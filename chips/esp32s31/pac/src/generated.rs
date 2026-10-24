@@ -22938,6 +22938,864 @@ pub mod layouts {
 // Typed register blocks over `oer-mmio`, rendered by `cargo registers`
 // from the published SVD and the API policy; no `unsafe`, no raw write.
 
+/// The `EFUSE` register block.
+///
+/// eFuse controller read words of block 1: the factory MAC, its extension and the chip and block revisions. The controller mirrors the eFuses into them after reset; reading needs no command.
+pub mod efuse {
+    /// The block's base address.
+    pub const BASE: usize = 0x20715000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x60;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x50, 0x54, 0x5c];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x20715000>, BlockWords>;
+
+    /// The exclusive owner of the `EFUSE` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct Efuse<P: oer_mmio::Placement = oer_mmio::Fixed<0x20715000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl Efuse {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> Efuse<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> Efuse<P> {
+        /// Read `RD_MAC_SYS0`.
+        #[inline]
+        pub fn read_rd_mac_sys0(&self) -> rd_mac_sys0::R {
+            rd_mac_sys0::R(self.0.read::<0x50>())
+        }
+
+        /// Read `RD_MAC_SYS1`.
+        #[inline]
+        pub fn read_rd_mac_sys1(&self) -> rd_mac_sys1::R {
+            rd_mac_sys1::R(self.0.read::<0x54>())
+        }
+
+        /// Read `RD_MAC_SYS3`.
+        #[inline]
+        pub fn read_rd_mac_sys3(&self) -> rd_mac_sys3::R {
+            rd_mac_sys3::R(self.0.read::<0x5c>())
+        }
+    }
+
+    /// The `RD_MAC_SYS0` register.
+    ///
+    /// Factory MAC address, low 32 bits.
+    pub mod rd_mac_sys0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x50;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// MAC address bits 31:0; the last transmitted octet is bits 7:0.
+            #[inline]
+            pub const fn mac_0(self) -> u32 {
+                self.0
+            }
+        }
+    }
+
+    /// The `RD_MAC_SYS1` register.
+    ///
+    /// Factory MAC address, high 16 bits, and its extended bits.
+    pub mod rd_mac_sys1 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x54;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// MAC address bits 47:32; the first transmitted octet is bits 15:8.
+            #[inline]
+            pub const fn mac_1(self) -> u16 {
+                (self.0) as u16
+            }
+
+            /// Extended bits of the MAC address.
+            #[inline]
+            pub const fn mac_ext(self) -> u16 {
+                (self.0 >> 16) as u16
+            }
+        }
+    }
+
+    /// The `RD_MAC_SYS3` register.
+    ///
+    /// Chip and eFuse block revisions and the PSRAM capacity.
+    pub mod rd_mac_sys3 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xfffc0000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x5c;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Minor chip revision.
+            #[inline]
+            pub const fn wafer_version_minor(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+
+            /// Major chip revision.
+            #[inline]
+            pub const fn wafer_version_major(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 22)
+            }
+
+            /// Disables the check of the major chip revision.
+            #[inline]
+            pub const fn disable_wafer_version_major(self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Disables the check of the major block revision.
+            #[inline]
+            pub const fn disable_blk_version_major(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Minor revision of eFuse block 2.
+            #[inline]
+            pub const fn blk_version_minor(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 26)
+            }
+
+            /// Major revision of eFuse block 2.
+            #[inline]
+            pub const fn blk_version_major(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 29)
+            }
+
+            /// PSRAM capacity.
+            #[inline]
+            pub const fn psram_cap(self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+        }
+    }
+}
+
+/// The `LP_AON_RESET_CAUSE` register block.
+///
+/// Low-power always-on clock/reset registers: the reset cause of each HP core. Firmware reads them after boot; the host reads HP core 0's through JTAG after a power cycle.
+pub mod lp_aon_reset_cause {
+    /// The block's base address.
+    pub const BASE: usize = 0x20701000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x38;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x30, 0x34];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x20701000>, BlockWords>;
+
+    /// The exclusive owner of the `LP_AON_RESET_CAUSE` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct LpAonResetCause<P: oer_mmio::Placement = oer_mmio::Fixed<0x20701000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl LpAonResetCause {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> LpAonResetCause<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> LpAonResetCause<P> {
+        /// Read `HPCORE0_RESET_CAUSE`.
+        #[inline]
+        pub fn read_hpcore0_reset_cause(&self) -> hpcore0_reset_cause::R {
+            hpcore0_reset_cause::R(self.0.read::<0x30>())
+        }
+
+        /// Read `HPCORE1_RESET_CAUSE`.
+        #[inline]
+        pub fn read_hpcore1_reset_cause(&self) -> hpcore1_reset_cause::R {
+            hpcore1_reset_cause::R(self.0.read::<0x34>())
+        }
+    }
+
+    /// The `HPCORE0_RESET_CAUSE` register.
+    ///
+    /// Why HP core 0 last left reset. It holds until the next reset, so a host reads it through JTAG after the core returned; the ROM reads bits 6:1 of this word for core 0.
+    pub mod hpcore0_reset_cause {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000007f;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x30;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Set when HP core 0 left reset.
+            #[inline]
+            pub const fn hpcore0_reset_flag(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The reset cause code: one is a power-on reset; others are system, watchdog, brown-out, USB Serial/JTAG and JTAG resets.
+            #[inline]
+            pub const fn hpcore0_reset_cause(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 1)
+            }
+        }
+    }
+
+    /// The `HPCORE1_RESET_CAUSE` register.
+    ///
+    /// Why HP core 1 last left reset. It holds until the next reset; the ROM reads bits 6:1 of this word for any core but core 0.
+    pub mod hpcore1_reset_cause {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000007f;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x34;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Set when HP core 1 left reset.
+            #[inline]
+            pub const fn hpcore1_reset_flag(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The reset cause code, with the codes of HP core 0's cause field.
+            #[inline]
+            pub const fn hpcore1_reset_cause(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 1)
+            }
+        }
+    }
+}
+
+/// The `LP_PERICLKRST_RNG` register block.
+///
+/// Low-power peripheral clock/reset registers: the clock and reset of the true random number generator.
+pub mod lp_periclkrst_rng {
+    /// The block's base address.
+    pub const BASE: usize = 0x20710000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x40;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x3c];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x20710000>, BlockWords>;
+
+    /// The exclusive owner of the `LP_PERICLKRST_RNG` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct LpPericlkrstRng<P: oer_mmio::Placement = oer_mmio::Fixed<0x20710000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl LpPericlkrstRng {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> LpPericlkrstRng<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> LpPericlkrstRng<P> {
+        /// Read `RNG_CTRL`.
+        #[inline]
+        pub fn read_rng_ctrl(&self) -> rng_ctrl::R {
+            rng_ctrl::R(self.0.read::<0x3c>())
+        }
+
+        /// Read `RNG_CTRL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_rng_ctrl(&mut self, change: impl FnOnce(&mut rng_ctrl::W)) {
+            let mut value = rng_ctrl::W(self.0.read::<0x3c>());
+            change(&mut value);
+            self.0.write::<0x3c>(value.0);
+        }
+    }
+
+    /// The `RNG_CTRL` register.
+    ///
+    /// Random number generator clock and reset control.
+    pub mod rng_ctrl {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xc0000000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x3c;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Random number generator clock enable; set after reset.
+            #[inline]
+            pub const fn lp_rng_clk_en(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Random number generator reset; the generator runs only while it is clear.
+            #[inline]
+            pub const fn lp_rng_rst_en(self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Random number generator clock enable; set after reset.
+            #[inline]
+            pub const fn lp_rng_clk_en(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Random number generator reset; the generator runs only while it is clear.
+            #[inline]
+            pub const fn lp_rng_rst_en(&self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Set `LP_RNG_CLK_EN`.
+            #[inline]
+            pub fn set_lp_rng_clk_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                self
+            }
+
+            /// Set `LP_RNG_RST_EN`.
+            #[inline]
+            pub fn set_lp_rng_rst_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                self
+            }
+        }
+    }
+}
+
+/// The `TRNG` register block.
+///
+/// True random number generator: the configuration and health-test words its owner observes, the health-error flag and the conditioned random output.
+pub mod trng {
+    /// The block's base address.
+    pub const BASE: usize = 0x20814000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x4c;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0, 0x4, 0x2c, 0x48];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x20814000>, BlockWords>;
+
+    /// The exclusive owner of the `TRNG` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct Trng<P: oer_mmio::Placement = oer_mmio::Fixed<0x20814000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl Trng {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> Trng<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> Trng<P> {
+        /// Read `CONF`.
+        #[inline]
+        pub fn read_conf(&self) -> conf::R {
+            conf::R(self.0.read::<0x0>())
+        }
+
+        /// Write one to the write-trigger field `FIFO_RESET` of `CONF`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_conf_fifo_reset(&mut self) {
+            self.0
+                .write::<0x0>((self.0.read::<0x0>() & !conf::TRIGGERS) | 0x10000000);
+        }
+
+        /// Read `CONF`, change fields and write it back; every other bit keeps
+        /// the value read and every write-trigger field is zero.
+        #[inline]
+        pub fn modify_conf(&mut self, change: impl FnOnce(&mut conf::W)) {
+            let mut value = conf::W(self.0.read::<0x0>() & !conf::TRIGGERS);
+            change(&mut value);
+            self.0.write::<0x0>(value.0);
+        }
+
+        /// Read `DEBUG_CONF`.
+        #[inline]
+        pub fn read_debug_conf(&self) -> debug_conf::R {
+            debug_conf::R(self.0.read::<0x4>())
+        }
+
+        /// Write one to the write-trigger field `STARTUP_TEST_START` of `DEBUG_CONF`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_debug_conf_startup_test_start(&mut self) {
+            self.0
+                .write::<0x4>((self.0.read::<0x4>() & !debug_conf::TRIGGERS) | 0x00000001);
+        }
+
+        /// Write one to the write-trigger field `HEALTH_TEST_END` of `DEBUG_CONF`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_debug_conf_health_test_end(&mut self) {
+            self.0
+                .write::<0x4>((self.0.read::<0x4>() & !debug_conf::TRIGGERS) | 0x20000000);
+        }
+
+        /// Read `DEBUG_CONF`, change fields and write it back; every other bit keeps
+        /// the value read and every write-trigger field is zero.
+        #[inline]
+        pub fn modify_debug_conf(&mut self, change: impl FnOnce(&mut debug_conf::W)) {
+            let mut value = debug_conf::W(self.0.read::<0x4>() & !debug_conf::TRIGGERS);
+            change(&mut value);
+            self.0.write::<0x4>(value.0);
+        }
+
+        /// Read `INT_RAW`.
+        #[inline]
+        pub fn read_int_raw(&self) -> int_raw::R {
+            int_raw::R(self.0.read::<0x2c>())
+        }
+
+        /// Sample `INT_RAW` once, keeping its declared fields, to acknowledge.
+        #[inline]
+        pub fn sample_int_raw(&self) -> int_raw::Snapshot {
+            int_raw::Snapshot(self.0.read::<0x2c>() & int_raw::FIELDS)
+        }
+
+        /// Acknowledge exactly the sampled set: write one to each bit the
+        /// snapshot holds and zero to every other bit.
+        #[inline]
+        pub fn acknowledge_int_raw(&mut self, snapshot: int_raw::Snapshot) {
+            self.0.write::<0x2c>(snapshot.0);
+        }
+
+        /// Read `CRC_SYNC_DATA`.
+        #[inline]
+        pub fn read_crc_sync_data(&self) -> crc_sync_data::R {
+            crc_sync_data::R(self.0.read::<0x48>())
+        }
+    }
+
+    /// The `CONF` register.
+    ///
+    /// Noise source, health-test cutoffs and output configuration.
+    pub mod conf {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// The bits of the write-trigger fields: zero in every
+        /// read-modify-write, one only in a field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x10000000;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Noise source selection, one-hot; zero selects none.
+            #[inline]
+            pub const fn noise_source_sel(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Sampling-enable selection of the noise source.
+            #[inline]
+            pub const fn noise_pos_sel(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 5)
+            }
+
+            /// Cutoff of the repetition-count health test.
+            #[inline]
+            pub const fn repetition_value_c(self) -> oer_mmio::Bits<9> {
+                oer_mmio::Bits::truncate(self.0 >> 10)
+            }
+
+            /// Cutoff of the adaptive-proportion health test.
+            #[inline]
+            pub const fn adpative_value_c(self) -> oer_mmio::Bits<9> {
+                oer_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// Output mode of the random data.
+            #[inline]
+            pub const fn random_output_mode(self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Enables the CRC conditioner of the noise samples.
+            #[inline]
+            pub const fn noise_crc_en(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Enables noise sampling.
+            #[inline]
+            pub const fn sample_enable(self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Noise source selection, one-hot; zero selects none.
+            #[inline]
+            pub const fn noise_source_sel(&self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Sampling-enable selection of the noise source.
+            #[inline]
+            pub const fn noise_pos_sel(&self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 5)
+            }
+
+            /// Cutoff of the repetition-count health test.
+            #[inline]
+            pub const fn repetition_value_c(&self) -> oer_mmio::Bits<9> {
+                oer_mmio::Bits::truncate(self.0 >> 10)
+            }
+
+            /// Cutoff of the adaptive-proportion health test.
+            #[inline]
+            pub const fn adpative_value_c(&self) -> oer_mmio::Bits<9> {
+                oer_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// Output mode of the random data.
+            #[inline]
+            pub const fn random_output_mode(&self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Enables the CRC conditioner of the noise samples.
+            #[inline]
+            pub const fn noise_crc_en(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Enables noise sampling.
+            #[inline]
+            pub const fn sample_enable(&self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Set `NOISE_SOURCE_SEL`.
+            #[inline]
+            pub fn set_noise_source_sel(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
+                self.0 = (self.0 & !0x0000001f) | value.get();
+                self
+            }
+
+            /// Set `NOISE_POS_SEL`.
+            #[inline]
+            pub fn set_noise_pos_sel(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
+                self.0 = (self.0 & !0x000003e0) | (value.get() << 5);
+                self
+            }
+
+            /// Set `REPETITION_VALUE_C`.
+            #[inline]
+            pub fn set_repetition_value_c(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                self.0 = (self.0 & !0x0007fc00) | (value.get() << 10);
+                self
+            }
+
+            /// Set `ADPATIVE_VALUE_C`.
+            #[inline]
+            pub fn set_adpative_value_c(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                self.0 = (self.0 & !0x0ff80000) | (value.get() << 19);
+                self
+            }
+
+            /// Set `RANDOM_OUTPUT_MODE`.
+            #[inline]
+            pub fn set_random_output_mode(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                self
+            }
+
+            /// Set `NOISE_CRC_EN`.
+            #[inline]
+            pub fn set_noise_crc_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                self
+            }
+
+            /// Set `SAMPLE_ENABLE`.
+            #[inline]
+            pub fn set_sample_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                self
+            }
+        }
+    }
+
+    /// The `DEBUG_CONF` register.
+    ///
+    /// Startup and continuous health-test control and result.
+    pub mod debug_conf {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x7fffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4;
+
+        /// The bits of the write-trigger fields: zero in every
+        /// read-modify-write, one only in a field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x20000001;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Number of samples the startup health test takes.
+            #[inline]
+            pub const fn startup_test_limit(self) -> u16 {
+                (self.0 >> 1) as u16
+            }
+
+            /// Debug output data.
+            #[inline]
+            pub const fn debug_data(self) -> u8 {
+                (self.0 >> 17) as u8
+            }
+
+            /// Debug mode enable.
+            #[inline]
+            pub const fn debug_mode(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Error code of the last failed health test.
+            #[inline]
+            pub const fn health_test_error_code(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 26)
+            }
+
+            /// Bypasses the health tests.
+            #[inline]
+            pub const fn health_test_bypass(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Number of samples the startup health test takes.
+            #[inline]
+            pub const fn startup_test_limit(&self) -> u16 {
+                (self.0 >> 1) as u16
+            }
+
+            /// Debug output data.
+            #[inline]
+            pub const fn debug_data(&self) -> u8 {
+                (self.0 >> 17) as u8
+            }
+
+            /// Debug mode enable.
+            #[inline]
+            pub const fn debug_mode(&self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Error code of the last failed health test.
+            #[inline]
+            pub const fn health_test_error_code(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 26)
+            }
+
+            /// Bypasses the health tests.
+            #[inline]
+            pub const fn health_test_bypass(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Set `STARTUP_TEST_LIMIT`.
+            #[inline]
+            pub fn set_startup_test_limit(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & !0x0001fffe) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `DEBUG_MODE`.
+            #[inline]
+            pub fn set_debug_mode(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
+                self
+            }
+
+            /// Set `HEALTH_TEST_BYPASS`.
+            #[inline]
+            pub fn set_health_test_bypass(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                self
+            }
+        }
+    }
+
+    /// The `INT_RAW` register.
+    ///
+    /// Raw health-error interrupt status.
+    pub mod int_raw {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000001;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x2c;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Set by hardware when a startup or continuous health test fails; writing one clears it.
+            #[inline]
+            pub const fn error_int_raw(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+        }
+
+        /// One sample of the register's asserted fields, to acknowledge once.
+        #[must_use = "a sampled write-one-to-clear set must be acknowledged"]
+        #[derive(Debug, Eq, PartialEq)]
+        pub struct Snapshot(pub(super) u32);
+
+        impl Snapshot {
+            /// Whether no declared field was asserted.
+            pub const fn is_clear(&self) -> bool {
+                self.0 == 0
+            }
+
+            /// Set by hardware when a startup or continuous health test fails; writing one clears it.
+            #[inline]
+            pub const fn error_int_raw(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The snapshot without `ERROR_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_error_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & !0x00000001)
+                }
+            }
+        }
+    }
+
+    /// The `CRC_SYNC_DATA` register.
+    ///
+    /// Conditioned random output, synchronized to the bus clock.
+    pub mod crc_sync_data {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x48;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// One 32-bit random word.
+            #[inline]
+            pub const fn sw_crc_random_data_sync(self) -> u32 {
+                self.0
+            }
+        }
+    }
+}
+
 /// The `WIFI_MAC_INTERFACE_ADDRESS` register block at this chip's address: its layout,
 /// accessors and transactions are the `ieee80211` register library's
 /// [`oer_espressif_ieee80211_pac::wifi_mac_interface_address`].
@@ -22958,6 +23816,22 @@ pub mod wifi_mac_interface_address {
 
 /// The ownership partitions of the typed register blocks.
 pub mod peripheral_ownership {
+    /// The eFuse controller's read words of the factory MAC and the chip revision, read once by the factory identity.
+    pub struct EfusePeripherals {
+        pub efuse: super::efuse::Efuse,
+    }
+
+    /// The true random number generator and its clock and reset word, read by the entropy owner.
+    pub struct EntropyPeripherals {
+        pub trng: super::trng::Trng,
+        pub lp_periclkrst_rng: super::lp_periclkrst_rng::LpPericlkrstRng,
+    }
+
+    /// The reset-cause words of both HP cores, read by the reset-cause owner.
+    pub struct ResetCausePeripherals {
+        pub lp_aon_reset_cause: super::lp_aon_reset_cause::LpAonResetCause,
+    }
+
     /// The Wi-Fi MAC receive-interface address pairs, the shared register library's typed block, owned by the Wi-Fi hardware lifecycle with the other Wi-Fi MAC views.
     pub struct WifiMacInterfacePeripherals {
         pub wifi_mac_interface_address: super::wifi_mac_interface_address::WifiMacInterfaceAddress,
@@ -22965,19 +23839,46 @@ pub mod peripheral_ownership {
 
     /// Every typed partition.
     pub struct PeripheralPartitions {
+        /// The eFuse controller's read words of the factory MAC and the chip revision, read once by the factory identity.
+        pub efuse: EfusePeripherals,
+        /// The true random number generator and its clock and reset word, read by the entropy owner.
+        pub entropy: EntropyPeripherals,
+        /// The reset-cause words of both HP cores, read by the reset-cause owner.
+        pub reset_cause: ResetCausePeripherals,
         /// The Wi-Fi MAC receive-interface address pairs, the shared register library's typed block, owned by the Wi-Fi hardware lifecycle with the other Wi-Fi MAC views.
         pub wifi_mac_interface: WifiMacInterfacePeripherals,
     }
 
     /// The device registers of every typed block, which the PAC root
     /// takes with one `oer_mmio::assume_owned`.
-    pub type Claims = super::wifi_mac_interface_address::Claim;
+    pub type Claims = (
+        super::efuse::Claim,
+        super::trng::Claim,
+        super::lp_periclkrst_rng::Claim,
+        super::lp_aon_reset_cause::Claim,
+        super::wifi_mac_interface_address::Claim,
+    );
 
     /// Give each claimed block to its owner in its partition.
     #[inline]
     pub fn partition(claims: Claims) -> PeripheralPartitions {
-        let wifi_mac_interface_address = claims;
+        let (efuse, trng, lp_periclkrst_rng, lp_aon_reset_cause, wifi_mac_interface_address) =
+            claims;
         PeripheralPartitions {
+            efuse: EfusePeripherals {
+                efuse: super::efuse::Efuse::new(efuse),
+            },
+            entropy: EntropyPeripherals {
+                trng: super::trng::Trng::new(trng),
+                lp_periclkrst_rng: super::lp_periclkrst_rng::LpPericlkrstRng::new(
+                    lp_periclkrst_rng,
+                ),
+            },
+            reset_cause: ResetCausePeripherals {
+                lp_aon_reset_cause: super::lp_aon_reset_cause::LpAonResetCause::new(
+                    lp_aon_reset_cause,
+                ),
+            },
             wifi_mac_interface: WifiMacInterfacePeripherals {
                 wifi_mac_interface_address:
                     super::wifi_mac_interface_address::WifiMacInterfaceAddress::new(
@@ -22989,9 +23890,24 @@ pub mod peripheral_ownership {
 }
 
 const _: () = assert!(
-    oer_mmio::check::disjoint_blocks(&[(
-        wifi_mac_interface_address::BASE,
-        <wifi_mac_interface_address::BlockWords as oer_mmio::Registers>::WORDS
-    )]),
+    oer_mmio::check::disjoint_blocks(&[
+        (
+            efuse::BASE,
+            <efuse::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            lp_aon_reset_cause::BASE,
+            <lp_aon_reset_cause::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            lp_periclkrst_rng::BASE,
+            <lp_periclkrst_rng::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (trng::BASE, <trng::BlockWords as oer_mmio::Registers>::WORDS),
+        (
+            wifi_mac_interface_address::BASE,
+            <wifi_mac_interface_address::BlockWords as oer_mmio::Registers>::WORDS
+        )
+    ]),
     "no two typed blocks list the same word"
 );

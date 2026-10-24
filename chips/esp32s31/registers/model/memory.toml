@@ -271,18 +271,18 @@ end-exclusive = 0x20701030
 permissions = "rw"
 
 [[regions]]
-name = "lp-aon-hpcore0-reset-cause"
+name = "lp-aon-reset-cause"
 address-space = "cpu"
 kind = "mmio"
 start = 0x20701030
-end-exclusive = 0x20701034
+end-exclusive = 0x20701038
 permissions = "rw"
 
 [[regions]]
-name = "lp-aon-between-hpcore0-reset-cause-and-phy-aux"
+name = "lp-aon-between-reset-cause-and-phy-aux"
 address-space = "cpu"
 kind = "mmio"
-start = 0x20701034
+start = 0x20701038
 end-exclusive = 0x20701068
 permissions = "rw"
 
@@ -423,18 +423,66 @@ end-exclusive = 0x20710034
 permissions = "rw"
 
 [[regions]]
-name = "lp-system-after-phy-aux"
+name = "lp-periclkrst-between-tsens-and-rng"
 address-space = "cpu"
 kind = "mmio"
 start = 0x20710034
+end-exclusive = 0x2071003C
+permissions = "rw"
+
+[[regions]]
+name = "lp-periclkrst-rng"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2071003C
+end-exclusive = 0x20710040
+permissions = "rw"
+
+[[regions]]
+name = "lp-system-between-rng-and-efuse-mac"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20710040
+end-exclusive = 0x20715050
+permissions = "rw"
+
+[[regions]]
+name = "efuse-mac"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20715050
+end-exclusive = 0x20715060
+permissions = "rw"
+
+[[regions]]
+name = "lp-system-after-efuse-mac"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20715060
 end-exclusive = 0x20800000
 permissions = "rw"
 
 [[regions]]
-name = "lp-peripheral-before-tsens-phy-aux"
+name = "lp-peripheral-before-trng"
 address-space = "cpu"
 kind = "mmio"
 start = 0x20800000
+end-exclusive = 0x20814000
+permissions = "rw"
+
+[[regions]]
+name = "trng"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20814000
+end-exclusive = 0x2081404C
+permissions = "rw"
+
+[[regions]]
+name = "lp-peripheral-between-trng-and-tsens-phy-aux"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2081404C
 end-exclusive = 0x20818000
 permissions = "rw"
 

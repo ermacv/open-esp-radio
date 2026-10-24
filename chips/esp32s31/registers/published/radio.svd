@@ -11838,6 +11838,338 @@
       </registers>
     </peripheral>
     <peripheral>
+      <name>EFUSE</name>
+      <description>eFuse controller read words of block 1: the factory MAC, its extension and the chip and block revisions. The controller mirrors the eFuses into them after reset; reading needs no command.</description>
+      <baseAddress>0x20715000</baseAddress>
+      <registers>
+        <register>
+          <name>RD_MAC_SYS0</name>
+          <description>Factory MAC address, low 32 bits.</description>
+          <addressOffset>0x50</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>MAC_0</name>
+              <description>MAC address bits 31:0; the last transmitted octet is bits 7:0.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RD_MAC_SYS1</name>
+          <description>Factory MAC address, high 16 bits, and its extended bits.</description>
+          <addressOffset>0x54</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>MAC_1</name>
+              <description>MAC address bits 47:32; the first transmitted octet is bits 15:8.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+            <field>
+              <name>MAC_EXT</name>
+              <description>Extended bits of the MAC address.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RD_MAC_SYS3</name>
+          <description>Chip and eFuse block revisions and the PSRAM capacity.</description>
+          <addressOffset>0x5C</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>WAFER_VERSION_MINOR</name>
+              <description>Minor chip revision.</description>
+              <bitOffset>18</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+            <field>
+              <name>WAFER_VERSION_MAJOR</name>
+              <description>Major chip revision.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>DISABLE_WAFER_VERSION_MAJOR</name>
+              <description>Disables the check of the major chip revision.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>DISABLE_BLK_VERSION_MAJOR</name>
+              <description>Disables the check of the major block revision.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BLK_VERSION_MINOR</name>
+              <description>Minor revision of eFuse block 2.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>BLK_VERSION_MAJOR</name>
+              <description>Major revision of eFuse block 2.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>PSRAM_CAP</name>
+              <description>PSRAM capacity.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>TRNG</name>
+      <description>True random number generator: the configuration and health-test words its owner observes, the health-error flag and the conditioned random output.</description>
+      <baseAddress>0x20814000</baseAddress>
+      <registers>
+        <register>
+          <name>CONF</name>
+          <description>Noise source, health-test cutoffs and output configuration.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x40000000</resetValue>
+          <fields>
+            <field>
+              <name>NOISE_SOURCE_SEL</name>
+              <description>Noise source selection, one-hot; zero selects none.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>5</bitWidth>
+            </field>
+            <field>
+              <name>NOISE_POS_SEL</name>
+              <description>Sampling-enable selection of the noise source.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>5</bitWidth>
+            </field>
+            <field>
+              <name>REPETITION_VALUE_C</name>
+              <description>Cutoff of the repetition-count health test.</description>
+              <bitOffset>10</bitOffset>
+              <bitWidth>9</bitWidth>
+            </field>
+            <field>
+              <name>ADPATIVE_VALUE_C</name>
+              <description>Cutoff of the adaptive-proportion health test.</description>
+              <bitOffset>19</bitOffset>
+              <bitWidth>9</bitWidth>
+            </field>
+            <field>
+              <name>FIFO_RESET</name>
+              <description>Writing one resets the output FIFO; reads zero.</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>write-only</access>
+            </field>
+            <field>
+              <name>RANDOM_OUTPUT_MODE</name>
+              <description>Output mode of the random data.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>NOISE_CRC_EN</name>
+              <description>Enables the CRC conditioner of the noise samples.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>SAMPLE_ENABLE</name>
+              <description>Enables noise sampling.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>DEBUG_CONF</name>
+          <description>Startup and continuous health-test control and result.</description>
+          <addressOffset>0x4</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000800</resetValue>
+          <fields>
+            <field>
+              <name>STARTUP_TEST_START</name>
+              <description>Writing one starts the startup health test; reads zero.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>write-only</access>
+            </field>
+            <field>
+              <name>STARTUP_TEST_LIMIT</name>
+              <description>Number of samples the startup health test takes.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+            <field>
+              <name>DEBUG_DATA</name>
+              <description>Debug output data.</description>
+              <bitOffset>17</bitOffset>
+              <bitWidth>8</bitWidth>
+              <access>read-only</access>
+            </field>
+            <field>
+              <name>DEBUG_MODE</name>
+              <description>Debug mode enable.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>HEALTH_TEST_ERROR_CODE</name>
+              <description>Error code of the last failed health test.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>3</bitWidth>
+              <access>read-only</access>
+            </field>
+            <field>
+              <name>HEALTH_TEST_END</name>
+              <description>Writing one ends the health test; reads zero.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>write-only</access>
+            </field>
+            <field>
+              <name>HEALTH_TEST_BYPASS</name>
+              <description>Bypasses the health tests.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>INT_RAW</name>
+          <description>Raw health-error interrupt status.</description>
+          <addressOffset>0x2C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <modifiedWriteValues>oneToClear</modifiedWriteValues>
+          <fields>
+            <field>
+              <name>ERROR_INT_RAW</name>
+              <description>Set by hardware when a startup or continuous health test fails; writing one clears it.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>CRC_SYNC_DATA</name>
+          <description>Conditioned random output, synchronized to the bus clock.</description>
+          <addressOffset>0x48</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>SW_CRC_RANDOM_DATA_SYNC</name>
+              <description>One 32-bit random word.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>LP_PERICLKRST_RNG</name>
+      <description>Low-power peripheral clock/reset registers: the clock and reset of the true random number generator.</description>
+      <baseAddress>0x20710000</baseAddress>
+      <registers>
+        <register>
+          <name>RNG_CTRL</name>
+          <description>Random number generator clock and reset control.</description>
+          <addressOffset>0x3C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x40000000</resetValue>
+          <fields>
+            <field>
+              <name>LP_RNG_CLK_EN</name>
+              <description>Random number generator clock enable; set after reset.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>LP_RNG_RST_EN</name>
+              <description>Random number generator reset; the generator runs only while it is clear.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>LP_AON_RESET_CAUSE</name>
+      <description>Low-power always-on clock/reset registers: the reset cause of each HP core. Firmware reads them after boot; the host reads HP core 0's through JTAG after a power cycle.</description>
+      <baseAddress>0x20701000</baseAddress>
+      <registers>
+        <register>
+          <name>HPCORE0_RESET_CAUSE</name>
+          <description>Why HP core 0 last left reset. It holds until the next reset, so a host reads it through JTAG after the core returned; the ROM reads bits 6:1 of this word for core 0.</description>
+          <addressOffset>0x30</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>HPCORE0_RESET_FLAG</name>
+              <description>Set when HP core 0 left reset.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>HPCORE0_RESET_CAUSE</name>
+              <description>The reset cause code: one is a power-on reset; others are system, watchdog, brown-out, USB Serial/JTAG and JTAG resets.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>6</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>HPCORE1_RESET_CAUSE</name>
+          <description>Why HP core 1 last left reset. It holds until the next reset; the ROM reads bits 6:1 of this word for any core but core 0.</description>
+          <addressOffset>0x34</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>HPCORE1_RESET_FLAG</name>
+              <description>Set when HP core 1 left reset.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>HPCORE1_RESET_CAUSE</name>
+              <description>The reset cause code, with the codes of HP core 0's cause field.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>6</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
       <name>WIFI_MAC_STA_BEACON_FILTER</name>
       <description>Station beacon-filter control word recovered from the complete enable and disable leaves. The three low bits are toggled together; individual hardware meanings remain unknown.</description>
       <baseAddress>0x201042B4</baseAddress>
