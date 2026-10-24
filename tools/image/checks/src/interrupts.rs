@@ -502,6 +502,23 @@ pub fn rom_summaries(root: &Path, profile: &oer_chip_profile::Profile) -> Result
     Ok(summaries.into_iter().map(|summary| summary.name).collect())
 }
 
+/// A core without an interrupt stack takes no interrupt: an entry that routes
+/// a source to it would run a handler on a stack nobody bounded.
+fn reject_unstacked_cores(
+    table: &[oer_analysis_riscv_stack::TableEntry],
+    harts: &[u32],
+) -> Result<()> {
+    match table.iter().find(|entry| !harts.contains(&entry.core)) {
+        Some(entry) => Err(format!(
+            "the interrupt table routes source {} (level {}) to core {}, whose interrupt \
+             stack the image declares unused or the chip does not have",
+            entry.source, entry.level, entry.core
+        )
+        .into()),
+        None => Ok(()),
+    }
+}
+
 /// Bound every hart's interrupt stack of the runtime ELF bytes `elf`, with
 /// the pinned ROM of the repository at `root`. A hart whose linked stack is
 /// empty is one the image's stack policy declares unused, which the image
@@ -572,19 +589,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         },
         &mut control,
     )?;
-    // A core without an interrupt stack takes no interrupt: an entry that
-    // routes a source to it would run a handler on a stack nobody bounded.
-    if let Some(entry) = table
-        .iter()
-        .find(|entry| !interrupts.harts.contains(&entry.core))
-    {
-        return Err(format!(
-            "the interrupt table routes source {} (level {}) to core {}, whose interrupt \
-             stack the image declares unused or the chip does not have",
-            entry.source, entry.level, entry.core
-        )
-        .into());
-    }
+    reject_unstacked_cores(&table, &interrupts.harts)?;
     let vectors = vector_table(&facts, &interrupts.vector_table_symbol, &mut control)?
         .into_iter()
         .flatten()
@@ -883,6 +888,26 @@ fn source_table(elf: &[u8], symbol: &str) -> Result<u32> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_table_entry_for_a_core_without_an_interrupt_stack_is_refused() {
+        use oer_analysis_riscv_stack::TableEntry;
+        let entry = |core| TableEntry {
+            source: 7,
+            level: 2,
+            core,
+            handler: Some(0x4000_0000),
+        };
+        reject_unstacked_cores(&[entry(0), entry(0)], &[0]).unwrap();
+        reject_unstacked_cores(&[entry(0), entry(1)], &[0, 1]).unwrap();
+        let error = reject_unstacked_cores(&[entry(0), entry(1)], &[0])
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("source 7") && error.contains("to core 1"),
+            "{error}"
+        );
+    }
+
     use super::*;
     use oer_analysis_riscv_stack::Assumption;
 

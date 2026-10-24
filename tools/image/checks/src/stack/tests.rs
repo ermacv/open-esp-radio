@@ -984,3 +984,180 @@ fn the_repository_policies_load() {
         }
     }
 }
+
+mod cores {
+    use super::*;
+    use crate::stack::cores;
+
+    const POLICY: &str = r#"
+schema = 6
+coverage_policy = "coverage.toml"
+max_move_bytes = 4096
+
+[core.0.task_stack]
+root = "runtime_main"
+storage_symbol = "cpu0_stack"
+minimum_free_bytes = 16
+
+[core.0.interrupt_stack]
+
+[core.1.task_stack]
+unused = true
+
+[core.1.interrupt_stack]
+unused = true
+"#;
+
+    const USED: &str = r#"
+schema = 6
+coverage_policy = "coverage.toml"
+max_move_bytes = 4096
+
+[core.0.task_stack]
+root = "runtime_main"
+storage_symbol = "cpu0_stack"
+minimum_free_bytes = 16
+
+[core.0.interrupt_stack]
+
+[core.1.task_stack]
+root = "ROOT"
+storage_symbol = "cpu1_stack"
+minimum_free_bytes = 16
+
+[core.1.interrupt_stack]
+"#;
+
+    fn chip() -> oer_chip_profile::Profile {
+        oer_chip_profile::Profile::load(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.."),
+            "esp32s31",
+        )
+        .unwrap()
+    }
+
+    fn starter(name: &'static str) -> Code {
+        Code {
+            name,
+            words: vec![RET],
+            frame: Some(0),
+        }
+    }
+
+    fn with(extra: Option<Code>) -> Vec<Code> {
+        let mut code = program(true);
+        code.extend(extra);
+        code
+    }
+
+    #[test]
+    fn an_image_that_links_no_starter_proves_core_one_unused() {
+        let (_directory, policy) = policy_with(POLICY, "");
+        let image = image(&with(None), &[("cpu0_stack", 0, 1024)]);
+        let report = cores::audit_runtime(&image, &policy, &chip()).unwrap();
+        assert!(report.contains("1\tunused"), "{report}");
+        // An empty linked range is an explicit 0.
+        let empty = self::image(
+            &with(None),
+            &[
+                ("cpu0_stack", 0, 1024),
+                ("__runtime_cpu1_irq_stack_bottom", 0x800, 0),
+                ("__runtime_cpu1_irq_stack_top", 0x800, 0),
+            ],
+        );
+        cores::audit_runtime(&empty, &policy, &chip()).unwrap();
+        cores::audit_bootstrap(&empty, &chip()).unwrap();
+    }
+
+    #[test]
+    fn a_linked_starter_with_core_one_unused_fails() {
+        let (_directory, policy) = policy_with(POLICY, "");
+        for name in [
+            "esp_hal::system::CpuControl::start_app_core::<closure>",
+            "esp_hal::system::CpuControl::unpark_core",
+            "esp_hal::soc::cpu_control::start_core1",
+        ] {
+            let image = image(&with(Some(starter(name))), &[("cpu0_stack", 0, 1024)]);
+            let error = cores::audit_runtime(&image, &policy, &chip())
+                .unwrap_err()
+                .to_string();
+            assert!(
+                error.contains("declares the task stack of core 1 unused"),
+                "{name}: {error}"
+            );
+            assert!(error.contains(name), "{error}");
+            assert!(cores::audit_bootstrap(&image, &chip()).is_err());
+        }
+        // A function that only resembles a starter is none.
+        let image = image(
+            &with(Some(starter("esp_hal::system::park_core"))),
+            &[("cpu0_stack", 0, 1024)],
+        );
+        cores::audit_runtime(&image, &policy, &chip()).unwrap();
+    }
+
+    #[test]
+    fn storage_linked_for_an_unused_stack_fails() {
+        let (_directory, policy) = policy_with(POLICY, "");
+        for (bottom, top) in [
+            (
+                "__runtime_cpu1_irq_stack_bottom",
+                "__runtime_cpu1_irq_stack_top",
+            ),
+            (
+                "__runtime_cpu1_task_stack_bottom",
+                "__runtime_cpu1_task_stack_top",
+            ),
+        ] {
+            let image = image(
+                &with(None),
+                &[("cpu0_stack", 0, 1024), (bottom, 0x800, 0), (top, 0x900, 0)],
+            );
+            let error = cores::audit_runtime(&image, &policy, &chip())
+                .unwrap_err()
+                .to_string();
+            assert!(
+                error.contains("unused") && error.contains("256 bytes"),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_policy_that_omits_a_core_of_the_chip_fails() {
+        let one_core = POLICY.split("[core.1").next().unwrap();
+        let (_directory, policy) = policy_with(one_core, "");
+        let image = image(&with(None), &[("cpu0_stack", 0, 1024)]);
+        let error = cores::audit_runtime(&image, &policy, &chip())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("names 1 cores but the chip has 2"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_used_core_runs_only_with_a_proven_bound() {
+        // `leaf`-rooted core 1 is proven; `indirect`-rooted is `+ ?`.
+        for (root, proven) in [("leaf", true), ("indirect", false)] {
+            let (_directory, policy) = policy_with(&USED.replace("ROOT", root), ASM_REVIEW);
+            let image = image(
+                &with(Some(starter("esp_hal::system::CpuControl::start_app_core"))),
+                &[("cpu0_stack", 0, 1024), ("cpu1_stack", 0x400, 1024)],
+            );
+            cores::audit_runtime(&image, &policy, &chip()).unwrap();
+            let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks()).unwrap();
+            assert_eq!(audit.stacks.len(), 2);
+            let result = audit.check();
+            assert_eq!(result.is_ok(), proven, "{root}: {result:?}");
+            if !proven {
+                let error = result.unwrap_err().to_string();
+                assert!(
+                    error.contains("a core other than core 0 runs only with a proven bound"),
+                    "{error}"
+                );
+            }
+        }
+    }
+}

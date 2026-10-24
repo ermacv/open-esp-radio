@@ -7,6 +7,10 @@ const ADDI_SP_0: u32 = 0x0001_0113; // addi sp, sp, 0
 const AUIPC_RA: u32 = 0x0000_0097; // auipc ra, 0
 const JALR_RA_16: u32 = 0x0100_80e7; // jalr ra, 16(ra)
 const NOP: u32 = 0x0000_0013;
+const CSRR_T0_MHARTID: u32 = 0xf140_22f3; // csrr t0, mhartid
+const BNEZ_T0_PLUS_16: u32 = 0x0002_9863; // bnez t0, +16
+const SPIN: u32 = 0x0000_006f; // j .
+const CSRRW_SP_MSCRATCH: u32 = 0x3401_1173; // csrrw sp, mscratch, sp
 const LUI_T1_0X5000: u32 = 0x0000_5337; // lui t1, 0x5000
 const LUI_T1_0X50014000: u32 = 0x5001_4337; // lui t1, 0x50014000
 const ADDI_T1_MINUS_0X300: u32 = 0xd003_0313; // addi t1, t1, -0x300
@@ -210,4 +214,32 @@ fn a_functions_bytes_come_from_its_address_whatever_section_index_it_carries() {
     // An address no section holds has no bytes, without a panic.
     function.address = 0x9000_0000;
     assert_eq!(function_code(&elf, &function), None);
+}
+
+#[test]
+fn a_hart_check_before_the_installation_passes_and_a_csr_may_not_write_sp() {
+    // Another hart spins; hart 0 installs the stack pointer.
+    scan(
+        vec![code(
+            "entry",
+            vec![
+                CSRR_T0_MHARTID,
+                BNEZ_T0_PLUS_16,
+                AUIPC_SP_TO_RODATA,
+                ADDI_SP_0,
+                RET,
+                SPIN,
+            ],
+        )],
+        "entry",
+        RODATA + 8,
+    )
+    .unwrap();
+    let error = scan(
+        vec![code("entry", vec![CSRRW_SP_MSCRATCH, RET])],
+        "entry",
+        RODATA,
+    )
+    .unwrap_err();
+    assert!(error.contains("sp is "), "{error}");
 }

@@ -84,7 +84,7 @@ pub fn configure_runtime(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
     println!("cargo:rerun-if-env-changed=OPEN_RADIO_UNUSED_IRQ_STACK_HARTS");
     let unused_irq_harts = match std::env::var("OPEN_RADIO_UNUSED_IRQ_STACK_HARTS") {
         Ok(value) => unused_harts(&value).expect("valid unused IRQ stack harts"),
-        Err(std::env::VarError::NotPresent) => Vec::new(),
+        Err(std::env::VarError::NotPresent) => std::vec::Vec::new(),
         Err(std::env::VarError::NotUnicode(_)) => panic!("unused IRQ stack harts are not Unicode"),
     };
     link(
@@ -137,7 +137,7 @@ pub fn configure_runtime(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
 /// The harts whose interrupt stack the image's policy declares unused, from
 /// the comma-separated `OPEN_RADIO_UNUSED_IRQ_STACK_HARTS`. The linker script
 /// has a stack for no hart but 0 and 1, and hart 0 runs the runtime.
-fn unused_harts(value: &str) -> Result<Vec<u32>, &'static str> {
+fn unused_harts(value: &str) -> Result<std::vec::Vec<u32>, &'static str> {
     value
         .split(',')
         .map(|hart| match hart {

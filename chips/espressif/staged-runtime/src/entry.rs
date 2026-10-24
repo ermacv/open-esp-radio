@@ -104,9 +104,9 @@ _runtime_start:
     tail runtime_main
     // Only hart 0 runs the runtime (`oer_espressif_staged_layout::BOOT_HART`):
     // a stale boot address that ROM hands to another hart stops here, before
-    // the hart touches data, the stacks or any peripheral.
+    // the hart touches data, the stacks or any peripheral. It spins: the
+    // handoff scan decodes no `wfi`.
 99:
-    wfi
     j 99b
     .size _runtime_start, . - _runtime_start
 
