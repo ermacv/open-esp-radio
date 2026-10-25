@@ -10,6 +10,7 @@ description = "The pins of a chip's vendor artifacts: the one reader of artifact
 
 [dependencies]
 oer-chip-profile = { path = "../chip/profile" }
+oer-espressif-facts = { path = "../../chips/espressif/facts" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.4"
 oer-os-process = { path = "../os/process" }

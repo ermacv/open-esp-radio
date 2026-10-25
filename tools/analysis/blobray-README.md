@@ -129,11 +129,12 @@ repository root, `cargo blobray` runs `oer-tool-analysis-cli` with the `tools`
 profile.
 
 Use `cargo blobray` in the checkout: Cargo rebuilds the CLI when its Rust
-inputs or tracked `chips/*/platform/chip.toml` facts change. A directly invoked
-binary checks a pinned input's chip facts against those present at build time
-and refuses changed or newly added profiles with a `cargo blobray` rebuild
-message before resolving the artifact. Both the tools and debug profiles use
-this check; even a comment change in a chip profile requires a rebuild.
+inputs or the tracked chip fact layers (`oer-espressif-facts`) change. A
+directly invoked binary checks every layer file of a pinned input's chip
+against the one compiled in and refuses changed or newly added layers with a
+`cargo blobray` rebuild message before resolving the artifact. Both the tools
+and debug profiles use this check; even a comment change in a layer requires
+a rebuild.
 
 The Linux linker adapter uses the shared process foundation's `command`
 factory to clear unrelated operation context. Linker ownership and resource

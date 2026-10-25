@@ -308,11 +308,8 @@ fn sram_is_the_union_of_placed_ranges_below_the_rom_boundary() {
 
 #[test]
 fn sram_inventory_reads_placement_symbols_sections_and_the_boundary_source() {
-    let profile: Profile = toml::from_str(include_str!(
-        "../../../../../../chips/esp32s31/platform/chip.toml"
-    ))
-    .unwrap();
-    let region = profile.memory.as_ref().unwrap().sram;
+    let profile = Profile::tracked("esp32s31").unwrap();
+    let region = profile.facts.memory.as_ref().unwrap().sram;
     let base = u64::from(region.origin);
     let mut writer = Object::new(BinaryFormat::Elf, Architecture::Riscv32, Endianness::Little);
     let text = writer.section_id(StandardSection::Text);

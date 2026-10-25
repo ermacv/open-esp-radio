@@ -170,7 +170,8 @@ Each image build leaves its bundle in `target/fw/<image>/`, described by its
 `bundle.json` (`tools/image/build`): `bootloader.bin`, `partitions.bin`,
 `application.bin`, `otadata.bin`, the packed `runtime.bin`, `runtime.elf`,
 `bootstrap.elf` and the check reports. The placement check reads the
-`[placement]` contract of `chip.toml`: among its rules, the interrupt-table
+`[placement]` contract of the chip's facts (the family layer,
+`chips/espressif/platform/family.toml`): among its rules, the interrupt-table
 handlers lie in SRAM or ROM, and the panic entry and hook and the
 `.critical.*` sections in internal SRAM; `cargo fw` reports a violation, a
 HIL image fails on it.

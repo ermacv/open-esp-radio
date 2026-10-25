@@ -39,6 +39,7 @@ oer-image-compare = { path = "../../image/compare" }
 toml = "1.1"
 
 [dev-dependencies]
+oer-espressif-facts = { path = "../../../chips/espressif/facts" }
 oer-hil-lab = { path = "../lab", features = ["test-support"] }
 oer-hil-runs = { path = "../runs", features = ["test-support"] }
 toml = "1.1"

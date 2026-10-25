@@ -114,12 +114,12 @@ pub fn image(root: &Path, package: &str, rust_target: &str) -> PathBuf {
 pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf> {
     let chips: Vec<String> = oer_chip_profile::Profile::all(root)?
         .into_iter()
-        .map(|profile| profile.id)
+        .map(|profile| profile.facts.id)
         .collect();
     let chip = chip_of(package, &chips)?;
     let profile = oer_chip_profile::Profile::load(root, chip)?;
     let policy = oer_chip_profile::policy::StackPolicy::load(&root.join(profile.stack_policy()))?;
-    let target = profile.rust_target.as_str();
+    let target = profile.facts.rust_target.as_str();
     let cache = target_dir(root);
     let _cache = crate::compiler::lock_compile_cache(&cache)?;
     let output = root.join("target/fw/probes").join(package);

@@ -48,7 +48,7 @@ impl Spec {
         inputs: &mut Inputs,
     ) -> Result<Option<(Image, oer_chip_profile::Profile, StackPolicy)>> {
         let profile = oer_chip_profile::Profile::load_with_inputs(&self.root, &self.chip, inputs)?;
-        if profile.memory.is_none() || profile.interrupts.is_none() {
+        if profile.facts.memory.is_none() || profile.facts.interrupts.is_none() {
             return Ok(None);
         }
         let policy =

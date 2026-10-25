@@ -222,13 +222,11 @@ mod tests {
 
     fn repository() -> tempfile::TempDir {
         let directory = tempfile::tempdir().unwrap();
-        let profile = directory.path().join("chips/esp32s31/platform/chip.toml");
-        std::fs::create_dir_all(profile.parent().unwrap()).unwrap();
-        std::fs::write(
-            &profile,
-            include_str!("../../../../chips/esp32s31/platform/chip.toml"),
-        )
-        .unwrap();
+        for (path, text) in oer_espressif_facts::tracked::FILES {
+            let path = directory.path().join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
         for image in ["b0", "w0", "w1", "w2", "w3", "boot-smoke"] {
             let manifest = directory
                 .path()
@@ -384,7 +382,7 @@ mod tests {
         let output = output(root, "w0");
         let staging = oer_image_build::bundle::staging_directory(&output).unwrap();
         std::fs::create_dir_all(&staging).unwrap();
-        let mut built = ImageBundle::new(&staging, &profile, profile.flash.clone().unwrap());
+        let mut built = ImageBundle::new(&staging, &profile, profile.facts.flash.clone().unwrap());
         for segment in built.segments() {
             std::fs::write(segment.file, b"fixture").unwrap();
         }
@@ -408,7 +406,8 @@ mod tests {
         let staging = oer_image_build::bundle::staging_directory(&output).unwrap();
         for purpose in [Purpose::Analysis, Purpose::Flash] {
             std::fs::create_dir_all(&staging).unwrap();
-            let mut built = ImageBundle::new(&staging, &profile, profile.flash.clone().unwrap());
+            let mut built =
+                ImageBundle::new(&staging, &profile, profile.facts.flash.clone().unwrap());
             built.purpose = purpose;
             for segment in built.segments() {
                 std::fs::write(segment.file, b"fixture").unwrap();

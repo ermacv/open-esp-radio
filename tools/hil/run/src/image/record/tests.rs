@@ -27,12 +27,19 @@ fn test_artifacts(
 ) -> Artifacts {
     let directory = application.parent().unwrap().join("bundle");
     fs::create_dir_all(&directory).unwrap();
-    let profile: oer_chip_profile::Profile =
-        toml::from_str(oer_hil_runs::run::test_support::TEST_CHIP_PROFILE).unwrap();
+    let chip = tempfile::tempdir().unwrap();
+    let layer = chip.path().join(oer_espressif_facts::chip_file(
+        oer_hil_runs::run::test_support::TEST_CHIP,
+    ));
+    fs::create_dir_all(layer.parent().unwrap()).unwrap();
+    fs::write(&layer, oer_hil_runs::run::test_support::TEST_CHIP_PROFILE).unwrap();
+    let profile =
+        oer_chip_profile::Profile::load(chip.path(), oer_hil_runs::run::test_support::TEST_CHIP)
+            .unwrap();
     let mut bundle = oer_image_build::bundle::ImageBundle::new(
         &directory,
         &profile,
-        profile.flash.clone().unwrap(),
+        profile.facts.flash.clone().unwrap(),
     );
     for (source, name) in [
         (application, files::APPLICATION),

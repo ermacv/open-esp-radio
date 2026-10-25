@@ -142,7 +142,8 @@ way.
 ## Flash map
 
 Each chip's `chips/<chip>/platform/chip.toml` `[flash]` table
-([`oer-chip-profile`](../../chip/profile/src/lib.rs)'s `FlashMap`) holds the
+([`oer-espressif-facts`](../../../chips/espressif/facts/README.md)' `FlashMap`,
+with the flash size of the chip's module) holds the
 bootloader, partition-table, application and OTA-data offsets and the
 partition-table CSV path (`chips/<chip>/platform/partitions/`). Both S31 and
 C5 use staged boot. The [C5 profile](../../../chips/esp32c5/platform/chip.toml)

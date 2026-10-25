@@ -38,7 +38,7 @@ fn manifest_path_with_inputs(
     inputs: &mut oer_os_durable::inputs::Inputs,
 ) -> Result<String> {
     let profile = oer_chip_profile::Profile::load_with_inputs(root, chip, inputs)?;
-    let manifest = manifest(&profile.id);
+    let manifest = manifest(&profile.facts.id);
     if !root.join(&manifest).is_file() {
         return Err(format!("chip {chip} has no vendor artifact pins ({manifest})").into());
     }

@@ -1,0 +1,126 @@
+# The Espressif family layer of the chip facts: what every chip of the family
+# shares, its staged boot's contracts with the host tools included. Each
+# chip's `chips/<id>/platform/chip.toml` extends this file and the ISA of its
+# harts (`isa/`); chips/espressif/facts/README.md describes the layers.
+schema = 2
+# The family whose shared code the chips use (`platform = "family"` packages).
+family = "espressif"
+# The ROM loads the ESP-IDF bootloader, which loads the chip's bootstrap
+# (firmware/bootstrap/<id>); the bootstrap stages the runtime into PSRAM.
+boot = "staged"
+
+# Formatting entry points watched by the host reachability report of every
+# image of the family.
+observed-functions = [
+    "core::fmt::write",
+    "<core::fmt::Formatter>::*",
+    "<core::fmt::rt::Argument>::fmt*",
+    "<core::fmt::builders::*",
+    "* as core::fmt::Debug>::fmt*",
+    "* as core::fmt::Display>::fmt*",
+    "* as core::fmt::Binary>::fmt*",
+    "* as core::fmt::Octal>::fmt*",
+    "* as core::fmt::LowerHex>::fmt*",
+    "* as core::fmt::UpperHex>::fmt*",
+    "* as core::fmt::Pointer>::fmt*",
+    "* as core::fmt::LowerExp>::fmt*",
+    "* as core::fmt::UpperExp>::fmt*",
+    "* as core::fmt::Write>::write_fmt*",
+]
+
+# The interrupt contract the interrupt-stack check reads: the staged runtime
+# (chips/espressif/staged-runtime) installs these vectors and stacks; the
+# symbols are the interrupt table's (portable/interrupt-table) and the staged
+# runtime's (chips/espressif/staged-runtime stacks.rs). A chip adds its harts
+# and their guards.
+[interrupts]
+table-symbol = "__OER_INTERRUPT_TABLE"
+# `oer_interrupt_table::Binding`: source u16 at 0, CPU line u8 at 2, level
+# u8 at 3, class u8 at 4 (`oer_interrupt_table::Class`), hart u8 at 5,
+# handler word at 8; fields as [offset, bytes]. An exempt entry's reason is
+# the bytes of the symbol named by the prefix and the entry's handler symbol.
+table-entry-bytes = 12
+table-source = [0, 2]
+table-line = [2, 1]
+table-level = [3, 1]
+table-class = [4, 1]
+table-core = [5, 1]
+table-handler = 8
+table-exemption-prefix = "__OER_INTERRUPT_EXEMPT_"
+# Each hart's table of 64 words, the word of line n at 4n; each line's
+# entry calls the line's handler directly and returns through the checked
+# exit (staged-runtime `vectors.s`).
+vector-table-symbol = "_runtime_mtvt"
+vector-table-hart-slots = 64
+exception-entry-symbol = "_start_trap"
+# Maximum allocation of each hart's dedicated SRAM interrupt stack.
+irq-stack-bytes = 0x8000
+irq-stack-margin-percent = 10
+# Routes and line levels are written through the interrupt table's router
+# (portable/interrupt-table) by the chip's controller, whose writer
+# functions this list names with the contexts they may run in.
+level-writers = []
+
+# The staged runtime's placement contract (chips/espressif/staged-layout/linker/runtime):
+# code, data and the CPU0 task stack in PSRAM; interrupt entries, vector
+# tables, interrupt stacks, critical code and data, DMA data and the panic
+# entry and hook in SRAM; the interrupt table's handlers in SRAM or ROM.
+# A rule with `per-hart = true` stands once for each of the chip's harts,
+# `{hart}` replaced by its number; `bytes-per-hart` sizes a rule by the
+# number of harts.
+[placement]
+name = "psram-code-psram-data-psram-stack"
+image = { start = "__runtime_image_start", end = "__runtime_payload_end", origin = "runtime-psram" }
+entry = { symbol = "_runtime_start", text = ["__runtime_text_start", "__runtime_text_end"] }
+range = [
+    { range = ["__runtime_data_start", "__runtime_data_bss_end"], region = "psram" },
+    { range = ["__runtime_isr_start", "__runtime_isr_end"], region = "sram" },
+    { range = ["__runtime_critical_data_start", "__runtime_critical_bss_end"], region = "sram" },
+    { range = ["__runtime_dma_data_start", "__runtime_dma_bss_end"], region = "sram" },
+    { range = ["_stack_end", "_stack_start"], region = "psram", bytes = 0x30000 },
+    { range = ["__runtime_cpu{hart}_irq_stack_bottom", "__runtime_cpu{hart}_irq_stack_top"], region = "sram", maximum-bytes = 0x8000, per-hart = true },
+]
+symbol = [
+    { name = "_start_trap", bytes = 4, region = "sram" },
+    { name = "_runtime_irq_h{hart}_l{n}", numbers = [1, 47], bytes = 4, region = "sram", per-hart = true },
+    { name = "_runtime_irq_exit", bytes = 4, region = "sram" },
+    # Each hart's 64-word vector table (`vector-table-hart-slots`).
+    { name = "_runtime_mtvt", bytes-per-hart = 256, region = "sram" },
+    { name = "__rustc::rust_begin_unwind", bytes = 4, region = "sram" },
+    { name = "oer_platform_panic_hook", bytes = 4, region = "sram", optional = true },
+]
+# Code reachable from an interrupt runs from SRAM or the mask ROM.
+interrupt-handlers = ["sram", "rom"]
+section = [{ prefix = ".critical", region = "sram" }]
+stack-swap = [
+    { name = "_start_trap" },
+    { name = "_runtime_irq_h{hart}_l{n}", numbers = [1, 47], per-hart = true },
+]
+
+# The staged boot's host contract: the stage-two header the image pipeline
+# packs (chips/espressif/staged-layout stage_two.rs) and the input sections
+# the runtime linker script zeroes (zeroed.rs), which the image linker refuses
+# initialized bytes in.
+[staged]
+zeroed-inputs = [
+    ".dram2_uninit.bss", ".dram2_uninit.bss.*", ".dram2_uninit", ".dram2_uninit.*",
+    ".rtc_fast.bss", ".rtc_fast.bss.*",
+    ".critical.bss", ".critical.bss.*", ".flash.critical.bss", ".flash.critical.bss.*",
+    ".dma.bss", ".dma.bss.*",
+    ".psram.bss", ".psram.bss.*", ".sbss", ".sbss.*", ".bss", ".bss.*", "COMMON",
+]
+# The PSRAM page the bootstrap probes before it copies stage two
+# (chips/espressif/staged-layout memory.rs): stage two lies after it.
+bootstrap-psram-bytes = 0x1_0000
+
+# The stage-two header: little-endian words; "STG2" magic, the handoff ABI
+# version, the header's own size and the payload CRC-32 (computed with its
+# field read as zero) at these byte offsets.
+[staged.stage-two]
+magic = 0x32475453
+abi-version = 1
+header-bytes = 44
+magic-offset = 0
+abi-version-offset = 4
+header-size-offset = 28
+crc-offset = 40

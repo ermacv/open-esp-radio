@@ -7,7 +7,7 @@ fn profile() -> oer_chip_profile::Profile {
     oer_chip_profile::Profile::all(&root)
         .unwrap()
         .into_iter()
-        .find(|profile| profile.flash.is_some())
+        .find(|profile| profile.facts.flash.is_some())
         .unwrap()
 }
 
@@ -17,7 +17,7 @@ fn staged(output: &Path, application: &[u8]) -> ImageBundle {
     let staging = staging_directory(output).unwrap();
     remove_directory(&staging).unwrap();
     std::fs::create_dir_all(&staging).unwrap();
-    let mut bundle = ImageBundle::new(&staging, &profile, profile.flash.clone().unwrap());
+    let mut bundle = ImageBundle::new(&staging, &profile, profile.facts.flash.clone().unwrap());
     bundle.otadata = true;
     for (file, bytes) in [
         (bundle.bootloader(), &b"boot"[..]),

@@ -71,7 +71,7 @@ fn one(input: &Path, output: &Path, root: &Path) -> Result<()> {
     }
     let policy = oer_chip_profile::policy::StackPolicy::load(&root.join(&provenance.stack_policy))?;
     let profile = oer_chip_profile::Profile::load(root, &provenance.chip)?;
-    if profile.rust_target != provenance.target {
+    if profile.facts.rust_target != provenance.target {
         return Err("sizes-refresh: configuration target differs from original build".into());
     }
     let mut elfs = BTreeMap::new();

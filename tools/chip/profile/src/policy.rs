@@ -541,6 +541,7 @@ impl StackPolicy {
     /// stack's proven bound.
     pub fn set_task_stack_bytes(profile: &mut crate::Profile, bytes: u32) -> Result<()> {
         let memory = profile
+            .facts
             .memory
             .as_ref()
             .ok_or("a task stack allocation requires the chip memory map")?;
@@ -553,6 +554,7 @@ impl StackPolicy {
             return Err("task stack allocation does not fit PSRAM".into());
         }
         let placement = profile
+            .facts
             .placement
             .as_mut()
             .ok_or("a task stack allocation requires exact placement rules")?;
@@ -591,7 +593,7 @@ impl StackPolicy {
     /// the placement gate verifies the linked ranges.
     pub fn runtime_profile(&self, base: &crate::Profile) -> Result<crate::Profile> {
         self.validate()?;
-        self.check_cores(base.properties.cores)?;
+        self.check_cores(base.facts.properties.cores)?;
         let mut profile = base.clone();
         if let Some(bytes) = self
             .cpu0_task_stack()
@@ -599,10 +601,10 @@ impl StackPolicy {
         {
             Self::set_task_stack_bytes(&mut profile, bytes)?;
         }
-        if let Some(interrupts) = profile.interrupts.as_mut() {
+        if let Some(interrupts) = profile.facts.interrupts.as_mut() {
             let unused = self.unused_interrupt_cores();
             interrupts.harts.retain(|hart| !unused.contains(hart));
-            if let Some(placement) = profile.placement.as_mut() {
+            if let Some(placement) = profile.facts.placement.as_mut() {
                 placement.range.retain(|rule| {
                     !unused.iter().any(|hart| {
                         rule.range[0] == format!("__runtime_cpu{hart}_irq_stack_bottom")
@@ -614,10 +616,12 @@ impl StackPolicy {
             return Ok(profile);
         };
         let memory = profile
+            .facts
             .memory
             .as_ref()
             .ok_or("an interrupt stack allocation requires the chip memory map")?;
         let interrupts = profile
+            .facts
             .interrupts
             .as_mut()
             .ok_or("an interrupt stack allocation requires the interrupt contract")?;
@@ -630,6 +634,7 @@ impl StackPolicy {
             return Err("interrupt stack allocation does not fit the SRAM/guard contract".into());
         }
         let placement = profile
+            .facts
             .placement
             .as_mut()
             .ok_or("an interrupt stack allocation requires exact placement rules")?;
@@ -730,16 +735,14 @@ mod tests {
     fn tracked_loads_record_the_chip_and_both_policy_files_at_their_reads() {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
+        for (path, text) in oer_espressif_facts::tracked::FILES {
+            let path = root.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
         let platform = root.join("chips/esp32s31/platform");
-        std::fs::create_dir_all(&platform).unwrap();
-        let chip = platform.join("chip.toml");
         let policy = platform.join("policy.toml");
         let base = platform.join("base.toml");
-        std::fs::write(
-            &chip,
-            include_str!("../../../../chips/esp32s31/platform/chip.toml"),
-        )
-        .unwrap();
         std::fs::write(&policy, "schema = 6\nextends = 'base.toml'\n").unwrap();
         std::fs::write(
             &base,
@@ -750,17 +753,22 @@ mod tests {
         crate::Profile::load_with_inputs(root, "esp32s31", &mut inputs).unwrap();
         StackPolicy::load_with_inputs(&policy, &mut inputs).unwrap();
         let digests = inputs.into_digests();
-        assert_eq!(digests.len(), 3);
-        for path in [chip, policy, base] {
+        let layers = [
+            "chips/espressif/platform/isa/rv32imafc.toml",
+            "chips/espressif/platform/family.toml",
+            "chips/esp32s31/platform/chip.toml",
+            "chips/esp32s31/platform/modules/esp32-s31-wroom.toml",
+            "chips/esp32s31/platform/boards/esp32-s31-function-coreboard-1.toml",
+        ]
+        .map(|path| root.join(path));
+        assert_eq!(digests.len(), layers.len() + 2);
+        for path in layers.into_iter().chain([policy, base]) {
             assert_eq!(digests[&path], oer_os_durable::sha256_file(&path).unwrap());
         }
     }
 
     fn profile() -> crate::Profile {
-        toml::from_str(include_str!(
-            "../../../../chips/esp32s31/platform/chip.toml"
-        ))
-        .unwrap()
+        crate::Profile::tracked("esp32s31").unwrap()
     }
     #[test]
     fn a_task_allocation_binds_the_link_environment_and_exact_psram_range() {
@@ -770,6 +778,7 @@ mod tests {
         let adjusted = policy.runtime_profile(&base).unwrap();
         let rule = |profile: &crate::Profile| {
             profile
+                .facts
                 .placement
                 .as_ref()
                 .unwrap()
@@ -781,7 +790,7 @@ mod tests {
         };
         assert_eq!(rule(&base), Some(0x30000));
         assert_eq!(rule(&adjusted), Some(1 << 20));
-        assert_eq!(adjusted.interrupts.as_ref().unwrap().harts, [0]);
+        assert_eq!(adjusted.facts.interrupts.as_ref().unwrap().harts, [0]);
         assert!(
             policy
                 .runtime_environment()
@@ -838,6 +847,7 @@ mod tests {
         let mut profile = profile();
         StackPolicy::set_task_stack_bytes(&mut profile, 17264).unwrap();
         let rule = profile
+            .facts
             .placement
             .as_ref()
             .unwrap()
@@ -889,23 +899,32 @@ mod tests {
         let base = profile();
         let before = base.clone();
         let unchanged = policy(None).runtime_profile(&base).unwrap();
-        assert_eq!(unchanged.interrupts.as_ref().unwrap().harts, [0]);
-        let requested = base.interrupts.as_ref().unwrap().irq_stack_bytes * 2;
+        assert_eq!(unchanged.facts.interrupts.as_ref().unwrap().harts, [0]);
+        let requested = base.facts.interrupts.as_ref().unwrap().irq_stack_bytes * 2;
         let image = policy(Some(requested)).runtime_profile(&base).unwrap();
-        let contract = image.interrupts.as_ref().unwrap();
+        let contract = image.facts.interrupts.as_ref().unwrap();
         assert_eq!(contract.irq_stack_bytes, requested);
         assert_eq!(
             contract.irq_stack_guard_bytes,
-            base.interrupts.as_ref().unwrap().irq_stack_guard_bytes
+            base.facts
+                .interrupts
+                .as_ref()
+                .unwrap()
+                .irq_stack_guard_bytes
         );
         assert_eq!(
             contract.irq_stack_margin_percent,
-            base.interrupts.as_ref().unwrap().irq_stack_margin_percent
+            base.facts
+                .interrupts
+                .as_ref()
+                .unwrap()
+                .irq_stack_margin_percent
         );
         assert_eq!(contract.harts, [0]);
         for hart in &contract.harts {
             let bottom = format!("__runtime_cpu{hart}_irq_stack_bottom");
             let range = image
+                .facts
                 .placement
                 .as_ref()
                 .unwrap()
@@ -932,9 +951,10 @@ mod tests {
     #[test]
     fn a_larger_budget_requires_consistent_exact_sram_placement() {
         let mut base = profile();
-        let requested = base.interrupts.as_ref().unwrap().irq_stack_bytes * 2;
+        let requested = base.facts.interrupts.as_ref().unwrap().irq_stack_bytes * 2;
         let name = "__runtime_cpu0_irq_stack_bottom";
         let rule = base
+            .facts
             .placement
             .as_mut()
             .unwrap()
@@ -944,7 +964,8 @@ mod tests {
             .unwrap();
         rule.bytes = Some(1);
         assert!(policy(Some(requested)).runtime_profile(&base).is_err());
-        base.placement
+        base.facts
+            .placement
             .as_mut()
             .unwrap()
             .range
@@ -1027,10 +1048,11 @@ mod tests {
     fn unused_interrupt_stacks_leave_the_contract_and_the_link_environment_names_them() {
         let base = profile();
         let image = policy(None).runtime_profile(&base).unwrap();
-        let contract = image.interrupts.as_ref().unwrap();
+        let contract = image.facts.interrupts.as_ref().unwrap();
         assert_eq!(contract.harts, [0]);
         let placed = |profile: &crate::Profile, hart: u32| {
             profile
+                .facts
                 .placement
                 .as_ref()
                 .unwrap()

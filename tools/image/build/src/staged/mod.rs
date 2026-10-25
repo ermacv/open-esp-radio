@@ -35,9 +35,9 @@ pub(crate) fn build(
     panics: &oer_image_checks::panics::Contract,
 ) -> Result<ImageBundle> {
     let root = spec.root.as_path();
-    let target = profile.rust_target.as_str();
+    let target = profile.facts.rust_target.as_str();
     let bootstrap_package = profile.bootstrap_package();
-    let flash = profile.flash.clone().ok_or("no flash map")?;
+    let flash = profile.facts.flash.clone().ok_or("no flash map")?;
     // Every file goes into the staging directory; the bundle is published
     // only once the whole build succeeded.
     let staging = Staging::begin(&spec.output)?;
@@ -67,7 +67,7 @@ pub(crate) fn build(
         let mut runtime = crate::runtime_command(spec, profile, "build", &policy, instrumentation)?;
         runtime.env("CARGO_TARGET_DIR", &cache);
         sizes.flags("runtime", &runtime, root)?;
-        let strict = profile.memory.is_some() && profile.interrupts.is_some();
+        let strict = profile.facts.memory.is_some() && profile.facts.interrupts.is_some();
         let analysis = oer_image_checks::linker::strict::Spec {
             root: spec.root.clone(),
             chip: spec.chip.clone(),
@@ -149,6 +149,7 @@ pub(crate) fn build(
         .arg(&runtime_bin);
     log.run(&mut objcopy, "flatten the stage-two runtime")?;
     let staged = profile
+        .facts
         .staged
         .as_ref()
         .ok_or("a staged chip's profile names its [staged] contract")?;
@@ -295,7 +296,7 @@ fn encode_application(
         })?;
     let encoded = encode::encode(
         elf,
-        encode::chip(&profile.espflash_chip)?,
+        encode::chip(&profile.facts.espflash_chip)?,
         Encoding::application(&bundle.flash, MMU_PAGE_SIZE)?,
         Some(&root.join(&bundle.flash.partitions)),
         bundle.flash.partition_table,
@@ -330,7 +331,7 @@ pub(crate) fn encode_boot_files(
     let csv = root.join(&flash.partitions);
     let rom = encode::encode(
         elf,
-        encode::chip(&profile.espflash_chip)?,
+        encode::chip(&profile.facts.espflash_chip)?,
         Encoding::bootloader(&flash, MMU_PAGE_SIZE)?,
         Some(&csv),
         flash.partition_table,

@@ -1,13 +1,10 @@
-# The facts of the ESP32-S31 that host tools cannot derive from the chip id.
-# Paths follow the id by convention, such as registers/<id>.
-schema = 1
+# The chip layer of the ESP32-S31's facts: what host tools cannot derive from
+# the chip id. It extends the ISA of its harts and the Espressif family; its
+# module and board (modules/, boards/) extend it. Paths follow the id by
+# convention, such as registers/<id>.
+schema = 2
 id = "esp32s31"
-# The family whose shared code the chip uses (`platform = "family"` packages).
-family = "espressif"
-rust-target = "riscv32imafc-unknown-none-elf"
-# The ROM loads the ESP-IDF bootloader, which loads firmware/bootstrap/esp32s31;
-# the bootstrap stages the runtime into PSRAM.
-boot = "staged"
+extends = ["../../espressif/platform/isa/rv32imafc.toml", "../../espressif/platform/family.toml"]
 espflash-chip = "esp32s31"
 revisions = ["rev0"]
 
@@ -30,17 +27,19 @@ partition-table = 0x8000
 application = 0x10000
 otadata = 0xd000
 partitions = "chips/esp32s31/platform/partitions/applications.csv"
-# The application image's header: ESP-IDF's bootloader switches the board's
-# 16-MiB flash to QIO at 80 MHz before it loads the bootstrap (the bootstrap
-# then tunes 120 MHz itself). The ROM reads the bootloader in DIO.
-application-encoding = { mode = "qio", frequency-mhz = 80, size-mib = 16 }
+# The application image's header: ESP-IDF's bootloader switches the module's
+# flash (its size is the module's) to QIO at 80 MHz before it loads the
+# bootstrap (the bootstrap then tunes 120 MHz itself). The ROM reads the
+# bootloader in DIO.
+application-encoding = { mode = "qio", frequency-mhz = 80 }
 bootloader-mode = "dio"
 # How a written image starts: the writer's hard reset.
 start = "reset"
 
 # The staged-boot address map as host tools check images against it: the
 # firmware's own copy is chips/esp32s31/layout (LAYOUT), which the linker
-# scripts read. Sizes describe the fitted memories.
+# scripts read. The PSRAM's size is the module's; stage two lies in it after
+# the bootstrap's probe page (`runtime-psram`).
 [memory]
 # Application-owned internal SRAM (ESP-IDF's SRAM_START..SRAM_SEG_END).
 sram = { origin = 0x2f000000, length = 0x0007afc0 }
@@ -53,48 +52,16 @@ sram = { origin = 0x2f000000, length = 0x0007afc0 }
 # programs covers 512 MiB (`chips/esp32s31/board/README.md`, "Boot state on the
 # board"). The host checks treat only these 64 MiB as cached flash.
 flash-xip = { origin = 0x40000000, length = 0x04000000 }
-# Cached external RAM aperture of the fitted 16-MiB PSRAM.
-psram = { origin = 0x50000000, length = 0x01000000 }
-# Stage-two code relocated to PSRAM, after the bootstrap's 64-KiB probe page.
-runtime-psram = { origin = 0x50010000, length = 0x00ff0000 }
+# Where the module's PSRAM lies: the start of the cached external RAM aperture.
+psram-origin = 0x50000000
 # The runtime's task stacks lie in PSRAM.
 task-stacks = "psram"
 
-# The interrupt contract the interrupt-stack check reads: the staged runtime
-# (chips/espressif/staged-runtime) installs these vectors and stacks; the
-# symbols are the interrupt table's (portable/interrupt-table) and the staged
-# runtime's (chips/espressif/staged-runtime stacks.rs).
+# The chip's harts and the guard of each one's interrupt stack; the family
+# states the rest of the interrupt contract.
 [interrupts]
-table-symbol = "__OER_INTERRUPT_TABLE"
-# `oer_interrupt_table::Binding`: source u16 at 0, CPU line u8 at 2, level
-# u8 at 3, class u8 at 4 (`oer_interrupt_table::Class`), hart u8 at 5,
-# handler word at 8; fields as [offset, bytes]. An exempt entry's reason is
-# the bytes of the symbol named by the prefix and the entry's handler symbol.
-table-entry-bytes = 12
-table-source = [0, 2]
-table-line = [2, 1]
-table-level = [3, 1]
-table-class = [4, 1]
-table-core = [5, 1]
-table-handler = 8
-table-exemption-prefix = "__OER_INTERRUPT_EXEMPT_"
-# Each hart's table of 64 words, the word of line n at 4n; each line's
-# entry calls the line's handler directly and returns through the checked
-# exit (staged-runtime `vectors.s`).
-vector-table-symbol = "_runtime_mtvt"
-vector-table-hart-slots = 64
-exception-entry-symbol = "_start_trap"
 harts = [0, 1]
-# Maximum allocation of each hart's dedicated SRAM interrupt stack.
-irq-stack-bytes = 0x8000
 irq-stack-guard-bytes = { "0" = 4096, "1" = 1024 }
-irq-stack-margin-percent = 10
-# Routes and line levels are written through the interrupt table's router
-# (portable/interrupt-table) by the chip's controller, whose writer
-# functions this list names with the contexts they may run in.
-level-writers = []
-
-
 
 # What releases core 1 from the reset the esp-hal fork holds it in
 # (chips/esp32s31/notes/core1-boot.md). An image links none of these unless its
@@ -124,66 +91,6 @@ forbidden = [
     { name = "eco0-radio-api", start = 0x2f800bf0, end = 0x2f8016bc },
     { name = "eco0-radio-body", start = 0x2f823c12, end = 0x2f83e6d0 },
 ]
-
-# The staged runtime's placement contract (chips/espressif/staged-layout/linker/runtime
-# script): code, data and the CPU0 task stack in PSRAM; interrupt entries,
-# vector tables, interrupt stacks, critical code and data, DMA data and the
-# panic entry and hook in SRAM; the interrupt table's handlers in SRAM or ROM.
-[placement]
-name = "psram-code-psram-data-psram-stack"
-image = { start = "__runtime_image_start", end = "__runtime_payload_end", origin = "runtime-psram" }
-entry = { symbol = "_runtime_start", text = ["__runtime_text_start", "__runtime_text_end"] }
-range = [
-    { range = ["__runtime_data_start", "__runtime_data_bss_end"], region = "psram" },
-    { range = ["__runtime_isr_start", "__runtime_isr_end"], region = "sram" },
-    { range = ["__runtime_critical_data_start", "__runtime_critical_bss_end"], region = "sram" },
-    { range = ["__runtime_dma_data_start", "__runtime_dma_bss_end"], region = "sram" },
-    { range = ["_stack_end", "_stack_start"], region = "psram", bytes = 0x30000 },
-    { range = ["__runtime_cpu0_irq_stack_bottom", "__runtime_cpu0_irq_stack_top"], region = "sram", maximum-bytes = 0x8000 },
-    { range = ["__runtime_cpu1_irq_stack_bottom", "__runtime_cpu1_irq_stack_top"], region = "sram", maximum-bytes = 0x8000 },
-]
-symbol = [
-    { name = "_start_trap", bytes = 4, region = "sram" },
-    { name = "_runtime_irq_h0_l{n}", numbers = [1, 47], bytes = 4, region = "sram" },
-    { name = "_runtime_irq_h1_l{n}", numbers = [1, 47], bytes = 4, region = "sram" },
-    { name = "_runtime_irq_exit", bytes = 4, region = "sram" },
-    { name = "_runtime_mtvt", bytes = 512, region = "sram" },
-    { name = "__rustc::rust_begin_unwind", bytes = 4, region = "sram" },
-    { name = "oer_platform_panic_hook", bytes = 4, region = "sram", optional = true },
-]
-# Code reachable from an interrupt runs from SRAM or the mask ROM.
-interrupt-handlers = ["sram", "rom"]
-section = [{ prefix = ".critical", region = "sram" }]
-stack-swap = [
-    { name = "_start_trap" },
-    { name = "_runtime_irq_h0_l{n}", numbers = [1, 47] },
-    { name = "_runtime_irq_h1_l{n}", numbers = [1, 47] },
-]
-
-# The staged boot's host contract: the stage-two header the image build
-# packs (chips/espressif/staged-layout stage_two.rs) and the input sections
-# the runtime linker script zeroes (zeroed.rs), which the image linker refuses
-# initialized bytes in.
-[staged]
-zeroed-inputs = [
-    ".dram2_uninit.bss", ".dram2_uninit.bss.*", ".dram2_uninit", ".dram2_uninit.*",
-    ".rtc_fast.bss", ".rtc_fast.bss.*",
-    ".critical.bss", ".critical.bss.*", ".flash.critical.bss", ".flash.critical.bss.*",
-    ".dma.bss", ".dma.bss.*",
-    ".psram.bss", ".psram.bss.*", ".sbss", ".sbss.*", ".bss", ".bss.*", "COMMON",
-]
-
-# The stage-two header: little-endian words; "STG2" magic, the handoff ABI
-# version, the header's own size and the payload CRC-32 (computed with its
-# field read as zero) at these byte offsets.
-[staged.stage-two]
-magic = 0x32475453
-abi-version = 1
-header-bytes = 44
-magic-offset = 0
-abi-version-offset = 4
-header-size-offset = 28
-crc-offset = 40
 
 # The Rust probe images of the vendor comparison (firmware/probes),
 # in build order: the artifact role each serves. The Bluetooth probe returns

@@ -36,11 +36,14 @@ chips/      everything about Espressif hardware
   espressif/    IP shared by Espressif chips: Wi-Fi MAC PAC, analog, modem
                 clock, coexistence, the 802.15.4 engine, Wi-Fi policy, the
                 staged boot (bootstrap, runtime, layout), executor and
-                esp-hal bindings; registers/ and notes/ shared by the chips
+                esp-hal bindings, the chip facts model (facts/) and the
+                family and ISA fact layers (platform/); registers/ and notes/
+                shared by the chips
   esp32s31/ esp32c5/
                 PAC, HAL, PHY, drivers, radio system, board, memory layout,
                 chip knowledge, and the chip's data:
-                platform/   chip profile, partitions, ROM functions, stack budgets
+                platform/   chip, module and board fact layers, partitions, ROM
+                            functions, stack budgets
                 registers/  the reviewed register model and its publications
                 notes/      recovered facts and research notes
                 vendor/     the vendor pins and generated facts

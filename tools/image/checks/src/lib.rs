@@ -124,8 +124,8 @@ pub struct CheckOutcome {
 }
 
 /// The ROM ranges of `profile`'s chip no image may call into.
-fn forbidden_rom(profile: &oer_chip_profile::Profile) -> &[oer_chip_profile::RomRange] {
-    profile.rom.as_ref().map_or(&[], |rom| &rom.forbidden)
+fn forbidden_rom(profile: &oer_chip_profile::Profile) -> &[oer_espressif_facts::RomRange] {
+    profile.facts.rom.as_ref().map_or(&[], |rom| &rom.forbidden)
 }
 
 /// The placement report in an image bundle.
@@ -245,20 +245,20 @@ const AUDIT: &str = "audit";
 
 /// The code sections of the mask ROM, from `profile`'s pinned `[rom]` ELF at
 /// `root`; none for a chip without one.
-fn rom_code(root: &Path, profile: &Profile) -> Result<Vec<oer_chip_profile::Region>> {
-    let Some(rom) = &profile.rom else {
+fn rom_code(root: &Path, profile: &Profile) -> Result<Vec<oer_espressif_facts::Region>> {
+    let Some(rom) = &profile.facts.rom else {
         return Ok(Vec::new());
     };
     let bytes = std::fs::read(oer_tool_pins::artifacts::ensure(
         root,
-        &profile.id,
+        &profile.facts.id,
         &rom.elf,
     )?)?;
     let elf = oer_analysis_elf::Elf::parse(&bytes)?;
     elf.sections()
         .filter(|section| section.allocated && section.executable && section.size > 0)
         .map(|section| {
-            Ok(oer_chip_profile::Region {
+            Ok(oer_espressif_facts::Region {
                 origin: u32::try_from(section.address)?,
                 length: u32::try_from(section.size)?,
             })
@@ -317,13 +317,17 @@ impl Gates {
             StackPolicy::set_task_stack_bytes(&mut image_profile, allocation.bytes)?;
         }
         let profile = &image_profile;
-        let chip =
-            |table: &str| format!("chips/{}/platform/chip.toml names no {table}", profile.id);
+        let chip = |table: &str| {
+            format!(
+                "chips/{}/platform/chip.toml names no {table}",
+                profile.facts.id
+            )
+        };
         let missing = |what: String| CheckResult::MissingContract(what);
         // What each analysis needs.
-        let rom = profile.rom.is_some();
+        let rom = profile.facts.rom.is_some();
         let stacks = input.policy.stacks().is_ok();
-        let interrupts = profile.memory.is_some() && profile.interrupts.is_some();
+        let interrupts = profile.facts.memory.is_some() && profile.facts.interrupts.is_some();
         let stack_runs = self.stack && rom && stacks;
         let frames_run = self.frames && rom;
         let interrupts_run = self.interrupts.is_some() && rom && interrupts;
@@ -587,7 +591,7 @@ impl Gates {
             ));
         }
         if self.placement {
-            let result = match (&profile.memory, &profile.placement) {
+            let result = match (&profile.facts.memory, &profile.facts.placement) {
                 (Some(memory), Some(placement)) => ran((|| -> Result<()> {
                     let rom = if placement
                         .interrupt_handlers
@@ -601,7 +605,7 @@ impl Gates {
                     let contract = crate::placement::Contract {
                         memory,
                         placement,
-                        interrupts: profile.interrupts.as_ref(),
+                        interrupts: profile.facts.interrupts.as_ref(),
                         rom: &rom,
                     };
                     let report = crate::placement::audit(&contract, input.elf, input.flat)?;
@@ -628,10 +632,10 @@ impl Gates {
         if !self.stack && !self.frames && !self.panics {
             return Ok(outcome);
         }
-        if input.profile.rom.is_none() {
+        if input.profile.facts.rom.is_none() {
             let missing = CheckResult::MissingContract(format!(
                 "chips/{}/platform/chip.toml names no [rom] ELF",
-                input.profile.id
+                input.profile.facts.id
             ));
             for name in self.requested(CheckedElf::Bootstrap) {
                 outcome.results.push((name, missing.clone()));

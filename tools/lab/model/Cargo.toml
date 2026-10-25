@@ -11,6 +11,7 @@ description = "The owner's stand file: its one reader"
 [dependencies]
 oer-os-durable = { path = "../../os/durable" }
 oer-chip-profile = { path = "../../chip/profile" }
+oer-espressif-facts = { path = "../../../chips/espressif/facts" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.4"
 

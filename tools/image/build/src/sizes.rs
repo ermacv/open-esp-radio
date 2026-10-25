@@ -165,7 +165,7 @@ impl Summary {
                 chip: spec.chip.clone(),
                 package: spec.application.package.clone(),
                 binary: spec.application.binary.clone(),
-                target: profile.rust_target.clone(),
+                target: profile.facts.rust_target.clone(),
                 profile: crate::FIRMWARE_PROFILE.into(),
                 profile_settings,
                 features,

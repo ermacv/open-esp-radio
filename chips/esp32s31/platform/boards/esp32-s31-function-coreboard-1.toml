@@ -1,0 +1,6 @@
+# The board layer: ESP32-S31-Function-CoreBoard-1 and the module it carries.
+schema = 2
+extends = "../modules/esp32-s31-wroom.toml"
+
+[board]
+name = "ESP32-S31-Function-CoreBoard-1"

@@ -239,7 +239,7 @@ fn size(path: &Path) -> u64 {
 pub fn run(root: &Path, policy: Policy, apply: bool) -> Result<u64> {
     let chips: Vec<String> = oer_chip_profile::Profile::all(root)?
         .into_iter()
-        .map(|profile| profile.id)
+        .map(|profile| profile.facts.id)
         .collect();
     let found = unheld(
         candidates(root, &chips, policy, SystemTime::now()),

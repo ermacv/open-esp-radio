@@ -8,6 +8,7 @@ fn repository() -> tempfile::TempDir {
 /// ESP-IDF bootloader.
 fn application_chip() -> String {
     oer_chip_profile::Profile::all(repository().path()).unwrap()[0]
+        .facts
         .id
         .clone()
 }
@@ -17,13 +18,13 @@ fn application_chip() -> String {
 /// form of the chip's partition table.
 fn boot_files(root: &Path) -> (Vec<u8>, Vec<u8>) {
     let profile = oer_chip_profile::Profile::load(root, &application_chip()).unwrap();
-    let chip = crate::encode::chip(&profile.espflash_chip).unwrap();
+    let chip = crate::encode::chip(&profile.facts.espflash_chip).unwrap();
     let mut bootloader = vec![0; 24];
     bootloader[0] = 0xe9;
     bootloader[1] = 1;
     bootloader[12..14].copy_from_slice(&chip.id().to_le_bytes());
-    let table =
-        crate::encode::partition_table(&root.join(profile.flash.unwrap().partitions)).unwrap();
+    let table = crate::encode::partition_table(&root.join(profile.facts.flash.unwrap().partitions))
+        .unwrap();
     (bootloader, table)
 }
 

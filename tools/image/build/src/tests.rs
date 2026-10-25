@@ -28,7 +28,7 @@ fn every_chip_with_images_names_its_flash_map() {
     let root = repository.path();
     for chip in oer_chip_profile::supported(&root).unwrap() {
         let profile = profile(&root, &chip).unwrap();
-        let flash = profile.flash.unwrap();
+        let flash = profile.facts.flash.unwrap();
         assert!(
             flash.bootloader < flash.partition_table && flash.partition_table < flash.application
         );
@@ -77,7 +77,7 @@ fn empty_bundle(directory: &Path) -> crate::bundle::ImageBundle {
     let root = repository.path();
     let chip = oer_chip_profile::supported(&root).unwrap().remove(0);
     let profile = profile(&root, &chip).unwrap();
-    let flash = profile.flash.clone().unwrap();
+    let flash = profile.facts.flash.clone().unwrap();
     crate::bundle::ImageBundle::new(directory, &profile, flash)
 }
 
@@ -239,15 +239,7 @@ fn runtime_checks_refuse_requested_link_time_gates() {
 pub(crate) fn repository() -> tempfile::TempDir {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
-    for (path, text) in [
-        (
-            "chips/esp32c5/platform/chip.toml",
-            include_str!("../../../../chips/esp32c5/platform/chip.toml"),
-        ),
-        (
-            "chips/esp32s31/platform/chip.toml",
-            include_str!("../../../../chips/esp32s31/platform/chip.toml"),
-        ),
+    for (path, text) in oer_espressif_facts::tracked::FILES.iter().copied().chain([
         (
             "chips/esp32c5/platform/partitions/applications.csv",
             include_str!("../../../../chips/esp32c5/platform/partitions/applications.csv"),
@@ -292,7 +284,7 @@ pub(crate) fn repository() -> tempfile::TempDir {
                 "../../../../firmware/vendor/esp32s31/phy-tracking-reference/firmware.toml"
             ),
         ),
-    ] {
+    ]) {
         let path = root.join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();

@@ -12,7 +12,9 @@ use std::{
     time::Duration,
 };
 
-use oer_chip_profile::{Profile, Start};
+use oer_chip_profile::Profile;
+
+use oer_espressif_facts::Start;
 use oer_image_build::bundle::ImageBundle;
 use serde::Serialize;
 
@@ -174,10 +176,10 @@ impl Opened {
         profile: &Profile,
     ) -> crate::Result<image::Receipt> {
         let _operation = self.access.operation()?;
-        if bundle.chip != profile.id {
+        if bundle.chip != profile.facts.id {
             return Err(format!(
                 "the bundle is an {} image; the profile is {}'s",
-                bundle.chip, profile.id
+                bundle.chip, profile.facts.id
             )
             .into());
         }
@@ -199,12 +201,12 @@ impl Opened {
             image,
             image::Transport::Usb {
                 port: &port,
-                espflash_chip: &profile.espflash_chip,
+                espflash_chip: &profile.facts.espflash_chip,
             },
             &self.command,
         )?;
-        remember_chip(&self.device.mac, &profile.id)?;
-        self.device.chip = Some(profile.id.clone());
+        remember_chip(&self.device.mac, &profile.facts.id)?;
+        self.device.chip = Some(profile.facts.id.clone());
         match written.pending_start() {
             Start::Reset => {}
             Start::PowerOn => drop(self.reset_port()?),
@@ -252,16 +254,16 @@ impl Opened {
         let name = flash::detect(&port)?;
         let profile = chips
             .iter()
-            .find(|profile| profile.espflash_chip == name)
+            .find(|profile| profile.facts.espflash_chip == name)
             .ok_or_else(|| {
                 format!(
                     "board {} is an {name}, which no chip profile names",
                     self.device.mac
                 )
             })?;
-        remember_chip(&self.device.mac, &profile.id)?;
-        self.device.chip = Some(profile.id.clone());
-        Ok(profile.id.clone())
+        remember_chip(&self.device.mac, &profile.facts.id)?;
+        self.device.chip = Some(profile.facts.id.clone());
+        Ok(profile.facts.id.clone())
     }
 }
 

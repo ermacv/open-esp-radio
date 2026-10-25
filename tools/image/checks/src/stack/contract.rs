@@ -1,7 +1,9 @@
 //! What the checks read from the chip profile: the `[memory]` map and the
 //! `[interrupts]` contract.
 
-use oer_chip_profile::{InterruptContract, Memory, Profile};
+use oer_chip_profile::Profile;
+
+use oer_espressif_facts::{InterruptContract, Memory};
 
 /// The chip's address map and interrupt contract.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -15,8 +17,8 @@ impl Contract {
     /// map or no `[interrupts]` contract.
     pub fn of(profile: &Profile) -> Option<Self> {
         Some(Self {
-            memory: profile.memory.clone()?,
-            interrupts: profile.interrupts.clone()?,
+            memory: profile.facts.memory.clone()?,
+            interrupts: profile.facts.interrupts.clone()?,
         })
     }
 

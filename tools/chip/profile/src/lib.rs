@@ -1,10 +1,11 @@
-//! The chips this repository supports, from their tracked profiles, and
-//! the stack policy of their image families ([`policy`]).
+//! The chips this repository supports, from their tracked layered facts
+//! (`oer-espressif-facts`), and the stack policy of their image families
+//! ([`policy`]).
 //!
-//! Every supported chip has `chips/<id>/platform/chip.toml`, holding only what
-//! differs between chips and cannot be derived from the id: the chip family,
-//! the Rust target, the boot flow, the chip name `espflash` uses, the silicon revisions and
-//! the chip's properties (radio bands, Bluetooth modes, cores).
+//! Every supported chip has `chips/<id>/platform/chip.toml`, its chip layer:
+//! it extends the ISA of its harts and its family, and its module and board
+//! extend it. A [`Profile`] is the resolved facts of the chip's board and the
+//! image registry its chip layer holds (`[hil]`, `[packages]`, `[[probe]]`).
 //! Everything else follows the id by convention
 //! (`firmware/probes/<id>-<name>`, `chips/<id>/registers`), and a capability exists
 //! where its directory does.
@@ -18,439 +19,50 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use oer_espressif_facts::{Facts, Source};
 use serde::{Deserialize, Serialize};
 
-mod irq_stack;
-
-/// Format of `chip.toml`.
-pub const SCHEMA: u32 = 1;
 /// The root of the chip packages, whose `<id>/platform` directories hold
 /// each chip's platform data.
 const CHIPS: &str = "chips";
-/// The platform data directory of a chip, below `chips/<id>/`.
-const PLATFORM: &str = "platform";
-/// The profile file in a chip's platform directory.
-const PROFILE: &str = "chip.toml";
 
 /// The platform data directory of chip `id` (`chips/<id>/platform`),
-/// relative to the root: its profile, stack policy, partitions and ROM
+/// relative to the root: its layers, stack policy, partitions and ROM
 /// function summaries.
 pub fn platform_dir(id: &str) -> PathBuf {
-    Path::new(CHIPS).join(id).join(PLATFORM)
+    PathBuf::from(oer_espressif_facts::platform_dir(id))
 }
 
 pub mod policy;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-/// How an image starts an application.
-///
-/// Every chip's own images boot [`Boot::Staged`] (a profile names no other);
-/// [`Boot::EspIdfBootloader`] describes only an image the firmware catalog
-/// builds with ESP-IDF (a vendor or peer image), whose own bootloader loads
-/// its application.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Boot {
-    /// The ESP-IDF second-stage bootloader loads the platform's bootstrap,
-    /// which stages the runtime into PSRAM.
-    Staged,
-    /// The ESP-IDF second-stage bootloader loads an ESP-IDF application.
-    EspIdfBootloader,
-}
-
-/// One supported chip.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+/// One supported chip: its resolved facts and its image registry.
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Profile {
-    schema: u32,
-    /// The chip id: lowercase, as in paths, package names and evidence.
-    pub id: String,
-    /// The family whose shared code the chip uses: a `family` package
-    /// declaring this id builds for, and may be used by, every chip of it.
-    pub family: String,
-    /// The Rust target triple of its firmware.
-    pub rust_target: String,
-    /// How the chip's images start: [`Boot::Staged`].
-    pub boot: Boot,
-    /// The `--chip` value of `espflash`.
-    pub espflash_chip: String,
-    /// Silicon revisions the repository's models and pins describe.
-    pub revisions: Vec<String>,
-    /// Where the chip's images lie in flash: the image pipeline encodes
-    /// for it, and every flash writes there. `None` for a chip that has no
-    /// images yet.
-    #[serde(default)]
-    pub flash: Option<FlashMap>,
-    /// What the chip has.
-    pub properties: Properties,
-    /// The address map images are checked against; `None` for a chip whose
-    /// images are not checked by address.
-    #[serde(default)]
-    pub memory: Option<Memory>,
-    /// The interrupt contract the interrupt-stack check reads.
-    #[serde(default)]
-    pub interrupts: Option<InterruptContract>,
-    /// The ROM the stack analyses read; `None` for a chip without a pinned
-    /// ROM ELF.
-    #[serde(default)]
-    pub rom: Option<Rom>,
-    /// The placement contract the placement check reads.
-    #[serde(default)]
-    pub placement: Option<Placement>,
-    /// How code reaches a core other than core 0; a chip with more than one
-    /// core names it.
-    #[serde(default)]
-    pub core_start: Option<CoreStart>,
-    /// What the chip's HIL agent may not link; `None` when nothing is
-    /// forbidden.
-    #[serde(default)]
+    /// The facts of the chip, its module and its board.
+    pub facts: Facts,
+    /// What the chip's HIL agent may not link and the HIL image recipes;
+    /// `None` when the chip names neither.
     pub hil: Option<Hil>,
     /// The chip's packages as the repository policies classify them.
-    #[serde(default)]
     pub packages: Packages,
     /// The Rust probe images of the chip's vendor comparison, in build
     /// order (`firmware/probes/<id>-*`).
-    #[serde(default)]
     pub probe: Vec<Probe>,
-    /// The staged boot's host contract; a chip with images names it.
-    #[serde(default)]
-    pub staged: Option<StagedBoot>,
-    /// Where the host reads why the chip last reset; `None` for a chip whose
-    /// stand cannot prove a power loss.
-    #[serde(default)]
-    pub reset_cause: Option<ResetCause>,
 }
 
-/// The `[core-start]` table: the functions that release a core other than
-/// core 0 from reset or stall. An image that links one has a core running code
-/// of its own, which its stack policy must then declare with a proven root;
-/// an image that declares every other core unused links none.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+/// The image registry of a chip layer: the keys
+/// [`oer_espressif_facts::REGISTRY`] names.
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct CoreStart {
-    /// Demangled function-name patterns, as the policy's `observed_functions`:
-    /// `*` matches any substring, all other characters are literal.
-    pub starters: Vec<String>,
-    /// The functions of the cross-core call, same patterns. An image that
-    /// links one runs code posted to another core, which no image does until
-    /// the call is typed.
-    pub ipc: Vec<String>,
-}
-
-/// The `[reset-cause]` table: the field of the chip's platform publication
-/// (`chips/<id>/registers/published/platform.bindings.toml`) that holds why the
-/// core last left reset, which the stand reads through JTAG after a power
-/// cycle, and the code of a power-on reset.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct ResetCause {
-    /// `PERIPHERAL.REGISTER.FIELD`, the SVD names.
-    pub field: String,
-    pub power_on: u32,
-}
-
-/// A contiguous address range.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Region {
-    pub origin: u32,
-    pub length: u32,
-}
-
-impl Region {
-    /// First address past the region.
-    pub const fn end(self) -> u32 {
-        self.origin + self.length
-    }
-
-    /// Whether `start..end` is a (possibly empty) range inside this region.
-    pub const fn contains_range(self, start: u64, end: u64) -> bool {
-        start >= self.origin as u64 && end >= start && end <= self.end() as u64
-    }
-}
-
-/// The `[memory]` table: the address map host tools check images against.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Memory {
-    pub sram: Region,
-    pub flash_xip: Region,
-    /// The cached external RAM aperture, on a chip that maps one apart
-    /// from flash.
+struct Registry {
     #[serde(default)]
-    pub psram: Option<Region>,
-    /// Where a staged boot's runtime is linked.
+    hil: Option<Hil>,
     #[serde(default)]
-    pub runtime_psram: Option<Region>,
-    /// The region the runtime's task stacks lie in, by [`Memory::region`]
-    /// name.
-    pub task_stacks: String,
-}
-
-impl Memory {
-    /// The region a placement rule names: `sram`, `flash-xip`, `psram` or
-    /// `runtime-psram`; `None` for one the chip does not map.
-    pub fn region(&self, name: &str) -> Option<Region> {
-        match name {
-            "sram" => Some(self.sram),
-            "flash-xip" => Some(self.flash_xip),
-            "psram" => self.psram,
-            "runtime-psram" => self.runtime_psram,
-            _ => None,
-        }
-    }
-
-    /// The region the task stacks lie in.
-    pub fn task_stack_region(&self) -> Option<Region> {
-        self.region(&self.task_stacks)
-    }
-
-    /// The cached regions: code there cannot run while the cache is off.
-    pub fn cached(&self) -> Vec<Region> {
-        std::iter::once(self.flash_xip).chain(self.psram).collect()
-    }
-}
-
-/// A writer of interrupt levels or routes and the functions it may run in.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct LevelWriter {
-    pub writer: String,
-    pub contexts: Vec<String>,
-}
-
-/// The `[interrupts]` table: where an image's interrupt table, vectors and
-/// dispatcher are, the levels every hart takes and the stack they run on.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct InterruptContract {
-    pub table_symbol: String,
-    pub table_entry_bytes: u32,
-    /// Fields of a table entry as `[offset, bytes]`.
-    pub table_source: [u32; 2],
-    /// The CPU line the entry's source is routed to.
-    pub table_line: [u32; 2],
-    pub table_level: [u32; 2],
-    /// The entry's handler class (`oer_interrupt_table::Class`).
-    pub table_class: [u32; 2],
-    pub table_core: [u32; 2],
-    pub table_handler: u32,
-    /// An exempt entry's reason is the bytes of the symbol named by this
-    /// prefix and the entry's handler symbol.
-    pub table_exemption_prefix: String,
-    /// Every hart's hardware-vector table, one after another.
-    pub vector_table_symbol: String,
-    /// The words of one hart's table: the word of line `n` of hart `h` is
-    /// word `h * vector_table_hart_slots + n`.
-    pub vector_table_hart_slots: u32,
-    pub exception_entry_symbol: String,
-    pub harts: Vec<u32>,
-    pub level_writers: Vec<LevelWriter>,
-    /// Maximum allocation of each hart's dedicated SRAM interrupt stack.
-    pub irq_stack_bytes: u32,
-    /// Guard bytes keyed by hart, with exactly one entry for every `harts` member.
-    pub irq_stack_guard_bytes: BTreeMap<u32, u32>,
-    pub irq_stack_margin_percent: u32,
-}
-
-impl InterruptContract {
-    /// Maximum usable bytes; final checks read the actual allocation from ELF.
-    pub fn irq_stack_usable_bytes(&self, hart: u32) -> u32 {
-        self.irq_stack_bytes - self.irq_stack_guard_bytes[&hart]
-    }
-
-    fn validate(&self) -> Result<()> {
-        let harts: std::collections::BTreeSet<_> = self.harts.iter().copied().collect();
-        if harts.len() != self.harts.len()
-            || harts.is_empty()
-            || self
-                .irq_stack_guard_bytes
-                .keys()
-                .copied()
-                .collect::<std::collections::BTreeSet<_>>()
-                != harts
-        {
-            return Err("interrupt guards must name every hart exactly once".into());
-        }
-        for (&hart, &bytes) in &self.irq_stack_guard_bytes {
-            if bytes < 16 || !bytes.is_power_of_two() || bytes >= self.irq_stack_bytes {
-                return Err(format!("hart {hart}'s interrupt guard must be a power of two of at least 16 bytes, smaller than its stack").into());
-            }
-        }
-        Ok(())
-    }
-}
-
-/// The `[staged]` table: the staged boot's host contract.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct StagedBoot {
-    /// The input sections the runtime's linker script places in regions the
-    /// boot zeroes: `name` or `name.*`.
-    pub zeroed_inputs: Vec<String>,
-    pub stage_two: StageTwo,
-}
-
-/// The stage-two image header the image pipeline packs: little-endian
-/// words at these byte offsets.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct StageTwo {
-    pub magic: u32,
-    pub abi_version: u32,
-    pub header_bytes: u32,
-    pub magic_offset: u32,
-    pub abi_version_offset: u32,
-    pub header_size_offset: u32,
-    /// The payload CRC-32, computed with this field read as zero.
-    pub crc_offset: u32,
-}
-
-/// The `[rom]` table: the chip's mask ROM as the binary analyses read it.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Rom {
-    /// The id of the pinned ROM ELF in `chips/<id>/vendor/artifacts.toml`
-    /// (`oer-vendor-pins`) the stack analyses run with.
-    pub elf: String,
-    /// The reviewed ROM function summaries of the stack analyses, relative
-    /// to the repository root; `None` for a chip with none reviewed yet.
+    packages: Packages,
     #[serde(default)]
-    pub summaries: Option<PathBuf>,
-    /// ROM code no shipped image may call into.
-    #[serde(default)]
-    pub forbidden: Vec<RomRange>,
-}
-
-/// A named ROM address range, `start..end`.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct RomRange {
-    pub name: String,
-    pub start: u32,
-    pub end: u32,
-}
-
-/// The `[placement]` table: where an image's linked symbols must lie in the
-/// `[memory]` map. Regions are named as [`Memory::region`] names them.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Placement {
-    /// The contract's name in the placement report.
-    pub name: String,
-    /// The flattened image: it spans these symbols from the origin of a
-    /// region, and the flat file holds exactly them.
-    #[serde(default)]
-    pub image: Option<FlatImage>,
-    /// The entry point and the `[start, end]` symbols of the text it lies in.
-    #[serde(default)]
-    pub entry: Option<Entry>,
-    /// Symbol ranges that lie in a region, some of an exact size.
-    #[serde(default)]
-    pub range: Vec<RangeRule>,
-    /// Symbols whose `bytes` from their address lie in a region.
-    #[serde(default)]
-    pub symbol: Vec<SymbolRule>,
-    /// The regions every handler of the `[interrupts]` table lies in;
-    /// `rom` names the mask ROM's code, as the `[rom]` ELF holds it.
-    #[serde(default)]
-    pub interrupt_handlers: Vec<String>,
-    /// Allocated sections, by name prefix, that lie in a region.
-    #[serde(default)]
-    pub section: Vec<SectionRule>,
-    /// Entries whose first instruction swaps `sp` with `mscratch` before
-    /// anything touches the interrupted stack.
-    #[serde(default)]
-    pub stack_swap: Vec<Symbols>,
-}
-
-/// The flattened image's span.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct FlatImage {
-    pub start: String,
-    pub end: String,
-    /// The region whose origin the image starts at.
-    pub origin: String,
-}
-
-/// The entry point and its text.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Entry {
-    pub symbol: String,
-    pub text: [String; 2],
-}
-
-/// `[start, end]` symbols that lie in `region`.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct RangeRule {
-    pub range: [String; 2],
-    pub region: String,
-    /// The range's exact size, where the contract fixes one.
-    #[serde(default)]
-    pub bytes: Option<u64>,
-    /// Maximum size for a range whose allocation is chosen at link time.
-    #[serde(default)]
-    pub maximum_bytes: Option<u64>,
-}
-
-/// Symbols whose `bytes` from their address lie in `region`.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct SymbolRule {
-    /// A symbol, or with `numbers` a family as [`Symbols`] names it.
-    pub name: String,
-    #[serde(default)]
-    pub numbers: Option<[u32; 2]>,
-    pub bytes: u64,
-    pub region: String,
-    /// Whether an image may lack the symbol.
-    #[serde(default)]
-    pub optional: bool,
-}
-
-/// Allocated sections whose name starts with `prefix`, each wholly in
-/// `region`.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct SectionRule {
-    pub prefix: String,
-    pub region: String,
-}
-
-impl SymbolRule {
-    /// The symbols the rule holds.
-    pub fn symbols(&self) -> Symbols {
-        Symbols {
-            name: self.name.clone(),
-            numbers: self.numbers,
-        }
-    }
-}
-
-/// One symbol, or a numbered family: `name` with `{n}` replaced by each of
-/// `numbers` (inclusive).
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Symbols {
-    pub name: String,
-    #[serde(default)]
-    pub numbers: Option<[u32; 2]>,
-}
-
-impl Symbols {
-    /// Every symbol named.
-    pub fn names(&self) -> Vec<String> {
-        match self.numbers {
-            None => vec![self.name.clone()],
-            Some([first, last]) => (first..=last)
-                .map(|number| self.name.replace("{n}", &number.to_string()))
-                .collect(),
-        }
-    }
+    probe: Vec<Probe>,
 }
 
 /// The `[hil]` table: policy of the chip's HIL agent graph.
@@ -515,96 +127,39 @@ pub struct Probe {
     pub package: String,
 }
 
-/// A Wi-Fi band the chip's radio serves.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-pub enum WifiBand {
-    #[serde(rename = "2g4")]
-    Band2g4,
-    #[serde(rename = "5g")]
-    Band5g,
+/// The repository's files, every read recorded in the caller's inputs.
+struct Tree<'a> {
+    root: &'a Path,
+    inputs: &'a mut oer_os_durable::inputs::Inputs,
 }
 
-/// A Bluetooth mode the chip's controller serves.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum BluetoothMode {
-    Le,
-    BrEdr,
-}
+impl Source for Tree<'_> {
+    fn read(&mut self, path: &str) -> oer_espressif_facts::Result<String> {
+        let path = self.root.join(path);
+        self.inputs
+            .read_to_string(&path)
+            .map_err(|error| format!("cannot read {}: {error}", path.display()).into())
+    }
 
-/// The `[properties]` table of a chip profile.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Properties {
-    pub wifi_bands: Vec<WifiBand>,
-    pub bluetooth: Vec<BluetoothMode>,
-    pub ieee802154: bool,
-    pub cores: u8,
-}
-
-/// The chip's flash map (`[flash]` of its `chip.toml`): where the
-/// second-stage bootloader, the partition table, the application and the
-/// OTA selection lie, the partition table the platform defines, and how the
-/// bootloader and the application are encoded.
-///
-/// The partition table is the source of the partitions it holds; the image
-/// pipeline checks that `application` and `otadata` are the offsets of its
-/// first application partition and its OTA data partition.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct FlashMap {
-    pub bootloader: u32,
-    pub partition_table: u32,
-    /// The partition an image's application is written to.
-    pub application: u32,
-    /// The OTA data partition, which selects the application slot.
-    pub otadata: u32,
-    /// The partition table images boot with, as a CSV relative to the
-    /// repository root.
-    pub partitions: PathBuf,
-    /// The flash settings in the application image's header, which the
-    /// bootloader switches to before it loads the application.
-    pub application_encoding: FlashSettings,
-    /// The mode the ROM reads the second-stage bootloader in; the
-    /// bootloader's own header keeps the application's frequency and size.
-    pub bootloader_mode: FlashMode,
-    /// How a written image starts.
-    pub start: Start,
-}
-
-/// Flash settings of an ESP image header.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct FlashSettings {
-    pub mode: FlashMode,
-    /// The SPI clock, in MHz.
-    pub frequency_mhz: u32,
-    /// The flash chip's size, in MiB.
-    pub size_mib: u32,
-}
-
-/// An SPI flash read mode of an ESP image header.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum FlashMode {
-    Qio,
-    Qout,
-    Dio,
-    Dout,
-}
-
-/// How the stand starts an image it wrote into a board's flash.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Start {
-    /// The writer's hard reset after the last segment starts the image.
-    Reset,
-    /// The writer leaves the ROM in its download mode; a power-on reset of
-    /// the board's hub port starts the image, or an RTS reset on a board
-    /// that does not reset by power: on such a chip an RTS reset out of
-    /// download mode starts the image with its USB Serial/JTAG console
-    /// silent, and the writer's own reset can leave it in download mode.
-    PowerOn,
+    fn files(&mut self, directory: &str) -> oer_espressif_facts::Result<Vec<String>> {
+        let directory = self.root.join(directory);
+        let entries = match std::fs::read_dir(&directory) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => {
+                return Err(format!("cannot list {}: {error}", directory.display()).into());
+            }
+        };
+        let mut names = Vec::new();
+        for entry in entries {
+            let entry =
+                entry.map_err(|error| format!("cannot list {}: {error}", directory.display()))?;
+            if entry.path().is_file() {
+                names.push(entry.file_name().to_string_lossy().into_owned());
+            }
+        }
+        Ok(names)
+    }
 }
 
 impl Profile {
@@ -613,67 +168,48 @@ impl Profile {
         Self::load_with_inputs(root, id, &mut oer_os_durable::inputs::Inputs::default())
     }
 
-    /// Load the profile and record its source in the caller's computation.
+    /// Load the profile and record every layer it reads in the caller's
+    /// computation.
     pub fn load_with_inputs(
         root: &Path,
         id: &str,
         inputs: &mut oer_os_durable::inputs::Inputs,
     ) -> Result<Self> {
-        let path = profile_path(root, id);
-        let text = match inputs.read_to_string(&path) {
-            Ok(text) => text,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Err(format!(
-                    "unsupported chip `{id}`; supported: {}",
-                    supported(root)?.join(", ")
-                )
-                .into());
+        if !root.join(oer_espressif_facts::chip_file(id)).is_file() {
+            return Err(format!(
+                "unsupported chip `{id}`; supported: {}",
+                supported(root)?.join(", ")
+            )
+            .into());
+        }
+        Self::from_source(&mut Tree { root, inputs }, id)
+    }
+
+    /// The profile of `id` from the layer files this build compiled in
+    /// ([`oer_espressif_facts::tracked`]).
+    pub fn tracked(id: &str) -> Result<Self> {
+        Self::from_source(&mut oer_espressif_facts::tracked::Tracked, id)
+    }
+
+    fn from_source(source: &mut dyn Source, id: &str) -> Result<Self> {
+        let layers = oer_espressif_facts::load(source, id)?;
+        let top = layers.top().to_owned();
+        let mut table = layers.table;
+        let mut registry = toml::Table::new();
+        for key in oer_espressif_facts::REGISTRY {
+            if let Some(value) = table.remove(*key) {
+                registry.insert((*key).to_owned(), value);
             }
-            Err(error) => return Err(error.into()),
-        };
-        let profile: Self =
-            toml::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))?;
-        if profile.schema != SCHEMA {
-            return Err(format!(
-                "{} has schema {}; this tool reads schema {SCHEMA}",
-                path.display(),
-                profile.schema
-            )
-            .into());
         }
-        if profile.id != id {
-            return Err(format!("{} names chip `{}`", path.display(), profile.id).into());
-        }
-        if profile.boot != Boot::Staged {
-            return Err(format!(
-                "{} names boot `{:?}`; a chip's images boot staged, the ESP-IDF bootloader \
-                 boots only the firmware catalog's images",
-                path.display(),
-                profile.boot
-            )
-            .into());
-        }
-        if !valid_identifier(&profile.family) {
-            return Err(format!(
-                "{} names invalid family `{}`",
-                path.display(),
-                profile.family
-            )
-            .into());
-        }
-        if let Some(interrupts) = &profile.interrupts {
-            interrupts
-                .validate()
-                .map_err(|error| format!("{}: {error}", path.display()))?;
-        }
-        if (profile.properties.cores > 1) != profile.core_start.is_some() {
-            return Err(format!(
-                "{}: `[core-start]` is named by exactly the chips with more than one core",
-                path.display()
-            )
-            .into());
-        }
-        Ok(profile)
+        let registry: Registry = registry
+            .try_into()
+            .map_err(|error| format!("{top}: {error}"))?;
+        Ok(Self {
+            facts: Facts::from_table(id, &top, table)?,
+            hil: registry.hil,
+            packages: registry.packages,
+            probe: registry.probe,
+        })
     }
 
     /// Every supported chip, sorted by id.
@@ -686,13 +222,13 @@ impl Profile {
 
     /// `<root>/chips/<id>/<directory>`, such as `chips/<id>/vendor`.
     pub fn directory(&self, root: &Path, directory: &str) -> PathBuf {
-        root.join(CHIPS).join(&self.id).join(directory)
+        root.join(CHIPS).join(&self.facts.id).join(directory)
     }
 
     /// The bootstrap package the staged boot builds into every image beside
     /// its runtime.
     pub fn bootstrap_package(&self) -> String {
-        format!("oer-firmware-bootstrap-{}", self.id)
+        format!("oer-firmware-bootstrap-{}", self.facts.id)
     }
 
     /// The explicit recipe of `class`; an unsupported class has no recipe.
@@ -704,75 +240,57 @@ impl Profile {
     /// to the root: the move limit and reserves of every image of the chip,
     /// which the HIL policy extends.
     pub fn stack_policy(&self) -> PathBuf {
-        platform_dir(&self.id).join("stack.toml")
+        platform_dir(&self.facts.id).join("stack.toml")
     }
 
     /// The input sections the chip's staged boot zeroes, comma separated,
     /// as the image linker reads them; empty for a chip without a staged
     /// boot.
     pub fn zeroed_inputs(&self) -> String {
-        self.staged
+        self.facts
+            .staged
             .as_ref()
             .map(|staged| staged.zeroed_inputs.join(","))
             .unwrap_or_default()
     }
 }
 
-/// The Rust target of `id`'s firmware, from its `chip.toml`.
+/// The Rust target of `id`'s firmware, from its facts.
 pub fn rust_target(root: &Path, id: &str) -> Result<String> {
-    Ok(Profile::load(root, id)?.rust_target)
+    Ok(Profile::load(root, id)?.facts.rust_target)
 }
 
 /// The family of every supported chip, keyed by chip id.
 pub fn families(root: &Path) -> Result<BTreeMap<String, String>> {
     Ok(Profile::all(root)?
         .into_iter()
-        .map(|profile| (profile.id, profile.family))
+        .map(|profile| (profile.facts.id, profile.facts.family))
         .collect())
 }
 
-/// A chip or family identifier: a lowercase ASCII letter, then lowercase
-/// letters, digits or hyphens.
-pub fn valid_identifier(id: &str) -> bool {
-    id.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
-        && id
-            .bytes()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')
-}
-
-/// Ids of the chips with a profile, sorted.
+/// Ids of the chips with a chip layer, sorted.
 pub fn supported(root: &Path) -> Result<Vec<String>> {
     let mut ids = Vec::new();
     for entry in std::fs::read_dir(root.join(CHIPS))? {
         let entry = entry?;
-        if entry.path().join(PLATFORM).join(PROFILE).is_file() {
-            ids.push(entry.file_name().to_string_lossy().into_owned());
+        let id = entry.file_name().to_string_lossy().into_owned();
+        if root.join(oer_espressif_facts::chip_file(&id)).is_file() {
+            ids.push(id);
         }
     }
     ids.sort();
     Ok(ids)
 }
 
-fn profile_path(root: &Path, id: &str) -> PathBuf {
-    root.join(platform_dir(id)).join(PROFILE)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// A repository of the tracked layer files and partition tables.
     fn repository() -> tempfile::TempDir {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
-        for (path, text) in [
-            (
-                "chips/esp32c5/platform/chip.toml",
-                include_str!("../../../../chips/esp32c5/platform/chip.toml"),
-            ),
-            (
-                "chips/esp32s31/platform/chip.toml",
-                include_str!("../../../../chips/esp32s31/platform/chip.toml"),
-            ),
+        for (path, text) in oer_espressif_facts::tracked::FILES.iter().copied().chain([
             (
                 "chips/esp32c5/platform/partitions/applications.csv",
                 include_str!("../../../../chips/esp32c5/platform/partitions/applications.csv"),
@@ -781,7 +299,7 @@ mod tests {
                 "chips/esp32s31/platform/partitions/applications.csv",
                 include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
             ),
-        ] {
+        ]) {
             let path = root.join(path);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, text).unwrap();
@@ -793,44 +311,67 @@ mod tests {
     fn the_tracked_profiles_load() {
         let repository = repository();
         let root = repository.path();
-        let chips = Profile::all(&root).unwrap();
+        let chips = Profile::all(root).unwrap();
         assert!(!chips.is_empty());
-        assert_eq!(families(&root).unwrap().len(), chips.len());
+        assert_eq!(families(root).unwrap().len(), chips.len());
         for chip in &chips {
-            assert!(valid_identifier(&chip.family), "{}", chip.id);
-            if let Some(flash) = &chip.flash {
-                assert!(flash.bootloader < flash.partition_table, "{}", chip.id);
-                assert!(flash.partition_table < flash.application, "{}", chip.id);
+            let facts = &chip.facts;
+            assert_eq!(*chip, Profile::tracked(&facts.id).unwrap(), "{}", facts.id);
+            assert!(
+                oer_espressif_facts::valid_identifier(&facts.family),
+                "{}",
+                facts.id
+            );
+            if let Some(flash) = &facts.flash {
+                assert!(flash.bootloader < flash.partition_table, "{}", facts.id);
+                assert!(flash.partition_table < flash.application, "{}", facts.id);
                 // The partition table the platform defines exists.
-                assert!(root.join(&flash.partitions).is_file(), "{}", chip.id);
+                assert!(root.join(&flash.partitions).is_file(), "{}", facts.id);
             }
             assert_eq!(
-                chip.directory(&root, "registers"),
-                root.join("chips").join(&chip.id).join("registers")
+                chip.directory(root, "registers"),
+                root.join("chips").join(&facts.id).join("registers")
             );
-            if let Some(memory) = &chip.memory {
-                assert!(memory.task_stack_region().is_some(), "{}", chip.id);
+            if let Some(memory) = &facts.memory {
+                assert!(memory.task_stack_region().is_some(), "{}", facts.id);
             }
-            if let Some(placement) = &chip.placement {
-                let memory = chip.memory.as_ref().unwrap();
+            if let Some(placement) = &facts.placement {
+                let memory = facts.memory.as_ref().unwrap();
                 for rule in &placement.range {
-                    assert!(memory.region(&rule.region).is_some(), "{}", chip.id);
+                    assert!(memory.region(&rule.region).is_some(), "{}", facts.id);
                 }
             }
         }
     }
 
     #[test]
-    fn each_hart_has_its_own_guard_and_usable_capacity() {
+    fn a_load_records_every_layer_it_reads() {
         let repository = repository();
+        let root = repository.path();
+        let mut inputs = oer_os_durable::inputs::Inputs::tracked();
+        Profile::load_with_inputs(root, "esp32c5", &mut inputs).unwrap();
+        let read: Vec<PathBuf> = inputs.into_digests().into_keys().collect();
+        let mut expected: Vec<PathBuf> = [
+            "chips/espressif/platform/isa/rv32imac.toml",
+            "chips/espressif/platform/family.toml",
+            "chips/esp32c5/platform/chip.toml",
+            "chips/esp32c5/platform/modules/esp32-c5-wroom-1-n16r8.toml",
+            "chips/esp32c5/platform/boards/esp32-c5-devkit.toml",
+        ]
+        .iter()
+        .map(|path| root.join(path))
+        .collect();
+        expected.sort();
+        assert_eq!(read, expected);
+    }
+
+    #[test]
+    fn each_hart_has_its_own_guard_and_usable_capacity() {
         for (chip, guards) in [
             ("esp32s31", BTreeMap::from([(0, 4096), (1, 1024)])),
             ("esp32c5", BTreeMap::from([(0, 4096)])),
         ] {
-            let contract = Profile::load(repository.path(), chip)
-                .unwrap()
-                .interrupts
-                .unwrap();
+            let contract = Profile::tracked(chip).unwrap().facts.interrupts.unwrap();
             assert_eq!(contract.irq_stack_guard_bytes, guards);
             for (hart, guard) in guards {
                 assert_eq!(
@@ -870,22 +411,47 @@ mod tests {
     }
 
     #[test]
+    fn a_registry_key_outside_the_registry_is_refused() {
+        let repository = repository();
+        let path = repository.path().join("chips/esp32c5/platform/chip.toml");
+        let source = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(
+            &path,
+            source.replace("[hil]\n", "[hil]\nimage-names = []\n"),
+        )
+        .unwrap();
+        let error = Profile::load(repository.path(), "esp32c5")
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("image-names"), "{error}");
+    }
+
+    /// A chip layer without parents, module or board.
+    fn standalone(id: &str, family: &str) -> String {
+        format!(
+            "schema = 2\nid = \"{id}\"\nfamily = \"{family}\"\nisa = \"rv32imac\"\n\
+             rust-target = \"riscv32imac-unknown-none-elf\"\nboot = \"staged\"\n\
+             espflash-chip = \"x\"\nrevisions = []\n[properties]\nwifi-bands = []\n\
+             bluetooth = []\nieee802154 = false\ncores = 1\n"
+        )
+    }
+
+    #[test]
     fn an_unknown_chip_names_the_supported_ones() {
         let root = tempfile::tempdir().unwrap();
         let platform = root.path().join(platform_dir("esp32x9"));
         std::fs::create_dir_all(&platform).unwrap();
-        std::fs::write(
-            platform.join(PROFILE),
-            "schema = 1\nid = \"esp32x9\"\nrust-target = \"riscv32imac-unknown-none-elf\"\n\
-             boot = \"staged\"\nespflash-chip = \"esp32x9\"\nrevisions = [\"rev0\"]\n",
-        )
-        .unwrap();
+        std::fs::write(platform.join("chip.toml"), standalone("esp32x9", "f")).unwrap();
         std::fs::create_dir_all(root.path().join(platform_dir("no-profile"))).unwrap();
         let error = Profile::load(root.path(), "esp32s2")
             .unwrap_err()
             .to_string();
         assert_eq!(error, "unsupported chip `esp32s2`; supported: esp32x9");
         assert_eq!(supported(root.path()).unwrap(), ["esp32x9"]);
+        assert_eq!(
+            Profile::load(root.path(), "esp32x9").unwrap().facts.id,
+            "esp32x9"
+        );
     }
 
     #[test]
@@ -893,12 +459,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let platform = root.path().join(platform_dir("esp32x9"));
         std::fs::create_dir_all(&platform).unwrap();
-        std::fs::write(
-            platform.join(PROFILE),
-            "schema = 1\nid = \"other\"\nrust-target = \"t\"\nboot = \"staged\"\n\
-             espflash-chip = \"x\"\nrevisions = []\n",
-        )
-        .unwrap();
+        std::fs::write(platform.join("chip.toml"), standalone("other", "f")).unwrap();
         assert!(Profile::load(root.path(), "esp32x9").is_err());
     }
 
@@ -907,20 +468,20 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let platform = root.path().join(platform_dir("esp32x9"));
         std::fs::create_dir_all(&platform).unwrap();
-        let profile = |family: &str| {
-            format!(
-                "schema = 1\nid = \"esp32x9\"\nfamily = \"{family}\"\n\
-                 rust-target = \"t\"\nboot = \"staged\"\nespflash-chip = \"x\"\n\
-                 revisions = []\n[properties]\nwifi-bands = []\nbluetooth = []\n\
-                 ieee802154 = false\ncores = 1\n"
-            )
-        };
-        std::fs::write(platform.join(PROFILE), profile("espressif")).unwrap();
+        std::fs::write(
+            platform.join("chip.toml"),
+            standalone("esp32x9", "espressif"),
+        )
+        .unwrap();
         assert_eq!(
-            Profile::load(root.path(), "esp32x9").unwrap().family,
+            Profile::load(root.path(), "esp32x9").unwrap().facts.family,
             "espressif"
         );
-        std::fs::write(platform.join(PROFILE), profile("Espressif")).unwrap();
+        std::fs::write(
+            platform.join("chip.toml"),
+            standalone("esp32x9", "Espressif"),
+        )
+        .unwrap();
         let error = Profile::load(root.path(), "esp32x9")
             .unwrap_err()
             .to_string();

@@ -9,6 +9,7 @@ publish = false
 description = "The chip profiles (chip.toml) and the stack policies (stack.toml) every image tool reads"
 
 [dependencies]
+oer-espressif-facts = { path = "../../../chips/espressif/facts" }
 oer-os-durable = { path = "../../os/durable" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.4"

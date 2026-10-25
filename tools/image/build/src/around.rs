@@ -34,7 +34,11 @@ pub fn around(
     output: &Path,
 ) -> Result<ImageBundle> {
     let profile = crate::profile(root, chip)?;
-    let flash = profile.flash.clone().ok_or("the chip names no flash map")?;
+    let flash = profile
+        .facts
+        .flash
+        .clone()
+        .ok_or("the chip names no flash map")?;
     // Given boot files are another build's: refuse what is not the chip's
     // before anything is staged.
     if let BootFiles::Given {
@@ -42,7 +46,7 @@ pub fn around(
         partition_table,
     } = boot
     {
-        let espflash = crate::encode::chip(&profile.espflash_chip)?;
+        let espflash = crate::encode::chip(&profile.facts.espflash_chip)?;
         let read = |path: &Path| {
             std::fs::read(path).map_err(|error| format!("{}: {error}", path.display()))
         };

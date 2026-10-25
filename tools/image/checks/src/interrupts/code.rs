@@ -4,7 +4,7 @@ use super::Result;
 use oer_analysis_riscv_stack::{
     Analysis, Class, Function, HartStack, Resolutions, Stacks, task_poll_sites,
 };
-use oer_chip_profile::Memory;
+use oer_espressif_facts::Memory;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{self, Write as _};
 

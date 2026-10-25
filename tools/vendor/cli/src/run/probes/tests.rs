@@ -6,25 +6,22 @@ use std::collections::BTreeSet;
 fn repository() -> tempfile::TempDir {
     let directory = tempfile::tempdir().unwrap();
     std::fs::write(directory.path().join("Cargo.toml"), "[workspace]\n").unwrap();
-    for (chip, target, probes) in [
+    for (chip, isa, probes) in [
         (
             "chip-a",
-            "riscv32imafc-unknown-none-elf",
+            "imafc",
             &[
                 ("rust-artifact", "radio"),
                 ("rust-artifact:bluetooth", "bluetooth"),
             ][..],
         ),
-        (
-            "chip-b",
-            "riscv32imac-unknown-none-elf",
-            &[("rust-artifact", "radio")][..],
-        ),
+        ("chip-b", "imac", &[("rust-artifact", "radio")][..]),
     ] {
         let profile = directory.path().join(oer_chip_profile::platform_dir(chip));
         std::fs::create_dir_all(&profile).unwrap();
         let mut text = format!(
-            "schema = 1\nid = \"{chip}\"\nfamily = \"f\"\nrust-target = \"{target}\"\n\
+            "schema = 2\nid = \"{chip}\"\nfamily = \"f\"\nisa = \"rv32{isa}\"\n\
+             rust-target = \"riscv32{isa}-unknown-none-elf\"\n\
              boot = \"staged\"\nespflash-chip = \"{chip}\"\nrevisions = []\n\
              [properties]\nwifi-bands = []\nbluetooth = []\nieee802154 = false\ncores = 1\n"
         );

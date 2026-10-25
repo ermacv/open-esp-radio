@@ -660,7 +660,12 @@ impl InterruptStacks {
 /// The names of the reviewed ROM summaries of `profile`'s chip; none for a
 /// chip that reviews none.
 pub fn rom_summaries(root: &Path, profile: &oer_chip_profile::Profile) -> Result<Vec<String>> {
-    let Some(path) = profile.rom.as_ref().and_then(|rom| rom.summaries.as_ref()) else {
+    let Some(path) = profile
+        .facts
+        .rom
+        .as_ref()
+        .and_then(|rom| rom.summaries.as_ref())
+    else {
         return Ok(Vec::new());
     };
     let summaries = parse_summaries(&std::fs::read_to_string(root.join(path))?)?;
@@ -694,7 +699,7 @@ pub fn interrupt_stacks(
     elf: Vec<u8>,
 ) -> Result<InterruptStacks> {
     let mut profile = profile.clone();
-    if let Some(contract) = profile.interrupts.as_mut() {
+    if let Some(contract) = profile.facts.interrupts.as_mut() {
         let file = oer_analysis_elf::Elf::parse(&elf)?;
         let mut harts = Vec::new();
         for &hart in &contract.harts {
@@ -1037,7 +1042,7 @@ fn cached_hook_references(
     elf: &oer_analysis_elf::Elf<'_>,
     functions: &[oer_analysis_riscv_stack::Function],
     reached: &BTreeSet<u32>,
-    memory: &oer_chip_profile::Memory,
+    memory: &oer_espressif_facts::Memory,
 ) -> Result<Vec<(u32, u32, u64)>> {
     use oer_analysis_elf::rv32::{Role, kind};
     let mut references = BTreeSet::new();
@@ -1080,7 +1085,7 @@ fn panic_path_code(
     analysis: &Analysis,
     names: &BTreeMap<u32, String>,
     resolutions: &oer_analysis_riscv_stack::Resolutions,
-    memory: &oer_chip_profile::Memory,
+    memory: &oer_espressif_facts::Memory,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<HandlerCode> {
@@ -1118,7 +1123,7 @@ fn handler_code(
     analysis: &Analysis,
     reached: &BTreeSet<u32>,
     names: &BTreeMap<u32, String>,
-    memory: &oer_chip_profile::Memory,
+    memory: &oer_espressif_facts::Memory,
 ) -> HandlerCode {
     let panicking = |address: u32| {
         names
@@ -1161,7 +1166,7 @@ fn handler_code(
 /// chain must hold one of the writer's contexts.
 fn level_writers(
     dwarf: &Dwarf,
-    interrupts: &oer_chip_profile::InterruptContract,
+    interrupts: &oer_espressif_facts::InterruptContract,
 ) -> Result<Vec<String>> {
     let writers: Vec<&str> = interrupts
         .level_writers
@@ -1216,14 +1221,11 @@ mod tests {
     use oer_analysis_riscv_stack::Assumption;
 
     fn contract() -> Contract {
-        [
-            include_str!("../../../../chips/esp32c5/platform/chip.toml"),
-            include_str!("../../../../chips/esp32s31/platform/chip.toml"),
-        ]
-        .into_iter()
-        .map(|text| toml::from_str::<oer_chip_profile::Profile>(text).unwrap())
-        .find_map(|profile| Contract::of(&profile))
-        .expect("a chip names an interrupt contract")
+        oer_espressif_facts::tracked::ids()
+            .into_iter()
+            .map(|id| oer_chip_profile::Profile::tracked(id).unwrap())
+            .find_map(|profile| Contract::of(&profile))
+            .expect("a chip names an interrupt contract")
     }
 
     /// The `TIMER` slot's handler: in the contract's SRAM.

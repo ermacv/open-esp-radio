@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 
 pub use oer_image_checks::{CheckRecord, CheckResult, CheckedElf};
 
-pub use oer_chip_profile::{Boot, FlashMap};
+pub use oer_espressif_facts::{Boot, FlashMap};
 
 use crate::Result;
 
@@ -129,7 +129,7 @@ pub struct Snapshot {
     /// The chip the bundle is for.
     pub chip: String,
     /// How a written image starts.
-    pub start: oer_chip_profile::Start,
+    pub start: oer_espressif_facts::Start,
     /// Every segment in write order.
     pub segments: Vec<SnapshotSegment>,
 }
@@ -194,9 +194,9 @@ impl ImageBundle {
             schema: SCHEMA,
             purpose: Purpose::Flash,
             directory: directory.to_owned(),
-            chip: profile.id.clone(),
-            rust_target: profile.rust_target.clone(),
-            boot: profile.boot,
+            chip: profile.facts.id.clone(),
+            rust_target: profile.facts.rust_target.clone(),
+            boot: profile.facts.boot,
             flash,
             staged: None,
             otadata: false,

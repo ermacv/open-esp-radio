@@ -12,7 +12,7 @@ use std::{
 
 use crate::image::{Receipt, Store, Transport};
 use crate::lock::{DeviceAccess, DeviceId};
-use oer_chip_profile::Start;
+use oer_espressif_facts::Start;
 use oer_lab_model::{BoardRef, ResetStep, Stand};
 
 use crate::console;
@@ -72,14 +72,15 @@ impl Board {
     ) -> crate::stand::Result<Self> {
         let profile = oer_chip_profile::Profile::load(root, &board.chip)?;
         let reset_cause = profile
+            .facts
             .reset_cause
             .as_ref()
-            .map(|field| ResetCauseField::resolve(root, &profile.id, field))
+            .map(|field| ResetCauseField::resolve(root, &profile.facts.id, field))
             .transpose()?;
         Ok(Self {
             reference: board.reference()?,
             port,
-            espflash_chip: profile.espflash_chip,
+            espflash_chip: profile.facts.espflash_chip,
             reset: board.reset.clone(),
             power: crate::power::hub_port(stand, board).map(HubPower::new),
             reset_cause,

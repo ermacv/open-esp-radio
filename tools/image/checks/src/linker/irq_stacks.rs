@@ -75,7 +75,7 @@ fn verify_bound(
     allocation: &Allocation,
     bound: Option<u64>,
     partial: u64,
-    contract: &oer_chip_profile::InterruptContract,
+    contract: &oer_espressif_facts::InterruptContract,
 ) -> Result<()> {
     let hart = allocation.hart;
     if let (Some(first), Some(final_bound)) = (allocation.first_bound, bound)
@@ -100,10 +100,11 @@ fn verify_bound(
 mod tests {
     use super::*;
 
-    fn contract() -> oer_chip_profile::InterruptContract {
+    fn contract() -> oer_espressif_facts::InterruptContract {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
         oer_chip_profile::Profile::load(&root, "esp32c5")
             .unwrap()
+            .facts
             .interrupts
             .unwrap()
     }

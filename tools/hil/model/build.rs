@@ -13,7 +13,7 @@ fn main() {
     for profile in oer_chip_profile::Profile::all(&root).expect("the chip profiles load") {
         println!(
             "cargo::rerun-if-changed={}",
-            root.join(oer_chip_profile::platform_dir(&profile.id))
+            root.join(oer_chip_profile::platform_dir(&profile.facts.id))
                 .display()
         );
         let Some(hil) = &profile.hil else { continue };
@@ -25,7 +25,7 @@ fn main() {
             }
             entries.push_str(&format!(
                 "    ({:?}, {:?}, include_str!({:?})),\n",
-                profile.id,
+                profile.facts.id,
                 class,
                 manifest.display().to_string()
             ));

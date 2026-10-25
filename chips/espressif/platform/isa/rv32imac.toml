@@ -1,0 +1,6 @@
+# RV32IMAC: the RV32I base with integer multiplication and division, atomics
+# and compressed instructions. A chip's chip.toml extends the ISA of its harts.
+schema = 2
+isa = "rv32imac"
+# The bare-metal Rust target of this ISA, checked against `isa`.
+rust-target = "riscv32imac-unknown-none-elf"

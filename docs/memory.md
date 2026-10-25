@@ -8,7 +8,10 @@ contracts; details live with their owners.
 The [shared layout](../chips/espressif/staged-layout/README.md) defines the
 regions; the [S31 board map](../chips/esp32s31/layout/src/lib.rs) and
 [C5 board map](../chips/esp32c5/layout/src/lib.rs) supply their addresses
-and sizes.
+and sizes. The host checks read the same map from the
+[chip facts](../chips/espressif/facts/README.md): the chip layer's SRAM and
+flash window, the module's PSRAM, and `runtime-psram` after the family's
+bootstrap probe page; a test holds both sources equal.
 
 | Region | Current use and source |
 | --- | --- |

@@ -13,6 +13,7 @@ oer-analysis-elf = { path = "../../analysis/elf" }
 oer-image-checks = { path = "../checks" }
 oer-image-esp-idf = { path = "../esp-idf" }
 oer-chip-profile = { path = "../../chip/profile" }
+oer-espressif-facts = { path = "../../../chips/espressif/facts" }
 oer-os-toolchain = { path = "../../os/toolchain" }
 oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process" }
