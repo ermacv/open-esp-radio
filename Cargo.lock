@@ -4039,8 +4039,8 @@ dependencies = [
 name = "oer-image-build"
 version = "0.1.0"
 dependencies = [
- "esp-idf-part",
  "espflash",
+ "md-5 0.11.0",
  "object 0.39.1",
  "oer-analysis-elf",
  "oer-chip-profile",
@@ -4050,6 +4050,7 @@ dependencies = [
  "oer-os-durable",
  "oer-os-process",
  "oer-os-toolchain",
+ "oer-wire",
  "serde",
  "serde_json",
  "sha2 0.10.9",
