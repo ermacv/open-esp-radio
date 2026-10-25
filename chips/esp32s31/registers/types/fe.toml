@@ -103,10 +103,14 @@ sources = ["S31_MMIO_AUDIT_20100028", "S31_MMIO_DECLARED_20100028"]
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 
 [review.entity."FREQUENCY_MEMORY_DATA.DATA"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."FREQUENCY_MEMORY_DATA.MODE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."I2C_NUMBER_CONTROL"]
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
@@ -132,7 +136,9 @@ sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 completeness = "unknown"
 
 [review.entity."FREQUENCY_MEMORY_READ_RESULT.VALUE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."WORD_0400_OPAQUE"]
 sources = ["ROM_REV0_PHY_OPEN_FE_BB_CLK", "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK"]
@@ -212,19 +218,29 @@ completeness = "unknown"
 sources = ["ROM_REV0_PHY_TXDC_CAL"]
 
 [review.entity."TX_DC_MEASUREMENT_CONTROL_STATUS.MEASUREMENT_START"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_TXDC_CAL"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TX_DC_MEASUREMENT_CONTROL_STATUS.MEASUREMENT_ENABLE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_TXDC_CAL"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TX_DC_MEASUREMENT_CONTROL_STATUS.MEASUREMENT_READY"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_TXDC_CAL"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TX_DC_MEASUREMENT_CONTROL_STATUS.Q_COMPARATOR_HIGH"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_TXDC_CAL"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TX_DC_MEASUREMENT_CONTROL_STATUS.I_COMPARATOR_HIGH"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_TXDC_CAL"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TX_DC_MEASUREMENT_CONTROL_STATUS.BITS_2_21_OPAQUE"]
 sources = ["S31_MMIO_USE_20100418", "S31_MMIO_DECLARED_20100418"]
@@ -237,7 +253,9 @@ sources = ["ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR", "
 completeness = "partial"
 
 [review.entity."TONE_PATH_0_CONTROL.SELECTOR_HIGH"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR", "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TONE_PATH_0_CONTROL.BITS_8_9_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_2010041C"]
@@ -245,10 +263,14 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."TONE_PATH_0_CONTROL.NEGATED_STEP_OR_ATTENUATION"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR", "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TONE_PATH_0_CONTROL.TONE_ENABLE_OR_ARM"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR", "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TONE_PATH_0_CONTROL.BITS_19_21_OPAQUE"]
 sources = ["ROM_REV0_PHY_TXIQ_GET_MIS_PWR", "S31_MMIO_DECLARED_2010041C"]
@@ -271,7 +293,9 @@ sources = ["ROM_REV0_PHY_START_STOP_TX_TONE", "BLOB_LIBPHY_PHY_START_TX_TONE_STE
 completeness = "partial"
 
 [review.entity."TONE_PATH_1_CONTROL.SELECTOR_HIGH"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_START_STOP_TX_TONE", "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TONE_PATH_1_CONTROL.BITS_8_9_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20100420"]
@@ -279,10 +303,14 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."TONE_PATH_1_CONTROL.NEGATED_STEP_OR_ATTENUATION"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_START_STOP_TX_TONE", "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TONE_PATH_1_CONTROL.TONE_ENABLE_OR_ARM"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_START_STOP_TX_TONE", "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TONE_PATH_1_CONTROL.BITS_19_27_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20100420"]
@@ -305,10 +333,14 @@ completeness = "unknown"
 sources = ["ROM_REV0_PHY_START_TX_TONE_STEP", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR", "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW"]
 
 [review.entity."TONE_SELECTOR_CONTROL.PATH_0_SELECTOR_LOW"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_START_TX_TONE_STEP", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR", "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TONE_SELECTOR_CONTROL.PATH_1_SELECTOR_LOW"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_START_TX_TONE_STEP", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR", "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TONE_SELECTOR_CONTROL.BITS_15_31_OPAQUE"]
 sources = ["S31_MMIO_USE_20100428", "S31_MMIO_DECLARED_20100428"]
@@ -346,10 +378,14 @@ sources = ["S31_MMIO_USE_20100434", "S31_MMIO_DECLARED_20100434"]
 sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_IQ_COEFFICIENTS", "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT"]
 
 [review.entity."IQ_CORRECTION_CONTROL.RX_IQ_GAIN_COEFFICIENT"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_IQ_COEFFICIENTS", "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."IQ_CORRECTION_CONTROL.RX_IQ_PHASE_COEFFICIENT"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_IQ_COEFFICIENTS", "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."IQ_CORRECTION_CONTROL.RX_IQ_CORRECTION_MODE_LOW"]
 sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT"]
@@ -420,10 +456,12 @@ completeness = "unknown"
 completeness = "partial"
 
 [review.entity."ESTIMATOR_CONTROL.START_ENABLE"]
-unsourced = "The curated model's review names this entity without a source."
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."ESTIMATOR_CONTROL.MEASUREMENT_ENABLE"]
-unsourced = "The curated model's review names this entity without a source."
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."ESTIMATOR_CONTROL.BITS_2_16_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20100450"]
@@ -448,7 +486,8 @@ sources = ["S31_MMIO_USE_20100474"]
 sources = ["S31_MMIO_USE_20100474", "S31_MMIO_DECLARED_20100474"]
 
 [review.entity."ESTIMATOR_READY_STATUS.READY"]
-unsourced = "The curated model's review names this entity without a source."
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."ESTIMATOR_READY_STATUS.BITS_0_15_OPAQUE"]
 sources = ["S31_MMIO_USE_2010047C", "S31_MMIO_DECLARED_2010047C"]
@@ -473,7 +512,9 @@ sources = ["S31_MMIO_USE_20100800", "S31_MMIO_DECLARED_20100800"]
 sources = ["ROM_REV0_PHY_POWER_DETECTOR", "BLOB_LIBPHY_PHY_TXDC_PWDET"]
 
 [review.entity."POWER_DETECTOR_CONTROL.SAR_TRIGGER"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_POWER_DETECTOR", "BLOB_LIBPHY_PHY_TXDC_PWDET"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_CONTROL.BIT_1_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20100808"]
@@ -545,43 +586,61 @@ completeness = "unknown"
 sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
 
 [review.entity."POWER_DETECTOR_REFERENCE.REFERENCE_CODE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT"]
 sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
 
 [review.entity."POWER_DETECTOR_SAR_RESULT.SAR_SAMPLE_LOW"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT.SAR_SAMPLE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_1"]
 sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_1.SAR_SAMPLE_LOW"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_1.SAR_SAMPLE_HIGH"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_2"]
 sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_2.SAR_SAMPLE_LOW"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_2.SAR_SAMPLE_HIGH"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_3"]
 sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_3.SAR_SAMPLE_LOW"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_3.SAR_SAMPLE_HIGH"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."WORD_0834_OPAQUE"]
 sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
@@ -674,16 +733,24 @@ completeness = "unknown"
 sources = ["ROM_REV0_PHY_SET_PBUS_MEM", "ROM_REV0_PHY_WRITE_PBUS_MEM", "ROM_REV0_PHY_SAVE_PBUS_REG"]
 
 [review.entity."GROUP_BOUNDARY%s.EVEN_GROUP_FIRST_ENTRY"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_SET_PBUS_MEM", "ROM_REV0_PHY_WRITE_PBUS_MEM", "ROM_REV0_PHY_SAVE_PBUS_REG"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."GROUP_BOUNDARY%s.EVEN_GROUP_LAST_ENTRY"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_SET_PBUS_MEM", "ROM_REV0_PHY_WRITE_PBUS_MEM", "ROM_REV0_PHY_SAVE_PBUS_REG"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."GROUP_BOUNDARY%s.ODD_GROUP_FIRST_ENTRY"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_SET_PBUS_MEM", "ROM_REV0_PHY_WRITE_PBUS_MEM", "ROM_REV0_PHY_SAVE_PBUS_REG"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."GROUP_BOUNDARY%s.ODD_GROUP_LAST_ENTRY"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_SET_PBUS_MEM", "ROM_REV0_PHY_WRITE_PBUS_MEM", "ROM_REV0_PHY_SAVE_PBUS_REG"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TX_PA_CONTROL_0"]
 sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
@@ -753,10 +820,14 @@ completeness = "unknown"
 sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_RX_DCO"]
 
 [review.entity."PBUS_COMMAND.DEBUG_MODE_ENABLE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_RX_DCO"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."PBUS_COMMAND.TRANSACTION_START"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_RX_DCO"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."PBUS_COMMAND.SELECTOR"]
 sources = ["BLOB_LIBPHY_PHY_DEBUG_PBUS"]
@@ -773,7 +844,9 @@ completeness = "partial"
 sources = ["ROM_REV0_PHY_PBUS"]
 
 [review.entity."MODE.WORK_MODE_ENABLE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_PBUS"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."MODE.BIT_2_OPAQUE"]
 sources = ["S31_MMIO_USE_2010088C", "S31_MMIO_DECLARED_2010088C"]
@@ -799,7 +872,9 @@ sources = ["ROM_REV0_PHY_CLOCK_FORCE", "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT", "S31_MMI
 sources = ["ROM_REV0_PHY_CLOCK_FORCE"]
 
 [review.entity."STATUS_CLOCK_FORCE.BUSY"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_CLOCK_FORCE"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."STATUS_CLOCK_FORCE.BITS_0_7_OPAQUE"]
 sources = ["S31_MMIO_USE_20100890", "S31_MMIO_DECLARED_20100890"]
@@ -815,7 +890,9 @@ sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_FE_REG_INIT"]
 completeness = "partial"
 
 [review.entity."READ_RESULT_0.RESULT_WINDOW_0_RX_DCO"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_FE_REG_INIT"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."READ_RESULT_0.BITS_9_17_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20100894"]
@@ -985,10 +1062,14 @@ sources = ["S31_MMIO_USE_20100C08", "S31_MMIO_DECLARED_20100C08"]
 sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_IQ_COEFFICIENTS", "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT"]
 
 [review.entity."IQ_CORRECTION_AUX.TX_IQ_GAIN_COEFFICIENT"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_IQ_COEFFICIENTS", "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."IQ_CORRECTION_AUX.TX_IQ_PHASE_COEFFICIENT"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_IQ_COEFFICIENTS", "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."IQ_CORRECTION_AUX.TX_IQ_CORRECTION_MODE_LOW"]
 sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT"]

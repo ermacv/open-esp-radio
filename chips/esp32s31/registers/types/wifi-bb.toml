@@ -263,7 +263,9 @@ accuracy = "exact"
 sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
 
 [review.entity."CSI_DUMP_FORCE_CONTROL.FORCE_LLTF"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."CSI_DUMP_FORCE_CONTROL.BITS_0_14_OPAQUE"]
 sources = ["S31_MMIO_USE_201070A4", "S31_MMIO_DECLARED_201070A4"]
@@ -497,13 +499,19 @@ sources = ["S31_MMIO_DECLARED_2010743C"]
 sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
 
 [review.entity."TX_OUTPUT_FILTER_CONTROL.FILTER_INPUT_2"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TX_OUTPUT_FILTER_CONTROL.FILTER_INPUT_0"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TX_OUTPUT_FILTER_CONTROL.FILTER_INPUT_1"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TX_OUTPUT_FILTER_CONTROL.BITS_0_3_OPAQUE"]
 sources = ["S31_MMIO_USE_20107440", "S31_MMIO_DECLARED_20107440"]
@@ -519,7 +527,9 @@ completeness = "partial"
 sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_0.TRACK_ENABLE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."TX_POWER_TRACK_CONTROL_0.BITS_1_4_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20107454"]
@@ -585,13 +595,16 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."ICCFR_FORCE_CONTROL.FORCE_MODE_LOW"]
-unsourced = "The curated model's review names this entity without a source."
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."ICCFR_FORCE_CONTROL.FORCE_MODE_HIGH"]
-unsourced = "The curated model's review names this entity without a source."
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."ICCFR_FORCE_CONTROL.FORCE_TRIGGER"]
-unsourced = "The curated model's review names this entity without a source."
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."WORD_0800_OPAQUE.FFT_SCALE_FORCE"]
 sources = ["S31_MMIO_DECLARED_20107800"]
@@ -866,13 +879,19 @@ completeness = "partial"
 sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
 
 [review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_TIMEOUT_CLEAR"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_INTERRUPT_ENABLE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_ENABLE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."BASEBAND_WATCHDOG_ENABLE.BITS_0_28_OPAQUE"]
 sources = ["S31_MMIO_USE_20107C40", "S31_MMIO_DECLARED_20107C40"]
@@ -1000,7 +1019,9 @@ sources = ["S31_MMIO_DECLARED_20107CE4"]
 sources = ["S31_MMIO_DECLARED_20107CE4"]
 
 [review.entity."CHANNEL_CBW_CONTROL_1.VHT_SUPPORT"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."CHANNEL_CBW_CONTROL_1.BITS_6_31_OPAQUE"]
 sources = ["S31_MMIO_USE_20107CE4", "S31_MMIO_DECLARED_20107CE4"]

@@ -165,20 +165,42 @@ fn curated_registers_keep_their_absolute_words() {
 
 #[test]
 fn unestablished_facts_stay_unestablished() {
-    use oer_registers_contracts::{FactAccuracy, FactCompleteness};
+    use oer_registers_contracts::{FactAccuracy, FactCompleteness, FactProvenance, NameOrigin};
     use oer_registers_model::chip_model::FieldClass;
 
     let model = model();
-    // A review without a source claims no provenance or classification.
-    let unsourced = model.unsourced_reviews().collect::<Vec<_>>();
-    assert!(!unsourced.is_empty());
-    for review in &unsourced {
-        let annotation = &model.types()[review.block_type].reviews[review.key];
-        assert!(annotation.sources.is_empty(), "{}", annotation.entity);
-        assert_eq!(annotation.provenance, None, "{}", annotation.entity);
-        assert_eq!(annotation.accuracy, Some(FactAccuracy::Unknown));
-        assert_eq!(annotation.completeness, Some(FactCompleteness::Unknown));
-    }
+    // A curated name without its own source cites the record that found the
+    // entity, its register's or its slice's; its behavior and name are
+    // reconstructed, so accuracy and completeness stay unknown.
+    let found_by = |identity: &str, source: &str| {
+        let review = model
+            .register(identity)
+            .map(|register| &register.review)
+            .or_else(|| model.field(identity).map(|field| &field.review))
+            .expect("the entity exists");
+        assert!(review.sources.iter().any(|s| s == source), "{identity}");
+        assert_eq!(
+            review.provenance,
+            Some(FactProvenance::Observed),
+            "{identity}"
+        );
+        assert_eq!(review.accuracy, Some(FactAccuracy::Unknown), "{identity}");
+        assert_eq!(
+            review.completeness,
+            Some(FactCompleteness::Unknown),
+            "{identity}"
+        );
+        assert_eq!(review.naming, Some(NameOrigin::Descriptive), "{identity}");
+    };
+    found_by(
+        "WIFI_MAC.CTS_INTERRUPT.VALUE",
+        "BLOB_LIBPP_PP_DEBUG_HW_STATISTICS",
+    );
+    found_by("WIFI_MAC.BITMAP_HIGH", "BLOB_LIBPP_DBG_READ_INTERNAL_TXBA");
+    found_by(
+        "WIFI_MAC.BITMAP_HIGH.BITMAP",
+        "BLOB_LIBPP_DBG_READ_INTERNAL_TXBA",
+    );
     let class = |identity: &str| model.field(identity).expect("the field exists").class;
     // No source states the access of this analog field.
     assert_eq!(

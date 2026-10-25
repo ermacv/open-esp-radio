@@ -8,10 +8,10 @@ description = "The coexistence block: its timer bank and external coexistence co
 sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT", "BLOB_LIBCOEX_EXTERNAL", "S31_MMIO_COEX_EXTERNAL"]
 
 [review]
-sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+sources = ["BLOB_LIBCOEX_EXTERNAL"]
 provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
+accuracy = "unknown"
+completeness = "unknown"
 naming = "descriptive"
 
 [review.opaque]
@@ -20,77 +20,51 @@ provenance = "observed"
 accuracy = "unknown"
 completeness = "unknown"
 
+[review.entity."CONFIGURATION%s"]
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+accuracy = "exact"
+completeness = "complete"
+
 [review.entity."CONFIGURATION%s.PRIMARY_TICK_IMAGE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
 
 [review.entity."CONFIGURATION%s.PARAMETER_2"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
 
 [review.entity."CONFIGURATION%s.PARAMETER_1"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
 
 [review.entity."CONFIGURATION%s.BITS_30_31_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_2010F400"]
 
 [review.entity."SECONDARY_TARGET%s"]
-completeness = "unknown"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+accuracy = "exact"
 
 [review.entity."SECONDARY_TARGET%s.SECONDARY_TICK_IMAGE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
 
 [review.entity."SECONDARY_TARGET%s.BITS_24_31_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_2010F404"]
 
+[review.entity."ENABLE_CONTROL%s"]
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+accuracy = "exact"
+completeness = "complete"
+
 [review.entity."ENABLE_CONTROL%s.ENABLE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+
+[review.entity."DISABLE_CONTROL%s"]
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+accuracy = "exact"
+completeness = "complete"
 
 [review.entity."DISABLE_CONTROL%s.DISABLE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."PTI"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."PTI.PRIORITY_0"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."PTI.PRIORITY_1"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."PTI.PRIORITY_2"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."PTI.ADVANCED_PRIORITY"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."PTI.WORK_MODE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.VALIDATE_HIGH"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.GRANT_DELAY_LOW"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.GRANT_DELAY"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.ENABLE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.SYNC"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
 
 [review.entity."CONTROL.BITS_20_31_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_2010F4A0"]
-
-[review.entity."ENABLE_1"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."ENABLE_1.ENABLE"]
-unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."WORD_00B4_OPAQUE"]
 sources = ["S31_MMIO_USE_2010F4B4"]
@@ -111,18 +85,6 @@ completeness = "partial"
 sources = ["S31_MMIO_USE_2010F4B8", "S31_MMIO_DECLARED_2010F4B8"]
 accuracy = "exact"
 completeness = "partial"
-
-[review.entity."ENABLE_MASK_0"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."ENABLE_MASK_0.MASK"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."ENABLE_MASK_1"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."ENABLE_MASK_1.MASK"]
-unsourced = "The curated model's review names this entity without a source."
 
 [[registers]]
 name = "CONFIGURATION%s"

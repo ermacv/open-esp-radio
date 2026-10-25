@@ -3,11 +3,11 @@
 
 use std::{error::Error as StdError, fs};
 
-use oer_registers_contracts::{FactAccuracy, FactCompleteness, NameOrigin};
+use oer_registers_contracts::{FactAccuracy, NameOrigin};
 use oer_registers_model::{
     RegisterEvidenceSet,
     analog::AnalogAddress,
-    chip_model::{ChipModel, Error, ErrorKind, FieldClass, Location, UnsourcedReview},
+    chip_model::{ChipModel, Error, ErrorKind, FieldClass, Location},
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn StdError>>;
@@ -1563,113 +1563,6 @@ rejects!(
     "accuracy = \"bounded\"\nprovenance = \"hint\"",
     ErrorKind::ReviewHint
 );
-
-/// The BLE fixture's only field reviewed as unsourced, with `extra` keys.
-fn unsourced_pending(extra: &str) -> TestResult<Fixture> {
-    let fixture = Fixture::new()?;
-    fixture.edit(
-        "types/ble.toml",
-        "naming = \"descriptive\"\n",
-        &format!(
-            "naming = \"descriptive\"\n\n[review.entity.\"EVENT_STATUS.PENDING\"]\nunsourced = \"No source is recorded.\"\n{extra}"
-        ),
-    )?;
-    Ok(fixture)
-}
-
-#[test]
-fn unsourced_review_claims_nothing_and_is_listed() -> TestResult {
-    let model = unsourced_pending("")?.load()?;
-    let pending = model
-        .field("BLE.EVENT_STATUS.PENDING")
-        .ok_or("no PENDING")?;
-    assert!(pending.review.sources.is_empty());
-    assert_eq!(pending.review.provenance, None);
-    assert_eq!(pending.review.accuracy, Some(FactAccuracy::Unknown));
-    assert_eq!(pending.review.completeness, Some(FactCompleteness::Unknown));
-    assert_eq!(pending.review.naming, Some(NameOrigin::Descriptive));
-    let register = model.register("BLE.EVENT_STATUS").ok_or("no register")?;
-    assert_eq!(register.review.sources, ["SRC_BLOB"], "only the field");
-    let listed = model.unsourced_reviews().collect::<Vec<_>>();
-    assert_eq!(
-        listed,
-        [UnsourcedReview {
-            block_type: "BLE",
-            key: "EVENT_STATUS.PENDING",
-            reason: "No source is recorded.",
-        }]
-    );
-    Ok(())
-}
-
-#[test]
-fn unsourced_review_may_change_only_naming() -> TestResult {
-    let fixture = Fixture::new()?;
-    fixture.edit(
-        "types/ble.toml",
-        "naming = \"descriptive\"\n",
-        "naming = \"descriptive\"\n\n[review.entity.\"WORD_0014_OPAQUE\"]\nunsourced = \"Word seen, no source kept.\"\n\n[review.entity.\"WORD_0014_OPAQUE.BITS_0_7_OPAQUE\"]\nunsourced = \"Bits seen, no source kept.\"\n",
-    )?;
-    fixture.edit(
-        "types/ble.toml",
-        "class = \"read-only\"\n",
-        "class = \"read-only\"\n\n[[registers]]\nname = \"WORD_0014_OPAQUE\"\noffset = 0x14\n\n[[registers.fields]]\nname = \"BITS_0_7_OPAQUE\"\nbits = \"7:0\"\nclass = \"unknown\"\n",
-    )?;
-    let model = fixture.load()?;
-    let opaque = model
-        .field("BLE.WORD_0014_OPAQUE.BITS_0_7_OPAQUE")
-        .ok_or("no opaque bits")?;
-    assert_eq!(opaque.review.naming, Some(NameOrigin::Opaque));
-    assert!(opaque.review.sources.is_empty());
-    assert_eq!(opaque.class, FieldClass::Unknown);
-    assert_eq!(model.unsourced_reviews().count(), 2);
-    Ok(())
-}
-
-#[test]
-fn unsourced_review_states_no_classification() -> TestResult {
-    for claim in [
-        "sources = [\"SRC_BLOB\"]",
-        "sources = []",
-        "provenance = \"imported\"",
-        "provenance = \"observed\"",
-        "accuracy = \"exact\"",
-        "accuracy = \"unknown\"",
-        "completeness = \"complete\"",
-        "completeness = \"unknown\"",
-    ] {
-        let error = unsourced_pending(&format!("{claim}\n"))?.rejection()?;
-        assert!(
-            matches!(error.kind, ErrorKind::ReviewUnsourced(_)),
-            "{claim}: {error}"
-        );
-        assert_eq!(error.entity, "BLE.EVENT_STATUS.PENDING");
-    }
-    Ok(())
-}
-
-#[test]
-fn unsourced_review_needs_a_reason_and_no_vendor_name() -> TestResult {
-    let fixture = unsourced_pending("")?;
-    fixture.edit(
-        "types/ble.toml",
-        "unsourced = \"No source is recorded.\"",
-        "unsourced = \" \"",
-    )?;
-    let error = fixture.rejection()?;
-    assert!(
-        matches!(error.kind, ErrorKind::ReviewUnsourced(_)),
-        "{error}"
-    );
-    let error = unsourced_pending("naming = \"vendor\"\n")?.rejection()?;
-    assert!(matches!(error.kind, ErrorKind::Naming(_)), "{error}");
-    let error = unsourced_pending("naming = \"descriptive\"\n")?.rejection()?;
-    assert!(
-        matches!(error.kind, ErrorKind::ReviewRepeatsDefault("naming")),
-        "{error}"
-    );
-    Ok(())
-}
 
 #[test]
 fn unknown_class_is_neither_read_nor_written() -> TestResult {

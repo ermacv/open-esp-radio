@@ -214,20 +214,6 @@ register. The first group member's combined offset must fit `u32`, the
 positional naming domain. An observation of one instance is a source of
 that instance in the root, not a second review.
 
-An entity no source is recorded for has an override with
-`unsourced = "<reason>"` and at most a `naming` that differs from its
-default. It states no `sources`, `provenance`, `accuracy` or
-`completeness` and inherits none: it resolves to no sources, no
-provenance and `unknown` accuracy and completeness, so it claims nothing
-beyond its bits and name and is no reviewed assertion. A `vendor` name
-needs a source, so an unsourced entity is `descriptive` or `opaque`.
-`ChipModel::unsourced_reviews` lists every such review with its reason.
-
-```toml
-[review.entity."CONTROL.GAIN"]
-unsourced = "The curated review names it without a source."
-```
-
 ### Chip root file (`schema = 4`)
 
 ```toml

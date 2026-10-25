@@ -117,12 +117,6 @@ pub struct OpaqueReview {
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ReviewOverride {
-    /// No source is recorded for the entity, and why. Such a review states
-    /// no sources, provenance, accuracy or completeness: it resolves to no
-    /// sources, no provenance and `unknown` accuracy and completeness, and
-    /// is no reviewed assertion.
-    #[serde(default)]
-    pub unsourced: Option<String>,
     #[serde(default)]
     pub sources: Option<Vec<String>>,
     #[serde(default)]

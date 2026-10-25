@@ -71,7 +71,9 @@ sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"
 sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM"]
 
 [review.entity."CHANNEL_ENABLE_CLEAR.CH2"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL"]
+accuracy = "unknown"
+completeness = "unknown"
 naming = "descriptive"
 
 [review.entity."CHANNEL_ENABLE_CLEAR.CH4"]

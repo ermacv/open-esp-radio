@@ -10,737 +10,465 @@ sources = ["S31_REG_BASE", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B
 [review]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll"]
 provenance = "imported"
-accuracy = "exact"
-completeness = "complete"
+accuracy = "unknown"
+completeness = "unknown"
 naming = "descriptive"
 
 [review.entity."COMMAND"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."COMMAND.OPCODE"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."CONTROL"]
+accuracy = "exact"
 completeness = "partial"
 
-[review.entity."CONTROL.AUTO_ACK_TX"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."MULTIPAN%s_SHORT_ADDRESS"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."CONTROL.ENHANCED_ACK_TX"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."MULTIPAN%s_PAN_ID"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."CONTROL.AUTO_ACK_RX"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."MULTIPAN%s_EXTENDED_ADDRESS_LOW"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."CONTROL.COORDINATOR"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.PROMISCUOUS"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.PENDING_ENHANCED"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.MULTIPAN0_ENABLED"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.MULTIPAN1_ENABLED"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.MULTIPAN2_ENABLED"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.MULTIPAN3_ENABLED"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.IFS_DIS"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.VERSION_FILTER_DIS"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.TX_WAIT_ACK_TIMEOUT_EN"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.FILTER_ENHANCE_DIS"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.RX_FILTER_MULTIPAN_CROSS_CHECK"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.COEX_ARB_DELAY"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.BIT_ORDER"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.NO_RSSI_TRIGGER_BREAK_EN"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.COEX_FORCE_RX"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CONTROL.RX_DONE_TRIG_IDLE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."MULTIPAN%s_SHORT_ADDRESS.ADDRESS"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."MULTIPAN%s_PAN_ID.PAN_ID"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."MULTIPAN%s_EXTENDED_ADDRESS_LOW.ADDRESS_WORD"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."MULTIPAN%s_EXTENDED_ADDRESS_HIGH.ADDRESS_WORD"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."MULTIPAN%s_EXTENDED_ADDRESS_HIGH"]
+accuracy = "exact"
+completeness = "complete"
 
 [review.entity."CHANNEL"]
+accuracy = "exact"
 completeness = "partial"
 naming = "vendor"
-
-[review.entity."CHANNEL.FREQUENCY_CODE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CHANNEL.SEC_CH_FREQ"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CHANNEL.RX_MULTI_CH_EN"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CHANNEL.RX_WAIT_PREMABLE_TIME"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CHANNEL.RX_PREAMBLE_PATTERN_SEL"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CHANNEL.PRI_CH_I2C_SEL"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CHANNEL.SEC_CH_I2C_SEL"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CHANNEL.FAST_FREQHOP_EN"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."CHANNEL.FREQ_BASE_SEL"]
-unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."TX_POWER"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
-[review.entity."TX_POWER.POWER_CODE"]
-unsourced = "The curated model's review names this entity without a source."
-
 [review.entity."ED_DURATION"]
+accuracy = "exact"
 completeness = "partial"
-
-[review.entity."ED_DURATION.DURATION"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."ED_DURATION.DELAY"]
-unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."ED_CONFIG"]
+accuracy = "exact"
 completeness = "partial"
-
-[review.entity."ED_CONFIG.CCA_THRESHOLD_CODE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."ED_CONFIG.ED_SAMPLE_RATE"]
-unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."ED_CONFIG.ED_SAMPLE_MODE"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
-accuracy = "unknown"
-completeness = "unknown"
 naming = "vendor"
 
 [review.entity."ED_CONFIG.CCA_MODE"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
-accuracy = "unknown"
-completeness = "unknown"
 naming = "vendor"
-
-[review.entity."ED_CONFIG.ED_RSS_CODE"]
-unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."ED_CONFIG.CCA_BUSY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
-accuracy = "unknown"
-completeness = "unknown"
 naming = "vendor"
 
 [review.entity."ACK_TIMEOUT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
-[review.entity."ACK_TIMEOUT.TIMEOUT"]
-unsourced = "The curated model's review names this entity without a source."
-
 [review.entity."EVENT_ENABLE"]
+accuracy = "exact"
 completeness = "partial"
-
-[review.entity."EVENT_ENABLE.TX_DONE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."EVENT_ENABLE.RX_DONE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."EVENT_ENABLE.ACK_TX_DONE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."EVENT_ENABLE.ACK_RX_DONE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."EVENT_ENABLE.RX_ABORT"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."EVENT_ENABLE.TX_ABORT"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."EVENT_ENABLE.ED_DONE"]
-unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."EVENT_ENABLE.EVENTS_7"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
-accuracy = "unknown"
-completeness = "unknown"
-
-[review.entity."EVENT_ENABLE.TIMER0_OVERFLOW"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."EVENT_ENABLE.TIMER1_OVERFLOW"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."EVENT_ENABLE.CLOCK_COUNT_MATCH"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."EVENT_ENABLE.TX_SFD_DONE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."EVENT_ENABLE.RX_SFD_DONE"]
-unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."EVENT_ENABLE.EVENTS_13"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
-accuracy = "unknown"
-completeness = "unknown"
 
 [review.entity."EVENT_STATUS"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+accuracy = "exact"
 completeness = "partial"
 
 [review.entity."EVENT_STATUS.TX_DONE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
 
 [review.entity."EVENT_STATUS.RX_DONE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
 
 [review.entity."EVENT_STATUS.ACK_TX_DONE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
 
 [review.entity."EVENT_STATUS.ACK_RX_DONE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
 
 [review.entity."EVENT_STATUS.RX_ABORT"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
 
 [review.entity."EVENT_STATUS.TX_ABORT"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
 
 [review.entity."EVENT_STATUS.ED_DONE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
 
 [review.entity."EVENT_STATUS.EVENTS_7"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
-accuracy = "unknown"
-completeness = "unknown"
 
 [review.entity."EVENT_STATUS.TIMER0_OVERFLOW"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
 
 [review.entity."EVENT_STATUS.TIMER1_OVERFLOW"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
 
 [review.entity."EVENT_STATUS.CLOCK_COUNT_MATCH"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
 
 [review.entity."EVENT_STATUS.TX_SFD_DONE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
 
 [review.entity."EVENT_STATUS.RX_SFD_DONE"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
 
 [review.entity."EVENT_STATUS.EVENTS_13"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
-accuracy = "unknown"
-completeness = "unknown"
 
 [review.entity."RX_ABORT_ENABLE"]
+accuracy = "exact"
 completeness = "partial"
-
-[review.entity."RX_ABORT_ENABLE.RX_STOP"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_ABORT_ENABLE.SFD_TIMEOUT"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_ABORT_ENABLE.CRC_ERROR"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_ABORT_ENABLE.INVALID_LENGTH"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_ABORT_ENABLE.FILTER_FAIL"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_ABORT_ENABLE.NO_RSS"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_ABORT_ENABLE.COEXISTENCE_BREAK"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_ABORT_ENABLE.UNEXPECTED_ACK"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_ABORT_ENABLE.RX_RESTART"]
-unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."RX_ABORT_ENABLE.RX_ABORT_EN_9_14"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
-accuracy = "unknown"
-completeness = "unknown"
-
-[review.entity."RX_ABORT_ENABLE.TX_ACK_TIMEOUT"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_ABORT_ENABLE.TX_ACK_STOP"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_ABORT_ENABLE.TX_ACK_COEXISTENCE_BREAK"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_ABORT_ENABLE.ENHANCED_ACK_SECURITY_ERROR"]
-unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."RX_ABORT_ENABLE.RX_ABORT_EN_19_22"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
-accuracy = "unknown"
-completeness = "unknown"
-
-[review.entity."RX_ABORT_ENABLE.ED_ABORT"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_ABORT_ENABLE.ED_STOP"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_ABORT_ENABLE.ED_COEXISTENCE_REJECT"]
-unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."RX_ABORT_ENABLE.RX_ABORT_EN_26_30"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
-accuracy = "unknown"
-completeness = "unknown"
 
 [review.entity."PENDING_CONFIG"]
+accuracy = "exact"
 completeness = "partial"
 
-[review.entity."PENDING_CONFIG.FRAME_PENDING"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."PENDING_CONFIG.PENDING_TIMEOUT"]
-unsourced = "The curated model's review names this entity without a source."
-
 [review.entity."COEX_PTI"]
+accuracy = "exact"
 completeness = "partial"
 naming = "vendor"
 
-[review.entity."COEX_PTI.TXRX_PTI"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."COEX_PTI.ACK_PTI"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."COEX_PTI.CLOSE_RF_SEL"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."COEX_PTI.ANT_MODE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."COEX_PTI.HW_TX_ACK_ANT_MODE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."COEX_PTI.STBY_COEX_GRANT_MASK"]
-unsourced = "The curated model's review names this entity without a source."
-
 [review.entity."TX_ABORT_ENABLE"]
+accuracy = "exact"
 completeness = "partial"
-
-[review.entity."TX_ABORT_ENABLE.RX_ACK_STOP"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TX_ABORT_ENABLE.RX_ACK_SFD_TIMEOUT"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TX_ABORT_ENABLE.RX_ACK_CRC_ERROR"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TX_ABORT_ENABLE.RX_ACK_INVALID_LENGTH"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TX_ABORT_ENABLE.RX_ACK_FILTER_FAIL"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TX_ABORT_ENABLE.RX_ACK_NO_RSS"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TX_ABORT_ENABLE.RX_ACK_COEXISTENCE_BREAK"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TX_ABORT_ENABLE.RX_ACK_TYPE_NOT_ACK"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TX_ABORT_ENABLE.RX_ACK_RESTART"]
-unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."TX_ABORT_ENABLE.TX_ABORT_EN_9_14"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
-accuracy = "unknown"
-completeness = "unknown"
-
-[review.entity."TX_ABORT_ENABLE.RX_ACK_TIMEOUT"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TX_ABORT_ENABLE.TX_STOP"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TX_ABORT_ENABLE.TX_COEXISTENCE_BREAK"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TX_ABORT_ENABLE.TX_SECURITY_ERROR"]
-unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."TX_ABORT_ENABLE.TX_ABORT_EN_19_22"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
-accuracy = "unknown"
-completeness = "unknown"
-
-[review.entity."TX_ABORT_ENABLE.CCA_FAILED"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TX_ABORT_ENABLE.CCA_BUSY"]
-unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."TX_ABORT_ENABLE.TX_ABORT_EN_25_30"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
-accuracy = "unknown"
-completeness = "unknown"
 
-[review.entity."ENHANCED_ACK_NOTIFY.NOTIFY_IMAGE"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."ENHANCED_ACK_NOTIFY"]
+accuracy = "exact"
+completeness = "complete"
 
 [review.entity."RX_STATUS"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
-
-[review.entity."RX_STATUS.FILTER_FAIL_REASON"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_STATUS.ABORT_REASON"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_STATUS.STATE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."RX_STATUS.CURRENT_CHANNEL_INDEX"]
-unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."RX_STATUS.PREAMBLE_MATCH"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
-accuracy = "unknown"
-completeness = "unknown"
 naming = "vendor"
 
 [review.entity."RX_STATUS.SFD_MATCH"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
-accuracy = "unknown"
-completeness = "unknown"
 naming = "vendor"
 
 [review.entity."TX_STATUS"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
-
-[review.entity."TX_STATUS.STATE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TX_STATUS.ABORT_REASON"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TX_STATUS.SECURITY_ERROR"]
-unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."STATUS"]
 sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
 provenance = "observed"
+accuracy = "exact"
 completeness = "partial"
 
 [review.entity."STATUS.TXRX_STATE"]
 sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
 provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
-[review.entity."DTM_CFG.DTM_TX_LENGTH"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."DTM_CFG"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."DTM_CFG.DTM_TX_PAYLOAD_TYPE"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."TIMER0_THRESHOLD"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."DTM_CFG.DTM_HOP_FREQ"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."TIMER0_VALUE"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."DTM_CFG.DTM_CONT_RX_EN"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."TIMER1_THRESHOLD"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."DTM_CFG.DTM_ON"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."TIMER1_VALUE"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."DTM_CFG.EXTEND_PREAMBLE_BYTE_NUM"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."SFD_WAIT"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."TIMER0_THRESHOLD.THRESHOLD"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TIMER0_VALUE.VALUE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TIMER1_THRESHOLD.THRESHOLD"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TIMER1_VALUE.VALUE"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."SFD_WAIT.SFD_WAIT_SYMBOL_NUM"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."TX_DMA_ADDRESS.ADDRESS"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."TX_DMA_ADDRESS"]
+accuracy = "exact"
+completeness = "complete"
 
 [review.entity."TXDMA_ERR"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."TXDMA_ERR.TXDMA_ERR"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
-[review.entity."RX_DMA_ADDRESS.ADDRESS"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."RX_DMA_ADDRESS"]
+accuracy = "exact"
+completeness = "complete"
 
 [review.entity."RXDMA_ERR"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."RXDMA_ERR.RXDMA_ERR"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."PAON_DELAY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."PAON_DELAY.PAON_DELAY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."TXON_DELAY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."TXON_DELAY.TXON_DELAY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."TXEN_STOP_DELAY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."TXEN_STOP_DELAY.TXEN_STOP_DLY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."TXOFF_DELAY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."TXOFF_DELAY.TXOFF_DELAY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."RXON_DELAY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET", "ESP_PACS_AAA5C2EA_S31_IEEE802154_RXON_DELAY"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."RXON_DELAY.RXON_DELAY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET", "ESP_PACS_AAA5C2EA_S31_IEEE802154_RXON_DELAY"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."TXRX_SWITCH_DELAY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."TXRX_SWITCH_DELAY.TXRX_SWITCH_DELAY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."CONT_RX_DELAY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."CONT_RX_DELAY.CONT_RX_DELAY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."DCDC_CTRL"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."DCDC_CTRL.DCDC_PRE_UP_DELAY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."DCDC_CTRL.DCDC_DOWN_DELAY"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."DCDC_CTRL.DCDC_CTRL_EN"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
 [review.entity."DCDC_CTRL.TX_DCDC_UP"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
 naming = "vendor"
 
-[review.entity."SECURITY_CONTROL.TX_ENABLE"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."SECURITY_CONTROL"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."SECURITY_CONTROL.PAYLOAD_OFFSET"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."SECURITY_ADDRESS_LOW"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."SECURITY_ADDRESS_LOW.ADDRESS_WORD"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."SECURITY_ADDRESS_HIGH"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."SECURITY_ADDRESS_HIGH.ADDRESS_WORD"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."SECURITY_KEY%s.KEY_WORD"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."SECURITY_KEY%s"]
+accuracy = "exact"
+completeness = "complete"
 
 [review.entity."SFD_TIMEOUT_COUNTER"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "ESP_IDF_7B9CC1AC_S31_IEEE802154_LL"]
+accuracy = "exact"
+completeness = "complete"
 
 [review.entity."SFD_TIMEOUT_COUNTER.SFD_TIMEOUT_COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "ESP_IDF_7B9CC1AC_S31_IEEE802154_LL"]
 
 [review.entity."SFD_TIMEOUT_COUNTER.RX_FILTER_NOT_WORK_COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "ESP_IDF_7B9CC1AC_S31_IEEE802154_LL"]
 
 [review.entity."CRC_ERROR_COUNTER"]
 sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "ESP_IDF_7B9CC1AC_S31_IEEE802154_LL"]
+accuracy = "exact"
+completeness = "complete"
 
 [review.entity."CRC_ERROR_COUNTER.CRC_ERROR_COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "ESP_IDF_7B9CC1AC_S31_IEEE802154_LL"]
 
 [review.entity."CRC_ERROR_COUNTER.RX_PREAMBLE_DETECT_ERROR_COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "ESP_IDF_7B9CC1AC_S31_IEEE802154_LL"]
 
-[review.entity."ED_ABORT_COUNTER.COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."ED_ABORT_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."CCA_FAIL_COUNTER.COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."CCA_FAIL_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."RX_FILTER_FAIL_COUNTER.COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."RX_FILTER_FAIL_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."NO_RSS_DETECT_COUNTER.COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."NO_RSS_DETECT_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."RX_ABORT_COEX_COUNTER.COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."RX_ABORT_COEX_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."RX_RESTART_COUNTER.COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."RX_RESTART_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."TX_ACK_ABORT_COEX_COUNTER.COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."TX_ACK_ABORT_COEX_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."ED_SCAN_BREAK_COEX_COUNTER.COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."ED_SCAN_BREAK_COEX_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."RX_ACK_ABORT_COEX_COUNTER.COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."RX_ACK_ABORT_COEX_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."RX_ACK_TIMEOUT_COUNTER.COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."RX_ACK_TIMEOUT_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."TX_BREAK_COEX_COUNTER.COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."TX_BREAK_COEX_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."TX_SECURITY_ERROR_COUNTER.COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."TX_SECURITY_ERROR_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."CCA_BUSY_COUNTER.COUNT"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."CCA_BUSY_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
 
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.ED_SCAN_BREAK_COEX"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.CCA_BUSY"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.CCA_FAIL"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.ED_ABORT"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.TX_SECURITY_ERROR"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.TX_BREAK_COEX"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.TX_ACK_ABORT_COEX"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.RX_ACK_TIMEOUT"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.RX_RESTART"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.RX_ACK_ABORT_COEX"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.RX_ABORT_COEX"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.NO_RSS_DETECT"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.RX_FILTER_FAIL"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.CRC_ERROR"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.SFD_TIMEOUT"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.RX_FILTER_NOT_WORK"]
-unsourced = "The curated model's review names this entity without a source."
-
-[review.entity."DIAGNOSTIC_COUNTER_CLEAR.RX_PREAMBLE_DETECT_ERROR"]
-unsourced = "The curated model's review names this entity without a source."
+[review.entity."DIAGNOSTIC_COUNTER_CLEAR"]
+accuracy = "exact"
+completeness = "complete"
 
 [[registers]]
 name = "COMMAND"
