@@ -567,6 +567,35 @@ overlay's ESP-IDF headers are `esp-idf/<path>` artifacts of the chip's
 fails, naming `cargo pins fetch --chip <chip>`, while one is missing, and
 when the overlay's `esp-idf` pin is not the manifest's.
 
+## Strictness overlay from ESP-IDF headers
+
+`cargo registers overlay check --chip <esp32s31|esp32c5> --idf <checkout>`
+verifies every entry of the chip's `model/strictness.toml` against the file
+and line it cites in the pinned ESP-IDF register headers and against the
+vendor SVD: the register definition line (`*_reg.h`), the field line (name,
+bits, access class), the closing line of the register union (`*_struct.h`,
+whose `reserved_*` members are the entry's `reserved` bits and whose other
+members are the SVD's fields) and the enumerator of `interrupts.h` (its
+position is the source number). An access class decides what an entry may
+state: `R/W` a plain field, `WT` a write trigger, `HRO` a hardware-modified
+read-only field, a hardware-modified field (`SC`, `SS`, ...) a read-only
+register, all fields `WTC` a write-one-to-clear register. `trm:` and
+`esp-hal:` sources, `read-side-effect` and enumerated values are counted as
+unchecked.
+The checkout must be at the overlay's `esp-idf` pin.
+
+`cargo registers overlay import --chip <chip> --idf <checkout>
+[--peripheral <name>]... [--write]` pins the headers of the named
+peripherals: a peripheral without a `[[headers]]` entry gets the `*_reg.h`
+that holds most of its registers and the `*_struct.h` beside it. It prints
+the registers the headers place at another offset than the vendor SVD as
+`[[registers]]` correction entries (`--write` appends them to the overlay)
+and the header fields the SVD lacks. Without `--peripheral` it
+looks at every pinned peripheral. Access classes, reserved bits and
+reserved words are derived from the pinned headers when the model is
+generated, so import writes no per-register entry; running it on a pinned
+peripheral changes nothing.
+
 ## Pinned header function signatures
 
 `cargo registers signatures --chip <esp32s31|esp32c5> --idf <checkout>

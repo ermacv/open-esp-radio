@@ -55,7 +55,7 @@ pub use soc::{
     FieldKind, FieldRule, HeaderRule, InterruptRule, OverlayAccess, RegisterApi, RegisterRule,
     RegisterVerdict, SocInputs, SocRender, StrictnessOverlay, ValueRule, render_soc,
 };
-pub use soc_overlay::{HeaderTree, OverlayCheck, check_overlay, import_overlay};
+pub use soc_overlay::{HeaderTree, OverlayCheck, OverlayImport, check_overlay, import_overlay};
 
 pub use pac_api::{
     BitwiseComposedDomain, BitwiseComposedDomainArgument, BitwiseComposedValueType, BoundedDomain,
