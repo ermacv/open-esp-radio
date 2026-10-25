@@ -63,6 +63,10 @@ pub enum ErrorKind {
     Dim(String),
     #[error("group: {0}")]
     Group(String),
+    #[error("expansion exceeds the loader's {0} budget")]
+    ExpansionLimit(&'static str),
+    #[error("cannot allocate expanded records: {0}")]
+    Allocation(#[source] std::collections::TryReserveError),
     #[error("word at offset {offset:#x} overlaps {other}")]
     WordOverlap { offset: u64, other: String },
     #[error("command register: {0}")]
@@ -81,6 +85,8 @@ pub enum ErrorKind {
     ReviewRepeatsDefault(&'static str),
     #[error("review has no {0} after its default and override")]
     ReviewIncomplete(&'static str),
+    #[error("a hint is navigation, not a reviewed assertion")]
+    ReviewHint,
     #[error("naming: {0}")]
     Naming(String),
     #[error("names type {0:?}, which no included file declares")]

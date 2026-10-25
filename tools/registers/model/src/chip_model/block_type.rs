@@ -48,6 +48,39 @@ impl Context<'_> {
     }
 }
 
+/// Bound both record overhead and owned text before materializing repetitions.
+/// Separate budgets cover all included types and all expanded instances.
+#[derive(Default)]
+pub(super) struct ExpansionBudget {
+    records: u64,
+    text: u64,
+}
+
+impl ExpansionBudget {
+    pub(super) fn include(
+        &mut self,
+        context: Context<'_>,
+        entity: &str,
+        count: u64,
+        records: u64,
+        text: u64,
+    ) -> Result<(), Error> {
+        self.records = self.records.saturating_add(count.saturating_mul(records));
+        self.text = self.text.saturating_add(count.saturating_mul(text));
+        let exceeded = if self.records > 65_536 {
+            Some("65,536 register/field records")
+        } else if self.text > 64 * 1024 * 1024 {
+            Some("64 MiB of expanded text")
+        } else {
+            None
+        };
+        if let Some(limit) = exceeded {
+            return Err(context.error(entity, ErrorKind::ExpansionLimit(limit)));
+        }
+        Ok(())
+    }
+}
+
 /// A name: `UPPER_SNAKE` from a letter, with exactly one `%s` where
 /// `indexed`, and none otherwise.
 pub(super) fn check_name(name: &str, indexed: bool) -> Result<(), ErrorKind> {
@@ -148,15 +181,24 @@ impl BlockType {
     }
 
     /// Read and check one type file.
-    pub(super) fn load(path: &Path, evidence: &BTreeSet<String>) -> Result<Self, Error> {
+    pub(super) fn load(
+        path: &Path,
+        evidence: &BTreeSet<String>,
+        budget: &mut ExpansionBudget,
+    ) -> Result<Self, Error> {
         let text = std::fs::read_to_string(path)
             .map_err(|error| Error::new(path, "", ErrorKind::Read(error)))?;
         let file: TypeFile = toml_edit::de::from_str(&text)
             .map_err(|error| Error::new(path, "", ErrorKind::Parse(error.to_string())))?;
-        Self::check(Context { path, evidence }, path.to_owned(), file)
+        Self::check(Context { path, evidence }, path.to_owned(), file, budget)
     }
 
-    fn check(context: Context<'_>, path: PathBuf, file: TypeFile) -> Result<Self, Error> {
+    fn check(
+        context: Context<'_>,
+        path: PathBuf,
+        file: TypeFile,
+        budget: &mut ExpansionBudget,
+    ) -> Result<Self, Error> {
         let name = file.header.name.clone();
         if file.schema != TYPE_SCHEMA {
             return Err(context.error(
@@ -217,7 +259,8 @@ impl BlockType {
             }
         }
 
-        let elements = elements(&file, space);
+        let count = preflight_elements(context, &file, budget)?;
+        let elements = elements(context, &file, space, count)?;
         check_elements(context, space, &name, &elements)?;
         check_group_spans(context, &name, &file.groups, &elements)?;
         check_commands(context, &name, &file.commands, &templates)?;
@@ -343,6 +386,22 @@ fn check_register(
         {
             return Err(fail(ErrorKind::ReadSafe(
                 "a read of this register changes the hardware".to_owned(),
+            )));
+        }
+        let mut readable = 0u64;
+        let mut described = 0u64;
+        for field in &register.fields {
+            let (low, width) = parse_bits(&field.bits).map_err(fail)?;
+            let bits = mask(low, width);
+            described |= bits;
+            if field.class.readable() {
+                readable |= bits;
+            }
+        }
+        let comparison = read_safe.comparison_mask.map_or(described, u64::from);
+        if readable == 0 || comparison & !readable != 0 {
+            return Err(fail(ErrorKind::ReadSafe(
+                "qualification needs readable fields and may compare only readable bits".to_owned(),
             )));
         }
         context.sources(entity, &read_safe.sources)?;
@@ -478,6 +537,15 @@ fn check_group(
     for register in &group.registers {
         let register_entity = format!("{entity}.{}", register.name);
         check_register(context, space, &register_entity, register)?;
+        let bytes = register_width(space, register) / 8;
+        if !group.offset.is_multiple_of(bytes) || !group.stride.is_multiple_of(bytes) {
+            return Err(context.error(
+                &register_entity,
+                ErrorKind::Group(format!(
+                    "offset and stride must preserve the member's {bytes}-byte alignment"
+                )),
+            ));
+        }
         if !names.insert(register.name.as_str()) {
             return Err(context.error(
                 &register_entity,
@@ -500,9 +568,88 @@ fn check_group(
     Ok(())
 }
 
-/// Every element of `file`, in offset order.
-fn elements(file: &TypeFile, space: Space) -> Vec<Element> {
+/// Check the last byte and total expansion cost without iterating repetitions.
+fn preflight_elements(
+    context: Context<'_>,
+    file: &TypeFile,
+    budget: &mut ExpansionBudget,
+) -> Result<usize, Error> {
+    let space = file.header.space;
+    let mut count = 0usize;
+    let mut include = |register: &Register, group: Option<&Group>| {
+        let key = match group {
+            Some(group) => format!("{}.{}", group.name, register.name),
+            None => register.name.clone(),
+        };
+        let entity = format!("{}.{key}", file.header.name);
+        let fail = || {
+            context.error(
+                &entity,
+                ErrorKind::RegisterGeometry("repeated span overflows".to_owned()),
+            )
+        };
+        let (base, group_repeat, groups) = group.map_or((0, 0, 1), |group| {
+            (
+                u64::from(group.offset),
+                u64::from(group.count - 1) * u64::from(group.stride),
+                u64::from(group.count),
+            )
+        });
+        let (repeat, registers) = register.dim.map_or((0, 1), |dim| {
+            (
+                u64::from(dim.count - 1) * u64::from(dim.stride),
+                u64::from(dim.count),
+            )
+        });
+        let end = base
+            .checked_add(group_repeat)
+            .and_then(|offset| offset.checked_add(u64::from(register.offset)))
+            .and_then(|offset| offset.checked_add(repeat))
+            .and_then(|offset| offset.checked_add(u64::from(register_width(space, register) / 8)))
+            .ok_or_else(fail)?;
+        if space == Space::AnalogI2c && end > 256 {
+            return Err(context.error(
+                &entity,
+                ErrorKind::RegisterGeometry("repeated analog byte index is above 0xff".to_owned()),
+            ));
+        }
+        let elements = groups.checked_mul(registers).ok_or_else(fail)?;
+        // key, expanded name (up to two ten-digit indices), optional group.
+        let text = (key.len() as u64)
+            .saturating_mul(2)
+            .saturating_add(group.map_or(0, |group| group.name.len() as u64))
+            .saturating_add(22);
+        budget.include(
+            context,
+            &entity,
+            elements,
+            1 + register.fields.len() as u64,
+            text,
+        )?;
+        count += elements as usize; // The record budget fits usize on host targets.
+        Ok(())
+    };
+    for register in &file.registers {
+        include(register, None)?;
+    }
+    for group in &file.groups {
+        for register in &group.registers {
+            include(register, Some(group))?;
+        }
+    }
+    Ok(count)
+}
+
+/// Every element of `file`, in offset order, after preflight bounded its cost.
+fn elements(
+    context: Context<'_>,
+    file: &TypeFile,
+    space: Space,
+    count: usize,
+) -> Result<Vec<Element>, Error> {
     let mut out = Vec::new();
+    out.try_reserve_exact(count)
+        .map_err(|error| context.error(&file.header.name, ErrorKind::Allocation(error)))?;
     let mut push = |key: String,
                     name: &str,
                     base: u64,
@@ -553,7 +700,7 @@ fn elements(file: &TypeFile, space: Space) -> Vec<Element> {
         }
     }
     out.sort_by_key(|element| element.offset);
-    out
+    Ok(out)
 }
 
 /// Expanded names are unique, no two words overlap and an analog byte's
@@ -575,6 +722,12 @@ fn check_elements(
     }
     for element in elements {
         let entity = format!("{name}.{}", element.name);
+        if !element.offset.is_multiple_of(u64::from(element.width / 8)) {
+            return Err(context.error(
+                &entity,
+                ErrorKind::RegisterGeometry("expanded offset is not naturally aligned".to_owned()),
+            ));
+        }
         // A group element's name and a register's name share one scope.
         if let Some((group, _)) = element.name.split_once('.')
             && names.contains(group)
@@ -746,7 +899,11 @@ struct ReviewEntity {
     position: String,
 }
 
-fn review_entities(file: &TypeFile, templates: &BTreeMap<String, Register>) -> Vec<ReviewEntity> {
+fn review_entities(
+    context: Context<'_>,
+    file: &TypeFile,
+    templates: &BTreeMap<String, Register>,
+) -> Result<Vec<ReviewEntity>, Error> {
     let space = file.header.space;
     let group_offsets =
         file.groups
@@ -759,7 +916,19 @@ fn review_entities(file: &TypeFile, templates: &BTreeMap<String, Register>) -> V
             .collect::<BTreeMap<_, _>>();
     let mut out = Vec::new();
     for (key, register) in templates {
-        let offset = group_offsets.get(key).copied().unwrap_or(0) + register.offset;
+        let offset = group_offsets
+            .get(key)
+            .copied()
+            .unwrap_or(0)
+            .checked_add(register.offset)
+            .ok_or_else(|| {
+                context.error(
+                    format!("{}.{key}", file.header.name),
+                    ErrorKind::RegisterGeometry(
+                        "the first group member's offset exceeds u32".to_owned(),
+                    ),
+                )
+            })?;
         let position = match space {
             Space::Mmio => {
                 opaque_position_name(Position::Register { offset }, register.dim.is_some())
@@ -780,7 +949,7 @@ fn review_entities(file: &TypeFile, templates: &BTreeMap<String, Register>) -> V
             });
         }
     }
-    out
+    Ok(out)
 }
 
 /// Every register's and field's review: its default (`[review]`, or
@@ -794,7 +963,22 @@ fn resolve_reviews(
 ) -> Result<BTreeMap<String, ReviewAnnotation>, Error> {
     let type_name = &file.header.name;
     let review = &file.review;
-    let entities = review_entities(file, templates);
+    if let Some(sources) = &review.sources {
+        context.sources(type_name, sources)?;
+    }
+    if let Some(sources) = review
+        .opaque
+        .as_ref()
+        .and_then(|opaque| opaque.sources.as_ref())
+    {
+        context.sources(&format!("{type_name}.review.opaque"), sources)?;
+    }
+    for (key, annotation) in &review.entity {
+        if let Some(sources) = &annotation.sources {
+            context.sources(&format!("{type_name}.{key}"), sources)?;
+        }
+    }
+    let entities = review_entities(context, file, templates)?;
     if let Some(key) = review
         .entity
         .keys()
@@ -855,6 +1039,9 @@ fn resolve_reviews(
             ),
         };
         context.sources(&path, &annotation.sources)?;
+        if !crate::review_annotation_is_assertion(&annotation) {
+            return Err(fail(ErrorKind::ReviewHint));
+        }
         crate::validate_naming(&path, Some(&annotation), &entity.position)
             .map_err(|error| fail(ErrorKind::Naming(error.to_string())))?;
         resolved.insert(entity.key, annotation);

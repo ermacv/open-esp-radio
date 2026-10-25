@@ -248,6 +248,11 @@ pub enum FieldClass {
 }
 
 impl FieldClass {
+    /// Whether a read has a defined value, independently of read side effects.
+    pub fn readable(self) -> bool {
+        !matches!(self, Self::WriteOnly | Self::WriteTrigger)
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Plain => "plain",

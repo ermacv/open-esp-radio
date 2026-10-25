@@ -1175,3 +1175,505 @@ rejects!(
     "[[ram-regions]]\nname = \"dma-window\"\nbase = 0x40900000\nsize = 0x100\nsources = [\"SRC_HEADER\"]\n\n[[layout-placements]]",
     ErrorKind::Duplicate(_)
 );
+
+// Cross-review regressions: validate relationships after root placement.
+#[test]
+fn root_places_pointer_targets() -> TestResult {
+    for compressed in [false, true] {
+        let fixture = Fixture::new()?;
+        fixture.edit(
+            "layouts/rx-descriptor.toml",
+            "placement = [\"dma-window\"]",
+            "points-to = \"RX_DESCRIPTOR\"",
+        )?;
+        if compressed {
+            fixture.edit(
+                "layouts/rx-descriptor.toml",
+                "bits = \"31:0\"",
+                "bits = \"19:0\"\nencoding = \"ble-compressed\"",
+            )?;
+        }
+        let model = fixture.load()?;
+        assert!(model.layouts()[0].is_dma_target());
+        assert_eq!(
+            model.layouts()[0].units[1].fields[0].points_to.as_deref(),
+            Some("RX_DESCRIPTOR")
+        );
+    }
+    Ok(())
+}
+
+const RING_LAYOUT: &str = r#"
+schema = 1
+[layout]
+name = "RX_RING"
+description = "Synthetic descriptor ring."
+size = 16
+align = 4
+[layout.array]
+element = "RX_DESCRIPTOR"
+count = 2
+[layout.review]
+sources = ["SRC_HEADER"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+"#;
+
+#[test]
+fn root_places_arrays_and_checks_element_placement() -> TestResult {
+    for place_array in [false, true] {
+        let fixture = Fixture::new()?;
+        fixture.write("layouts/ring.toml", RING_LAYOUT)?;
+        fixture.edit(
+            "root.toml",
+            "layouts = [\"layouts/rx-descriptor.toml\"]",
+            "layouts = [\"layouts/rx-descriptor.toml\", \"layouts/ring.toml\"]",
+        )?;
+        fixture.edit(
+            "layouts/rx-descriptor.toml",
+            "placement = [\"dma-window\"]",
+            "points-to = \"RX_RING\"",
+        )?;
+        if place_array {
+            fixture.edit(
+                "root.toml",
+                "[[layout-placements]]",
+                "[[layout-placements]]\nlayout = \"RX_RING\"\nregions = [\"dma-window\"]\n\n[[layout-placements]]",
+            )?;
+            let model = fixture.load()?;
+            assert!(model.layouts().iter().all(|layout| layout.is_dma_target()));
+        } else {
+            let error = fixture.rejection()?;
+            assert!(matches!(error.kind, ErrorKind::Layouts(_)), "{error}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn root_checks_same_geometry_after_placement() -> TestResult {
+    for region in ["dma-window", "other-ram"] {
+        let fixture = Fixture::new()?;
+        fixture.write(
+            "layouts/peer.toml",
+            &LAYOUT.replace(
+                "name = \"RX_DESCRIPTOR\"",
+                "name = \"TX_DESCRIPTOR\"\nsame-geometry-as = \"RX_DESCRIPTOR\"",
+            ),
+        )?;
+        fixture.edit(
+            "root.toml",
+            "layouts = [\"layouts/rx-descriptor.toml\"]",
+            "layouts = [\"layouts/rx-descriptor.toml\", \"layouts/peer.toml\"]",
+        )?;
+        fixture.write(
+            "root.toml",
+            &format!(
+                "{}\n[[ram-regions]]\nname = \"other-ram\"\nbase = 0x40900000\nsize = 0x10000\nsources = [\"SRC_HEADER\"]\n\n[[layout-placements]]\nlayout = \"TX_DESCRIPTOR\"\nregions = [\"{region}\"]\n",
+                fs::read_to_string(fixture.dir.path().join("root.toml"))?
+            ),
+        )?;
+        if region == "dma-window" {
+            fixture.load()?;
+        } else {
+            let error = fixture.rejection()?;
+            assert!(matches!(error.kind, ErrorKind::Layouts(_)), "{error}");
+        }
+    }
+    Ok(())
+}
+
+rejects!(
+    pointer_requires_included_target,
+    "layouts/rx-descriptor.toml",
+    "placement = [\"dma-window\"]",
+    "points-to = \"MISSING\"",
+    ErrorKind::Layouts(_)
+);
+
+#[test]
+fn pointer_requires_dma_target_placement() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "layouts/rx-descriptor.toml",
+        "placement = [\"dma-window\"]",
+        "points-to = \"RX_DESCRIPTOR\"",
+    )?;
+    fixture.edit(
+        "root.toml",
+        "[[layout-placements]]\nlayout = \"RX_DESCRIPTOR\"\nregions = [\"dma-window\"]",
+        "",
+    )?;
+    let error = fixture.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::Layouts(_)), "{error}");
+    Ok(())
+}
+
+rejects!(
+    group_offset_overflow_returns_geometry_error,
+    "types/timg.toml",
+    "name = \"T%s\"\noffset = 0x00",
+    "name = \"T%s\"\noffset = 0xfffffffc",
+    ErrorKind::RegisterGeometry(_)
+);
+rejects!(
+    huge_analog_dim_is_rejected_before_expansion,
+    "types/bbpll.toml",
+    "name = \"OC_DIV\"\noffset = 0x02",
+    "name = \"OC_DIV_%s\"\noffset = 0x02\ndim = { count = 4294967295, stride = 1 }",
+    ErrorKind::RegisterGeometry(_)
+);
+rejects!(
+    huge_mmio_dim_is_rejected_before_expansion,
+    "types/timg.toml",
+    "count = 2, stride = 4",
+    "count = 4294967295, stride = 4",
+    ErrorKind::ExpansionLimit(_)
+);
+rejects!(
+    huge_mmio_group_is_rejected_before_expansion,
+    "types/timg.toml",
+    "count = 2\nstride = 0x24",
+    "count = 4294967295\nstride = 0x24",
+    ErrorKind::ExpansionLimit(_)
+);
+
+#[test]
+fn huge_analog_group_is_rejected_before_expansion() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.write(
+        "types/bbpll.toml",
+        &BBPLL.replace("[[registers", "[[groups.registers").replacen(
+            "[[groups.registers]]",
+            "[[groups]]\nname = \"BANK_%s\"\noffset = 0\ncount = 4294967295\nstride = 4\n\n[[groups.registers]]",
+            1,
+        ),
+    )?;
+    let error = fixture.rejection()?;
+    assert!(
+        matches!(error.kind, ErrorKind::RegisterGeometry(_)),
+        "{error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn nested_repetitions_share_the_type_budget() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timg.toml",
+        "count = 2\nstride = 0x24",
+        "count = 10000\nstride = 0x10000",
+    )?;
+    fixture.edit(
+        "types/timg.toml",
+        "name = \"LOAD\"\noffset = 0x20",
+        "name = \"LOAD_%s\"\noffset = 0x20\ndim = { count = 10000, stride = 4 }",
+    )?;
+    let error = fixture.rejection()?;
+    assert!(
+        matches!(error.kind, ErrorKind::ExpansionLimit(_)),
+        "{error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn long_names_share_the_expanded_text_budget() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/ble.toml",
+        "name = \"EVENT_STATUS\"\noffset = 0x10",
+        &format!(
+            "name = \"EVENT_{}_%s\"\noffset = 0x10\ndim = {{ count = 4096, stride = 4 }}",
+            "A".repeat(16384)
+        ),
+    )?;
+    let error = fixture.rejection()?;
+    assert!(
+        matches!(error.kind, ErrorKind::ExpansionLimit(_)),
+        "{error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn instances_share_the_chip_expansion_budget() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/ble.toml",
+        "name = \"EVENT_STATUS\"\noffset = 0x10",
+        "name = \"EVENT_STATUS_%s\"\noffset = 0x10\ndim = { count = 20000, stride = 4 }",
+    )?;
+    fixture.edit("root.toml", "size = 0x20,", "size = 0x20000,")?;
+    fixture.edit(
+        "root.toml",
+        "[[interrupts]]",
+        "[[instances]]\nname = \"BLE2\"\ntype = \"BLE\"\nbase = 0x60030000\nextent = { size = 0x20000 }\nsources = [\"SRC_BASE\"]\n\n[[interrupts]]",
+    )?;
+    let error = fixture.rejection()?;
+    assert!(
+        matches!(error.kind, ErrorKind::ExpansionLimit(_)),
+        "{error}"
+    );
+    Ok(())
+}
+
+rejects!(
+    misaligned_group_offset,
+    "types/timg.toml",
+    "name = \"T%s\"\noffset = 0x00",
+    "name = \"T%s\"\noffset = 0x01",
+    ErrorKind::Group(_)
+);
+rejects!(
+    misaligned_group_stride,
+    "types/timg.toml",
+    "stride = 0x24",
+    "stride = 0x25",
+    ErrorKind::Group(_)
+);
+
+#[test]
+fn group_alignment_preserves_members_with_dim_and_mixed_widths() -> TestResult {
+    for (offset, stride) in [(1, 8), (4, 9), (4, 8)] {
+        let fixture = Fixture::new()?;
+        let group = format!(
+            r#"
+[[groups]]
+name = "LANE_%s"
+offset = {offset}
+count = 2
+stride = {stride}
+[[groups.registers]]
+name = "FLAGS"
+offset = 0
+width = 8
+[[groups.registers.fields]]
+name = "ACTIVE"
+bits = "0"
+class = "plain"
+[[groups.registers]]
+name = "CONTROL_%s"
+offset = 4
+width = 16
+dim = {{ count = 2, stride = 2 }}
+[[groups.registers.fields]]
+name = "ENABLE"
+bits = "0"
+class = "plain"
+"#
+        );
+        fixture.write("types/ble.toml", &format!("{BLE}{group}"))?;
+        fixture.edit("types/ble.toml", "offset = 0x10", "offset = 0x1c")?;
+        if offset == 4 && stride == 8 {
+            fixture.load()?;
+        } else {
+            let error = fixture.rejection()?;
+            assert!(matches!(error.kind, ErrorKind::Group(_)), "{error}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn read_safe_requires_readable_comparison_bits() -> TestResult {
+    for class in ["write-only", "write-trigger"] {
+        for explicit_mask in [false, true] {
+            let fixture = Fixture::new()?;
+            fixture.edit(
+                "types/bbpll.toml",
+                "class = \"plain\"",
+                &format!("class = \"{class}\""),
+            )?;
+            if !explicit_mask {
+                fixture.edit("types/bbpll.toml", ", comparison-mask = 0x3f", "")?;
+            }
+            let error = fixture.rejection()?;
+            assert!(matches!(error.kind, ErrorKind::ReadSafe(_)), "{error}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn read_safe_comparison_can_exclude_unreadable_lanes() -> TestResult {
+    for comparison in ["0x3f", "0x7f"] {
+        let fixture = Fixture::new()?;
+        fixture.write(
+            "types/bbpll.toml",
+            &format!(
+                r#"{BBPLL}
+[[registers.fields]]
+name = "WRITE_CONTROL"
+bits = "6"
+class = "write-only"
+"#
+            ),
+        )?;
+        fixture.edit(
+            "types/bbpll.toml",
+            "comparison-mask = 0x3f",
+            &format!("comparison-mask = {comparison}"),
+        )?;
+        if comparison == "0x3f" {
+            fixture.load()?;
+        } else {
+            let error = fixture.rejection()?;
+            assert!(matches!(error.kind, ErrorKind::ReadSafe(_)), "{error}");
+        }
+    }
+    Ok(())
+}
+
+rejects!(
+    review_hint_is_not_an_assertion,
+    "types/ble.toml",
+    "provenance = \"observed\"",
+    "provenance = \"hint\"",
+    ErrorKind::ReviewHint
+);
+rejects!(
+    opaque_review_hint_is_not_an_assertion,
+    "types/timg.toml",
+    "provenance = \"observed\"",
+    "provenance = \"hint\"",
+    ErrorKind::ReviewHint
+);
+rejects!(
+    review_override_hint_is_not_an_assertion,
+    "types/timg.toml",
+    "accuracy = \"bounded\"",
+    "accuracy = \"bounded\"\nprovenance = \"hint\"",
+    ErrorKind::ReviewHint
+);
+
+#[test]
+fn overridden_review_default_sources_are_validated() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.write(
+        "types/ble.toml",
+        &format!(
+            r#"{}
+[review.entity."EVENT_STATUS"]
+sources = ["SRC_BLOB"]
+[review.entity."EVENT_STATUS.PENDING"]
+sources = ["SRC_BLOB"]
+"#,
+            BLE.replace(
+                "[review]\nsources = [\"SRC_BLOB\"]",
+                "[review]\nsources = [\"NOT_IN_CATALOG\"]"
+            )
+        ),
+    )?;
+    let error = fixture.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::UnknownSource(_)), "{error}");
+    Ok(())
+}
+
+#[test]
+fn unused_opaque_review_sources_are_validated() -> TestResult {
+    for sources in ["[\"NOT_IN_CATALOG\"]", "[]", "[\"SRC_BLOB\", \"SRC_BLOB\"]"] {
+        let fixture = Fixture::new()?;
+        fixture.write(
+            "types/ble.toml",
+            &format!("{BLE}\n[review.opaque]\nsources = {sources}\n"),
+        )?;
+        let error = fixture.rejection()?;
+        assert!(
+            matches!(
+                error.kind,
+                ErrorKind::UnknownSource(_) | ErrorKind::InvalidSources
+            ),
+            "{error}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn included_layout_may_be_unplaced_without_being_a_dma_target() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "root.toml",
+        "[[layout-placements]]\nlayout = \"RX_DESCRIPTOR\"\nregions = [\"dma-window\"]",
+        "",
+    )?;
+    let model = fixture.load()?;
+    assert!(model.layouts()[0].placement.is_empty());
+    assert!(!model.layouts()[0].is_dma_target());
+    Ok(())
+}
+
+#[test]
+fn byte_decoder_may_be_unplaced() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.write(
+        "layouts/rx-descriptor.toml",
+        &LAYOUT
+            .replace("[[layout.words]]", "[[layout.bytes]]")
+            .replace("[[layout.words.fields]]", "[[layout.bytes.fields]]")
+            .replace("access = \"shared\"", "size = 4\naccess = \"owned\"")
+            .replace("placement = [\"dma-window\"]", ""),
+    )?;
+    fixture.edit(
+        "root.toml",
+        "[[layout-placements]]\nlayout = \"RX_DESCRIPTOR\"\nregions = [\"dma-window\"]",
+        "",
+    )?;
+    let model = fixture.load()?;
+    assert!(model.layouts()[0].placement.is_empty());
+    assert!(!model.layouts()[0].is_dma_target());
+    Ok(())
+}
+
+#[test]
+fn expanded_field_names_share_the_chip_text_budget() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/ble.toml",
+        "name = \"EVENT_STATUS\"\noffset = 0x10",
+        "name = \"EVENT_STATUS_%s\"\noffset = 0x10\ndim = { count = 4096, stride = 4 }",
+    )?;
+    fixture.edit(
+        "types/ble.toml",
+        "name = \"PENDING\"",
+        &format!("name = \"PENDING_{}\"", "A".repeat(8192)),
+    )?;
+    fixture.edit("root.toml", "size = 0x20,", "size = 0x5000,")?;
+    let error = fixture.rejection()?;
+    assert!(
+        matches!(error.kind, ErrorKind::ExpansionLimit(_)),
+        "{error}"
+    );
+    assert_eq!(error.entity, "BLE");
+    Ok(())
+}
+
+#[test]
+fn included_types_share_the_materialization_budget() -> TestResult {
+    let fixture = Fixture::new()?;
+    let repeated = BLE.replace(
+        "name = \"EVENT_STATUS\"\noffset = 0x10",
+        "name = \"EVENT_STATUS_%s\"\noffset = 0x10\ndim = { count = 20000, stride = 4 }",
+    );
+    fixture.write("types/ble.toml", &repeated)?;
+    fixture.write(
+        "types/copy.toml",
+        &repeated.replace("name = \"BLE\"", "name = \"BLE_COPY\""),
+    )?;
+    fixture.edit(
+        "root.toml",
+        "\"types/ble.toml\"",
+        "\"types/ble.toml\", \"types/copy.toml\"",
+    )?;
+    let error = fixture.rejection()?;
+    assert!(
+        matches!(error.kind, ErrorKind::ExpansionLimit(_)),
+        "{error}"
+    );
+    assert!(error.entity.starts_with("BLE_COPY."));
+    Ok(())
+}

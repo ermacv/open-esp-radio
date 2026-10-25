@@ -171,7 +171,11 @@ Register-level constructs live in the type file:
   bits are never fields and every write keeps them;
 - analog-I2C types only: `read-safe = { epoch, comparison-mask, sources }`
   and `[[registers.views]]` (`name`, `field`, `bits`, `sources`, a strict
-  subrange of one field).
+  subrange of one field). Read-safe qualification needs readable fields,
+  and its comparison mask covers only readable field bits; without a mask
+  it qualifies all declared fields. `write-only` and `write-trigger` have
+  no readable value. FIFO, read-side-effect and read-clears registers never
+  qualify, even when the comparison mask excludes the affected bits.
 
 A whole-word fixed image is a transaction, so it stays in the PAC policy
 (`fixed-register-images`, `whole-word = true`).
@@ -180,23 +184,33 @@ A whole-word fixed image is a transaction, so it stays in the PAC policy
 the register's bytes, the name holds one `%s`). `[[groups]]` repeat a set
 of registers, which take their offsets from the group's start; the group
 name holds one `%s`, `count` is at least 2, `stride` covers every register
-of the group, and a group holds no group. No two words of a type overlap:
+of the group, and a group holds no group. The group's offset and stride
+preserve every member's natural alignment, including members with `dim`.
+No two words of a type overlap:
 registers, `dim` elements and group elements alike, and no register or
 other group lies inside a group's span, from its first element's start to
-its last element's end. An analog byte's index is below 256.
+its last element's end. An analog byte's index is below 256. Repeated spans
+are checked before expansion. The loader bounds materialization for all
+included types combined, and separately for the chip's expanded instances,
+to 65,536 register/field records and 64 MiB of owned expansion
+text (including source-string slots); excessive expansion returns a typed
+error before creating those records.
 
 Review is by exception. `[review]` is the default record of every register
 and field, `[review.opaque]` of every one whose name ends in `_OPAQUE`
 (with `naming = "opaque"`). A `[review.entity."KEY"]` with `KEY` one of
 `REGISTER`, `REGISTER.FIELD`, `GROUP.REGISTER` or `GROUP.REGISTER.FIELD`
 (the template names, `%s` included) overrides the keys it states, and only
-keys that differ. After the merge every register and field has sources,
-provenance, accuracy, completeness and naming; the naming rules of
+keys that differ. Every explicitly supplied source list is validated even
+when overridden or unused. After the merge every register and field has
+sources, non-hint provenance, accuracy, completeness and naming; a hint
+cannot supply reviewed coverage. The naming rules of
 [Name origin](#name-origin) apply, with a positional name's offset taken
 from the block's base (a group register at the group's first element; a
 `dim` register inserts `_%s`), and `BYTE_<index>_OPAQUE` for an analog
-register. An observation of one instance is a source of that instance in
-the root, not a second review.
+register. The first group member's combined offset must fit `u32`, the
+positional naming domain. An observation of one instance is a source of
+that instance in the root, not a second review.
 
 ### Chip root file (`schema = 4`)
 
@@ -261,8 +275,13 @@ has a unique name and number and is bound to an existing instance and, when
 its type names outputs, to one of them; several sources may lead to one
 output. Analog-I2C instances are addressed by their block code, not by a
 CPU address, and keep their request routes. Memory layout files keep their
-own format without a file-level `placement`; the root places each one in
-RAM regions, which an address field's `placement` also names.
+own format without a file-level `placement`; the root may place a layout
+in RAM regions, which an address field's `placement` also names. Omitting
+`[[layout-placements]]` for an included layout leaves it unplaced: it can
+still describe bytes or words, but is not a DMA target. A `points-to`
+target must be a word layout or word array placed in `dma-window` only.
+After root placement, the loader checks pointer targets, equal array and
+element placements, and `same-geometry-as` (including equal placement).
 
 Loading expands every instance: each register element and field gets an
 absolute address (an `AnalogAddress` in the analog space) and the identity

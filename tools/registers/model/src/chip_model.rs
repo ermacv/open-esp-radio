@@ -23,7 +23,7 @@ mod error;
 mod source;
 
 pub use block_type::{BlockType, Element};
-use block_type::{Context, check_name, parse_bits};
+use block_type::{Context, ExpansionBudget, check_name, parse_bits};
 pub use error::{Error, ErrorKind};
 pub use source::{
     AnalogInstance, AnalogSpace, Command, Dim, Extent, Field, FieldClass, Group, Instance,
@@ -129,6 +129,8 @@ impl ChipModel {
         check_interrupts(context, &root, &types)?;
         check_analog(context, &root, &types, &mut names)?;
         place_layouts(context, &root, &regions, &mut layouts)?;
+        crate::layouts::validate_layout_set(&layouts)
+            .map_err(|error| context.error("", ErrorKind::Layouts(Box::new(error))))?;
         let registers = expand(context, &root, &types)?;
         Ok(Self {
             path: path.to_owned(),
@@ -217,9 +219,10 @@ fn load_types(
 ) -> Result<BTreeMap<String, BlockType>, Error> {
     let mut seen = BTreeSet::new();
     let mut types = BTreeMap::new();
+    let mut budget = ExpansionBudget::default();
     for include in includes {
         safe_include(context, include, &mut seen)?;
-        let block_type = BlockType::load(&base.join(include), context.evidence)?;
+        let block_type = BlockType::load(&base.join(include), context.evidence, &mut budget)?;
         let name = block_type.name().to_owned();
         if types.contains_key(&name) {
             return Err(Error::new(
@@ -246,7 +249,7 @@ fn load_layouts(
     if includes.is_empty() {
         return Ok(Vec::new());
     }
-    let layouts = crate::layouts::load_layouts(
+    let layouts = crate::layouts::parse_layouts(
         base,
         includes,
         &mut BTreeMap::new(),
@@ -543,17 +546,6 @@ fn place_layouts(
     }
     for layout in layouts.iter() {
         let fail = |reason: String| context.error(&layout.name, ErrorKind::Placement(reason));
-        if let Some(array) = &layout.array
-            && layouts
-                .iter()
-                .find(|element| element.name == array.element)
-                .is_some_and(|element| element.placement != layout.placement)
-        {
-            return Err(fail(format!(
-                "an array lies where its element {} does",
-                array.element
-            )));
-        }
         for field in layout.units.iter().flat_map(|unit| &unit.fields) {
             if let Some(region) = field
                 .placement
@@ -594,6 +586,54 @@ fn expand(
                 Placed::Analog(instance.code),
             )
         }));
+    let mut budget = ExpansionBudget::default();
+    let mut count = 0;
+    for (instance, name, _) in placed.clone() {
+        let block_type = types
+            .get(name)
+            .ok_or_else(|| context.error(instance, ErrorKind::UnknownType(name.clone())))?;
+        for element in &block_type.elements {
+            let fail = |kind| context.error(instance, kind);
+            let register = block_type
+                .templates
+                .get(&element.key)
+                .ok_or_else(|| fail(ErrorKind::UnknownType(element.key.clone())))?;
+            let source_bytes = |key: &str| -> Result<u64, Error> {
+                let review = block_type
+                    .reviews
+                    .get(key)
+                    .ok_or_else(|| fail(ErrorKind::ReviewIncomplete("review")))?;
+                Ok(review.sources.iter().fold(0u64, |sum, source| {
+                    sum.saturating_add(source.len() as u64)
+                        .saturating_add(std::mem::size_of::<String>() as u64)
+                }))
+            };
+            // Each identity is owned by both the record and its review.
+            let identity = (instance.len() as u64)
+                .saturating_add(element.name.len() as u64)
+                .saturating_add(1);
+            let mut text = identity
+                .saturating_mul(2)
+                .saturating_add(instance.len() as u64)
+                .saturating_add(element.key.len() as u64)
+                .saturating_add(source_bytes(&element.key)?);
+            for field in &register.fields {
+                text = text
+                    .saturating_add(
+                        identity
+                            .saturating_add(1)
+                            .saturating_add(field.name.len() as u64)
+                            .saturating_mul(2),
+                    )
+                    .saturating_add(field.name.len() as u64)
+                    .saturating_add(source_bytes(&format!("{}.{}", element.key, field.name))?);
+            }
+            budget.include(context, instance, 1, 1 + register.fields.len() as u64, text)?;
+        }
+        count += block_type.elements.len();
+    }
+    out.try_reserve_exact(count)
+        .map_err(|error| context.error(&root.chip, ErrorKind::Allocation(error)))?;
     for (instance, block_type, placed) in placed {
         let block_type = types
             .get(block_type)
