@@ -257,6 +257,27 @@ struct Soc {
     vendor_path: String,
     overlay: oer_registers_model::StrictnessOverlay,
     report: PathBuf,
+    headers: PinnedHeaders,
+}
+/// The pinned ESP-IDF files of a chip, as `cargo pins fetch` fetched them:
+/// each must be an `esp-idf/<path>` artifact of the chip's `artifacts.toml`
+/// and match its SHA-256.
+struct PinnedHeaders {
+    root: PathBuf,
+    chip: String,
+}
+impl oer_registers_model::HeaderTree for PinnedHeaders {
+    fn read(&self, path: &str) -> oer_registers_model::Result<String> {
+        let file =
+            oer_tool_pins::artifacts::fetched(&self.root, &self.chip, &format!("esp-idf/{path}"))
+                .map_err(|error| oer_registers_model::Error::Invalid(error.to_string()))?;
+        Ok(fs::read_to_string(file)?)
+    }
+    fn list(&self, directory: &str) -> oer_registers_model::Result<Vec<String>> {
+        Err(oer_registers_model::Error::Invalid(format!(
+            "the generator reads pinned files only, not the directory {directory}"
+        )))
+    }
 }
 impl ChipPublication {
     /// Load explicitly selected source documents. Artifact-specific assertions cannot
@@ -389,14 +410,31 @@ impl ChipPublication {
                     return Err("the vendor SVD renders into a PAC".into());
                 }
                 let svd = base.join(&soc.svd).canonicalize()?;
-                let overlay = base.join(&soc.overlay).canonicalize()?;
+                let overlay_path = base.join(&soc.overlay).canonicalize()?;
                 input_paths.insert(svd.clone());
-                input_paths.insert(overlay.clone());
+                input_paths.insert(overlay_path.clone());
+                let overlay = oer_registers_model::StrictnessOverlay::load(&overlay_path)?;
+                let root = path
+                    .ancestors()
+                    .find(|directory| directory.join("chips").is_dir())
+                    .ok_or("the manifest is not below a checkout's chips/")?
+                    .to_path_buf();
+                let chip = model.chip().to_owned();
+                let manifest = oer_tool_pins::Manifest::load(&root, &chip)?;
+                let pinned = manifest.source("esp-idf")?.revision.clone();
+                if pinned.as_deref() != Some(overlay.esp_idf.as_str()) {
+                    return Err(format!(
+                        "the overlay cites esp-idf {}, the chip's artifacts.toml pins {pinned:?}",
+                        overlay.esp_idf
+                    )
+                    .into());
+                }
                 Some(Soc {
                     vendor_svd: fs::read_to_string(&svd)?,
                     vendor_path: repository_path(&svd),
-                    overlay: oer_registers_model::StrictnessOverlay::load(&overlay)?,
+                    overlay,
                     report: base.join(&soc.report),
+                    headers: PinnedHeaders { root, chip },
                 })
             }
         };
@@ -460,6 +498,7 @@ impl ChipPublication {
                             overlay: &soc.overlay,
                             curated_svd: &svd,
                             curated_typed: &curated_typed,
+                            headers: &soc.headers,
                         })?;
                     outputs.push((&soc.report, rendered.report));
                     Some(rendered.rust)

@@ -37,6 +37,58 @@ mod generated;
 /// (`soc::Interrupt`); the PAC root claims them at once.
 pub use generated::soc;
 
+/// What the pinned ESP-IDF headers take away from the vendor SVD's API.
+///
+/// SOC_ETM's event status is write-one-to-clear (`soc_etm_reg.h:2597`): it is
+/// sampled and acknowledged,
+///
+/// ```
+/// use oer_esp32s31_pac::soc::soc_etm::SocEtm;
+/// fn acknowledge(etm: &mut SocEtm<oer_mmio::Host<'_>>) {
+///     let sample = etm.sample_evt_st0();
+///     etm.acknowledge_evt_st0(sample);
+/// }
+/// ```
+///
+/// never modified:
+///
+/// ```compile_fail
+/// use oer_esp32s31_pac::soc::soc_etm::SocEtm;
+/// fn modify(etm: &mut SocEtm<oer_mmio::Host<'_>>) {
+///     etm.modify_evt_st0(|_| {});
+/// }
+/// ```
+///
+/// GMAC's DMA bus mode is read,
+///
+/// ```
+/// use oer_esp32s31_pac::soc::gmac::Gmac;
+/// fn bus(gmac: &Gmac<oer_mmio::Host<'_>>) {
+///     let _ = gmac.read_register10_axibusmoderegister();
+/// }
+/// ```
+///
+/// its remote wake-up filter port, read in sequence (`gmac_reg.h:916`), is
+/// not,
+///
+/// ```compile_fail
+/// use oer_esp32s31_pac::soc::gmac::Gmac;
+/// fn filter(gmac: &Gmac<oer_mmio::Host<'_>>) {
+///     let _ = gmac.read_register10_remotewakeupframefilterregister();
+/// }
+/// ```
+///
+/// nor its PMT status, which a read clears (`gmac_reg.h:971`):
+///
+/// ```compile_fail
+/// use oer_esp32s31_pac::soc::gmac::Gmac;
+/// fn power(gmac: &Gmac<oer_mmio::Host<'_>>) {
+///     let _ = gmac.read_register11_pmtcontrolandstatusregister();
+/// }
+/// ```
+#[cfg(doctest)]
+pub struct SocHeaderSemantics;
+
 pub use phy::pbus;
 pub mod phy;
 

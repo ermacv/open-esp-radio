@@ -163,8 +163,10 @@ moves; ownership, orchestration and wiring are rebuilt.
   opaque bits are fields. Pointer fields take typed references; placement is
   proved by the linker; each block's handover protocol is its HAL engine. Every
   peripheral of the vendor SVD the model does not describe is a typed block
-  of the PAC's `soc` module: read-only where the SVD leaves semantics open,
-  made stricter by the chip's sourced overlay (`model/strictness.toml`).
+  of the PAC's `soc` module whose API the pinned ESP-IDF register headers
+  decide (access classes, reserved lanes and words, offsets, names); what
+  no header states is read-only, and the chip's sourced overlay
+  (`model/strictness.toml`) adds and corrects what they lack.
 - **Radio access.** The S31 Wi-Fi handoff returns one `RadioAccess` by value;
   the driver owns it through the runtime epoch and lends it with `&mut`. No
   shared register arena or dynamic borrow guard.

@@ -520,3 +520,1051 @@ id = "esp-idf/components/soc/esp32s31/register/soc/reg_base.h"
 source = "esp-idf"
 path = "components/soc/esp32s31/register/soc/reg_base.h"
 sha256 = "24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d"
+
+# ESP-IDF register headers of the vendor SVD's peripherals: the strictness
+# overlay names and cites them, and `cargo registers generate` derives
+# each register's API from them.
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/adc_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/adc_reg.h"
+sha256 = "afa37abf8712649b81ca85daf9e1739a03d35762a5ad04085c06612d77d2c5a5"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/adc_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/adc_struct.h"
+sha256 = "04d4b6fe2c2c182bb084d52893cf3ec88f03aa9ff3668373c1c30cc183e6af8c"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/aes_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/aes_reg.h"
+sha256 = "452ee339e0899ec27ee959b40cca68c19debf09e6bb1cf20a0b4cf55b01853fa"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/aes_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/aes_struct.h"
+sha256 = "f1d97b1ceb13b0e3159678aaf4a164519be63620f88aa6028a74c0bf66652d95"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/ahb_dma_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/ahb_dma_reg.h"
+sha256 = "f9b4a8b420e7af0ad567e42d10612e1e1a0fbeb93a54fcd7b68cdf3dde17c78f"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/ahb_dma_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/ahb_dma_struct.h"
+sha256 = "a7fc3fd600520f2dbd7a558f69dff83eab139522f80a36cdbcf54b82762492fe"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/asrc_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/asrc_reg.h"
+sha256 = "9dfbb7767e3c6cea9812d8a411d7b695ccff36c11d8e71d6ab22c6f66522418f"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/asrc_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/asrc_struct.h"
+sha256 = "95f036d6f33c8552eebfb4b3917f57eb60fbf9402b2e815c77ab8db58ffdd4f7"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/axi_dma_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/axi_dma_reg.h"
+sha256 = "61f69749d2057253f3f7c5500e9a57016a78edce7444c0c113e095f77c31e9c8"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/axi_dma_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/axi_dma_struct.h"
+sha256 = "b642e76868647064dcd7c64f822021da59b33fecd0e057756b953bb8fac05c6a"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/axi_perf_mon_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/axi_perf_mon_reg.h"
+sha256 = "9e206cde362b2b019eb34d75eec0e3bd40185878df00bd952372de626225550b"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/axi_perf_mon_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/axi_perf_mon_struct.h"
+sha256 = "793db31629d279b218568403cf587acd67aa85327e6424a2145c5a0b83ee8a00"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/bitscrambler_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/bitscrambler_reg.h"
+sha256 = "5e868bb363744b049e60b53336c8ee5be69ec70a0bf6a453fe946cdf74613d73"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/bitscrambler_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/bitscrambler_struct.h"
+sha256 = "33f44d0ab6b456a3ed08ba39520bb87d99c27c4778f01b318b9c2d9b7329f836"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/bus_monitor_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/bus_monitor_reg.h"
+sha256 = "7129bbf40d204e19a8bf605b1e7ac67f48d5b3e03c4c171acd3be05d9dd0cc2f"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/bus_monitor_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/bus_monitor_struct.h"
+sha256 = "bc6d12f72ec408c402e3d350f1991e93c547550381fd56ca18ced90f3b8fe1a8"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/cache_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/cache_reg.h"
+sha256 = "d358ef9ee267b27d9c8e266ebb6e6bd4e1e0d809bd657d5c029bee754db80e9e"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/cache_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/cache_struct.h"
+sha256 = "f8ff77536e512f4d481501db1076affa5496d359a9bc40cd40d1623e9c6d1622"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/cnnt_io_mux_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/cnnt_io_mux_reg.h"
+sha256 = "982c112c3260ba0faefe3adb6fe17e2d526a087d24ce44c4a24e1dd985a8d39f"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/cnnt_io_mux_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/cnnt_io_mux_struct.h"
+sha256 = "f4bf2389153e784465c2e1eca480982d17b245601b81f9ad471650d2bcde7aa0"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/cordic_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/cordic_reg.h"
+sha256 = "aad25bad4ce37d44eb8db3221c2dfd127a272f11deef0bc48b2e290a7e4319c7"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/cordic_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/cordic_struct.h"
+sha256 = "ef25fd514a3bb759a2eb19bb4a9b0f8d0c87a8d448a29b02724102d39802d887"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/cpu_apm_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/cpu_apm_reg.h"
+sha256 = "8fd23a60385bad7ea26f9874ad9aa9bee3b0e8ebcdc39df37fe402a810fcc20d"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/cpu_apm_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/cpu_apm_struct.h"
+sha256 = "31c3fcf40f5cbf07407ae1224be463a702c0769541d7171fdd2e45f3797d2bd1"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/dac_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/dac_reg.h"
+sha256 = "1ecfbe631b1524fb79f289bc561c92dfcdd1773291d53c245b4a6d68b1cc38f0"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/dac_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/dac_struct.h"
+sha256 = "e61ec48038a7f854786976d73298d1d906065c2fbea3656138fa5ee6a44207aa"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/dma2d_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/dma2d_reg.h"
+sha256 = "0c8ecc197ce9a5e6ad24e6c85adb1830819f6fff539d3b788dac5d98744d0844"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/dma2d_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/dma2d_struct.h"
+sha256 = "4400662fd52d323fd90f8289c6fd2dd294ddb771f37ab864b2fb4f7a904fbb17"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/ds_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/ds_reg.h"
+sha256 = "e6a9cabdcd0cba6f4e195147355a3770b0df89c1be509c6014c6b49bf7f01431"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/ds_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/ds_struct.h"
+sha256 = "f01c830e56c56c17e02df893129a1997e206e3be6e43010319ab56763203f293"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/ecc_mult_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/ecc_mult_reg.h"
+sha256 = "ecd07755e33fe617237dc544c8d4699eeb493203b1dab76b4c37e8bd43f670f8"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/ecc_mult_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/ecc_mult_struct.h"
+sha256 = "4992edd38dcddef96240f8214ee69fbd0c4873078fa694a0de2574f5bee7f835"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/ecdsa_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/ecdsa_reg.h"
+sha256 = "b42b30e2a90312c6ff2898c093253ad047744f25e66563552c86c448195f0dff"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/ecdsa_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/ecdsa_struct.h"
+sha256 = "8a1f7d0bf82236acd25e53dbb1cc9d3573fdfb8305b354b4761b69c1fdc9b507"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/efuse_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/efuse_reg.h"
+sha256 = "066c77f8cb869c9a0c2c0585beecca73c60bfd20c7fb4eba2fc4efdeb93fe6c6"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/efuse_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/efuse_struct.h"
+sha256 = "ae55d2863c19b3f00c10c7e237de455dd94f9539fe6da757288f45d3cea544c5"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/gmac_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/gmac_reg.h"
+sha256 = "cf3bc6add08327ad4fc99818f4926a8fde1720b11a8a49d9bcd947aa7523de20"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/gmac_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/gmac_struct.h"
+sha256 = "71d96ce44585a65fe1c62479bc6f85178cfe36d1585b8590414521cb19dba838"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/gpio_ext_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/gpio_ext_reg.h"
+sha256 = "43cbd35b634adf7613d5145534bd2c46f016c28291d76afe05ab5109f1ec0957"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/gpio_ext_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/gpio_ext_struct.h"
+sha256 = "8623566f8bd14db4a7d630325110b44eed77a16fd3ea9bddcb21b2eccd4041db"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/gpio_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/gpio_reg.h"
+sha256 = "81ed1cfaee40dcc30c12e2f556c0e75240364326a8b8167eda7db6e065608007"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/gpio_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/gpio_struct.h"
+sha256 = "3083eeee276737a8b698bd89dd70c44769b3244fe8b332e420be567d8ee28412"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hmac_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hmac_reg.h"
+sha256 = "2a11ef9102b7bfed951ad80b5162e15e8d8b52a068067eba8bcf3bc14cfe8408"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hmac_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hmac_struct.h"
+sha256 = "0daa4e6204ba5f104c8f060cc65bab46dbbea7ae4b2fa8560267d8d64bdb64d1"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hp_alive_sys_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hp_alive_sys_reg.h"
+sha256 = "7b39d319c96a9585684cf567c5a66f3f92e5d3a870b6af9a18f2720507d1d93e"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hp_alive_sys_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hp_alive_sys_struct.h"
+sha256 = "fb0d152dec29218eb09f6644526a76cc6178c068b7db3e47362938822ab82fd2"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hp_apm_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hp_apm_reg.h"
+sha256 = "ff58d4d8a8a941b75bb488b4122830d3df6f8d6fc9189786bacb8497f09110e4"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hp_apm_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hp_apm_struct.h"
+sha256 = "6cbae1777d8c61cb95a8b5e81a2506fbf22552f163b01c3caa41eea77cffa711"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hp_mem_apm_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hp_mem_apm_reg.h"
+sha256 = "ef04753496cfd167b633cf0fd9864ce855cc02748ec312605d07f9c92ad85553"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hp_mem_apm_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hp_mem_apm_struct.h"
+sha256 = "9cfe4bbb4855b4a10a199f594874e083280135dc4272d4eb0bf38b139fd910eb"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hp_peri0_pms_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hp_peri0_pms_reg.h"
+sha256 = "794f6cb8dce9bf16a22513efd5308b75c5f5a5dcef2681f53e876d6f9166b856"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hp_peri0_pms_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hp_peri0_pms_struct.h"
+sha256 = "9258f3f84d6d32615a56e4ae1be479515a71c4fbc5dbfdd6cf9a5feb44bb8cd5"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hp_peri1_pms_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hp_peri1_pms_reg.h"
+sha256 = "839a32ce6cbf623f3d5c8bef68f762d910f8bfec8f6cd185940e85b240548b00"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hp_peri1_pms_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hp_peri1_pms_struct.h"
+sha256 = "e263c180369d9d362d9872a08101219b1c494899d4501f3fddcb6e38f18b6b36"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h"
+sha256 = "1ea5f6783bf861b4f59e90799db46e5746ce0f6d52440ec0339661a5f9241043"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h"
+sha256 = "63c4fbb7c0cc56e830630050d407d58c27a32314cbc96c69d4fd19052eb3a359"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hp_system_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hp_system_reg.h"
+sha256 = "808e417c1cfbf10b686c1ca0beb9ba6a4309d415e855149303ca847a225e9d6f"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/hp_system_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/hp_system_struct.h"
+sha256 = "9c3373f5ee1a99777761740e22d429d7937e128be7eff5c971fad8274d270b2b"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/huk_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/huk_reg.h"
+sha256 = "4341fc09c4dc37297c50e029bf6811dd5ca0fd0b825388faf845274cc8c92dac"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/huk_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/huk_struct.h"
+sha256 = "dcc4a0e3c6e8592eed676b3217585381f68b04991c7918b8aea08a2aa18ce6f1"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/i2c_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/i2c_reg.h"
+sha256 = "11e49910e6c40bc0cb1b8326a7e48b7a9734059a31ea6235bb1cd49b8102d5f9"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/i2c_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/i2c_struct.h"
+sha256 = "b81af4ebfba1655213e736b16170411f447355031f2eccd4a8cadc533d3fbd2c"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/i2s_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/i2s_reg.h"
+sha256 = "b04abb82595b44b3aceea9dfd6175de943c2dc385f745db95134b4724a040774"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/i2s_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/i2s_struct.h"
+sha256 = "c8b55234fd6f379bc24add791554fdc2704c65e794954017e88c3f70cc49d1a5"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/io_mux_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/io_mux_reg.h"
+sha256 = "e0d2aae6a9d56a701cc29b6ce5a0b6eb872b52636843fe14e3b81736e0ea237a"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/io_mux_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/io_mux_struct.h"
+sha256 = "8e65c634522ecd8126f4d7b1000f0f62c6f9a5173ef14b274a9f881a88cfe313"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/iomux_mspi_pin_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/iomux_mspi_pin_reg.h"
+sha256 = "9b3f1521b862d738893b8af97627b2e40c784f788466933c5f528a94649cd084"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/iomux_mspi_pin_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/iomux_mspi_pin_struct.h"
+sha256 = "a1c8d5a110ad108475517772a2024763a33b2b16441b55e2b142a7cff4173c3f"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/jpeg_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/jpeg_reg.h"
+sha256 = "ea1a3b83084222ed65bc609309ca4464c12dd80445e00faae7a4761501ff968e"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/jpeg_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/jpeg_struct.h"
+sha256 = "b6dca414c560983252fb8214dbea3a34725c5010ca69e62e61f84d6317af5348"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/keymng_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/keymng_reg.h"
+sha256 = "9e65ea316b549de3a24f3a9d986a380d1d0b3484301482efd35855a8a5b44829"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/keymng_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/keymng_struct.h"
+sha256 = "4247ca464aa1f7d585af1f59343f57da404923a8a95344f53fe32e2cacfe914c"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lcd_cam_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lcd_cam_reg.h"
+sha256 = "eb10648d3326011b2832e04e09c67e1dda485fcc1114b88558df0df171bb7309"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lcd_cam_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lcd_cam_struct.h"
+sha256 = "d38169c90b2a3bfda582617459585d69ba65edf3c5ec1b71e258e422a96799be"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/ledc_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/ledc_reg.h"
+sha256 = "a33e881794f79757475fe04f1e0b3fe17a1e6f5499598908409aad4806ebe30c"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/ledc_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/ledc_struct.h"
+sha256 = "6aa2b7da985b50e5cec9214990b853de396ff9d7bdd39d984fdcda7fd3ab5938"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_adi_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_adi_reg.h"
+sha256 = "c244ca1a980f823765fa4b72454b24476b4255f102732b93133f59c9a55324c6"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_adi_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_adi_struct.h"
+sha256 = "b010c6bf6b89a6b31e8cdd962849eee9bf1757563948e63b20709f305c607447"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_ahb_dma_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_ahb_dma_reg.h"
+sha256 = "f798a0a2b877c064984fe9d8877dde965d34287cea030e7e3e658ca66b813614"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_ahb_dma_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_ahb_dma_struct.h"
+sha256 = "2be3170de6471e8d9eb61f5e9fda5fae00716bb34d3b8a022b3b2a8deb25d5c7"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_analog_peri_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_analog_peri_reg.h"
+sha256 = "b7d26237d800f039bbc3bcb30a4f854d4b4dcb7baaf532c61fa79bb89334595c"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_analog_peri_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_analog_peri_struct.h"
+sha256 = "4401c470dd4bb2f7a864dfc62f3f12b2dc16404bb3d7f72d2120b70c09fa29a7"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_apm_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_apm_reg.h"
+sha256 = "6995a2b330e33196c51a10e8d7721dd96503688a8099ae3c241cc470a382a825"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_apm_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_apm_struct.h"
+sha256 = "3266161329c38a107371e88b41965508e9280f54b90b53f8bf5e2753ee7108d4"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_clkrst_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_clkrst_reg.h"
+sha256 = "0f545692ddb5bc4fd5fee64752871425cd0012090ee203701978bb654874f211"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_clkrst_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_clkrst_struct.h"
+sha256 = "c20b1f7074c95a46e9c12058f012b42ab334e8f5accfdc1b1fb80387a15b31d6"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_gpio_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_gpio_reg.h"
+sha256 = "422281b698e6e5a7d230c65599ef1788cd473ea6d43bcd2a0bcc5ee6f7868ec0"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_gpio_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_gpio_struct.h"
+sha256 = "a5202f652c578c728bdad43408b6c0d55e94721a2997af8807685d236e2aef50"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_i2c_ana_mst_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_i2c_ana_mst_reg.h"
+sha256 = "32f77853c094bdf681351b14e3eb3878159211176b49fdaf9b203d26be3d9f59"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_i2c_ana_mst_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_i2c_ana_mst_struct.h"
+sha256 = "53ecef95233906067ac9c8e7282e81b23c15cf811c2f4dc990aca04a640ddff1"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_i2c_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_i2c_reg.h"
+sha256 = "ba3ee1cc4f1fb0acca8c2cf9a55f5c01c80086b323d5e9918a5f12d5aca46007"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_i2c_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_i2c_struct.h"
+sha256 = "a405b994c3dcbc806c511a0ce02f9cad9c0111df265015cefff16f0ce4597289"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_peri_clkrst_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_peri_clkrst_reg.h"
+sha256 = "01c0a0541a373bf3aef7f456d4eabb1b496094fb3c83b79c9f0cde4b68ee0205"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_peri_clkrst_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_peri_clkrst_struct.h"
+sha256 = "4f7c47b409bab983fe6e7723b3813f9ed51fb823b446491ddcab5aee14a249e0"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_peri_pms_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_peri_pms_reg.h"
+sha256 = "c689ae6e3e37dc628b22150b880d1da822772b9a8c86aeae6fcb02dea06beb05"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_peri_pms_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_peri_pms_struct.h"
+sha256 = "fa8e7abc2e5d053e97be080e24742700e19ed3279009cd6435114100b59790f5"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_pwr_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_pwr_reg.h"
+sha256 = "63a88d6147108059d22a858422d1f94ce987458998064bd041a84b7a0d9ad900"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_pwr_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_pwr_struct.h"
+sha256 = "c7283958cf9274b484149f046100ad722ca13db8cfe1177fdaa820dbe61bc465"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_tee_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_tee_reg.h"
+sha256 = "c3ea63992a7d7bc4ec47d1e896ae56af6c8012e3c63565235d4f4a3b3c3de87a"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_tee_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_tee_struct.h"
+sha256 = "0dd47fd0e681f0c81cd8b6f010126656368d3d7bec7608ad690d3d012015e3b0"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_uart_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_uart_reg.h"
+sha256 = "b4381965cdbb08e0d60f4589ec9a9f7b7db15c60e6af541961059637c88196eb"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/lp_uart_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/lp_uart_struct.h"
+sha256 = "8afc0072f2495d94939e03f7fb9a9cf4fa3d0c80765013f5c91b3b8337304a46"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/mcpwm_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/mcpwm_reg.h"
+sha256 = "763905a09899cdb2ede2ef23499a69a5cddfb92cfb8b1976c5f3f40b48945130"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/mcpwm_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/mcpwm_struct.h"
+sha256 = "43fd42fee0be88399da3387e321df19a59ea89c20bb110b0981bc9b29d1983ad"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/mem_monitor_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/mem_monitor_reg.h"
+sha256 = "62eb6fa3e23c9b8c75b49be979db3ab7f2d67ccbc4370727ccdfbd5bcec88642"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/mem_monitor_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/mem_monitor_struct.h"
+sha256 = "9b0389f66ac52a1418a87bb66c00619aa9f9f2161f1a55a13e36eab3b8be2978"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/parl_io_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/parl_io_reg.h"
+sha256 = "ebb14ef8222733878ca610af9945606cf0ef6acc1b0e0db65f7c516af0d1df1c"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/parl_io_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/parl_io_struct.h"
+sha256 = "0e381565ae914a96818044415a5069bc4c5d3a977f9d192656f1f0457263ee67"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/pau_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/pau_reg.h"
+sha256 = "722279920e9d5b9738e0aafd50667db21ea88059e6348ae1ecd4db86ef6b4722"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/pau_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/pau_struct.h"
+sha256 = "6c5e6ca73f72841115582551fd578924f0ded68076ac264912a6d1cc0cf625d7"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/pcnt_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/pcnt_reg.h"
+sha256 = "f771e13a1391f0122376b1c2416d7ea5498a9c66205c6def7b81aff7049b263a"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/pcnt_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/pcnt_struct.h"
+sha256 = "31d04d198fdf005f73ff1d2b1b726a9e25124451ea04d9ceceb19f3b32f1d0f1"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/pmu_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/pmu_reg.h"
+sha256 = "b1a04a306b9d7ee908e2f7b083d42b7a634f8687b6ee034cfe6f54f385e0d816"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/pmu_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/pmu_struct.h"
+sha256 = "5fc84c7569f9f24e193b0205728a647768c7c289b39d5ce679c50db7d8352e28"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/ppa_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/ppa_reg.h"
+sha256 = "5d91c999b926dc1e0559018f2fc5d92b440f88cdd03246bb358247c6596404a8"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/ppa_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/ppa_struct.h"
+sha256 = "8a6f851bdf00dd976faefdd812eef9e0a39e98f89367fe2d0b7c1b7fad450c36"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/pvt_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/pvt_reg.h"
+sha256 = "3e4f555915d684c2e209d3fdb3bf70a69c757b73f67e8d29629312bd62638955"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/pvt_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/pvt_struct.h"
+sha256 = "dddd6c9ecf26007726b4300833b4fc8de997fc7c448c4e8642a708ded8e63fd9"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/rma_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/rma_reg.h"
+sha256 = "742651563cbbcbe9777538e532da352ac742cdbee58cb44af48e7c5a00c0bf38"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/rma_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/rma_struct.h"
+sha256 = "422a702342f04ac1ebba5d7e25994c2cc17d7a5c144f1d6e144defe14349b7c7"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/rmt_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/rmt_reg.h"
+sha256 = "11c41c6d5dc39fca31694bca222477f5306b24cffaf3c3291fc38bd17b924e88"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/rmt_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/rmt_struct.h"
+sha256 = "5ee20dc8cd534ef09166d9f2ef0a562b3c3b7482c688304165b7a6aa52a808d0"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/rsa_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/rsa_reg.h"
+sha256 = "7d84a4a7a557adb58416d7d9fbcc947718325426e0c667534a9dd82668db57b3"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/rsa_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/rsa_struct.h"
+sha256 = "da6f10cf35b8c648259b92f6a5d12b287b5bcb0a5feb8b9ba8e74060b3807093"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/rtc_timer_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/rtc_timer_reg.h"
+sha256 = "fa93613bccb20826ebccc1e453820c0ee019be6a5721757ae082780386c82cf4"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/rtc_timer_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/rtc_timer_struct.h"
+sha256 = "ded3720e0b6a65c7a49a3775e9cb84833d3730c2c6e2fc5ad277afd7eb8e53f2"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/rtc_wdt_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/rtc_wdt_reg.h"
+sha256 = "e97d0038a7eb2a4ee7d333a13a31470d948214a106277951d7df81205e3103df"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/rtc_wdt_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/rtc_wdt_struct.h"
+sha256 = "06fda521583f3f1020afabbdc54c87ae126a3adb25b2fa1eb6896a4816ab9d44"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/rtclockcali_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/rtclockcali_reg.h"
+sha256 = "693a9e8e52d6b63ce08388272696f84035a8ad46a79e0429cf2aca3ea2e878ac"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/rtclockcali_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/rtclockcali_struct.h"
+sha256 = "29182107856cb2cb51795d81b2d3aeaea6719565bb91e6495143b1d9434f34ff"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/sdmmc_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/sdmmc_reg.h"
+sha256 = "1be15ff7197a9bb651eb6ee55a16eb3bea225c3a37a374621f5ae40ea5751748"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/sdmmc_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/sdmmc_struct.h"
+sha256 = "99a7c855798bf90522b1d56e33df1a91033e428cff2ff8476eb7a6091c2b1a6e"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/sha_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/sha_reg.h"
+sha256 = "1fb9e3dd828c61991b24ee98aacf5bd0a2c4605d4d786188f703bfbf11ca24ca"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/sha_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/sha_struct.h"
+sha256 = "739e6cbe80f77733aebff413b37322321e014ab0cb54ce2f17540a6c6006d049"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/soc_etm_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/soc_etm_reg.h"
+sha256 = "5b2b2433cd45a21841ec9dc009e39f82f78a6ba934173b2d4216dc60f7c6a6d2"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/soc_etm_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/soc_etm_struct.h"
+sha256 = "df4a549b594de89af0afbb9f4ac1ec5d4d8fde34fca9207b9bff34d1e80e69d8"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/spi1_mem_c_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/spi1_mem_c_reg.h"
+sha256 = "ff7a22fa6156fa3b535c5e16c27fbd5d2258ccc5d1831e6531001484e2f61ba7"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/spi1_mem_c_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/spi1_mem_c_struct.h"
+sha256 = "9879fb849703f40bdb9f725146ea90271613a0b83cc29edab7eb216d30f29851"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/spi1_mem_s_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/spi1_mem_s_reg.h"
+sha256 = "aa63edf881463587765a27e004026ab7872296012bfc83911078ec54199bcdce"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/spi1_mem_s_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/spi1_mem_s_struct.h"
+sha256 = "d3a92a6660f16a1d4472d6f5bff74048b448a583f741a4b20cc1a524b29b4e5b"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/spi_mem_c_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/spi_mem_c_reg.h"
+sha256 = "487bec7c5418e90b18ba538c2ae45e68049b128481569a60fc51a1be2059dd3b"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/spi_mem_c_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/spi_mem_c_struct.h"
+sha256 = "c6c8bf129756384d9fc40cc33b90a2eea222f21452ccbc1e435818150398f5ce"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/spi_mem_s_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/spi_mem_s_reg.h"
+sha256 = "6b765749fffaa65463dbdf3ab1b2aa5c5579a3bf7a6a3274276bfbea06efe3c5"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/spi_mem_s_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/spi_mem_s_struct.h"
+sha256 = "45fc15db411c71bdcd56a8bff90bc7ee46893c971dacfa2cf78b1d871c1dee9e"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/spi_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/spi_reg.h"
+sha256 = "162cef0dbc9afe56f4e52e8283bf3136a5d011c69851521225ee85ccd904caf8"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/spi_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/spi_struct.h"
+sha256 = "75697da452499ba3d58bd4c2144eec4f68202fa56da1c997c514b1690dca31a4"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/systimer_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/systimer_reg.h"
+sha256 = "51d57c950c5e19c6a6b01a7c1bf8510e848c76031a8d0e7040b0d22265a2e4b8"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/systimer_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/systimer_struct.h"
+sha256 = "b0310bf864e10d996253f9e86dac271d39b66981739bb9ab03d2f3293d983c6d"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/tee_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/tee_reg.h"
+sha256 = "e04d81e25321793bdff92573e9409a4c6ec2b4ccd20b1bf9c7a4ee239b5cf5cd"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/tee_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/tee_struct.h"
+sha256 = "385f230c9cc1a501ed3369c3ea28029d07c45de231e79516c862aca5a17dc4b3"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/timer_group_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/timer_group_reg.h"
+sha256 = "e3299695b4e6ab7d414a168d6115a683462ed261d0c8b41921f195f746d6e808"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/timer_group_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/timer_group_struct.h"
+sha256 = "6add061971adf862684950e567434a9df62bdd1fa43e08c4f5f44cf0703774eb"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/touch_aon_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/touch_aon_reg.h"
+sha256 = "15928309c57f5b768487f653ab8aa47d61113c649262fe4923dae0ade1c75e6c"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/touch_aon_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/touch_aon_struct.h"
+sha256 = "3c4cdf9f23e7d9c95f76919c72cac0f56b40c3ca8d4baf3b4ca63f30643d5884"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/touch_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/touch_reg.h"
+sha256 = "c218296b3906d1975ff3f50989aa624e3f7cf1fb984b1ed5a90f3db8e965b5f5"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/touch_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/touch_struct.h"
+sha256 = "69c87f497e1d3ee48490cd7081cdc6e56a937386a5cd71118024c559b78b7c86"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/trace_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/trace_reg.h"
+sha256 = "07b3e20e1b5eacb7311b8c0167bc9148158feaff2b85c3ee1e77ea76e93a534d"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/trace_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/trace_struct.h"
+sha256 = "37054a0d3732e3e0ee0406247206c3e0a6f277b1e2480aebafe7ffca25ce73e8"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/trng_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/trng_reg.h"
+sha256 = "87132234449ca62635625aa8b43ac91a7ecab810ba3016c483d32457dbb4d494"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/trng_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/trng_struct.h"
+sha256 = "22ef399f5150abef917b7195248861a9456dc319e88ffc1fc1819052b02892e2"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/tsens_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/tsens_reg.h"
+sha256 = "848ee7ceade4e215c25bd5d7005be1451d3e554ef9e078ebbd744ae64d49af23"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/tsens_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/tsens_struct.h"
+sha256 = "f8db221ea3afe8c6022f599615d10afe0a1578fc3e6bc67e6c1cad474e4e6483"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/twaifd_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/twaifd_reg.h"
+sha256 = "6bce0a9066d2b5d3988b1b6a865207485d51ccedf7979850df29088690051143"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/twaifd_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/twaifd_struct.h"
+sha256 = "87e776614ea87e8cb81783e7a440e04e387ef8c6fa4c686fc786835ebbdf0824"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/uart_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/uart_reg.h"
+sha256 = "01c790eccc82b0af902063139c61548b0981ac7526ca6c5f76b1e7ad3fb63ada"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/uart_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/uart_struct.h"
+sha256 = "bd6461967e4dbf859296655689b063ac898c9fd34a4401a067431a0ae26a76a1"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/uhci_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/uhci_reg.h"
+sha256 = "80e3950a5946eeb0d27c4adae0f9daff1b75f1a38575031f268daed51d73b6ad"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/uhci_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/uhci_struct.h"
+sha256 = "7af2a92e2bc4380bc23f9d69ea9ad2a0aacf96cc5ddca43118a808824f724c51"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/usb_otghs_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/usb_otghs_reg.h"
+sha256 = "9a9b8941f20dca3db0672d74697c76f750b1e94ed8e520083ded4266c9993162"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/usb_otghs_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/usb_otghs_struct.h"
+sha256 = "4eb3d1cdc8228beb9f84fd188f7b2b75c012181e954768ba228c4d7b6c8b047d"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/usb_serial_jtag_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/usb_serial_jtag_reg.h"
+sha256 = "3c25b77a29a35c122a88331456bec2437ee1512cf8a26ce351eb322bf8cd4bb0"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/usb_serial_jtag_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/usb_serial_jtag_struct.h"
+sha256 = "1791e1f478cd17b96f657e5adc50224184eb13e79ec5318e4bebfbe3c1df7b96"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/zero_det_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/zero_det_reg.h"
+sha256 = "6ca9402fc488de5322fe744a5a3b8dae5599042f6f9fdf2654736b87be6e6ae9"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/zero_det_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/zero_det_struct.h"
+sha256 = "a22ff6f2f549baa6e9c7ee22e9e7fa94ff1315acc159cbda131fb63a7faaf378"

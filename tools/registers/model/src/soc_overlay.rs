@@ -27,7 +27,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use svd_rs::{Access, MaybeArray, RegisterCluster};
 
-use crate::soc::{derive, raw_status, trigger_candidate};
+use crate::soc::{raw_status, trigger_candidate};
 use crate::{
     Error, FieldKind, FieldRule, InterruptRule, OverlayAccess, RegisterRule, Result,
     StrictnessOverlay,
@@ -51,40 +51,54 @@ pub struct OverlayCheck {
     pub unchecked: Vec<String>,
     /// Entries that do not match their source or the SVD.
     pub failures: Vec<String>,
-    /// Disagreements that do not make an entry wrong: the SVD and the
-    /// headers place the register at different offsets.
-    pub notes: Vec<String>,
 }
 
 // ---------------------------------------------------------------- headers
 
 #[derive(Clone, Debug)]
-struct HeaderField {
-    line: usize,
-    name: String,
-    access: String,
-    low: u32,
-    high: u32,
+pub(crate) struct HeaderField {
+    pub(crate) line: usize,
+    pub(crate) name: String,
+    pub(crate) access: String,
+    pub(crate) low: u32,
+    pub(crate) high: u32,
+    /// The comment lines after the field line, joined by single spaces.
+    pub(crate) description: String,
+}
+
+impl HeaderField {
+    pub(crate) fn width(&self) -> u32 {
+        self.high.saturating_sub(self.low) + 1
+    }
 }
 
 #[derive(Clone, Debug)]
-struct HeaderRegister {
-    line: usize,
+pub(crate) struct HeaderRegister {
+    pub(crate) line: usize,
     /// The macro name without its `_REG` suffix.
-    name: String,
-    offset: u64,
-    fields: Vec<HeaderField>,
+    pub(crate) name: String,
+    pub(crate) offset: u64,
+    pub(crate) fields: Vec<HeaderField>,
 }
 
 #[derive(Clone, Debug)]
-struct HeaderStruct {
-    close_line: usize,
-    type_name: String,
+pub(crate) struct HeaderStruct {
+    pub(crate) close_line: usize,
+    pub(crate) type_name: String,
     /// More than one view of the register: the members are not one layout.
-    ambiguous: bool,
-    reserved: u32,
+    pub(crate) ambiguous: bool,
+    pub(crate) reserved: u32,
     /// Named members: (name, low bit, width).
-    members: Vec<(String, u32, u32)>,
+    pub(crate) members: Vec<(String, u32, u32)>,
+}
+
+/// Reserved words of a device layout (`} <name>_dev_t;`): the member
+/// `uint32_t reserved_<offset>[<words>];` at `line`.
+#[derive(Clone, Debug)]
+pub(crate) struct ReservedWords {
+    pub(crate) line: usize,
+    pub(crate) offset: u64,
+    pub(crate) words: u64,
 }
 
 fn identifier(text: &str) -> &str {
@@ -104,11 +118,33 @@ fn parse_number(text: &str) -> Option<u64> {
     }
 }
 
-fn parse_reg_header(text: &str) -> Vec<HeaderRegister> {
+pub(crate) fn parse_reg_header(text: &str) -> Vec<HeaderRegister> {
     let mut registers: Vec<HeaderRegister> = Vec::new();
     let mut open = false;
+    // Whether the comment of the last field is still open.
+    let mut describing = false;
     for (index, line) in text.lines().enumerate() {
         let number = index + 1;
+        if describing {
+            let text = line
+                .trim()
+                .trim_start_matches('*')
+                .trim_end_matches("*/")
+                .trim();
+            if let Some(field) = registers.last_mut().and_then(|r| r.fields.last_mut())
+                && !text.is_empty()
+                && !line.trim_start().starts_with("*/")
+            {
+                if !field.description.is_empty() {
+                    field.description.push(' ');
+                }
+                field.description.push_str(text);
+            }
+            if line.contains("*/") {
+                describing = false;
+            }
+            continue;
+        }
         if let Some(rest) = line.strip_prefix("#define ") {
             let name = identifier(rest);
             if let Some(base) = name.strip_suffix("_REG") {
@@ -161,13 +197,59 @@ fn parse_reg_header(text: &str) -> Vec<HeaderRegister> {
                 access: access.trim().to_owned(),
                 low,
                 high,
+                description: String::new(),
             });
+            describing = !line.contains("*/");
         }
     }
     registers
 }
 
-fn parse_struct_header(text: &str) -> Vec<HeaderStruct> {
+/// The reserved words of the one device layout of a `*_struct.h`; none
+/// when it has no device layout or more than one.
+pub(crate) fn parse_layout_reserved(text: &str) -> Vec<ReservedWords> {
+    let mut layouts: Vec<Vec<ReservedWords>> = Vec::new();
+    let mut open: Option<Vec<ReservedWords>> = None;
+    for (index, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("typedef struct") && trimmed.ends_with('{') {
+            open = Some(Vec::new());
+            continue;
+        }
+        let Some(words) = open.as_mut() else {
+            continue;
+        };
+        if let Some(rest) = trimmed.strip_prefix("uint32_t reserved_")
+            && !rest.contains(':')
+        {
+            let hex = identifier(rest);
+            let count = rest
+                .get(hex.len()..)
+                .and_then(|t| t.strip_prefix('['))
+                .and_then(|t| t.split_once(']'))
+                .map_or(Some(1), |(n, _)| parse_number(n));
+            if let (Ok(offset), Some(count)) = (u64::from_str_radix(hex, 16), count) {
+                words.push(ReservedWords {
+                    line: index + 1,
+                    offset,
+                    words: count,
+                });
+            }
+        } else if trimmed.starts_with('}')
+            && let Some(done) = open.take()
+            && trimmed.trim_end_matches(';').ends_with("_dev_t")
+        {
+            layouts.push(done);
+        }
+    }
+    if layouts.len() == 1 {
+        layouts.pop().unwrap_or_default()
+    } else {
+        Vec::new()
+    }
+}
+
+pub(crate) fn parse_struct_header(text: &str) -> Vec<HeaderStruct> {
     let mut structs = Vec::new();
     let mut current: Option<HeaderStruct> = None;
     let mut offset = 0_u32;
@@ -369,10 +451,15 @@ struct Svd {
     interrupts: BTreeSet<u64>,
 }
 
-fn load_svd(text: &str) -> Result<Svd> {
-    let mut device =
-        svd_parser::parse(text).map_err(|error| Error::message(format!("vendor SVD: {error}")))?;
-    derive(&mut device)?;
+fn corrected_device(
+    text: &str,
+    overlay: &StrictnessOverlay,
+    tree: &dyn HeaderTree,
+) -> Result<svd_rs::Device> {
+    Ok(crate::soc::corrected_vendor(text, overlay, tree)?.0)
+}
+
+fn svd_of(device: &svd_rs::Device) -> Svd {
     let mut svd = Svd::default();
     for peripheral in &device.peripherals {
         let default = peripheral
@@ -414,7 +501,7 @@ fn load_svd(text: &str) -> Result<Svd> {
         svd.order.push(peripheral.name.clone());
         svd.peripherals.insert(peripheral.name.clone(), registers);
     }
-    Ok(svd)
+    svd
 }
 
 /// Whether the header register is the SVD register: the vendor SVD and the
@@ -435,15 +522,24 @@ fn same_register(header: &HeaderRegister, register: &SvdRegister) -> bool {
         })
 }
 
-/// Whether the header field name is the SVD field name: the same name, the
-/// SVD's name inside the header's (`SPI1_MEM_S_PER_END_INT_CLR` holds
-/// `PER_END`) or the same last word (`SPI_FMEM_C_OUTMINBYTELEN` and
-/// `SPI_FMEM_OUTMINBYTELEN`); the register and the bits identify the field,
-/// the name only guards against a wrong line.
-fn same_field(header: &str, name: &str) -> bool {
-    ends_with_name(header, name)
-        || format!("_{header}_").contains(&format!("_{name}_"))
-        || header.rsplit('_').next() == name.rsplit('_').next()
+/// Whether the header field name is the SVD field name: the SVD's words
+/// are the header's in order, the header adding only words such as its
+/// prefix (`PCR_CLK_480M_OEN` is `CLK_480M_OEN`, `SPI1_MEM_S_PER_END_INT_CLR`
+/// holds `PER_END`, `SPI_FMEM_C_OUTMINBYTELEN` holds `FMEM_OUTMINBYTELEN`),
+/// a word possibly without the instance's number the header appends.
+/// A different word is a different field: `CLK_320M_OEN` is not
+/// `PCR_CLK_480M_OEN`.
+pub(crate) fn same_field(header: &str, name: &str) -> bool {
+    let mut words = header.split('_');
+    name.split('_').filter(|word| !word.is_empty()).all(|word| {
+        words.any(|candidate| {
+            candidate == word
+                // An instance's number the SVD leaves out: `SPI_MEM_SYNC_RESET`
+                // is SPI1's `SPI1_MEM_C_SYNC_RESET`, `IN_DONE_CH_INT_RAW`
+                // channel 0's `AHB_DMA_IN_DONE_CH0_INT_RAW`.
+                || candidate.trim_end_matches(|c: char| c.is_ascii_digit()) == word
+        })
+    })
 }
 
 fn ends_with_name(header: &str, name: &str) -> bool {
@@ -538,12 +634,24 @@ pub fn check_overlay(
     vendor_svd: &str,
     tree: &dyn HeaderTree,
 ) -> Result<OverlayCheck> {
-    let svd = load_svd(vendor_svd)?;
+    let device = corrected_device(vendor_svd, overlay, tree)?;
+    check_device(overlay, &device, tree)
+}
+
+/// Verify every entry of `overlay` against `tree` and the corrected vendor
+/// SVD `device`. A register the header places at another offset than the
+/// SVD is a failure.
+pub(crate) fn check_device(
+    overlay: &StrictnessOverlay,
+    device: &svd_rs::Device,
+    tree: &dyn HeaderTree,
+) -> Result<OverlayCheck> {
+    let svd = svd_of(device);
     let mut headers = Headers::new(tree);
     let mut result = OverlayCheck::default();
     for rule in &overlay.registers {
         let subject = format!("register {}.{}", rule.peripheral, rule.register);
-        match check_register(rule, &svd, &mut headers, &subject, &mut result.notes)? {
+        match check_register(rule, &svd, &mut headers, &subject)? {
             Verdict::Checked => result.checked += 1,
             Verdict::Unchecked(why) => result.unchecked.push(format!("{subject}: {why}")),
             Verdict::Failed(why) => result.failures.extend(why),
@@ -601,7 +709,6 @@ fn check_register(
     svd: &Svd,
     headers: &mut Headers<'_>,
     subject: &str,
-    notes: &mut Vec<String>,
 ) -> Result<Verdict> {
     let (cited, other) = idf_sources(&rule.sources);
     if cited.is_empty() {
@@ -639,8 +746,8 @@ fn check_register(
                         ));
                     } else {
                         if found.offset != register.offset {
-                            notes.push(format!(
-                                "{cite} has offset {:#x}, the SVD {:#x}",
+                            failures.push(format!(
+                                "{cite} has offset {:#x}, the SVD {:#x}: the overlay corrects its offset",
                                 found.offset, register.offset
                             ));
                         }
@@ -801,10 +908,16 @@ fn check_field(
             ));
             continue;
         }
-        if !same_field(&header_field.name, &rule.field) {
+        let named = rule.rename.as_deref().unwrap_or(&rule.field);
+        if !same_field(&header_field.name, named) {
             failures.push(format!(
-                "{cite} is field {}, not {}",
-                header_field.name, rule.field
+                "{cite} is field {}, not {named}{}",
+                header_field.name,
+                if rule.rename.is_none() {
+                    ": the overlay renames it after its source"
+                } else {
+                    ""
+                }
             ));
             continue;
         }
@@ -866,11 +979,13 @@ fn check_interrupt(
                 found.ordinal, rule.source
             ));
         }
-        let name = if found.name == "ETS_MAX_INTR_SOURCE" {
-            Some("MAX".to_owned())
-        } else {
-            interrupt_name(&found.name)
-        };
+        if found.name == "ETS_MAX_INTR_SOURCE" {
+            failures.push(format!(
+                "{cite} is ETS_MAX_INTR_SOURCE, the number of sources, not a source"
+            ));
+            continue;
+        }
+        let name = interrupt_name(&found.name);
         if name.as_deref() != Some(rule.name.as_str()) {
             failures.push(format!(
                 "{cite} is {}, not interrupt {}",
@@ -903,7 +1018,7 @@ pub fn import_overlay(
     peripherals: &[String],
     tree: &dyn HeaderTree,
 ) -> Result<String> {
-    let svd = load_svd(vendor_svd)?;
+    let svd = svd_of(&corrected_device(vendor_svd, existing, tree)?);
     let mut headers = Headers::new(tree);
     let directory = format!("components/soc/{chip}/register/soc");
     let files: Vec<String> = tree
@@ -1014,11 +1129,11 @@ fn derive_interrupts(
         if svd.interrupts.contains(&item.ordinal) {
             continue;
         }
-        let name = if item.name == "ETS_MAX_INTR_SOURCE" {
-            "MAX".to_owned()
-        } else if let Some(name) = interrupt_name(&item.name) {
-            name
-        } else {
+        // The count of sources, not a source.
+        if item.name == "ETS_MAX_INTR_SOURCE" {
+            continue;
+        }
+        let Some(name) = interrupt_name(&item.name) else {
             continue;
         };
         let Ok(source) = u16::try_from(item.ordinal) else {
@@ -1138,6 +1253,8 @@ fn derive_peripheral(
         let mut rule = RegisterRule {
             peripheral: peripheral.to_owned(),
             register: register.name.clone(),
+            offset: None,
+            add: false,
             access: None,
             reserved: None,
             read_side_effect: None,
@@ -1198,6 +1315,7 @@ fn derive_peripheral(
                 peripheral: peripheral.to_owned(),
                 register: register.name.clone(),
                 field: field.name.clone(),
+                rename: None,
                 access: None,
                 kind: None,
                 values: Vec::new(),
@@ -1242,10 +1360,14 @@ fn render_peripheral(
             (Some(mut rule), Some(kept)) => {
                 rule.fifo = kept.fifo;
                 rule.read_side_effect = kept.read_side_effect;
+                rule.offset = kept.offset;
+                rule.add = kept.add;
                 Some(rule)
             }
             (Some(rule), None) => Some(rule),
-            (None, Some(kept)) if kept.fifo || kept.read_side_effect.is_some() => {
+            (None, Some(kept))
+                if kept.fifo || kept.read_side_effect.is_some() || kept.offset.is_some() =>
+            {
                 Some(kept.clone())
             }
             (None, _) => None,
@@ -1259,6 +1381,7 @@ fn render_peripheral(
                 f.peripheral == peripheral && f.register == register.name && f.field == field.field
             }) {
                 field.values = kept.values.clone();
+                field.rename.clone_from(&kept.rename);
             }
             render_field(out, &field);
         }
@@ -1316,6 +1439,12 @@ fn render_register(out: &mut String, rule: &RegisterRule) {
         quote(&rule.peripheral),
         quote(&rule.register)
     ));
+    if let Some(offset) = rule.offset {
+        out.push_str(&format!("offset = {offset:#x}\n"));
+    }
+    if rule.add {
+        out.push_str("add = true\n");
+    }
     if let Some(access) = rule.access {
         out.push_str(&format!("access = {}\n", quote(access_name(access))));
     }
@@ -1345,6 +1474,9 @@ fn render_field(out: &mut String, rule: &FieldRule) {
         quote(&rule.register),
         quote(&rule.field)
     ));
+    if let Some(rename) = &rule.rename {
+        out.push_str(&format!("rename = {}\n", quote(rename)));
+    }
     if let Some(kind) = rule.kind {
         let kind = match kind {
             FieldKind::Plain => "plain",

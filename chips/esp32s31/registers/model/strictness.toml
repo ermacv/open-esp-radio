@@ -1,14 +1,539 @@
-# The strictness overlay over the vendor SVD (`../upstream/esp32s31.svd`): what
-# the SVD does not state about access, read side effects, write-one-to-clear,
-# write triggers, FIFO ports, enumerated values and reserved bits, and the
-# interrupt sources it does not list. Every entry cites its source:
-# `esp-idf:<path>:<line>` at the pin below, `esp-hal:<path>:<line>` at the
-# esp-hal pin, or `trm:<section>`. What no entry states keeps the
-# conservative default of `cargo registers generate`; the generated
-# `../published/soc.report.toml` lists every register it narrowed.
+# The strictness overlay over the vendor SVD (`../upstream/esp32s31.svd`). The
+# `[[headers]]` table names each vendor peripheral's pinned ESP-IDF header;
+# `cargo registers generate` derives every register's API from its access
+# classes, reserved lanes and words, offsets and names, and checks every
+# `esp-idf:` citation below against the cited line. The entries state what
+# the headers do not, or correct the SVD: offsets, read side effects, FIFO
+# ports, enumerated values, and the interrupt sources the SVD does not list.
+# Every entry cites its source: `esp-idf:<path>:<line>` at the pin below,
+# `esp-hal:<path>:<line>` at the esp-hal pin, or `trm:<section>`. The
+# generated `../published/soc.report.toml` lists every renamed field and
+# every register the pass narrowed.
 schema = 1
 esp-idf = "4d59230ddff16327812782151ef0afef202dc6d7"
 esp-hal = "1f646c5af4f4ca2774f493783581237fea2379dc"
+
+
+# The pinned ESP-IDF header of each vendor peripheral: its `*_reg.h` states
+# every register's offset and every field's bits, access class and
+# description, its `*_struct.h` the device layout's reserved words. The
+# generator derives each register's API from them; a register the header
+# places elsewhere than the SVD is an error until an entry below corrects it.
+
+[[headers]]
+peripheral = "ADC"
+registers = "components/soc/esp32s31/register/soc/adc_reg.h"
+layout = "components/soc/esp32s31/register/soc/adc_struct.h"
+
+[[headers]]
+peripheral = "AES"
+registers = "components/soc/esp32s31/register/soc/aes_reg.h"
+layout = "components/soc/esp32s31/register/soc/aes_struct.h"
+
+[[headers]]
+peripheral = "AHB_DMA"
+registers = "components/soc/esp32s31/register/soc/ahb_dma_reg.h"
+layout = "components/soc/esp32s31/register/soc/ahb_dma_struct.h"
+
+[[headers]]
+peripheral = "ASRC"
+registers = "components/soc/esp32s31/register/soc/asrc_reg.h"
+layout = "components/soc/esp32s31/register/soc/asrc_struct.h"
+
+[[headers]]
+peripheral = "AXI_DMA"
+registers = "components/soc/esp32s31/register/soc/axi_dma_reg.h"
+layout = "components/soc/esp32s31/register/soc/axi_dma_struct.h"
+
+[[headers]]
+peripheral = "AXI_PERF_MON"
+registers = "components/soc/esp32s31/register/soc/axi_perf_mon_reg.h"
+layout = "components/soc/esp32s31/register/soc/axi_perf_mon_struct.h"
+
+[[headers]]
+peripheral = "BITSCRAMBLER"
+registers = "components/soc/esp32s31/register/soc/bitscrambler_reg.h"
+layout = "components/soc/esp32s31/register/soc/bitscrambler_struct.h"
+
+[[headers]]
+peripheral = "BUS_MONITOR"
+registers = "components/soc/esp32s31/register/soc/bus_monitor_reg.h"
+layout = "components/soc/esp32s31/register/soc/bus_monitor_struct.h"
+
+[[headers]]
+peripheral = "CACHE"
+registers = "components/soc/esp32s31/register/soc/cache_reg.h"
+layout = "components/soc/esp32s31/register/soc/cache_struct.h"
+
+[[headers]]
+peripheral = "CNNT_IO_MUX"
+registers = "components/soc/esp32s31/register/soc/cnnt_io_mux_reg.h"
+layout = "components/soc/esp32s31/register/soc/cnnt_io_mux_struct.h"
+
+[[headers]]
+peripheral = "CORDIC"
+registers = "components/soc/esp32s31/register/soc/cordic_reg.h"
+layout = "components/soc/esp32s31/register/soc/cordic_struct.h"
+
+[[headers]]
+peripheral = "CPU_APM"
+registers = "components/soc/esp32s31/register/soc/cpu_apm_reg.h"
+layout = "components/soc/esp32s31/register/soc/cpu_apm_struct.h"
+
+[[headers]]
+peripheral = "DAC"
+registers = "components/soc/esp32s31/register/soc/dac_reg.h"
+layout = "components/soc/esp32s31/register/soc/dac_struct.h"
+
+[[headers]]
+peripheral = "DMA2D"
+registers = "components/soc/esp32s31/register/soc/dma2d_reg.h"
+layout = "components/soc/esp32s31/register/soc/dma2d_struct.h"
+
+[[headers]]
+peripheral = "DS"
+registers = "components/soc/esp32s31/register/soc/ds_reg.h"
+layout = "components/soc/esp32s31/register/soc/ds_struct.h"
+
+[[headers]]
+peripheral = "ECC"
+registers = "components/soc/esp32s31/register/soc/ecc_mult_reg.h"
+layout = "components/soc/esp32s31/register/soc/ecc_mult_struct.h"
+
+[[headers]]
+peripheral = "ECDSA"
+registers = "components/soc/esp32s31/register/soc/ecdsa_reg.h"
+layout = "components/soc/esp32s31/register/soc/ecdsa_struct.h"
+
+[[headers]]
+peripheral = "EFUSE"
+registers = "components/soc/esp32s31/register/soc/efuse_reg.h"
+layout = "components/soc/esp32s31/register/soc/efuse_struct.h"
+
+[[headers]]
+peripheral = "GMAC"
+registers = "components/soc/esp32s31/register/soc/gmac_reg.h"
+layout = "components/soc/esp32s31/register/soc/gmac_struct.h"
+
+[[headers]]
+peripheral = "GPIO"
+registers = "components/soc/esp32s31/register/soc/gpio_reg.h"
+layout = "components/soc/esp32s31/register/soc/gpio_struct.h"
+
+[[headers]]
+peripheral = "GPIO_EXT"
+registers = "components/soc/esp32s31/register/soc/gpio_ext_reg.h"
+layout = "components/soc/esp32s31/register/soc/gpio_ext_struct.h"
+
+[[headers]]
+peripheral = "HMAC"
+registers = "components/soc/esp32s31/register/soc/hmac_reg.h"
+layout = "components/soc/esp32s31/register/soc/hmac_struct.h"
+
+[[headers]]
+peripheral = "HP_ALIVE_SYS"
+registers = "components/soc/esp32s31/register/soc/hp_alive_sys_reg.h"
+layout = "components/soc/esp32s31/register/soc/hp_alive_sys_struct.h"
+
+[[headers]]
+peripheral = "HP_APM"
+registers = "components/soc/esp32s31/register/soc/hp_apm_reg.h"
+layout = "components/soc/esp32s31/register/soc/hp_apm_struct.h"
+
+[[headers]]
+peripheral = "HP_MEM_APM"
+registers = "components/soc/esp32s31/register/soc/hp_mem_apm_reg.h"
+layout = "components/soc/esp32s31/register/soc/hp_mem_apm_struct.h"
+
+[[headers]]
+peripheral = "HP_PERI0_PMS"
+registers = "components/soc/esp32s31/register/soc/hp_peri0_pms_reg.h"
+layout = "components/soc/esp32s31/register/soc/hp_peri0_pms_struct.h"
+
+[[headers]]
+peripheral = "HP_PERI1_PMS"
+registers = "components/soc/esp32s31/register/soc/hp_peri1_pms_reg.h"
+layout = "components/soc/esp32s31/register/soc/hp_peri1_pms_struct.h"
+
+[[headers]]
+peripheral = "HP_SYS"
+registers = "components/soc/esp32s31/register/soc/hp_system_reg.h"
+layout = "components/soc/esp32s31/register/soc/hp_system_struct.h"
+
+[[headers]]
+peripheral = "HP_SYS_CLKRST"
+registers = "components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h"
+layout = "components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h"
+
+[[headers]]
+peripheral = "LP_HUK"
+registers = "components/soc/esp32s31/register/soc/huk_reg.h"
+layout = "components/soc/esp32s31/register/soc/huk_struct.h"
+
+[[headers]]
+peripheral = "I2C0"
+registers = "components/soc/esp32s31/register/soc/i2c_reg.h"
+layout = "components/soc/esp32s31/register/soc/i2c_struct.h"
+
+[[headers]]
+peripheral = "I2C1"
+registers = "components/soc/esp32s31/register/soc/i2c_reg.h"
+layout = "components/soc/esp32s31/register/soc/i2c_struct.h"
+
+[[headers]]
+peripheral = "LP_I2C"
+registers = "components/soc/esp32s31/register/soc/lp_i2c_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_i2c_struct.h"
+
+[[headers]]
+peripheral = "I2S0"
+registers = "components/soc/esp32s31/register/soc/i2s_reg.h"
+layout = "components/soc/esp32s31/register/soc/i2s_struct.h"
+
+[[headers]]
+peripheral = "I2S1"
+registers = "components/soc/esp32s31/register/soc/i2s_reg.h"
+layout = "components/soc/esp32s31/register/soc/i2s_struct.h"
+
+[[headers]]
+peripheral = "IOMUX_MSPI_PIN"
+registers = "components/soc/esp32s31/register/soc/iomux_mspi_pin_reg.h"
+layout = "components/soc/esp32s31/register/soc/iomux_mspi_pin_struct.h"
+
+[[headers]]
+peripheral = "IO_MUX"
+registers = "components/soc/esp32s31/register/soc/io_mux_reg.h"
+layout = "components/soc/esp32s31/register/soc/io_mux_struct.h"
+
+[[headers]]
+peripheral = "JPEG"
+registers = "components/soc/esp32s31/register/soc/jpeg_reg.h"
+layout = "components/soc/esp32s31/register/soc/jpeg_struct.h"
+
+[[headers]]
+peripheral = "KEYMNG"
+registers = "components/soc/esp32s31/register/soc/keymng_reg.h"
+layout = "components/soc/esp32s31/register/soc/keymng_struct.h"
+
+[[headers]]
+peripheral = "LCD_CAM"
+registers = "components/soc/esp32s31/register/soc/lcd_cam_reg.h"
+layout = "components/soc/esp32s31/register/soc/lcd_cam_struct.h"
+
+[[headers]]
+peripheral = "LEDC0"
+registers = "components/soc/esp32s31/register/soc/ledc_reg.h"
+layout = "components/soc/esp32s31/register/soc/ledc_struct.h"
+
+[[headers]]
+peripheral = "LEDC1"
+registers = "components/soc/esp32s31/register/soc/ledc_reg.h"
+layout = "components/soc/esp32s31/register/soc/ledc_struct.h"
+
+[[headers]]
+peripheral = "LP_ADI"
+registers = "components/soc/esp32s31/register/soc/lp_adi_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_adi_struct.h"
+
+[[headers]]
+peripheral = "LP_AHB_DMA"
+registers = "components/soc/esp32s31/register/soc/lp_ahb_dma_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_ahb_dma_struct.h"
+
+[[headers]]
+peripheral = "LP_ANA_PERI"
+registers = "components/soc/esp32s31/register/soc/lp_analog_peri_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_analog_peri_struct.h"
+
+[[headers]]
+peripheral = "LP_AON_CLKRST"
+registers = "components/soc/esp32s31/register/soc/lp_clkrst_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_clkrst_struct.h"
+
+[[headers]]
+peripheral = "LP_APM"
+registers = "components/soc/esp32s31/register/soc/lp_apm_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_apm_struct.h"
+
+[[headers]]
+peripheral = "LP_GPIO"
+registers = "components/soc/esp32s31/register/soc/lp_gpio_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_gpio_struct.h"
+
+[[headers]]
+peripheral = "LP_I2C_ANA_MST"
+registers = "components/soc/esp32s31/register/soc/lp_i2c_ana_mst_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_i2c_ana_mst_struct.h"
+
+[[headers]]
+peripheral = "LP_PERICLKRST"
+registers = "components/soc/esp32s31/register/soc/lp_peri_clkrst_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_peri_clkrst_struct.h"
+
+[[headers]]
+peripheral = "LP_PERI_PMS"
+registers = "components/soc/esp32s31/register/soc/lp_peri_pms_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_peri_pms_struct.h"
+
+[[headers]]
+peripheral = "LP_PWR"
+registers = "components/soc/esp32s31/register/soc/lp_pwr_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_pwr_struct.h"
+
+[[headers]]
+peripheral = "LP_TEE"
+registers = "components/soc/esp32s31/register/soc/lp_tee_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_tee_struct.h"
+
+[[headers]]
+peripheral = "LP_UART"
+registers = "components/soc/esp32s31/register/soc/lp_uart_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_uart_struct.h"
+
+[[headers]]
+peripheral = "MCPWM0"
+registers = "components/soc/esp32s31/register/soc/mcpwm_reg.h"
+layout = "components/soc/esp32s31/register/soc/mcpwm_struct.h"
+
+[[headers]]
+peripheral = "MCPWM1"
+registers = "components/soc/esp32s31/register/soc/mcpwm_reg.h"
+layout = "components/soc/esp32s31/register/soc/mcpwm_struct.h"
+
+[[headers]]
+peripheral = "MCPWM2"
+registers = "components/soc/esp32s31/register/soc/mcpwm_reg.h"
+layout = "components/soc/esp32s31/register/soc/mcpwm_struct.h"
+
+[[headers]]
+peripheral = "MCPWM3"
+registers = "components/soc/esp32s31/register/soc/mcpwm_reg.h"
+layout = "components/soc/esp32s31/register/soc/mcpwm_struct.h"
+
+[[headers]]
+peripheral = "MEM_MONITOR0"
+registers = "components/soc/esp32s31/register/soc/mem_monitor_reg.h"
+layout = "components/soc/esp32s31/register/soc/mem_monitor_struct.h"
+
+[[headers]]
+peripheral = "MEM_MONITOR1"
+registers = "components/soc/esp32s31/register/soc/mem_monitor_reg.h"
+layout = "components/soc/esp32s31/register/soc/mem_monitor_struct.h"
+
+[[headers]]
+peripheral = "PARL_IO"
+registers = "components/soc/esp32s31/register/soc/parl_io_reg.h"
+layout = "components/soc/esp32s31/register/soc/parl_io_struct.h"
+
+[[headers]]
+peripheral = "PAU"
+registers = "components/soc/esp32s31/register/soc/pau_reg.h"
+layout = "components/soc/esp32s31/register/soc/pau_struct.h"
+
+[[headers]]
+peripheral = "PCNT0"
+registers = "components/soc/esp32s31/register/soc/pcnt_reg.h"
+layout = "components/soc/esp32s31/register/soc/pcnt_struct.h"
+
+[[headers]]
+peripheral = "PCNT1"
+registers = "components/soc/esp32s31/register/soc/pcnt_reg.h"
+layout = "components/soc/esp32s31/register/soc/pcnt_struct.h"
+
+[[headers]]
+peripheral = "PMU"
+registers = "components/soc/esp32s31/register/soc/pmu_reg.h"
+layout = "components/soc/esp32s31/register/soc/pmu_struct.h"
+
+[[headers]]
+peripheral = "PPA"
+registers = "components/soc/esp32s31/register/soc/ppa_reg.h"
+layout = "components/soc/esp32s31/register/soc/ppa_struct.h"
+
+[[headers]]
+peripheral = "PVT"
+registers = "components/soc/esp32s31/register/soc/pvt_reg.h"
+layout = "components/soc/esp32s31/register/soc/pvt_struct.h"
+
+[[headers]]
+peripheral = "RMA"
+registers = "components/soc/esp32s31/register/soc/rma_reg.h"
+layout = "components/soc/esp32s31/register/soc/rma_struct.h"
+
+[[headers]]
+peripheral = "RMT"
+registers = "components/soc/esp32s31/register/soc/rmt_reg.h"
+layout = "components/soc/esp32s31/register/soc/rmt_struct.h"
+
+[[headers]]
+peripheral = "RSA"
+registers = "components/soc/esp32s31/register/soc/rsa_reg.h"
+layout = "components/soc/esp32s31/register/soc/rsa_struct.h"
+
+[[headers]]
+peripheral = "LP_CLKCALI"
+registers = "components/soc/esp32s31/register/soc/rtclockcali_reg.h"
+layout = "components/soc/esp32s31/register/soc/rtclockcali_struct.h"
+
+[[headers]]
+peripheral = "RTCLOCKCALI1"
+registers = "components/soc/esp32s31/register/soc/rtclockcali_reg.h"
+layout = "components/soc/esp32s31/register/soc/rtclockcali_struct.h"
+
+[[headers]]
+peripheral = "LP_TIMER"
+registers = "components/soc/esp32s31/register/soc/rtc_timer_reg.h"
+layout = "components/soc/esp32s31/register/soc/rtc_timer_struct.h"
+
+[[headers]]
+peripheral = "LP_WDT"
+registers = "components/soc/esp32s31/register/soc/rtc_wdt_reg.h"
+layout = "components/soc/esp32s31/register/soc/rtc_wdt_struct.h"
+
+[[headers]]
+peripheral = "SDHOST"
+registers = "components/soc/esp32s31/register/soc/sdmmc_reg.h"
+layout = "components/soc/esp32s31/register/soc/sdmmc_struct.h"
+
+[[headers]]
+peripheral = "SHA"
+registers = "components/soc/esp32s31/register/soc/sha_reg.h"
+layout = "components/soc/esp32s31/register/soc/sha_struct.h"
+
+[[headers]]
+peripheral = "SOC_ETM"
+registers = "components/soc/esp32s31/register/soc/soc_etm_reg.h"
+layout = "components/soc/esp32s31/register/soc/soc_etm_struct.h"
+
+[[headers]]
+peripheral = "SPI0"
+registers = "components/soc/esp32s31/register/soc/spi_mem_c_reg.h"
+layout = "components/soc/esp32s31/register/soc/spi_mem_c_struct.h"
+
+[[headers]]
+peripheral = "SPI1"
+registers = "components/soc/esp32s31/register/soc/spi1_mem_c_reg.h"
+layout = "components/soc/esp32s31/register/soc/spi1_mem_c_struct.h"
+
+[[headers]]
+peripheral = "MEMSPI2"
+registers = "components/soc/esp32s31/register/soc/spi_mem_s_reg.h"
+layout = "components/soc/esp32s31/register/soc/spi_mem_s_struct.h"
+
+[[headers]]
+peripheral = "MEMSPI3"
+registers = "components/soc/esp32s31/register/soc/spi1_mem_s_reg.h"
+layout = "components/soc/esp32s31/register/soc/spi1_mem_s_struct.h"
+
+[[headers]]
+peripheral = "SPI2"
+registers = "components/soc/esp32s31/register/soc/spi_reg.h"
+layout = "components/soc/esp32s31/register/soc/spi_struct.h"
+
+[[headers]]
+peripheral = "SPI3"
+registers = "components/soc/esp32s31/register/soc/spi_reg.h"
+layout = "components/soc/esp32s31/register/soc/spi_struct.h"
+
+[[headers]]
+peripheral = "SYSTIMER"
+registers = "components/soc/esp32s31/register/soc/systimer_reg.h"
+layout = "components/soc/esp32s31/register/soc/systimer_struct.h"
+
+[[headers]]
+peripheral = "TEE"
+registers = "components/soc/esp32s31/register/soc/tee_reg.h"
+layout = "components/soc/esp32s31/register/soc/tee_struct.h"
+
+[[headers]]
+peripheral = "TIMG0"
+registers = "components/soc/esp32s31/register/soc/timer_group_reg.h"
+layout = "components/soc/esp32s31/register/soc/timer_group_struct.h"
+
+[[headers]]
+peripheral = "TIMG1"
+registers = "components/soc/esp32s31/register/soc/timer_group_reg.h"
+layout = "components/soc/esp32s31/register/soc/timer_group_struct.h"
+
+[[headers]]
+peripheral = "LP_TOUCH"
+registers = "components/soc/esp32s31/register/soc/touch_reg.h"
+layout = "components/soc/esp32s31/register/soc/touch_struct.h"
+
+[[headers]]
+peripheral = "LP_TOUCH_AON"
+registers = "components/soc/esp32s31/register/soc/touch_aon_reg.h"
+layout = "components/soc/esp32s31/register/soc/touch_aon_struct.h"
+
+[[headers]]
+peripheral = "TRACE0"
+registers = "components/soc/esp32s31/register/soc/trace_reg.h"
+layout = "components/soc/esp32s31/register/soc/trace_struct.h"
+
+[[headers]]
+peripheral = "TRACE1"
+registers = "components/soc/esp32s31/register/soc/trace_reg.h"
+layout = "components/soc/esp32s31/register/soc/trace_struct.h"
+
+[[headers]]
+peripheral = "TRNG"
+registers = "components/soc/esp32s31/register/soc/trng_reg.h"
+layout = "components/soc/esp32s31/register/soc/trng_struct.h"
+
+[[headers]]
+peripheral = "LP_TSENS"
+registers = "components/soc/esp32s31/register/soc/tsens_reg.h"
+layout = "components/soc/esp32s31/register/soc/tsens_struct.h"
+
+[[headers]]
+peripheral = "TWAI0"
+registers = "components/soc/esp32s31/register/soc/twaifd_reg.h"
+layout = "components/soc/esp32s31/register/soc/twaifd_struct.h"
+
+[[headers]]
+peripheral = "TWAI1"
+registers = "components/soc/esp32s31/register/soc/twaifd_reg.h"
+layout = "components/soc/esp32s31/register/soc/twaifd_struct.h"
+
+[[headers]]
+peripheral = "UART0"
+registers = "components/soc/esp32s31/register/soc/uart_reg.h"
+layout = "components/soc/esp32s31/register/soc/uart_struct.h"
+
+[[headers]]
+peripheral = "UART1"
+registers = "components/soc/esp32s31/register/soc/uart_reg.h"
+layout = "components/soc/esp32s31/register/soc/uart_struct.h"
+
+[[headers]]
+peripheral = "UART2"
+registers = "components/soc/esp32s31/register/soc/uart_reg.h"
+layout = "components/soc/esp32s31/register/soc/uart_struct.h"
+
+[[headers]]
+peripheral = "UART3"
+registers = "components/soc/esp32s31/register/soc/uart_reg.h"
+layout = "components/soc/esp32s31/register/soc/uart_struct.h"
+
+[[headers]]
+peripheral = "UHCI0"
+registers = "components/soc/esp32s31/register/soc/uhci_reg.h"
+layout = "components/soc/esp32s31/register/soc/uhci_struct.h"
+
+[[headers]]
+peripheral = "USB_OTG_HS"
+registers = "components/soc/esp32s31/register/soc/usb_otghs_reg.h"
+layout = "components/soc/esp32s31/register/soc/usb_otghs_struct.h"
+
+[[headers]]
+peripheral = "USB_DEVICE"
+registers = "components/soc/esp32s31/register/soc/usb_serial_jtag_reg.h"
+layout = "components/soc/esp32s31/register/soc/usb_serial_jtag_struct.h"
+
+[[headers]]
+peripheral = "ZERO_DET"
+registers = "components/soc/esp32s31/register/soc/zero_det_reg.h"
+layout = "components/soc/esp32s31/register/soc/zero_det_struct.h"
 
 # Interrupt sources the vendor SVD does not list, numbered as ESP-IDF's
 # interrupts.h enumerates them; the name drops ETS_ and _INTR_SOURCE
@@ -198,11 +723,6 @@ sources = ["esp-idf:components/soc/esp32s31/include/soc/interrupts.h:182"]
 name = "LP_SW_INVALID_SLEEP"
 source = 168
 sources = ["esp-idf:components/soc/esp32s31/include/soc/interrupts.h:187"]
-
-[[interrupts]]
-name = "MAX"
-source = 169
-sources = ["esp-idf:components/soc/esp32s31/include/soc/interrupts.h:188"]
 
 
 # HP_SYS_CLKRST: components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h and hp_sys_clkrst_struct.h.

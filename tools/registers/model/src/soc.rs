@@ -41,6 +41,9 @@ use svd_rs::{
     RegisterCluster, ValidateLevel,
 };
 
+use crate::soc_headers::{
+    Class, Derived, HeaderFacts, Lookup, SvdField, derive_register, elements, read_clears,
+};
 use crate::{
     Error, FifoPort, InterruptSource, OwnershipPartition, PacApiPack, Result, WriteTriggerField,
 };
@@ -55,6 +58,9 @@ pub struct StrictnessOverlay {
     /// The pinned esp-hal fork revision `esp-hal:` sources cite.
     #[serde(default)]
     pub esp_hal: Option<String>,
+    /// The pinned header of each vendor peripheral.
+    #[serde(default)]
+    pub headers: Vec<HeaderRule>,
     #[serde(default)]
     pub registers: Vec<RegisterRule>,
     #[serde(default)]
@@ -63,12 +69,32 @@ pub struct StrictnessOverlay {
     pub interrupts: Vec<InterruptRule>,
 }
 
+/// The pinned ESP-IDF headers of one vendor peripheral: the source of its
+/// registers' access classes, reserved lanes and reserved words.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct HeaderRule {
+    pub peripheral: String,
+    /// The `*_reg.h` path in the pinned ESP-IDF.
+    pub registers: String,
+    /// The `*_struct.h` path, whose device layout reserves words.
+    #[serde(default)]
+    pub layout: Option<String>,
+}
+
 /// What the overlay states about one vendor register.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RegisterRule {
     pub peripheral: String,
     pub register: String,
+    /// The register's offset where the SVD places it elsewhere, or of a
+    /// register the SVD lacks: its header's.
+    #[serde(default)]
+    pub offset: Option<u32>,
+    /// A register the vendor SVD lacks, built from its header definition.
+    #[serde(default)]
+    pub add: bool,
     /// The register's access, replacing the SVD's.
     #[serde(default)]
     pub access: Option<OverlayAccess>,
@@ -99,6 +125,9 @@ pub struct FieldRule {
     pub peripheral: String,
     pub register: String,
     pub field: String,
+    /// The field's name by its source, where the SVD names it otherwise.
+    #[serde(default)]
+    pub rename: Option<String>,
     /// The field's access, replacing the SVD's.
     #[serde(default)]
     pub access: Option<OverlayAccess>,
@@ -193,12 +222,45 @@ impl StrictnessOverlay {
             ));
         }
         let mut seen = BTreeSet::new();
+        for rule in &self.headers {
+            if !seen.insert(rule.peripheral.clone()) {
+                return Err(Error::message(format!(
+                    "overlay names the header of {} twice",
+                    rule.peripheral
+                )));
+            }
+            let header = |path: &str, suffix: &str| {
+                path.starts_with("components/soc/") && path.ends_with(suffix)
+            };
+            if !header(&rule.registers, "_reg.h")
+                || rule
+                    .layout
+                    .as_deref()
+                    .is_some_and(|layout| !header(layout, "_struct.h"))
+            {
+                return Err(Error::message(format!(
+                    "overlay header of {}: registers is a components/soc/**/*_reg.h, layout a *_struct.h",
+                    rule.peripheral
+                )));
+            }
+        }
+        let mut seen = BTreeSet::new();
         for rule in &self.registers {
             let subject = format!("{}.{}", rule.peripheral, rule.register);
             if !seen.insert(subject.clone()) {
                 return Err(Error::message(format!("overlay states {subject} twice")));
             }
             self.validate_sources(&subject, &rule.sources)?;
+            if (rule.add || rule.offset.is_some())
+                && !rule
+                    .sources
+                    .iter()
+                    .any(|source| source.starts_with("esp-idf:"))
+            {
+                return Err(Error::message(format!(
+                    "overlay register {subject} adds or moves a register without its esp-idf definition"
+                )));
+            }
             if rule.fifo && rule.write_one_to_clear {
                 return Err(Error::message(format!(
                     "overlay register {subject} is a FIFO port and write-one-to-clear"
@@ -327,6 +389,8 @@ pub struct SocInputs<'a> {
     /// The curated typed peripherals: the module also asserts that its
     /// blocks list no word of theirs.
     pub curated_typed: &'a BTreeSet<&'a str>,
+    /// The pinned ESP-IDF files the overlay names.
+    pub headers: &'a dyn crate::HeaderTree,
 }
 
 /// Name candidates of a write-trigger field: writing one starts an action.
@@ -455,9 +519,23 @@ fn register_words(base: u64, register: &svd_rs::Register) -> Vec<u64> {
 
 /// Render the `soc` module of a chip.
 pub fn render_soc(inputs: &SocInputs<'_>) -> Result<SocRender> {
-    let mut vendor = svd_parser::parse(inputs.vendor_svd)
-        .map_err(|error| Error::message(format!("vendor SVD: {error}")))?;
-    derive(&mut vendor)?;
+    let (vendor, facts) = corrected_vendor(inputs.vendor_svd, inputs.overlay, inputs.headers)?;
+    let moved = moved_registers(&vendor, &facts);
+    if !moved.is_empty() {
+        return Err(Error::message(format!(
+            "{} vendor registers are elsewhere in their pinned header; the overlay corrects their offsets:\n{}",
+            moved.len(),
+            moved.join("\n")
+        )));
+    }
+    let check = crate::soc_overlay::check_device(inputs.overlay, &vendor, inputs.headers)?;
+    if !check.failures.is_empty() {
+        return Err(Error::message(format!(
+            "{} overlay entries do not match the pinned headers:\n{}",
+            check.failures.len(),
+            check.failures.join("\n")
+        )));
+    }
     let mut curated = svd_parser::parse(inputs.curated_svd)
         .map_err(|error| Error::message(format!("curated SVD: {error}")))?;
     derive(&mut curated)?;
@@ -485,8 +563,7 @@ pub fn render_soc(inputs: &SocInputs<'_>) -> Result<SocRender> {
     let mut matched_registers = BTreeSet::new();
     let mut matched_fields = BTreeSet::new();
     let mut verdicts = Vec::new();
-    let mut triggers = Vec::new();
-    let mut fifos = Vec::new();
+    let mut collected = Collected::default();
     let mut rendered = Vec::new();
     let mut skipped = Vec::new();
     let mut device = vendor.clone();
@@ -590,14 +667,15 @@ pub fn render_soc(inputs: &SocInputs<'_>) -> Result<SocRender> {
                     None,
                 )
             } else {
+                let header = header_view(&facts, &name, register)?;
                 classify(
                     &vendor,
                     peripheral,
                     register,
                     rule,
                     &field_rules,
-                    &mut triggers,
-                    &mut fifos,
+                    &header,
+                    &mut collected,
                 )?
             };
             verdicts.push(RegisterVerdict {
@@ -649,6 +727,11 @@ pub fn render_soc(inputs: &SocInputs<'_>) -> Result<SocRender> {
                 .map(|child| (peripheral.name.clone(), child.name().clone()))
         })
         .collect::<BTreeSet<_>>();
+    let Collected {
+        mut triggers,
+        mut fifos,
+        renames,
+    } = collected;
     triggers.retain(|trigger: &WriteTriggerField| {
         rendered_registers.contains(&(trigger.peripheral.clone(), trigger.register.clone()))
     });
@@ -718,13 +801,307 @@ pub fn render_soc(inputs: &SocInputs<'_>) -> Result<SocRender> {
         );
     }
     rust.push_str("}\n");
-    let report = render_report(inputs.vendor_path, &verdicts, &skipped, &rendered);
+    let report = render_report(inputs.vendor_path, &verdicts, &skipped, &rendered, &renames);
     Ok(SocRender {
         rust,
         report,
         verdicts,
         peripherals: rendered,
     })
+}
+
+/// What the pass collects over every register.
+#[derive(Default)]
+struct Collected {
+    triggers: Vec<WriteTriggerField>,
+    fifos: Vec<FifoPort>,
+    renames: Vec<Rename>,
+}
+
+/// A vendor field the API names after its source.
+struct Rename {
+    peripheral: String,
+    register: String,
+    svd: String,
+    source: String,
+}
+
+/// What the pinned header says about one vendor register.
+enum HeaderView {
+    /// The overlay names no header for its peripheral.
+    Unmapped,
+    /// The header does not define it; `none` when the layout reserves its
+    /// word.
+    Absent {
+        reason: String,
+        none: bool,
+    },
+    Derived(Derived),
+}
+
+fn svd_fields(register: &svd_rs::Register) -> Vec<SvdField<'_>> {
+    register
+        .fields
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|field| match field {
+            MaybeArray::Single(info) => Some(SvdField {
+                name: info.name.as_str(),
+                low: info.bit_range.offset,
+                width: info.bit_range.width,
+                description: info.description.as_deref().unwrap_or(""),
+            }),
+            MaybeArray::Array(..) => None,
+        })
+        .collect()
+}
+
+/// Whether two derivations give the same API.
+fn same_semantics(first: &Derived, second: &Derived) -> bool {
+    first.none.is_some() == second.none.is_some()
+        && first.narrow.is_empty() == second.narrow.is_empty()
+        && first.one_to_clear == second.one_to_clear
+        && first.reserved == second.reserved
+        && first.reserved_fields == second.reserved_fields
+        && first
+            .fields
+            .iter()
+            .map(|(name, field)| (name, field.class))
+            .eq(second
+                .fields
+                .iter()
+                .map(|(name, field)| (name, field.class)))
+}
+
+/// The header's view of `register` of `peripheral`: every element of an
+/// array must be in the header with the same semantics. A register the
+/// header places at another offset is an error until the overlay corrects
+/// its offset.
+fn header_view(
+    facts: &HeaderFacts,
+    peripheral: &str,
+    register: &svd_rs::Register,
+) -> Result<HeaderView> {
+    let fields = svd_fields(register);
+    let mut derived: Option<Derived> = None;
+    for (name, offset) in elements(register) {
+        match facts.lookup(
+            peripheral,
+            &name,
+            offset,
+            matches!(register, MaybeArray::Array(..)),
+        ) {
+            Lookup::Unmapped => return Ok(HeaderView::Unmapped),
+            Lookup::Moved {
+                path,
+                register: header,
+            } => {
+                return Err(Error::message(format!(
+                    "{peripheral}.{name}: the vendor SVD places it at {offset:#x}, \
+                     esp-idf:{path}:{} at {:#x}; the overlay corrects its offset",
+                    header.line, header.offset
+                )));
+            }
+            Lookup::Absent { path, reserved } => {
+                return Ok(HeaderView::Absent {
+                    reason: match reserved {
+                        Some((layout, line)) => {
+                            format!("the pinned layout reserves its word (esp-idf:{layout}:{line})")
+                        }
+                        None => format!("esp-idf:{path} defines no register {name}"),
+                    },
+                    none: reserved.is_some(),
+                });
+            }
+            Lookup::Matched {
+                path,
+                prefix,
+                register: header,
+            } => {
+                let next = derive_register(
+                    path,
+                    prefix,
+                    header,
+                    &fields,
+                    matches!(register, MaybeArray::Array(..)),
+                );
+                match &derived {
+                    None => derived = Some(next),
+                    Some(first) if same_semantics(first, &next) => {}
+                    Some(_) => {
+                        return Ok(HeaderView::Absent {
+                            reason: format!(
+                                "the header's elements of {} differ (esp-idf:{path}:{})",
+                                register.name, header.line
+                            ),
+                            none: false,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    Ok(derived.map_or(HeaderView::Unmapped, HeaderView::Derived))
+}
+
+/// The vendor SVD of `text` with the overlay's corrections, `derivedFrom`
+/// resolved after them so a derived block takes its base's, and the
+/// headers of its peripherals.
+pub(crate) fn corrected_vendor(
+    text: &str,
+    overlay: &StrictnessOverlay,
+    tree: &dyn crate::HeaderTree,
+) -> Result<(Device, HeaderFacts)> {
+    let mut vendor =
+        svd_parser::parse(text).map_err(|error| Error::message(format!("vendor SVD: {error}")))?;
+    let mut derived = vendor.clone();
+    derive(&mut derived)?;
+    let facts = HeaderFacts::load(overlay, tree, &derived)?;
+    correct(&mut vendor, overlay, &facts)?;
+    derive(&mut vendor)?;
+    Ok((vendor, facts))
+}
+
+/// Every register of `device` its peripheral's header names at another
+/// offset: a wrong address is wrong whether or not the module renders it.
+fn moved_registers(device: &Device, facts: &HeaderFacts) -> Vec<String> {
+    let mut moved = Vec::new();
+    for peripheral in &device.peripherals {
+        for child in peripheral.registers.as_deref().unwrap_or_default() {
+            let RegisterCluster::Register(register) = child else {
+                continue;
+            };
+            for (name, offset) in elements(register) {
+                if let Lookup::Moved {
+                    path,
+                    register: header,
+                } = facts.lookup(
+                    &peripheral.name,
+                    &name,
+                    offset,
+                    matches!(register, MaybeArray::Array(..)),
+                ) {
+                    moved.push(format!(
+                        "{}.{name}: the vendor SVD places it at {offset:#x}, esp-idf:{path}:{} at {:#x}",
+                        peripheral.name, header.line, header.offset
+                    ));
+                }
+            }
+        }
+    }
+    moved
+}
+
+/// Apply the overlay's register corrections to the vendor SVD: offsets the
+/// header places elsewhere, and registers the SVD lacks, built from their
+/// header definition.
+fn correct(device: &mut Device, overlay: &StrictnessOverlay, facts: &HeaderFacts) -> Result<()> {
+    for rule in &overlay.registers {
+        if !rule.add && rule.offset.is_none() {
+            continue;
+        }
+        let subject = format!("{}.{}", rule.peripheral, rule.register);
+        let Some(peripheral) = device
+            .peripherals
+            .iter_mut()
+            .find(|peripheral| peripheral.name == rule.peripheral)
+        else {
+            return Err(Error::message(format!(
+                "overlay register {subject}: no such vendor peripheral"
+            )));
+        };
+        let registers = peripheral.registers.get_or_insert_with(Vec::new);
+        let existing = registers.iter_mut().find_map(|child| match child {
+            RegisterCluster::Register(register) if register.name == rule.register => Some(register),
+            _ => None,
+        });
+        match (rule.add, existing) {
+            (false, Some(register)) => {
+                if let Some(offset) = rule.offset {
+                    register.address_offset = offset;
+                }
+            }
+            (false, None) => {
+                return Err(Error::message(format!(
+                    "overlay register {subject} is not in the vendor SVD"
+                )));
+            }
+            (true, Some(_)) => {
+                return Err(Error::message(format!(
+                    "overlay adds {subject}, which the vendor SVD has"
+                )));
+            }
+            (true, None) => {
+                let Some((path, prefix, Some(header))) =
+                    facts.by_name(&rule.peripheral, &rule.register)
+                else {
+                    return Err(Error::message(format!(
+                        "overlay adds {subject}, which its peripheral's header does not define"
+                    )));
+                };
+                let offset = u32::try_from(header.offset).map_err(|_| {
+                    Error::message(format!("{subject}: header offset above 32 bits"))
+                })?;
+                if rule.offset.is_some_and(|stated| stated != offset) {
+                    return Err(Error::message(format!(
+                        "overlay adds {subject} at {:#x}, esp-idf:{path}:{} at {offset:#x}",
+                        rule.offset.unwrap_or_default(),
+                        header.line
+                    )));
+                }
+                let fields = header
+                    .fields
+                    .iter()
+                    .filter(|field| !crate::soc_headers::reserved_description(&field.description))
+                    .map(|field| {
+                        let access = match crate::soc_headers::class(&field.access) {
+                            Class::ReadOnly => Access::ReadOnly,
+                            Class::WriteOnly => Access::WriteOnly,
+                            _ => Access::ReadWrite,
+                        };
+                        svd_rs::FieldInfo::builder()
+                            .name(
+                                field
+                                    .name
+                                    .strip_prefix(prefix)
+                                    .unwrap_or(&field.name)
+                                    .to_owned(),
+                            )
+                            .description(Some(field.description.clone()))
+                            .bit_range(svd_rs::BitRange::from_offset_width(
+                                field.low,
+                                field.width(),
+                            ))
+                            .access(Some(access))
+                            .build(ValidateLevel::Disabled)
+                            .map(MaybeArray::Single)
+                            .map_err(|error| Error::message(error.to_string()))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                let register = svd_rs::RegisterInfo::builder()
+                    .name(rule.register.clone())
+                    .description(Some(format!(
+                        "The register the vendor SVD lacks, from esp-idf:{path}:{}.",
+                        header.line
+                    )))
+                    .address_offset(offset)
+                    .size(Some(32))
+                    .fields(Some(fields))
+                    .build(ValidateLevel::Disabled)
+                    .map_err(|error| Error::message(error.to_string()))?;
+                let at = registers
+                    .iter()
+                    .position(|child| match child {
+                        RegisterCluster::Register(register) => register.address_offset > offset,
+                        RegisterCluster::Cluster(cluster) => cluster.address_offset > offset,
+                    })
+                    .unwrap_or(registers.len());
+                registers.insert(at, RegisterCluster::Register(MaybeArray::Single(register)));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The conservative verdict on one register, with the register the typed
@@ -739,9 +1116,14 @@ fn classify(
     register: &svd_rs::Register,
     rule: Option<&RegisterRule>,
     field_rules: &BTreeMap<(&str, &str, &str), &FieldRule>,
-    triggers: &mut Vec<WriteTriggerField>,
-    fifos: &mut Vec<FifoPort>,
+    header: &HeaderView,
+    collected: &mut Collected,
 ) -> Result<(RegisterApi, Vec<String>, Option<svd_rs::Register>)> {
+    let Collected {
+        triggers,
+        fifos,
+        renames,
+    } = collected;
     let name = peripheral.name.as_str();
     let mut typed = register.clone();
     typed.description = typed.description.as_deref().map(doc_line);
@@ -803,6 +1185,51 @@ fn classify(
     }
     let mut reasons = Vec::new();
     let mut narrow = false;
+    let derived = match header {
+        HeaderView::Derived(derived) => {
+            if let Some(reason) = &derived.none {
+                return Ok((RegisterApi::None, vec![reason.clone()], None));
+            }
+            if !derived.narrow.is_empty() {
+                narrow = true;
+                reasons.extend(derived.narrow.iter().cloned());
+            }
+            Some(derived)
+        }
+        HeaderView::Absent { reason, none: true } => {
+            return Ok((RegisterApi::None, vec![reason.clone()], None));
+        }
+        HeaderView::Absent {
+            reason,
+            none: false,
+        } => {
+            narrow = true;
+            reasons.push(reason.clone());
+            None
+        }
+        HeaderView::Unmapped => {
+            narrow = true;
+            reasons.push("the overlay names no pinned header of its peripheral".to_owned());
+            None
+        }
+    };
+    if derived.is_none()
+        && let Some(field) = svd_fields(register)
+            .into_iter()
+            .find(|field| read_clears(field.description))
+    {
+        return Ok((
+            RegisterApi::None,
+            vec![format!(
+                "field {} is cleared by a read (the vendor SVD's description)",
+                field.name
+            )],
+            None,
+        ));
+    }
+    let explicit_w1c = rule.is_some_and(|rule| rule.write_one_to_clear);
+    let w1c = explicit_w1c || derived.is_some_and(|derived| derived.one_to_clear);
+    let mut header_reserved = 0_u32;
     let mut kept = Vec::new();
     // Overlapping fields: neither keeps an accessor.
     let mut overlapping = BTreeSet::new();
@@ -845,6 +1272,29 @@ fn classify(
         if overlapping.contains(&info.name) {
             continue;
         }
+        if derived.is_some_and(|derived| derived.reserved_fields.contains(&info.name)) {
+            // The header calls the lane reserved: no field, kept by writes.
+            header_reserved |= (u32::MAX >> (32 - width)) << offset;
+            continue;
+        }
+        let svd_name = info.name.clone();
+        let field_rule = field_rules
+            .get(&(name, register.name.as_str(), svd_name.as_str()))
+            .copied();
+        let derived_field = derived.and_then(|derived| derived.fields.get(&svd_name));
+        // The field's name is its source's: the overlay's, else the header's.
+        if let Some(rename) = field_rule
+            .and_then(|rule| rule.rename.as_ref())
+            .or_else(|| derived.and_then(|derived| derived.renamed.get(&svd_name)))
+        {
+            renames.push(Rename {
+                peripheral: name.to_owned(),
+                register: register.name.clone(),
+                svd: svd_name.clone(),
+                source: rename.clone(),
+            });
+            info.name.clone_from(rename);
+        }
         if !valid_module(&module_name(&info.name)) {
             narrow = true;
             reasons.push(format!(
@@ -853,18 +1303,20 @@ fn classify(
             ));
             continue;
         }
-        let field_rule = field_rules
-            .get(&(name, register.name.as_str(), info.name.as_str()))
-            .copied();
         // The overlay's field access, else its register access, else the
-        // SVD's field access, else the register's.
+        // header's class, else the SVD's field access, else the register's.
         let field_access = match (
             field_rule.and_then(|rule| rule.access),
             rule.and_then(|rule| rule.access),
         ) {
             (Some(field), _) => field.svd(),
             (None, Some(_)) => access,
-            (None, None) => info.access.unwrap_or(access),
+            (None, None) => match derived_field.map(|field| field.class) {
+                Some(Class::Plain | Class::Trigger | Class::OneToClear) => Access::ReadWrite,
+                Some(Class::ReadOnly) => Access::ReadOnly,
+                Some(Class::WriteOnly) => Access::WriteOnly,
+                _ => info.access.unwrap_or(access),
+            },
         };
         info.access = Some(field_access);
         info.enumerated_values.clear();
@@ -894,7 +1346,6 @@ fn classify(
             narrow = true;
             reasons.push(format!("field {} has a write constraint", info.name));
         }
-        let w1c = rule.is_some_and(|rule| rule.write_one_to_clear);
         if info.modified_write_values.take().is_some() && !w1c {
             narrow = true;
             reasons.push(format!(
@@ -905,15 +1356,26 @@ fn classify(
         if w1c {
             info.modified_write_values = Some(ModifiedWriteValues::OneToClear);
         }
-        let kind = field_rule.and_then(|rule| rule.kind);
+        let kind = field_rule.and_then(|rule| rule.kind).or_else(|| {
+            derived_field.and_then(|field| match field.class {
+                Class::Trigger if width == 1 => Some(FieldKind::WriteTrigger),
+                Class::Plain => Some(FieldKind::Plain),
+                _ => None,
+            })
+        });
         if kind == Some(FieldKind::WriteTrigger) {
             triggers.push(WriteTriggerField {
                 peripheral: name.to_owned(),
                 register: register.name.clone(),
                 field: info.name.clone(),
-                sources: field_rule
-                    .map(|rule| rule.sources.clone())
-                    .unwrap_or_default(),
+                sources: field_rule.map_or_else(
+                    || {
+                        derived_field
+                            .map(|field| vec![field.source.clone()])
+                            .unwrap_or_default()
+                    },
+                    |rule| rule.sources.clone(),
+                ),
             });
         } else if field_access == Access::WriteOnly && kind != Some(FieldKind::Plain) {
             narrow = true;
@@ -932,23 +1394,29 @@ fn classify(
         declared |= (u32::MAX >> (32 - width)) << offset;
         kept.push(MaybeArray::Single(info));
     }
-    let reserved = rule.and_then(|rule| rule.reserved).unwrap_or(0);
-    if reserved & declared != 0 {
+    let explicit = rule.and_then(|rule| rule.reserved);
+    if explicit.is_some_and(|reserved| reserved & declared != 0) {
         return Err(Error::message(format!(
             "overlay reserves bits of declared fields of {name}.{}",
             register.name
         )));
     }
+    let reserved = explicit
+        .unwrap_or_else(|| derived.map_or(0, |derived| derived.reserved & !declared))
+        | header_reserved;
     let undeclared = !(declared | reserved);
     if undeclared != 0 && access.can_write() {
         narrow = true;
         reasons.push(format!("undeclared bits 0x{undeclared:08x}"));
     }
-    if raw_status(&register.name) && !rule.is_some_and(|rule| rule.raw_status_writable) {
+    if raw_status(&register.name)
+        && !rule.is_some_and(|rule| rule.raw_status_writable)
+        && !derived.is_some_and(|derived| derived.one_to_clear)
+    {
         narrow = true;
         reasons.push("a raw interrupt status: what a write does is not stated".to_owned());
     }
-    if rule.is_some_and(|rule| rule.write_one_to_clear) && narrow {
+    if explicit_w1c && narrow {
         return Err(Error::message(format!(
             "overlay makes {name}.{} write-one-to-clear, but {}",
             register.name,
@@ -962,10 +1430,19 @@ fn classify(
         kept.retain(|field| field.access.is_none_or(|access| access.can_read()));
         for field in &mut kept {
             field.access = Some(Access::ReadOnly);
+            field.modified_write_values = None;
         }
     }
     if kept.is_empty() {
         reasons.push("no readable field remains".to_owned());
+        return Ok((RegisterApi::None, reasons, None));
+    }
+    let names = kept
+        .iter()
+        .map(|field| field.name.as_str())
+        .collect::<BTreeSet<_>>();
+    if names.len() != kept.len() {
+        reasons.push("two fields share a name after their header's".to_owned());
         return Ok((RegisterApi::None, reasons, None));
     }
     if fifo {
@@ -1103,15 +1580,17 @@ fn render_report(
     verdicts: &[RegisterVerdict],
     skipped: &[(String, String)],
     rendered: &[String],
+    renames: &[Rename],
 ) -> String {
     let count = |api: RegisterApi| verdicts.iter().filter(|verdict| verdict.api == api).count();
     let mut report = String::new();
     let _ = writeln!(
         report,
-        "# Generated by `cargo registers generate` from {vendor_path} and the\n\
-         # strictness overlay; do not edit. Every vendor register the conservative\n\
-         # pass narrowed, with its reasons: `read` has field reads only, `none` is\n\
-         # not rendered.\n\
+        "# Generated by `cargo registers generate` from {vendor_path}, the\n\
+         # strictness overlay and the pinned ESP-IDF headers; do not edit. Every\n\
+         # vendor field the API names after its header (`renamed`), and every\n\
+         # register the conservative pass narrowed, with its reasons: `read` has\n\
+         # field reads only, `none` is not rendered.\n\
          schema = 1\n\n\
          [summary]\n\
          peripherals = {}\n\
@@ -1119,13 +1598,15 @@ fn render_report(
          registers = {}\n\
          full = {}\n\
          read = {}\n\
-         none = {}\n",
+         none = {}\n\
+         renamed-fields = {}\n",
         rendered.len(),
         skipped.len(),
         verdicts.len(),
         count(RegisterApi::Full),
         count(RegisterApi::Read),
         count(RegisterApi::None),
+        renames.len(),
     );
     for (peripheral, reason) in skipped {
         let _ = writeln!(
@@ -1133,6 +1614,16 @@ fn render_report(
             "[[skipped]]\nperipheral = {}\nreason = {}\n",
             quote(peripheral),
             quote(reason)
+        );
+    }
+    for rename in renames {
+        let _ = writeln!(
+            report,
+            "[[renamed]]\nperipheral = {}\nregister = {}\nsvd = {}\nsource = {}\n",
+            quote(&rename.peripheral),
+            quote(&rename.register),
+            quote(&rename.svd),
+            quote(&rename.source)
         );
     }
     for verdict in verdicts

@@ -561,7 +561,11 @@ no firmware reaches: its binding index names no crate.
 A chip publication with a PAC may name `[soc]`: `svd` (the vendor SVD,
 unmodified), `overlay` (the chip's strictness overlay) and `report` (the
 generated report). The vendor SVD renders into the PAC API's `soc` module;
-see the [register model library](../model/README.md#the-vendor-svd).
+see the [register model library](../model/README.md#the-vendor-svd). The
+overlay's ESP-IDF headers are `esp-idf/<path>` artifacts of the chip's
+`vendor/artifacts.toml`, read verified from the vendor store: generation
+fails, naming `cargo pins fetch --chip <chip>`, while one is missing, and
+when the overlay's `esp-idf` pin is not the manifest's.
 
 ## Pinned header function signatures
 

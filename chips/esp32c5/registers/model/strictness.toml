@@ -1,14 +1,628 @@
-# The strictness overlay over the vendor SVD (`../upstream/esp32c5.svd`): what
-# the SVD does not state about access, read side effects, write-one-to-clear,
-# write triggers, FIFO ports, enumerated values and reserved bits, and the
-# interrupt sources it does not list. Every entry cites its source:
-# `esp-idf:<path>:<line>` at the pin below, `esp-hal:<path>:<line>` at the
-# esp-hal pin, or `trm:<section>`. What no entry states keeps the
-# conservative default of `cargo registers generate`; the generated
-# `../published/soc.report.toml` lists every register it narrowed.
+# The strictness overlay over the vendor SVD (`../upstream/esp32c5.svd`). The
+# `[[headers]]` table names each vendor peripheral's pinned ESP-IDF header;
+# `cargo registers generate` derives every register's API from its access
+# classes, reserved lanes and words, offsets and names, and checks every
+# `esp-idf:` citation below against the cited line. The entries state what
+# the headers do not, or correct the SVD: offsets, read side effects, FIFO
+# ports, enumerated values, and the interrupt sources the SVD does not list.
+# Every entry cites its source: `esp-idf:<path>:<line>` at the pin below,
+# `esp-hal:<path>:<line>` at the esp-hal pin, or `trm:<section>`. The
+# generated `../published/soc.report.toml` lists every renamed field and
+# every register the pass narrowed.
 schema = 1
 esp-idf = "4d59230ddff16327812782151ef0afef202dc6d7"
 esp-hal = "1f646c5af4f4ca2774f493783581237fea2379dc"
+
+
+# The pinned ESP-IDF header of each vendor peripheral: its `*_reg.h` states
+# every register's offset and every field's bits, access class and
+# description, its `*_struct.h` the device layout's reserved words. The
+# generator derives each register's API from them; a register the header
+# places elsewhere than the SVD is an error until an entry below corrects it.
+
+[[headers]]
+peripheral = "AES"
+registers = "components/soc/esp32c5/register/soc/aes_reg.h"
+layout = "components/soc/esp32c5/register/soc/aes_struct.h"
+
+[[headers]]
+peripheral = "AHB_DMA"
+registers = "components/soc/esp32c5/register/soc/ahb_dma_reg.h"
+layout = "components/soc/esp32c5/register/soc/ahb_dma_struct.h"
+
+[[headers]]
+peripheral = "APB_SARADC"
+registers = "components/soc/esp32c5/register/soc/apb_saradc_reg.h"
+layout = "components/soc/esp32c5/register/soc/apb_saradc_struct.h"
+
+[[headers]]
+peripheral = "BITSCRAMBLER"
+registers = "components/soc/esp32c5/register/soc/bitscrambler_reg.h"
+layout = "components/soc/esp32c5/register/soc/bitscrambler_struct.h"
+
+[[headers]]
+peripheral = "BUS_MONITOR"
+registers = "components/soc/esp32c5/register/soc/bus_monitor_reg.h"
+layout = "components/soc/esp32c5/register/soc/bus_monitor_struct.h"
+
+[[headers]]
+peripheral = "DS"
+registers = "components/soc/esp32c5/register/soc/ds_reg.h"
+layout = "components/soc/esp32c5/register/soc/ds_struct.h"
+
+[[headers]]
+peripheral = "ECC"
+registers = "components/soc/esp32c5/register/soc/ecc_mult_reg.h"
+layout = "components/soc/esp32c5/register/soc/ecc_mult_struct.h"
+
+[[headers]]
+peripheral = "ECDSA"
+registers = "components/soc/esp32c5/register/soc/ecdsa_reg.h"
+layout = "components/soc/esp32c5/register/soc/ecdsa_struct.h"
+
+[[headers]]
+peripheral = "EFUSE"
+registers = "components/soc/esp32c5/register/soc/efuse_reg.h"
+layout = "components/soc/esp32c5/register/soc/efuse_struct.h"
+
+[[headers]]
+peripheral = "GPIO"
+registers = "components/soc/esp32c5/register/soc/gpio_reg.h"
+layout = "components/soc/esp32c5/register/soc/gpio_struct.h"
+
+[[headers]]
+peripheral = "GPIO_EXT"
+registers = "components/soc/esp32c5/register/soc/gpio_ext_reg.h"
+layout = "components/soc/esp32c5/register/soc/gpio_ext_struct.h"
+
+[[headers]]
+peripheral = "HMAC"
+registers = "components/soc/esp32c5/register/soc/hmac_reg.h"
+layout = "components/soc/esp32c5/register/soc/hmac_struct.h"
+
+[[headers]]
+peripheral = "HP_APM"
+registers = "components/soc/esp32c5/register/soc/hp_apm_reg.h"
+layout = "components/soc/esp32c5/register/soc/hp_apm_struct.h"
+
+[[headers]]
+peripheral = "HP_SYSTEM"
+registers = "components/soc/esp32c5/register/soc/hp_system_reg.h"
+layout = "components/soc/esp32c5/register/soc/hp_system_struct.h"
+
+[[headers]]
+peripheral = "HUK"
+registers = "components/soc/esp32c5/register/soc/huk_reg.h"
+layout = "components/soc/esp32c5/register/soc/huk_struct.h"
+
+[[headers]]
+peripheral = "I2C0"
+registers = "components/soc/esp32c5/register/soc/i2c_reg.h"
+layout = "components/soc/esp32c5/register/soc/i2c_struct.h"
+
+[[headers]]
+peripheral = "I2S0"
+registers = "components/soc/esp32c5/register/soc/i2s_reg.h"
+layout = "components/soc/esp32c5/register/soc/i2s_struct.h"
+
+[[headers]]
+peripheral = "INTERRUPT_CORE0"
+registers = "components/soc/esp32c5/register/soc/interrupt_matrix_reg.h"
+layout = "components/soc/esp32c5/register/soc/interrupt_matrix_struct.h"
+
+[[headers]]
+peripheral = "INTPRI"
+registers = "components/soc/esp32c5/register/soc/intpri_reg.h"
+layout = "components/soc/esp32c5/register/soc/intpri_struct.h"
+
+[[headers]]
+peripheral = "IO_MUX"
+registers = "components/soc/esp32c5/register/soc/io_mux_reg.h"
+layout = "components/soc/esp32c5/register/soc/io_mux_struct.h"
+
+[[headers]]
+peripheral = "KEYMNG"
+registers = "components/soc/esp32c5/register/soc/keymng_reg.h"
+layout = "components/soc/esp32c5/register/soc/keymng_struct.h"
+
+[[headers]]
+peripheral = "LEDC"
+registers = "components/soc/esp32c5/register/soc/ledc_reg.h"
+layout = "components/soc/esp32c5/register/soc/ledc_struct.h"
+
+[[headers]]
+peripheral = "LPPERI"
+registers = "components/soc/esp32c5/register/soc/lpperi_reg.h"
+layout = "components/soc/esp32c5/register/soc/lpperi_struct.h"
+
+[[headers]]
+peripheral = "LP_ANA"
+registers = "components/soc/esp32c5/register/soc/lp_analog_peri_reg.h"
+layout = "components/soc/esp32c5/register/soc/lp_analog_peri_struct.h"
+
+[[headers]]
+peripheral = "LP_AON"
+registers = "components/soc/esp32c5/register/soc/lp_aon_reg.h"
+layout = "components/soc/esp32c5/register/soc/lp_aon_struct.h"
+
+[[headers]]
+peripheral = "LP_APM0"
+registers = "components/soc/esp32c5/register/soc/lp_apm_reg.h"
+layout = "components/soc/esp32c5/register/soc/lp_apm_struct.h"
+
+[[headers]]
+peripheral = "LP_CLKRST"
+registers = "components/soc/esp32c5/register/soc/lp_clkrst_reg.h"
+layout = "components/soc/esp32c5/register/soc/lp_clkrst_struct.h"
+
+[[headers]]
+peripheral = "LP_IO"
+registers = "components/soc/esp32c5/register/soc/lp_gpio_reg.h"
+layout = "components/soc/esp32c5/register/soc/lp_gpio_struct.h"
+
+[[headers]]
+peripheral = "LP_I2C0"
+registers = "components/soc/esp32c5/register/soc/lp_i2c_reg.h"
+layout = "components/soc/esp32c5/register/soc/lp_i2c_struct.h"
+
+[[headers]]
+peripheral = "LP_I2C_ANA_MST"
+registers = "components/soc/esp32c5/register/soc/lp_i2c_ana_mst_reg.h"
+layout = "components/soc/esp32c5/register/soc/lp_i2c_ana_mst_struct.h"
+
+[[headers]]
+peripheral = "LP_IO_MUX"
+registers = "components/soc/esp32c5/register/soc/lp_iomux_reg.h"
+layout = "components/soc/esp32c5/register/soc/lp_iomux_struct.h"
+
+[[headers]]
+peripheral = "LP_TEE"
+registers = "components/soc/esp32c5/register/soc/lp_tee_reg.h"
+layout = "components/soc/esp32c5/register/soc/lp_tee_struct.h"
+
+[[headers]]
+peripheral = "LP_TIMER"
+registers = "components/soc/esp32c5/register/soc/lp_timer_reg.h"
+layout = "components/soc/esp32c5/register/soc/lp_timer_struct.h"
+
+[[headers]]
+peripheral = "LP_UART"
+registers = "components/soc/esp32c5/register/soc/lp_uart_reg.h"
+layout = "components/soc/esp32c5/register/soc/lp_uart_struct.h"
+
+[[headers]]
+peripheral = "LP_WDT"
+registers = "components/soc/esp32c5/register/soc/lp_wdt_reg.h"
+layout = "components/soc/esp32c5/register/soc/lp_wdt_struct.h"
+
+[[headers]]
+peripheral = "MCPWM0"
+registers = "components/soc/esp32c5/register/soc/mcpwm_reg.h"
+layout = "components/soc/esp32c5/register/soc/mcpwm_struct.h"
+
+[[headers]]
+peripheral = "MEM_MONITOR"
+registers = "components/soc/esp32c5/register/soc/mem_monitor_reg.h"
+layout = "components/soc/esp32c5/register/soc/mem_monitor_struct.h"
+
+[[headers]]
+peripheral = "PARL_IO"
+registers = "components/soc/esp32c5/register/soc/parl_io_reg.h"
+layout = "components/soc/esp32c5/register/soc/parl_io_struct.h"
+
+[[headers]]
+peripheral = "PAU"
+registers = "components/soc/esp32c5/register/soc/pau_reg.h"
+layout = "components/soc/esp32c5/register/soc/pau_struct.h"
+
+[[headers]]
+peripheral = "PCNT"
+registers = "components/soc/esp32c5/register/soc/pcnt_reg.h"
+layout = "components/soc/esp32c5/register/soc/pcnt_struct.h"
+
+[[headers]]
+peripheral = "PCR"
+registers = "components/soc/esp32c5/register/soc/pcr_reg.h"
+layout = "components/soc/esp32c5/register/soc/pcr_struct.h"
+
+[[headers]]
+peripheral = "PMU"
+registers = "components/soc/esp32c5/register/soc/pmu_reg.h"
+layout = "components/soc/esp32c5/register/soc/pmu_struct.h"
+
+[[headers]]
+peripheral = "PVT"
+registers = "components/soc/esp32c5/register/soc/pvt_reg.h"
+layout = "components/soc/esp32c5/register/soc/pvt_struct.h"
+
+[[headers]]
+peripheral = "RMT"
+registers = "components/soc/esp32c5/register/soc/rmt_reg.h"
+layout = "components/soc/esp32c5/register/soc/rmt_struct.h"
+
+[[headers]]
+peripheral = "RSA"
+registers = "components/soc/esp32c5/register/soc/rsa_reg.h"
+layout = "components/soc/esp32c5/register/soc/rsa_struct.h"
+
+[[headers]]
+peripheral = "SHA"
+registers = "components/soc/esp32c5/register/soc/sha_reg.h"
+layout = "components/soc/esp32c5/register/soc/sha_struct.h"
+
+[[headers]]
+peripheral = "SOC_ETM"
+registers = "components/soc/esp32c5/register/soc/soc_etm_reg.h"
+layout = "components/soc/esp32c5/register/soc/soc_etm_struct.h"
+
+[[headers]]
+peripheral = "SPI0"
+registers = "components/soc/esp32c5/register/soc/spi_mem_c_reg.h"
+layout = "components/soc/esp32c5/register/soc/spi_mem_c_struct.h"
+
+[[headers]]
+peripheral = "SPI1"
+registers = "components/soc/esp32c5/register/soc/spi1_mem_reg.h"
+layout = "components/soc/esp32c5/register/soc/spi1_mem_struct.h"
+
+[[headers]]
+peripheral = "SPI2"
+registers = "components/soc/esp32c5/register/soc/spi_reg.h"
+layout = "components/soc/esp32c5/register/soc/spi_struct.h"
+
+[[headers]]
+peripheral = "SYSTIMER"
+registers = "components/soc/esp32c5/register/soc/systimer_reg.h"
+layout = "components/soc/esp32c5/register/soc/systimer_struct.h"
+
+[[headers]]
+peripheral = "TEE"
+registers = "components/soc/esp32c5/register/soc/tee_reg.h"
+layout = "components/soc/esp32c5/register/soc/tee_struct.h"
+
+[[headers]]
+peripheral = "TIMG0"
+registers = "components/soc/esp32c5/register/soc/timer_group_reg.h"
+layout = "components/soc/esp32c5/register/soc/timer_group_struct.h"
+
+[[headers]]
+peripheral = "TIMG1"
+registers = "components/soc/esp32c5/register/soc/timer_group_reg.h"
+layout = "components/soc/esp32c5/register/soc/timer_group_struct.h"
+
+[[headers]]
+peripheral = "TRACE"
+registers = "components/soc/esp32c5/register/soc/trace_reg.h"
+layout = "components/soc/esp32c5/register/soc/trace_struct.h"
+
+[[headers]]
+peripheral = "TWAI0"
+registers = "components/soc/esp32c5/register/soc/twaifd_reg.h"
+layout = "components/soc/esp32c5/register/soc/twaifd_struct.h"
+
+[[headers]]
+peripheral = "TWAI1"
+registers = "components/soc/esp32c5/register/soc/twaifd_reg.h"
+layout = "components/soc/esp32c5/register/soc/twaifd_struct.h"
+
+[[headers]]
+peripheral = "UART0"
+registers = "components/soc/esp32c5/register/soc/uart_reg.h"
+layout = "components/soc/esp32c5/register/soc/uart_struct.h"
+
+[[headers]]
+peripheral = "UART1"
+registers = "components/soc/esp32c5/register/soc/uart_reg.h"
+layout = "components/soc/esp32c5/register/soc/uart_struct.h"
+
+[[headers]]
+peripheral = "UHCI0"
+registers = "components/soc/esp32c5/register/soc/uhci_reg.h"
+layout = "components/soc/esp32c5/register/soc/uhci_struct.h"
+
+[[headers]]
+peripheral = "USB_DEVICE"
+registers = "components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h"
+layout = "components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h"
+
+# Registers the vendor SVD places elsewhere than the pinned header, and the
+# one it lacks (EFUSE.ECDSA, whose absence shifts STATUS ... WR_TIM_CONF0_RS_BYPASS
+# by one word): each at its header's offset.
+
+[[registers]]
+peripheral = "EFUSE"
+register = "STATUS"
+offset = 0x1d4
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2809"]
+
+[[registers]]
+peripheral = "EFUSE"
+register = "RD_TIM_CONF"
+offset = 0x1f0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:3022"]
+
+[[registers]]
+peripheral = "EFUSE"
+register = "WR_TIM_CONF1"
+offset = 0x1f4
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:3056"]
+
+[[registers]]
+peripheral = "EFUSE"
+register = "WR_TIM_CONF2"
+offset = 0x1f8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:3085"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "MSPI_INTR_MAP"
+offset = 0xb0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:852"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "I2S_INTR_MAP"
+offset = 0xb4
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:871"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "UHCI0_INTR_MAP"
+offset = 0xb8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:890"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "UART0_INTR_MAP"
+offset = 0xbc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:909"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "UART1_INTR_MAP"
+offset = 0xc0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:928"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "LEDC_INTR_MAP"
+offset = 0xc4
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:947"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "TWAI0_INTR_MAP"
+offset = 0xc8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:966"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "TWAI0_TIMER_INTR_MAP"
+offset = 0xcc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:985"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "TWAI1_INTR_MAP"
+offset = 0xd0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1004"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "TWAI1_TIMER_INTR_MAP"
+offset = 0xd4
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1023"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "USB_SERIAL_JTAG_INTR_MAP"
+offset = 0xd8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1042"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "RMT_INTR_MAP"
+offset = 0xdc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1061"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "I2C_EXT0_INTR_MAP"
+offset = 0xe0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1080"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "TG0_T0_INTR_MAP"
+offset = 0xe4
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1099"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "TG0_WDT_INTR_MAP"
+offset = 0xe8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1118"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "TG1_T0_INTR_MAP"
+offset = 0xec
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1137"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "TG1_WDT_INTR_MAP"
+offset = 0xf0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1156"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "SYSTIMER_TARGET0_INTR_MAP"
+offset = 0xf4
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1175"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "SYSTIMER_TARGET1_INTR_MAP"
+offset = 0xf8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1194"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "SYSTIMER_TARGET2_INTR_MAP"
+offset = 0xfc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1213"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "APB_ADC_INTR_MAP"
+offset = 0x100
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1232"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "PWM_INTR_MAP"
+offset = 0x104
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1251"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "PCNT_INTR_MAP"
+offset = 0x108
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1270"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "PARL_IO_TX_INTR_MAP"
+offset = 0x10c
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1289"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "PARL_IO_RX_INTR_MAP"
+offset = 0x110
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1308"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "DMA_IN_CH0_INTR_MAP"
+offset = 0x11c
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1365"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "DMA_IN_CH1_INTR_MAP"
+offset = 0x120
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1384"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "DMA_IN_CH2_INTR_MAP"
+offset = 0x124
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1403"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "DMA_OUT_CH0_INTR_MAP"
+offset = 0x128
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1422"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "DMA_OUT_CH1_INTR_MAP"
+offset = 0x12c
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1441"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "DMA_OUT_CH2_INTR_MAP"
+offset = 0x130
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1460"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "GPSPI2_INTR_MAP"
+offset = 0x134
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1479"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "AES_INTR_MAP"
+offset = 0x138
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1498"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "SHA_INTR_MAP"
+offset = 0x13c
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1517"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "RSA_INTR_MAP"
+offset = 0x140
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1536"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "ECC_INTR_MAP"
+offset = 0x144
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1555"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "ECDSA_INTR_MAP"
+offset = 0x148
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1574"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "KM_INTR_MAP"
+offset = 0x14c
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1593"]
+
+[[registers]]
+peripheral = "INTPRI"
+register = "CPU_INTR_FROM_CPU_3"
+offset = 0x9c
+sources = ["esp-idf:components/soc/esp32c5/register/soc/intpri_reg.h:52"]
+
+[[registers]]
+peripheral = "LP_TEE"
+register = "CLOCK_GATE"
+offset = 0xf8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_tee_reg.h:1148"]
+
+[[registers]]
+peripheral = "TEE"
+register = "CLOCK_GATE"
+offset = 0xff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/tee_reg.h:3526"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "INT_STATUS_0"
+offset = 0x150
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1612"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "INT_STATUS_1"
+offset = 0x154
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1627"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "INT_STATUS_2"
+offset = 0x158
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1642"]
+
+[[registers]]
+peripheral = "EFUSE"
+register = "ECDSA"
+add = true
+offset = 0x1d0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2748"]
 
 # Interrupt sources the vendor SVD does not list, numbered as ESP-IDF's
 # interrupts.h enumerates them; the name drops ETS_ and _INTR_SOURCE
@@ -78,11 +692,6 @@ sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:95"]
 name = "KM"
 source = 83
 sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:102"]
-
-[[interrupts]]
-name = "MAX"
-source = 84
-sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:103"]
 
 
 # PCR: components/soc/esp32c5/register/soc/pcr_reg.h and pcr_struct.h.
@@ -2588,12 +3197,14 @@ sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2692", "esp-
 [[registers]]
 peripheral = "EFUSE"
 register = "CMD"
+offset = 0x1d8
 access = "read-only"
 sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2879"]
 
 [[registers]]
 peripheral = "EFUSE"
 register = "INT_RAW"
+offset = 0x1dc
 write-one-to-clear = true
 raw-status-writable = true
 reserved = 0xfffffffc
@@ -2602,18 +3213,21 @@ sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2910", "esp-
 [[registers]]
 peripheral = "EFUSE"
 register = "INT_ST"
+offset = 0x1e0
 reserved = 0xfffffffc
 sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2929", "esp-idf:components/soc/esp32c5/register/soc/efuse_struct.h:1894"]
 
 [[registers]]
 peripheral = "EFUSE"
 register = "INT_ENA"
+offset = 0x1e4
 reserved = 0xfffffffc
 sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2948", "esp-idf:components/soc/esp32c5/register/soc/efuse_struct.h:1912"]
 
 [[registers]]
 peripheral = "EFUSE"
 register = "INT_CLR"
+offset = 0x1e8
 reserved = 0xfffffffc
 sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2967", "esp-idf:components/soc/esp32c5/register/soc/efuse_struct.h:1930"]
 
@@ -2636,6 +3250,7 @@ sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2975"]
 [[registers]]
 peripheral = "EFUSE"
 register = "DAC_CONF"
+offset = 0x1ec
 reserved = 0xfffc0000
 sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2986", "esp-idf:components/soc/esp32c5/register/soc/efuse_struct.h:1630"]
 
@@ -2649,6 +3264,7 @@ sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:3009"]
 [[registers]]
 peripheral = "EFUSE"
 register = "WR_TIM_CONF0_RS_BYPASS"
+offset = 0x1fc
 reserved = 0xffe00000
 sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:3107", "esp-idf:components/soc/esp32c5/register/soc/efuse_struct.h:1731"]
 
@@ -2828,6 +3444,7 @@ sources = ["esp-idf:components/soc/esp32c5/register/soc/intpri_reg.h:88", "esp-i
 [[registers]]
 peripheral = "INTERRUPT_CORE0"
 register = "CLOCK_GATE"
+offset = 0x170
 reserved = 0xfffffffe
 sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1726", "esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_struct.h:1636"]
 
