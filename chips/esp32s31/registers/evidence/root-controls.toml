@@ -2,12 +2,16 @@
 schema = 1
 
 [[sources]]
-id = "ESP_IDF_4D59230D_S31_CLK_GATE_LL_H_L182"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/esp_hal_clock/esp32s31/include/hal/clk_gate_ll.h:182, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
+id = "ESP_IDF_4D59230D_S31_BOOTLOADER_INIT_C_L94"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/bootloader_support/src/bootloader_init.c:94, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Initializes the RWDT context used by the following timeout calculation."
 
 [[sources]]
-id = "ESP_IDF_4D59230D_S31_CLK_GATE_LL_H_L183"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/esp_hal_clock/esp32s31/include/hal/clk_gate_ll.h:183, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
+id = "ESP_IDF_4D59230D_S31_BOOTLOADER_INIT_C_L95"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/bootloader_support/src/bootloader_init.c:95, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Computes watchdog timeout ticks from rtc_clk_slow_freq_get_hz()."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_BOOTLOADER_INIT_C_L97"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/bootloader_support/src/bootloader_init.c:97, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Configures the RWDT stage with those RTC slow-clock timeout ticks."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_CLK_TREE_DEFS_H_L299"
@@ -30,6 +34,14 @@ id = "ESP_IDF_4D59230D_S31_CLK_TREE_LL_H_L934"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:934, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
 
 [[sources]]
+id = "ESP_IDF_4D59230D_S31_CLK_TREE_LL_H_L936"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:936, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Names slow_clk_sel encoding 3 as SOC_RTC_SLOW_CLK_SRC_OSC_SLOW."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_CLK_TREE_LL_H_L937"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:937, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Identifies OSC_SLOW as an external circuit connected to XTAL_32K_N."
+
+[[sources]]
 id = "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L161"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:161, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
 
@@ -46,44 +58,12 @@ id = "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L189"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:189, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
 
 [[sources]]
-id = "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L2268"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:2268, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
-
-[[sources]]
-id = "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L2271"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:2271, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
-
-[[sources]]
-id = "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L2340"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:2340, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
-
-[[sources]]
-id = "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L2343"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:2343, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
-
-[[sources]]
 id = "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L2539"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:2539, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L2543"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:2543, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
-
-[[sources]]
-id = "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L3580"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:3580, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
-
-[[sources]]
-id = "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L3589"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:3589, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
-
-[[sources]]
-id = "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L3597"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:3597, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
-
-[[sources]]
-id = "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L3601"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:3601, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L361"
@@ -154,32 +134,12 @@ id = "ESP_IDF_4D59230D_S31_LP_CLKRST_STRUCT_H_L136"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:136, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
 
 [[sources]]
-id = "ESP_IDF_4D59230D_S31_LP_CLKRST_STRUCT_H_L56"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:56, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
-
-[[sources]]
 id = "ESP_IDF_4D59230D_S31_LP_PERI_CLKRST_STRUCT_H_L191"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/lp_peri_clkrst_struct.h:191, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_LP_PERI_CLKRST_STRUCT_H_L195"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/lp_peri_clkrst_struct.h:195, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
-
-[[sources]]
-id = "ESP_IDF_4D59230D_S31_MODEM_CLOCK_HAL_C_L124"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/hal/esp32s31/modem_clock_hal.c:124, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
-
-[[sources]]
-id = "ESP_IDF_4D59230D_S31_MODEM_CLOCK_HAL_C_L125"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/hal/esp32s31/modem_clock_hal.c:125, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
-
-[[sources]]
-id = "ESP_IDF_4D59230D_S31_MODEM_CLOCK_HAL_C_L127"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/hal/esp32s31/modem_clock_hal.c:127, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
-
-[[sources]]
-id = "ESP_IDF_4D59230D_S31_MODEM_CLOCK_HAL_C_L128"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/hal/esp32s31/modem_clock_hal.c:128, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_MODEM_CLOCK_HAL_C_L141"
@@ -622,14 +582,6 @@ id = "ESP_IDF_4D59230D_S31_MSPI_LL_H_L257"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/esp_hal_mspi/esp32s31/include/hal/mspi_ll.h:257, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
 
 [[sources]]
-id = "ESP_IDF_4D59230D_S31_MWDT_LL_H_L275"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h:275, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
-
-[[sources]]
-id = "ESP_IDF_4D59230D_S31_MWDT_LL_H_L282"
-description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h:282, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
-
-[[sources]]
 id = "ESP_IDF_4D59230D_S31_MWDT_LL_H_L295"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h:295, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
 
@@ -704,6 +656,30 @@ description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_RNG_LL_H_L38"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/hal/esp32s31/include/hal/rng_ll.h:38, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_SPIMEM_FLASH_LL_H_L40"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:40, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Maps SPI1_HOST to SPIMEM1 in the flash LL."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_SPIMEM_FLASH_LL_H_L808"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:808, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Declares the flash controller clock-disable helper with an MSPI ID."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_SPIMEM_FLASH_LL_H_L810"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:810, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Discards the MSPI ID before disabling the common FLASH clocks."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_SPIMEM_FLASH_LL_H_L811"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:811, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Disables FLASH_CTRL0.reg_flash_core_clk_en."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_SPIMEM_FLASH_LL_H_L812"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:812, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Disables FLASH_CTRL0.reg_flash_pll_clk_en."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_SPIMEM_FLASH_LL_H_L813"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:813, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Disables FLASH_CTRL0.reg_flash_sys_clk_en."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_SYSTIMER_LL_H_L40"

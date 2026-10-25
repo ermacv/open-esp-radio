@@ -361,6 +361,86 @@ fn timg0_keeps_its_bus_timer_watchdog_gates_and_group_reset() {
             .collect::<Vec<_>>(),
         [(0, "XTAL"), (1, "RC_FAST"), (2, "REF_F80M")]
     );
+    // The LL's XTAL assertion never writes a selector encoding, and its
+    // default-clock comment names P4. Neither establishes an S31 input.
+    for instance in ["TIMG0", "TIMG1"] {
+        assert!(!model.controls().iter().any(|link| {
+            link.instance == instance && link.kind == ControlKind::Mux && link.role == "wdt"
+        }));
+    }
+}
+
+#[test]
+fn root_controls_keep_policy_dependencies_and_unestablished_relations_absent() {
+    let model = model();
+    assert!(
+        model
+            .gate_groups()
+            .iter()
+            .all(|group| group.name != "SOC_PLL_SOURCE_CG")
+    );
+    let pad_gate = "HP_SYS_CLKRST.MSPI_PAD_CTRL0.REG_MSPI_PAD_CTRL_APB_CLK_EN";
+    let pad_users = model
+        .controls()
+        .iter()
+        .filter(|link| link.field.identity == pad_gate)
+        .map(|link| (link.instance.as_str(), link.kind, link.role.as_str()))
+        .collect::<Vec<_>>();
+    assert_eq!(pad_users, [("IOMUX_MSPI_PIN", ControlKind::Clock, "bus")]);
+    assert!(
+        model
+            .shared_controls()
+            .iter()
+            .all(|shared| shared.field != pad_gate)
+    );
+    assert!(!model.controls().iter().any(|link| {
+        link.instance == "EFUSE" && link.kind == ControlKind::Clock && link.role == "core"
+    }));
+
+    let spi1 = model
+        .controls()
+        .iter()
+        .filter(|link| link.instance == "SPI1")
+        .collect::<Vec<_>>();
+    assert_eq!(spi1.len(), 3);
+    for link in spi1 {
+        assert_eq!(link.kind, ControlKind::Clock);
+        assert!(
+            link.sources
+                .iter()
+                .any(|source| source == "ESP_IDF_4D59230D_S31_SPIMEM_FLASH_LL_H_L810")
+        );
+        let shared = model
+            .shared_controls()
+            .iter()
+            .find(|shared| shared.field == link.field.identity)
+            .expect("the established FLASH gate has explicit users");
+        assert_eq!(shared.instances, ["SPI0", "SPI1"]);
+    }
+}
+
+#[test]
+fn lp_watchdog_slow_clock_link_cites_its_consumer_and_all_established_inputs() {
+    let model = model();
+    let mux = model
+        .controls()
+        .iter()
+        .find(|link| {
+            link.instance == "LP_WDT" && link.kind == ControlKind::Mux && link.role == "slow"
+        })
+        .expect("RWDT timeout ticks use the RTC slow-clock frequency");
+    assert!(
+        mux.sources
+            .iter()
+            .any(|source| source == "ESP_IDF_4D59230D_S31_BOOTLOADER_INIT_C_L95")
+    );
+    assert_eq!(
+        mux.inputs
+            .iter()
+            .map(|(code, name)| (*code, name.as_str()))
+            .collect::<Vec<_>>(),
+        [(0, "RC_SLOW"), (1, "XTAL32K"), (3, "OSC_SLOW")]
+    );
 }
 
 #[test]

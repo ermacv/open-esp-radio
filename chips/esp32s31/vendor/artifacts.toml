@@ -1886,3 +1886,9 @@ id = "esp-idf-clocks/components/soc/esp32s31/include/soc/clk_tree_defs.h"
 source = "esp-idf-clocks"
 path = "components/soc/esp32s31/include/soc/clk_tree_defs.h"
 sha256 = "2bc8b7ba38679ccd52c30893248dbadb20b4a5dc750686b65c6e72a54d4dd7b6"
+
+[[artifact]]
+id = "esp-idf-clocks/components/bootloader_support/src/bootloader_init.c"
+source = "esp-idf-clocks"
+path = "components/bootloader_support/src/bootloader_init.c"
+sha256 = "61752b7c541d1bd5d0437a667f3c4c0895f81d8388f2b602f2d77d2b766a97ad"
