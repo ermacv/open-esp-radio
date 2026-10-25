@@ -6,8 +6,8 @@ device-access = true
 allow-clippy-empty-docs = true
 # Typed register blocks over `oer-mmio`; svd2rust renders every other
 # exposed peripheral. The platform blocks (eFuse, TRNG, reset cause,
-# watchdogs, the USB Serial/JTAG console) are claimed by their own platform
-# handoffs, as are the step-4 blocks (system timer, software interrupt lines,
+# watchdogs, the USB Serial/JTAG console, core control) are claimed by their
+# own platform handoffs, as are the step-4 blocks (system timer, software interrupt lines,
 # interrupt matrix and CLIC).
 typed-peripherals = [
     "IEEE802154_MAC",
@@ -53,6 +53,10 @@ typed-peripherals = [
     "INTERRUPT_CORE1_STATUS",
     "USB_SERIAL_JTAG",
     "USB_SERIAL_JTAG_PADS",
+    "PMU_CPU_STALL",
+    "HP_SYS_CORE_STALL_STATUS",
+    "HP_SYS_CLKRST_CORE",
+    "LP_AON_CLKRST_CORE_RESET",
 ]
 
 
@@ -61,6 +65,13 @@ name = "UsbSerialJtagPeripherals"
 member = "usb_serial_jtag"
 description = "The USB Serial/JTAG console: its data FIFO, interrupts and pads, written by the early writer before the console's driver exists and by the driver after."
 peripherals = ["USB_SERIAL_JTAG", "USB_SERIAL_JTAG_PADS"]
+handoff = true
+
+[[ownership-partitions]]
+name = "CoreControlPeripherals"
+member = "core_control"
+description = "Core control: each HP core's stall request and stall status, HP core 1's clocks and global reset, each core's software CPU reset and UART0's function clock, written by the cores' owner and the fatal path."
+peripherals = ["PMU_CPU_STALL", "HP_SYS_CORE_STALL_STATUS", "HP_SYS_CLKRST_CORE", "LP_AON_CLKRST_CORE_RESET"]
 handoff = true
 
 [[ownership-partitions]]
@@ -11001,3 +11012,15 @@ sources = ["ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"]
 peripheral = "USB_SERIAL_JTAG"
 register = "EP1"
 sources = ["ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"]
+
+[[write-trigger-fields]]
+peripheral = "LP_AON_CLKRST_CORE_RESET"
+register = "HPCORE0_RESET_CTRL"
+field = "HPCORE0_SW_RESET"
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[[write-trigger-fields]]
+peripheral = "LP_AON_CLKRST_CORE_RESET"
+register = "HPCORE1_RESET_CTRL"
+field = "HPCORE1_SW_RESET"
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]

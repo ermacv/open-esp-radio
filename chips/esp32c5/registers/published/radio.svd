@@ -11418,6 +11418,53 @@ documentation establishes their electrical meaning.</description>
       </registers>
     </peripheral>
     <peripheral>
+      <name>PCR_UART0_CLOCK</name>
+      <description>Peripheral clock/reset registers: UART0's function clock, which the boot ROM prints through after a software reset.</description>
+      <baseAddress>0x60096000</baseAddress>
+      <registers>
+        <register>
+          <name>UART0_SCLK_CONF</name>
+          <description>UART0's function clock: divider, source and enable.</description>
+          <addressOffset>0x4</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00400000</resetValue>
+          <fields>
+            <field>
+              <name>UART0_SCLK_DIV_A</name>
+              <description>Denominator of the function clock divider's fractional part.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>6</bitWidth>
+            </field>
+            <field>
+              <name>UART0_SCLK_DIV_B</name>
+              <description>Numerator of the function clock divider's fractional part.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>6</bitWidth>
+            </field>
+            <field>
+              <name>UART0_SCLK_DIV_NUM</name>
+              <description>Integral part of the function clock divider; zero divides by one.</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>UART0_SCLK_SEL</name>
+              <description>Function clock source: 0 XTAL, 1 RC_FAST, 2 PLL_F80M.</description>
+              <bitOffset>20</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>UART0_SCLK_EN</name>
+              <description>Function clock enable.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
       <name>SYSTIMER</name>
       <description>The system timer's comparators: their enables in CONF, targets, modes, load
 strobes and interrupt enables; their acknowledgements are SYSTIMER_ACKNOWLEDGE. The counter latch of unit

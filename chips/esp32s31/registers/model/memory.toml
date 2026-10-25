@@ -329,10 +329,42 @@ end-exclusive = 0x20586020
 permissions = "rw"
 
 [[regions]]
-name = "hp-system-between-from-cpu-and-radio-modem-control"
+name = "hp-system-between-from-cpu-and-core-stall-status"
 address-space = "cpu"
 kind = "mmio"
 start = 0x20586020
+end-exclusive = 0x20586064
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-core-stall-status"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20586064
+end-exclusive = 0x20586068
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-between-core-stall-status-and-hpcore1-control"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20586068
+end-exclusive = 0x20587020
+permissions = "rw"
+
+[[regions]]
+name = "hp-sys-clkrst-hpcore1-control"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20587020
+end-exclusive = 0x20587024
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-between-hpcore1-control-and-radio-modem-control"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20587024
 end-exclusive = 0x20587040
 permissions = "rw"
 
@@ -345,10 +377,26 @@ end-exclusive = 0x20587044
 permissions = "rw"
 
 [[regions]]
-name = "hp-system-between-radio-modem-control-and-timg1-clock"
+name = "hp-system-between-radio-modem-control-and-uart0-clock"
 address-space = "cpu"
 kind = "mmio"
 start = 0x20587044
+end-exclusive = 0x20587088
+permissions = "rw"
+
+[[regions]]
+name = "hp-sys-clkrst-uart0-clock"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20587088
+end-exclusive = 0x2058708C
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-between-uart0-clock-and-timg1-clock"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2058708C
 end-exclusive = 0x2058711C
 permissions = "rw"
 
@@ -417,10 +465,26 @@ end-exclusive = 0x20701038
 permissions = "rw"
 
 [[regions]]
-name = "lp-aon-between-reset-cause-and-phy-aux"
+name = "lp-aon-between-reset-cause-and-hpcore-reset"
 address-space = "cpu"
 kind = "mmio"
 start = 0x20701038
+end-exclusive = 0x2070103C
+permissions = "rw"
+
+[[regions]]
+name = "lp-aon-hpcore-reset"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2070103C
+end-exclusive = 0x20701044
+permissions = "rw"
+
+[[regions]]
+name = "lp-aon-between-hpcore-reset-and-phy-aux"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20701044
 end-exclusive = 0x20701068
 permissions = "rw"
 
@@ -529,10 +593,26 @@ end-exclusive = 0x20704188
 permissions = "rw"
 
 [[regions]]
-name = "pmu-between-radio-rf-power-and-analog-peripheral-power"
+name = "pmu-between-radio-rf-power-and-cpu-stall"
 address-space = "cpu"
 kind = "mmio"
 start = 0x20704188
+end-exclusive = 0x207041EC
+permissions = "rw"
+
+[[regions]]
+name = "pmu-cpu-stall"
+address-space = "cpu"
+kind = "mmio"
+start = 0x207041EC
+end-exclusive = 0x207041F0
+permissions = "rw"
+
+[[regions]]
+name = "pmu-between-cpu-stall-and-analog-peripheral-power"
+address-space = "cpu"
+kind = "mmio"
+start = 0x207041F0
 end-exclusive = 0x20704208
 permissions = "rw"
 

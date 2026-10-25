@@ -11759,6 +11759,181 @@ pub mod pcr_timg1 {
     }
 }
 
+/// The `PCR_UART0_CLOCK` register block.
+///
+/// Peripheral clock/reset registers: UART0's function clock, which the boot ROM prints through after a software reset.
+pub mod pcr_uart0_clock {
+    /// The block's base address.
+    pub const BASE: usize = 0x60096000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x8;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x4];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x60096000>, BlockWords>;
+
+    /// The exclusive owner of the `PCR_UART0_CLOCK` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct PcrUart0Clock<P: oer_mmio::Placement = oer_mmio::Fixed<0x60096000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl PcrUart0Clock {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> PcrUart0Clock<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> PcrUart0Clock<P> {
+        /// Read `UART0_SCLK_CONF`.
+        #[inline]
+        pub fn read_uart0_sclk_conf(&self) -> uart0_sclk_conf::R {
+            uart0_sclk_conf::R(self.0.read::<0x4>())
+        }
+
+        /// Read `UART0_SCLK_CONF`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_uart0_sclk_conf(&mut self, change: impl FnOnce(&mut uart0_sclk_conf::W)) {
+            let mut value = uart0_sclk_conf::W(self.0.read::<0x4>());
+            change(&mut value);
+            self.0.write::<0x4>(value.0);
+        }
+    }
+
+    /// The `UART0_SCLK_CONF` register.
+    ///
+    /// UART0's function clock: divider, source and enable.
+    pub mod uart0_sclk_conf {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x007fffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Denominator of the function clock divider's fractional part.
+            #[inline]
+            pub const fn uart0_sclk_div_a(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Numerator of the function clock divider's fractional part.
+            #[inline]
+            pub const fn uart0_sclk_div_b(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 6)
+            }
+
+            /// Integral part of the function clock divider; zero divides by one.
+            #[inline]
+            pub const fn uart0_sclk_div_num(self) -> u8 {
+                (self.0 >> 12) as u8
+            }
+
+            /// Function clock source: 0 XTAL, 1 RC_FAST, 2 PLL_F80M.
+            #[inline]
+            pub const fn uart0_sclk_sel(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// Function clock enable.
+            #[inline]
+            pub const fn uart0_sclk_en(self) -> bool {
+                (self.0 & 0x00400000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Denominator of the function clock divider's fractional part.
+            #[inline]
+            pub const fn uart0_sclk_div_a(&self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Numerator of the function clock divider's fractional part.
+            #[inline]
+            pub const fn uart0_sclk_div_b(&self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 6)
+            }
+
+            /// Integral part of the function clock divider; zero divides by one.
+            #[inline]
+            pub const fn uart0_sclk_div_num(&self) -> u8 {
+                (self.0 >> 12) as u8
+            }
+
+            /// Function clock source: 0 XTAL, 1 RC_FAST, 2 PLL_F80M.
+            #[inline]
+            pub const fn uart0_sclk_sel(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// Function clock enable.
+            #[inline]
+            pub const fn uart0_sclk_en(&self) -> bool {
+                (self.0 & 0x00400000) != 0
+            }
+
+            /// Set `UART0_SCLK_DIV_A`.
+            #[inline]
+            pub fn set_uart0_sclk_div_a(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                self.0 = (self.0 & !0x0000003f) | value.get();
+                self
+            }
+
+            /// Set `UART0_SCLK_DIV_B`.
+            #[inline]
+            pub fn set_uart0_sclk_div_b(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                self.0 = (self.0 & !0x00000fc0) | (value.get() << 6);
+                self
+            }
+
+            /// Set `UART0_SCLK_DIV_NUM`.
+            #[inline]
+            pub fn set_uart0_sclk_div_num(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x000ff000) | (u32::from(value) << 12);
+                self
+            }
+
+            /// Set `UART0_SCLK_SEL`.
+            #[inline]
+            pub fn set_uart0_sclk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x00300000) | (value.get() << 20);
+                self
+            }
+
+            /// Set `UART0_SCLK_EN`.
+            #[inline]
+            pub fn set_uart0_sclk_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                self
+            }
+        }
+    }
+}
+
 /// The `PHY_BASEBAND_CONFIG` register block.
 ///
 /// ESP32-C5 PHY baseband configuration words recovered from complete pinned
@@ -22159,6 +22334,27 @@ pub mod peripheral_ownership {
         }
     }
 
+    /// Core control of the one HP core: UART0's function clock, which the software reset restores for the boot ROM.
+    pub struct CoreControlPeripherals {
+        pub pcr_uart0_clock: super::pcr_uart0_clock::PcrUart0Clock,
+    }
+
+    /// The device registers of [`CoreControlPeripherals`]'s blocks, which its platform
+    /// handoff claims with one `oer_mmio::assume_owned`; the PAC root
+    /// does not claim them.
+    pub type CoreControlPeripheralsClaims = super::pcr_uart0_clock::Claim;
+
+    impl CoreControlPeripherals {
+        /// Give each claimed block to its owner.
+        #[inline]
+        pub fn from_claims(claims: CoreControlPeripheralsClaims) -> Self {
+            let pcr_uart0_clock = claims;
+            Self {
+                pcr_uart0_clock: super::pcr_uart0_clock::PcrUart0Clock::new(pcr_uart0_clock),
+            }
+        }
+    }
+
     /// The random number generator's clock gate, configuration and output, enabled and read by the entropy owner.
     pub struct EntropyPeripherals {
         pub lpperi_rng: super::lpperi_rng::LpperiRng,
@@ -22650,6 +22846,10 @@ const _: () = assert!(
         (
             pcr_timg1::BASE,
             <pcr_timg1::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            pcr_uart0_clock::BASE,
+            <pcr_uart0_clock::BlockWords as oer_mmio::Registers>::WORDS
         ),
         (
             phy_baseband_config::BASE,
@@ -85922,13 +86122,13 @@ pub mod soc {
 
         impl oer_mmio::Registers for BlockWords {
             const WORDS: &'static [usize] = &[
-                0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34,
-                0x38, 0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c, 0x64, 0x6c, 0x70, 0x74,
-                0x78, 0x7c, 0x80, 0x84, 0x8c, 0x94, 0x98, 0x9c, 0xa0, 0xa4, 0xa8, 0xac, 0xb0, 0xb4,
-                0xb8, 0xbc, 0xc0, 0xc4, 0xc8, 0xcc, 0xd0, 0xd4, 0xd8, 0xdc, 0xe0, 0xe4, 0xe8, 0xec,
-                0xf0, 0xf4, 0xf8, 0xfc, 0x100, 0x104, 0x108, 0x10c, 0x110, 0x114, 0x118, 0x11c,
-                0x120, 0x124, 0x128, 0x12c, 0x130, 0x134, 0x138, 0x13c, 0x144, 0x148, 0x150, 0x154,
-                0x158, 0x15c, 0x160, 0x164, 0x168, 0x16c, 0x170, 0x174, 0x178, 0xff4, 0xff8, 0xffc,
+                0x0, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38,
+                0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c, 0x64, 0x6c, 0x70, 0x74, 0x78,
+                0x7c, 0x80, 0x84, 0x8c, 0x94, 0x98, 0x9c, 0xa0, 0xa4, 0xa8, 0xac, 0xb0, 0xb4, 0xb8,
+                0xbc, 0xc0, 0xc4, 0xc8, 0xcc, 0xd0, 0xd4, 0xd8, 0xdc, 0xe0, 0xe4, 0xe8, 0xec, 0xf0,
+                0xf4, 0xf8, 0xfc, 0x100, 0x104, 0x108, 0x10c, 0x110, 0x114, 0x118, 0x11c, 0x120,
+                0x124, 0x128, 0x12c, 0x130, 0x134, 0x138, 0x13c, 0x144, 0x148, 0x150, 0x154, 0x158,
+                0x15c, 0x160, 0x164, 0x168, 0x16c, 0x170, 0x174, 0x178, 0xff4, 0xff8, 0xffc,
             ];
         }
 
@@ -85969,21 +86169,6 @@ pub mod soc {
                 let mut value = uart0_conf::W(self.0.read::<0x0>());
                 change(&mut value);
                 self.0.write::<0x0>(value.0);
-            }
-
-            /// Read `UART0_SCLK_CONF`.
-            #[inline]
-            pub fn read_uart0_sclk_conf(&self) -> uart0_sclk_conf::R {
-                uart0_sclk_conf::R(self.0.read::<0x4>())
-            }
-
-            /// Read `UART0_SCLK_CONF`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_uart0_sclk_conf(&mut self, change: impl FnOnce(&mut uart0_sclk_conf::W)) {
-                let mut value = uart0_sclk_conf::W(self.0.read::<0x4>());
-                change(&mut value);
-                self.0.write::<0x4>(value.0);
             }
 
             /// Read `UART0_PD_CTRL`.
@@ -87448,122 +87633,6 @@ pub mod soc {
                 #[inline]
                 pub fn set_uart0_rst_en(&mut self, value: bool) -> &mut Self {
                     self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
-                    self
-                }
-            }
-        }
-
-        /// The `UART0_SCLK_CONF` register.
-        ///
-        /// UART0_SCLK configuration register
-        pub mod uart0_sclk_conf {
-            /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0x007fffff;
-            /// The register's byte offset in its block.
-            pub const OFFSET: usize = 0x4;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {
-                /// The denominator of the frequency divider factor of the uart0 function clock.
-                #[inline]
-                pub const fn uart0_sclk_div_a(self) -> oer_mmio::Bits<6> {
-                    oer_mmio::Bits::truncate(self.0)
-                }
-
-                /// The numerator of the frequency divider factor of the uart0 function clock.
-                #[inline]
-                pub const fn uart0_sclk_div_b(self) -> oer_mmio::Bits<6> {
-                    oer_mmio::Bits::truncate(self.0 >> 6)
-                }
-
-                /// The integral part of the frequency divider factor of the uart0 function clock.
-                #[inline]
-                pub const fn uart0_sclk_div_num(self) -> u8 {
-                    (self.0 >> 12) as u8
-                }
-
-                /// Configures the clock source of UART0.\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\ 2: PLL_F80M_CLK\\
-                #[inline]
-                pub const fn uart0_sclk_sel(self) -> oer_mmio::Bits<2> {
-                    oer_mmio::Bits::truncate(self.0 >> 20)
-                }
-
-                /// Set 1 to enable uart0 function clock
-                #[inline]
-                pub const fn uart0_sclk_en(self) -> bool {
-                    (self.0 & 0x00400000) != 0
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// The denominator of the frequency divider factor of the uart0 function clock.
-                #[inline]
-                pub const fn uart0_sclk_div_a(&self) -> oer_mmio::Bits<6> {
-                    oer_mmio::Bits::truncate(self.0)
-                }
-
-                /// The numerator of the frequency divider factor of the uart0 function clock.
-                #[inline]
-                pub const fn uart0_sclk_div_b(&self) -> oer_mmio::Bits<6> {
-                    oer_mmio::Bits::truncate(self.0 >> 6)
-                }
-
-                /// The integral part of the frequency divider factor of the uart0 function clock.
-                #[inline]
-                pub const fn uart0_sclk_div_num(&self) -> u8 {
-                    (self.0 >> 12) as u8
-                }
-
-                /// Configures the clock source of UART0.\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\ 2: PLL_F80M_CLK\\
-                #[inline]
-                pub const fn uart0_sclk_sel(&self) -> oer_mmio::Bits<2> {
-                    oer_mmio::Bits::truncate(self.0 >> 20)
-                }
-
-                /// Set 1 to enable uart0 function clock
-                #[inline]
-                pub const fn uart0_sclk_en(&self) -> bool {
-                    (self.0 & 0x00400000) != 0
-                }
-
-                /// Set `UART0_SCLK_DIV_A`.
-                #[inline]
-                pub fn set_uart0_sclk_div_a(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
-                    self.0 = (self.0 & !0x0000003f) | value.get();
-                    self
-                }
-
-                /// Set `UART0_SCLK_DIV_B`.
-                #[inline]
-                pub fn set_uart0_sclk_div_b(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
-                    self.0 = (self.0 & !0x00000fc0) | (value.get() << 6);
-                    self
-                }
-
-                /// Set `UART0_SCLK_DIV_NUM`.
-                #[inline]
-                pub fn set_uart0_sclk_div_num(&mut self, value: u8) -> &mut Self {
-                    self.0 = (self.0 & !0x000ff000) | (u32::from(value) << 12);
-                    self
-                }
-
-                /// Set `UART0_SCLK_SEL`.
-                #[inline]
-                pub fn set_uart0_sclk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                    self.0 = (self.0 & !0x00300000) | (value.get() << 20);
-                    self
-                }
-
-                /// Set `UART0_SCLK_EN`.
-                #[inline]
-                pub fn set_uart0_sclk_en(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
                     self
                 }
             }
@@ -167571,6 +167640,10 @@ pub mod soc {
             (
                 super::pcr_timg1::BASE,
                 <super::pcr_timg1::BlockWords as oer_mmio::Registers>::WORDS
+            ),
+            (
+                super::pcr_uart0_clock::BASE,
+                <super::pcr_uart0_clock::BlockWords as oer_mmio::Registers>::WORDS
             ),
             (
                 super::phy_baseband_config::BASE,

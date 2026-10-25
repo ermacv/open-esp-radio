@@ -5,7 +5,7 @@ schema = 5
 allow-clippy-empty-docs = true
 # Every exposed peripheral is a typed register block over `oer-mmio`. The
 # platform blocks (the generator, the reset cause, the USB Serial/JTAG
-# console) are claimed by their own platform handoffs.
+# console, core control) are claimed by their own platform handoffs.
 typed-peripherals = [
     "IEEE802154_MAC",
     "MODEM_ETM",
@@ -46,6 +46,7 @@ typed-peripherals = [
     "INTERRUPT_CORE0_STATUS",
     "USB_SERIAL_JTAG",
     "USB_SERIAL_JTAG_PADS",
+    "PCR_UART0_CLOCK",
 ]
 # Source-qualified MMIO views retained for bit-use coverage; no owner reaches
 # them (their words lie in the typed blocks above or are not used).
@@ -56,6 +57,13 @@ name = "UsbSerialJtagPeripherals"
 member = "usb_serial_jtag"
 description = "The USB Serial/JTAG console: its data FIFO, interrupts and pads, written by the early writer before the console's driver exists and by the driver after."
 peripherals = ["USB_SERIAL_JTAG", "USB_SERIAL_JTAG_PADS"]
+handoff = true
+
+[[ownership-partitions]]
+name = "CoreControlPeripherals"
+member = "core_control"
+description = "Core control of the one HP core: UART0's function clock, which the software reset restores for the boot ROM."
+peripherals = ["PCR_UART0_CLOCK"]
 handoff = true
 
 [[ownership-partitions]]

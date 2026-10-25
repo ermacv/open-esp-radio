@@ -49,6 +49,7 @@ owned-ranges = [
     "lp-clkrst-reset-cause",
     "timg0-wdt",
     "timg1-wdt",
+    "pcr-uart0-sclk-conf",
     "pcr-timg1-conf",
     "pcr-timg1-wdt-clk-conf",
     "lp-wdt",

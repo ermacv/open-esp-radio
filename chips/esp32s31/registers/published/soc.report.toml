@@ -9,9 +9,9 @@ schema = 1
 peripherals = 100
 skipped-peripherals = 3
 registers = 4724
-full = 2506
-read = 1339
-none = 879
+full = 2501
+read = 1338
+none = 885
 renamed-fields = 29
 
 [[skipped]]
@@ -6275,8 +6275,8 @@ reasons = []
 [[register]]
 peripheral = "HP_SYS"
 register = "HP_CPU_CORESTALLED_ST"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["the curated model's HP_SYS_CORE_STALL_STATUS describes its word"]
 
 [[register]]
 peripheral = "HP_SYS"
@@ -6418,9 +6418,21 @@ reasons = []
 
 [[register]]
 peripheral = "HP_SYS_CLKRST"
+register = "HPCORE1_CTRL0"
+api = "none"
+reasons = ["the curated model's HP_SYS_CLKRST_CORE describes its word"]
+
+[[register]]
+peripheral = "HP_SYS_CLKRST"
 register = "MODEM_CTRL0"
 api = "none"
 reasons = ["the curated model's HP_SYS_CLKRST_RADIO describes its word"]
+
+[[register]]
+peripheral = "HP_SYS_CLKRST"
+register = "UART0_CTRL0"
+api = "none"
+reasons = ["the curated model's HP_SYS_CLKRST_CORE describes its word"]
 
 [[register]]
 peripheral = "HP_SYS_CLKRST"
@@ -7384,6 +7396,18 @@ reasons = ["the curated model's LP_AON_RESET_CAUSE describes its word"]
 
 [[register]]
 peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_HPCORE0_RESET_CTRL"
+api = "none"
+reasons = ["the curated model's LP_AON_CLKRST_CORE_RESET describes its word"]
+
+[[register]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_HPCORE1_RESET_CTRL"
+api = "none"
+reasons = ["the curated model's LP_AON_CLKRST_CORE_RESET describes its word"]
+
+[[register]]
+peripheral = "LP_AON_CLKRST"
 register = "LP_AONCLKRST_HP_CLK_CTRL"
 api = "read"
 reasons = []
@@ -8041,6 +8065,12 @@ peripheral = "PMU"
 register = "VDD_SPI_STATUS"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "PMU"
+register = "CPU_STALL_SW"
+api = "none"
+reasons = ["the curated model's PMU_CPU_STALL describes its word"]
 
 [[register]]
 peripheral = "PMU"

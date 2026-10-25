@@ -1,7 +1,8 @@
 //! Platform blocks the image takes from esp-hal one domain at a time: the
 //! eFuse MAC words, the true random number generator and the reset causes,
 //! the system timer, the software interrupt lines, the interrupt matrix
-//! with the CLIC, and the USB Serial/JTAG console ([`usb_serial_jtag`]).
+//! with the CLIC, the USB Serial/JTAG console ([`usb_serial_jtag`]) and
+//! core control ([`core_control`]).
 //!
 //! Each domain has a handoff proof, made once by the owner that consumed the
 //! domain's esp-hal singletons, and an owner built from it that claims only
@@ -24,7 +25,10 @@ use crate::generated::{
 #[cfg(test)]
 mod tests;
 
+pub mod core_control;
 pub mod usb_serial_jtag;
+
+pub use core_control::{CoreControlHandoff, CoreControlRegisters};
 
 pub use usb_serial_jtag::{
     UsbEndpointRegisters, UsbEvents, UsbInterruptRegisters, UsbPadRegisters, UsbSerialJtagHandoff,
