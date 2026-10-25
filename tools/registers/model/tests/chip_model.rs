@@ -287,6 +287,7 @@ placement = ["dma-window"]
 const ROOT: &str = r#"
 schema = 4
 chip = "testchip"
+interrupt-sources = { count = 30, sources = ["SRC_HEADER"] }
 types = ["types/timg.toml", "types/ble.toml", "types/bbpll.toml"]
 layouts = ["layouts/rx-descriptor.toml"]
 
@@ -392,6 +393,19 @@ impl Fixture {
         ] {
             fixture.write(path, text)?;
         }
+        let mut root = ROOT.to_owned();
+        for source in (0..30).filter(|source| ![10, 11, 20, 29].contains(source)) {
+            root.push_str(&format!(
+                r#"
+[[unbound-interrupts]]
+source = {source}
+name = "UNBOUND_{source}"
+reason = "No owner in the synthetic fixture."
+sources = ["SRC_HEADER"]
+"#
+            ));
+        }
+        fixture.write("root.toml", &root)?;
         Ok(fixture)
     }
 
@@ -1677,3 +1691,5 @@ fn included_types_share_the_materialization_budget() -> TestResult {
     assert!(error.entity.starts_with("BLE_COPY."));
     Ok(())
 }
+#[path = "chip_model/controls.rs"]
+mod controls;
