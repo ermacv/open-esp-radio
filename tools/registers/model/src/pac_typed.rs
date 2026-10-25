@@ -3176,12 +3176,10 @@ impl<'a> TypedRegister<'a> {
         let module = &self.method;
         let index = self.index_parameter();
         let name = &self.info.name;
-        if self.commands() == 0 {
+        // A register with a command field has a command mask.
+        let Some(zero) = self.modify_zero().filter(|_| self.commands() != 0) else {
             return;
-        }
-        let zero = self
-            .modify_zero()
-            .expect("a register with a command field has a command mask");
+        };
         for field in self.fields.iter().filter(|field| field.command) {
             let method = field.method.trim_start_matches("r#");
             if field.exclusive {

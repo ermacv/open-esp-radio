@@ -1556,7 +1556,7 @@ fn classify(
         !commands.iter().any(|command| {
             command.peripheral == name
                 && command.register == register.name
-                && fields_svd_name(&renames, name, &register.name, &command.field) == **field
+                && fields_svd_name(renames, name, &register.name, &command.field) == **field
         })
     }) {
         return Err(Error::message(format!(
