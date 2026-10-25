@@ -952,7 +952,9 @@ description = "Bluetooth controller interrupt registers transferred independentl
 [[partitions.parts]]
 name = "BluetoothInterruptBank"
 instance = "BT_MAC"
-interrupt = "MODEM_BT_MAC"
+interrupt = ["MODEM_BT_MAC", "MODEM_BT_MAC_INT1"]
+description = "The controller's interrupt bank: the primary source and the NRT source are each sampled and acknowledged through this one write-one-to-clear bank, so one handler serves both."
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 registers = ["IRQ_CONTROL_0", "IRQ_CONTROL_1", "IRQ_CONTROL_2", "IRQ_ENABLE_0", "IRQ_CLEAR_0", "IRQ_STATUS_0", "IRQ_ENABLE_1", "IRQ_CLEAR_1", "IRQ_STATUS_1", "IRQ_DIAGNOSTIC_STATE", "IRQ_DIAGNOSTIC_DETAIL_0", "IRQ_DIAGNOSTIC_DETAIL_1", "IRQ_STATUS_SNAPSHOT_0", "IRQ_STATUS_SNAPSHOT_1"]
 
 [[partitions.parts]]

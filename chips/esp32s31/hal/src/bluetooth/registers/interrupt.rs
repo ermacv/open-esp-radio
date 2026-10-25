@@ -142,6 +142,16 @@ struct BluetoothPrimaryBank0Status {
     unclassified_pending: bool,
 }
 
+impl BluetoothPrimaryBank0Status {
+    /// Whether no bit of the bank was pending: the four cover all of them.
+    const fn is_clear(self) -> bool {
+        !(self.source_15_pending
+            || self.source_21_pending
+            || self.sources_27_or_28_pending
+            || self.unclassified_pending)
+    }
+}
+
 #[derive(Clone, Copy)]
 struct BluetoothPrimaryBank1Status {
     source_3_pending: bool,
@@ -149,6 +159,17 @@ struct BluetoothPrimaryBank1Status {
     source_9_pending: bool,
     source_12_pending: bool,
     unclassified_pending: bool,
+}
+
+impl BluetoothPrimaryBank1Status {
+    /// Whether no bit of the bank was pending: the five cover all of them.
+    const fn is_clear(self) -> bool {
+        !(self.source_3_pending
+            || self.source_8_pending
+            || self.source_9_pending
+            || self.source_12_pending
+            || self.unclassified_pending)
+    }
 }
 
 trait BluetoothPrimaryInterruptControl {
@@ -241,20 +262,20 @@ fn execute_primary_release(control: &mut impl BluetoothInterruptControl) {
     control.mask_primary_baseline_bank_1();
 }
 
-/// Controller-side interrupt output prepared before a CPU route is installed.
+/// Controller-side interrupt output prepared by the bank's interrupt handler
+/// when it opens the epoch.
 ///
 /// This state owns the exact baseline clear/enable transaction followed by
-/// `IRQ_CONTROL_0 = 1`, immediately before the vendor platform allocates the
-/// primary CPU interrupt. It still exposes no status capture: both CPU routes
-/// must share one staged ISR owner before either route is enabled.
-#[must_use = "the prepared Bluetooth interrupt output must be routed or released"]
+/// `IRQ_CONTROL_0 = 1`, which the vendor runs immediately before it allocates
+/// the primary CPU interrupt. It still exposes no status capture: the handler
+/// stages it at once for sources 124 and 133.
+#[must_use = "the prepared Bluetooth interrupt output must be staged or released"]
 pub struct BluetoothInterruptOutputPrepared<P: BluetoothPlacements = Chip> {
     pub(crate) peripherals: InterruptBlocks<P>,
 }
 
 impl<P: BluetoothPlacements> BluetoothInterruptSetup<P> {
-    /// Prepare the controller-side interrupt output before installing a CPU
-    /// route.
+    /// Prepare the controller-side interrupt output in the bank's handler.
     ///
     /// SOURCE: complete ESP32-S31 `libbtdm_common.a` `btdm_hal.c` helpers. The
     /// composite setup clears bank images `0x0000_8000` and `0x0000_1300`,
@@ -294,28 +315,11 @@ impl<P: BluetoothPlacements> BluetoothInterruptOutputPrepared<P> {
         }
     }
 
-    /// Transfer the prepared bank into stable storage shared by both hard
-    /// handlers before either CPU route is enabled.
-    ///
-    /// This conversion performs no MMIO and does not itself prove that source
-    /// 124 or source 133 has been routed. A platform adapter must retain the
-    /// returned value in interrupt-safe storage, bind both routes on one core,
-    /// and recover it only after both routes have been disabled.
-    pub fn stage_for_cpu_routes(self) -> BluetoothInterruptRegisters<P> {
+    /// The prepared bank as its handler holds it for the epoch. Performs no
+    /// MMIO; the handler serving sources 124 and 133 calls it when it opens
+    /// the epoch and keeps the bank until the output is released.
+    pub fn stage_for_handler(self) -> BluetoothInterruptRegisters<P> {
         BluetoothInterruptRegisters {
-            peripherals: self.peripherals,
-        }
-    }
-}
-
-impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
-    /// Return the interrupt partition to controller-output-only ownership.
-    ///
-    /// The caller must mask events and disable the CPU route first. This
-    /// method performs no controller transaction; the separate output-release
-    /// edge publishes the reviewed teardown strobes.
-    pub fn deactivate(self) -> BluetoothInterruptOutputPrepared<P> {
-        BluetoothInterruptOutputPrepared {
             peripherals: self.peripherals,
         }
     }
@@ -502,13 +506,18 @@ impl BluetoothPrimaryInterruptEpoch {
     }
 }
 
+/// One primary epoch, or `None` when neither bank held a pending bit: the
+/// handler of the shared line then writes nothing.
 fn execute_primary_interrupt_epoch(
     control: &mut impl BluetoothPrimaryInterruptControl,
-) -> BluetoothPrimaryInterruptEpoch {
+) -> Option<BluetoothPrimaryInterruptEpoch> {
     let bank_0 = control.sample_bank_0();
     let bank_1 = control.sample_bank_1();
     let bank_0_status = control.bank_0_status(&bank_0);
     let bank_1_status = control.bank_1_status(&bank_1);
+    if bank_0_status.is_clear() && bank_1_status.is_clear() {
+        return None;
+    }
     control.acknowledge_bank_0(bank_0);
     control.acknowledge_bank_1(bank_1);
 
@@ -521,12 +530,12 @@ fn execute_primary_interrupt_epoch(
         control.capture_diagnostic_state();
     }
 
-    BluetoothPrimaryInterruptEpoch {
+    Some(BluetoothPrimaryInterruptEpoch {
         bank_0_source_21_pending: bank_0_status.source_21_pending,
         bank_0_sources_27_or_28_pending: bank_0_status.sources_27_or_28_pending,
         bank_1_source_3_pending: bank_1_status.source_3_pending,
         fault_sources,
-    }
+    })
 }
 
 impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
@@ -556,13 +565,17 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
     /// then preserves the complete diagnostic prefix: source 9 captures both
     /// detail words and source 12 captures the state word. Callback dispatch
     /// and the special scheduler-event suffix remain higher-layer work.
-    pub fn capture_primary_and_acknowledge(&mut self) -> BluetoothPrimaryInterruptEpoch {
+    ///
+    /// The bank shares its handler's line with other sources, so an entry
+    /// may find both status words clear: it then writes nothing and returns
+    /// `None`.
+    pub fn capture_primary_and_acknowledge(&mut self) -> Option<BluetoothPrimaryInterruptEpoch> {
         let mut control = HardwareInterruptControl {
             bank: &mut self.peripherals.bluetooth_interrupt_bank,
         };
-        let epoch = execute_primary_interrupt_epoch(&mut control);
+        let epoch = execute_primary_interrupt_epoch(&mut control)?;
         device_fence();
-        epoch
+        Some(epoch)
     }
 
     /// Capture and acknowledge one complete controller interrupt epoch.
@@ -576,7 +589,11 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
     ///
     /// Separate sample or acknowledgement methods are deliberately absent:
     /// the reviewed vendor body does not authorize another ordering.
-    pub fn capture_nrt_and_acknowledge(&mut self) -> BluetoothNrtInterruptAcknowledged {
+    ///
+    /// The bank shares its handler's line with other sources, so an entry
+    /// may find both snapshots clear: it then writes nothing and returns
+    /// `None`.
+    pub fn capture_nrt_and_acknowledge(&mut self) -> Option<BluetoothNrtInterruptAcknowledged> {
         let bank_0 = self
             .peripherals
             .bluetooth_interrupt_bank
@@ -585,6 +602,9 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
             .peripherals
             .bluetooth_interrupt_bank
             .sample_bluetooth_interrupt_bank_1();
+        if bank_0.is_clear() && bank_1.is_clear() {
+            return None;
+        }
         self.peripherals
             .bluetooth_interrupt_bank
             .acknowledge_bluetooth_interrupt_bank_0(bank_0);
@@ -592,7 +612,7 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
             .bluetooth_interrupt_bank
             .acknowledge_bluetooth_interrupt_bank_1(bank_1);
         device_fence();
-        BluetoothNrtInterruptAcknowledged { _private: () }
+        Some(BluetoothNrtInterruptAcknowledged { _private: () })
     }
 }
 

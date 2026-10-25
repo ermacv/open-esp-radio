@@ -24,7 +24,6 @@ use oer_esp32s31_hal::bluetooth::TaskOwner as HalBluetoothTaskOwner;
 use {
     oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerOwnerError,
     oer_esp32s31_hal::bluetooth::ControllerRandomAddress,
-    oer_esp32s31_hal::bluetooth::InterruptOutputPreparedOwner,
     oer_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner,
     oer_esp32s31_hal::domain::RadioDomain,
 };
@@ -81,22 +80,23 @@ impl<M: ControllerMemory> TaskResources<M> {
         self.engine.task_owner()
     }
 
-    /// Reset the stopped Controller, reunite the drained timer and return the
-    /// clocked client.
+    /// Reset the stopped Controller and await the timer its handler gives up
+    /// after the reset.
     ///
-    /// The caller has released Controller output and left the shared PHY
-    /// domain and BTBB; the controller-time worker holds no request.
+    /// The caller has released Controller output, had the timer's handler
+    /// disable its compare and left the shared PHY domain and BTBB; the
+    /// controller-time worker holds no request.
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn shut_down<B: PlatformClockBackend, T>(
         self,
         radio: &mut RadioDomain<B, T>,
         output: oer_esp32s31_hal::bluetooth::InterruptOutputReleasedOwner,
-        timer: oer_esp32s31_hal::bluetooth::ModemLpTimerInterruptReadyOwner,
+        compare: oer_esp32s31_hal::bluetooth::ModemLpTimerCompareDisabled,
     ) -> Result<
-        oer_esp32s31_hal::bluetooth::engine::EngineShutDown<M>,
+        oer_esp32s31_hal::bluetooth::engine::EngineResetTimerPending<M>,
         oer_esp32s31_hal::bluetooth::engine::EngineShutdownFailure<M>,
     > {
-        self.engine.shut_down(radio, output, timer)
+        self.engine.shut_down(radio, output, compare)
     }
 
     /// Preserve pending or faulted time ownership before any terminal extraction.
@@ -106,20 +106,21 @@ impl<M: ControllerMemory> TaskResources<M> {
         self.controller_time.retirement_ready()
     }
 
+    /// Release the controller output of the stopped epoch with the bank's
+    /// handler over the scheduler channel `bell` reaches.
+    ///
+    /// # Errors
+    ///
+    /// A refused step, with nothing written after it, or a failed exchange.
     #[cfg(target_arch = "riscv32")]
-    pub fn release_controller_output(
+    pub async fn release_controller_output(
         &mut self,
-        output: oer_esp32s31_hal::bluetooth::InterruptOutputAfterRoutesOwner,
-        clock: &impl oer_time::Clock,
+        bell: &impl oer_esp32s31_hal::bluetooth::engine::scheduler::interrupt::SchedulerDoorbell,
     ) -> Result<
-        oer_esp32s31_hal::bluetooth::InterruptOutputReleasedOwner,
-        (
-            oer_esp32s31_hal::bluetooth::BluetoothControllerOutputReleaseError,
-            oer_esp32s31_hal::bluetooth::InterruptOutputAfterRoutesOwner,
-        ),
+        oer_esp32s31_hal::bluetooth::BluetoothOutputReleased,
+        oer_esp32s31_hal::bluetooth::engine::EngineOutputReleaseError,
     > {
-        self.engine
-            .release_controller_output(output, crate::diagnostic_settle(clock))
+        self.engine.release_controller_output(bell).await
     }
 }
 
@@ -255,6 +256,11 @@ impl<M: ControllerMemory> TaskResources<M> {
         &mut self.engine
     }
 
+    /// Whether the physical scheduler is stopped (its channel may stay).
+    pub fn scheduler_stopped(&self) -> bool {
+        self.engine.scheduler_is_stopped()
+    }
+
     pub fn engine_retirement_ready(&self) -> bool {
         self.engine.retirement_ready()
     }
@@ -269,12 +275,10 @@ pub(crate) struct InterruptBankOwner {
 
 #[cfg(target_arch = "riscv32")]
 impl InterruptBankOwner {
-    /// Prepare the controller output while retaining the affine IRQ partition.
-    ///
-    /// The caller owns the matching completed Controller initialization, and
-    /// all three CPU routes remain inactive.
-    pub(crate) fn prepare_controller_output(self) -> InterruptOutputPreparedOwner {
-        self._registers.prepare_controller_output()
+    /// The unprepared bank, for the gate of its interrupt handler, which
+    /// prepares the controller output when the epoch opens.
+    pub(crate) fn into_setup(self) -> HalBluetoothInterruptSetupOwner {
+        self._registers
     }
 }
 

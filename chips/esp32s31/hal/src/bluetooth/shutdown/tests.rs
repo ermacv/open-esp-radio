@@ -4,7 +4,6 @@ struct Model {
     separated: bool,
     btbb: bool,
     reset_ok: bool,
-    compare_enabled: bool,
     counter_running: bool,
     reset_count: usize,
 }
@@ -18,14 +17,7 @@ impl Control for Model {
     fn btbb_held(&self) -> bool {
         self.btbb
     }
-    fn disable_compare(&mut self) {
-        self.compare_enabled = false;
-    }
     fn reset_controller(&mut self) {
-        assert!(
-            !self.compare_enabled,
-            "compare must be disabled before reset"
-        );
         self.reset_count += 1;
         if self.reset_ok {
             self.counter_running = false;
@@ -57,12 +49,11 @@ fn outstanding_time_timer_or_baseband_prevent_shutdown_mutation() {
             separated,
             btbb,
             reset_ok: true,
-            compare_enabled: true,
             counter_running: true,
             reset_count: 0,
         };
         assert_eq!(prepare(&mut model), Err(error));
-        assert!(model.compare_enabled && model.counter_running);
+        assert!(model.counter_running);
         assert_eq!(model.reset_count, 0);
     }
 }
@@ -74,7 +65,6 @@ fn reset_readback_is_required_before_returning_hardware_ownership() {
             separated: true,
             btbb: false,
             reset_ok,
-            compare_enabled: true,
             counter_running: true,
             reset_count: 0,
         };
@@ -86,7 +76,6 @@ fn reset_readback_is_required_before_returning_hardware_ownership() {
                 Err(BluetoothShutdownError::ControllerReset)
             }
         );
-        assert!(!model.compare_enabled);
         assert_eq!(model.reset_count, 1);
         assert_eq!(model.counter_running, !reset_ok);
     }

@@ -144,9 +144,11 @@ pub struct ControllerBlePhyEngineInitialized<
 pub struct BlePhyRuntime<'runtime, const MT: usize, X: SignalExecutor, M: ControllerMemory> {
     /// Task, interrupt and modem-timer endpoints.
     pub endpoints: crate::low_power::ControllerRuntimeEndpoints<'runtime, MT, X, M>,
-    /// Controller interrupt output, prepared for stable ISR storage.
-    pub output: oer_esp32s31_hal::bluetooth::InterruptOutputPreparedOwner,
-    /// Initialized low-power timer hardware, not yet started.
+    /// The controller's interrupt bank, its output not prepared: the gate
+    /// of its interrupt handler prepares it when the epoch opens.
+    pub interrupts: oer_esp32s31_hal::bluetooth::InterruptSetupOwner,
+    /// Initialized low-power timer hardware, not yet started: the gate of
+    /// its interrupt handler starts it after the output is prepared.
     pub timer: ModemLpTimerLowPowerHardwareInitializedOwner,
     /// Packet-start calibration of this PHY.
     pub timing: BlePhyTimingAuthority,
@@ -161,14 +163,13 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
         self.report
     }
 
-    /// Prepare the controller interrupt output and hand every owner of the
-    /// epoch to its runtime role.
+    /// Hand every owner of the epoch to its runtime role.
     ///
-    /// The bank leaves this engine's custody here for the first time, so no
-    /// CPU-route installer can have received it; this complete initialization
-    /// is the matching Controller epoch. The timer is returned unstarted and
-    /// only with the prepared output, so it cannot be started before the
-    /// output.
+    /// The bank leaves this engine's custody here for the first time, its
+    /// output not prepared, together with the unstarted timer: the gate of
+    /// their interrupt handler prepares the output, then starts the timer,
+    /// when the epoch opens, so no source is armed while the task holds its
+    /// owner. This complete initialization is the matching Controller epoch.
     pub fn activate(self) -> BlePhyRuntime<'cells, MODEM_TIMER_CAPACITY, X, M> {
         let Self {
             mut controller,
@@ -176,10 +177,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
         } = self;
         let interrupts: InterruptBankOwner = controller.take_interrupt_owner();
         let timer = controller.take_timer_hardware();
-        // The owner is the completed matching Controller initialization, and
-        // the bank has just left its one-shot custody, so all three CPU
-        // routes remain inactive.
-        let output = interrupts.prepare_controller_output();
+        let interrupts = interrupts.into_setup();
         let timing = BlePhyTimingAuthority::new(
             controller
                 .task_mut()
@@ -188,7 +186,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
         );
         BlePhyRuntime {
             endpoints: controller.split_runtime(),
-            output,
+            interrupts,
             timer,
             timing,
         }

@@ -158,9 +158,9 @@ impl ChipPolicy {
     }
 }
 
-/// Each part's interrupt is a source of the root bound to the part's
-/// instance and served by that part alone; an interrupt handler's part
-/// names its interrupt.
+/// Each part's interrupts are sources of the root bound to the part's
+/// instance, each served by that part alone; an interrupt handler's part
+/// names at least one.
 fn check_interrupts(
     context: Context<'_>,
     model: &ChipModel,
@@ -171,26 +171,24 @@ fn check_interrupts(
         for part in &partition.parts {
             let entity = format!("{}.{}", partition.name, part.name);
             let fail = |reason: String| context.error(&entity, ErrorKind::Interrupt(reason));
-            let Some(name) = &part.interrupt else {
-                if part.irq_side {
-                    return Err(fail(
-                        "an interrupt handler's part names its interrupt".to_owned(),
-                    ));
-                }
-                continue;
-            };
-            let bound = model
-                .interrupts()
-                .iter()
-                .any(|interrupt| interrupt.name == *name && interrupt.instance == part.instance);
-            if !bound {
-                return Err(fail(format!(
-                    "{name} is no interrupt source bound to {}",
-                    part.instance
-                )));
+            if part.interrupt.is_empty() && part.irq_side {
+                return Err(fail(
+                    "an interrupt handler's part names its interrupt".to_owned(),
+                ));
             }
-            if !served.insert(name.as_str()) {
-                return Err(fail(format!("{name} is served by another part")));
+            for name in &part.interrupt {
+                let bound = model.interrupts().iter().any(|interrupt| {
+                    interrupt.name == *name && interrupt.instance == part.instance
+                });
+                if !bound {
+                    return Err(fail(format!(
+                        "{name} is no interrupt source bound to {}",
+                        part.instance
+                    )));
+                }
+                if !served.insert(name.as_str()) {
+                    return Err(fail(format!("{name} is already served")));
+                }
             }
         }
     }

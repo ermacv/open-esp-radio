@@ -6,9 +6,9 @@ struct Backend {
 }
 
 impl NrtInterruptBackend for Backend {
-    fn capture_nrt_and_acknowledge(&mut self) -> BluetoothNrtInterruptAcknowledged {
+    fn capture_nrt_and_acknowledge(&mut self) -> Option<BluetoothNrtInterruptAcknowledged> {
         self.captures += 1;
-        self.acknowledged.take().expect("one NRT epoch")
+        self.acknowledged.take()
     }
 }
 
@@ -19,7 +19,17 @@ fn default_profile_retains_one_epoch_without_synthetic_work() {
         captures: 0,
     };
 
-    let _epoch = execute_nrt_default_interrupt_step(&mut backend);
+    assert!(execute_nrt_default_interrupt_step(&mut backend).is_some());
+    assert_eq!(backend.captures, 1);
+}
 
+#[test]
+fn clear_snapshots_make_no_epoch() {
+    let mut backend = Backend {
+        acknowledged: None,
+        captures: 0,
+    };
+
+    assert!(execute_nrt_default_interrupt_step(&mut backend).is_none());
     assert_eq!(backend.captures, 1);
 }

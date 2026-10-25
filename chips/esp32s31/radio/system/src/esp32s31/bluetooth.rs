@@ -253,7 +253,7 @@ where
                 return poisoned(PoisonCause::Controller);
             }
         };
-        let clocked = match self.controller.reset(&mut shared.radio) {
+        let clocked = match self.controller.reset(&mut shared.radio).await {
             Ok(clocked) => clocked,
             Err(_) => return poisoned(PoisonCause::Controller),
         };

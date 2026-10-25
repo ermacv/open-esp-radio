@@ -13,10 +13,12 @@ use core::{
 };
 
 use crate::bluetooth::{
+    BluetoothControllerOutputReleaseError, BluetoothDynamicSourcesMasked,
+    BluetoothOutputIdleSampled, BluetoothOutputReleaseAdmitted, BluetoothOutputReleased,
     BluetoothSchedulerBusyObservation, BluetoothSchedulerCancellationIndexed,
-    BluetoothSchedulerCancellationSourceAcknowledged,
-    BluetoothSchedulerLockModifyInterruptObservation, BluetoothSchedulerRunInterruptsPrepared,
-    InterruptRegistersOwner,
+    BluetoothSchedulerCancellationSourceAcknowledged, BluetoothSchedulerHeadsAbsent,
+    BluetoothSchedulerLockModifyInterruptObservation, BluetoothSchedulerRunDisabled,
+    BluetoothSchedulerRunInterruptsPrepared, InterruptRegistersOwner,
 };
 
 const FREE: u32 = 0;
@@ -62,6 +64,9 @@ pub enum SchedulerInterruptError {
     DiagnosticUnsettled,
     Quarantined,
     NotStopped,
+    /// The epoch's output is released: no scheduler-run group is enabled
+    /// again.
+    OutputReleased,
 }
 
 enum Command {
@@ -74,6 +79,9 @@ enum Command {
     Progress,
     SelectSettle,
     Settled,
+    SampleIdleOutput(BluetoothOutputReleaseAdmitted),
+    MaskOutput(BluetoothSchedulerHeadsAbsent),
+    ReleaseOutput(BluetoothSchedulerRunDisabled),
 }
 
 enum Reply {
@@ -83,6 +91,9 @@ enum Reply {
     Cancellation(BluetoothSchedulerCancellationSourceAcknowledged),
     Done,
     Flag(bool),
+    IdleSampled(Result<BluetoothOutputIdleSampled, BluetoothControllerOutputReleaseError>),
+    OutputMasked(BluetoothDynamicSourcesMasked),
+    OutputReleased(Result<BluetoothOutputReleased, BluetoothControllerOutputReleaseError>),
 }
 
 // Initialized by P2 before REQUEST. P3 borrows this one message in place,
@@ -196,9 +207,11 @@ impl SchedulerInterruptHalf {
                         .capture_scheduler_lock_modify_interrupt(settle)
                         .map_err(unsettled)?,
                 ),
-                Command::PrepareRun => {
-                    Reply::Prepared(interrupts.prepare_scheduler_run_interrupts())
-                }
+                Command::PrepareRun => Reply::Prepared(
+                    interrupts
+                        .prepare_scheduler_run_interrupts()
+                        .ok_or(SchedulerInterruptError::OutputReleased)?,
+                ),
                 Command::AcknowledgeCancellation(indexed) => {
                     let acknowledged =
                         interrupts.acknowledge_scheduler_cancellation_source(indexed);
@@ -226,6 +239,15 @@ impl SchedulerInterruptHalf {
                         .scheduler_execution_modify_settled(settle)
                         .map_err(unsettled)?,
                 ),
+                Command::SampleIdleOutput(admitted) => {
+                    Reply::IdleSampled(interrupts.sample_idle_output(admitted, settle))
+                }
+                Command::MaskOutput(heads) => {
+                    Reply::OutputMasked(interrupts.mask_output_dynamic_sources(heads))
+                }
+                Command::ReleaseOutput(run) => {
+                    Reply::OutputReleased(interrupts.release_idle_output(run, settle))
+                }
             })
         })
     }
@@ -485,6 +507,48 @@ impl SchedulerTaskHalf {
         bell: &impl SchedulerDoorbell,
     ) -> Result<bool, SchedulerInterruptError> {
         self.flag(bell, Command::Settled).await
+    }
+    /// The handler's idle sample of the output release.
+    pub(crate) async fn sample_idle_output(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+        admitted: BluetoothOutputReleaseAdmitted,
+    ) -> Result<
+        Result<BluetoothOutputIdleSampled, BluetoothControllerOutputReleaseError>,
+        SchedulerInterruptError,
+    > {
+        match self
+            .exchange(bell, Command::SampleIdleOutput(admitted))
+            .await?
+        {
+            (_, Reply::IdleSampled(sampled)) => Ok(sampled),
+            _ => Err(SchedulerInterruptError::ForeignReply),
+        }
+    }
+    /// The handler's mask of the dynamic scheduler sources.
+    pub(crate) async fn mask_output(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+        heads: BluetoothSchedulerHeadsAbsent,
+    ) -> Result<BluetoothDynamicSourcesMasked, SchedulerInterruptError> {
+        match self.exchange(bell, Command::MaskOutput(heads)).await? {
+            (_, Reply::OutputMasked(masked)) => Ok(masked),
+            _ => Err(SchedulerInterruptError::ForeignReply),
+        }
+    }
+    /// The handler's release of the controller output.
+    pub(crate) async fn release_output(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+        run: BluetoothSchedulerRunDisabled,
+    ) -> Result<
+        Result<BluetoothOutputReleased, BluetoothControllerOutputReleaseError>,
+        SchedulerInterruptError,
+    > {
+        match self.exchange(bell, Command::ReleaseOutput(run)).await? {
+            (_, Reply::OutputReleased(released)) => Ok(released),
+            _ => Err(SchedulerInterruptError::ForeignReply),
+        }
     }
     async fn flag(
         &mut self,

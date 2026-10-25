@@ -554,14 +554,12 @@ fn the_thin_renderer_renders_the_esp32s31_root_and_policy() {
     let rendered = oer_registers_model::chip_render::render(&model, &policy)
         .unwrap_or_else(|error| panic!("the thin PAC renders: {error}"));
     // Each part the policy gives an interrupt serves its source: the
-    // handlers', the software lines', the Bluetooth bank's (source 124,
-    // whose owner also serves 133) and the modem low-power timer's.
+    // handlers', the software lines' and the modem low-power timer's.
     for (part, source) in [
         ("Ieee802154MacIrq", 132),
         ("UsbSerialJtagIrq", 2),
         ("FromCpu0", 65),
         ("FromCpu3", 68),
-        ("BluetoothInterruptBank", 124),
         ("BtdmRuntimeControl", 127),
     ] {
         let item = format!(
@@ -569,6 +567,13 @@ fn the_thin_renderer_renders_the_esp32s31_root_and_policy() {
         );
         assert!(rendered.contains(&item), "{item}");
     }
+    // The Bluetooth bank acknowledges the primary source 124 and the NRT
+    // source 133, so its part serves both and names no single one.
+    let bank = "impl<P: oer_mmio::Placement> oer_mmio::InterruptSources for BluetoothInterruptBank<P> {\nconst SOURCES: &'static [u16] = &[124, 133];";
+    assert!(rendered.contains(bank), "{bank}");
+    assert!(!rendered.contains(
+        "impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for BluetoothInterruptBank<P>"
+    ));
     // The irreducible acknowledgements render; ordinary transactions do not.
     for item in [
         "pub fn mac_interrupt_clear(&mut self)",

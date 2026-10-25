@@ -1,13 +1,16 @@
-//! Terminal output release after independent task and CPU-route retirement.
+//! Terminal output release of an idle scheduler, while the interrupt
+//! handler still holds the bank.
 //!
-//! The idle preflight retains every hardware list pointer on rejection. The
-//! accepted suffix composes the reviewed scheduler source mask/run-disable,
-//! link-basic acknowledgement and controller-output release transactions.
-//! It does not stop the modem counter or revoke PHY/RX/DF publications.
+//! The bank stays with its handler for the whole epoch, so the release is a
+//! sequence of steps that alternate between the handler (the bank and the
+//! diagnostic pair) and the task (the scheduler's list heads and RUN). The
+//! writes keep the reviewed order: mask the dynamic scheduler sources, disable
+//! RUN, fence; acknowledge the dynamic sources, release the controller output,
+//! fence. It does not stop the modem counter or revoke PHY/RX/DF publications.
 //!
-//! Scheduler BUSY is sampled by the HAL, which bounds the diagnostic retry,
-//! so release is two transactions: quiescence consumes the preflight sample,
-//! release consumes a fresh sample taken after the mask/disable fence.
+//! Scheduler BUSY is sampled by the HAL, which bounds the diagnostic retry:
+//! the idle sample precedes the mask, and a fresh sample after the fence that
+//! disables RUN precedes the release.
 
 use super::*;
 use crate::bluetooth::registers::{
@@ -27,83 +30,99 @@ pub enum BluetoothControllerOutputReleaseError {
     SchedulerBusyUnsettled,
     /// A list still names hardware-visible memory; it is left unchanged.
     PublishedHead(BluetoothSchedulerHardwareListIndex),
-    /// A fatal or unclassified primary source remains unacknowledged.
+    /// A fatal or unclassified primary source is pending, or the handler
+    /// acknowledged one during the epoch.
     InterruptFault,
 }
 
-trait Control {
-    fn head_present(&mut self, index: BluetoothSchedulerHardwareListIndex) -> bool;
+/// The handler's side of the release: the bank.
+trait BankControl {
     fn fault_pending(&mut self) -> bool;
     fn mask_dynamic(&mut self);
-    fn disable_run(&mut self);
-    fn fence(&mut self);
     fn clear_dynamic(&mut self);
     fn release_output(&mut self);
+    fn fence(&mut self);
 }
 
-fn validate_idle(
-    control: &mut impl Control,
+/// The task's side of the release: the scheduler's list heads and RUN.
+trait TaskControl {
+    fn head_present(&mut self, index: BluetoothSchedulerHardwareListIndex) -> bool;
+    fn disable_run(&mut self);
+    fn fence(&mut self);
+}
+
+/// The idle sample: no execution and no fault.
+fn sample_idle(
+    bank: &mut impl BankControl,
     busy: BluetoothSchedulerBusyObservation,
 ) -> Result<(), BluetoothControllerOutputReleaseError> {
     use BluetoothControllerOutputReleaseError as Error;
     if busy.is_busy() {
         return Err(Error::SchedulerBusy);
     }
-    for index in 0..16 {
-        let index = BluetoothSchedulerHardwareListIndex::new(index).expect("hardware list");
-        if control.head_present(index) {
-            return Err(Error::PublishedHead(index));
-        }
-    }
-    if control.fault_pending() {
+    if bank.fault_pending() {
         return Err(Error::InterruptFault);
     }
     Ok(())
 }
 
-fn quiesce(
-    control: &mut impl Control,
-    busy: BluetoothSchedulerBusyObservation,
+/// No list names hardware-visible memory.
+fn confirm_heads_absent(
+    task: &mut impl TaskControl,
 ) -> Result<(), BluetoothControllerOutputReleaseError> {
-    validate_idle(control, busy)?;
-    control.mask_dynamic();
-    control.disable_run();
-    control.fence();
+    for index in (0..16).filter_map(BluetoothSchedulerHardwareListIndex::new) {
+        if task.head_present(index) {
+            return Err(BluetoothControllerOutputReleaseError::PublishedHead(index));
+        }
+    }
     Ok(())
 }
 
+/// Mask the dynamic scheduler sources and fence before the task disables
+/// RUN in its own context.
+fn mask(bank: &mut impl BankControl) {
+    bank.mask_dynamic();
+    bank.fence();
+}
+
+/// Disable RUN and fence.
+fn disable_run(task: &mut impl TaskControl) {
+    task.disable_run();
+    task.fence();
+}
+
 fn release(
-    control: &mut impl Control,
+    bank: &mut impl BankControl,
     busy: BluetoothSchedulerBusyObservation,
 ) -> Result<(), BluetoothControllerOutputReleaseError> {
     use BluetoothControllerOutputReleaseError as Error;
     // Do not acknowledge a new fault or release output if execution changed
-    // during the preflight. CPU routing stays disabled on every result.
+    // after the mask.
     if busy.is_busy() {
         return Err(Error::SchedulerBusy);
     }
-    if control.fault_pending() {
+    if bank.fault_pending() {
         return Err(Error::InterruptFault);
     }
-    control.clear_dynamic();
-    control.release_output();
-    control.fence();
+    bank.clear_dynamic();
+    bank.release_output();
+    bank.fence();
     Ok(())
 }
 
-struct Hardware<'a, P: BluetoothPlacements> {
-    task: &'a mut BluetoothTaskRegisters<P>,
-    output: &'a mut BluetoothInterruptOutputPrepared<P>,
+struct BankHardware<'a, P: BluetoothPlacements> {
+    bank: &'a mut oer_esp32s31_pac::bt_mac::BluetoothInterruptBank<P::BtMac>,
+    /// The handler acknowledged a fault during the epoch.
+    fault_acknowledged: bool,
 }
 
-impl<P: BluetoothPlacements> Control for Hardware<'_, P> {
-    fn head_present(&mut self, index: BluetoothSchedulerHardwareListIndex) -> bool {
-        self.task.scheduler_head_present(index)
-    }
-
+impl<P: BluetoothPlacements> BankControl for BankHardware<'_, P> {
     fn fault_pending(&mut self) -> bool {
+        if self.fault_acknowledged {
+            return true;
+        }
         let mut control = HardwareInterruptControl {
-            bank: &mut self.output.peripherals.bluetooth_interrupt_bank,
+            bank: &mut *self.bank,
         };
         let bank_0 = control.sample_bank_0();
         let bank_1 = control.sample_bank_1();
@@ -115,14 +134,41 @@ impl<P: BluetoothPlacements> Control for Hardware<'_, P> {
     }
 
     fn mask_dynamic(&mut self) {
-        let bank = &mut self.output.peripherals.bluetooth_interrupt_bank;
-        bank.modify_irq_enable_0(|w| {
+        self.bank.modify_irq_enable_0(|w| {
             w.set_source_21(false);
             w.set_sources_27_28(oer_mmio::Bits::constant::<0x0>());
         });
-        bank.modify_irq_enable_1(|w| {
+        self.bank.modify_irq_enable_1(|w| {
             w.set_source_3(false);
         });
+    }
+
+    fn clear_dynamic(&mut self) {
+        let mut control = HardwareInterruptControl {
+            bank: &mut *self.bank,
+        };
+        control.clear_scheduler_run_bank_0();
+        control.clear_scheduler_run_bank_1();
+    }
+
+    fn release_output(&mut self) {
+        execute_primary_release(&mut HardwareInterruptControl {
+            bank: &mut *self.bank,
+        });
+    }
+
+    fn fence(&mut self) {
+        device_fence();
+    }
+}
+
+struct TaskHardware<'a, P: BluetoothPlacements> {
+    task: &'a mut BluetoothTaskRegisters<P>,
+}
+
+impl<P: BluetoothPlacements> TaskControl for TaskHardware<'_, P> {
+    fn head_present(&mut self, index: BluetoothSchedulerHardwareListIndex) -> bool {
+        self.task.scheduler_head_present(index)
     }
 
     fn disable_run(&mut self) {
@@ -137,88 +183,69 @@ impl<P: BluetoothPlacements> Control for Hardware<'_, P> {
     fn fence(&mut self) {
         device_fence();
     }
-
-    fn clear_dynamic(&mut self) {
-        let mut control = HardwareInterruptControl {
-            bank: &mut self.output.peripherals.bluetooth_interrupt_bank,
-        };
-        control.clear_scheduler_run_bank_0();
-        control.clear_scheduler_run_bank_1();
-    }
-
-    fn release_output(&mut self) {
-        execute_primary_release(&mut HardwareInterruptControl {
-            bank: &mut self.output.peripherals.bluetooth_interrupt_bank,
-        });
-    }
 }
 
-/// Proof that the idle preflight passed and the dynamic scheduler sources
-/// were masked, RUN disabled and a device fence completed.
-#[derive(Debug, Eq, PartialEq)]
-#[must_use = "a quiesced output awaits a fresh idle sample before release"]
-pub struct BluetoothControllerOutputQuiesced {
-    _private: (),
-}
-
-impl<P: BluetoothPlacements> BluetoothInterruptOutputPrepared<P> {
-    /// Sample scheduler BUSY once through the diagnostic pair; `None` when
-    /// the two reads disagreed. The HAL owns the bounded retry.
-    pub fn capture_scheduler_busy(&mut self) -> Option<BluetoothSchedulerBusyObservation> {
-        crate::bluetooth::registers::scheduler::runtime::sample_scheduler_busy(
-            &mut self.peripherals.bluetooth_scheduler_interrupt_runtime,
-        )
-        .map(BluetoothSchedulerBusyObservation::new)
-    }
-
-    /// Observe idle admission without changing masks, heads or pending status.
-    /// The caller retains the task and unrouted interrupt partitions throughout.
-    pub fn validate_idle_controller(
+impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
+    /// Admit release on an idle BUSY sample without a pending or
+    /// acknowledged fault. Writes nothing.
+    pub(crate) fn sample_idle_output(
         &mut self,
-        task: &mut BluetoothTaskRegisters<P>,
         busy: BluetoothSchedulerBusyObservation,
+        fault_acknowledged: bool,
     ) -> Result<(), BluetoothControllerOutputReleaseError> {
-        validate_idle(&mut Hardware { task, output: self }, busy)
-    }
-
-    /// Admit an idle, headless scheduler without primary faults, then mask the
-    /// dynamic scheduler sources, disable RUN and fence.
-    ///
-    /// The lifecycle caller must own the retired command task and must have
-    /// removed CPU routes before calling. Rejection before the preflight
-    /// passes changes nothing; no list head is erased to manufacture idle.
-    pub fn quiesce_idle_controller_output(
-        &mut self,
-        task: &mut BluetoothTaskRegisters<P>,
-        busy: BluetoothSchedulerBusyObservation,
-    ) -> Result<BluetoothControllerOutputQuiesced, BluetoothControllerOutputReleaseError> {
-        quiesce(&mut Hardware { task, output: self }, busy)?;
-        Ok(BluetoothControllerOutputQuiesced { _private: () })
-    }
-
-    /// Release output when a BUSY sample taken after quiescence is still idle
-    /// and no primary fault is pending.
-    ///
-    /// Rejection retains both partitions and leaves dynamic sources masked and
-    /// RUN disabled. Faults are never cleared.
-    pub fn try_release_idle_controller_output(
-        mut self,
-        task: &mut BluetoothTaskRegisters<P>,
-        _quiesced: BluetoothControllerOutputQuiesced,
-        busy: BluetoothSchedulerBusyObservation,
-    ) -> Result<BluetoothInterruptSetup<P>, (BluetoothControllerOutputReleaseError, Self)> {
-        if let Err(error) = release(
-            &mut Hardware {
-                task,
-                output: &mut self,
+        sample_idle(
+            &mut BankHardware::<P> {
+                bank: &mut self.peripherals.bluetooth_interrupt_bank,
+                fault_acknowledged,
             },
             busy,
-        ) {
-            return Err((error, self));
-        }
-        Ok(BluetoothInterruptSetup {
+        )
+    }
+
+    /// Mask the dynamic scheduler sources and fence.
+    pub(crate) fn mask_output_dynamic_sources(&mut self) {
+        mask(&mut BankHardware::<P> {
+            bank: &mut self.peripherals.bluetooth_interrupt_bank,
+            fault_acknowledged: false,
+        });
+    }
+
+    /// Acknowledge the dynamic sources and release the output when a BUSY
+    /// sample taken after RUN was disabled is idle and no fault is pending
+    /// or was acknowledged. Faults are never cleared.
+    pub(crate) fn release_idle_output(
+        &mut self,
+        busy: BluetoothSchedulerBusyObservation,
+        fault_acknowledged: bool,
+    ) -> Result<(), BluetoothControllerOutputReleaseError> {
+        release(
+            &mut BankHardware::<P> {
+                bank: &mut self.peripherals.bluetooth_interrupt_bank,
+                fault_acknowledged,
+            },
+            busy,
+        )
+    }
+
+    /// The released bank, as the inactive interrupt partition. No MMIO.
+    pub(crate) fn into_released(self) -> BluetoothInterruptSetup<P> {
+        BluetoothInterruptSetup {
             peripherals: self.peripherals,
-        })
+        }
+    }
+}
+
+impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
+    /// No scheduler list names hardware-visible memory. Writes nothing.
+    pub(crate) fn confirm_scheduler_heads_absent(
+        &mut self,
+    ) -> Result<(), BluetoothControllerOutputReleaseError> {
+        confirm_heads_absent(&mut TaskHardware { task: self })
+    }
+
+    /// Disable scheduler RUN and fence.
+    pub(crate) fn disable_scheduler_run(&mut self) {
+        disable_run(&mut TaskHardware { task: self });
     }
 }
 
