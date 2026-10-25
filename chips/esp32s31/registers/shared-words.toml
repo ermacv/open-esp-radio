@@ -68,21 +68,6 @@ coordination = "disjoint-lifecycle"
 reason = "Written only by modem_clock_domain_power_state_icg_map_init at the end of rtc::init inside esp_hal::init (esp-hal 4fd4ba9b), which ORs in the modem clock-domain ICG maps before any radio owner exists."
 
 [[word]]
-address = 0x20585210
-radio = "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE"
-esp_hal = "INTERRUPT_CORE0.core_0_intr_map[132] in map_raw (interrupt/mod.rs)"
-coordination = "radio-reads-only"
-reason = "The radio's IEEE802154_INTERRUPT_ROUTE view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the word; the radio PAC only reads it to classify the route. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source, MODEM_ZB_MAC included, to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
-
-[[word]]
-address = 0x20585a10
-radio = "IEEE802154_INTERRUPT_ROUTE.CORE1_ROUTE"
-esp_hal = "INTERRUPT_CORE1.core_1_intr_map[132] in map_raw (interrupt/mod.rs)"
-coordination = "radio-reads-only"
-reason = "The radio's IEEE802154_INTERRUPT_ROUTE view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the word; the radio PAC only reads it to classify the route. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source, MODEM_ZB_MAC included, to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
-
-
-[[word]]
 address = 0x20586010
 words = 4
 radio = "FROM_CPU_0.LINE to FROM_CPU_3.LINE"
@@ -153,44 +138,28 @@ coordination = "disjoint-lifecycle"
 reason = "esp-hal 1f646c5 stores the super watchdog's key only through Rtc's Swd, which only esp_hal::init builds (rtc.swd.disable()); the watchdog handoff consumes LP_WDT after esp_hal::init and no image builds an Rtc. The super watchdog owner alone writes the key afterwards."
 
 [[word]]
+address = 0x20585000
+words = 169
+radio = "INTERRUPT_CORE0.ROUTE%s (typed block)"
+esp_hal = "INTERRUPT_CORE0.core_0_intr_map in map_raw, from setup_interrupts (interrupt/mod.rs)"
+coordination = "disjoint-lifecycle"
+reason = "setup_interrupts routes every source nowhere. esp-hal writes the word only in esp_hal::init, which returns before the interrupt matrix's handoff; the handoff consumes esp-hal's `INTERRUPT_CORE0`, `INTERRUPT_CORE1` and `CLIC` singletons, and esp-hal's other writers (interrupt::enable, map and bind_interrupt, the drivers' set_interrupt_handler and async constructors) have no caller in our images. After the handoff the chip HAL's interrupt controller, which the interrupt table's router drives, is the only writer (esp-hal 1f646c5 interrupt/mod.rs, interrupt/riscv.rs, interrupt/riscv/clic.rs)."
+
+[[word]]
+address = 0x20585800
+words = 169
+radio = "INTERRUPT_CORE1.ROUTE%s (typed block)"
+esp_hal = "INTERRUPT_CORE1.core_1_intr_map in map_raw, from setup_interrupts (interrupt/mod.rs)"
+coordination = "disjoint-lifecycle"
+reason = "setup_interrupts routes every source nowhere. esp-hal writes the word only in esp_hal::init, which returns before the interrupt matrix's handoff; the handoff consumes esp-hal's `INTERRUPT_CORE0`, `INTERRUPT_CORE1` and `CLIC` singletons, and esp-hal's other writers (interrupt::enable, map and bind_interrupt, the drivers' set_interrupt_handler and async constructors) have no caller in our images. After the handoff the chip HAL's interrupt controller, which the interrupt table's router drives, is the only writer (esp-hal 1f646c5 interrupt/mod.rs, interrupt/riscv.rs, interrupt/riscv/clic.rs)."
+
+[[word]]
 address = 0x10801000
 words = 48
 radio = "CLIC.CTRL%s (typed block)"
 esp_hal = "CLIC.int_ie, int_ip, int_attr and int_ctl in init, init_vectoring and the CpuInterrupt methods (interrupt/riscv.rs, interrupt/riscv/clic.rs)"
-coordination = "unreached-radio-writer"
-reason = "The CLIC view is writable in the publication, but nothing calls the typed block's writers and no API transaction stores to the words. esp-hal is the only writer: init_vectoring, from esp_hal::init, gives each level its line; the CpuInterrupt and enable_direct writers have no caller in our images (chip.toml [interrupts] level-writers pins the level writers; esp-hal 1f646c5)."
-
-[[word]]
-address = 0x20585000
-words = 132
-radio = "INTERRUPT_CORE0.MAP_LOW%s (typed block)"
-esp_hal = "INTERRUPT_CORE0.core_0_intr_map in map_raw (interrupt/mod.rs)"
-coordination = "unreached-radio-writer"
-reason = "The interrupt-matrix view is writable in the publication, but nothing calls the typed block's writers and no API transaction stores to the words. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
-
-[[word]]
-address = 0x20585214
-words = 36
-radio = "INTERRUPT_CORE0.MAP_HIGH%s (typed block)"
-esp_hal = "INTERRUPT_CORE0.core_0_intr_map in map_raw (interrupt/mod.rs)"
-coordination = "unreached-radio-writer"
-reason = "The interrupt-matrix view is writable in the publication, but nothing calls the typed block's writers and no API transaction stores to the words. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
-
-[[word]]
-address = 0x20585800
-words = 132
-radio = "INTERRUPT_CORE1.MAP_LOW%s (typed block)"
-esp_hal = "INTERRUPT_CORE1.core_1_intr_map in map_raw (interrupt/mod.rs)"
-coordination = "unreached-radio-writer"
-reason = "The interrupt-matrix view is writable in the publication, but nothing calls the typed block's writers and no API transaction stores to the words. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
-
-[[word]]
-address = 0x20585a14
-words = 36
-radio = "INTERRUPT_CORE1.MAP_HIGH%s (typed block)"
-esp_hal = "INTERRUPT_CORE1.core_1_intr_map in map_raw (interrupt/mod.rs)"
-coordination = "unreached-radio-writer"
-reason = "The interrupt-matrix view is writable in the publication, but nothing calls the typed block's writers and no API transaction stores to the words. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
+coordination = "disjoint-lifecycle"
+reason = "init_vectoring gives each line its level and hardware vectoring and sets the level-bit count. esp-hal writes the word only in esp_hal::init, which returns before the interrupt matrix's handoff; the handoff consumes esp-hal's `INTERRUPT_CORE0`, `INTERRUPT_CORE1` and `CLIC` singletons, and esp-hal's other writers (interrupt::enable, map and bind_interrupt, the drivers' set_interrupt_handler and async constructors) have no caller in our images. After the handoff the chip HAL's interrupt controller, which the interrupt table's router drives, is the only writer (esp-hal 1f646c5 interrupt/mod.rs, interrupt/riscv.rs, interrupt/riscv/clic.rs)."
 
 [[word]]
 address = 0x20399000
@@ -360,5 +329,5 @@ reason = "esp-hal 1f646c5 stores it only in its USB Serial/JTAG driver (usb/usb_
 address = 0x10800000
 radio = "CLIC.INT_CONFIG (typed block)"
 esp_hal = "CLIC.int_config in init, from init_vectoring (interrupt/riscv/clic.rs, interrupt/riscv.rs)"
-coordination = "unreached-radio-writer"
-reason = "Nothing calls the typed block's writer. esp-hal's init_vectoring, through clic::init, from esp_hal::init, is the only runtime writer of the level-bit count (esp-hal 1f646c5)."
+coordination = "disjoint-lifecycle"
+reason = "init_vectoring gives each line its level and hardware vectoring and sets the level-bit count. esp-hal writes the word only in esp_hal::init, which returns before the interrupt matrix's handoff; the handoff consumes esp-hal's `INTERRUPT_CORE0`, `INTERRUPT_CORE1` and `CLIC` singletons, and esp-hal's other writers (interrupt::enable, map and bind_interrupt, the drivers' set_interrupt_handler and async constructors) have no caller in our images. After the handoff the chip HAL's interrupt controller, which the interrupt table's router drives, is the only writer (esp-hal 1f646c5 interrupt/mod.rs, interrupt/riscv.rs, interrupt/riscv/clic.rs)."

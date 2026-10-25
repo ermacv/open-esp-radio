@@ -20,18 +20,20 @@ pub use oer_espressif_ieee802154_mac_values::{
     Ieee802154EventObservation, Ieee802154EventObservationError, Ieee802154MacCommand,
     Ieee802154MacControl, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
     Ieee802154ObservedEventState, Ieee802154OperationEventEnableObservation,
-    Ieee802154OperationRxAbortEnableObservation, Ieee802154PanIdentity, Ieee802154RouteState,
-    Ieee802154RxAbortEnableSet, Ieee802154RxAbortEnableState, Ieee802154RxAbortReason,
-    Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode, Ieee802154SecurityPayloadOffset,
-    Ieee802154StateSnapshot, Ieee802154TransmitSecurityControl, Ieee802154TxAbortEnableSet,
-    Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation, Ieee802154TxSecurityError,
+    Ieee802154OperationRxAbortEnableObservation, Ieee802154PanIdentity, Ieee802154RxAbortEnableSet,
+    Ieee802154RxAbortEnableState, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
+    Ieee802154RxStateCode, Ieee802154SecurityPayloadOffset, Ieee802154StateSnapshot,
+    Ieee802154TransmitSecurityControl, Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason,
+    Ieee802154TxAbortReasonObservation, Ieee802154TxSecurityError,
     Ieee802154TxSecurityErrorObservation, Ieee802154TxStateCode, Ieee802154TxStatus,
     Ieee802154ValidationEdDurationState, Ieee802154ValidationEventEnableState,
 };
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154InterruptActivationPlan, Ieee802154InterruptTransitionPort,
-    execute_interrupt_activation, execute_interrupt_deactivation,
+    Ieee802154InterruptActivationPlan, Ieee802154InterruptTransitionPort, execute_interrupt_arming,
+    execute_interrupt_deactivation,
 };
+use oer_interrupt_table::EventAuthority;
+use oer_mmio::InterruptSource;
 
 /// The shared observation of one chip `EVENT_ENABLE` or `EVENT_STATUS`
 /// readback.
@@ -512,8 +514,6 @@ impl Ieee802154FoundationSnapshot {
 #[doc(hidden)]
 pub struct Ieee802154RegisterLease<'registers> {
     registers: &'registers mut crate::ieee802154::ownership::TaskRegisters,
-    interrupt_route:
-        &'registers crate::generated::ieee802154_interrupt_route::Ieee802154InterruptRoute,
     etm: &'registers mut crate::modem::etm::Ieee802154EtmChannels,
 }
 
@@ -888,7 +888,7 @@ impl Ieee802154RegisterLease<'_> {
 /// Cold/polled MAC lease that borrows both disjoint ownership halves.
 ///
 /// Construction requires the inactive [`Ieee802154InterruptSetup`]. Because
-/// activation consumes that setup, `EVENT_STATUS`, affine W1C acknowledge and
+/// arming consumes that setup, `EVENT_STATUS`, affine W1C acknowledge and
 /// RX/TX interrupt sidebands are statically unavailable while a hard-IRQ owner
 /// exists. Task-only command, DMA and policy operations remain reachable via
 /// the embedded [`Ieee802154RegisterLease`].
@@ -1037,17 +1037,10 @@ impl Ieee802154PolledRegisterLease<'_> {
         crate::device_fence();
         events
     }
-
-    /// Classify the source-12 route without exposing its register image.
-    #[doc(hidden)]
-    pub fn interrupt_route_state(&self) -> Ieee802154RouteState {
-        let route = self.task.interrupt_route.read_core0_route();
-        Ieee802154RouteState::from_observation(route.map().get() != 0, route.pass_in_sec())
-    }
 }
 
 /// Borrowed task owner plus the disjoint raw interrupt partition for one
-/// activation or teardown transaction.
+/// arming or teardown transaction.
 struct Ieee802154PacInterruptTransitionPort<'task> {
     task: &'task mut Ieee802154TaskRegisters,
     registers: crate::ieee802154::ownership::InterruptRegisters,
@@ -1118,7 +1111,7 @@ impl Ieee802154InterruptSetup {
     /// Borrow both disjoint halves for one inactive-route polled transaction.
     ///
     /// The returned lease cannot outlive either owner. Calling
-    /// [`Self::activate`] consumes this setup, so no polled `EVENT_STATUS` or
+    /// [`Self::arm`] consumes this setup, so no polled `EVENT_STATUS` or
     /// W1C operation can coexist with the active hard-IRQ capability.
     #[doc(hidden)]
     pub fn polled_register_lease<'registers>(
@@ -1131,24 +1124,25 @@ impl Ieee802154InterruptSetup {
         }
     }
 
-    /// Install the source-confirmed runtime baseline and create the finite
-    /// hard-IRQ owner.
+    /// Arm the interrupt side and create the finite hard-IRQ owner, every
+    /// event still masked.
     ///
-    /// The platform CPU route must remain disabled until the returned value is
-    /// installed in its final storage. This single consuming transition uses
-    /// only the generated runtime-baseline accessors. It keeps event delivery
-    /// masked while configuring both abort fields, consumes one complete stale
-    /// affine W1C snapshot, publishes runtime events last, and orders those
-    /// writes before returning.
+    /// This consuming transition uses only the generated runtime-baseline
+    /// accessors: it configures both abort fields with event delivery masked,
+    /// consumes one complete stale affine W1C snapshot and orders those writes
+    /// before returning. The returned owner implements
+    /// [`oer_mmio::InterruptSource`]; the task publishes the runtime events
+    /// ([`Ieee802154TaskRegisters::enable_runtime_events`]) only after its
+    /// handler holds it.
     ///
-    /// There is no caller-selected mask argument: runtime code cannot activate
+    /// There is no caller-selected mask argument: runtime code cannot arm
     /// an incomplete abort vocabulary or an event absent from the reviewed ISR.
-    pub fn activate(self, task: &mut Ieee802154TaskRegisters) -> Ieee802154InterruptRegisters {
+    pub fn arm(self, task: &mut Ieee802154TaskRegisters) -> Ieee802154InterruptRegisters {
         let mut port = Ieee802154PacInterruptTransitionPort {
             task,
             registers: self.registers,
         };
-        execute_interrupt_activation(
+        execute_interrupt_arming(
             &mut port,
             Ieee802154InterruptActivationPlan::SOURCE_CONFIRMED_BASELINE,
         );
@@ -1156,6 +1150,11 @@ impl Ieee802154InterruptSetup {
             registers: port.registers,
         }
     }
+}
+
+impl oer_mmio::InterruptSource for Ieee802154InterruptRegisters {
+    /// The source of the MAC's interrupt side, generated for its `Irq` part.
+    const SOURCE: u16 = crate::ieee802154::ownership::InterruptRegisters::SOURCE;
 }
 
 impl Ieee802154InterruptRegisters {
@@ -1198,8 +1197,9 @@ impl Ieee802154InterruptRegisters {
 
     /// Close one finite hard-IRQ epoch and return inactive setup ownership.
     ///
-    /// The caller must disable the platform CPU route before this method. The
-    /// transition stops the active operation and both MAC timers, replaces
+    /// Only an owner that was never bound reaches it (a bound owner stays
+    /// with its handler), so its source is routed nowhere. The transition
+    /// stops the active operation and both MAC timers, replaces
     /// event, transmit-abort, and receive-abort enables with exact zero images,
     /// consumes one final complete affine W1C snapshot, and orders both phases
     /// before returning task-side setup authority.
@@ -1224,10 +1224,59 @@ impl Ieee802154TaskRegisters {
     pub fn ieee802154_register_lease(&mut self) -> Ieee802154RegisterLease<'_> {
         Ieee802154RegisterLease {
             registers: &mut self.peripherals.ieee802154_mac,
-            interrupt_route: &self.peripherals.ieee802154_interrupt_route,
             etm: &mut self.peripherals.etm,
         }
     }
+
+    /// Publish the runtime events of the reviewed ISR, after arming
+    /// ([`Ieee802154InterruptSetup::arm`]), and order the write: from here
+    /// the MAC raises its interrupt. `authority` proves that a handler holds
+    /// a part of the MAC's source or that no line receives it
+    /// ([`oer_interrupt_table::Bound`], [`oer_interrupt_table::Silent`]).
+    ///
+    /// ```compile_fail,E0061
+    /// fn enable(task: &mut oer_esp32c5_pac::Ieee802154TaskRegisters) {
+    ///     // Enabling the events takes the router's proof.
+    ///     task.enable_runtime_events();
+    /// }
+    /// ```
+    ///
+    /// ```compile_fail,E0080
+    /// # use oer_interrupt_table::Bound;
+    /// struct OtherIrq;
+    /// impl oer_mmio::InterruptSource for OtherIrq {
+    ///     const SOURCE: u16 = 3;
+    /// }
+    /// fn enable(task: &mut oer_esp32c5_pac::Ieee802154TaskRegisters, bound: &Bound<OtherIrq>) {
+    ///     // Another source's binding proves nothing about the MAC's.
+    ///     task.enable_runtime_events(bound);
+    /// }
+    /// # fn main() {
+    /// #     let _: fn(&mut oer_esp32c5_pac::Ieee802154TaskRegisters, &Bound<OtherIrq>) = enable;
+    /// # }
+    /// ```
+    pub fn enable_runtime_events<P: InterruptSource>(
+        &mut self,
+        authority: &impl EventAuthority<P>,
+    ) {
+        mac_source_authority::<P>(authority);
+        self.peripherals
+            .ieee802154_mac
+            .enable_runtime_events_without_timer0();
+        crate::device_fence();
+    }
+}
+
+/// Check at compile time that `P`, whose events `authority` allows, is a
+/// part of the MAC's source.
+fn mac_source_authority<P: InterruptSource>(authority: &impl EventAuthority<P>) {
+    const {
+        assert!(
+            P::SOURCE == crate::ieee802154::ownership::InterruptRegisters::SOURCE,
+            "the authority is another source's, not the IEEE 802.15.4 MAC's"
+        );
+    };
+    let _authority = authority;
 }
 
 const fn event_of(event: crate::ieee802154::ownership::RawEvent) -> Ieee802154Event {

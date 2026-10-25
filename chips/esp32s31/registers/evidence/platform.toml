@@ -55,7 +55,7 @@ description = "Official ESP-IDF commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe,
 
 [[sources]]
 id = "ESP_IDF_S31_INTERRUPT_SOURCES"
-description = "Official ESP-IDF commit aeab6dcfbeb44aba4b1f8ed102e3086172833153, components/soc/esp32s31/include/soc/interrupts.h, sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d. The hardware source table assigns MODEM_BT_MAC to 124 and MODEM_BT_MAC_INT1 to 133. The identical file is also present at the public-source review commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe."
+description = "Official ESP-IDF commit aeab6dcfbeb44aba4b1f8ed102e3086172833153, components/soc/esp32s31/include/soc/interrupts.h, sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d. The hardware source table assigns MODEM_BT_MAC to 124 and MODEM_BT_MAC_INT1 to 133, and, counting from ETS_SYS_ICM_INTR_SOURCE = 0 at line 19, ETS_USB_SERIAL_JTAG_INTR_SOURCE to 2 (line 21), ETS_CPU_INTR_FROM_CPU_0_SOURCE to ETS_CPU_INTR_FROM_CPU_3_SOURCE to 65 to 68 (lines 84 to 87) and ETS_MODEM_ZB_MAC_INTR_SOURCE to 132 (line 151); ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 holds the same bytes. The identical file is also present at the public-source review commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe."
 
 [[sources]]
 id = "ESP_IDF_BTDM_OSAL_INTERRUPT_POLICY"

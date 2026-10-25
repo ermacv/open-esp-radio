@@ -3,7 +3,8 @@ use std::vec::Vec;
 use super::{
     Ieee802154InterruptActivationPlan, Ieee802154InterruptTransitionPort,
     Ieee802154ObservedEventState, Ieee802154RxStateCode, Ieee802154StateSnapshot,
-    Ieee802154TxStateCode, execute_interrupt_activation, execute_interrupt_deactivation,
+    Ieee802154TxStateCode, execute_interrupt_activation, execute_interrupt_arming,
+    execute_interrupt_deactivation,
 };
 
 #[test]
@@ -168,6 +169,31 @@ fn production_activation_executor_masks_then_acks_the_exact_affine_sample() {
             InterruptTransitionOperation::SampleStaleEvents(0xa5),
             InterruptTransitionOperation::AcknowledgeStaleEvents(0xa5),
             InterruptTransitionOperation::EnableRuntimeEvents,
+            InterruptTransitionOperation::OrderDeviceAccesses,
+        ]
+    );
+}
+
+#[test]
+fn arming_acks_the_exact_affine_sample_and_leaves_every_event_masked() {
+    let mut port = RecordingInterruptTransitionPort {
+        event_identity: 0x5a,
+        operations: Vec::new(),
+    };
+    execute_interrupt_arming(
+        &mut port,
+        Ieee802154InterruptActivationPlan::SOURCE_CONFIRMED_BASELINE,
+    );
+
+    assert_eq!(
+        port.operations,
+        [
+            InterruptTransitionOperation::MaskEvents,
+            InterruptTransitionOperation::EnableRuntimeTxAborts,
+            InterruptTransitionOperation::EnableRuntimeRxAborts,
+            InterruptTransitionOperation::OrderDeviceAccesses,
+            InterruptTransitionOperation::SampleStaleEvents(0x5a),
+            InterruptTransitionOperation::AcknowledgeStaleEvents(0x5a),
             InterruptTransitionOperation::OrderDeviceAccesses,
         ]
     );

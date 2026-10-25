@@ -4,46 +4,18 @@ schema = 2
 name = "INTERRUPT_CORE0"
 description = """
 The interrupt-matrix route words of core 0, one per peripheral source, by source
-number. Source 12 (ZB_MAC) is left out: its route word belongs to the
-IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-around it."""
+number, ZB_MAC (source 12) included."""
 baseAddress = 0x60010000
 
 [[peripherals.registers]]
 
 [peripherals.registers.register]
-dim = 12
+dim = 84
 dimIncrement = 0x4
-dimIndex = "0-11"
-name = "MAP_LOW%s"
-description = "Route of source %s (sources 0 to 11)."
+dimIndex = "0-83"
+name = "ROUTE%s"
+description = "Route of source %s."
 addressOffset = 0x0
-size = 32
-access = "read-write"
-reserved = { mask = 0xfffffec0, sources = ["ESP_IDF_4D59230D_C5_INTERRUPT_MATRIX"] }
-resetValue = 0x0
-
-[[peripherals.registers.register.fields]]
-name = "MAP"
-description = "The CPU interrupt line the source is routed to; zero routes it nowhere."
-bitOffset = 0
-bitWidth = 6
-
-[[peripherals.registers.register.fields]]
-name = "PASS_IN_SEC"
-description = "The PASS_IN_SEC flag of the source."
-bitOffset = 8
-bitWidth = 1
-
-[[peripherals.registers]]
-
-[peripherals.registers.register]
-dim = 71
-dimIncrement = 0x4
-dimIndex = "0-70"
-name = "MAP_HIGH%s"
-description = "Route of source 13 + %s (sources 13 to 83)."
-addressOffset = 0x34
 size = 32
 access = "read-write"
 reserved = { mask = 0xfffffec0, sources = ["ESP_IDF_4D59230D_C5_INTERRUPT_MATRIX"] }

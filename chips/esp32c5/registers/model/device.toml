@@ -5,7 +5,6 @@ indirect-spaces = ["analog/phy.toml"]
 fragments = [
     "peripherals/observed-mmio-words.toml",
     "peripherals/ieee802154-mac.toml",
-    "peripherals/ieee802154-interrupt-route.toml",
     "peripherals/modem-etm.toml",
     "peripherals/modem-syscon-radio.toml",
     "peripherals/modem-lpcon-shared-clock.toml",

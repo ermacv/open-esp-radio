@@ -11,7 +11,6 @@ allow-clippy-empty-docs = true
 # interrupt matrix and CLIC).
 typed-peripherals = [
     "IEEE802154_MAC",
-    "IEEE802154_INTERRUPT_ROUTE",
     "WIFI_MAC_INTERFACE_ADDRESS",
     "EFUSE",
     "TRNG",
@@ -313,10 +312,9 @@ peripherals = [
 [[ownership-partitions]]
 name = "Ieee802154Peripherals"
 member = "ieee802154"
-description = "IEEE 802.15.4 MAC and source-specific interrupt-route registers owned by the IEEE 802.15.4 hardware lifecycle."
+description = "IEEE 802.15.4 MAC registers owned by the IEEE 802.15.4 hardware lifecycle; its interrupt route word is the interrupt matrix's."
 peripherals = [
     "IEEE802154_MAC",
-    "IEEE802154_INTERRUPT_ROUTE",
 ]
 
 [[register-sides]]
@@ -330,6 +328,31 @@ sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 peripheral = "IEEE802154_MAC"
 source = 132
 sources = ["ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX", "ESP_IDF_4D59230D_S31_INTERRUPT_ZB_MAC_MAP"]
+
+[[interrupt-sources]]
+peripheral = "FROM_CPU_0"
+source = 65
+sources = ["ESP_IDF_S31_INTERRUPT_SOURCES"]
+
+[[interrupt-sources]]
+peripheral = "FROM_CPU_1"
+source = 66
+sources = ["ESP_IDF_S31_INTERRUPT_SOURCES"]
+
+[[interrupt-sources]]
+peripheral = "FROM_CPU_2"
+source = 67
+sources = ["ESP_IDF_S31_INTERRUPT_SOURCES"]
+
+[[interrupt-sources]]
+peripheral = "FROM_CPU_3"
+source = 68
+sources = ["ESP_IDF_S31_INTERRUPT_SOURCES"]
+
+[[interrupt-sources]]
+peripheral = "USB_SERIAL_JTAG"
+source = 2
+sources = ["ESP_IDF_S31_INTERRUPT_SOURCES"]
 
 [[enum-domains]]
 name = "ModemPowerTickTarget"

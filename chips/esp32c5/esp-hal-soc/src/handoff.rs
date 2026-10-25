@@ -1,6 +1,7 @@
 //! The per-domain transfers of platform blocks from esp-hal's singletons to
 //! the chip PAC: the random number generator, the reset cause, the
-//! watchdogs and the USB Serial/JTAG console.
+//! watchdogs, the interrupt matrix with the CLIC and the USB Serial/JTAG
+//! console.
 //!
 //! Each function consumes the domain's esp-hal singletons, which esp-hal
 //! hands out once, and never returns them, so it runs at most once per
@@ -9,10 +10,11 @@
 
 use esp_hal::{
     clock::xtal_clock,
-    peripherals::{LP_CLKRST, LP_PERI, LP_WDT, RNG, TIMG0, TIMG1, USB_DEVICE},
+    peripherals::{INTERRUPT_CORE0, LP_CLKRST, LP_PERI, LP_WDT, RNG, TIMG0, TIMG1, USB_DEVICE},
 };
 use oer_esp32c5_hal::platform::{
-    EntropyHandoff, EntropyRegisters, ResetCauseHandoff, ResetCauseRegisters,
+    EntropyHandoff, EntropyRegisters, InterruptBlocks, InterruptMatrixHandoff,
+    InterruptMatrixPeripherals, ResetCauseHandoff, ResetCauseRegisters,
 };
 use oer_esp32c5_hal::usb_serial_jtag::{
     RetireError, UsbSerialJtagHandoff, UsbSerialJtagRegisters, retire_early_writer,
@@ -52,6 +54,27 @@ pub fn take_reset_cause(lp_clkrst: LP_CLKRST<'static>) -> ResetCauseRegisters {
     // calls, and esp-hal does not write it.
     let handoff = unsafe { ResetCauseHandoff::assume_exclusive() };
     ResetCauseRegisters::from_handoff(handoff)
+}
+
+/// Transfer the interrupt matrix and the CLIC: hart 0's controller, which
+/// the interrupt table's router installs, and the pending sources.
+///
+/// Call it after `esp_hal::init`, whose `setup_interrupts` is esp-hal's last
+/// write of the route and line words.
+pub fn take_interrupt_controller(interrupt_core0: INTERRUPT_CORE0<'static>) -> InterruptBlocks {
+    let _consumed = interrupt_core0;
+    #[allow(
+        unsafe_code,
+        reason = "the consumed esp-hal owner proves the permanent interrupt-matrix handoff"
+    )]
+    // SAFETY: esp-hal issues `INTERRUPT_CORE0` once; it is consumed above and
+    // never returned, so this runs at most once. esp-hal writes the route and
+    // CLIC words only in `esp_hal::init`, which has returned, and in its
+    // interrupt API (`interrupt::enable`, `map`, `bind_interrupt` and the
+    // drivers' interrupt handlers), which no image calls; the words are
+    // reviewed in `registers/shared-words.toml`.
+    let handoff = unsafe { InterruptMatrixHandoff::assume_exclusive() };
+    InterruptBlocks::new(InterruptMatrixPeripherals::from_handoff(handoff))
 }
 
 /// Transfer the watchdogs once and own them, the main watchdogs counting

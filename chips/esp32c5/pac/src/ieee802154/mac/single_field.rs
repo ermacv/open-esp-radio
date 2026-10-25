@@ -11,9 +11,11 @@ use super::{
     Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode, Ieee802154SecurityPayloadOffset,
     Ieee802154TxAbortEnableSet, Ieee802154TxAbortReasonObservation,
     Ieee802154TxSecurityErrorObservation, Ieee802154TxStateCode, Ieee802154TxStatus,
-    multipan_register_index,
+    mac_source_authority, multipan_register_index,
 };
 use crate::ieee802154::ownership::{RawDebugCounter, RawEvent};
+use oer_interrupt_table::EventAuthority;
+use oer_mmio::InterruptSource;
 
 /// Complete `RX_STATUS` observation (`ieee802154_ll_get_rx_status`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -243,13 +245,21 @@ impl Ieee802154RegisterLease<'_> {
             .set_ed_sample_mode(matches!(mode, Ieee802154EdSampleMode::Average));
     }
 
-    /// `ieee802154_ll_enable_events(IEEE802154_EVENT_MASK)`.
-    pub fn enable_all_events(&mut self) {
+    /// `ieee802154_ll_enable_events(IEEE802154_EVENT_MASK)`; `authority`
+    /// proves a handler holds the MAC's part or no line receives its source.
+    pub fn enable_all_events<P: InterruptSource>(&mut self, authority: &impl EventAuthority<P>) {
+        mac_source_authority::<P>(authority);
         self.registers.enable_all_events();
     }
 
-    /// `ieee802154_ll_enable_events` of one event.
-    pub fn enable_event(&mut self, event: Ieee802154Event) {
+    /// `ieee802154_ll_enable_events` of one event, with the authority of
+    /// [`Self::enable_all_events`].
+    pub fn enable_event<P: InterruptSource>(
+        &mut self,
+        event: Ieee802154Event,
+        authority: &impl EventAuthority<P>,
+    ) {
+        mac_source_authority::<P>(authority);
         self.registers.set_event_enabled(raw_event(event), true);
     }
 

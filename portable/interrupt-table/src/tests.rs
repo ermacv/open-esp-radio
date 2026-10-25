@@ -185,3 +185,91 @@ fn the_table_lays_out_each_entry_as_the_tools_read_it() {
     );
     assert!(absent.handler.is_none());
 }
+
+extern "C" fn no_handler() {}
+
+/// A table whose one entry of hart 0 is `binding`, as a table of wider
+/// `Lines` than the controller's would hold it.
+fn table_of(source: u16, line: u8, level: u8) -> &'static crate::Table {
+    std::boxed::Box::leak(std::boxed::Box::new([crate::Binding {
+        source,
+        line,
+        level,
+        class: crate::Class::Hardware,
+        hart: 0,
+        handler: Some(no_handler),
+    }]))
+}
+
+#[test]
+fn install_refuses_an_entry_outside_the_controller_before_any_write() {
+    for (table, error) in [
+        (table_of(84, 20, 3), Error::NoSuchSource { source: 84 }),
+        (table_of(3, 60, 3), Error::NoSuchLine { line: 60 }),
+        (table_of(3, 48, 3), Error::NoSuchLine { line: 48 }),
+        (table_of(3, 20, 9), Error::NoSuchLevel { level: 9 }),
+        (table_of(3, 20, 0), Error::NoSuchLevel { level: 0 }),
+    ] {
+        assert_eq!(
+            Router::install(FakeController::new(0), table).err(),
+            Some(error)
+        );
+    }
+    // Another hart's entry is its own router's to check.
+    let other = std::boxed::Box::leak(std::boxed::Box::new([crate::Binding {
+        hart: 1,
+        ..crate::Binding {
+            source: 84,
+            line: 60,
+            level: 3,
+            class: crate::Class::Hardware,
+            hart: 0,
+            handler: Some(no_handler),
+        }
+    }]));
+    assert!(Router::install(FakeController::new(0), other).is_ok());
+}
+
+#[test]
+fn a_controller_refuses_a_source_or_line_it_lacks_and_writes_nothing() {
+    use crate::Controller;
+    let mut controller = FakeController::new(0);
+    assert_eq!(controller.route(3, 48), Err(Error::NoSuchLine { line: 48 }));
+    assert_eq!(
+        controller.route(8, 20),
+        Err(Error::NoSuchSource { source: 8 })
+    );
+    assert_eq!(
+        controller.silence(8),
+        Err(Error::NoSuchSource { source: 8 })
+    );
+    assert_eq!(
+        controller.set_line(48, LineState::DISABLED),
+        Err(Error::NoSuchLine { line: 48 })
+    );
+    assert!(controller.writes.is_empty());
+}
+
+#[test]
+fn only_a_silent_source_no_entry_binds_gets_the_polling_proof() {
+    let mut router = fake_router(0);
+    // The absent entry's build leaves it out: nothing binds source 6.
+    let _silent: crate::Silent<AbsentIrq> = router.silent().unwrap();
+    // The timer's entry binds source 3, the radio's (hart one) source 5.
+    assert_eq!(
+        router.silent::<TimerIrq>().err(),
+        Some(Error::Bindable { source: 3 })
+    );
+    assert_eq!(
+        router.silent::<RadioIrq>().err(),
+        Some(Error::Bindable { source: 5 })
+    );
+    router.controller.routes[6] = Some(30);
+    assert_eq!(
+        router.silent::<AbsentIrq>().err(),
+        Some(Error::ForeignRoute {
+            source: 6,
+            line: 30
+        })
+    );
+}

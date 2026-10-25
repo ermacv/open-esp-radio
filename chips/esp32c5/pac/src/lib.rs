@@ -11,9 +11,6 @@
 extern crate std;
 
 #[cfg(test)]
-mod test_memory;
-
-#[cfg(test)]
 mod typed_register_tests;
 
 #[cfg(test)]
@@ -137,15 +134,15 @@ pub use ieee802154::mac::{
     Ieee802154MacConfigurationReadback, Ieee802154MacControl, Ieee802154MacPolicySnapshot,
     Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154ObservedEventState,
     Ieee802154OperationEventEnableObservation, Ieee802154OperationRxAbortEnableObservation,
-    Ieee802154PanIdentity, Ieee802154Pti, Ieee802154RouteState, Ieee802154RxAbortEnableSet,
-    Ieee802154RxAbortEnableState, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
-    Ieee802154RxStateCode, Ieee802154RxStatus, Ieee802154SecurityPayloadOffset,
-    Ieee802154StateSnapshot, Ieee802154Timer0ThresholdWord, Ieee802154Timer0ValueWord,
-    Ieee802154Timer1ThresholdWord, Ieee802154Timer1ValueWord, Ieee802154TimerLease,
-    Ieee802154TransmitSecurityControl, Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason,
-    Ieee802154TxAbortReasonObservation, Ieee802154TxPowerCode, Ieee802154TxSecurityError,
-    Ieee802154TxSecurityErrorObservation, Ieee802154TxStateCode, Ieee802154TxStatus,
-    Ieee802154ValidationEdDurationState, Ieee802154ValidationEventEnableState,
+    Ieee802154PanIdentity, Ieee802154Pti, Ieee802154RxAbortEnableSet, Ieee802154RxAbortEnableState,
+    Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode,
+    Ieee802154RxStatus, Ieee802154SecurityPayloadOffset, Ieee802154StateSnapshot,
+    Ieee802154Timer0ThresholdWord, Ieee802154Timer0ValueWord, Ieee802154Timer1ThresholdWord,
+    Ieee802154Timer1ValueWord, Ieee802154TimerLease, Ieee802154TransmitSecurityControl,
+    Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation,
+    Ieee802154TxPowerCode, Ieee802154TxSecurityError, Ieee802154TxSecurityErrorObservation,
+    Ieee802154TxStateCode, Ieee802154TxStatus, Ieee802154ValidationEdDurationState,
+    Ieee802154ValidationEventEnableState,
 };
 
 /// The typed IEEE 802.15.4 MAC block, for the register probe's raw writes.

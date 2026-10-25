@@ -200,7 +200,7 @@ pub use ieee802154::mac::{
     Ieee802154MacPolicySnapshot, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
     Ieee802154ObservedEventState, Ieee802154OperationEventEnableObservation,
     Ieee802154OperationRxAbortEnableObservation, Ieee802154PanIdentity, Ieee802154PowerSequence,
-    Ieee802154Pti, Ieee802154RouteState, Ieee802154RxAbortEnableSet, Ieee802154RxAbortEnableState,
+    Ieee802154Pti, Ieee802154RxAbortEnableSet, Ieee802154RxAbortEnableState,
     Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode,
     Ieee802154RxStatus, Ieee802154SecurityPayloadOffset, Ieee802154StateSnapshot,
     Ieee802154Timer0ThresholdWord, Ieee802154Timer0ValueWord, Ieee802154Timer1ThresholdWord,

@@ -3,7 +3,9 @@
 //! generator and why each HP core last left reset.
 //!
 //! Each owner is built from the PAC owner of its domain, which an esp-hal
-//! adapter makes from its handoff. Nothing here writes a register.
+//! adapter makes from its handoff. Nothing here writes a register but the
+//! hart's interrupt controller ([`interrupt_controller`]), which the
+//! interrupt table's router drives.
 
 pub use oer_esp32s31_knowledge::reset_cause::ResetCause;
 /// The step-4 platform blocks (system timer, software interrupt lines,
@@ -29,6 +31,9 @@ use oer_time::{Clock, Duration, Instant};
 
 use oer_time::settle::{Settle, SettleLimit, settle};
 
+pub use interrupt_controller::{Hart1Interrupts, InterruptBlocks, InterruptController};
+
+pub mod interrupt_controller;
 #[cfg(test)]
 mod tests;
 

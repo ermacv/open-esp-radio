@@ -19,14 +19,12 @@ pub(crate) struct WifiRadioPeripheralOwners {
 
 /// Physical owners used by one IEEE 802.15.4 task register set.
 ///
-/// The MAC, its interrupt route, its ETM channels and the read of the BTBB
-/// receive information are the whole IEEE 802.15.4 authority. Clocks,
-/// resets, the common PHY and the rest of the shared BTBB baseband it
-/// depends on belong to the shared radio partition.
+/// The MAC, its ETM channels and the read of the BTBB receive information
+/// are the whole IEEE 802.15.4 authority; its interrupt route words are the
+/// interrupt matrix's. Clocks, resets, the common PHY and the rest of the
+/// shared BTBB baseband it depends on belong to the shared radio partition.
 pub(crate) struct Ieee802154TaskPeripheralOwners {
     pub(crate) ieee802154_mac: crate::ieee802154::ownership::TaskRegisters,
-    pub(crate) ieee802154_interrupt_route:
-        generated::ieee802154_interrupt_route::Ieee802154InterruptRoute,
     pub(crate) etm: crate::modem::etm::Ieee802154EtmChannels,
     pub(crate) rx_info: crate::ieee802154::baseband::Ieee802154BasebandRxInfo,
 }
@@ -198,7 +196,7 @@ pub struct BluetoothControllerPartition {
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct SharedRadioPartition(svd::peripheral_ownership::SharedRadioPeripherals);
 
-/// Opaque IEEE 802.15.4 MAC and interrupt-route register partition.
+/// Opaque IEEE 802.15.4 MAC register partition.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct Ieee802154Partition {
     peripherals: generated::peripheral_ownership::Ieee802154Peripherals,
@@ -787,11 +785,7 @@ impl Ieee802154TaskRegisters {
     /// disjoint task and interrupt owners. This performs no MMIO.
     pub fn new(partition: Ieee802154Partition) -> (Self, Ieee802154InterruptSetup) {
         let Ieee802154Partition {
-            peripherals:
-                generated::peripheral_ownership::Ieee802154Peripherals {
-                    ieee802154_mac,
-                    ieee802154_interrupt_route,
-                },
+            peripherals: generated::peripheral_ownership::Ieee802154Peripherals { ieee802154_mac },
             etm,
             rx_info,
         } = partition;
@@ -800,7 +794,6 @@ impl Ieee802154TaskRegisters {
             Self {
                 peripherals: Ieee802154TaskPeripheralOwners {
                     ieee802154_mac: task_mac,
-                    ieee802154_interrupt_route,
                     etm,
                     rx_info,
                 },
@@ -816,16 +809,12 @@ impl Ieee802154TaskRegisters {
     pub fn into_partition(self, interrupts: Ieee802154InterruptSetup) -> Ieee802154Partition {
         let Ieee802154TaskPeripheralOwners {
             ieee802154_mac: task_mac,
-            ieee802154_interrupt_route,
             etm,
             rx_info,
         } = self.peripherals;
         let ieee802154_mac = crate::ieee802154::ownership::reunite(task_mac, interrupts.registers);
         Ieee802154Partition {
-            peripherals: generated::peripheral_ownership::Ieee802154Peripherals {
-                ieee802154_mac,
-                ieee802154_interrupt_route,
-            },
+            peripherals: generated::peripheral_ownership::Ieee802154Peripherals { ieee802154_mac },
             etm,
             rx_info,
         }

@@ -209,15 +209,3 @@ fn a_dma_address_is_published_whole() {
         .collect();
     assert_eq!(written, [frame.bits()], "one word, the whole address");
 }
-
-#[test]
-fn the_route_view_reads_both_cores_routes() {
-    use crate::generated::ieee802154_interrupt_route::{self as route, Ieee802154InterruptRoute};
-    let mut words = vec![0_u32; route::SIZE / 4];
-    *words.last_mut().expect("the core-one word") = 0x0000_0201;
-    let block = Ieee802154InterruptRoute::host(&mut words).expect("memory holds the block");
-    assert_eq!(block.read_core0_route().map().get(), 0);
-    let core1 = block.read_core1_route();
-    assert_eq!(core1.map().get(), 1);
-    assert_eq!(core1.pass_level().get(), 2);
-}

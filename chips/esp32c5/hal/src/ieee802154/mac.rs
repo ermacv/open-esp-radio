@@ -1,17 +1,20 @@
 //! Driver-facing owners of the dedicated IEEE 802.15.4 MAC registers.
 //!
-//! The task owner and the active interrupt owner together drive the MAC
-//! through the [`ll`](crate::i::ll) backend. The interrupt owners
-//! expose the reviewed activation and teardown transitions. The owners are
-//! made from and returned to the PAC partition; the MAC lifecycle that will
-//! own clocks, reset and foundation around them is not part of this crate
-//! yet.
+//! The task owner holds every task-side word; the armed interrupt owner is
+//! the MAC's interrupt part. The interrupt table binds the interrupt owner
+//! by value and the task enables the events with the binding's proof, or the
+//! engine pair of the [`ll`](crate::ieee802154::ll) backend holds both and
+//! polls the events. The owners are made from and returned to the PAC
+//! partition; the MAC lifecycle that will own clocks, reset and foundation
+//! around them is not part of this crate yet.
 
 use oer_esp32c5_pac::{
     Ieee802154InterruptRegisters as PacInterruptRegisters,
     Ieee802154InterruptSetup as PacInterruptSetup, Ieee802154RegisterLease as PacRegisterLease,
     Ieee802154TaskRegisters as PacTaskRegisters,
 };
+use oer_interrupt_table::Bound;
+use oer_mmio::InterruptSource;
 
 /// Exclusive task-side owner of the IEEE 802.15.4 MAC registers.
 ///
@@ -71,20 +74,146 @@ pub struct Ieee802154InterruptSetupOwner {
 }
 
 impl Ieee802154InterruptSetupOwner {
-    /// Install the reviewed event/abort baseline, acknowledge one stale
-    /// snapshot and return the active interrupt owner. The platform CPU route
-    /// must be enabled only afterwards.
-    pub fn activate(self, task: &mut Ieee802154TaskOwner) -> Ieee802154InterruptOwner {
+    /// Install the reviewed abort baseline with every event masked,
+    /// acknowledge one stale snapshot and return the interrupt owner.
+    ///
+    /// The owner is the MAC's interrupt part: the interrupt table binds it
+    /// by value (`oer_interrupt_table::Router::bind`), and the binding's
+    /// [`Bound`] proof is what [`Ieee802154TaskOwner::enable_events`] takes,
+    /// so no event reaches the CPU before the handler holds the owner. The
+    /// engine pair ([`Ieee802154MacOwners`](crate::ieee802154::ll::Ieee802154MacOwners))
+    /// holds the owner itself instead, with the router's
+    /// [`Silent`](oer_interrupt_table::Silent) proof that no entry binds its
+    /// source and the matrix routes it nowhere; the engine polls its events.
+    pub fn arm(self, task: &mut Ieee802154TaskOwner) -> Ieee802154InterruptOwner {
         Ieee802154InterruptOwner {
-            registers: self.registers.activate(&mut task.registers),
+            registers: self.registers.arm(&mut task.registers),
         }
     }
 }
 
-/// Active IEEE 802.15.4 hard-IRQ owner.
-#[must_use = "the active IEEE 802.15.4 interrupt owner must be deactivated"]
+impl Ieee802154TaskOwner {
+    /// Publish the runtime events of the reviewed ISR: from here the MAC
+    /// raises its interrupt. `bound` proves that the interrupt table's
+    /// handler holds the armed interrupt owner and its line and route are
+    /// written.
+    ///
+    /// ```compile_fail,E0061
+    /// # use oer_esp32c5_hal::ieee802154::mac::Ieee802154TaskOwner;
+    /// fn enable(task: &mut Ieee802154TaskOwner) {
+    ///     // Enabling the interrupt takes the binding's proof.
+    ///     task.enable_events();
+    /// }
+    /// ```
+    ///
+    /// ```compile_fail,E0308
+    /// # use oer_esp32c5_hal::ieee802154::mac::Ieee802154TaskOwner;
+    /// # use oer_interrupt_table::Bound;
+    /// struct OtherIrq;
+    /// impl oer_mmio::InterruptSource for OtherIrq {
+    ///     const SOURCE: u16 = 3;
+    /// }
+    /// fn enable(task: &mut Ieee802154TaskOwner, bound: &Bound<OtherIrq>) {
+    ///     // Another part's binding proves nothing about this interrupt.
+    ///     task.enable_events(bound);
+    /// }
+    /// ```
+    pub fn enable_events(&mut self, bound: &Bound<Ieee802154InterruptOwner>) {
+        self.registers.enable_runtime_events(bound);
+    }
+}
+
+/// Armed IEEE 802.15.4 interrupt owner: the MAC's interrupt part.
+///
+/// An image's interrupt table binds it by value, its source (`ZB_MAC`) from
+/// its type; the task then enables the events with the binding's proof:
+///
+/// ```no_run
+/// use oer_esp32c5_hal::ieee802154::mac::{
+///     Ieee802154InterruptOwner, Ieee802154InterruptSetupOwner, Ieee802154TaskOwner,
+/// };
+/// use oer_esp32c5_hal::platform::InterruptController;
+/// use oer_interrupt_table::Router;
+/// # const LINES: oer_interrupt_table::Lines =
+/// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 1 };
+/// pub fn on_mac(_: &mut Ieee802154InterruptOwner) {}
+/// oer_interrupt_table::interrupt_table! {
+///     lines: LINES,
+///     handler_attributes: [];
+///     mac: MacToken = Ieee802154InterruptOwner => on_mac, line 20, level 3, hart 0, Hardware;
+/// }
+/// fn start(
+///     router: &mut Router<InterruptController>,
+///     token: MacToken,
+///     task: &mut Ieee802154TaskOwner,
+///     setup: Ieee802154InterruptSetupOwner,
+/// ) {
+///     let interrupts = setup.arm(task);
+///     if let Ok(bound) = router.bind(token, interrupts) {
+///         task.enable_events(&bound);
+///     }
+/// }
+/// # fn main() {}
+/// ```
+///
+/// The owner moves into its one binding:
+///
+/// ```compile_fail,E0382
+/// # use oer_esp32c5_hal::ieee802154::mac::{Ieee802154InterruptOwner, Ieee802154TaskOwner};
+/// # use oer_esp32c5_hal::platform::InterruptController;
+/// # use oer_interrupt_table::Router;
+/// # const LINES: oer_interrupt_table::Lines =
+/// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 1 };
+/// # pub fn on_mac(_: &mut Ieee802154InterruptOwner) {}
+/// # oer_interrupt_table::interrupt_table! {
+/// #     lines: LINES,
+/// #     handler_attributes: [];
+/// #     mac: MacToken = Ieee802154InterruptOwner => on_mac, line 20, level 3, hart 0, Hardware;
+/// # }
+/// fn start(
+///     router: &mut Router<InterruptController>,
+///     token: MacToken,
+///     task: &mut Ieee802154TaskOwner,
+///     interrupts: Ieee802154InterruptOwner,
+/// ) {
+///     let _bound = router.bind(token, interrupts);
+///     // The handler holds the owner now; the task cannot take it back.
+///     let _setup = interrupts.deactivate(task);
+/// }
+/// # fn main() {}
+/// ```
+///
+/// and the MAC's token binds the MAC's owner alone:
+///
+/// ```compile_fail,E0308
+/// # use oer_esp32c5_hal::ieee802154::mac::Ieee802154InterruptOwner;
+/// # use oer_esp32c5_hal::platform::InterruptController;
+/// # use oer_interrupt_table::Router;
+/// # const LINES: oer_interrupt_table::Lines =
+/// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 1 };
+/// # pub fn on_mac(_: &mut Ieee802154InterruptOwner) {}
+/// # oer_interrupt_table::interrupt_table! {
+/// #     lines: LINES,
+/// #     handler_attributes: [];
+/// #     mac: MacToken = Ieee802154InterruptOwner => on_mac, line 20, level 3, hart 0, Hardware;
+/// # }
+/// pub struct ConsoleIrq;
+/// impl oer_mmio::InterruptSource for ConsoleIrq {
+///     const SOURCE: u16 = 54;
+/// }
+/// fn start(router: &mut Router<InterruptController>, token: MacToken) {
+///     let _bound = router.bind(token, ConsoleIrq);
+/// }
+/// # fn main() {}
+/// ```
+#[must_use = "the armed IEEE 802.15.4 interrupt owner must be bound or deactivated"]
 pub struct Ieee802154InterruptOwner {
     registers: PacInterruptRegisters,
+}
+
+impl InterruptSource for Ieee802154InterruptOwner {
+    /// The MAC's source (`ZB_MAC`), generated for its interrupt side.
+    const SOURCE: u16 = <PacInterruptRegisters as InterruptSource>::SOURCE;
 }
 
 impl Ieee802154InterruptOwner {
@@ -96,8 +225,8 @@ impl Ieee802154InterruptOwner {
         &mut self.registers
     }
 
-    /// Close one hard-IRQ epoch after the CPU route was disabled and return
-    /// inactive setup ownership.
+    /// Close one polled epoch of the engine pair and return inactive setup
+    /// ownership. A bound owner never comes back: its handler holds it.
     pub fn deactivate(self, task: &mut Ieee802154TaskOwner) -> Ieee802154InterruptSetupOwner {
         Ieee802154InterruptSetupOwner {
             registers: self.registers.deactivate(&mut task.registers),

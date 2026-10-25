@@ -2446,7 +2446,7 @@ reasons = ["the curated model's INTERRUPT_CORE0 describes its word"]
 peripheral = "INTERRUPT_CORE0"
 register = "ZB_MAC_INTR_MAP"
 api = "none"
-reasons = ["the curated model's IEEE802154_INTERRUPT_ROUTE describes its word"]
+reasons = ["the curated model's INTERRUPT_CORE0 describes its word"]
 
 [[register]]
 peripheral = "INTERRUPT_CORE0"

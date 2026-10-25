@@ -33960,63 +33960,6 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
       </registers>
     </peripheral>
     <peripheral>
-      <name>IEEE802154_INTERRUPT_ROUTE</name>
-      <description>The two CPU interrupt-matrix words for ESP32-S31 modem source 132
-(MODEM_ZB_MAC). This source-specific view is retained with the IEEE 802.15.4
-owner and publishes only the generated field readers needed to prove that a
-polled or validation transaction starts with both CPU routes detached. Its
-read-only access states the radio's access: the hardware words are
-read-write, and esp-hal's interrupt table (InterruptRoutes) is their only
-writer.</description>
-      <baseAddress>0x20585210</baseAddress>
-      <registers>
-        <register>
-          <name>CORE0_ROUTE</name>
-          <description>Project-assigned name. Core-zero destination and privilege routing for MODEM_ZB_MAC.</description>
-          <addressOffset>0x0</addressOffset>
-          <size>0x20</size>
-          <access>read-only</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-            <field>
-              <name>MAP</name>
-              <description>Project-assigned name. CPU-interrupt destination selected for the peripheral source.</description>
-              <bitOffset>0</bitOffset>
-              <bitWidth>6</bitWidth>
-            </field>
-            <field>
-              <name>PASS_LEVEL</name>
-              <description>Project-assigned name. Privilege pass/remap level selected for the peripheral source.</description>
-              <bitOffset>8</bitOffset>
-              <bitWidth>2</bitWidth>
-            </field>
-          </fields>
-        </register>
-        <register>
-          <name>CORE1_ROUTE</name>
-          <description>Project-assigned name. Core-one destination and privilege routing for MODEM_ZB_MAC.</description>
-          <addressOffset>0x800</addressOffset>
-          <size>0x20</size>
-          <access>read-only</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-            <field>
-              <name>MAP</name>
-              <description>Project-assigned name. CPU-interrupt destination selected for the peripheral source.</description>
-              <bitOffset>0</bitOffset>
-              <bitWidth>6</bitWidth>
-            </field>
-            <field>
-              <name>PASS_LEVEL</name>
-              <description>Project-assigned name. Privilege pass/remap level selected for the peripheral source.</description>
-              <bitOffset>8</bitOffset>
-              <bitWidth>2</bitWidth>
-            </field>
-          </fields>
-        </register>
-      </registers>
-    </peripheral>
-    <peripheral>
       <name>MODEM_ETM</name>
       <description>ESP32-S31 modem event-task matrix at MODEM_BASE + 0x8800, shared by the
 IEEE 802.15.4 and Bluetooth lifecycles. The public IEEE 802.15.4 driver names
@@ -34741,43 +34684,16 @@ holds the number of level bits of each line's control byte.</description>
     <peripheral>
       <name>INTERRUPT_CORE0</name>
       <description>The interrupt-matrix route words of core 0, one per peripheral source, by source
-number. Source 132 (ZB_MAC) is left out: its route word belongs to the
-IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-around it.</description>
+number, ZB_MAC (source 132) included.</description>
       <baseAddress>0x20585000</baseAddress>
       <registers>
         <register>
-          <dim>132</dim>
+          <dim>169</dim>
           <dimIncrement>0x4</dimIncrement>
-          <dimIndex>0-131</dimIndex>
-          <name>MAP_LOW%s</name>
-          <description>Project-assigned name. Route of source %s (sources 0 to 131).</description>
+          <dimIndex>0-168</dimIndex>
+          <name>ROUTE%s</name>
+          <description>Project-assigned name. Route of source %s.</description>
           <addressOffset>0x0</addressOffset>
-          <size>0x20</size>
-          <access>read-write</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-            <field>
-              <name>MAP</name>
-              <description>Project-assigned name. The CPU interrupt line the source is routed to; zero routes it nowhere.</description>
-              <bitOffset>0</bitOffset>
-              <bitWidth>6</bitWidth>
-            </field>
-            <field>
-              <name>PASS_LEVEL</name>
-              <description>Project-assigned name. Remap level of the source: zero none, one S-level, two or three M-level.</description>
-              <bitOffset>8</bitOffset>
-              <bitWidth>2</bitWidth>
-            </field>
-          </fields>
-        </register>
-        <register>
-          <dim>36</dim>
-          <dimIncrement>0x4</dimIncrement>
-          <dimIndex>0-35</dimIndex>
-          <name>MAP_HIGH%s</name>
-          <description>Project-assigned name. Route of source 133 + %s (sources 133 to 168).</description>
-          <addressOffset>0x214</addressOffset>
           <size>0x20</size>
           <access>read-write</access>
           <resetValue>0x00000000</resetValue>
@@ -34905,43 +34821,16 @@ Every context polls it, so it is a shared block of side-effect-free reads.</desc
     <peripheral>
       <name>INTERRUPT_CORE1</name>
       <description>The interrupt-matrix route words of core 1, one per peripheral source, by source
-number. Source 132 (ZB_MAC) is left out: its route word belongs to the
-IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-around it.</description>
+number, ZB_MAC (source 132) included.</description>
       <baseAddress>0x20585800</baseAddress>
       <registers>
         <register>
-          <dim>132</dim>
+          <dim>169</dim>
           <dimIncrement>0x4</dimIncrement>
-          <dimIndex>0-131</dimIndex>
-          <name>MAP_LOW%s</name>
-          <description>Project-assigned name. Route of source %s (sources 0 to 131).</description>
+          <dimIndex>0-168</dimIndex>
+          <name>ROUTE%s</name>
+          <description>Project-assigned name. Route of source %s.</description>
           <addressOffset>0x0</addressOffset>
-          <size>0x20</size>
-          <access>read-write</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-            <field>
-              <name>MAP</name>
-              <description>Project-assigned name. The CPU interrupt line the source is routed to; zero routes it nowhere.</description>
-              <bitOffset>0</bitOffset>
-              <bitWidth>6</bitWidth>
-            </field>
-            <field>
-              <name>PASS_LEVEL</name>
-              <description>Project-assigned name. Remap level of the source: zero none, one S-level, two or three M-level.</description>
-              <bitOffset>8</bitOffset>
-              <bitWidth>2</bitWidth>
-            </field>
-          </fields>
-        </register>
-        <register>
-          <dim>36</dim>
-          <dimIncrement>0x4</dimIncrement>
-          <dimIndex>0-35</dimIndex>
-          <name>MAP_HIGH%s</name>
-          <description>Project-assigned name. Route of source 133 + %s (sources 133 to 168).</description>
-          <addressOffset>0x214</addressOffset>
           <size>0x20</size>
           <access>read-write</access>
           <resetValue>0x00000000</resetValue>

@@ -224,41 +224,6 @@ pub enum Ieee802154MacCommand {
     Stop,
 }
 
-/// Semantic state of the chip's IEEE 802.15.4 CPU interrupt route.
-///
-/// Register words and field geometry remain private to this PAC domain.
-/// Reset state refers only to the named destination and pass fields;
-/// reserved and absent bits are not observed or classified.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum Ieee802154RouteState {
-    /// Every CPU route's named destination and pass fields retain reset values.
-    ResetDetached,
-    /// A route has a CPU-interrupt destination assigned.
-    DestinationAssigned,
-    /// No destination is assigned, but a pass-through or pass-level field is
-    /// configured.
-    PassLevelConfigured,
-}
-
-impl Ieee802154RouteState {
-    /// Classify one route observation of the chip.
-    #[doc(hidden)]
-    pub const fn from_observation(destination_assigned: bool, pass_level_configured: bool) -> Self {
-        if destination_assigned {
-            Self::DestinationAssigned
-        } else if pass_level_configured {
-            Self::PassLevelConfigured
-        } else {
-            Self::ResetDetached
-        }
-    }
-
-    /// Whether every route's named destination and pass fields retain reset values.
-    pub const fn is_reset_detached(self) -> bool {
-        matches!(self, Self::ResetDetached)
-    }
-}
-
 /// Source-confirmed MAC control fields programmed as one semantic policy.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ieee802154MacControl {

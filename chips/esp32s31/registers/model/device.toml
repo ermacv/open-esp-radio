@@ -122,7 +122,6 @@ fragments = [
     "peripherals/phy-bb-recovered-gaps.toml",
     "peripherals/phy-brx-recovered-gaps.toml",
     "peripherals/ieee802154-mac.toml",
-    "peripherals/ieee802154-interrupt-route.toml",
     "peripherals/modem-etm.toml",
     "peripherals/systimer.toml",
     "peripherals/software-interrupts.toml",

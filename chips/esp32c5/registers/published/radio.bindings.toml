@@ -3694,12 +3694,12 @@ access = "read-write"
 address = 1610678272
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_LOW0"
+identity = "INTERRUPT_CORE0.ROUTE0"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_low"
+register-method = "route"
 register-index = 0
 
 [[registers.fields]]
@@ -3720,12 +3720,12 @@ access = "read-write"
 address = 1610678276
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_LOW1"
+identity = "INTERRUPT_CORE0.ROUTE1"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_low"
+register-method = "route"
 register-index = 1
 
 [[registers.fields]]
@@ -3746,12 +3746,12 @@ access = "read-write"
 address = 1610678280
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_LOW2"
+identity = "INTERRUPT_CORE0.ROUTE2"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_low"
+register-method = "route"
 register-index = 2
 
 [[registers.fields]]
@@ -3772,12 +3772,12 @@ access = "read-write"
 address = 1610678284
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_LOW3"
+identity = "INTERRUPT_CORE0.ROUTE3"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_low"
+register-method = "route"
 register-index = 3
 
 [[registers.fields]]
@@ -3798,12 +3798,12 @@ access = "read-write"
 address = 1610678288
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_LOW4"
+identity = "INTERRUPT_CORE0.ROUTE4"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_low"
+register-method = "route"
 register-index = 4
 
 [[registers.fields]]
@@ -3824,12 +3824,12 @@ access = "read-write"
 address = 1610678292
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_LOW5"
+identity = "INTERRUPT_CORE0.ROUTE5"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_low"
+register-method = "route"
 register-index = 5
 
 [[registers.fields]]
@@ -3850,12 +3850,12 @@ access = "read-write"
 address = 1610678296
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_LOW6"
+identity = "INTERRUPT_CORE0.ROUTE6"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_low"
+register-method = "route"
 register-index = 6
 
 [[registers.fields]]
@@ -3876,12 +3876,12 @@ access = "read-write"
 address = 1610678300
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_LOW7"
+identity = "INTERRUPT_CORE0.ROUTE7"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_low"
+register-method = "route"
 register-index = 7
 
 [[registers.fields]]
@@ -3902,12 +3902,12 @@ access = "read-write"
 address = 1610678304
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_LOW8"
+identity = "INTERRUPT_CORE0.ROUTE8"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_low"
+register-method = "route"
 register-index = 8
 
 [[registers.fields]]
@@ -3928,12 +3928,12 @@ access = "read-write"
 address = 1610678308
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_LOW9"
+identity = "INTERRUPT_CORE0.ROUTE9"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_low"
+register-method = "route"
 register-index = 9
 
 [[registers.fields]]
@@ -3954,12 +3954,12 @@ access = "read-write"
 address = 1610678312
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_LOW10"
+identity = "INTERRUPT_CORE0.ROUTE10"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_low"
+register-method = "route"
 register-index = 10
 
 [[registers.fields]]
@@ -3980,12 +3980,12 @@ access = "read-write"
 address = 1610678316
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_LOW11"
+identity = "INTERRUPT_CORE0.ROUTE11"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_low"
+register-method = "route"
 register-index = 11
 
 [[registers.fields]]
@@ -4006,12 +4006,13 @@ access = "read-write"
 address = 1610678320
 width = 32
 access = "read-write"
-identity = "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE"
-peripheral = "IEEE802154_INTERRUPT_ROUTE"
-peripheral-type = "Ieee802154InterruptRoute"
-peripheral-module = "ieee802154_interrupt_route"
+identity = "INTERRUPT_CORE0.ROUTE12"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
 scope = []
-register-method = "core0_route"
+register-method = "route"
+register-index = 12
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4031,13 +4032,13 @@ access = "read-write"
 address = 1610678324
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH0"
+identity = "INTERRUPT_CORE0.ROUTE13"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 0
+register-method = "route"
+register-index = 13
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4057,13 +4058,13 @@ access = "read-write"
 address = 1610678328
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH1"
+identity = "INTERRUPT_CORE0.ROUTE14"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 1
+register-method = "route"
+register-index = 14
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4083,13 +4084,13 @@ access = "read-write"
 address = 1610678332
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH2"
+identity = "INTERRUPT_CORE0.ROUTE15"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 2
+register-method = "route"
+register-index = 15
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4109,13 +4110,13 @@ access = "read-write"
 address = 1610678336
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH3"
+identity = "INTERRUPT_CORE0.ROUTE16"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 3
+register-method = "route"
+register-index = 16
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4135,13 +4136,13 @@ access = "read-write"
 address = 1610678340
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH4"
+identity = "INTERRUPT_CORE0.ROUTE17"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 4
+register-method = "route"
+register-index = 17
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4161,13 +4162,13 @@ access = "read-write"
 address = 1610678344
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH5"
+identity = "INTERRUPT_CORE0.ROUTE18"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 5
+register-method = "route"
+register-index = 18
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4187,13 +4188,13 @@ access = "read-write"
 address = 1610678348
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH6"
+identity = "INTERRUPT_CORE0.ROUTE19"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 6
+register-method = "route"
+register-index = 19
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4213,13 +4214,13 @@ access = "read-write"
 address = 1610678352
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH7"
+identity = "INTERRUPT_CORE0.ROUTE20"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 7
+register-method = "route"
+register-index = 20
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4239,13 +4240,13 @@ access = "read-write"
 address = 1610678356
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH8"
+identity = "INTERRUPT_CORE0.ROUTE21"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 8
+register-method = "route"
+register-index = 21
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4265,13 +4266,13 @@ access = "read-write"
 address = 1610678360
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH9"
+identity = "INTERRUPT_CORE0.ROUTE22"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 9
+register-method = "route"
+register-index = 22
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4291,13 +4292,13 @@ access = "read-write"
 address = 1610678364
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH10"
+identity = "INTERRUPT_CORE0.ROUTE23"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 10
+register-method = "route"
+register-index = 23
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4317,13 +4318,13 @@ access = "read-write"
 address = 1610678368
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH11"
+identity = "INTERRUPT_CORE0.ROUTE24"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 11
+register-method = "route"
+register-index = 24
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4343,13 +4344,13 @@ access = "read-write"
 address = 1610678372
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH12"
+identity = "INTERRUPT_CORE0.ROUTE25"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 12
+register-method = "route"
+register-index = 25
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4369,13 +4370,13 @@ access = "read-write"
 address = 1610678376
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH13"
+identity = "INTERRUPT_CORE0.ROUTE26"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 13
+register-method = "route"
+register-index = 26
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4395,13 +4396,13 @@ access = "read-write"
 address = 1610678380
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH14"
+identity = "INTERRUPT_CORE0.ROUTE27"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 14
+register-method = "route"
+register-index = 27
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4421,13 +4422,13 @@ access = "read-write"
 address = 1610678384
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH15"
+identity = "INTERRUPT_CORE0.ROUTE28"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 15
+register-method = "route"
+register-index = 28
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4447,13 +4448,13 @@ access = "read-write"
 address = 1610678388
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH16"
+identity = "INTERRUPT_CORE0.ROUTE29"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 16
+register-method = "route"
+register-index = 29
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4473,13 +4474,13 @@ access = "read-write"
 address = 1610678392
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH17"
+identity = "INTERRUPT_CORE0.ROUTE30"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 17
+register-method = "route"
+register-index = 30
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4499,13 +4500,13 @@ access = "read-write"
 address = 1610678396
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH18"
+identity = "INTERRUPT_CORE0.ROUTE31"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 18
+register-method = "route"
+register-index = 31
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4525,13 +4526,13 @@ access = "read-write"
 address = 1610678400
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH19"
+identity = "INTERRUPT_CORE0.ROUTE32"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 19
+register-method = "route"
+register-index = 32
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4551,13 +4552,13 @@ access = "read-write"
 address = 1610678404
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH20"
+identity = "INTERRUPT_CORE0.ROUTE33"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 20
+register-method = "route"
+register-index = 33
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4577,13 +4578,13 @@ access = "read-write"
 address = 1610678408
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH21"
+identity = "INTERRUPT_CORE0.ROUTE34"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 21
+register-method = "route"
+register-index = 34
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4603,13 +4604,13 @@ access = "read-write"
 address = 1610678412
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH22"
+identity = "INTERRUPT_CORE0.ROUTE35"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 22
+register-method = "route"
+register-index = 35
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4629,13 +4630,13 @@ access = "read-write"
 address = 1610678416
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH23"
+identity = "INTERRUPT_CORE0.ROUTE36"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 23
+register-method = "route"
+register-index = 36
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4655,13 +4656,13 @@ access = "read-write"
 address = 1610678420
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH24"
+identity = "INTERRUPT_CORE0.ROUTE37"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 24
+register-method = "route"
+register-index = 37
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4681,13 +4682,13 @@ access = "read-write"
 address = 1610678424
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH25"
+identity = "INTERRUPT_CORE0.ROUTE38"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 25
+register-method = "route"
+register-index = 38
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4707,13 +4708,13 @@ access = "read-write"
 address = 1610678428
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH26"
+identity = "INTERRUPT_CORE0.ROUTE39"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 26
+register-method = "route"
+register-index = 39
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4733,13 +4734,13 @@ access = "read-write"
 address = 1610678432
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH27"
+identity = "INTERRUPT_CORE0.ROUTE40"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 27
+register-method = "route"
+register-index = 40
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4759,13 +4760,13 @@ access = "read-write"
 address = 1610678436
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH28"
+identity = "INTERRUPT_CORE0.ROUTE41"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 28
+register-method = "route"
+register-index = 41
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4785,13 +4786,13 @@ access = "read-write"
 address = 1610678440
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH29"
+identity = "INTERRUPT_CORE0.ROUTE42"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 29
+register-method = "route"
+register-index = 42
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4811,13 +4812,13 @@ access = "read-write"
 address = 1610678444
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH30"
+identity = "INTERRUPT_CORE0.ROUTE43"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 30
+register-method = "route"
+register-index = 43
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4837,13 +4838,13 @@ access = "read-write"
 address = 1610678448
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH31"
+identity = "INTERRUPT_CORE0.ROUTE44"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 31
+register-method = "route"
+register-index = 44
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4863,13 +4864,13 @@ access = "read-write"
 address = 1610678452
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH32"
+identity = "INTERRUPT_CORE0.ROUTE45"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 32
+register-method = "route"
+register-index = 45
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4889,13 +4890,13 @@ access = "read-write"
 address = 1610678456
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH33"
+identity = "INTERRUPT_CORE0.ROUTE46"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 33
+register-method = "route"
+register-index = 46
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4915,13 +4916,13 @@ access = "read-write"
 address = 1610678460
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH34"
+identity = "INTERRUPT_CORE0.ROUTE47"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 34
+register-method = "route"
+register-index = 47
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4941,13 +4942,13 @@ access = "read-write"
 address = 1610678464
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH35"
+identity = "INTERRUPT_CORE0.ROUTE48"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 35
+register-method = "route"
+register-index = 48
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4967,13 +4968,13 @@ access = "read-write"
 address = 1610678468
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH36"
+identity = "INTERRUPT_CORE0.ROUTE49"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 36
+register-method = "route"
+register-index = 49
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -4993,13 +4994,13 @@ access = "read-write"
 address = 1610678472
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH37"
+identity = "INTERRUPT_CORE0.ROUTE50"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 37
+register-method = "route"
+register-index = 50
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5019,13 +5020,13 @@ access = "read-write"
 address = 1610678476
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH38"
+identity = "INTERRUPT_CORE0.ROUTE51"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 38
+register-method = "route"
+register-index = 51
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5045,13 +5046,13 @@ access = "read-write"
 address = 1610678480
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH39"
+identity = "INTERRUPT_CORE0.ROUTE52"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 39
+register-method = "route"
+register-index = 52
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5071,13 +5072,13 @@ access = "read-write"
 address = 1610678484
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH40"
+identity = "INTERRUPT_CORE0.ROUTE53"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 40
+register-method = "route"
+register-index = 53
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5097,13 +5098,13 @@ access = "read-write"
 address = 1610678488
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH41"
+identity = "INTERRUPT_CORE0.ROUTE54"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 41
+register-method = "route"
+register-index = 54
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5123,13 +5124,13 @@ access = "read-write"
 address = 1610678492
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH42"
+identity = "INTERRUPT_CORE0.ROUTE55"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 42
+register-method = "route"
+register-index = 55
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5149,13 +5150,13 @@ access = "read-write"
 address = 1610678496
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH43"
+identity = "INTERRUPT_CORE0.ROUTE56"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 43
+register-method = "route"
+register-index = 56
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5175,13 +5176,13 @@ access = "read-write"
 address = 1610678500
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH44"
+identity = "INTERRUPT_CORE0.ROUTE57"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 44
+register-method = "route"
+register-index = 57
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5201,13 +5202,13 @@ access = "read-write"
 address = 1610678504
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH45"
+identity = "INTERRUPT_CORE0.ROUTE58"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 45
+register-method = "route"
+register-index = 58
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5227,13 +5228,13 @@ access = "read-write"
 address = 1610678508
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH46"
+identity = "INTERRUPT_CORE0.ROUTE59"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 46
+register-method = "route"
+register-index = 59
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5253,13 +5254,13 @@ access = "read-write"
 address = 1610678512
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH47"
+identity = "INTERRUPT_CORE0.ROUTE60"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 47
+register-method = "route"
+register-index = 60
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5279,13 +5280,13 @@ access = "read-write"
 address = 1610678516
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH48"
+identity = "INTERRUPT_CORE0.ROUTE61"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 48
+register-method = "route"
+register-index = 61
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5305,13 +5306,13 @@ access = "read-write"
 address = 1610678520
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH49"
+identity = "INTERRUPT_CORE0.ROUTE62"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 49
+register-method = "route"
+register-index = 62
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5331,13 +5332,13 @@ access = "read-write"
 address = 1610678524
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH50"
+identity = "INTERRUPT_CORE0.ROUTE63"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 50
+register-method = "route"
+register-index = 63
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5357,13 +5358,13 @@ access = "read-write"
 address = 1610678528
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH51"
+identity = "INTERRUPT_CORE0.ROUTE64"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 51
+register-method = "route"
+register-index = 64
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5383,13 +5384,13 @@ access = "read-write"
 address = 1610678532
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH52"
+identity = "INTERRUPT_CORE0.ROUTE65"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 52
+register-method = "route"
+register-index = 65
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5409,13 +5410,13 @@ access = "read-write"
 address = 1610678536
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH53"
+identity = "INTERRUPT_CORE0.ROUTE66"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 53
+register-method = "route"
+register-index = 66
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5435,13 +5436,13 @@ access = "read-write"
 address = 1610678540
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH54"
+identity = "INTERRUPT_CORE0.ROUTE67"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 54
+register-method = "route"
+register-index = 67
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5461,13 +5462,13 @@ access = "read-write"
 address = 1610678544
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH55"
+identity = "INTERRUPT_CORE0.ROUTE68"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 55
+register-method = "route"
+register-index = 68
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5487,13 +5488,13 @@ access = "read-write"
 address = 1610678548
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH56"
+identity = "INTERRUPT_CORE0.ROUTE69"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 56
+register-method = "route"
+register-index = 69
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5513,13 +5514,13 @@ access = "read-write"
 address = 1610678552
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH57"
+identity = "INTERRUPT_CORE0.ROUTE70"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 57
+register-method = "route"
+register-index = 70
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5539,13 +5540,13 @@ access = "read-write"
 address = 1610678556
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH58"
+identity = "INTERRUPT_CORE0.ROUTE71"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 58
+register-method = "route"
+register-index = 71
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5565,13 +5566,13 @@ access = "read-write"
 address = 1610678560
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH59"
+identity = "INTERRUPT_CORE0.ROUTE72"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 59
+register-method = "route"
+register-index = 72
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5591,13 +5592,13 @@ access = "read-write"
 address = 1610678564
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH60"
+identity = "INTERRUPT_CORE0.ROUTE73"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 60
+register-method = "route"
+register-index = 73
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5617,13 +5618,13 @@ access = "read-write"
 address = 1610678568
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH61"
+identity = "INTERRUPT_CORE0.ROUTE74"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 61
+register-method = "route"
+register-index = 74
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5643,13 +5644,13 @@ access = "read-write"
 address = 1610678572
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH62"
+identity = "INTERRUPT_CORE0.ROUTE75"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 62
+register-method = "route"
+register-index = 75
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5669,13 +5670,13 @@ access = "read-write"
 address = 1610678576
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH63"
+identity = "INTERRUPT_CORE0.ROUTE76"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 63
+register-method = "route"
+register-index = 76
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5695,13 +5696,13 @@ access = "read-write"
 address = 1610678580
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH64"
+identity = "INTERRUPT_CORE0.ROUTE77"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 64
+register-method = "route"
+register-index = 77
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5721,13 +5722,13 @@ access = "read-write"
 address = 1610678584
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH65"
+identity = "INTERRUPT_CORE0.ROUTE78"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 65
+register-method = "route"
+register-index = 78
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5747,13 +5748,13 @@ access = "read-write"
 address = 1610678588
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH66"
+identity = "INTERRUPT_CORE0.ROUTE79"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 66
+register-method = "route"
+register-index = 79
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5773,13 +5774,13 @@ access = "read-write"
 address = 1610678592
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH67"
+identity = "INTERRUPT_CORE0.ROUTE80"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 67
+register-method = "route"
+register-index = 80
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5799,13 +5800,13 @@ access = "read-write"
 address = 1610678596
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH68"
+identity = "INTERRUPT_CORE0.ROUTE81"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 68
+register-method = "route"
+register-index = 81
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5825,13 +5826,13 @@ access = "read-write"
 address = 1610678600
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH69"
+identity = "INTERRUPT_CORE0.ROUTE82"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 69
+register-method = "route"
+register-index = 82
 
 [[registers.fields]]
 svd-name = "MAP"
@@ -5851,13 +5852,13 @@ access = "read-write"
 address = 1610678604
 width = 32
 access = "read-write"
-identity = "INTERRUPT_CORE0.MAP_HIGH70"
+identity = "INTERRUPT_CORE0.ROUTE83"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
 peripheral-module = "interrupt_core0"
 scope = []
-register-method = "map_high"
-register-index = 70
+register-method = "route"
+register-index = 83
 
 [[registers.fields]]
 svd-name = "MAP"
