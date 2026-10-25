@@ -39,7 +39,7 @@ chips/      everything about Espressif hardware
                 esp-hal bindings, the chip facts model (facts/) and the
                 family and ISA fact layers (platform/); registers/ and notes/
                 shared by the chips
-  esp32s31/ esp32c5/
+  esp32s31/ esp32c5/   (esp32c5 lies outside the Cargo workspace and CI)
                 PAC, HAL, PHY, drivers, radio system, board, memory layout,
                 chip knowledge, and the chip's data:
                 platform/   chip, module and board fact layers, partitions, ROM

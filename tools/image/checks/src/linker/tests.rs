@@ -339,10 +339,7 @@ fn a_nonruntime_link_ignores_the_specification_and_writes_no_fragment() {
 
 #[test]
 fn a_runtime_link_gets_each_guard_from_the_chip_contract_before_its_first_pass() {
-    for (chip, expected) in [
-        ("esp32s31", vec![(0, 4096), (1, 1024)]),
-        ("esp32c5", vec![(0, 4096)]),
-    ] {
+    for (chip, expected) in [("esp32s31", vec![(0, 4096), (1, 1024)])] {
         let directory = tempdir();
         let root = directory.path();
         for (path, text) in oer_espressif_facts::tracked::FILES {

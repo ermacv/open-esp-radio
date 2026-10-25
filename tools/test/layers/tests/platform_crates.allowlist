@@ -4,11 +4,6 @@
 # that starts at one of those crates, or a dependency on one. Lines are removed
 # as the platform moves to our own HAL and PAC; none is added.
 Cargo.toml 2
-chips/esp32c5/board/Cargo.toml 1
-chips/esp32c5/board/src/lib.rs 1
-chips/esp32c5/esp-hal-soc/Cargo.toml 1
-chips/esp32c5/esp-hal-soc/src/handoff.rs 1
-chips/esp32c5/esp-hal-soc/src/radio.rs 1
 chips/esp32s31/board/Cargo.toml 1
 chips/esp32s31/board/src/lib.rs 4
 chips/esp32s31/radio/system/src/lib.rs 2
@@ -20,7 +15,6 @@ chips/espressif/esp-hal/soc/src/handoff.rs 1
 chips/espressif/esp-hal/soc/src/flash/mmu.rs 1
 chips/espressif/executor/Cargo.toml 1
 chips/espressif/executor/src/chip.rs 1
-chips/espressif/executor/tests/chip/c5.rs 1
 chips/espressif/executor/tests/chip/s31.rs 3
 chips/espressif/staged-bootstrap/Cargo.toml 1
 chips/espressif/staged-bootstrap/src/lib.rs 1
@@ -42,15 +36,8 @@ firmware/apps/w2/src/main.rs 3
 firmware/apps/w3/Cargo.toml 1
 firmware/apps/w3/src/entry.rs 3
 firmware/apps/w3/src/irq.rs 1
-firmware/bootstrap/esp32c5/Cargo.toml 2
-firmware/bootstrap/esp32c5/src/main.rs 4
 firmware/bootstrap/esp32s31/Cargo.toml 2
 firmware/bootstrap/esp32s31/src/main.rs 12
-firmware/hil/esp32c5/Cargo.toml 1
-firmware/hil/esp32c5/src/boot_smoke_rearm.rs 1
-firmware/hil/esp32c5/src/boot_smoke.rs 1
-firmware/hil/esp32c5/src/main.rs 3
-firmware/hil/esp32c5/src/system/postmortem.rs 1
 firmware/hil/esp32s31/Cargo.toml 1
 firmware/hil/esp32s31-lower-mac/Cargo.toml 1
 firmware/hil/esp32s31-lower-mac/src/irq.rs 1
@@ -66,9 +53,6 @@ firmware/hil/esp32s31/src/software_interrupt.rs 2
 firmware/hil/esp32s31/src/system/postmortem.rs 2
 firmware/hil/esp32s31/src/wifi_station/irq.rs 1
 firmware/hil/esp32s31/src/wifi_station/mod.rs 4
-firmware/probes/esp32c5-radio/Cargo.toml 1
-firmware/probes/esp32c5-register/Cargo.toml 5
-firmware/probes/esp32c5-register/src/main.rs 8
 tools/image/checks/src/interrupts.rs 1
 tools/image/checks/src/stack/reachability/tests.rs 1
 tools/image/checks/src/stack/tests.rs 9

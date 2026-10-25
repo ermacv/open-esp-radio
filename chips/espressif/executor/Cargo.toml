@@ -18,11 +18,6 @@ esp32s31 = [
     "esp-hal/esp32s31",
     "dep:oer-esp32s31-hal",
 ]
-esp32c5 = [
-    "chip",
-    "esp-hal/esp32c5",
-    "dep:oer-esp32c5-hal",
-]
 # The executor and time driver, which a chip feature selects.
 chip = [
     "dep:embassy-time-driver",
@@ -48,7 +43,6 @@ oer-interrupt-table = { path = "../../../portable/interrupt-table", optional = t
 oer-riscv = { path = "../../../portable/riscv", optional = true }
 oer-mmio = { path = "../../../portable/mmio", optional = true }
 oer-esp32s31-hal = { path = "../../esp32s31/hal", optional = true }
-oer-esp32c5-hal = { path = "../../esp32c5/hal", optional = true }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 riscv = { version = "0.15", optional = true }
@@ -75,4 +69,4 @@ targets = []
 [package.metadata.open-radio]
 # An image selects exactly one chip of esp-hal; each profile builds for its
 # chip's target only.
-supported-feature-profiles = ["esp32s31", "esp32c5"]
+supported-feature-profiles = ["esp32s31"]

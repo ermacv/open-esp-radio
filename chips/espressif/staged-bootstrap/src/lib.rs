@@ -24,8 +24,6 @@ use oer_espressif_staged_layout::{
     stage_two::{Header as RuntimeHeader, PayloadCrc},
 };
 
-#[cfg(feature = "esp32c5")]
-use oer_esp32c5_hal::usb_serial_jtag::early_text;
 #[cfg(feature = "esp32s31")]
 use oer_esp32s31_hal::usb_serial_jtag::early_text;
 

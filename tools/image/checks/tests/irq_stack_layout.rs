@@ -152,7 +152,7 @@ fn checks_hart_one_alignment_only_when_it_exists() {
 #[test]
 fn per_hart_allocations_keep_both_guard_bottoms_aligned_without_growing_other_state() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    for chip in ["esp32s31", "esp32c5"] {
+    for chip in ["esp32s31"] {
         let profile = oer_chip_profile::Profile::load(&root, chip).unwrap();
         let contract = profile.facts.interrupts.unwrap();
         let mut sizes = [0; 2];

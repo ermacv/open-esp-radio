@@ -108,17 +108,11 @@ mod tests {
     use super::*;
 
     const SCRIPT: &str = include_str!("../linker/runtime/sections.x");
-    /// Both chips have a DMA window; the generator tests cover an unknown window.
-    const WINDOWS: &[(&str, &str)] = &[
-        (
-            "esp32s31",
-            include_str!("../../../esp32s31/layout/linker/dma-window.x"),
-        ),
-        (
-            "esp32c5",
-            include_str!("../../../esp32c5/layout/linker/dma-window.x"),
-        ),
-    ];
+    /// The chip has a DMA window; the generator tests cover an unknown window.
+    const WINDOWS: &[(&str, &str)] = &[(
+        "esp32s31",
+        include_str!("../../../esp32s31/layout/linker/dma-window.x"),
+    )];
 
     #[test]
     fn dma_storage_is_checked_against_the_generated_window() {

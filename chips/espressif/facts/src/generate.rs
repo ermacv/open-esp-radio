@@ -302,9 +302,7 @@ mod tests {
     #[test]
     fn the_vectors_follow_the_chip_s_lines_and_harts() {
         let s31 = Vectors::of(&tracked("esp32s31")).expect("vectors");
-        let c5 = Vectors::of(&tracked("esp32c5")).expect("vectors");
         assert_eq!((s31.lines, s31.harts, s31.slots), (48, 2, 64));
-        assert_eq!((c5.lines, c5.harts, c5.slots), (48, 1, 64));
         let assembly = s31.assembly();
         let entries: Vec<&str> = assembly
             .lines()
@@ -324,7 +322,6 @@ mod tests {
         assert_eq!(assembly.matches(".fill 16, 4, 0").count(), 2);
         assert_eq!(assembly.matches(".balign 256").count(), 2);
         assert!(!assembly.contains('{') && !assembly.contains('}'));
-        assert!(!c5.assembly().contains("_h1_"));
         // The same facts give the same text.
         let again = Vectors::of(&tracked("esp32s31")).expect("vectors");
         assert_eq!(

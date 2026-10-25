@@ -102,7 +102,7 @@ mod tests {
 
     fn contract() -> oer_espressif_facts::InterruptContract {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        oer_chip_profile::Profile::load(&root, "esp32c5")
+        oer_chip_profile::Profile::load(&root, "esp32s31")
             .unwrap()
             .facts
             .interrupts
@@ -113,8 +113,8 @@ mod tests {
     fn a_small_bound_increase_that_exceeds_the_final_capacity_is_an_error_with_figures() {
         let contract = contract();
         let allocation = Allocation {
-            hart: 0,
-            bytes: contract.irq_stack_size(0, Some(1000)).unwrap(),
+            hart: 1,
+            bytes: contract.irq_stack_size(1, Some(1000)).unwrap(),
             first_bound: Some(1000),
             from_bound: true,
         };
@@ -126,8 +126,8 @@ mod tests {
             "1000",
             "1010",
             "1111",
-            "5200",
-            "4096",
+            "2128",
+            "1024",
             "1104",
             "no further link",
         ] {

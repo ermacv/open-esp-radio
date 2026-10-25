@@ -31,8 +31,7 @@ completion is always observed with the address that started the command.
 the polled forms. A chip may instead drive the transitions with its own
 executor, which then owns every wait and deadline.
 
-The ESP32-C5 bus is `oer_esp32c5_hal::analog::AnalogI2c`, polled through the
-drivers. The ESP32-S31 PHY drives the transitions from its own executor; its
+The ESP32-S31 PHY drives the transitions from its own executor; its
 HAL configuration transaction and retained-wake parallel stage use
 `ConfigurationTransition` and `ParallelTransition` over the PAC bus.
 

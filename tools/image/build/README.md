@@ -54,7 +54,7 @@ The chip profile's boot kind selects the pipeline:
 
 | Boot | Module | Bootloader and partition table |
 | --- | --- | --- |
-| `staged` (esp32s31, esp32c5) | `staged` | The ROM-readable DIO bootloader from the `espflash` library's resources, the partition table of the flash map's CSV, the `ota_0` selection |
+| `staged` (esp32s31) | `staged` | The ROM-readable DIO bootloader from the `espflash` library's resources, the partition table of the flash map's CSV, the `ota_0` selection |
 | `esp-idf-bootloader` (an ESP-IDF catalog image) | `esp_idf` | The catalog project's own bootloader and partition table, built against the pinned ESP-IDF (`esp_idf::catalog`, `esp_idf::idf`); its `flasher_args.json` must place them at the flash map's offsets |
 
 An application package may declare instrumentation classes in its manifest,
@@ -145,11 +145,8 @@ Each chip's `chips/<chip>/platform/chip.toml` `[flash]` table
 ([`oer-espressif-facts`](../../../chips/espressif/facts/README.md)' `FlashMap`,
 with the flash size of the chip's module) holds the
 bootloader, partition-table, application and OTA-data offsets and the
-partition-table CSV path (`chips/<chip>/platform/partitions/`). Both S31 and
-C5 use staged boot. The [C5 profile](../../../chips/esp32c5/platform/chip.toml)
-supplies its staged flash map, and
-[`oer-esp32c5-layout`](../../../chips/esp32c5/layout/src/lib.rs) generates its
-board memory map from the chip facts. The flash map is host data: no target code reads it (the
+partition-table CSV path (`chips/<chip>/platform/partitions/`). The S31
+uses staged boot; its profile supplies the staged flash map. The flash map is host data: no target code reads it (the
 bootstrap finds its payload through the flash MMU). The staged pipeline
 refuses a flash map whose application or OTA-data offset is not the
 partition table's.
@@ -210,7 +207,7 @@ flags, frame coverage, IRQ guards, stack allocations or stack bounds.
 
 The policy is a chip's `chips/<chip>/platform/stack.toml` (schema 6), extended
 by the HIL target's policy. Every image runs its tasks on CPU0; none starts
-the second S31 core, and C5 has one hart. Each stack names the function that
+the second S31 core. Each stack names the function that
 runs on it from its top (its root, by symbol), its storage (a sized symbol, or a
 linker script's bottom and top symbols) and `minimum_free_bytes`: the root's
 worst-case call chain (`Analysis::bound_with`) must leave the storage that
@@ -263,7 +260,7 @@ hart's levels and their critical paths to `interrupt-stack.txt`.
 Each hart's exception bound (including its entry frame) plus the largest
 own function frame reached at any of its levels, including the exception
 and executor tasks, must fit that hart's `irq-stack-guard-bytes` in the chip's
-`chip.toml`: S31 hart 0 has 4096 bytes and hart 1 has 1024; C5 has 4096.
+`chip.toml`: S31 hart 0 has 4096 bytes and hart 1 has 1024.
 The image linker exports `__runtime_cpu{hart}_irq_stack_guard_bytes` from
 this contract; the runtime reads that absolute symbol to program its trigger.
 The IRQ stacks occupy a separate NOLOAD section at the start of internal
@@ -377,11 +374,8 @@ PSRAM trap and interrupt entry first swaps to its SRAM stack; the caller's
 audit runs beside it.
 
 A stack policy that names no stacks sets the move and per-function frame limit:
-the image is compiled with every image flag and has no whole stack to bound. Staged S31 and C5
-images both name their stacks and pin their ROM inputs. C5 keeps the
-4096-byte move limit; its console pins the large serving and watchdog
-futures separately before joining their references, avoiding a second move
-of the console state.
+the image is compiled with every image flag and has no whole stack to bound. Staged S31 images
+name their stacks and pin their ROM inputs.
 
 ## Comparing images
 

@@ -248,7 +248,7 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
             "oer-espressif-ieee80211-pac",
             Path::new("chips/espressif/ieee80211-pac"),
         ),
-        ("oer-esp32c5-hal", Path::new("chips/esp32c5/hal")),
+        ("oer-esp32s31-hal", Path::new("chips/esp32s31/hal")),
         (
             "oer-espressif-executor",
             Path::new("chips/espressif/executor"),
@@ -263,7 +263,7 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
         ("oer_esp32s31_pac_raw::x", Layer::Pac),
         ("oer_espressif_ieee80211_pac::x", Layer::Pac),
         (
-            "<oer_esp32c5_hal::Uart as core::fmt::Write>::write_str",
+            "<oer_esp32s31_hal::Uart as core::fmt::Write>::write_str",
             Layer::Hal,
         ),
         ("oer_espressif_executor::poll", Layer::Chips),

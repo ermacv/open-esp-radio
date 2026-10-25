@@ -6,8 +6,8 @@ the end go deeper.
 
 ## Goals and scope
 
-- **Chips.** ESP32-S31 is the product; ESP32-C5 is a research target and a
-  peer on the vendor SDK.
+- **Chips.** ESP32-S31 is the product; ESP32-C5 is a peer on the vendor SDK.
+  Its code lies in the tree outside the Cargo workspace and CI.
 - **Radios.** Wi-Fi in every mode, Bluetooth LE (every controller capability
   the hardware offers, multiple connections and the central role first),
   IEEE 802.15.4, with hardware coexistence between them. Bluetooth Classic

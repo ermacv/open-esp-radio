@@ -37,12 +37,9 @@ mod critical;
 )]
 mod default_handlers;
 pub mod diagnostics;
-#[cfg(any(feature = "esp32s31", feature = "esp32c5"))]
+#[cfg(feature = "esp32s31")]
 pub mod fatal;
-#[cfg(all(
-    target_arch = "riscv32",
-    any(feature = "esp32s31", feature = "esp32c5")
-))]
+#[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
 pub use fatal::{fatal_halt, reset};
 #[cfg(target_arch = "riscv32")]
 #[allow(unsafe_code, reason = "the stage-two reset entry is assembly")]
@@ -50,7 +47,7 @@ mod entry;
 pub mod interrupts;
 /// The chip's CPU lines, harts and vector-table words, which the build
 /// generates from its facts.
-#[cfg(any(feature = "esp32s31", feature = "esp32c5"))]
+#[cfg(feature = "esp32s31")]
 mod vectors {
     include!(concat!(env!("OUT_DIR"), "/vectors.rs"));
 }

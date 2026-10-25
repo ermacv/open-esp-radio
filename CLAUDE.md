@@ -1,7 +1,8 @@
 # open-esp-radio
 
-Rust 2024 `no_std` radio stack for Espressif chips (ESP32-S31, ESP32-C5):
-Wi-Fi, Bluetooth LE and IEEE 802.15.4, without vendor radio binaries.
+Rust 2024 `no_std` radio stack for the Espressif ESP32-S31 (the ESP32-C5 code
+lies in the tree outside the Cargo workspace and CI): Wi-Fi, Bluetooth LE and
+IEEE 802.15.4, without vendor radio binaries.
 Read [docs/architecture.md](docs/architecture.md) before any task: it is the
 system these rules serve.
 

@@ -5,25 +5,14 @@ members = [
     "tools/vendor/phy-esp32s31",
     "firmware/probes/esp32s31-register",
     "firmware/probes/esp32s31-radio",
-    "tools/vendor/scenarios-esp32c5-cli",
     "tools/vendor/scenarios-esp32s31-cli",
     "tools/vendor/cli",
     "tools/vendor/ieee802154-esp32s31",
     "tools/vendor/ieee802154-esp32s31-cli",
     "tools/vendor/scenario",
     "tools/vendor/scenario-report",
-    "tools/vendor/scenarios-esp32c5",
     "tools/vendor/scenarios-esp32s31",
-    "firmware/probes/esp32c5-radio",
-    "firmware/probes/esp32c5-register",
     "tools/vendor/phy",
-    "chips/esp32c5/pac",
-    "chips/esp32c5/hal",
-    "chips/esp32c5/esp-hal-soc",
-    "chips/esp32c5/board",
-    "firmware/bootstrap/esp32c5",
-    "chips/esp32c5/layout",
-    "firmware/hil/esp32c5",
     "firmware/hil/esp32s31-phy",
     "firmware/hil/esp32s31-lower-mac",
     "tools/hil/cli",
@@ -176,19 +165,14 @@ default-members = [
     "chips/esp32s31/bluetooth/driver",
     "chips/esp32s31/knowledge",
     "tools/vendor/phy-esp32s31",
-    "tools/vendor/scenarios-esp32c5-cli",
     "tools/vendor/scenarios-esp32s31-cli",
     "tools/vendor/cli",
     "tools/vendor/ieee802154-esp32s31",
     "tools/vendor/ieee802154-esp32s31-cli",
     "tools/vendor/scenario",
     "tools/vendor/scenario-report",
-    "tools/vendor/scenarios-esp32c5",
     "tools/vendor/scenarios-esp32s31",
     "tools/vendor/phy",
-    "chips/esp32c5/pac",
-    "chips/esp32c5/hal",
-    "chips/esp32c5/esp-hal-soc",
     "tools/hil/cli",
     "tools/lab/cli",
     "tools/hil/model",
@@ -323,8 +307,20 @@ default-members = [
     "chips/esp32s31/layout",
 ]
 resolver = "3"
-# Ported packages that do not build yet, each with why; they join the
-# workspace when what they need is there.
+# ESP32-C5 code stays in the tree outside the workspace and CI.
+exclude = [
+    "chips/esp32c5/board",
+    "chips/esp32c5/esp-hal-soc",
+    "chips/esp32c5/hal",
+    "chips/esp32c5/layout",
+    "chips/esp32c5/pac",
+    "firmware/bootstrap/esp32c5",
+    "firmware/hil/esp32c5",
+    "firmware/probes/esp32c5-radio",
+    "firmware/probes/esp32c5-register",
+    "tools/vendor/scenarios-esp32c5",
+    "tools/vendor/scenarios-esp32c5-cli",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -350,11 +346,6 @@ oer-espressif-executor = { path = "chips/espressif/executor" }
 oer-hil-protocol = { path = "protocols/hil/protocol", default-features = false }
 oer-hil-agent = { path = "portable/hil-agent", default-features = false }
 oer-espressif-staged-runtime = { path = "chips/espressif/staged-runtime" }
-# The ESP32-C5 platform's shared dependencies.
-oer-esp32c5-layout = { path = "chips/esp32c5/layout" }
-oer-esp32c5-board = { path = "chips/esp32c5/board" }
-oer-esp32c5-esp-hal-soc = { path = "chips/esp32c5/esp-hal-soc" }
-embassy-futures = "0.1.2"
 critical-section = "1.2.0"
 
 [workspace.lints.rust]

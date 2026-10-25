@@ -204,7 +204,7 @@ impl Profile {
         id: &str,
         inputs: &mut oer_os_durable::inputs::Inputs,
     ) -> Result<Self> {
-        if !root.join(oer_espressif_facts::chip_file(id)).is_file() {
+        if !supported(root)?.iter().any(|chip| chip == id) {
             return Err(format!(
                 "unsupported chip `{id}`; supported: {}",
                 supported(root)?.join(", ")
@@ -299,13 +299,16 @@ pub fn families(root: &Path) -> Result<BTreeMap<String, String>> {
         .collect())
 }
 
-/// Ids of the chips with a chip layer, sorted.
+/// Ids of the chips with a chip layer, sorted; the chips of
+/// [`oer_espressif_facts::tracked::UNTRACKED`] are not supported.
 pub fn supported(root: &Path) -> Result<Vec<String>> {
     let mut ids = Vec::new();
     for entry in std::fs::read_dir(root.join(CHIPS))? {
         let entry = entry?;
         let id = entry.file_name().to_string_lossy().into_owned();
-        if root.join(oer_espressif_facts::chip_file(&id)).is_file() {
+        if !oer_espressif_facts::tracked::UNTRACKED.contains(&id.as_str())
+            && root.join(oer_espressif_facts::chip_file(&id)).is_file()
+        {
             ids.push(id);
         }
     }
@@ -321,16 +324,10 @@ mod tests {
     fn repository() -> tempfile::TempDir {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
-        for (path, text) in oer_espressif_facts::tracked::FILES.iter().copied().chain([
-            (
-                "chips/esp32c5/platform/partitions/applications.csv",
-                include_str!("../../../../chips/esp32c5/platform/partitions/applications.csv"),
-            ),
-            (
-                "chips/esp32s31/platform/partitions/applications.csv",
-                include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
-            ),
-        ]) {
+        for (path, text) in oer_espressif_facts::tracked::FILES.iter().copied().chain([(
+            "chips/esp32s31/platform/partitions/applications.csv",
+            include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
+        )]) {
             let path = root.join(path);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, text).unwrap();
@@ -380,7 +377,7 @@ mod tests {
         let repository = repository();
         let root = repository.path();
         let bytes = || -> Result<Option<u64>> {
-            let placement = Profile::load(root, "esp32c5")?
+            let placement = Profile::load(root, "esp32s31")?
                 .facts
                 .placement
                 .expect("placement");
@@ -391,7 +388,7 @@ mod tests {
                 .and_then(|rule| rule.bytes))
         };
         assert_eq!(bytes().unwrap(), Some(0x3_0000));
-        let policy = root.join("chips/esp32c5/platform/stack.toml");
+        let policy = root.join("chips/esp32s31/platform/stack.toml");
         let text = std::fs::read_to_string(&policy).unwrap();
         let key = "default_cpu0_task_stack_bytes = 0x30000";
         assert!(text.contains(key));
@@ -410,17 +407,17 @@ mod tests {
         let repository = repository();
         let root = repository.path();
         let mut inputs = oer_os_durable::inputs::Inputs::tracked();
-        Profile::load_with_inputs(root, "esp32c5", &mut inputs).unwrap();
+        Profile::load_with_inputs(root, "esp32s31", &mut inputs).unwrap();
         let read: Vec<PathBuf> = inputs.into_digests().into_keys().collect();
         let mut expected: Vec<PathBuf> = [
-            "chips/espressif/platform/isa/rv32imac.toml",
+            "chips/espressif/platform/isa/rv32imafc.toml",
             "chips/espressif/platform/family.toml",
-            "chips/esp32c5/platform/chip.toml",
-            "chips/esp32c5/platform/rom-rev100.toml",
-            "chips/esp32c5/platform/modules/esp32-c5-wroom-1-n16r8.toml",
-            "chips/esp32c5/platform/boards/esp32-c5-devkit.toml",
+            "chips/esp32s31/platform/chip.toml",
+            "chips/esp32s31/platform/rom-rev0.toml",
+            "chips/esp32s31/platform/modules/esp32-s31-wroom.toml",
+            "chips/esp32s31/platform/boards/esp32-s31-function-coreboard-1.toml",
             // The chip's stack policy sizes the default task stack.
-            "chips/esp32c5/platform/stack.toml",
+            "chips/esp32s31/platform/stack.toml",
         ]
         .iter()
         .map(|path| root.join(path))
@@ -431,10 +428,7 @@ mod tests {
 
     #[test]
     fn each_hart_has_its_own_guard_and_usable_capacity() {
-        for (chip, guards) in [
-            ("esp32s31", BTreeMap::from([(0, 4096), (1, 1024)])),
-            ("esp32c5", BTreeMap::from([(0, 4096)])),
-        ] {
+        for (chip, guards) in [("esp32s31", BTreeMap::from([(0, 4096), (1, 1024)]))] {
             let contract = Profile::tracked(chip).unwrap().facts.interrupts.unwrap();
             assert_eq!(contract.irq_stack_guard_bytes, guards);
             for (hart, guard) in guards {
@@ -477,14 +471,14 @@ mod tests {
     #[test]
     fn a_registry_key_outside_the_registry_is_refused() {
         let repository = repository();
-        let path = repository.path().join("chips/esp32c5/platform/chip.toml");
+        let path = repository.path().join("chips/esp32s31/platform/chip.toml");
         let source = std::fs::read_to_string(&path).unwrap();
         std::fs::write(
             &path,
             source.replace("[hil]\n", "[hil]\nimage-names = []\n"),
         )
         .unwrap();
-        let error = Profile::load(repository.path(), "esp32c5")
+        let error = Profile::load(repository.path(), "esp32s31")
             .unwrap_err()
             .to_string();
         assert!(error.contains("image-names"), "{error}");
@@ -507,6 +501,11 @@ mod tests {
         std::fs::create_dir_all(&platform).unwrap();
         std::fs::write(platform.join("chip.toml"), standalone("esp32x9", "f")).unwrap();
         std::fs::create_dir_all(root.path().join(platform_dir("no-profile"))).unwrap();
+        // A chip outside the workspace has a layer and is not supported.
+        let untracked = root.path().join(platform_dir("esp32c5"));
+        std::fs::create_dir_all(&untracked).unwrap();
+        std::fs::write(untracked.join("chip.toml"), standalone("esp32c5", "f")).unwrap();
+        assert!(Profile::load(root.path(), "esp32c5").is_err());
         let error = Profile::load(root.path(), "esp32s2")
             .unwrap_err()
             .to_string();

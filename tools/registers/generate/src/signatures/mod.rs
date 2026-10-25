@@ -58,8 +58,8 @@ fn write(path: &std::path::Path, content: &str, check: bool) -> Result<()> {
 /// qualify their prototypes against the pinned ESP-IDF headers and publish
 /// only supported, unambiguous facts. Reports and raw captures stay ignored.
 pub fn run(ctx: &Checkout, options: Options) -> Result<()> {
-    if !matches!(options.chip.as_str(), "esp32s31" | "esp32c5") {
-        return Err("signature generation supports esp32s31 and esp32c5".into());
+    if options.chip != "esp32s31" {
+        return Err("signature generation supports esp32s31".into());
     }
     let manifest = oer_tool_pins::Manifest::load(&ctx.root, &options.chip)?;
     let revision = manifest

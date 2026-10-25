@@ -15,7 +15,6 @@ serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.4"
 
 [dev-dependencies]
-oer-esp32c5-layout = { path = "../../../chips/esp32c5/layout" }
 oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
 oer-esp32s31-layout = { path = "../../../chips/esp32s31/layout" }
 oer-espressif-staged-layout = { path = "../../../chips/espressif/staged-layout" }

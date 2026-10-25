@@ -594,7 +594,7 @@ when the overlay's `esp-idf` pin is not the manifest's.
 
 ## Strictness overlay from ESP-IDF headers
 
-`cargo registers overlay check --chip <esp32s31|esp32c5> --idf <checkout>`
+`cargo registers overlay check --chip esp32s31 --idf <checkout>`
 verifies every entry of the chip's `model/strictness.toml` against the file
 and line it cites in the pinned ESP-IDF register headers and against the
 vendor SVD: the register definition line (`*_reg.h`), the field line (name,
@@ -623,7 +623,7 @@ peripheral changes nothing.
 
 ## Pinned header function signatures
 
-`cargo registers signatures --chip <esp32s31|esp32c5> --idf <checkout>
+`cargo registers signatures --chip esp32s31 --idf <checkout>
 --sdkconfig <build/config/sdkconfig.h> [--libc-include <picolibc/include>]
 [--clang clang] [--check] [--output <ignored-report-directory>]` writes
 `chips/<chip>/vendor/facts/idf-function-signatures.toml` and its companion
@@ -633,8 +633,7 @@ at the chip's current pin, with its pinned header submodules initialized.
 
 The SDK configuration is an explicit input. For the checked-in facts, use
 the generated configuration from `cargo hil firmware build
-ble-scan-vendor-reference` (S31) or `cargo hil firmware build
-ble-scan-request-counter` (C5). These build SDK reference firmware locally.
+ble-scan-vendor-reference`. It builds SDK reference firmware locally.
 The configuration hash is recorded, and another configuration may expose a
 different set of declarations. The command neither flashes nor captures a
 board. A RISC-V capable Clang and the SDK's C library headers are required.

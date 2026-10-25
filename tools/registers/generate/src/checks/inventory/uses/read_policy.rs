@@ -79,38 +79,6 @@ const S31_DIAGNOSTICS: Diagnostics = &[
     ),
 ];
 
-// SOURCE: ESP32-C5's own pins (chips/esp32c5/vendor/artifacts.toml).
-const C5_DIAGNOSTICS: Diagnostics = &[
-    ("ets_printf", "pin:esp32c5/rom-rev100::ets_printf"),
-    ("ets_vprintf", "pin:esp32c5/rom-rev100::ets_vprintf"),
-    ("phy_printf", "pin:esp32c5/libphy::phy_i2c_correct+288"),
-    ("pp_printf", "pin:esp32c5/libpp::dbg_dump_rx_links+138"),
-    (
-        "wifi_log",
-        "pin:esp32c5/libnet80211[ieee80211_debug.o]::wifi_log",
-    ),
-    (
-        "r_ble_log_internal_x0",
-        "pin:esp32c5/libble_app[ble_log.c.o]::r_ble_log_internal_x0",
-    ),
-    (
-        "r_ble_log_internal_x1",
-        "pin:esp32c5/libble_app[ble_log.c.o]::r_ble_log_internal_x1",
-    ),
-    (
-        "r_ble_log_internal_x2",
-        "pin:esp32c5/libble_app[ble_log.c.o]::r_ble_log_internal_x2",
-    ),
-    (
-        "r_ble_log_internal_x3",
-        "pin:esp32c5/libble_app[ble_log.c.o]::r_ble_log_internal_x3",
-    ),
-    (
-        "r_ble_log_internal_hex",
-        "pin:esp32c5/libble_app[ble_log.c.o]::r_ble_log_internal_hex",
-    ),
-];
-
 /// Selection happens once at the checker boundary; unsupported chips fail.
 pub struct Policy {
     diagnostics: Diagnostics,
@@ -119,7 +87,6 @@ impl Policy {
     pub fn for_chip(chip: &str) -> crate::Result<Self> {
         let diagnostics = match chip {
             "esp32s31" => S31_DIAGNOSTICS,
-            "esp32c5" => C5_DIAGNOSTICS,
             _ => return Err("no diagnostic policy for this chip".into()),
         };
         Ok(Self { diagnostics })

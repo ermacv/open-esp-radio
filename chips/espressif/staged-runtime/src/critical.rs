@@ -6,10 +6,8 @@
 //! was set. Releasing, in reverse order of acquiring, sets MIE again when it
 //! was set and then writes the raw threshold back, so nested sections return
 //! the hart to exactly the state the outermost one found; the threshold is
-//! never rebuilt from the running level. Raising the threshold too masks the
-//! interrupts that clearing MIE alone lets through on the ESP32-C5; the
-//! three instructions after the release give a pending interrupt its
-//! window.
+//! never rebuilt from the running level. The three instructions after the
+//! release give a pending interrupt its window.
 //!
 //! The section is hart-local and takes no lock, so only one hart may run
 //! code: an image whose hart 1 runs (`cpu1-runs`) does not build until a

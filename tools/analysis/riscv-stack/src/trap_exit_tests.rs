@@ -15,15 +15,14 @@ fn chip(id: &str) -> Vectors {
     Vectors::of(&facts).unwrap()
 }
 
-/// The single-hart chip whose exit raises the threshold.
-fn c5() -> Vectors {
-    chip("esp32c5")
+/// The ESP32-S31's vectors.
+fn s31() -> Vectors {
+    chip("esp32s31")
 }
 
-/// A program that assembles `chip`'s generated vectors and `vectors`,
-/// raising the threshold on exit when `raise_threshold`, with every line's
-/// handler and the exception handler defined.
-fn runtime(vectors: &str, chip: &Vectors, raise_threshold: bool) -> Vec<u8> {
+/// A program that assembles `chip`'s generated vectors and `vectors`, with
+/// every line's handler and the exception handler defined.
+fn runtime(vectors: &str, chip: &Vectors) -> Vec<u8> {
     let build = tempfile::Builder::new()
         .prefix("vectors")
         .tempdir()
@@ -43,7 +42,6 @@ core::arch::global_asm!(
     fs = const 0x6000,
     mie = const 8,
     mintthresh = const 0x347,
-    raise_threshold = const {raise},
     tcontrol = const 0x7a5,
     mte = const 8,
     mpte_shift = const 4,
@@ -69,8 +67,7 @@ pub extern "C" fn _start() -> ! {{
 fn panic(_: &core::panic::PanicInfo<'_>) -> ! {{
     loop {{}}
 }}
-"#,
-        raise = u32::from(raise_threshold),
+"#
     );
     let mut link = vec![
         "--undefined=_runtime_mtvt".to_owned(),
@@ -118,9 +115,9 @@ fn address(elf: &[u8], name: &str) -> u32 {
 
 #[test]
 fn every_runtime_entry_returns_through_the_checked_exit() {
-    for (id, raise) in [("esp32c5", true), ("esp32s31", false)] {
+    for id in ["esp32s31"] {
         let chip = chip(id);
-        let elf = runtime(VECTORS, &chip, raise);
+        let elf = runtime(VECTORS, &chip);
         let (vectors, exception) = checked(&elf).unwrap();
         let handler = address(&elf, "handler");
         let slots = chip.slots as usize;
@@ -151,8 +148,8 @@ fn broken(from: &str, to: &str) -> String {
 }
 
 /// The first failure of the checks on `vectors`.
-fn failure(vectors: &str, raise: bool) -> String {
-    match checked(&runtime(vectors, &c5(), raise)) {
+fn failure(vectors: &str) -> String {
+    match checked(&runtime(vectors, &s31())) {
         Ok(_) => panic!("the broken entry passes"),
         Err(error) => error.message,
     }
@@ -161,17 +158,17 @@ fn failure(vectors: &str, raise: bool) -> String {
 #[test]
 fn an_exit_that_loses_mepc_or_mcause_or_reads_a_stale_slot_fails() {
     let lost = broken("    lw t0, 76(sp)\n    csrw mepc, t0\n", "");
-    assert!(failure(&lost, false).contains("without the trap's mepc"));
+    assert!(failure(&lost).contains("without the trap's mepc"));
     let lost = broken("    lw t0, 80(sp)\n    csrw mcause, t0\n", "");
-    assert!(failure(&lost, false).contains("without the trap's mcause"));
+    assert!(failure(&lost).contains("without the trap's mcause"));
     // mepc from the interrupted sp's slot.
     let stale = broken(
         "    lw t0, 76(sp)\n    csrw mepc, t0\n",
         "    lw t0, 72(sp)\n    csrw mepc, t0\n",
     );
-    assert!(failure(&stale, false).contains("without the trap's mepc"));
+    assert!(failure(&stale).contains("without the trap's mepc"));
     let lost = broken("    lw t0, 84(sp)\n    csrw {mintthresh}, t0\n", "");
-    assert!(failure(&lost, true).contains("interrupt threshold"));
+    assert!(failure(&lost).contains("interrupt threshold"));
 }
 
 #[test]
@@ -181,14 +178,14 @@ fn an_exit_that_unmasks_early_or_returns_unmasked_fails() {
         "    csrci mstatus, {mie}\n    lw t0, 80(sp)",
         "    lw t0, 80(sp)",
     );
-    assert!(failure(&late, false).contains("with interrupts enabled"));
+    assert!(failure(&late).contains("with interrupts enabled"));
     let unmasked = broken(
         "    addi sp, sp, 96\n    mret",
         "    addi sp, sp, 96\n    csrsi mstatus, {mie}\n    mret",
     );
-    assert!(failure(&unmasked, false).contains("enables interrupts again"));
+    assert!(failure(&unmasked).contains("enables interrupts again"));
     let lost = broken("    lw t0, 68(sp)\n    csrw mstatus, t0\n", "");
-    assert!(failure(&lost, false).contains("mstatus"));
+    assert!(failure(&lost).contains("mstatus"));
 }
 
 #[test]
@@ -198,17 +195,17 @@ fn an_exit_on_another_stack_or_without_a_register_fails() {
         "    addi sp, sp, 96\n    mret",
         "    addi sp, sp, 80\n    mret",
     );
-    assert!(failure(&wrong, false).contains("another stack"));
+    assert!(failure(&wrong).contains("another stack"));
     let lost = broken("    lw a5, 52(sp)\n", "");
-    assert!(failure(&lost, false).contains("without restoring a register"));
+    assert!(failure(&lost).contains("without restoring a register"));
 }
 
 #[test]
 fn an_entry_that_nests_before_saving_or_keeps_the_fpu_on_fails() {
     let unsaved = broken("    csrr t1, mepc\n    sw t1, 76(sp)\n", "");
-    assert!(failure(&unsaved, false).contains("admits nesting before its frame holds"));
+    assert!(failure(&unsaved).contains("admits nesting before its frame holds"));
     let fpu = broken("    li t1, {fs}\n    csrc mstatus, t1\n", "");
-    assert!(failure(&fpu, false).contains("with the FPU on"));
+    assert!(failure(&fpu).contains("with the FPU on"));
 }
 
 #[test]
@@ -220,9 +217,7 @@ fn an_exit_that_lets_interrupts_in_after_masking_fails() {
         "    lw t0, 64(sp)\n",
         "    csrsi mstatus, {mie}\n    nop\n    nop\n    nop\n    csrci mstatus, {mie}\n    lw t0, 64(sp)\n",
     );
-    for raise in [false, true] {
-        assert!(failure(&window, raise).contains("enables interrupts again on its way out"));
-    }
+    assert!(failure(&window).contains("enables interrupts again on its way out"));
 }
 
 #[test]
@@ -231,7 +226,7 @@ fn an_exit_that_moves_sp_below_its_frame_fails() {
         "_runtime_irq_exit:\n",
         "_runtime_irq_exit:\n    addi sp, sp, -1024\n    sw zero, 0(sp)\n    addi sp, sp, 1024\n",
     );
-    assert!(failure(&deep, false).contains("moves sp below its frame on its way out"));
+    assert!(failure(&deep).contains("moves sp below its frame on its way out"));
 }
 
 #[test]
@@ -242,7 +237,7 @@ fn an_entry_deeper_before_its_call_reports_its_deepest_frame() {
         "    csrsi mstatus, {mie}\n",
         "    addi sp, sp, -64\n    sw zero, 0(sp)\n    addi sp, sp, 64\n    csrsi mstatus, {mie}\n",
     );
-    let (vectors, _) = checked(&runtime(&deep, &c5(), false)).unwrap();
+    let (vectors, _) = checked(&runtime(&deep, &s31())).unwrap();
     assert_eq!(vectors[16].map(|vector| vector.frame), Some(160));
 }
 
@@ -253,18 +248,18 @@ fn a_trap_that_touches_the_floating_point_state_or_another_csr_fails() {
         "    li t1, {fs}\n",
         "    .option push\n    .option arch, +f\n    fmv.w.x ft0, zero\n    .option pop\n    li t1, {fs}\n",
     );
-    assert!(failure(&ft0, false).contains("floating-point instruction"));
+    assert!(failure(&ft0).contains("floating-point instruction"));
     // `fcsr` after the exit restored mstatus.
     let fcsr = broken(
         "    lw t0, 64(sp)\n",
         "    csrw 0x003, zero\n    lw t0, 64(sp)\n",
     );
-    assert!(failure(&fcsr, false).contains("a CSR the trap check does not model"));
+    assert!(failure(&fcsr).contains("a CSR the trap check does not model"));
     let mtvec = broken(
         "    lw t0, 64(sp)\n",
         "    csrw mtvec, zero\n    lw t0, 64(sp)\n",
     );
-    assert!(failure(&mtvec, false).contains("a CSR the trap check does not model"));
+    assert!(failure(&mtvec).contains("a CSR the trap check does not model"));
 }
 
 #[test]
@@ -272,13 +267,13 @@ fn a_trap_that_loses_tcontrol_or_changes_it_unsaved_fails() {
     // Without the restore a nested return leaves MPTE as the nested trap
     // set it.
     let lost = broken("    lw t0, 88(sp)\n    csrw {tcontrol}, t0\n", "");
-    assert!(failure(&lost, false).contains("without the trap's tcontrol"));
+    assert!(failure(&lost).contains("without the trap's tcontrol"));
     let unsaved = broken("    csrr t1, {tcontrol}\n    sw t1, 88(sp)\n", "");
-    assert!(failure(&unsaved, false).contains("changes tcontrol before its frame holds it"));
+    assert!(failure(&unsaved).contains("changes tcontrol before its frame holds it"));
     // Restored before the exit masks.
     let early = broken(
         "    csrci mstatus, {mie}\n    lw t0, 80(sp)",
         "    lw t0, 88(sp)\n    csrw {tcontrol}, t0\n    csrci mstatus, {mie}\n    lw t0, 80(sp)",
     );
-    assert!(failure(&early, false).contains("tcontrol with interrupts enabled"));
+    assert!(failure(&early).contains("tcontrol with interrupts enabled"));
 }

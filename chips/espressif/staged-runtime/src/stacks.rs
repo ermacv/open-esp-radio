@@ -63,21 +63,10 @@ use oer_riscv::{
 #[cfg(target_arch = "riscv32")]
 use crate::vectors::HARTS;
 
-/// Whether the trap exit raises the CLIC threshold before it clears
-/// `mstatus.MIE`: on the ESP32-C5 clearing MIE alone does not mask every
-/// interrupt (in the middle of a multi-cycle instruction).
-///
-/// SOURCE: esp-hal 1f646c5 `esp-sync/src/raw.rs` (`soc_cpu_has_zcmp_workaround`,
-/// set for the ESP32-C5 and not the ESP32-S31 by
-/// `esp-metadata-generated/src/_generated_esp32c5.rs`); ESP-IDF 4d59230d
-/// `riscv/vectors.S` (`mintthresh_csr_disable`).
-#[cfg(target_arch = "riscv32")]
-const RAISE_THRESHOLD: bool = cfg!(feature = "esp32c5");
-
 /// The words of one hart's vector table in `_runtime_mtvt`, the table's
 /// alignment in words, generated from the chip facts
 /// (`vector-table-hart-slots`).
-#[cfg(any(feature = "esp32s31", feature = "esp32c5"))]
+#[cfg(feature = "esp32s31")]
 pub use crate::vectors::VECTOR_TABLE_WORDS;
 
 #[cfg(target_arch = "riscv32")]
@@ -398,7 +387,6 @@ core::arch::global_asm!(
     fs = const status::FS_MASK,
     mie = const status::MIE,
     mintthresh = const clic::MINTTHRESH,
-    raise_threshold = const RAISE_THRESHOLD as u8,
     tcontrol = const trigger::TCONTROL,
     mte = const trigger::TCONTROL_MTE,
     mpte_shift = const tcontrol::MPTE_SHIFT,
