@@ -2770,6 +2770,7 @@ dependencies = [
  "oer-esp32s31-knowledge",
  "oer-esp32s31-pac",
  "oer-espressif-analog",
+ "oer-espressif-boot",
  "oer-espressif-coex",
  "oer-espressif-efuse",
  "oer-espressif-ieee802154-engine",
@@ -2858,12 +2859,15 @@ dependencies = [
  "libc",
  "oer-esp32s31-pac-raw",
  "oer-espressif-analog",
+ "oer-espressif-boot",
  "oer-espressif-efuse",
  "oer-espressif-ieee80211-pac",
  "oer-espressif-ieee802154-mac-values",
  "oer-espressif-watchdog",
  "oer-memory",
  "oer-mmio",
+ "oer-time",
+ "oer-time-virtual",
 ]
 
 [[package]]
@@ -2932,6 +2936,15 @@ dependencies = [
 [[package]]
 name = "oer-espressif-analog"
 version = "0.1.0"
+
+[[package]]
+name = "oer-espressif-boot"
+version = "0.1.0"
+dependencies = [
+ "oer-espressif-watchdog",
+ "oer-time",
+ "oer-time-virtual",
+]
 
 [[package]]
 name = "oer-espressif-coex"

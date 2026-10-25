@@ -18,6 +18,7 @@ test-support = ["oer-esp32s31-pac/test-support", "oer-espressif-ieee802154-engin
 oer-esp32s31-knowledge = { path = "../knowledge" }
 oer-espressif-efuse = { path = "../../espressif/efuse" }
 oer-espressif-watchdog = { path = "../../espressif/watchdog" }
+oer-espressif-boot = { path = "../../espressif/boot" }
 oer-mmio = { path = "../../../portable/mmio" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
 pin-project = "1.1.13"

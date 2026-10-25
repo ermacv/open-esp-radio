@@ -28,6 +28,7 @@ use oer_esp32s31_pac::{
 };
 
 pub mod bluetooth;
+pub mod boot;
 
 mod clock;
 
