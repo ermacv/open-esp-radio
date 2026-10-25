@@ -12,17 +12,9 @@
 
 use oer_esp32s31_pac::modem_etm::{ch_event, ch_task};
 use oer_espressif_ieee802154_engine::types::{Ieee802154EtmChannel, Ieee802154EtmRoute};
-use oer_mmio::{Index, Placement};
+use oer_mmio::Placement;
 
 use super::Ieee802154TaskOwner;
-
-/// The part's index of a channel: the part holds channels zero and one.
-const fn index(channel: Ieee802154EtmChannel) -> Index<2> {
-    match channel {
-        Ieee802154EtmChannel::Channel0 => Index::constant::<0>(),
-        Ieee802154EtmChannel::Channel1 => Index::constant::<1>(),
-    }
-}
 
 /// The event and the task a route connects.
 ///
@@ -75,14 +67,25 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// Write the complete event word, then the complete task word, of the
     /// route's channel.
     pub(crate) fn set_etm_route(&mut self, route: Ieee802154EtmRoute) {
-        let channel = index(route.channel());
         let (event, task) = route_ends(route);
-        self.etm.modify_ch_event(channel, |writer| {
-            writer.set_id(event);
-        });
-        self.etm.modify_ch_task(channel, |writer| {
-            writer.set_id(task);
-        });
+        match route.channel() {
+            Ieee802154EtmChannel::Channel0 => {
+                self.etm.modify_ch0_event(|w| {
+                    w.set_id(event.bits());
+                });
+                self.etm.modify_ch0_task(|w| {
+                    w.set_id(task.bits());
+                });
+            }
+            Ieee802154EtmChannel::Channel1 => {
+                self.etm.modify_ch1_event(|w| {
+                    w.set_id(event.bits());
+                });
+                self.etm.modify_ch1_task(|w| {
+                    w.set_id(task.bits());
+                });
+            }
+        }
     }
 
     /// The signed RSSI in dBm of the most recent baseband reception: the low

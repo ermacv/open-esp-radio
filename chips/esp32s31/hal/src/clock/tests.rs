@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, vec::Vec};
 
-use oer_esp32s31_pac::{WifiPowerBaseline, WifiPowerRestoreReadback};
+use crate::modem::{WifiPowerBaseline, WifiPowerRestoreReadback};
 
 use crate::power::test_clocks::{ClockEvent, CountingPlatformClocks, abandoned, held, holding};
 use crate::power::{PlatformClock, PlatformClockBackend, PlatformClockProvider};

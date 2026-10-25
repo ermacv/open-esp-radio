@@ -29,11 +29,9 @@
 #![forbid(unsafe_code)]
 
 use oer_esp32s31_pac::{
-    Ieee802154Partition, bt_v3_2_baseband,
-    bt_v3_2_baseband::BtV3_2BasebandRxInfo,
-    ieee802154_mac,
-    ieee802154_mac::{Ieee802154Mac, Ieee802154MacIrq, Ieee802154MacTask},
-    modem_etm,
+    bt_bb::BtV32BasebandRxInfo,
+    ieee802154,
+    ieee802154::{Ieee802154MacIrq, Ieee802154MacTask},
     modem_etm::ModemEtmIeee802154,
 };
 use oer_espressif_ieee802154_mac_values::{
@@ -50,13 +48,13 @@ pub use task::Ieee802154PowerSequence;
 pub(crate) use task::{Ieee802154FoundationSnapshot, Ieee802154Pti};
 
 /// Where the chip places the IEEE 802.15.4 MAC block.
-pub type MacPlacement = Fixed<{ ieee802154_mac::BASE }>;
+pub type MacPlacement = Fixed<{ oer_esp32s31_pac::instances::ieee802154::BASE }>;
 
 /// Where the chip places the modem ETM block.
-pub type EtmPlacement = Fixed<{ modem_etm::BASE }>;
+pub type EtmPlacement = Fixed<{ oer_esp32s31_pac::instances::modem_etm::BASE }>;
 
 /// Where the chip places the shared BTBB baseband block.
-pub type RxInfoPlacement = Fixed<{ bt_v3_2_baseband::BASE }>;
+pub type RxInfoPlacement = Fixed<{ oer_esp32s31_pac::instances::bt_bb::BASE }>;
 
 /// Exclusive task-side owner of the IEEE 802.15.4 MAC registers: every MAC
 /// register but `EVENT_STATUS`, the ETM channels zero and one and the
@@ -72,7 +70,7 @@ pub struct Ieee802154TaskOwner<
 > {
     mac: Ieee802154MacTask<P>,
     etm: ModemEtmIeee802154<E>,
-    rx_info: BtV3_2BasebandRxInfo<B>,
+    rx_info: BtV32BasebandRxInfo<B>,
 }
 
 /// Inactive IEEE 802.15.4 interrupt ownership: the MAC's interrupt side
@@ -92,13 +90,46 @@ pub struct Ieee802154InterruptOwner<P: Placement = MacPlacement> {
     mac: Ieee802154MacIrq<P>,
 }
 
+/// Owned MAC task/IRQ parts and the channel-disjoint ETM and RSSI capabilities.
+/// The radio root moves these parts here from the PAC's one claim.
+pub struct Ieee802154Partition {
+    pub(crate) task: Ieee802154MacTask,
+    pub(crate) interrupt: Ieee802154MacIrq,
+    pub(crate) etm: ModemEtmIeee802154,
+    pub(crate) rx_info: BtV32BasebandRxInfo,
+}
+
+impl Ieee802154Partition {
+    /// Assemble the protocol's parts without accessing any register.
+    pub fn new(
+        mac: oer_esp32s31_pac::ownership::Ieee802154Peripherals,
+        etm: ModemEtmIeee802154,
+        rx_info: BtV32BasebandRxInfo,
+    ) -> Self {
+        Self {
+            task: mac.ieee802154_mac_task,
+            interrupt: mac.ieee802154_mac_irq,
+            etm,
+            rx_info,
+        }
+    }
+}
+
+impl<P: Placement> oer_mmio::InterruptSource for Ieee802154InterruptOwner<P> {
+    const SOURCE: u16 = <Ieee802154MacIrq<P> as oer_mmio::InterruptSource>::SOURCE;
+}
+
 /// Split the partition into the task owner and the inactive interrupt
 /// owner. This performs no MMIO.
 pub(crate) fn split(
     partition: Ieee802154Partition,
 ) -> (Ieee802154TaskOwner, Ieee802154InterruptSetupOwner) {
-    let Ieee802154Partition { mac, etm, rx_info } = partition;
-    let (task, interrupt) = mac.split();
+    let Ieee802154Partition {
+        task,
+        interrupt,
+        etm,
+        rx_info,
+    } = partition;
     (
         Ieee802154TaskOwner {
             mac: task,
@@ -117,7 +148,8 @@ pub(crate) fn reunite(
 ) -> Ieee802154Partition {
     let Ieee802154TaskOwner { mac, etm, rx_info } = task;
     Ieee802154Partition {
-        mac: Ieee802154Mac::join(mac, interrupts.mac),
+        task: mac,
+        interrupt: interrupts.mac,
         etm,
         rx_info,
     }
@@ -129,7 +161,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     pub(crate) const fn from_parts(
         mac: Ieee802154MacTask<P>,
         etm: ModemEtmIeee802154<E>,
-        rx_info: BtV3_2BasebandRxInfo<B>,
+        rx_info: BtV32BasebandRxInfo<B>,
     ) -> Self {
         Self { mac, etm, rx_info }
     }
@@ -216,18 +248,18 @@ struct TransitionPort<'task, P: Placement, E: Placement, B: Placement> {
 impl<P: Placement, E: Placement, B: Placement> Ieee802154InterruptTransitionPort
     for TransitionPort<'_, P, E, B>
 {
-    type EventSnapshot = ieee802154_mac::event_status::Snapshot;
+    type EventSnapshot = ieee802154::event_status::Snapshot;
 
     fn stop_operation(&mut self) {
-        self.task.issue(ieee802154_mac::command::Opcode::Stop);
+        self.task.issue(ieee802154::command::Opcode::Stop);
     }
 
     fn stop_timer0(&mut self) {
-        self.task.issue(ieee802154_mac::command::Opcode::Timer0Stop);
+        self.task.issue(ieee802154::command::Opcode::Timer0Stop);
     }
 
     fn stop_timer1(&mut self) {
-        self.task.issue(ieee802154_mac::command::Opcode::Timer1Stop);
+        self.task.issue(ieee802154::command::Opcode::Timer1Stop);
     }
 
     fn mask_all_events(&mut self) {

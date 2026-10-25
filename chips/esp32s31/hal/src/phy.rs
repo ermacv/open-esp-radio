@@ -51,3 +51,10 @@ macro_rules! place_phy_engine_hot_path {
         $visibility fn $name $($body)*
     };
 }
+#[cfg(test)]
+mod ops_tests;
+
+/// Owned physical register sets for PHY operations.
+pub mod registers;
+
+pub(crate) mod sequence;

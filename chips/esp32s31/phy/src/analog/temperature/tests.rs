@@ -1,4 +1,4 @@
-use crate::analog::i2c::fields;
+use crate::analog::i2c::analog_i2c;
 
 use super::{
     PhyTemperatureAction, PhyTemperatureCompletion, PhyTemperatureFailure, PhyTemperatureOutcome,
@@ -8,7 +8,7 @@ use super::{
 fn complete_dac_read(transition: &mut PhyTemperatureTransition, dac: u8) {
     transition
         .advance(PhyTemperatureCompletion::MaskedRead {
-            field: fields::SARADC_I2C_SARADC_TSENS_DAC,
+            field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
             value: dac,
         })
         .unwrap();
@@ -52,20 +52,20 @@ fn saturated_range_waits_for_reapplication_even_when_dac_is_unchanged() {
         assert_eq!(
             transition.action(),
             PhyTemperatureAction::WriteMasked {
-                field: fields::SARADC_I2C_SARADC_TSENS_DAC,
+                field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
                 value: dac,
             }
         );
         assert_eq!(
             transition.advance(PhyTemperatureCompletion::MaskedWrite {
-                field: fields::SARADC_I2C_SARADC_TSENS_DAC,
+                field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
                 value: dac ^ 1,
             }),
             Err(PhyTemperatureTransitionError::WrongCompletion)
         );
         transition
             .advance(PhyTemperatureCompletion::MaskedWrite {
-                field: fields::SARADC_I2C_SARADC_TSENS_DAC,
+                field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
                 value: dac,
             })
             .unwrap();
@@ -86,20 +86,20 @@ fn range_change_requires_an_exact_i2c_write_completion() {
     assert_eq!(
         transition.action(),
         PhyTemperatureAction::WriteMasked {
-            field: fields::SARADC_I2C_SARADC_TSENS_DAC,
+            field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
             value: 7,
         }
     );
     assert_eq!(
         transition.advance(PhyTemperatureCompletion::MaskedWrite {
-            field: fields::SARADC_I2C_SARADC_TSENS_DAC,
+            field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
             value: 5,
         }),
         Err(PhyTemperatureTransitionError::WrongCompletion)
     );
     transition
         .advance(PhyTemperatureCompletion::MaskedWrite {
-            field: fields::SARADC_I2C_SARADC_TSENS_DAC,
+            field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
             value: 7,
         })
         .unwrap();
@@ -120,13 +120,13 @@ fn reset_dac_is_primed_to_the_first_rom_range_before_sampling() {
     assert_eq!(
         transition.action(),
         PhyTemperatureAction::WriteMasked {
-            field: fields::SARADC_I2C_SARADC_TSENS_DAC,
+            field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
             value: 5,
         }
     );
     transition
         .advance(PhyTemperatureCompletion::MaskedWrite {
-            field: fields::SARADC_I2C_SARADC_TSENS_DAC,
+            field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
             value: 5,
         })
         .unwrap();
@@ -161,7 +161,7 @@ fn sample_step_rejects_a_non_sample_completion() {
     complete_dac_read(&mut transition, 5);
     assert_eq!(
         transition.advance(PhyTemperatureCompletion::MaskedRead {
-            field: fields::SARADC_I2C_SARADC_TSENS_DAC,
+            field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
             value: 128,
         }),
         Err(PhyTemperatureTransitionError::WrongCompletion)

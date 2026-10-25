@@ -339,8 +339,7 @@ impl Io<'_, '_> {
     ) -> Result<Step, Failure> {
         use crate::{
             analog::{
-                frequency::PhyFrequencyCapMemoryAction as Memory,
-                i2c::{fields, registers},
+                frequency::PhyFrequencyCapMemoryAction as Memory, i2c::analog_i2c,
                 rfpll::RfpllCapacitorCode,
             },
             calibration::cold::{
@@ -383,26 +382,33 @@ impl Io<'_, '_> {
                 if run.transaction.is_none() {
                     let request = match search_action {
                         search::Action::ReadInitialCap if run.phase == 0 => {
-                            Request::read_byte(registers::RFPLL_CALIBRATED_CAPACITOR_LOW)
+                            Request::read_byte(analog_i2c::rfpll::calibrated_capacitor_low::ADDRESS)
                         }
-                        search::Action::ReadInitialCap => {
-                            Request::read_field(fields::RFPLL_CALIBRATED_CAPACITOR_HIGH)
-                        }
-                        search::Action::EnableSearch => {
-                            Request::write_field(fields::RFPLL_CAPACITOR_SEARCH_ENABLE, 1)
-                        }
+                        search::Action::ReadInitialCap => Request::read_field(
+                            analog_i2c::rfpll::lock_status::CALIBRATED_CAPACITOR_HIGH,
+                        ),
+                        search::Action::EnableSearch => Request::write_field(
+                            analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
+                            1,
+                        ),
                         search::Action::WriteCap(requested) => {
                             let code = RfpllCapacitorCode::from_request(requested)
                                 .ok_or(Failure::Binding)?;
                             if run.phase == 0 {
-                                Request::write_byte(registers::RFPLL_CAPACITOR_LOW, code.low_byte())
+                                Request::write_byte(
+                                    analog_i2c::rfpll::capacitor_low::ADDRESS,
+                                    code.low_byte(),
+                                )
                             } else {
-                                Request::write_field(fields::RFPLL_CAPACITOR_HIGH, code.high_bit())
+                                Request::write_field(
+                                    analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH,
+                                    code.high_bit(),
+                                )
                             }
                         }
-                        search::Action::ReadStatus => {
-                            Request::read_field(fields::RFPLL_CAPACITOR_SEARCH_STATUS)
-                        }
+                        search::Action::ReadStatus => Request::read_field(
+                            analog_i2c::rfpll::capacitor_search_status::CAPACITOR_SEARCH_STATUS,
+                        ),
                         _ => return Err(Failure::Binding),
                     };
                     run.transaction = Some(PhyColdI2cTransaction::new(request));

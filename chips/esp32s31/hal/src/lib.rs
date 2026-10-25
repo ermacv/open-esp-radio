@@ -44,13 +44,16 @@ pub mod cores;
 
 pub mod domain;
 pub mod executor;
+pub mod modem;
 pub mod power;
 pub mod root;
 pub mod types;
 
 pub mod owner;
 
-pub(crate) use owner::{phy_pac, phy_pac_mut, sealed};
+#[cfg(target_arch = "riscv32")]
+pub(crate) use owner::phy_pac_mut;
+pub(crate) use owner::{phy_blocks, phy_blocks_mut, sealed};
 
 pub mod ieee80211;
 pub mod ieee802154;
@@ -68,3 +71,5 @@ pub mod usb_serial_jtag;
 #[doc(hidden)]
 pub mod validation;
 pub mod watchdog;
+
+use phy::registers::RadioPhyRegisters;

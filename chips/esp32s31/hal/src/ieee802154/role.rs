@@ -20,7 +20,7 @@ use crate::power::PlatformClockBackend;
 
 use core::fmt;
 
-use oer_esp32s31_pac::RadioPhyRegisters;
+use crate::phy::registers::RadioPhyRegisters;
 
 use crate::{
     domain::{

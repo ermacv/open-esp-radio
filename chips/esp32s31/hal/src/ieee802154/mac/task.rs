@@ -5,7 +5,7 @@
 //! ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`), unless a step names
 //! another source.
 
-use oer_esp32s31_pac::ieee802154_mac::{
+use oer_esp32s31_pac::ieee802154::{
     command::Opcode,
     ed_config::{CcaMode, EdSampleMode},
     event_enable, rx_abort_enable, tx_abort_enable,
@@ -439,9 +439,7 @@ fn set_tx_abort_all(writer: &mut tx_abort_enable::W, enable: bool) {
 impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// `ieee802154_ll_set_cmd`: write one command image from zero.
     pub(crate) fn issue(&mut self, opcode: Opcode) {
-        self.mac.write_command(|writer| {
-            writer.set_opcode(opcode);
-        });
+        self.mac.write_command(opcode, |_| {});
     }
 
     /// Mask every MAC event, the two unnamed ones included.
@@ -853,12 +851,12 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
 
     /// `ieee802154_ll_set_tx_addr`: the placed frame the transmitter reads.
     pub(crate) fn set_tx_address(&mut self, address: DmaWindowAddress) {
-        self.mac.write_tx_dma_address(address);
+        self.mac.write_tx_dma_address(address, |_| {});
     }
 
     /// `ieee802154_ll_set_rx_addr`: the placed frame the receiver writes.
     pub(crate) fn set_rx_address(&mut self, address: DmaWindowAddress) {
-        self.mac.write_rx_dma_address(address);
+        self.mac.write_rx_dma_address(address, |_| {});
     }
 
     /// `ieee802154_ll_set_ed_duration`: the public LL's sixteen-bit

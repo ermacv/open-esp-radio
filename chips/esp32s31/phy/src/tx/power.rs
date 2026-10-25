@@ -10,7 +10,7 @@
 
 use crate::{
     analog::{
-        i2c::{Address, registers},
+        i2c::{Address, analog_i2c},
         rfpll::{
             RfpllFrequencyAction, RfpllFrequencyCompletion, RfpllFrequencyFailure,
             RfpllFrequencyRequest, RfpllFrequencyTransition,
@@ -130,7 +130,7 @@ const fn rate_to_target_index(rate: u8) -> Option<usize> {
     Some(index)
 }
 
-const TX_CAP_ADDRESS: Address = registers::TXRF_TX_CAPACITOR_LOW;
+const TX_CAP_ADDRESS: Address = analog_i2c::txrf::tx_capacitor_low::ADDRESS;
 const CHANNEL_CODES: [u16; 3] = [1, 6, 11];
 const POWER_CONTROL_MAX_ITERATIONS: u8 = 10;
 

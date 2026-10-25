@@ -21,9 +21,7 @@
 //! The domain is not a coexistence grant: it serializes register access, not
 //! air time.
 
-use oer_esp32s31_pac::{
-    BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, RadioPhyRegisters, SharedRadioRegisters,
-};
+use oer_esp32s31_pac::BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER;
 
 use crate::bluetooth::registers::BluetoothTaskRegisters;
 use crate::ieee80211::registers::WifiRadioRegisters;
@@ -726,7 +724,10 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// protocol capability that also borrows its own registers.
     pub(crate) fn phy_parts_mut(
         &mut self,
-    ) -> (&mut oer_esp32s31_pac::RadioPhyRegisters, &mut PhyRouteState) {
+    ) -> (
+        &mut crate::phy::registers::RadioPhyRegisters,
+        &mut PhyRouteState,
+    ) {
         let state = self.state_mut();
         (state.registers.radio_phy_mut(), &mut state.phy)
     }
@@ -736,7 +737,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     pub(crate) fn phy_parts_with_attachment(
         &mut self,
     ) -> (
-        &mut oer_esp32s31_pac::RadioPhyRegisters,
+        &mut crate::phy::registers::RadioPhyRegisters,
         &mut PhyRouteState,
         &mut T,
     ) {
@@ -1158,7 +1159,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// Registers of the radio-PHY partition image [`Self::phy_register_image`]
     /// reads.
     pub const PHY_REGISTER_IMAGE_LEN: usize =
-        oer_esp32s31_pac::RadioPhyRegisters::REGISTER_IMAGE_LEN;
+        crate::phy::registers::RadioPhyRegisters::REGISTER_IMAGE_LEN;
 
     /// Registers of the radio-PHY partition image.
     pub const fn phy_register_image_len(&self) -> usize {
@@ -1197,3 +1198,8 @@ pub(crate) fn deselect_bluetooth_low_power_clock(phy: &mut RadioPhyRegisters) {
 
 #[cfg(test)]
 mod tests;
+
+use crate::{
+    modem::{BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, SharedRadioRegisters},
+    phy::registers::RadioPhyRegisters,
+};

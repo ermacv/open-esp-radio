@@ -4,9 +4,11 @@
 //! BB+MAC reset belongs to its client entry after PHY calibration; this port
 //! cannot issue it. Wi-Fi MAC clocks belong to the later MAC start transition.
 
-use oer_esp32s31_pac::{
-    ModemSysconPowerObservation, PlatformClockPowerObservation, RadioPhyRegisters,
-    SharedModemClockObservation,
+use crate::{
+    modem::{
+        ModemSysconPowerObservation, PlatformClockPowerObservation, SharedModemClockObservation,
+    },
+    phy::registers::RadioPhyRegisters,
 };
 
 use crate::clock::PlatformClockRefs;
@@ -19,14 +21,14 @@ pub(crate) trait PowerSequenceBackend {
     /// Take one platform clock reference for common power.
     fn acquire_platform_clock(&mut self, clock: PlatformClock) -> Result<(), PlatformClockError>;
     fn configure_modem_source_clocks(&mut self);
-    fn platform_clock_power_observation(&self) -> oer_esp32s31_pac::PlatformClockPowerObservation;
+    fn platform_clock_power_observation(&self) -> crate::modem::PlatformClockPowerObservation;
     fn set_wifi_baseband_reset(&mut self, asserted: bool);
     fn configure_wifi_power_clock_map(&mut self);
     fn enable_phy_calibration_clocks(&mut self);
     fn select_phy_i2c_160mhz_source(&mut self);
-    fn modem_syscon_power_observation(&self) -> oer_esp32s31_pac::ModemSysconPowerObservation;
+    fn modem_syscon_power_observation(&self) -> crate::modem::ModemSysconPowerObservation;
     fn prepare_shared_modem_clock_map(&mut self);
-    fn shared_modem_clock_observation(&self) -> oer_esp32s31_pac::SharedModemClockObservation;
+    fn shared_modem_clock_observation(&self) -> crate::modem::SharedModemClockObservation;
 }
 
 /// Power-sequence port over one route's shared PHY, its platform clock

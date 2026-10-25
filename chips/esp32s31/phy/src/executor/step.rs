@@ -363,7 +363,7 @@ impl<'a> Job<'a> {
                 };
                 if let Completion::Rfpll(
                     crate::analog::rfpll::RfpllFrequencyCompletion::MaskedRead {
-                        field: crate::analog::i2c::fields::RFPLL_LOCK_STATUS,
+                        field: crate::analog::i2c::analog_i2c::rfpll::lock_status::LOCK_STATUS,
                         value,
                     },
                 ) = completion

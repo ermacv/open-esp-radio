@@ -16,7 +16,7 @@
 //! its finite deadline.  No transition method spins, sleeps or self-wakes.
 
 use crate::analog::{
-    i2c::{Address, registers},
+    i2c::{Address, analog_i2c},
     pbus::{PhyForceTxRxAction, PhyForceTxRxCompletion, PhyForceTxRxDepth, PhyForceTxRxTransition},
     temperature::{
         PhyTemperatureAction, PhyTemperatureCompletion, PhyTemperatureFailure,
@@ -24,7 +24,7 @@ use crate::analog::{
     },
 };
 
-const TX_CAP_ADDRESS: Address = registers::TXRF_TX_CAPACITOR_LOW;
+const TX_CAP_ADDRESS: Address = analog_i2c::txrf::tx_capacitor_low::ADDRESS;
 
 // ESP32-S31 Wi-Fi gain profile consumed by `phy_wifi_get_tx_tab_new` in
 // esp-phy-lib 20f1db053a0e6cb9f1c09d255c43bf42483041d0, libphy.a SHA-256

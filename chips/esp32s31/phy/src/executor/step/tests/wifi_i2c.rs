@@ -1,3 +1,5 @@
+use crate::analog::i2c::analog_i2c;
+
 use super::*;
 use crate::{
     state::{PhyConfig, PhyState},
@@ -80,8 +82,8 @@ fn both_masked_writes_keep_order_and_unrelated_bits_across_real_pending_edges() 
         })
         .copied()
         .collect();
-    let first = fields::TXRF_WIFI_TX_TEMPERATURE_TRACKING_0;
-    let second = fields::TXRF_WIFI_TX_TEMPERATURE_TRACKING_1;
+    let first = analog_i2c::txrf::wifi_tx_temperature_tracking_0::WIFI_TX_TEMPERATURE_TRACKING_0;
+    let second = analog_i2c::txrf::wifi_tx_temperature_tracking_1::WIFI_TX_TEMPERATURE_TRACKING_1;
     assert_eq!(
         commands,
         std::vec![

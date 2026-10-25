@@ -5,7 +5,9 @@
 //! arithmetic remain explicit in the PHY state machines.
 
 #[cfg(target_arch = "riscv32")]
-use crate::{owner::SharedPhyAccess, phy_pac_mut};
+use crate::{owner::SharedPhyAccess, phy_blocks_mut};
+
+pub mod ops;
 
 /// One observation of the estimator completion signals.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -41,8 +43,10 @@ pub struct SignalPowerSnapshot {
 /// and readiness loop are deliberately owned by the PHY transition.
 #[cfg(target_arch = "riscv32")]
 pub fn configure(registers: &mut impl SharedPhyAccess, control: u16) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_iq_estimator(control);
+    ops::configure(
+        &mut phy_blocks_mut(registers).phy_iq_estimator_oracle,
+        control,
+    );
 }
 
 /// Set or clear the first estimator enable phase.
@@ -52,8 +56,10 @@ pub fn configure(registers: &mut impl SharedPhyAccess, control: u16) {
 /// size `0x2c`, clears the same bit after its final delay.
 #[cfg(target_arch = "riscv32")]
 pub fn set_start_enabled(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    let registers = phy_pac_mut(registers);
-    registers.set_iq_estimator_start_enabled(enabled);
+    ops::set_start_enabled(
+        &mut phy_blocks_mut(registers).phy_iq_estimator_oracle,
+        enabled,
+    );
 }
 
 /// Set or clear the second estimator enable phase.
@@ -63,8 +69,10 @@ pub fn set_start_enabled(registers: &mut impl SharedPhyAccess, enabled: bool) {
 /// one-microsecond delay.
 #[cfg(target_arch = "riscv32")]
 pub fn set_measurement_enabled(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    let registers = phy_pac_mut(registers);
-    registers.set_iq_estimator_measurement_enabled(enabled);
+    ops::set_measurement_enabled(
+        &mut phy_blocks_mut(registers).phy_iq_estimator_oracle,
+        enabled,
+    );
 }
 
 /// Sample the ready word and shared activity word exactly once each.
@@ -74,8 +82,8 @@ pub fn set_measurement_enabled(registers: &mut impl SharedPhyAccess, enabled: bo
 /// outside this finite observation leaf.
 #[cfg(target_arch = "riscv32")]
 pub fn sample_readiness(registers: &mut impl SharedPhyAccess) -> ReadinessSnapshot {
-    let registers = phy_pac_mut(registers);
-    let (ready, activity) = registers.sample_iq_estimator_readiness();
+    let (ready, activity) =
+        ops::sample_readiness(&phy_blocks_mut(registers).phy_iq_estimator_oracle);
     ReadinessSnapshot { ready, activity }
 }
 
@@ -85,8 +93,8 @@ pub fn sample_readiness(registers: &mut impl SharedPhyAccess) -> ReadinessSnapsh
 /// `DC_I_ACCUMULATOR`, `DC_Q_ACCUMULATOR`, then `POWER_ACCUMULATOR`.
 #[cfg(target_arch = "riscv32")]
 pub fn read_dc_iq_accumulators(registers: &mut impl SharedPhyAccess) -> DcIqAccumulatorSnapshot {
-    let registers = phy_pac_mut(registers);
-    let [i, q, power] = registers.read_iq_estimator_dc_accumulators();
+    let [i, q, power] =
+        ops::read_dc_accumulators(&phy_blocks_mut(registers).phy_iq_estimator_oracle);
     DcIqAccumulatorSnapshot { i, q, power }
 }
 
@@ -96,8 +104,7 @@ pub fn read_dc_iq_accumulators(registers: &mut impl SharedPhyAccess) -> DcIqAccu
 /// `0x20c`, and complete `phy_rxiq_get_mis` both consume this identity.
 #[cfg(target_arch = "riscv32")]
 pub fn read_total_power(registers: &mut impl SharedPhyAccess) -> i32 {
-    let registers = phy_pac_mut(registers);
-    registers.read_iq_estimator_total_power()
+    ops::read_total_power(&phy_blocks_mut(registers).phy_iq_estimator_oracle)
 }
 
 /// Read four signed words in complete `phy_rxiq_get_mis` order.
@@ -106,8 +113,8 @@ pub fn read_total_power(registers: &mut impl SharedPhyAccess) -> i32 {
 /// physical addresses in order `0x0454`, `0x0460`, `0x045c`, `0x0458`.
 #[cfg(target_arch = "riscv32")]
 pub fn read_rxiq_mismatch(registers: &mut impl SharedPhyAccess) -> SignalPowerSnapshot {
-    let registers = phy_pac_mut(registers);
-    let [sum_i, difference_i, difference_q, sum_q] = registers.read_iq_estimator_rxiq_mismatch();
+    let [sum_i, difference_i, difference_q, sum_q] =
+        ops::read_rxiq_mismatch(&phy_blocks_mut(registers).phy_iq_estimator_oracle);
     SignalPowerSnapshot {
         sum_i,
         difference_i,
@@ -122,8 +129,8 @@ pub fn read_rxiq_mismatch(registers: &mut impl SharedPhyAccess) -> SignalPowerSn
 /// physical addresses in order `0x0454`, `0x0460`, `0x0458`, `0x045c`.
 #[cfg(target_arch = "riscv32")]
 pub fn read_signal_power(registers: &mut impl SharedPhyAccess) -> SignalPowerSnapshot {
-    let registers = phy_pac_mut(registers);
-    let [sum_i, difference_i, difference_q, sum_q] = registers.read_iq_estimator_signal_power();
+    let [sum_i, difference_i, difference_q, sum_q] =
+        ops::read_signal_power(&phy_blocks_mut(registers).phy_iq_estimator_oracle);
     SignalPowerSnapshot {
         sum_i,
         difference_i,
@@ -139,6 +146,5 @@ pub fn read_signal_power(registers: &mut impl SharedPhyAccess) -> SignalPowerSna
 /// remains in the caller-driven PHY transition.
 #[cfg(target_arch = "riscv32")]
 pub fn sample_activity(registers: &mut impl SharedPhyAccess) -> bool {
-    let registers = phy_pac_mut(registers);
-    registers.iq_estimator_active()
+    ops::active(&phy_blocks_mut(registers).phy_iq_estimator_oracle)
 }

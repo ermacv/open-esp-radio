@@ -1,3 +1,5 @@
+use crate::analog::i2c::analog_i2c;
+
 use super::*;
 use crate::analog::{
     dcode::{PhyDcodeAction, PhyDcodeExternalBinding, PhyDcodeParameters, PhyDcodeTransition},
@@ -96,8 +98,10 @@ fn cold_and_runtime_keep_channel_capture_order_and_complete_transaction_batches(
             .iter()
             .filter_map(|action| match action {
                 PhyColdI2cAction::StartRead { address }
-                    if *address == fields::RFPLL_INTERNAL_DCODE_0.address()
-                        || *address == fields::RFPLL_INTERNAL_DCODE_1.address() =>
+                    if *address
+                        == analog_i2c::rfpll::internal_dcode_0::INTERNAL_DCODE_0.address()
+                        || *address
+                            == analog_i2c::rfpll::internal_dcode_1::INTERNAL_DCODE_1.address() =>
                 {
                     Some(*address)
                 }
@@ -107,8 +111,8 @@ fn cold_and_runtime_keep_channel_capture_order_and_complete_transaction_batches(
         assert_eq!(
             captures,
             [
-                fields::RFPLL_INTERNAL_DCODE_0.address(),
-                fields::RFPLL_INTERNAL_DCODE_1.address()
+                analog_i2c::rfpll::internal_dcode_0::INTERNAL_DCODE_0.address(),
+                analog_i2c::rfpll::internal_dcode_1::INTERNAL_DCODE_1.address()
             ]
             .repeat(4)
         );
@@ -195,7 +199,7 @@ fn a_ready_rmw_write_is_observed_even_when_publication_crosses_the_deadline() {
             ..Io::default()
         };
         let mut transaction = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_field(
-            fields::RFPLL_DCODE_CKGEN_RESET,
+            analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET,
             1,
         ));
         let result = super::super::rfpll::direct_i2c(

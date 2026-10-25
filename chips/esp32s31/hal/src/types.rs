@@ -5,14 +5,6 @@
 //! register block, raw accessor, or generic MMIO capability is re-exported.
 
 pub use crate::bluetooth::BluetoothMemoryListSelector;
-pub use oer_esp32s31_pac::{
-    CfrValue, CoexTimerClientValue, CoexTimerClockDividerMinusOne,
-    CoexTimerClockSource, CoexTimerPtiValue, CoexTimerRegister,
-    CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource, ForcedRxGain,
-    PbusMemoryGroupBoundary, PhyAdcRate, PhyForcedPowerIndex, PhyFtmEnableVendorArgument,
-    PhyGainMemoryEntry, PhyMemoryError,
-};
-
 /// The Wi-Fi MAC value types of the HAL's register operations.
 pub use crate::ieee80211::registers::{
     ExtraSoftApRxBlockAckEntrySnapshot, MAC_TX_POWER_RATE_COUNT, MacApReceivePolicySnapshot,
@@ -50,3 +42,15 @@ pub use crate::phy::restore::{
 
 pub use crate::ieee80211::registers::WifiRxCsiControlMask;
 pub use crate::ieee80211::station_wake::StaTbttScheduleError;
+
+pub use crate::modem::values::{
+    CfrValue, CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource,
+    CoexTimerPtiValue, ForcedRxGain, PhyForcedPowerIndex,
+};
+pub use crate::modem::{
+    CoexTimerRegister, CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource,
+};
+pub use crate::phy::{
+    i2c::PhyAdcRate,
+    memory::{PbusMemoryGroupBoundary, PhyGainMemoryEntry, PhyMemoryError},
+};
