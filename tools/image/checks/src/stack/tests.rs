@@ -533,10 +533,14 @@ bluetooth = []
 ieee802154 = false
 cores = 1
 [memory]
-sram = { origin = 0x1000, length = 0x2000 }
+internal-sram = { origin = 0x1000, length = 0x2000 }
 flash-xip = { origin = 0x10000, length = 0x1000 }
 retained = { origin = 0x20000, length = 0x100 }
 task-stacks = "sram"
+[memory.attributes]
+sram = { executable = true, cached = false, dma = true, retained = false, writable = true }
+retained = { executable = true, cached = false, dma = false, retained = true, writable = true }
+flash-xip = { executable = true, cached = true, dma = false, retained = false, writable = false }
 "#,
     )
     .unwrap();

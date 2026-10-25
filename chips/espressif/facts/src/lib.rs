@@ -240,7 +240,7 @@ struct StatedEncoding {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 struct StatedMemory {
-    sram: Region,
+    internal_sram: Region,
     flash_xip: Region,
     #[serde(default)]
     psram_origin: Option<u32>,
@@ -249,6 +249,7 @@ struct StatedMemory {
     #[serde(default)]
     cache_window: Option<Region>,
     task_stacks: String,
+    attributes: alloc::collections::BTreeMap<String, Attributes>,
 }
 
 impl Facts {
@@ -339,14 +340,36 @@ impl Facts {
                     }
                     _ => None,
                 };
+                let internal = memory.internal_sram;
+                let sram = match &stated.boot_chain {
+                    Some(chain) => {
+                        let end = chain.application_sram_end;
+                        if end <= internal.origin || end > internal.end() {
+                            return Err(format!(
+                                "`[boot-chain] application-sram-end` {end:#010x} must lie in the \
+                                 internal SRAM {:#010x}..{:#010x}",
+                                internal.origin,
+                                internal.end()
+                            )
+                            .into());
+                        }
+                        Region {
+                            origin: internal.origin,
+                            length: end - internal.origin,
+                        }
+                    }
+                    None => internal,
+                };
                 Ok(Memory {
-                    sram: memory.sram,
+                    internal_sram: internal,
+                    sram,
                     flash_xip: memory.flash_xip,
                     psram,
                     runtime_psram,
                     retained: memory.retained,
                     cache_window: memory.cache_window,
                     task_stacks: memory.task_stacks,
+                    attributes: memory.attributes,
                 })
             })
             .transpose()?;
@@ -404,7 +427,16 @@ impl Facts {
             interrupts.validate()?;
         }
         if let Some(memory) = &self.memory {
-            memory.validate(self.boot_chain.as_ref())?;
+            memory.validate(self.boot_chain.as_ref(), self.rom.as_ref())?;
+        }
+        if let Some(rom) = &self.rom
+            && !self.revisions.contains(&rom.revision)
+        {
+            return Err(format!(
+                "the ROM of revision `{}` is not of a revision the chip names",
+                rom.revision
+            )
+            .into());
         }
         if (self.properties.cores > 1) != self.core_start.is_some() {
             return Err(
@@ -559,19 +591,29 @@ pub(crate) mod tests {
 
     #[test]
     fn the_tracked_chips_resolve_from_their_boards() {
-        for (id, board, module) in [
+        for (id, board, module, revision) in [
             (
                 "esp32s31",
                 "ESP32-S31-Function-CoreBoard-1",
                 "ESP32-S31-WROOM-3-N16R16",
+                "rev0",
             ),
-            ("esp32c5", "ESP32-C5 devkit", "ESP32-C5-WROOM-1-N16R8"),
+            (
+                "esp32c5",
+                "ESP32-C5 devkit",
+                "ESP32-C5-WROOM-1-N16R8",
+                "rev100",
+            ),
         ] {
             let layers = load(&mut tracked::Tracked, id).expect("the layers resolve");
             assert_eq!(
                 layers.files.len(),
-                5,
-                "{id}: ISA, family, chip, module, board"
+                6,
+                "{id}: ISA, family, chip, ROM, module, board"
+            );
+            assert_eq!(
+                layers.files[3],
+                format!("chips/{id}/platform/rom-{revision}.toml")
             );
             assert!(layers.top().contains("/boards/"), "{id}");
             let facts = tracked(id);
@@ -585,7 +627,182 @@ pub(crate) mod tests {
             );
             assert_eq!(facts.family, "espressif");
             assert!(!facts.observed_functions.is_empty());
+            assert_eq!(
+                facts.rom.as_ref().map(|rom| rom.revision.as_str()),
+                Some(revision)
+            );
         }
+    }
+
+    /// The application's SRAM as the layouts have linked it, from the
+    /// internal SRAM and the boot chain's reserve, clear of the ROM's data.
+    #[test]
+    fn the_application_sram_is_the_internal_sram_below_the_reserves() {
+        for (id, sram, data) in [
+            (
+                "esp32s31",
+                Region {
+                    origin: 0x2f00_0000,
+                    length: 0x0007_afc0,
+                },
+                0x2f07_e600,
+            ),
+            (
+                "esp32c5",
+                Region {
+                    origin: 0x4080_0000,
+                    length: 0x0004_e5a0,
+                },
+                0x4085_e5a0,
+            ),
+        ] {
+            let facts = tracked(id);
+            let memory = facts.memory.as_ref().expect("memory");
+            assert_eq!(memory.sram, sram, "{id}");
+            assert_eq!(memory.internal_sram.origin, sram.origin, "{id}");
+            let rom = facts.rom.as_ref().expect("rom");
+            let running: Vec<_> = rom
+                .sram
+                .iter()
+                .filter(|range| range.kept == Kept::Running)
+                .collect();
+            assert_eq!(running.len(), 1, "{id}");
+            assert_eq!(
+                (running[0].start, running[0].end),
+                (data, memory.internal_sram.end()),
+                "{id}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_rom_range_kept_while_an_image_runs_is_refused_in_the_application_sram() {
+        let c5 = tracked("esp32c5");
+        let memory = c5.memory.clone().expect("memory");
+        let chain = c5.boot_chain.clone().expect("boot chain");
+        let rom = c5.rom.clone().expect("rom");
+        assert!(memory.validate(Some(&chain), Some(&rom)).is_ok());
+
+        let mut overlapping = rom.clone();
+        let data = overlapping
+            .sram
+            .iter_mut()
+            .find(|range| range.kept == Kept::Running)
+            .expect("the ROM's data");
+        data.start = memory.sram.end() - 4;
+        // Ranges stay in address order: the boot stack ends where the data
+        // now starts.
+        overlapping.sram.retain(|range| range.kept != Kept::Boot);
+        overlapping
+            .sram
+            .retain(|range| range.kept != Kept::Download);
+        let error = memory
+            .validate(Some(&chain), Some(&overlapping))
+            .expect_err("ROM data in the application's SRAM");
+        assert!(error.to_string().contains("while an image runs"), "{error}");
+
+        // A boot stack or a download buffer the image reuses is no conflict.
+        let mut reused = rom.clone();
+        for range in &mut reused.sram {
+            if range.kept != Kept::Running {
+                range.start = range.start.min(memory.sram.end() - 0x100);
+            }
+        }
+        reused.sram.retain(|range| range.kept != Kept::Download);
+        assert!(memory.validate(Some(&chain), Some(&reused)).is_ok());
+
+        let mut outside = rom.clone();
+        outside.sram[2].end = memory.internal_sram.end() + 4;
+        assert!(memory.validate(Some(&chain), Some(&outside)).is_err());
+        let mut unordered = rom;
+        unordered.sram.swap(0, 2);
+        assert!(memory.validate(Some(&chain), Some(&unordered)).is_err());
+    }
+
+    #[test]
+    fn the_application_sram_ends_at_the_boot_chain_s_reserve() {
+        let base = format!(
+            "{CHIP}[memory]\ninternal-sram = {{ origin = 0x1000, length = 0x1000 }}\n\
+             flash-xip = {{ origin = 0x10000, length = 0x1000 }}\n\
+             retained = {{ origin = 0x20000, length = 0x100 }}\ntask-stacks = 'sram'\n\
+             [memory.attributes]\n\
+             sram = {{ executable = true, cached = false, dma = true, retained = false, writable = true }}\n\
+             retained = {{ executable = true, cached = false, dma = false, retained = true, writable = true }}\n\
+             flash-xip = {{ executable = true, cached = true, dma = false, retained = false, writable = false }}\n"
+        );
+        let chain = |end: u32| {
+            format!(
+                "{base}[boot-chain]\napplication-sram-end = {end:#x}\n\
+                 second-stage-loader-start = 0x1800\nretained-reserved-tail = 24\n"
+            )
+        };
+        let reserved = facts(&chain(0x1c00)).expect("a reserve in the internal SRAM");
+        assert_eq!(
+            reserved.memory.expect("memory").sram,
+            Region {
+                origin: 0x1000,
+                length: 0xc00
+            }
+        );
+        for end in [0x1000, 0x2004] {
+            let error = facts(&chain(end)).expect_err("a reserve outside the internal SRAM");
+            assert!(
+                error.to_string().contains("application-sram-end"),
+                "{error}"
+            );
+        }
+        let whole = facts(&base).expect("no boot chain");
+        assert_eq!(
+            whole.memory.expect("memory").sram,
+            Region {
+                origin: 0x1000,
+                length: 0x1000
+            }
+        );
+        let unattributed = base.replace("flash-xip = { executable", "flash = { executable");
+        let error = facts(&unattributed).expect_err("an unmapped region's attributes");
+        assert!(error.to_string().contains("memory.attributes"), "{error}");
+    }
+
+    #[test]
+    fn the_rom_is_of_a_revision_the_chip_names() {
+        let rom = "[rom]\nrevision = 'rev1'\nelf = 'rom'\nlinker-script = 'rom.x'\n";
+        let error = facts(&format!("{CHIP}{rom}")).expect_err("no such revision");
+        assert!(error.to_string().contains("`rev1`"), "{error}");
+        let named = CHIP.replace("revisions = []", "revisions = ['rev1']");
+        assert!(facts(&format!("{named}{rom}")).is_ok());
+    }
+
+    #[test]
+    fn the_checks_read_a_region_s_attributes() {
+        let c5 = tracked("esp32c5");
+        let memory = c5.memory.as_ref().expect("memory");
+        let cached: Vec<_> = memory
+            .regions()
+            .into_iter()
+            .filter(|mapped| mapped.attributes.cached)
+            .map(|mapped| mapped.name)
+            .collect();
+        assert_eq!(cached, ["flash-xip", "runtime-psram", "psram"]);
+        let sram = memory.sram;
+        let at = memory
+            .region_of(u64::from(sram.origin), u64::from(sram.origin) + 4)
+            .expect("in SRAM");
+        assert_eq!(at.name, "sram");
+        assert!(at.attributes.dma && !at.attributes.cached);
+        let runtime = memory.runtime_psram.expect("runtime PSRAM");
+        let at = memory
+            .region_of(u64::from(runtime.origin), u64::from(runtime.origin) + 4)
+            .expect("in PSRAM");
+        assert_eq!(at.name, "runtime-psram");
+        assert!(at.attributes.cached && at.attributes.writable);
+        assert_eq!(memory.region("retained"), memory.retained);
+        assert!(
+            memory
+                .region_of(u64::from(sram.end()), u64::from(sram.end()) + 4)
+                .is_none(),
+            "the ROM's reserve is no region of the map"
+        );
     }
 
     #[test]
@@ -727,19 +944,22 @@ pub(crate) mod tests {
     fn flash_and_psram_lie_in_the_shared_cache_window_and_the_loader_in_sram() {
         let c5 = tracked("esp32c5");
         let memory = c5.memory.clone().expect("memory");
-        assert!(memory.validate(c5.boot_chain.as_ref()).is_ok());
+        assert!(memory.validate(c5.boot_chain.as_ref(), None).is_ok());
         let mut narrow = memory.clone();
         narrow.cache_window = Some(Region {
             origin: 0x4200_0000,
             length: 0x0100_0000,
         });
-        assert!(narrow.validate(None).is_err(), "PSRAM outside the window");
+        assert!(
+            narrow.validate(None, None).is_err(),
+            "PSRAM outside the window"
+        );
         let mut chain = c5.boot_chain.clone().expect("boot chain");
         chain.second_stage_loader_start = memory.sram.end() + 4;
-        assert!(memory.validate(Some(&chain)).is_err());
+        assert!(memory.validate(Some(&chain), None).is_err());
         let mut chain = c5.boot_chain.clone().expect("boot chain");
         chain.retained_reserved_tail = 0x1_0000;
-        assert!(memory.validate(Some(&chain)).is_err());
+        assert!(memory.validate(Some(&chain), None).is_err());
     }
 
     #[test]
@@ -772,8 +992,9 @@ pub(crate) mod tests {
         );
 
         let memory = format!(
-            "{CHIP}[memory]\nsram = {{ origin = 0, length = 16 }}\n\
-             flash-xip = {{ origin = 16, length = 16 }}\npsram-origin = 64\ntask-stacks = 'sram'\n"
+            "{CHIP}[memory]\ninternal-sram = {{ origin = 0, length = 16 }}\n\
+             flash-xip = {{ origin = 16, length = 16 }}\npsram-origin = 64\ntask-stacks = 'sram'\n\
+             attributes = {{}}\n"
         );
         let error = facts(&memory).expect_err("no PSRAM fitted");
         assert!(error.to_string().contains("psram-origin"), "{error}");

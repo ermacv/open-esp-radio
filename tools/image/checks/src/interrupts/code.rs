@@ -186,19 +186,15 @@ impl CodePlacement {
                 let facts = analysis.functions.get(&address)?;
                 let start = u64::from(address);
                 let end = start + u64::from(facts.function.size.max(1));
-                let location = if memory.sram.contains_range(start, end) {
-                    Location::Sram
-                } else if memory.flash_xip.contains_range(start, end) {
-                    Location::Flash
-                } else if memory
-                    .psram
-                    .is_some_and(|region| region.contains_range(start, end))
-                {
-                    Location::Psram
-                } else if !own.contains(&address) {
-                    Location::Rom
-                } else {
-                    Location::Other
+                // By the region's attributes: uncached RAM a reset clears is
+                // the SRAM, cached read-only memory flash, cached RAM PSRAM.
+                let location = match memory.region_of(start, end).map(|at| at.attributes) {
+                    Some(at) if !at.cached && !at.retained => Location::Sram,
+                    Some(at) if at.cached && !at.writable => Location::Flash,
+                    Some(at) if at.cached => Location::Psram,
+                    Some(_) => Location::Other,
+                    None if !own.contains(&address) => Location::Rom,
+                    None => Location::Other,
                 };
                 Some((
                     address,

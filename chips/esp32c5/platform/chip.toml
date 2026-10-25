@@ -1,8 +1,8 @@
 # The chip layer of the ESP32-C5's facts: what host tools cannot derive from
 # the chip id. It extends the ISA of its hart and the Espressif family; its
-# module and board (modules/, boards/) extend it. Paths follow the id by
-# convention: chips/<id>/{vendor,registers}, firmware/hil/<id>,
-# target/hil/<id>.
+# ROM layer (rom-<revision>.toml), module and board (modules/, boards/)
+# extend it. Paths follow the id by convention: chips/<id>/{vendor,registers},
+# firmware/hil/<id>, target/hil/<id>.
 schema = 2
 id = "esp32c5"
 extends = ["../../espressif/platform/isa/rv32imac.toml", "../../espressif/platform/family.toml"]
@@ -51,14 +51,14 @@ start = "power-on"
 # Stage two lies in the PSRAM after the bootstrap's probe page
 # (`runtime-psram`).
 [memory]
-# Application-owned internal SRAM, `SRAM_START..SRAM_SEG_END`; the
-# second-stage loader, the ROM's download buffers, its stack and its data lie
-# above it.
+# The internal HP SRAM, the ROM's and the boot chain's reserves at its top
+# included; the application's SRAM (`sram`) is the part below what the boot
+# chain keeps (`[boot-chain] application-sram-end`).
 #
-# SOURCE: ESP-IDF 4d59230d `components/esp_system/ld/esp32c5/ld.hp_mem_defs:9`
-# (`SRAM_SEG_END 0x4084E5A0`) and `components/soc/esp32c5/include/soc/soc.h:156`
-# (`SOC_DRAM_LOW 0x40800000`).
-sram = { origin = 0x40800000, length = 0x0004e5a0 }
+# SOURCE: ESP-IDF 4d59230d `components/soc/esp32c5/include/soc/soc.h:154-157`
+# (`SOC_IRAM_LOW`/`SOC_DRAM_LOW 0x40800000`, `SOC_IRAM_HIGH`/`SOC_DRAM_HIGH
+# 0x40860000`).
+internal-sram = { origin = 0x40800000, length = 0x00060000 }
 # The cache window flash and PSRAM share.
 #
 # SOURCE: ESP-IDF 4d59230d `components/soc/esp32c5/include/soc/soc.h:144-149`
@@ -81,8 +81,31 @@ retained = { origin = 0x50000000, length = 0x4000 }
 # The runtime's task stacks lie in PSRAM.
 task-stacks = "psram"
 
+# What each region is. The internal SRAM is instruction and data RAM at one
+# address and the radio's DMA window; LP RAM is executable and outside that
+# window; flash and PSRAM are reached through the shared cache window,
+# outside the DMA window.
+#
+# SOURCE: ESP-IDF 4d59230d `components/soc/esp32c5/include/soc/soc.h:144-147`
+# (`SOC_IROM_LOW..SOC_IROM_HIGH`, `SOC_EXTRAM_DATA_LOW..SOC_EXTRAM_DATA_HIGH`),
+# `:158-161` (`SOC_RTC_IRAM`/`SOC_RTC_DRAM`), `:166-169` (`SOC_DIRAM_*`),
+# `:175-176` (`SOC_DMA_LOW 0x40800000`, `SOC_DMA_HIGH 0x40860000`).
+[memory.attributes]
+sram = { executable = true, cached = false, dma = true, retained = false, writable = true }
+retained = { executable = true, cached = false, dma = false, retained = true, writable = true }
+flash-xip = { executable = true, cached = true, dma = false, retained = false, writable = false }
+psram = { executable = true, cached = true, dma = false, retained = false, writable = true }
+
 # What the pinned second-stage bootloader keeps for itself.
 [boot-chain]
+# The end of ESP-IDF's application memory map, `SRAM_START..SRAM_SEG_END`:
+# the application's SRAM ends here. The internal SRAM above it holds the
+# second-stage loader, the ROM's download buffers, its boot stack and its
+# data (rom-rev100.toml).
+#
+# SOURCE: ESP-IDF 4d59230d `components/esp_system/ld/esp32c5/ld.hp_mem_defs:9`
+# (`SRAM_SEG_END 0x4084E5A0`) and `memory.ld.in:29` (`SRAM_SEG_SIZE`).
+application-sram-end = 0x4084e5a0
 # SOURCE: ESP-IDF 4d59230d
 # `components/bootloader/subproject/main/ld/esp32c5/bootloader.memory.ld.in:26-51`
 # (usable end 0x4085c5a0 minus the 0x2000 stack, 0x5000 `dram_seg` and 0x7000
@@ -107,17 +130,6 @@ flash-tuning-reference-bytes = 0
 [interrupts]
 harts = [0]
 irq-stack-guard-bytes = { "0" = 4096 }
-
-# The mask ROM the stack analyses read: the pinned ROM ELF of the revision
-# the profile describes (chips/esp32c5/vendor/artifacts.toml) and the
-# reviewed function summaries of the ROM the images link
-# (chips/esp32c5/layout/linker/rom/esp32c5-eco2.x).
-[rom]
-elf = "rom-rev100"
-# SOURCE: ESP-IDF 4d59230d `components/esp_rom/esp32c5/ld/esp32c5.rom.ld`
-# (the ECO2 ROM the images link).
-linker-script = "rom/esp32c5-eco2.x"
-summaries = "chips/esp32c5/platform/rom-functions.toml"
 
 # The HIL agent's graph is the source-only stack: the root lock and
 # firmware/hil/esp32c5 must not pull in esp-rtos, whose scheduler and
