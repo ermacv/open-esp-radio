@@ -195,9 +195,7 @@ impl Root {
         } = self.partitions;
         install_console(usb_serial_jtag);
         // Stage two runs from the PSRAM the bootstrap mapped over MPLL.
-        let Ok(clocks) = ChipClocks::install(chip_clocks, PsramMpll::adopted()) else {
-            unreachable!("the one root installs the chip clock words once");
-        };
+        let clocks = ChipClocks::install(chip_clocks, PsramMpll::adopted());
         if cores::install(
             CoreControlRegisters::new(core_control),
             Uart0ClockRegisters::new(uart0_clock),

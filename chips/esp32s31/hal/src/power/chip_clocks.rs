@@ -260,21 +260,20 @@ pub struct ChipClocks {
     _private: (),
 }
 
-/// The chip clock words were installed before.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct Installed;
-
 impl ChipClocks {
     /// Install the clock words with the PSRAM mapping's MPLL reference, once,
     /// from the reset root; this opens the Wi-Fi power gate.
-    pub(crate) fn install(
-        parts: ChipClockPeripherals,
-        psram: PsramMpll,
-    ) -> Result<Self, Installed> {
-        CHIP_CLOCKS
-            .install(ClockCounts::adopt(ClockWords::new(parts), psram))
-            .map_err(|_| Installed)?;
-        Ok(Self { _private: () })
+    ///
+    /// `parts` is the affine installation authority: only the PAC's one
+    /// root can supply these fixed-placement owners, and this call consumes
+    /// them without exposing a way to recover them.
+    pub(crate) fn install(parts: ChipClockPeripherals, psram: PsramMpll) -> Self {
+        // This is the cell's only installer. A second call needs a second
+        // `ChipClockPeripherals`, which the PAC cannot issue; lending an
+        // empty cell does not change its state. Installation therefore
+        // succeeds, without a runtime refusal or a panic in this API.
+        let _ = CHIP_CLOCKS.install(ClockCounts::adopt(ClockWords::new(parts), psram));
+        Self { _private: () }
     }
 
     fn with(

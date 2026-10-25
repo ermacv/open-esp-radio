@@ -12,6 +12,12 @@ shares with the SoC (`MODEM_LPCON.CLK_CONF`, `HP_SYS_CLKRST.REF_160M_CTRL0`):
 references of every user, and a refused acquire or release is the caller's
 typed error.
 
+Installation consumes the unique `ChipClockPeripherals` from the root by
+value. These fixed-placement PAC owners cannot be cloned or recovered after
+installation, so a second installation cannot be expressed. The paired UI
+case `chip_clocks_installed_once` checks that consuming `Root` produces the
+clock owner and prevents installing it again with that root.
+
 - MPLL: the PSRAM mapping holds it for the whole image (`PsramMpll`), so a
   radio reference is a count and no path powers MPLL down (ESP-IDF 4d59230d
   `esp_clk_tree.c` `esp_clk_tree_mpll_acquire`; esp-hal 1f646c5
