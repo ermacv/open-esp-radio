@@ -212,6 +212,40 @@ pub trait RtcWatchdogRegisters: WriteProtected {
     fn set_running(&mut self, access: Access<'_>, enabled: bool, flash_boot: bool);
 }
 
+/// What the RTC watchdog's stage 0 does when its hold expires.
+///
+/// SOURCE: ESP-IDF 4d59230d `components/soc/esp32s31/register/soc/rtc_wdt_reg.h`
+/// (`RTC_WDT_STG0`: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4
+/// RTC reset) and `components/bootloader_support/src/bootloader_init.c:96`
+/// (the bootloader's backstop stage 0 resets the RTC domain).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RtcStageAction {
+    /// Reset the RTC domain and with it the whole chip.
+    ResetRtc = 4,
+}
+
+impl RtcStageAction {
+    /// The stage field's value.
+    pub const fn code(self) -> u8 {
+        self as u8
+    }
+}
+
+/// The RTC watchdog's words that arm and feed it, beside the stop of
+/// [`RtcWatchdogRegisters`].
+///
+/// Each method writes only the fields it names, by read-modify-write, and
+/// keeps every other bit of the word; the feed is a write trigger.
+pub trait RtcWatchdogArm: RtcWatchdogRegisters {
+    /// Write stage 0's hold word, in the chip's units (its slow-clock
+    /// ticks, shifted as the chip's eFuse selects).
+    fn set_stage0_hold(&mut self, access: Access<'_>, hold: u32);
+    /// Write only stage 0's action.
+    fn set_stage0_action(&mut self, access: Access<'_>, action: RtcStageAction);
+    /// Restart the watchdog from stage 0.
+    fn feed(&mut self, access: Access<'_>);
+}
+
 /// The super watchdog's words.
 pub trait SuperWatchdogRegisters: WriteProtected {
     /// Write only the automatic feed field of the configuration word.
@@ -455,6 +489,66 @@ impl<R: RtcWatchdogRegisters> RtcWatchdog<R> {
     pub fn disable(&mut self) {
         let unlocked = Unlocked::new(&mut self.0);
         unlocked.registers.set_running(Access::new(), false, false);
+    }
+}
+
+impl<R: RtcWatchdogArm> RtcWatchdog<R> {
+    /// Arm the RTC watchdog as the image's backstop: stage 0 resets the
+    /// RTC domain `hold` after the last feed. Unlocked, the hold written,
+    /// stage 0's action, a feed, then the enable (flash boot protection
+    /// off), locked: the hold is in place before the feed and the enable
+    /// comes last, as [`MainWatchdog::arm_system_reset`] orders its words.
+    ///
+    /// SOURCE: ESP-IDF 4d59230d `bootloader_init.c:92-98`
+    /// (`wdt_hal_config_stage(WDT_STAGE0, …, WDT_STAGE_ACTION_RESET_RTC)`,
+    /// then `wdt_hal_enable`, which feeds and sets `WDT_EN`,
+    /// `wdt_hal_iram.c`).
+    pub fn arm_rtc_reset(mut self, hold: u32) -> ArmedRtcWatchdog<R> {
+        {
+            let unlocked = Unlocked::new(&mut self.0);
+            unlocked.registers.set_stage0_hold(Access::new(), hold);
+            unlocked
+                .registers
+                .set_stage0_action(Access::new(), RtcStageAction::ResetRtc);
+            unlocked.registers.feed(Access::new());
+            unlocked.registers.set_running(Access::new(), true, false);
+        }
+        ArmedRtcWatchdog(self.0)
+    }
+}
+
+/// The armed RTC watchdog: it resets the chip unless fed within its stage-0
+/// hold. Whoever owns it feeds it; a fatal path that cannot prepare the
+/// chip's reset waits for it.
+#[must_use = "the armed RTC watchdog resets the chip unless it is fed"]
+pub struct ArmedRtcWatchdog<R: RtcWatchdogArm>(R);
+
+impl<R: RtcWatchdogArm> ArmedRtcWatchdog<R> {
+    /// Restart the watchdog from stage 0: unlocked, fed, locked.
+    ///
+    /// SOURCE: ESP-IDF 4d59230d `components/esp_hal_wdt/esp32s31/include/hal/rwdt_ll.h:265-268`
+    /// (`rwdt_ll_feed`).
+    pub fn feed(&mut self) {
+        let unlocked = Unlocked::new(&mut self.0);
+        unlocked.registers.feed(Access::new());
+    }
+
+    /// Feed the watchdog now and then every `period` on `timer`, for good:
+    /// the body of the executor task that keeps the image alive. A task
+    /// that is not polled stops feeding and the watchdog resets the chip.
+    /// A deadline past the clock's range ends the feeding, never the wait.
+    pub async fn feed_every(
+        mut self,
+        timer: &impl oer_time::Timer,
+        period: oer_time::Duration,
+    ) -> ! {
+        loop {
+            self.feed();
+            match timer.deadline_after(period) {
+                Ok(deadline) => timer.wait_until(deadline).await,
+                Err(oer_time::TimeOverflow) => core::future::pending().await,
+            }
+        }
     }
 }
 

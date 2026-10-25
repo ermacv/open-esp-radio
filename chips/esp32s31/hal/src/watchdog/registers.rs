@@ -27,7 +27,7 @@
 
 use oer_espressif_watchdog::{
     Access, MainConfig, MainStageAction, MainWatchdogEnable, MainWatchdogRegisters, ResetLength,
-    RtcWatchdogRegisters, SuperWatchdogRegisters, WriteProtected,
+    RtcStageAction, RtcWatchdogArm, RtcWatchdogRegisters, SuperWatchdogRegisters, WriteProtected,
 };
 use oer_mmio::{Bits, Fixed, Placement};
 
@@ -122,6 +122,14 @@ impl<P: Placement> SwdRegisters<P> {
 
 /// A main watchdog stage's two-bit action field.
 /// SOURCE: ESP-IDF 4d59230d `timer_group_reg.h:464-470` (`TIMG_WDT_STG0`).
+/// SOURCE: ESP-IDF 4d59230d `rtc_wdt_reg.h` (`RTC_WDT_STG0`: 4 the RTC
+/// reset).
+const fn rtc_stage(action: RtcStageAction) -> Bits<3> {
+    match action {
+        RtcStageAction::ResetRtc => Bits::constant::<4>(),
+    }
+}
+
 const fn main_stage(action: MainStageAction) -> Bits<2> {
     match action {
         MainStageAction::Off => Bits::constant::<0>(),
@@ -219,6 +227,29 @@ impl<P: Placement> RtcWatchdogRegisters for RwdtRegisters<P> {
         self.0.modify_config0(|w| {
             w.set_wdt_en(enabled).set_wdt_flashboot_mod_en(flash_boot);
         });
+    }
+}
+
+impl<P: Placement> RtcWatchdogArm for RwdtRegisters<P> {
+    /// SOURCE: ESP-IDF 4d59230d `rwdt_ll.h:117-123` (`rwdt_ll_config_stage`
+    /// stores stage 0's hold word whole).
+    fn set_stage0_hold(&mut self, _: Access<'_>, hold: u32) {
+        self.0.modify_config1(|w| {
+            w.set_wdt_stg0_hold(hold);
+        });
+    }
+
+    /// SOURCE: ESP-IDF 4d59230d `rwdt_ll.h:117-121` (`hw->config0.wdt_stg0`).
+    fn set_stage0_action(&mut self, _: Access<'_>, action: RtcStageAction) {
+        self.0.modify_config0(|w| {
+            w.set_wdt_stg0(rtc_stage(action));
+        });
+    }
+
+    /// SOURCE: ESP-IDF 4d59230d `rwdt_ll.h:265-268` (`rwdt_ll_feed` sets
+    /// the one feed bit).
+    fn feed(&mut self, _: Access<'_>) {
+        self.0.trigger_feed_feed();
     }
 }
 

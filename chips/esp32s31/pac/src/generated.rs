@@ -123710,11 +123710,11 @@ pub mod rtc_wdt {
     pub struct LpWdtWords;
 
     impl oer_mmio::Registers for LpWdtWords {
-        const WORDS: &'static [usize] = &[0x0, 0x18];
+        const WORDS: &'static [usize] = &[0x0, 0x4, 0x14, 0x18];
     }
 
     impl oer_mmio::Words for LpWdtWords {
-        const OWNED: &'static [usize] = &[0x0, 0x18];
+        const OWNED: &'static [usize] = &[0x0, 0x4, 0x14, 0x18];
         const OBSERVED: &'static [usize] = &[];
     }
 
@@ -123750,6 +123750,28 @@ pub mod rtc_wdt {
             let mut value = config0::W(self.0.read::<0x0>());
             change(&mut value);
             self.0.write::<0x0>(value.0);
+        }
+
+        /// Read `CONFIG1`.
+        #[inline]
+        pub fn read_config1(&self) -> config1::R {
+            config1::R(self.0.read::<0x4>())
+        }
+
+        /// Read `CONFIG1`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_config1(&mut self, change: impl FnOnce(&mut config1::W)) {
+            let mut value = config1::W(self.0.read::<0x4>());
+            change(&mut value);
+            self.0.write::<0x4>(value.0);
+        }
+
+        /// Write to the write-trigger field `FEED` of `FEED`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_feed_feed(&mut self) {
+            self.0.write::<0x14>(0x80000000);
         }
 
         /// Read `WPROTECT`.

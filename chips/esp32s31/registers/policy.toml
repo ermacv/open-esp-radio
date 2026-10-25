@@ -160,7 +160,7 @@ registers = ["TIMERGRP1_CTRL0"]
 [[partitions.parts]]
 name = "LpWdt"
 instance = "LP_WDT"
-registers = ["CONFIG0", "WPROTECT"]
+registers = ["CONFIG0", "CONFIG1", "FEED", "WPROTECT"]
 
 [[partitions.parts]]
 name = "LpWdtSwd"
@@ -1261,7 +1261,7 @@ reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "LP_WDT"
-registers = ["CONFIG1", "CONFIG2", "CONFIG3", "CONFIG4", "FEED", "INT_RAW", "INT_ST", "INT_ENA", "INT_CLR", "PAUSE_EN", "DATE"]
+registers = ["CONFIG2", "CONFIG3", "CONFIG4", "INT_RAW", "INT_ST", "INT_ENA", "INT_CLR", "PAUSE_EN", "DATE"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]

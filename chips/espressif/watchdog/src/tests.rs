@@ -9,9 +9,9 @@ use oer_time_virtual::VirtualClock;
 
 use super::{
     Access, LOCK, MainConfig, MainStageAction, MainWatchdog, MainWatchdogEnable,
-    MainWatchdogRegisters, MicrosecondTick, Microseconds, ResetLength, RtcWatchdog,
-    RtcWatchdogRegisters, StoppedMainWatchdog, SuperWatchdog, SuperWatchdogRegisters, WRITE_KEY,
-    WriteProtected,
+    MainWatchdogRegisters, MicrosecondTick, Microseconds, ResetLength, RtcStageAction, RtcWatchdog,
+    RtcWatchdogArm, RtcWatchdogRegisters, StoppedMainWatchdog, SuperWatchdog,
+    SuperWatchdogRegisters, WRITE_KEY, WriteProtected,
     deadline::{DeadlineBudget, DeadlineError, DeadlineWatchdog},
 };
 
@@ -26,6 +26,8 @@ enum Op {
     Feed,
     Latch,
     AutoFeed(bool),
+    Hold(u32),
+    Action(RtcStageAction),
 }
 
 /// The registers' writes, shared with the test that reads them.
@@ -88,6 +90,18 @@ impl RtcWatchdogRegisters for Recorder<'_> {
             enabled,
             flash_boot,
         });
+    }
+}
+
+impl RtcWatchdogArm for Recorder<'_> {
+    fn set_stage0_hold(&mut self, _: Access<'_>, hold: u32) {
+        self.record(Op::Hold(hold));
+    }
+    fn set_stage0_action(&mut self, _: Access<'_>, action: RtcStageAction) {
+        self.record(Op::Action(action));
+    }
+    fn feed(&mut self, _: Access<'_>) {
+        self.record(Op::Feed);
     }
 }
 
@@ -285,4 +299,56 @@ fn a_late_completion_leaves_reset_armed() {
     let (_lease, error) = lease.complete().expect_err("the deadline passed");
     assert_eq!(error, DeadlineError::Expired);
     assert!(log.take().is_empty(), "the watchdog stays armed");
+}
+
+#[test]
+fn the_rtc_watchdog_arms_its_hold_before_the_feed_and_the_enable_last() {
+    let log = Log::default();
+    let watchdog = RtcWatchdog::new(Recorder(&log)).arm_rtc_reset(612_000);
+    assert_eq!(
+        log.take(),
+        [
+            Op::Key(WRITE_KEY),
+            Op::Hold(612_000),
+            Op::Action(RtcStageAction::ResetRtc),
+            Op::Feed,
+            Op::Running {
+                enabled: true,
+                flash_boot: false,
+            },
+            Op::Key(LOCK),
+        ]
+    );
+    assert_eq!(RtcStageAction::ResetRtc.code(), 4);
+    let mut watchdog = watchdog;
+    watchdog.feed();
+    assert_eq!(log.take(), [Op::Key(WRITE_KEY), Op::Feed, Op::Key(LOCK)]);
+}
+
+#[test]
+fn the_armed_rtc_watchdog_is_fed_every_period_while_its_task_is_polled() {
+    use core::{
+        future::Future,
+        pin::pin,
+        task::{Context, Poll, Waker},
+    };
+    let log = Log::default();
+    let clock = VirtualClock::<1>::new();
+    let watchdog = RtcWatchdog::new(Recorder(&log)).arm_rtc_reset(1);
+    log.take();
+    let mut feeding = pin!(watchdog.feed_every(&clock, Duration::from_millis(1_000)));
+    let mut context = Context::from_waker(Waker::noop());
+    let fed = [Op::Key(WRITE_KEY), Op::Feed, Op::Key(LOCK)];
+    assert!(feeding.as_mut().poll(&mut context).is_pending());
+    assert_eq!(log.take(), fed, "the first poll feeds");
+    clock
+        .advance(Duration::from_millis(999))
+        .expect("the virtual clock advances");
+    assert!(feeding.as_mut().poll(&mut context).is_pending());
+    assert!(log.take().is_empty(), "no feed before the period");
+    clock
+        .advance(Duration::from_millis(1))
+        .expect("the virtual clock advances");
+    assert!(matches!(feeding.as_mut().poll(&mut context), Poll::Pending));
+    assert_eq!(log.take(), fed, "one feed per period");
 }

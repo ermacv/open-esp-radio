@@ -6,8 +6,8 @@
 //! Word offsets are ESP-IDF 4d59230d's: `timer_group_reg.h`
 //! (`WDTCONFIG0` 0x48, `WDTCONFIG1` 0x4c, `WDTCONFIG2` 0x50, `WDTFEED`
 //! 0x60, `WDTWPROTECT` 0x64), `hp_sys_clkrst_reg.h` (`TIMERGRP1_CTRL0`
-//! 0x11c) and `lp_wdt_reg.h` (`CONFIG0` 0x0, `WPROTECT` 0x18,
-//! `SWD_CONFIG` 0x1c, `SWD_WPROTECT` 0x20).
+//! 0x11c) and `lp_wdt_reg.h` (`CONFIG0` 0x0, `CONFIG1` 0x4, `FEED` 0x14,
+//! `WPROTECT` 0x18, `SWD_CONFIG` 0x1c, `SWD_WPROTECT` 0x20).
 
 use core::num::NonZeroU32;
 use std::{vec, vec::Vec};
@@ -139,6 +139,29 @@ fn stopping_the_rtc_watchdog_keeps_its_reset_lengths_and_sleep_pause() {
     assert_eq!(view.0.read_wprotect().wdt_wkey(), LOCK, "locked again");
     drop(view);
     assert_eq!(changed(&before, &words), [0x0, 0x18]);
+}
+
+#[test]
+fn arming_the_rtc_watchdog_writes_its_hold_stage_0_and_enable_then_feeds() {
+    let mut words = memory(instances::lp_wdt::SIZE, 0);
+    let before = words.clone();
+    let mut armed =
+        RtcWatchdog::new(RwdtRegisters::host(&mut words).expect("host memory holds it"))
+            .arm_rtc_reset(super::super::RTC_WATCHDOG_STAGE0_HOLD);
+    armed.feed();
+    drop(armed);
+    let view = RwdtRegisters::host(&mut words).expect("host memory holds the block");
+    let config = view.0.read_config0();
+    assert!(config.wdt_en() && !config.wdt_flashboot_mod_en());
+    assert_eq!(config.wdt_stg0().get(), 4, "stage 0 resets the RTC domain");
+    assert_eq!(config.wdt_stg1().get(), 0, "the other stages are kept");
+    // 9 s of the 136 kHz slow clock, shifted right by one.
+    assert_eq!(view.0.read_config1().wdt_stg0_hold(), 612_000);
+    assert_eq!(view.0.read_wprotect().wdt_wkey(), LOCK, "locked again");
+    drop(view);
+    // The feed trigger leaves its bit in host memory.
+    assert_eq!(words[0x14 / 4], 1 << 31);
+    assert_eq!(changed(&before, &words), [0x0, 0x4, 0x14]);
 }
 
 #[test]

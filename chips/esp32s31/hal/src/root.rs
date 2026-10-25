@@ -48,7 +48,7 @@ use crate::{
     },
     power::PlatformClockBackend,
     usb_serial_jtag::{self, ConsoleRegisters},
-    watchdog::{Mwdt0Registers, RwdtRegisters, SwdRegisters, WatchdogRegisters},
+    watchdog::{Mwdt0Registers, RwdtRegisters, SwdRegisters, WatchdogRegisters, Watchdogs},
 };
 
 /// The chip's reset root: every claimed part, once.
@@ -150,6 +150,11 @@ impl Root {
     /// hart 0's pending sources and debug status to the executor's
     /// platform, and the platform's and radio's owners are returned. The
     /// bootstrap's partitions are dropped: stage two repeats no cold boot.
+    ///
+    /// Taking the watchdogs arms the RTC watchdog
+    /// ([`Watchdogs::new`]): from here the image's executor must feed it
+    /// ([`ArmedRtcWatchdog::feed_every`](crate::watchdog::ArmedRtcWatchdog::feed_every)),
+    /// and a fatal path that cannot prepare the reset waits for it.
     pub fn into_runtime(self) -> Runtime {
         let Partitions {
             usb_serial_jtag,
@@ -194,7 +199,7 @@ impl Root {
         }
         crate::executor::publish_debug_status(debug);
         Runtime {
-            watchdogs: WatchdogRegisters::new(watchdog),
+            watchdogs: Watchdogs::new(WatchdogRegisters::new(watchdog)),
             system_timer: SystemTimer::new(system_timer),
             software_interrupts: SoftwareInterrupts::new(
                 software_interrupt_0,
@@ -270,8 +275,9 @@ pub struct Bootstrap {
 /// Stage two's owners of the platform and the radio.
 #[must_use = "the runtime's owners drive the platform and the radio"]
 pub struct Runtime {
-    /// Every watchdog.
-    pub watchdogs: WatchdogRegisters,
+    /// Every watchdog, the RTC watchdog armed: the image's executor feeds
+    /// it.
+    pub watchdogs: Watchdogs,
     /// The system timer's comparators, counter and alarm parts.
     pub system_timer: SystemTimer,
     /// The four software interrupt lines and their interrupt parts.

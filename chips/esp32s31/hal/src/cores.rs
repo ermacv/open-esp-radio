@@ -43,8 +43,9 @@
 //! A fatal path that cannot hold the core-control words resets through the
 //! watchdog: [`software_reset`] returns [`AwaitWatchdog`] after the console's
 //! fatal note (if the block is free), and the path halts its masked hart
-//! until an armed watchdog resets the chip; no second owner of the words is
-//! made.
+//! until the RTC watchdog, which stage two arms when it takes its watchdogs
+//! ([`crate::watchdog::Watchdogs`]), resets the chip; no second owner of the
+//! words is made.
 
 use core::{
     marker::PhantomData,

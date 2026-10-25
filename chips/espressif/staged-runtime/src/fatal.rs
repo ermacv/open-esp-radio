@@ -32,7 +32,8 @@ pub fn fatal_halt(fatal_path: impl for<'a> FnOnce(Fatal<'a>)) -> ! {
 /// then the chip HAL's software reset, which restores what the boot ROM
 /// needs and resets through the ROM. A path that cannot hold the
 /// core-control words (`cores::AwaitWatchdog`) halts its masked hart until
-/// an armed watchdog resets the chip.
+/// the RTC watchdog the image armed when it took its watchdogs
+/// (`watchdog::Watchdogs`) resets the chip.
 #[cfg(target_arch = "riscv32")]
 #[allow(unsafe_code, reason = "lends the chip HAL's fatal-path proof")]
 pub fn reset() -> ! {
