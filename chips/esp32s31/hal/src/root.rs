@@ -36,9 +36,10 @@ use crate::{
         BluetoothClient, CoexAbsent, Ieee802154Client, RadioDomain, RadioDomainReleaseError,
         WifiClient,
     },
-    ieee80211::registers::{MacInterruptSetup, MacLocalTime, WifiMacPartition, WifiRxDmaRegisters},
+    ieee80211::registers::{MacLocalTime, WifiMacPartition, WifiRxDmaRegisters},
     ieee802154::mac::Ieee802154Partition,
     modem::SharedRadioRegisters,
+    owner::WifiInterruptBanks,
     phy::{RadioPhyRegisters, registration::PhyRegistration, restore::PhyRouteState},
     platform::{
         EfuseRegisters, EntropyRegisters, InterruptBlocks, ResetCauseRegisters, SoftwareInterrupts,
@@ -211,11 +212,11 @@ impl Root {
             efuse: EfuseRegisters::new(efuse),
             entropy: EntropyRegisters::new(entropy, soc.lp_periclkrst_rng_init),
             reset_cause: ResetCauseRegisters::new(reset_cause),
+            wifi_interrupts: WifiInterruptBanks::new(wifi_interrupts),
             radio: RadioHardware::new(RadioPartitions::compose(RadioParts {
                 wifi_mac,
                 wifi_mac_interface,
                 wifi_rx_dma,
-                wifi_interrupts,
                 mac_local_time,
                 radio_phy,
                 coexistence,
@@ -290,6 +291,9 @@ pub struct Runtime {
     pub entropy: EntropyRegisters,
     /// The HP cores' reset causes.
     pub reset_cause: ResetCauseRegisters,
+    /// The Wi-Fi MAC's interrupt banks, which the image's interrupt table
+    /// binds to the radio interrupt handler once.
+    pub wifi_interrupts: WifiInterruptBanks,
     /// The protocol-neutral radio root.
     pub radio: RadioHardware,
 }
@@ -299,7 +303,6 @@ struct RadioParts {
     wifi_mac: oer_esp32s31_pac::ownership::WifiMacPeripherals,
     wifi_mac_interface: oer_esp32s31_pac::ownership::WifiMacInterfacePeripherals,
     wifi_rx_dma: oer_esp32s31_pac::ownership::WifiRxDmaPeripherals,
-    wifi_interrupts: oer_esp32s31_pac::ownership::WifiInterruptPeripherals,
     mac_local_time: MacLocalTimePeripherals,
     radio_phy: oer_esp32s31_pac::ownership::RadioPhyPeripherals,
     coexistence: oer_esp32s31_pac::ownership::CoexistencePeripherals,
@@ -348,7 +351,6 @@ impl RadioPartitions {
             wifi_mac,
             wifi_mac_interface,
             wifi_rx_dma,
-            wifi_interrupts,
             mac_local_time,
             radio_phy,
             coexistence,
@@ -376,7 +378,6 @@ impl RadioPartitions {
             wifi: WifiPartition {
                 mac: WifiMacPartition::new(wifi_mac, wifi_mac_interface, local_time),
                 rx_dma: WifiRxDmaRegisters::new(wifi_rx_dma),
-                interrupts: MacInterruptSetup::new(wifi_interrupts),
             },
             bluetooth: BluetoothPartition {
                 controller: BluetoothControllerParts {
@@ -461,7 +462,6 @@ impl RadioHardware {
             wifi_mac,
             wifi_mac_interface,
             wifi_rx_dma,
-            wifi_interrupts,
             mac_local_time,
             radio_phy,
             coexistence,
@@ -478,7 +478,6 @@ impl RadioHardware {
             wifi_mac,
             wifi_mac_interface,
             wifi_rx_dma,
-            wifi_interrupts,
             mac_local_time,
             radio_phy,
             coexistence,
@@ -510,7 +509,6 @@ impl RadioHardware {
 pub struct WifiPartition {
     mac: WifiMacPartition,
     rx_dma: WifiRxDmaRegisters,
-    interrupts: MacInterruptSetup,
 }
 
 impl WifiPartition {
@@ -519,20 +517,12 @@ impl WifiPartition {
         self.mac.mac_local_time()
     }
 
-    pub(crate) fn into_parts(self) -> (WifiMacPartition, WifiRxDmaRegisters, MacInterruptSetup) {
-        (self.mac, self.rx_dma, self.interrupts)
+    pub(crate) fn into_parts(self) -> (WifiMacPartition, WifiRxDmaRegisters) {
+        (self.mac, self.rx_dma)
     }
 
-    pub(crate) const fn from_parts(
-        mac: WifiMacPartition,
-        rx_dma: WifiRxDmaRegisters,
-        interrupts: MacInterruptSetup,
-    ) -> Self {
-        Self {
-            mac,
-            rx_dma,
-            interrupts,
-        }
+    pub(crate) const fn from_parts(mac: WifiMacPartition, rx_dma: WifiRxDmaRegisters) -> Self {
+        Self { mac, rx_dma }
     }
 }
 

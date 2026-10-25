@@ -17,8 +17,8 @@ fn a_running_epoch_reunites_with_its_clocked_client() {
     let (_radio, partitions) =
         RadioHardware::for_host_test().split::<crate::power::test_clocks::CountingBackend, _>(());
     let clocked = super::WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi));
-    let (runtime, interrupts, clocks) = clocked.into_running();
-    let clocked = super::WifiClocked::from_running(runtime, interrupts, clocks);
+    let (runtime, clocks) = clocked.into_running();
+    let clocked = super::WifiClocked::from_running(runtime, clocks);
     assert!(!clocked.initialized());
 }
 
@@ -29,7 +29,7 @@ fn the_runtime_channel_capability_borrows_the_lease() {
     let (mut radio, partitions) =
         RadioHardware::for_host_test().split::<crate::power::test_clocks::CountingBackend, _>(());
     let clocked = super::WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi));
-    let (mut runtime, _interrupts, _clocks) = clocked.into_running();
+    let (mut runtime, _clocks) = clocked.into_running();
     let domain = &mut radio;
     let mut platform = ();
     let channel = runtime.channel_hal(&mut platform, domain);

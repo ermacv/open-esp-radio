@@ -2,8 +2,7 @@
 //!
 //! The one layer that adapts vendor-shaped scalar ABIs to the HAL's typed
 //! operations for the vendor comparison's probe images. A probe that can
-//! use the public API does so on the owners [`runtime_owner`] and
-//! [`mac_interrupt_setup`] claim; the functions here exist only for state
+//! use the public API does so on the owner [`runtime_owner`] claims; the functions here exist only for state
 //! the public API does not reach: raw vendor arguments and the PAC's
 //! internal register transactions.
 
@@ -11,7 +10,7 @@
 
 use crate::{
     ieee80211::{dma::rx_dma::RxDma, station_wake::StationWakeState},
-    owner::{MacInterruptRegisters, MacInterruptSetup, MacPowerInterruptRegisters, RadioAccess},
+    owner::{MacInterruptRegisters, MacPowerInterruptRegisters, RadioAccess},
     types::{MacHeTxProgram, MacHtTxProgram, MacInterface, MacLegacyTxProgram, TxBlockAckPayload},
 };
 
@@ -24,13 +23,6 @@ pub fn runtime_owner() -> RadioAccess {
         StationWakeState::default(),
         true,
     )
-}
-
-/// The task-side MAC interrupt setup of a probe image.
-pub fn mac_interrupt_setup() -> MacInterruptSetup {
-    MacInterruptSetup {
-        inner: oer_esp32s31_pac::validation::mac_interrupt_setup(),
-    }
 }
 
 fn mac_interrupt_registers() -> MacInterruptRegisters {

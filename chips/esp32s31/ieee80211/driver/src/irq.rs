@@ -1,72 +1,243 @@
 //! The Wi-Fi interrupt line at the radio interrupt level (P3).
 //!
-//! One [`WifiIrqLine`] owns the active interrupt epoch: both register banks,
-//! the MAC and WDEVPWR fact publishers, and the request word the radio
-//! executor (P2) writes. Three handlers of the image run it, one after
-//! another and never inside each other (esp-hal runs every source of one
-//! priority on one CPU line): the MAC handler calls [`service_mac_line`],
-//! the WDEVPWR handler [`service_power_line`] and the radio doorbell's
-//! handler [`run_doorbell`]. The image keeps the line in a
-//! [`HandlerCell`]; the cell is an ownership state machine, not a lock, so
-//! no handler ever shares a lock with a task.
+//! One entry of the image's interrupt table binds [`WifiIrqPart`] once, at
+//! start: both interrupt banks of the MAC (`MODEM_WIFI_MAC` and
+//! `MODEM_WIFI_PWR`) and the radio doorbell (`FROM_CPU_INTR3`) route to its
+//! one line, and its handler holds the part for the image's life. The
+//! handler calls [`service_wifi_line`], which learns what fired from the
+//! peripherals themselves and serves one cause per entry: it lowers the
+//! doorbell and applies the requests it takes; without one it serves the
+//! MAC bank, or else the WDEVPWR bank. The line is level-triggered, so a
+//! cause left for later enters the handler again at once.
 //!
-//! P2 never touches an interrupt register while the epoch is live. It asks
-//! the line through [`WifiIrqRequests`] and rings the doorbell:
+//! The banks' epoch ([`InterruptEpoch`]) is the handler's alone. The radio
+//! executor (P2) never touches an interrupt register and never the CPU
+//! route; it asks the line through [`WifiIrqRequests`] and rings the
+//! doorbell:
 //!
 //! 1. P2 sets a request bit (`fetch_or`, Release), then rings
-//!    ([`WifiIrqRequests::ring`]).
-//! 2. The doorbell handler resets its software interrupt first, then takes
-//!    every request at once (`swap(0)`, AcqRel). A ring after the reset
-//!    raises the interrupt again, so no request is lost; requests made
-//!    before the take coalesce.
-//! 3. [`WifiIrqRequest::MaskAll`] wins: unless the banks are masked already,
-//!    the line masks both, remembers it, and posts the masked fact
-//!    ([`IrqBatch::masked`](oer_esp32s31_ieee80211_mac::irq::consumer::IrqBatch::masked))
-//!    once. Otherwise [`WifiIrqRequest::UnmaskRx`] restores the RX delivery
-//!    group. An unmask after the mask is ignored and counted.
+//!    ([`WifiIrqRequests::ring`], or [`WifiIrqRequests::activate`] with the
+//!    binding's [`Bound`] proof).
+//! 2. The handler lowers the doorbell first, then takes every request at
+//!    once (`swap(0)`, AcqRel). A ring after the lowering raises the line
+//!    again, so no request is lost; requests made before the take coalesce.
+//!    The handler preempts P2, so once [`WifiIrqRequests::is_pending`] reads
+//!    `false` the requests it took are applied.
+//! 3. Of the requests taken together the safest wins:
+//!    [`WifiIrqRequest::Close`] (mask and clear both banks), then
+//!    [`WifiIrqRequest::MaskAll`] (mask both, keep the latched events; the
+//!    masked fact is posted once,
+//!    [`IrqBatch::masked`](oer_esp32s31_ieee80211_mac::irq::consumer::IrqBatch::masked)),
+//!    then the activation (clear, then publish the station mask), then
+//!    [`WifiIrqRequest::UnmaskRx`] (restore the RX delivery group of an
+//!    active epoch). An unmask that loses, or reaches a masked or closed
+//!    epoch, is ignored and counted.
+//!
+//! The handler reaches the receive arena's publishers through the line
+//! ([`WifiIrqLine`]), which the task installs once in a [`HandlerCell`]; the
+//! cell is an ownership state machine, not a lock, so the handler never
+//! shares a lock with a task. Before the line is installed the handler
+//! lowers the doorbell and closes a stray bank event, nothing else.
 
 use core::{
     mem::MaybeUninit,
-    sync::atomic::{AtomicU32, Ordering},
+    sync::atomic::{AtomicU8, AtomicU32, Ordering},
 };
-use oer_interrupt_table::signal::SignalExecutor;
+use oer_interrupt_table::{Bound, InterruptSources, signal::SignalExecutor};
 
+use oer_esp32s31_hal::{
+    ieee80211::init::MAC_STATION_INTERRUPT_MASK,
+    owner::{MacInterruptRegisters, MacPowerInterruptRegisters, WifiInterruptBanks},
+    platform::FromCpu3Irq,
+    types::MacInterruptEnableState,
+};
 use oer_esp32s31_ieee80211_mac::irq::{
     IrqDisposition, MacInterrupt, MacPowerInterrupt, PowerIrqDisposition,
     consumer::{IrqPublisher, PowerIrqPublisher},
-    epoch::{ActiveEpoch, Moderated},
+    epoch::{EpochState, InterruptEpoch, Moderated},
 };
 use oer_memory::{HandlerCell, Installed};
 
 use crate::rx::counters::WifiRxCounters;
 
 /// The radio doorbell, as the radio executor sees it: a software interrupt
-/// at the radio interrupt level whose handler calls [`run_doorbell`].
+/// at the radio interrupt level, one of [`WifiIrqPart`]'s sources.
 ///
 /// The image implements it over its `FROM_CPU` 3 doorbell; host tests run
-/// the doorbell handler synchronously, as the interrupt would preempt P2.
+/// the handler synchronously, as the interrupt would preempt P2.
 pub trait RadioDoorbell {
     /// Raise the doorbell. Never waits.
     fn ring(&self);
 }
 
-/// The CPU routes of the MAC and WDEVPWR interrupt sources.
-///
-/// The doorbell's route is enabled at boot and is not part of this pair.
-pub trait WifiIrqRoutes {
-    /// Route WDEVPWR, then MAC, to the radio interrupt level.
-    fn enable(&mut self);
-    /// Silence both routes.
-    fn silence(&mut self);
+/// The doorbell's lowering half, which the handler holds in its part
+/// (the executor's `DoorbellAcknowledger<3>` on the chip).
+pub trait DoorbellAcknowledge {
+    /// Lower the doorbell before the requests are taken. Never waits.
+    fn acknowledge(&mut self);
 }
 
-/// One request from the radio executor to the interrupt line.
+/// The radio interrupt handler's part: both MAC interrupt banks in their
+/// epoch, the doorbell's interrupt part and its lowering half.
+///
+/// `A` lowers the doorbell; `B`, `I` and `P` are the doorbell's part and
+/// the two banks, the chip's by default and host models in tests. The
+/// image's interrupt table binds it once, its sources from its type:
+///
+/// ```no_run
+/// use oer_esp32s31_hal::{owner::WifiInterruptBanks, platform::FromCpu3Irq};
+/// use oer_esp32s31_ieee80211_driver::irq::{DoorbellAcknowledge, WifiIrqPart};
+/// # const LINES: oer_interrupt_table::Lines =
+/// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 2 };
+/// pub struct Lower;
+/// impl DoorbellAcknowledge for Lower {
+///     fn acknowledge(&mut self) {}
+/// }
+/// pub fn on_wifi(_part: &mut WifiIrqPart<Lower>) {
+///     // service_wifi_line(&LINE, part)
+/// }
+/// oer_interrupt_table::interrupt_table! {
+///     lines: LINES,
+///     handler_attributes: [];
+///     wifi: WifiToken = WifiIrqPart<Lower> => on_wifi, line 20, level 3, hart 0, Hardware;
+/// }
+/// fn start(
+///     router: &mut oer_interrupt_table::Router<oer_esp32s31_hal::platform::InterruptController>,
+///     token: WifiToken,
+///     banks: WifiInterruptBanks,
+///     bell: FromCpu3Irq,
+/// ) {
+///     let _bound = router.bind(token, WifiIrqPart::new(banks, bell, Lower));
+/// }
+/// # fn main() {}
+/// ```
+///
+/// The part moves into its one binding:
+///
+/// ```compile_fail,E0382
+/// # use oer_esp32s31_ieee80211_driver::irq::{DoorbellAcknowledge, WifiIrqPart};
+/// # const LINES: oer_interrupt_table::Lines =
+/// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 2 };
+/// # pub struct Lower;
+/// # impl DoorbellAcknowledge for Lower {
+/// #     fn acknowledge(&mut self) {}
+/// # }
+/// # pub fn on_wifi(_part: &mut WifiIrqPart<Lower>) {}
+/// # oer_interrupt_table::interrupt_table! {
+/// #     lines: LINES,
+/// #     handler_attributes: [];
+/// #     wifi: WifiToken = WifiIrqPart<Lower> => on_wifi, line 20, level 3, hart 0, Hardware;
+/// # }
+/// fn start(
+///     router: &mut oer_interrupt_table::Router<oer_esp32s31_hal::platform::InterruptController>,
+///     token: WifiToken,
+///     part: WifiIrqPart<Lower>,
+/// ) {
+///     let _bound = router.bind(token, part);
+///     let _again = router.bind(token, part);
+/// }
+/// # fn main() {}
+/// ```
+pub struct WifiIrqPart<
+    A,
+    B = FromCpu3Irq,
+    I: MacInterrupt = MacInterruptRegisters,
+    P: MacPowerInterrupt = MacPowerInterruptRegisters,
+> {
+    epoch: InterruptEpoch<Moderated, I, P>,
+    /// The doorbell's interrupt part: it names a source of the part and
+    /// holds no register.
+    _bell: B,
+    acknowledger: A,
+}
+
+impl<A> WifiIrqPart<A> {
+    /// The chip's part over the root's banks, closed, and the doorbell's
+    /// part and lowering half. No register is touched.
+    pub fn new(banks: WifiInterruptBanks, bell: FromCpu3Irq, acknowledger: A) -> Self {
+        let WifiInterruptBanks { mac, power } = banks;
+        Self {
+            epoch: InterruptEpoch::new(mac, power),
+            _bell: bell,
+            acknowledger,
+        }
+    }
+}
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+/// A radio handler part of this driver: a [`WifiIrqPart`], whatever lowers
+/// its doorbell and whatever its banks are.
+pub trait WifiLinePart: sealed::Sealed + InterruptSources {}
+
+impl<A, B, I: MacInterrupt, P: MacPowerInterrupt> sealed::Sealed for WifiIrqPart<A, B, I, P> {}
+impl<A, B, I: MacInterrupt, P: MacPowerInterrupt> WifiLinePart for WifiIrqPart<A, B, I, P> where
+    Self: InterruptSources
+{
+}
+
+/// What an activation takes ([`WifiIrqRequests::activate`]): the router's
+/// [`Bound`] proof that the image's interrupt table binds a [`WifiLinePart`]
+/// (host tests use their own host proof). Sealed: only the router makes one.
+pub trait WifiIrqActivation: sealed::Sealed {}
+
+impl<P: WifiLinePart> sealed::Sealed for Bound<P> {}
+impl<P: WifiLinePart> WifiIrqActivation for Bound<P> {}
+
+/// The host tests' stand-in for the binding's proof: no table binds a host
+/// part, and the driver forbids the `unsafe` a table's entry implements.
+#[cfg(test)]
+pub(crate) struct HostActivation;
+
+#[cfg(test)]
+impl sealed::Sealed for HostActivation {}
+#[cfg(test)]
+impl WifiIrqActivation for HostActivation {}
+
+impl<A> InterruptSources for WifiIrqPart<A> {
+    const SOURCES: &'static [u16] = oer_interrupt_table::interrupt_sources![
+        MacInterruptRegisters,
+        MacPowerInterruptRegisters,
+        FromCpu3Irq
+    ];
+}
+
+impl<A, B, I: MacInterrupt, P: MacPowerInterrupt> WifiIrqPart<A, B, I, P> {
+    /// A part over host banks and a host doorbell, for tests without MMIO.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn for_host_test(epoch: InterruptEpoch<Moderated, I, P>, bell: B, acknowledger: A) -> Self {
+        Self {
+            epoch,
+            _bell: bell,
+            acknowledger,
+        }
+    }
+
+    /// The banks' epoch, to inspect it in tests.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn epoch(&self) -> &InterruptEpoch<Moderated, I, P> {
+        &self.epoch
+    }
+
+    /// The banks' epoch, to latch events in tests as the hardware would.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn epoch_mut(&mut self) -> &mut InterruptEpoch<Moderated, I, P> {
+        &mut self.epoch
+    }
+}
+
+/// One request from the radio executor to the interrupt line, besides the
+/// activation ([`WifiIrqRequests::activate`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WifiIrqRequest {
     /// Restore the RX delivery group after the RX frontier was drained.
     UnmaskRx,
-    /// Mask every source of both banks; wins over an unmask.
+    /// Mask every source of both banks; latched events stay latched.
     MaskAll,
+    /// Mask both banks and clear every latched event: the epoch closes.
+    Close,
 }
 
 impl WifiIrqRequest {
@@ -74,37 +245,100 @@ impl WifiIrqRequest {
         match self {
             Self::UnmaskRx => UNMASK_RX,
             Self::MaskAll => MASK_ALL,
+            Self::Close => CLOSE,
         }
     }
 }
 
 const UNMASK_RX: u32 = 1;
 const MASK_ALL: u32 = 2;
+const ACTIVATE: u32 = 4;
+const CLOSE: u32 = 8;
 
-/// Requests the radio executor leaves for the interrupt line.
+/// The published MAC enable image the line has not read yet.
+const ENABLE_UNREAD: u8 = 0;
+
+const fn enable_code(state: MacInterruptEnableState) -> u8 {
+    match state {
+        MacInterruptEnableState::Disabled => 1,
+        MacInterruptEnableState::Station => 2,
+        MacInterruptEnableState::Unknown => 3,
+    }
+}
+
+/// Requests the radio executor leaves for the interrupt line, and the MAC
+/// enable image the line last read.
 ///
-/// Its zero bytes are no request.
+/// Its zero bytes are no request and no read image.
 #[derive(bytemuck::Zeroable, Default)]
 pub struct WifiIrqRequests {
     pending: AtomicU32,
+    enable: AtomicU8,
 }
 
 impl WifiIrqRequests {
     pub const fn new() -> Self {
         Self {
             pending: AtomicU32::new(0),
+            enable: AtomicU8::new(ENABLE_UNREAD),
         }
     }
 
     /// Record `request` (Release) and ring `doorbell`. Never waits.
     pub fn ring(&self, request: WifiIrqRequest, doorbell: &impl RadioDoorbell) {
-        self.pending.fetch_or(request.bit(), Ordering::Release);
+        self.record(request.bit(), doorbell);
+    }
+
+    /// Ask the line to activate an epoch: clear both banks, then publish
+    /// the station mask. `bound` proves that the image's interrupt table
+    /// binds the line's part ([`Bound`] of a [`WifiLinePart`]), so its
+    /// handler serves every event the epoch enables. Never waits.
+    ///
+    /// ```compile_fail,E0061
+    /// # use oer_esp32s31_ieee80211_driver::irq::{RadioDoorbell, WifiIrqRequests};
+    /// fn start(requests: &WifiIrqRequests, doorbell: &impl RadioDoorbell) {
+    ///     // The activation takes the binding's proof.
+    ///     requests.activate(doorbell);
+    /// }
+    /// ```
+    ///
+    /// ```compile_fail,E0277
+    /// # use oer_esp32s31_ieee80211_driver::irq::{RadioDoorbell, WifiIrqRequests};
+    /// # use oer_interrupt_table::Bound;
+    /// struct OtherIrq;
+    /// impl oer_mmio::InterruptSource for OtherIrq {
+    ///     const SOURCE: u16 = 3;
+    /// }
+    /// fn start(requests: &WifiIrqRequests, bound: &Bound<OtherIrq>, doorbell: &impl RadioDoorbell) {
+    ///     // Another part's binding proves nothing about the Wi-Fi banks.
+    ///     requests.activate(bound, doorbell);
+    /// }
+    /// ```
+    pub fn activate(&self, bound: &impl WifiIrqActivation, doorbell: &impl RadioDoorbell) {
+        let _bound = bound;
+        self.record(ACTIVATE, doorbell);
+    }
+
+    fn record(&self, bits: u32, doorbell: &impl RadioDoorbell) {
+        self.pending.fetch_or(bits, Ordering::Release);
         doorbell.ring();
     }
 
-    /// Whether a request waits for the doorbell handler.
+    /// Whether a request waits for the handler: once `false` after a ring,
+    /// the handler, which preempts the ringing task, applied it.
     pub fn is_pending(&self) -> bool {
         self.pending.load(Ordering::Acquire) != 0
+    }
+
+    /// The MAC interrupt enable image the line read after the last
+    /// requests it applied; `None` before it applied one.
+    pub fn mac_interrupt_enable(&self) -> Option<MacInterruptEnableState> {
+        match self.enable.load(Ordering::Acquire) {
+            1 => Some(MacInterruptEnableState::Disabled),
+            2 => Some(MacInterruptEnableState::Station),
+            3 => Some(MacInterruptEnableState::Unknown),
+            _ => None,
+        }
     }
 
     fn take(&self) -> u32 {
@@ -114,179 +348,159 @@ impl WifiIrqRequests {
     fn clear(&self) {
         self.pending.store(0, Ordering::Release);
     }
+
+    fn publish_enable(&self, state: MacInterruptEnableState) {
+        self.enable.store(enable_code(state), Ordering::Release);
+    }
 }
 
-/// The owner of one live interrupt epoch, run by the radio interrupt
-/// handlers through a [`HandlerCell`].
-///
-/// `E` is the active epoch: [`ActiveEpoch<Moderated>`] over the PAC banks
-/// on the chip, over the host models in tests.
-pub struct WifiIrqLine<E, X: SignalExecutor> {
-    epoch: Option<E>,
+/// The receive arena's ends of the interrupt line: the MAC and WDEVPWR fact
+/// publishers, the request word and the counters. The task installs it once
+/// in the image's [`HandlerCell`]; the radio handler lends it per entry.
+pub struct WifiIrqLine<X: SignalExecutor> {
     mac: &'static IrqPublisher<'static, X>,
     power: PowerIrqPublisher<'static, X>,
     requests: &'static WifiIrqRequests,
     counters: &'static WifiRxCounters,
-    masked: bool,
 }
 
-impl<E, X: SignalExecutor> WifiIrqLine<E, X> {
+impl<X: SignalExecutor> WifiIrqLine<X> {
     const fn new(
-        epoch: E,
         mac: &'static IrqPublisher<'static, X>,
         power: PowerIrqPublisher<'static, X>,
         requests: &'static WifiIrqRequests,
         counters: &'static WifiRxCounters,
     ) -> Self {
         Self {
-            epoch: Some(epoch),
             mac,
             power,
             requests,
             counters,
-            masked: false,
         }
-    }
-
-    /// Called only after the runner masked both banks and silenced CPU routes.
-    pub(crate) fn take_epoch(&mut self) -> Option<E> {
-        if !self.masked {
-            return None;
-        }
-        self.epoch.take()
-    }
-
-    /// Reattach a returned epoch while CPU routes are still silent.
-    pub(crate) fn put_epoch(&mut self, epoch: E) -> Result<(), E> {
-        if self.epoch.is_some() {
-            return Err(epoch);
-        }
-        self.requests.clear();
-        self.masked = false;
-        self.epoch = Some(epoch);
-        Ok(())
-    }
-
-    /// Whether the line masked both banks.
-    pub const fn masked(&self) -> bool {
-        self.masked
-    }
-
-    /// The epoch, for a direct mask when the line never reached its cell.
-    pub(crate) fn epoch_mut(&mut self) -> &mut E {
-        self.epoch.as_mut().expect("the line has its active epoch")
-    }
-
-    #[cfg(test)]
-    pub(crate) fn epoch(&self) -> &E {
-        self.epoch.as_ref().expect("the line has its active epoch")
     }
 }
 
-/// The MAC handler's body: sample, mask RX before the acknowledgement,
-/// acknowledge, count, then publish and wake after the register borrow
-/// ended.
+/// The radio handler's body: lower the doorbell, then serve the line over
+/// `part`. Without an installed line it closes a stray bank event and
+/// returns `false`.
 #[inline(always)]
-pub fn service_mac_line<X: SignalExecutor, I: MacInterrupt, P: MacPowerInterrupt>(
-    line: &mut WifiIrqLine<ActiveEpoch<Moderated, I, P>, X>,
-) {
-    let Some(epoch) = line.epoch.as_mut() else {
-        return;
-    };
-    let entry = line.mac.begin_mac_entry();
-    let (disposition, snapshot) = epoch.service_mac();
-    line.counters.mac_interrupt(
-        disposition == IrqDisposition::Spurious,
-        snapshot.had_auxiliary_event,
-        snapshot.had_unhandled_event,
-    );
-    entry
-        .finish(line.mac.publish_snapshot_deferred(snapshot))
-        .wake();
-}
-
-/// The WDEVPWR handler's body: acknowledge, count and publish the causes.
-#[inline(always)]
-pub fn service_power_line<X: SignalExecutor, I: MacInterrupt, P: MacPowerInterrupt>(
-    line: &mut WifiIrqLine<ActiveEpoch<Moderated, I, P>, X>,
-) {
-    let Some(epoch) = line.epoch.as_mut() else {
-        return;
-    };
-    let (disposition, snapshot) = epoch.service_power();
-    let posted = disposition == PowerIrqDisposition::Posted;
-    line.counters.power_interrupt(!posted);
-    if posted {
-        line.power.publish(snapshot.observation);
+pub fn service_wifi_line<A, B, I, P, X>(
+    cell: &HandlerCell<WifiIrqLine<X>>,
+    part: &mut WifiIrqPart<A, B, I, P>,
+) -> bool
+where
+    A: DoorbellAcknowledge,
+    I: MacInterrupt,
+    P: MacPowerInterrupt,
+    X: SignalExecutor,
+{
+    part.acknowledger.acknowledge();
+    if cell.with(|line| serve(line, part)).is_some() {
+        return true;
     }
+    let _stray = part.epoch.close_stray();
+    false
 }
 
-/// Apply the requests the radio executor left: the doorbell's work once
-/// its software interrupt was reset.
+/// One entry over an installed line, one cause: the requests it takes;
+/// without one, the MAC bank (sample, moderate RX before the
+/// acknowledgement, acknowledge, count, publish and wake after the register
+/// borrow ended); with nothing there, the WDEVPWR bank. A closed epoch
+/// closes a stray event instead.
 #[inline(always)]
-pub fn service_doorbell_line<X: SignalExecutor, I: MacInterrupt, P: MacPowerInterrupt>(
-    line: &mut WifiIrqLine<ActiveEpoch<Moderated, I, P>, X>,
-) {
+fn serve<A, B, I, P, X>(line: &mut WifiIrqLine<X>, part: &mut WifiIrqPart<A, B, I, P>)
+where
+    I: MacInterrupt,
+    P: MacPowerInterrupt,
+    X: SignalExecutor,
+{
+    let epoch = &mut part.epoch;
     let pending = line.requests.take();
-    let Some(epoch) = line.epoch.as_mut() else {
+    if pending != 0 {
+        apply(line, epoch, pending);
+        line.requests.publish_enable(epoch.mac_interrupt_enable());
         return;
-    };
-    if pending & MASK_ALL != 0 {
-        if !line.masked {
-            epoch.mask_all();
-            line.masked = true;
+    }
+    if epoch.state() == EpochState::Closed {
+        if epoch.close_stray() {
+            line.counters.closed_interrupt();
+        }
+        return;
+    }
+    let entry = line.mac.begin_mac_entry();
+    if let Some((disposition, snapshot)) = epoch.service_mac()
+        && disposition != IrqDisposition::Spurious
+    {
+        line.counters.mac_interrupt(
+            false,
+            snapshot.had_auxiliary_event,
+            snapshot.had_unhandled_event,
+        );
+        entry
+            .finish(line.mac.publish_snapshot_deferred(snapshot))
+            .wake();
+        return;
+    }
+    if let Some((PowerIrqDisposition::Posted, snapshot)) = epoch.service_power() {
+        line.counters.power_interrupt();
+        line.power.publish(snapshot.observation);
+        return;
+    }
+    // No request and no enabled event in either bank.
+    line.counters.mac_interrupt(true, false, false);
+}
+
+/// Apply the requests taken together: the safest wins.
+#[inline(always)]
+fn apply<I, P, X>(line: &WifiIrqLine<X>, epoch: &mut InterruptEpoch<Moderated, I, P>, pending: u32)
+where
+    I: MacInterrupt,
+    P: MacPowerInterrupt,
+    X: SignalExecutor,
+{
+    if pending & CLOSE != 0 {
+        epoch.close();
+    } else if pending & MASK_ALL != 0 {
+        if epoch.state() != EpochState::Masked {
+            drop(epoch.mask_all());
             line.mac.notify_masked();
         }
-        if pending & UNMASK_RX != 0 {
-            line.counters.ignored_unmask();
-        }
+    } else if pending & ACTIVATE != 0 {
+        epoch.activate(MAC_STATION_INTERRUPT_MASK);
     } else if pending & UNMASK_RX != 0 {
-        if line.masked {
-            line.counters.ignored_unmask();
-        } else {
-            epoch.unmask_rx_after_drain();
+        if epoch.unmask_rx_after_drain() {
             line.counters.doorbell_unmask();
+        } else {
+            line.counters.ignored_unmask();
         }
+        return;
+    }
+    if pending & UNMASK_RX != 0 {
+        line.counters.ignored_unmask();
     }
 }
 
-/// The doorbell handler: `acknowledge` resets its software interrupt
-/// (`exec`'s `acknowledge::<3>` on the chip) before the requests are taken.
-///
-/// The reset happens even when `cell` holds no line, so a stray raise
-/// cannot keep the radio level busy. Returns whether a line ran.
-#[inline(always)]
-pub fn run_doorbell<X: SignalExecutor, I: MacInterrupt, P: MacPowerInterrupt>(
-    cell: &HandlerCell<WifiIrqLine<ActiveEpoch<Moderated, I, P>, X>>,
-    acknowledge: impl FnOnce(),
-) -> bool {
-    acknowledge();
-    cell.with(service_doorbell_line).is_some()
-}
-
-/// The arena's parts of one interrupt line, before its epoch exists.
-pub struct WifiIrqLineParts<'a, E, X: SignalExecutor> {
+/// The arena's parts of one interrupt line, before it is installed.
+pub struct WifiIrqLineParts<'a, X: SignalExecutor> {
     pub(crate) mac: &'a IrqPublisher<'a, X>,
     pub(crate) power: PowerIrqPublisher<'a, X>,
     pub(crate) requests: &'a WifiIrqRequests,
     pub(crate) counters: &'a WifiRxCounters,
-    pub(crate) slot: &'a mut MaybeUninit<WifiIrqLine<E, X>>,
+    pub(crate) slot: &'a mut MaybeUninit<WifiIrqLine<X>>,
 }
 
-impl<E, X: SignalExecutor> WifiIrqLineParts<'static, E, X> {
-    /// Put the line over `epoch` in its arena slot and hand it to the
-    /// handlers' `cell`.
+impl<X: SignalExecutor> WifiIrqLineParts<'static, X> {
+    /// Put the line in its arena slot and hand it to the handler's `cell`.
     ///
-    /// A request left from an earlier epoch is cleared first: the new line
+    /// A request left from an earlier line is cleared first: the new line
     /// starts with none. When `cell` already holds a line, the new one is
-    /// returned, still owned by the caller and never run by a handler.
+    /// returned, still owned by the caller and never run by the handler.
     pub fn install(
         self,
-        epoch: E,
-        cell: &'static HandlerCell<WifiIrqLine<E, X>>,
-    ) -> Result<Installed<'static, WifiIrqLine<E, X>>, &'static mut WifiIrqLine<E, X>> {
+        cell: &'static HandlerCell<WifiIrqLine<X>>,
+    ) -> Result<Installed<'static, WifiIrqLine<X>>, &'static mut WifiIrqLine<X>> {
         self.requests.clear();
-        let line = WifiIrqLine::new(epoch, self.mac, self.power, self.requests, self.counters);
+        let line = WifiIrqLine::new(self.mac, self.power, self.requests, self.counters);
         cell.install(self.slot.write(line))
     }
 }

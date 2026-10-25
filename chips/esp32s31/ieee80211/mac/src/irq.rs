@@ -9,8 +9,8 @@ pub mod model;
 use oer_esp32s31_hal::{
     owner::{MacInterruptRegisters, MacPowerInterruptRegisters},
     types::{
-        MacInterruptEvents, MacInterruptObservation, MacInterruptSnapshot,
-        MacPowerInterruptObservation, MacPowerInterruptSnapshot,
+        MacInterruptEnableState, MacInterruptEvents, MacInterruptMask, MacInterruptObservation,
+        MacInterruptSnapshot, MacPowerInterruptObservation, MacPowerInterruptSnapshot,
     },
 };
 
@@ -60,9 +60,23 @@ impl MacPowerInterruptStatusSnapshot for MacPowerInterruptObservation {
     }
 }
 
-/// The MAC interrupt bank owned by one active epoch.
+/// The proof that both banks of an epoch were masked, which clearing every
+/// latched event takes ([`epoch::MaskedBanks::clear_all`]). Only this crate
+/// makes one.
+#[derive(Debug)]
+pub struct BanksMasked {
+    _private: (),
+}
+
+impl BanksMasked {
+    pub(crate) const fn new() -> Self {
+        Self { _private: () }
+    }
+}
+
+/// The MAC interrupt bank of the radio interrupt handler.
 ///
-/// Production is the generated PAC capability; host tests use
+/// Production is the HAL's bank; host tests use
 /// [`model::MacInterruptModel`] (feature `test-support`). The trait is
 /// sealed: no other bank can enter an epoch.
 pub trait MacInterrupt: sealed::Sealed {
@@ -76,6 +90,12 @@ pub trait MacInterrupt: sealed::Sealed {
     /// Mask every source; a latched event stays latched.
     fn mask_all(&mut self);
     fn acknowledge(&mut self, snapshot: Self::Snapshot);
+    /// Acknowledge every latched event of the masked bank.
+    fn clear_all(&mut self, masked: &BanksMasked);
+    /// Publish one reviewed enable image.
+    fn publish(&mut self, mask: MacInterruptMask);
+    /// The published enable image, classified.
+    fn enable_state(&self) -> MacInterruptEnableState;
 }
 
 impl sealed::Sealed for MacInterruptRegisters {}
@@ -101,9 +121,21 @@ impl MacInterrupt for MacInterruptRegisters {
     fn acknowledge(&mut self, snapshot: Self::Snapshot) {
         self.acknowledge_mac_interrupts(snapshot);
     }
+
+    fn clear_all(&mut self, _masked: &BanksMasked) {
+        self.clear_all_mac_interrupts();
+    }
+
+    fn publish(&mut self, mask: MacInterruptMask) {
+        self.publish_mac_interrupt_mask(mask);
+    }
+
+    fn enable_state(&self) -> MacInterruptEnableState {
+        self.mac_interrupt_enable()
+    }
 }
 
-/// The WDEVPWR interrupt bank owned by one active epoch.
+/// The WDEVPWR interrupt bank of the radio interrupt handler.
 ///
 /// The PAC snapshot exposes the reviewed TSF-timer causes as named fields and
 /// groups every still-unknown cause as unhandled. Policy code never receives a
@@ -116,6 +148,10 @@ pub trait MacPowerInterrupt: sealed::Sealed {
     /// Mask every cause; a latched cause stays latched.
     fn mask_all(&mut self);
     fn acknowledge(&mut self, snapshot: Self::Snapshot);
+    /// Acknowledge every latched cause of the masked bank.
+    fn clear_all(&mut self, masked: &BanksMasked);
+    /// Enable the station TBTT cause.
+    fn enable_station_tbtt(&mut self);
 }
 
 impl sealed::Sealed for MacPowerInterruptRegisters {}
@@ -132,6 +168,14 @@ impl MacPowerInterrupt for MacPowerInterruptRegisters {
 
     fn acknowledge(&mut self, snapshot: Self::Snapshot) {
         self.acknowledge_power_interrupts(snapshot);
+    }
+
+    fn clear_all(&mut self, _masked: &BanksMasked) {
+        self.clear_all_power_interrupts();
+    }
+
+    fn enable_station_tbtt(&mut self) {
+        self.enable_station_tbtt_interrupt();
     }
 }
 

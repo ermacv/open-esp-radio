@@ -29,7 +29,7 @@ pub struct WifiRxCounters {
     auxiliary_mac_irqs: AtomicU32,
     unhandled_mac_irqs: AtomicU32,
     power_irqs: AtomicU32,
-    spurious_power_irqs: AtomicU32,
+    closed_irqs: AtomicU32,
     doorbell_unmasks: AtomicU32,
     ignored_unmasks: AtomicU32,
     units: AtomicU32,
@@ -757,18 +757,20 @@ impl DrainEndCounters {
 /// One reading of [`WifiRxCounters`].
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WifiRxReport {
-    /// MAC handler runs.
+    /// Radio handler entries that served a MAC event, or found no cause.
     pub mac_irqs: u32,
-    /// MAC handler runs which saw no enabled cause.
+    /// Radio handler entries that found no request and no enabled event in
+    /// either bank.
     pub spurious_mac_irqs: u32,
-    /// MAC handler runs which acknowledged an auxiliary cause.
+    /// Entries which acknowledged an auxiliary MAC cause.
     pub auxiliary_mac_irqs: u32,
-    /// MAC handler runs which acknowledged a cause without a known meaning.
+    /// Entries which acknowledged a MAC cause without a known meaning.
     pub unhandled_mac_irqs: u32,
-    /// WDEVPWR handler runs which acknowledged a cause.
+    /// Entries which acknowledged a WDEVPWR cause.
     pub power_irqs: u32,
-    /// WDEVPWR handler runs which saw no enabled cause.
-    pub spurious_power_irqs: u32,
+    /// Radio handler entries that found the epoch closed, whose banks they
+    /// closed again: an interrupt left from before the epoch.
+    pub closed_irqs: u32,
     /// RX delivery restored through the doorbell.
     pub doorbell_unmasks: u32,
     /// Unmask requests ignored because both banks were masked.
@@ -826,7 +828,7 @@ impl WifiRxCounters {
             auxiliary_mac_irqs: AtomicU32::new(0),
             unhandled_mac_irqs: AtomicU32::new(0),
             power_irqs: AtomicU32::new(0),
-            spurious_power_irqs: AtomicU32::new(0),
+            closed_irqs: AtomicU32::new(0),
             doorbell_unmasks: AtomicU32::new(0),
             ignored_unmasks: AtomicU32::new(0),
             units: AtomicU32::new(0),
@@ -859,7 +861,7 @@ impl WifiRxCounters {
             auxiliary_mac_irqs: load(&self.auxiliary_mac_irqs),
             unhandled_mac_irqs: load(&self.unhandled_mac_irqs),
             power_irqs: load(&self.power_irqs),
-            spurious_power_irqs: load(&self.spurious_power_irqs),
+            closed_irqs: load(&self.closed_irqs),
             doorbell_unmasks: load(&self.doorbell_unmasks),
             ignored_unmasks: load(&self.ignored_unmasks),
             units: load(&self.units),
@@ -898,12 +900,13 @@ impl WifiRxCounters {
     }
 
     #[inline(always)]
-    pub(crate) fn power_interrupt(&self, spurious: bool) {
-        bump(if spurious {
-            &self.spurious_power_irqs
-        } else {
-            &self.power_irqs
-        });
+    pub(crate) fn power_interrupt(&self) {
+        bump(&self.power_irqs);
+    }
+
+    #[inline(always)]
+    pub(crate) fn closed_interrupt(&self) {
+        bump(&self.closed_irqs);
     }
 
     #[inline(always)]

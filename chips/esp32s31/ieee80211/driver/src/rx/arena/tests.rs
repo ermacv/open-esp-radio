@@ -5,7 +5,6 @@ use oer_esp32s31_hal::ieee80211::dma::{
     rx_ring::RxDmaArenaState,
     space::{HOST_ARENA_BASE, HostDma},
 };
-use oer_esp32s31_ieee80211_mac::irq::model::{MacInterruptModel, PowerInterruptModel};
 
 use oer_time_virtual::VirtualClock;
 
@@ -17,9 +16,8 @@ use crate::rx::{
     upper::{QueueSink, RxFrameEnds},
 };
 
-type HostEpoch = ActiveEpoch<Moderated, MacInterruptModel, PowerInterruptModel>;
 type HostStatic =
-    WifiRxStatic<32, 1_664, 1_668, 32, oer_interrupt_table::signal::host::Host, HostDma, HostEpoch>;
+    WifiRxStatic<32, 1_664, 1_668, 32, oer_interrupt_table::signal::host::Host, HostDma>;
 
 #[test]
 fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {
@@ -85,11 +83,10 @@ fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {
 
     // The line lands in the arena's own slot.
     let cell: &'static oer_memory::HandlerCell<
-        WifiIrqLine<HostEpoch, oer_interrupt_table::signal::host::Host>,
+        WifiIrqLine<oer_interrupt_table::signal::host::Host>,
     > = Box::leak(Box::new(oer_memory::HandlerCell::new()));
-    let epoch = ActiveEpoch::for_host_test(MacInterruptModel::new(), PowerInterruptModel::new());
-    let Ok(installed) = parts.line.install(epoch, cell) else {
+    let Ok(installed) = parts.line.install(cell) else {
         panic!("an empty cell takes the line");
     };
-    assert_eq!(installed.cell().with(|line| line.masked()), Some(false));
+    assert_eq!(installed.cell().with(|_| ()), Some(()));
 }

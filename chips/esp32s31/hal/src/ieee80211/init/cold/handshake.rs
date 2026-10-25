@@ -35,9 +35,6 @@ pub trait MacColdHandshakeHardware {
 
     /// Sample whether the cold MAC start is ready.
     fn sample_cold_handshake_ready(&mut self) -> bool;
-
-    /// Mask and clear the MAC interrupts after the ready edge.
-    fn finish_cold_handshake(&mut self);
 }
 
 impl MacColdHandshakeHardware for WifiMacColdHal<'_> {
@@ -48,18 +45,17 @@ impl MacColdHandshakeHardware for WifiMacColdHal<'_> {
     fn sample_cold_handshake_ready(&mut self) -> bool {
         self.sample_handshake_ready()
     }
-
-    fn finish_cold_handshake(&mut self) {
-        self.finish_handshake();
-    }
 }
 
 /// Request the cold start, sample the ready edge once, then again after each
 /// [`MAC_COLD_HANDSHAKE_RESAMPLE`] wait on `timer` until `deadline` has
-/// passed, and finish with the interrupt cleanup.
+/// passed.
 ///
-/// One sample always occurs. After a not-ready sample at or past the deadline
-/// the handshake times out before the interrupt cleanup.
+/// One sample always occurs; a not-ready sample at or past the deadline
+/// times the handshake out. The vendor's interrupt cleanup after the ready
+/// edge (mask and clear every MAC event) is the radio interrupt handler's:
+/// it keeps the MAC's banks masked between epochs and clears them when it
+/// activates one.
 pub async fn run_cold_handshake<H: MacColdHandshakeHardware, T: Timer>(
     hardware: &mut H,
     timer: &T,
@@ -80,7 +76,6 @@ pub async fn run_cold_handshake<H: MacColdHandshakeHardware, T: Timer>(
             .await
             .map_err(|_| MacColdStartError::TimerOverflow)?;
     }
-    hardware.finish_cold_handshake();
     Ok(MacColdStartOutcome {
         handshake_samples: samples,
         handshake_observations: samples.saturating_add(1),

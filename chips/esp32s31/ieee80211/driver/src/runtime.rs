@@ -4,8 +4,7 @@ use crate::{port::WifiRetuneError, startup::WifiStartReport};
 
 use oer_esp32s31_hal::{
     ieee80211::client::{WifiClocked, WifiClocksOn},
-    owner::{MacInterruptSetup, RadioAccess},
-    types::MacInterruptEnableState,
+    owner::RadioAccess,
 };
 
 use oer_esp32s31_ieee80211_mac::sta_ap_registers::disable_all_role_receive_registers;
@@ -16,19 +15,12 @@ use oer_esp32s31_radio_client::{
 
 use oer_ieee80211_wire::channel::WifiChannel;
 
-/// Evidence captured while closing the cold polling interrupt phase.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct WifiRuntimeTransitionReport {
-    /// Mask published by the common MAC initializer before task-side routing.
-    pub cold_interrupt_mask: MacInterruptEnableState,
-}
-
 /// Common stopped Wi-Fi owner after cold MAC initialization.
 ///
-/// No Wi-Fi role owns DMA or an installed CPU interrupt route in this state.
-/// A station, AP or standalone monitor must consume this value to begin its
+/// No Wi-Fi role owns DMA or an open interrupt epoch in this state. A
+/// station, AP or standalone monitor must consume this value to begin its
 /// own finite runtime epoch and return the same ownership frontier only after
-/// both DMA and interrupt routing have acknowledged their stopped edges.
+/// its DMA stopped and the radio interrupt handler closed the epoch.
 ///
 /// `W` is Wi-Fi's own MAC platform. The shared PHY, common power, the clock
 /// sources and coexistence stay with the radio system.
@@ -86,11 +78,9 @@ pub struct WifiRuntimeTransitionReport {
 pub struct WifiStopped<W> {
     platform: W,
     registers: RadioAccess,
-    interrupt_setup: MacInterruptSetup,
     clocks: WifiClocksOn,
     member: Member<Wifi, Tracked>,
     start_report: WifiStartReport,
-    transition_report: WifiRuntimeTransitionReport,
     current_channel: WifiChannel,
 }
 
@@ -149,16 +139,13 @@ impl<W> WifiStopped<W> {
         let Self {
             platform,
             registers,
-            interrupt_setup,
             clocks,
             member,
             start_report,
-            transition_report,
             current_channel,
         } = self;
-        let (registers, interrupt_setup) = match registers.try_confirm_phy_stopped(interrupt_setup)
-        {
-            Ok(frontier) => frontier,
+        let registers = match registers.try_confirm_phy_stopped() {
+            Ok(registers) => registers,
             Err(failure) => {
                 return (
                     cell,
@@ -167,18 +154,16 @@ impl<W> WifiStopped<W> {
                         stopped: Self {
                             platform,
                             registers: failure.registers,
-                            interrupt_setup: failure.interrupts,
                             clocks,
                             member,
                             start_report,
-                            transition_report,
                             current_channel,
                         },
                     }),
                 );
             }
         };
-        let wifi = WifiClocked::from_running(registers, interrupt_setup, clocks);
+        let wifi = WifiClocked::from_running(registers, clocks);
         let (cell, left) = cell
             .leave(Leaving::Tracked(member), WifiLeave { wifi })
             .await;
@@ -225,16 +210,13 @@ impl<W> WifiStopped<W> {
         let Self {
             platform,
             registers,
-            interrupt_setup,
             clocks,
             member,
             start_report,
-            transition_report,
             current_channel,
         } = self;
-        let (registers, interrupt_setup) = match registers.try_confirm_phy_stopped(interrupt_setup)
-        {
-            Ok(frontier) => frontier,
+        let registers = match registers.try_confirm_phy_stopped() {
+            Ok(registers) => registers,
             Err(failure) => {
                 return WifiRetunePending {
                     pending: None,
@@ -246,11 +228,9 @@ impl<W> WifiStopped<W> {
                             stopped: Self {
                                 platform,
                                 registers: failure.registers,
-                                interrupt_setup: failure.interrupts,
                                 clocks,
                                 member,
                                 start_report,
-                                transition_report,
                                 current_channel,
                             },
                         }),
@@ -258,7 +238,7 @@ impl<W> WifiStopped<W> {
                 };
             }
         };
-        let wifi = WifiClocked::from_running(registers, interrupt_setup, clocks);
+        let wifi = WifiClocked::from_running(registers, clocks);
         WifiRetunePending {
             pending: Some(cell.retune(
                 member,
@@ -268,13 +248,7 @@ impl<W> WifiStopped<W> {
                     tx_ceiling,
                 },
             )),
-            context: Some((
-                platform,
-                start_report,
-                transition_report,
-                current_channel,
-                channel.channel(),
-            )),
+            context: Some((platform, start_report, current_channel, channel.channel())),
             immediate: None,
         }
     }
@@ -282,10 +256,6 @@ impl<W> WifiStopped<W> {
     /// Reports from the PHY and common MAC transitions.
     pub const fn start_report(&self) -> WifiStartReport {
         self.start_report
-    }
-
-    pub const fn transition_report(&self) -> WifiRuntimeTransitionReport {
-        self.transition_report
     }
 
     pub const fn current_channel(&self) -> WifiChannel {
@@ -303,12 +273,10 @@ impl<W> WifiStopped<W> {
         WifiRuntimeParts {
             platform: self.platform,
             registers: self.registers,
-            interrupt_setup: self.interrupt_setup,
             context: WifiRuntimeContext {
                 clocks: self.clocks,
                 member: self.member,
                 start_report: self.start_report,
-                transition_report: self.transition_report,
                 current_channel: self.current_channel,
             },
         }
@@ -317,29 +285,25 @@ impl<W> WifiStopped<W> {
 
 /// Atomic transfer object between the common stopped owner and one role.
 ///
-/// Keeping the membership, MMIO, interrupt setup and platform ownership
-/// together avoids a public constructor which could combine pieces from
+/// Keeping the membership, MMIO and platform ownership together avoids a public constructor which could combine pieces from
 /// unrelated epochs.
 #[doc(hidden)]
 pub struct WifiRuntimeParts<W> {
     pub platform: W,
     pub registers: RadioAccess,
-    pub interrupt_setup: MacInterruptSetup,
     pub context: WifiRuntimeContext,
 }
 
 /// Common Wi-Fi state retained beside one materialized role.
 ///
-/// Register ownership and the interrupt setup token deliberately do not live
-/// in this value. A role can reconstruct [`WifiStopped`] only after
-/// its DMA/task graph returns the exact runtime owner and its interrupt
-/// route returns the exact [`MacInterruptSetup`].
+/// Register ownership deliberately does not live in this value. A role can
+/// reconstruct [`WifiStopped`] only after its DMA/task graph returns the
+/// exact runtime owner and the radio interrupt handler closed its epoch.
 #[doc(hidden)]
 pub struct WifiRuntimeContext {
     clocks: WifiClocksOn,
     member: Member<Wifi, Tracked>,
     start_report: WifiStartReport,
-    transition_report: WifiRuntimeTransitionReport,
     current_channel: WifiChannel,
 }
 
@@ -352,22 +316,15 @@ impl WifiRuntimeContext {
         self.current_channel = channel;
     }
 
-    /// Reconstruct the role-neutral owner from independently proven DMA/task
-    /// and interrupt-route return edges.
-    pub fn into_stopped<W>(
-        self,
-        platform: W,
-        registers: RadioAccess,
-        interrupt_setup: MacInterruptSetup,
-    ) -> WifiStopped<W> {
+    /// Reconstruct the role-neutral owner from the proven DMA/task return
+    /// edge, after the radio interrupt handler closed the epoch.
+    pub fn into_stopped<W>(self, platform: W, registers: RadioAccess) -> WifiStopped<W> {
         WifiStopped {
             platform,
             registers,
-            interrupt_setup,
             clocks: self.clocks,
             member: self.member,
             start_report: self.start_report,
-            transition_report: self.transition_report,
             current_channel: self.current_channel,
         }
     }
@@ -375,10 +332,11 @@ impl WifiRuntimeContext {
 
 /// Unique Wi-Fi platform owner while any finite Wi-Fi role graph is active.
 ///
-/// RX DMA, register and interrupt capabilities move independently into the
-/// concrete epoch. The owner is deliberately role-neutral: a same-channel
-/// STA+AP graph still has exactly one Wi-Fi client and must not manufacture
-/// separate station and access-point owners around it.
+/// RX DMA and register capabilities move independently into the concrete
+/// epoch; the interrupt banks stay with the radio interrupt handler. The
+/// owner is deliberately role-neutral: a same-channel STA+AP graph still has
+/// exactly one Wi-Fi client and must not manufacture separate station and
+/// access-point owners around it.
 pub struct WifiRoleOwner<W> {
     platform: W,
     context: WifiRuntimeContext,
@@ -387,10 +345,6 @@ pub struct WifiRoleOwner<W> {
 impl<W> WifiRoleOwner<W> {
     pub const fn start_report(&self) -> WifiStartReport {
         self.context.start_report
-    }
-
-    pub const fn transition_report(&self) -> WifiRuntimeTransitionReport {
-        self.context.transition_report
     }
 
     pub fn platform_mut(&mut self) -> &mut W {
@@ -419,18 +373,11 @@ impl<W> WifiRoleOwner<W> {
         Self { platform, context }
     }
 
-    /// Return the role-neutral owner after the role's DMA/task graph and
-    /// interrupt route returned their exact owners.
-    pub fn into_stopped<L>(
-        self,
-        registers: RadioAccess,
-        interrupt_setup: MacInterruptSetup,
-        resources: L,
-    ) -> WifiRoleStopped<W, L> {
+    /// Return the role-neutral owner after the role's DMA/task graph
+    /// returned its exact owners and the interrupt epoch closed.
+    pub fn into_stopped<L>(self, registers: RadioAccess, resources: L) -> WifiRoleStopped<W, L> {
         WifiRoleStopped {
-            wifi: self
-                .context
-                .into_stopped(self.platform, registers, interrupt_setup),
+            wifi: self.context.into_stopped(self.platform, registers),
             resources,
         }
     }
@@ -440,7 +387,6 @@ impl<W> WifiRoleOwner<W> {
 pub struct WifiRoleMaterialized<W, L> {
     pub owner: WifiRoleOwner<W>,
     pub registers: RadioAccess,
-    pub interrupt_setup: MacInterruptSetup,
     pub resources: L,
 }
 
@@ -458,31 +404,27 @@ pub fn materialize_esp32s31_wifi_role<W, L>(
     let WifiRuntimeParts {
         platform,
         registers,
-        interrupt_setup,
         context,
     } = wifi.into_runtime_parts();
     WifiRoleMaterialized {
         owner: WifiRoleOwner { platform, context },
         registers,
-        interrupt_setup,
         resources,
     }
 }
 
-/// Close the cold polling phase and enter the reusable stopped-runtime state.
+/// Enter the reusable stopped-runtime state.
 ///
 /// This is the only normal conversion from the tracked client with its MAC
-/// prepared and common gates closed. It masks and acknowledges cold interrupt
-/// state before exposing the setup token used by a finite task-owned interrupt
-/// epoch. It touches Wi-Fi MAC registers only.
+/// prepared and common gates closed. The MAC's interrupt banks stay masked
+/// with the radio interrupt handler. It touches Wi-Fi MAC registers only.
 pub(crate) fn enter_esp32s31_wifi_runtime<W>(
-    mut clocked: WifiClocked,
+    clocked: WifiClocked,
     member: Member<Wifi, Tracked>,
     platform: W,
     start_report: WifiStartReport,
 ) -> WifiStopped<W> {
-    let cold_interrupt_mask = clocked.close_cold_interrupt_phase();
-    let (mut registers, interrupt_setup, clocks) = clocked.into_running();
+    let (mut registers, clocks) = clocked.into_running();
     // Cold `wifi_set_rx_policy(0)` first publishes both interface addresses,
     // then disables their receive policies. Our cold address transaction is
     // already complete; finish that exact role-neutral suffix before exposing
@@ -500,13 +442,9 @@ pub(crate) fn enter_esp32s31_wifi_runtime<W>(
     WifiStopped {
         platform,
         registers,
-        interrupt_setup,
         clocks,
         member,
         start_report,
-        transition_report: WifiRuntimeTransitionReport {
-            cold_interrupt_mask,
-        },
         current_channel: start_report.initial_channel,
     }
 }
@@ -517,13 +455,7 @@ pub struct WifiRetunePending<W> {
     pending: Option<
         oer_esp32s31_radio_client::Pending<Wifi, oer_esp32s31_radio_client::RetuneAnswer<Wifi>>,
     >,
-    context: Option<(
-        W,
-        WifiStartReport,
-        WifiRuntimeTransitionReport,
-        WifiChannel,
-        WifiChannel,
-    )>,
+    context: Option<(W, WifiStartReport, WifiChannel, WifiChannel)>,
     immediate: Option<(
         MembershipCell<Wifi>,
         Result<
@@ -562,7 +494,7 @@ impl<W: crate::startup::WifiMacPlatform> core::future::Future for WifiRetunePend
         };
         let (cell, answer) = core::task::ready!(Pin::new(pending).poll(cx));
         this.pending = None;
-        let (mut platform, start_report, transition_report, current_channel, target) = this
+        let (mut platform, start_report, current_channel, target) = this
             .context
             .take()
             .expect("retune retains its context until the answer");
@@ -576,18 +508,16 @@ impl<W: crate::startup::WifiMacPlatform> core::future::Future for WifiRetunePend
                 cause,
             }) => (wifi, member, Err(cause)),
         };
-        let (registers, interrupt_setup, clocks) = wifi.into_running();
+        let (registers, clocks) = wifi.into_running();
         if let Ok(report) = report {
             platform.install_phy_tx_power_profile(report.tx_power);
         }
         let stopped = WifiStopped {
             platform,
             registers,
-            interrupt_setup,
             clocks,
             member,
             start_report,
-            transition_report,
             current_channel: if report.is_ok() {
                 target
             } else {

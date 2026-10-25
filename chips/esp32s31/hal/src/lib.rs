@@ -26,7 +26,7 @@ extern crate std;
 use core::future::Future;
 
 use crate::ieee80211::registers::{
-    MacInterruptRegisters as PacMacInterruptRegisters, MacInterruptSetup as PacMacInterruptSetup,
+    MacInterruptRegisters as PacMacInterruptRegisters,
     MacPowerInterruptRegisters as PacMacPowerInterruptRegisters,
 };
 use crate::phy::RadioPhyRegisters;

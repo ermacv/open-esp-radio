@@ -15,9 +15,8 @@ use oer_esp32s31_hal::ieee80211::dma::{
 pub(super) enum Operation {
     RequestColdHandshake,
     SampleColdHandshake,
-    FinishColdHandshake,
     InitializeMacAntenna,
-    InitializeHalTail(MacInterruptMask, MacSlowClockCalibration),
+    InitializeHalTail(MacSlowClockCalibration),
     InitializeColdCoex(MacColdCoexPti),
     InitializeCryptoBypass,
     InitializeLastRxBufferTable,
@@ -27,7 +26,6 @@ pub(super) enum Operation {
     InitializeColdReceivePolicy,
     DisablePhyLowRate,
     HoldMacRuntime,
-    PrepareMacInterrupts(MacInterruptMask),
     ProgramInterfaceAddress(MacInterface, [u8; 6]),
     ApplyStaLinkPolicy([u8; 6]),
     InstallCcmp(MacInterface, u8, MacCcmpKeyIdentity),
@@ -366,10 +364,6 @@ impl MacColdHandshakeHardware for MockMmio {
         self.cold_handshake_ready_after
             .is_some_and(|ready_after| sample >= ready_after)
     }
-
-    fn finish_cold_handshake(&mut self) {
-        self.operations.push(Operation::FinishColdHandshake);
-    }
 }
 
 /// Drive `future` on `clock`, advancing it to the next deadline whenever the
@@ -413,15 +407,9 @@ impl MacColdAntennaHardware for MockMmio {
 }
 
 impl MacColdHalTailHardware for MockMmio {
-    fn initialize_hal_tail(
-        &mut self,
-        event_mask: MacInterruptMask,
-        slow_clock_calibration: MacSlowClockCalibration,
-    ) {
-        self.operations.push(Operation::InitializeHalTail(
-            event_mask,
-            slow_clock_calibration,
-        ));
+    fn initialize_hal_tail(&mut self, slow_clock_calibration: MacSlowClockCalibration) {
+        self.operations
+            .push(Operation::InitializeHalTail(slow_clock_calibration));
     }
 }
 
@@ -450,16 +438,6 @@ impl MacColdPrepareHardware for MockMmio {
         self.mac_gates_closed = true;
         self.runtime_stop_held = true;
         self.operations.push(Operation::HoldMacRuntime);
-    }
-
-    fn prepare_mac_interrupts(&mut self, event_mask: MacInterruptMask) {
-        assert!(
-            self.mac_gates_closed,
-            "cold IRQ setup must leave the core gated"
-        );
-        assert!(self.runtime_stop_held);
-        self.operations
-            .push(Operation::PrepareMacInterrupts(event_mask));
     }
 }
 
