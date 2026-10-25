@@ -82,7 +82,10 @@ pub(super) fn block(device: &Device, name: &str) -> Result<SvdBlock, ImportError
             .iter()
             .find(|peripheral| &peripheral.name == base)
             .ok_or_else(|| {
-                ImportError::new(&context, format!("derives from {base}, which the SVD lacks"))
+                ImportError::new(
+                    &context,
+                    format!("derives from {base}, which the SVD lacks"),
+                )
             })?;
     }
     let default_size = source

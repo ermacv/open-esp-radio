@@ -56,7 +56,9 @@ fn register(name: &str, offset: u32, reset: u32, fields: &[String]) -> String {
 fn peripheral(name: &str, base: u32, interrupts: &[(&str, u32)], registers: &[String]) -> String {
     let interrupts = interrupts
         .iter()
-        .map(|(name, value)| format!("<interrupt><name>{name}</name><value>{value}</value></interrupt>"))
+        .map(|(name, value)| {
+            format!("<interrupt><name>{name}</name><value>{value}</value></interrupt>")
+        })
         .collect::<String>();
     format!(
         "<peripheral><name>{name}</name><baseAddress>{base:#x}</baseAddress><addressBlock><offset>0</offset><size>0x10</size><usage>registers</usage></addressBlock>{interrupts}<registers>{}</registers></peripheral>",
@@ -67,7 +69,9 @@ fn peripheral(name: &str, base: u32, interrupts: &[(&str, u32)], registers: &[St
 fn derived(name: &str, from: &str, base: u32, interrupts: &[(&str, u32)]) -> String {
     let interrupts = interrupts
         .iter()
-        .map(|(name, value)| format!("<interrupt><name>{name}</name><value>{value}</value></interrupt>"))
+        .map(|(name, value)| {
+            format!("<interrupt><name>{name}</name><value>{value}</value></interrupt>")
+        })
         .collect::<String>();
     format!(
         "<peripheral derivedFrom=\"{from}\"><name>{name}</name><baseAddress>{base:#x}</baseAddress>{interrupts}</peripheral>"
@@ -187,7 +191,10 @@ fn derived_instances_share_one_type_and_load() -> TestResult {
     let model = load(&output)?;
     assert_eq!(model.instances().len(), 2);
     let conf = model.register("TIMG1.CONF").expect("TIMG1 has CONF");
-    assert_eq!(conf.reserved, 0xffff_fffc, "the header's reserved lane and undeclared bits");
+    assert_eq!(
+        conf.reserved, 0xffff_fffc,
+        "the header's reserved lane and undeclared bits"
+    );
     let classes = conf
         .fields
         .iter()
@@ -202,11 +209,26 @@ fn derived_instances_share_one_type_and_load() -> TestResult {
     let names = model
         .interrupts()
         .iter()
-        .map(|interrupt| (interrupt.name.as_str(), interrupt.source, interrupt.instance.as_str()))
+        .map(|interrupt| {
+            (
+                interrupt.name.as_str(),
+                interrupt.source,
+                interrupt.instance.as_str(),
+            )
+        })
         .collect::<Vec<_>>();
-    assert_eq!(names, [("TG0_T0", 1, "TIMG0"), ("TIMERGRP1_T0", 2, "TIMG1")]);
+    assert_eq!(
+        names,
+        [("TG0_T0", 1, "TIMG0"), ("TIMERGRP1_T0", 2, "TIMG1")]
+    );
     assert!(has(&output.report, "TIMG1", FindingKind::Interrupt));
-    assert!(!output.report.findings.iter().any(|f| f.kind == FindingKind::Default));
+    assert!(
+        !output
+            .report
+            .findings
+            .iter()
+            .any(|f| f.kind == FindingKind::Default)
+    );
     Ok(())
 }
 
@@ -220,12 +242,7 @@ fn the_header_wins_and_every_disagreement_is_reported() -> TestResult {
         0x1000,
         &[],
         &[
-            register(
-                "CONF",
-                0,
-                0x0,
-                &[field("EN", 0, 2), field("GHOST", 5, 1)],
-            ),
+            register("CONF", 0, 0x0, &[field("EN", 0, 2), field("GHOST", 5, 1)]),
             register("STAT", 4, 0, &[field("COUNT", 0, 16)]),
             register("EXTRA", 8, 0, &[field("VALUE", 0, 8)]),
         ],
@@ -257,8 +274,14 @@ base = \"DR_REG_TIMG0_BASE\"
         .map(|field| (field.name.as_str(), field.low, field.width))
         .collect::<Vec<_>>();
     assert_eq!(bits, [("EN", 0, 1), ("GO", 1, 1)]);
-    assert_eq!(conf.reset.map(|reset| reset.value), Some(0x1), "the header's default");
-    let extra = model.register("TIMG0.EXTRA").expect("the SVD-only register stays");
+    assert_eq!(
+        conf.reset.map(|reset| reset.value),
+        Some(0x1),
+        "the header's default"
+    );
+    let extra = model
+        .register("TIMG0.EXTRA")
+        .expect("the SVD-only register stays");
     assert_eq!(extra.fields[0].class, FieldClass::ReadOnly);
     Ok(())
 }
@@ -390,9 +413,19 @@ fn the_overlay_carries_commands_ports_and_driver_writes() -> TestResult {
         0x1000,
         &[],
         &[
-            register("CMD", 0, 0, &[field("USR", 0, 1), field("FLASH_READ", 1, 1)]),
+            register(
+                "CMD",
+                0,
+                0,
+                &[field("USR", 0, 1), field("FLASH_READ", 1, 1)],
+            ),
             register("W0", 4, 0, &[field("BUF0", 0, 32)]),
-            register("CLOCK", 8, 3, &[field("CLKCNT", 0, 8), field("SPARE", 8, 1)]),
+            register(
+                "CLOCK",
+                8,
+                3,
+                &[field("CLKCNT", 0, 8), field("SPARE", 8, 1)],
+            ),
         ],
     )]);
     let overlay = crate::StrictnessOverlay::parse(&format!(
@@ -415,17 +448,29 @@ base = \"DR_REG_TIMG0_BASE\"
     let pinned = files(svd, &[("spi_reg.h", header), ("driver.h", driver)]);
     let output = import(&spec(types), Some(&overlay), &pinned)?;
     let file = &output.types["types/spi1-mem-c.toml"];
-    assert!(file.contains("commands = [\"USR\"]\nheld = [\"FLASH_READ\"]"), "{file}");
-    assert!(file.contains("data-port = { sources = [\"ESP_IDF_01234567_SPI_REG_H_L9\"] }"), "{file}");
-    assert!(output.evidence.contains("esp-idf:driver.h:2"), "{}", output.evidence);
+    assert!(
+        file.contains("commands = [\"USR\"]\nheld = [\"FLASH_READ\"]"),
+        "{file}"
+    );
+    assert!(
+        file.contains("data-port = { sources = [\"ESP_IDF_01234567_SPI_REG_H_L9\"] }"),
+        "{file}"
+    );
+    assert!(
+        output.evidence.contains("esp-idf:driver.h:2"),
+        "{}",
+        output.evidence
+    );
     let model = load(&output)?;
     let spare = model.field("SPI1.CLOCK.SPARE").expect("SPARE");
     assert_eq!(spare.class, FieldClass::Plain, "a driver writes it");
-    assert!(spare
-        .review
-        .sources
-        .iter()
-        .any(|source| source == "ESP_IDF_01234567_DRIVER_H_L2"));
+    assert!(
+        spare
+            .review
+            .sources
+            .iter()
+            .any(|source| source == "ESP_IDF_01234567_DRIVER_H_L2")
+    );
     let read = model.field("SPI1.CMD.FLASH_READ").expect("FLASH_READ");
     assert_eq!(read.class, FieldClass::SelfClearing, "held");
     Ok(())
@@ -453,10 +498,17 @@ registers = \"modem_syscon_reg.h\"
 name = \"MODEM_SYSCON\"
 base = \"DR_REG_SYSCON_BASE\"
 ";
-    let output = import(&spec(types), None, &files(svd, &[("modem_syscon_reg.h", header)]))?;
+    let output = import(
+        &spec(types),
+        None,
+        &files(svd, &[("modem_syscon_reg.h", header)]),
+    )?;
     let model = load(&output)?;
     let conf = model.register("MODEM_SYSCON.CLK_CONF").expect("CLK_CONF");
-    assert_eq!(conf.location, crate::chip_model::Location::Mmio { address: 0x4104 });
+    assert_eq!(
+        conf.location,
+        crate::chip_model::Location::Mmio { address: 0x4104 }
+    );
     let fields = conf
         .fields
         .iter()
@@ -464,7 +516,10 @@ base = \"DR_REG_SYSCON_BASE\"
         .collect::<Vec<_>>();
     assert_eq!(
         fields,
-        [("CLK_ETM_EN", FieldClass::Plain), ("CLK_DIV", FieldClass::ReadOnly)]
+        [
+            ("CLK_ETM_EN", FieldClass::Plain),
+            ("CLK_DIV", FieldClass::ReadOnly)
+        ]
     );
     let reset = conf.reset.expect("the defaults");
     assert_eq!((reset.value, reset.mask), (0x1004, Some(0xff04)));
@@ -499,7 +554,9 @@ fn malformed_inputs_are_errors_not_panics() {
         derived("TIMG1", "TIMG0", 0x2000, &[]),
     ]);
     let mut empty_header = files(svd.clone(), &[]);
-    empty_header.idf.insert("timg_reg.h".to_owned(), "garbage\n".to_owned());
+    empty_header
+        .idf
+        .insert("timg_reg.h".to_owned(), "garbage\n".to_owned());
     assert!(import(&spec(types), None, &empty_header).is_err());
 
     let mut unknown_class = files(svd.clone(), &[]);
@@ -536,7 +593,10 @@ fn header_parsers_read_both_formats_and_their_literals() {
     );
     let sources = header::parse_interrupts(INTERRUPTS);
     assert_eq!(sources.len(), 3);
-    assert_eq!((sources[2].number, sources[2].name.as_str()), (2, "TIMERGRP1_T0"));
+    assert_eq!(
+        (sources[2].number, sources[2].name.as_str()),
+        (2, "TIMERGRP1_T0")
+    );
     let registers = header::parse_registers(TIMG_H);
     assert_eq!(registers[0].description.as_deref(), Some("Configuration."));
     assert_eq!(registers[1].fields[0].default, Some(0));

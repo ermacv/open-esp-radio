@@ -493,6 +493,29 @@ and numeric mux inputs. `gate_groups()` returns resolved fields and sources;
 `shared_controls()`, `clock_sources()`, `interrupt_sources()` and
 `unbound_interrupts()` retain their checked root facts.
 
+### Importing vendor blocks
+
+`chip_import::import` (`cargo registers import --chip <chip>`) writes block
+types, the chip root and an evidence catalog from the blocks a chip's
+`registers/import.toml` lists: a type per header device layout, its
+instances by SVD peripheral (or by `reg_base.h` macro for a block the SVD
+lacks). It reads the pinned vendor SVD and the pinned ESP-IDF headers
+(`vendor/artifacts.toml`); where they disagree the header wins: offsets,
+fields and bits, each field's `class` (with `debug-only` and `read-clears`
+from the header's descriptions), defaults and reserved bits. The SVD names
+registers and the fields at the header's bits, binds interrupt sources
+(numbered and named by `interrupts.h`) and states the reset of bits no
+header field covers. A register the header lacks keeps its SVD fields as
+`read-only`; one in a word the header's layout reserves is left out. SVD
+arrays whose elements import identically become `dim` registers. Instances
+listed as one type must import identically. The strictness overlay's
+command registers, ports, `define-fields`, driver writes and values move as
+data. Every `sources` entry is an evidence ID of the written catalog: one
+per pinned file and one per cited line (`<FILE>_L<line>`, its description
+holding the `esp-idf:<path>:<line>` locator). The report,
+`target/registers-import/<chip>/report.md`, lists every disagreement and
+what the import made of it. The import owns its type directory.
+
 ## Analog-I2C space
 
 The chip manifest's `indirect-spaces = ["analog/phy.toml"]` selects one

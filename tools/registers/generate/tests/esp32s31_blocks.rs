@@ -5,9 +5,7 @@
 
 use std::path::Path;
 
-use oer_registers_model::{
-    RegisterEvidenceSet, chip_import::ImportSpec, chip_model::ChipModel,
-};
+use oer_registers_model::{RegisterEvidenceSet, chip_import::ImportSpec, chip_model::ChipModel};
 
 #[test]
 fn the_imported_esp32s31_root_loads_with_every_spec_block() {

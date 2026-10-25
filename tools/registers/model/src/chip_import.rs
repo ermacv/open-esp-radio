@@ -303,7 +303,8 @@ impl Report {
 
     /// The report as Markdown: the count of each kind, then every finding.
     pub fn markdown(&self) -> String {
-        let mut out = String::from("# Register import report\n\n| Kind | Count |\n| --- | ---: |\n");
+        let mut out =
+            String::from("# Register import report\n\n| Kind | Count |\n| --- | ---: |\n");
         for (kind, count) in self.counts() {
             out.push_str(&format!("| {kind} | {count} |\n"));
         }

@@ -10,7 +10,9 @@ use super::{
     Report, Review,
 };
 use crate::chip_model::FieldClass;
-use crate::soc_headers::{self, Class, debug_only, read_clears, reserved_description, sequential_port};
+use crate::soc_headers::{
+    self, Class, debug_only, read_clears, reserved_description, sequential_port,
+};
 use crate::soc_overlay::{ReservedWords, same_field};
 use crate::{FieldKind, FieldRule, OverlayAccess, RegisterRule, StrictnessOverlay};
 
@@ -272,7 +274,11 @@ impl<'a> Rules<'a> {
         let mut registers = BTreeMap::new();
         let mut fields = BTreeMap::new();
         if let (Some(overlay), Some(peripheral)) = (overlay, peripheral) {
-            for rule in overlay.registers.iter().filter(|r| r.peripheral == peripheral) {
+            for rule in overlay
+                .registers
+                .iter()
+                .filter(|r| r.peripheral == peripheral)
+            {
                 registers.insert(rule.register.as_str(), rule);
             }
             for rule in overlay.fields.iter().filter(|r| r.peripheral == peripheral) {
@@ -288,7 +294,11 @@ impl<'a> Rules<'a> {
     }
 
     /// The register rule of an SVD element or of its array's template.
-    fn register(&mut self, element: &str, template: Option<&str>) -> Option<(&'a str, &'a RegisterRule)> {
+    fn register(
+        &mut self,
+        element: &str,
+        template: Option<&str>,
+    ) -> Option<(&'a str, &'a RegisterRule)> {
         let found = self
             .registers
             .get_key_value(element)
@@ -348,11 +358,22 @@ pub(super) fn instance(
     let mut elements = Vec::new();
     let mut used = BTreeSet::new();
 
-    for register in inputs.svd.map(|svd| svd.registers.as_slice()).unwrap_or_default() {
+    for register in inputs
+        .svd
+        .map(|svd| svd.registers.as_slice())
+        .unwrap_or_default()
+    {
         let entity = format!("{name}.{}", register.name);
         let array = register.array.is_some();
         let template = register.array.as_ref().map(|a| a.name.as_str());
-        let found = lookup(header, layout, &prefix, &register.name, register.offset, array);
+        let found = lookup(
+            header,
+            layout,
+            &prefix,
+            &register.name,
+            register.offset,
+            array,
+        );
         let index = match found {
             Lookup::Matched(index) | Lookup::Moved(index) if used.contains(&index) => {
                 report.add(
@@ -360,7 +381,7 @@ pub(super) fn instance(
                     FindingKind::RegisterSvdOnly,
                     format!(
                         "its header register {} is another SVD register's; the SVD's fields, read-only",
-                        header[index].name
+                        header.get(index).map_or("", |h| h.name.as_str())
                     ),
                 );
                 elements.push(svd_only(register, &entity)?);
@@ -373,12 +394,17 @@ pub(super) fn instance(
                     FindingKind::RegisterMoved,
                     format!(
                         "the SVD places it at {:#x}, {}:{} at {:#x}; the header's offset",
-                        register.offset, inputs.header_path, header[index].line, header[index].offset
+                        register.offset,
+                        inputs.header_path,
+                        header.get(index).map_or(0, |h| h.line),
+                        header.get(index).map_or(0, |h| h.offset)
                     ),
                 );
                 index
             }
-            Lookup::Absent { reserved: Some(line) } => {
+            Lookup::Absent {
+                reserved: Some(line),
+            } => {
                 report.add(
                     &entity,
                     FindingKind::RegisterReserved,
@@ -403,7 +429,12 @@ pub(super) fn instance(
             }
         };
         used.insert(index);
-        let h = &header[index];
+        let Some(h) = header.get(index) else {
+            return Err(ImportError::new(
+                &entity,
+                "the header lookup names no register",
+            ));
+        };
         let full = format!("{prefix}{}", register.name);
         if h.name != full {
             report.add(
@@ -412,7 +443,9 @@ pub(super) fn instance(
                 format!("the header names it {}; the SVD's name stays", h.name),
             );
         }
-        let rule = rules.register(&register.name, template).map(|(_, rule)| rule);
+        let rule = rules
+            .register(&register.name, template)
+            .map(|(_, rule)| rule);
         let field_rules = rules.fields_of(&register.name, template);
         elements.push(from_header(
             &HeaderInputs {
@@ -520,7 +553,11 @@ pub(super) fn instance(
             let (count, stride) = register.dim.unwrap_or((1, 0));
             (0..count).map(move |index| {
                 let start = u64::from(register.offset) + u64::from(index) * u64::from(stride);
-                (start, start + u64::from(register.width / 8), register.name.as_str())
+                (
+                    start,
+                    start + u64::from(register.width / 8),
+                    register.name.as_str(),
+                )
             })
         })
         .collect::<Vec<_>>();
@@ -661,7 +698,10 @@ fn from_header(inputs: &HeaderInputs<'_>, report: &mut Report) -> Result<Element
         ));
     }
     let array = inputs.svd.is_some_and(|svd| svd.array.is_some());
-    let svd_fields = inputs.svd.map(|svd| svd.fields.as_slice()).unwrap_or_default();
+    let svd_fields = inputs
+        .svd
+        .map(|svd| svd.fields.as_slice())
+        .unwrap_or_default();
     for (index, a) in svd_fields.iter().enumerate() {
         for b in svd_fields.iter().skip(index + 1) {
             let shared = mask(a.low, a.width) & mask(b.low, b.width);
@@ -729,8 +769,12 @@ fn from_header(inputs: &HeaderInputs<'_>, report: &mut Report) -> Result<Element
                 );
                 continue;
             }
-            let (class, base) =
-                field_class(&holder.access, &[&holder.description], driver, &field_entity)?;
+            let (class, base) = field_class(
+                &holder.access,
+                &[&holder.description],
+                driver,
+                &field_entity,
+            )?;
             let mut sources = header_cite.clone();
             sources.extend(rule_lines.iter().cloned());
             sources.extend(driver_lines(rule, &defined.name, &field_entity)?);
@@ -774,21 +818,17 @@ fn from_header(inputs: &HeaderInputs<'_>, report: &mut Report) -> Result<Element
     } else {
         // A header that declares two views of the same bits: the view the
         // SVD names stands.
-        let overlapping = |index: usize| {
-            let own = &h.fields[index];
-            h.fields.iter().enumerate().any(|(other, f)| {
-                other != index
+        let overlapping = |own: &super::header::HeaderField| {
+            h.fields.iter().any(|f| {
+                !std::ptr::eq(f, own)
                     && !reserved_description(&f.description)
                     && mask(f.low, f.width) & mask(own.low, own.width) != 0
             })
         };
-        let in_svd = |low: u32, width: u32| {
-            svd_fields
-                .iter()
-                .any(|s| s.low == low && s.width == width)
-        };
-        for (index, field) in h.fields.iter().enumerate() {
-            if reserved_description(&field.description) || !overlapping(index) {
+        let in_svd =
+            |low: u32, width: u32| svd_fields.iter().any(|s| s.low == low && s.width == width);
+        for field in &h.fields {
+            if reserved_description(&field.description) || !overlapping(field) {
                 continue;
             }
             if inputs.svd.is_none() {
@@ -811,8 +851,8 @@ fn from_header(inputs: &HeaderInputs<'_>, report: &mut Report) -> Result<Element
                 );
             }
         }
-        for (index, field) in h.fields.iter().enumerate() {
-            if overlapping(index)
+        for field in &h.fields {
+            if overlapping(field)
                 && !reserved_description(&field.description)
                 && !in_svd(field.low, field.width)
             {
@@ -956,7 +996,11 @@ fn from_header(inputs: &HeaderInputs<'_>, report: &mut Report) -> Result<Element
                     bits(s.low, s.width)
                 )
             };
-            report.add(format!("{entity}.{}", s.name), FindingKind::FieldDropped, detail);
+            report.add(
+                format!("{entity}.{}", s.name),
+                FindingKind::FieldDropped,
+                detail,
+            );
         }
     }
     fields.sort_by_key(|field| field.low);
@@ -993,9 +1037,7 @@ fn from_header(inputs: &HeaderInputs<'_>, report: &mut Report) -> Result<Element
             (Some(FieldKind::WriteTrigger), _) if field.class != FieldClass::WriteTrigger => {
                 Some("write-trigger")
             }
-            (Some(FieldKind::Plain), _) if field.class == FieldClass::WriteTrigger => {
-                Some("plain")
-            }
+            (Some(FieldKind::Plain), _) if field.class == FieldClass::WriteTrigger => Some("plain"),
             (_, Some(OverlayAccess::ReadOnly)) if field.class.written() => Some("read-only"),
             (_, Some(OverlayAccess::ReadWrite | OverlayAccess::WriteOnly))
                 if !field.class.written() =>
@@ -1020,7 +1062,10 @@ fn from_header(inputs: &HeaderInputs<'_>, report: &mut Report) -> Result<Element
             report.add(
                 &field_entity,
                 FindingKind::OverlayConflict,
-                format!("the overlay renames it {rename}; the import names it {}", field.name),
+                format!(
+                    "the overlay renames it {rename}; the import names it {}",
+                    field.name
+                ),
             );
         }
         if !rule.values.is_empty() {
@@ -1033,7 +1078,10 @@ fn from_header(inputs: &HeaderInputs<'_>, report: &mut Report) -> Result<Element
                     description: value.description.clone(),
                 })
                 .collect();
-            field.review.sources.extend(lines(&rule.sources, &field_entity)?);
+            field
+                .review
+                .sources
+                .extend(lines(&rule.sources, &field_entity)?);
             report.add(
                 &field_entity,
                 FindingKind::OverlayCarried,
@@ -1099,11 +1147,19 @@ fn from_header(inputs: &HeaderInputs<'_>, report: &mut Report) -> Result<Element
         let rule_lines = lines(&rule.sources, entity)?;
         if rule.fifo {
             fifo = Some(rule_lines.clone());
-            report.add(entity, FindingKind::OverlayCarried, "a FIFO port".to_owned());
+            report.add(
+                entity,
+                FindingKind::OverlayCarried,
+                "a FIFO port".to_owned(),
+            );
         }
         if rule.data_port {
             data_port = Some(rule_lines.clone());
-            report.add(entity, FindingKind::OverlayCarried, "a data port".to_owned());
+            report.add(
+                entity,
+                FindingKind::OverlayCarried,
+                "a data port".to_owned(),
+            );
         }
         if rule.read_side_effect == Some(true) {
             read_side_effect = Some(rule_lines.clone());
@@ -1114,14 +1170,12 @@ fn from_header(inputs: &HeaderInputs<'_>, report: &mut Report) -> Result<Element
             );
         }
         if rule.write_one_to_clear
-            && fields
-                .iter()
-                .any(|field| {
-                    !matches!(
-                        field.class,
-                        FieldClass::WriteOneToClear | FieldClass::DebugOnly
-                    )
-                })
+            && fields.iter().any(|field| {
+                !matches!(
+                    field.class,
+                    FieldClass::WriteOneToClear | FieldClass::DebugOnly
+                )
+            })
         {
             report.add(
                 entity,
@@ -1225,7 +1279,10 @@ fn fold(
     instance: &str,
     elements: Vec<Element>,
     report: &mut Report,
-) -> (Vec<OutRegister>, BTreeMap<String, (String, BTreeMap<String, String>)>) {
+) -> (
+    Vec<OutRegister>,
+    BTreeMap<String, (String, BTreeMap<String, String>)>,
+) {
     let mut registers = Vec::new();
     let mut names = BTreeMap::new();
     let mut arrays: BTreeMap<String, Vec<Element>> = BTreeMap::new();
@@ -1245,9 +1302,12 @@ fn fold(
     }
     for (template, mut members) in arrays {
         members.sort_by_key(|member| member.array.as_ref().map_or(0, |a| a.index));
-        let first = members.first().and_then(|m| m.array.clone());
+        let Some(head) = members.first() else {
+            continue;
+        };
+        let first = head.array.clone();
         let foldable = first.as_ref().is_some_and(|first| {
-            let base = &members[0].register;
+            let base = &head.register;
             let strip = |register: &OutRegister| {
                 let mut register = register.clone();
                 register.name.clear();
@@ -1261,17 +1321,17 @@ fn fold(
             u32::try_from(members.len()).is_ok_and(|n| n == first.count)
                 && first.count >= 2
                 && members.iter().enumerate().all(|(index, member)| {
-                    let expected = u64::from(base.offset)
-                        + index as u64 * u64::from(first.stride);
+                    let expected = u64::from(base.offset) + index as u64 * u64::from(first.stride);
                     u64::from(member.register.offset) == expected
-                        && member.from_header == members[0].from_header
+                        && member.from_header == head.from_header
                         && strip(&member.register) == strip(base)
-                        && member.svd_fields == members[0].svd_fields
+                        && member.svd_fields == head.svd_fields
                 })
         });
         match (foldable, first) {
             (true, Some(first)) => {
-                let mut register = members[0].register.clone();
+                let mut register = head.register.clone();
+                let head_fields = head.svd_fields.clone();
                 register.name = template.clone();
                 register.dim = Some((first.count, first.stride));
                 register.description = first.description.clone().or(register.description);
@@ -1280,10 +1340,7 @@ fn fold(
                         names.insert(svd.clone(), (template.clone(), member.svd_fields.clone()));
                     }
                 }
-                names.insert(
-                    template.clone(),
-                    (template.clone(), members[0].svd_fields.clone()),
-                );
+                names.insert(template.clone(), (template.clone(), head_fields));
                 registers.push(register);
             }
             _ => {
@@ -1345,10 +1402,7 @@ fn commands(
             .iter()
             .map(map)
             .collect::<Result<Vec<_>, _>>()?;
-        let named = commands
-            .iter()
-            .chain(&qualifiers)
-            .collect::<BTreeSet<_>>();
+        let named = commands.iter().chain(&qualifiers).collect::<BTreeSet<_>>();
         for name in &named {
             let one_bit = register.fields.iter().any(|field| {
                 &&field.name == name && field.width == 1 && field.class == FieldClass::SelfClearing

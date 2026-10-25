@@ -35,8 +35,8 @@ impl Pinned<'_> {
         let fail = |error: &dyn std::fmt::Display| ImportError::new(id, error.to_string());
         let artifact = self.manifest.artifact(id).map_err(|e| fail(&e))?;
         let source = self.manifest.source_of(artifact);
-        let path = oer_tool_pins::artifacts::fetched(self.root, self.chip, id)
-            .map_err(|e| fail(&e))?;
+        let path =
+            oer_tool_pins::artifacts::fetched(self.root, self.chip, id).map_err(|e| fail(&e))?;
         let text = fs::read_to_string(&path).map_err(|e| fail(&e))?;
         Ok((
             text,
@@ -85,7 +85,9 @@ pub fn run(root: &Path, chip: &str) -> Result<Imported> {
     if spec.chip != chip {
         return Err(format!("{} imports {}, not {chip}", spec_file.display(), spec.chip).into());
     }
-    let base = spec_file.parent().ok_or("the import spec has no directory")?;
+    let base = spec_file
+        .parent()
+        .ok_or("the import spec has no directory")?;
     let overlay = match &spec.overlay {
         None => None,
         Some(path) => Some(StrictnessOverlay::load(&base.join(path))?),
@@ -109,10 +111,11 @@ pub fn run(root: &Path, chip: &str) -> Result<Imported> {
         let relative = format!(
             "{}/{}",
             spec.types_directory,
-            path.file_name().and_then(|n| n.to_str()).unwrap_or_default()
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default()
         );
-        if path.extension().is_some_and(|e| e == "toml") && !output.types.contains_key(&relative)
-        {
+        if path.extension().is_some_and(|e| e == "toml") && !output.types.contains_key(&relative) {
             fs::remove_file(&path)?;
         }
     }
