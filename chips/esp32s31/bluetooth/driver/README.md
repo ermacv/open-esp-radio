@@ -178,7 +178,9 @@ Stop:
    and the actor releases Bluetooth clocks, coexistence and common power and
    closes RF only for the last member.
 
-The reset returns the complete arena. `into_reset` and `BluetoothAttachment::into_stopped`
+The reset returns the complete arena and the task's end of the interrupt
+handler's gate, which the next installation takes again: the handler's part
+stays bound for every epoch. `into_reset` and `BluetoothAttachment::into_stopped`
 allow a fresh scoped installation after the attachment loan is normally detached;
 the shared actor and Wi-Fi membership remain in their original storage. A started RF failure poisons the
 shared domain; a local Controller reset cannot clear it. A late retirement

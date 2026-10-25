@@ -271,9 +271,9 @@ fn clock_cell(
         .get(phase as usize)
 }
 
-fn clock_op(clock: PlatformClock, op: ClockOp, run: impl FnOnce()) {
+fn clock_op<T>(clock: PlatformClock, op: ClockOp, run: impl FnOnce() -> T) -> T {
     let start = Mcycle.now();
-    run();
+    let result = run();
     let cycles = Mcycle.now().wrapping_sub(start);
     let phase = phase();
     if let (Some(count), Some(max)) = (
@@ -283,6 +283,7 @@ fn clock_op(clock: PlatformClock, op: ClockOp, run: impl FnOnce()) {
         count.fetch_add(1, Ordering::Relaxed);
         max.fetch_max(cycles, Ordering::Relaxed);
     }
+    result
 }
 
 /// The operations of `clock` by `op` in `phase` and the longest, in cycles.
@@ -309,16 +310,16 @@ impl TimedChipClocks {
 }
 
 impl PlatformClockBackend for TimedChipClocks {
-    fn acquire(clock: PlatformClock) {
+    fn acquire(clock: PlatformClock) -> Result<(), PlatformClockError> {
         clock_op(clock, ClockOp::Acquire, || {
-            <ChipClocks as PlatformClockBackend>::acquire(clock);
-        });
+            <ChipClocks as PlatformClockBackend>::acquire(clock)
+        })
     }
 
-    fn release(clock: PlatformClock) {
+    fn release(clock: PlatformClock) -> Result<(), PlatformClockError> {
         clock_op(clock, ClockOp::Release, || {
-            <ChipClocks as PlatformClockBackend>::release(clock);
-        });
+            <ChipClocks as PlatformClockBackend>::release(clock)
+        })
     }
 
     fn abandon(clock: PlatformClock, how: PlatformClockAbandonment) {
@@ -336,7 +337,7 @@ impl PlatformClockProvider for TimedChipClocks {
         clock: PlatformClock,
     ) -> Result<PlatformClockGuard<Self>, PlatformClockError> {
         let _owner = &self.0;
-        <Self as PlatformClockBackend>::acquire(clock);
+        <Self as PlatformClockBackend>::acquire(clock)?;
         Ok(PlatformClockGuard::new(clock))
     }
 }

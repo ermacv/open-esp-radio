@@ -6,18 +6,20 @@ P2 worker joins the shared radio actor, completes initial tracking and
 publishes the P3 owners. Its command and independent clock mailboxes retain
 transactions across cancellation.
 
-Reset removes the BLE routes, retires the timer and Controller, leaves the
-actor, resets the Controller and returns its arena before a new installation
-can send Command Complete. The empty vendor command `0xfc00` performs the
+Reset retires the timer task and the Controller (the handler's gate gives
+back the released bank and disables the timer's compare), leaves the actor,
+resets the Controller and returns its arena and the gate before a new
+installation can send Command Complete. The empty vendor command `0xfc00` performs the
 same ordinary uninstall and sends its completion after graph return.
 
 The actor, branded lifecycle and large futures occupy static PSRAM storage;
-the arena and P3 state occupy their typed DMA/critical storage. Timer owners
-cross P3/P2 through affine queues. P2 handover touches the handler cell only
-with all BLE routes and the shared doorbell route removed, and moves the
-complete IRQ half by value. During timer retirement only the doorbell stays
-live until its affine return queue drains; handover is unavailable in that
-phase. P1 alone initializes, activates, cancels and retires clock bookkeeping;
+the arena and P3 state occupy their typed DMA/critical storage. One
+interrupt table entry binds the Bluetooth handler's part once at boot: the
+bank's primary and NRT sources, the modem low-power timer and the radio
+doorbell (`FROM_CPU` line 3) on one P3 line. P2 opens and closes each epoch
+through the part's gate, whose requests, replies and timer owners cross
+through one-slot queues announced by the doorbell; no route is removed and
+nothing is masked at the interrupt controller. P1 alone initializes, activates, cancels and retires clock bookkeeping;
 P2 constructs the epoch-keyed endpoint and serves its mailbox.
 
 `cargo fw build b0` builds an unconfigured image that prints `unconfigured`

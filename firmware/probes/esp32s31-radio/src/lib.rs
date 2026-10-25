@@ -56,9 +56,7 @@ oer_probe_macros::probe! {
 oer_probe_macros::probe! {
     pub fn open_wifi_sta_trace_hal_disable_sta_beacon_filter() {
         let _ = session::with(|session| {
-            let _ = session
-                .interrupts
-                .prepare_connected_sta_without_power_save(&mut session.wifi);
+            let _ = session.wifi.prepare_connected_sta_without_power_save();
         });
     }
 }

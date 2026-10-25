@@ -165,16 +165,26 @@ impl<F, E, X: SignalExecutor + 'static, M: ControllerMemory, R, const MT: usize>
         Ok(())
     }
 
-    /// Reclaim the complete arena only after the actor completed leave and
-    /// the matching Controller reset. Reinstall uses fresh generative scopes.
-    #[allow(clippy::result_large_err)]
-    pub fn into_reset(mut self) -> Result<oer_esp32s31_hal::dma_static::Placed<M::Storage>, Self> {
+    /// Reclaim the complete arena and the task's end of the interrupt
+    /// handler's gate only after the actor completed leave and the matching
+    /// Controller reset. Reinstall uses fresh generative scopes and the same
+    /// gate: the handler's part stays bound for every epoch.
+    #[allow(clippy::result_large_err, clippy::type_complexity)]
+    pub fn into_reset(
+        mut self,
+    ) -> Result<
+        (
+            oer_esp32s31_hal::dma_static::Placed<M::Storage>,
+            BluetoothInterruptGate<ChipGate, X, R>,
+        ),
+        Self,
+    > {
         let arena = match &mut self.state {
             State::Reset(arena) => arena.take(),
             _ => None,
         };
         match arena {
-            Some(arena) => Ok(arena),
+            Some(arena) => Ok((arena, self.gate)),
             None => Err(self),
         }
     }

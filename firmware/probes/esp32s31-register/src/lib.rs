@@ -49,7 +49,7 @@ fn start_session() -> u32 {
     let Ok(clocked) = powered.enable_clocks(&mut radio, &clocks) else {
         return 3;
     };
-    let (wifi, _interrupts, clocks_on) = clocked.into_running();
+    let (wifi, clocks_on) = clocked.into_running();
     let session = Session {
         wifi,
         _radio: radio,

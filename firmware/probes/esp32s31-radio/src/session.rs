@@ -10,7 +10,7 @@
 use oer_esp32s31_hal::{
     domain::{CommonPower, RadioDomain, WifiClient},
     ieee80211::client::{WifiClocksOn, WifiCold},
-    owner::{MacInterruptSetup, RadioAccess},
+    owner::RadioAccess,
     power::ChipClocks,
     root::Root,
 };
@@ -22,8 +22,6 @@ pub(crate) struct Session {
     pub(crate) radio: RadioDomain<ChipClocks>,
     /// The running Wi-Fi register owner.
     pub(crate) wifi: RadioAccess,
-    /// The Wi-Fi MAC's interrupt banks, task side.
-    pub(crate) interrupts: MacInterruptSetup,
     /// Wi-Fi's common power, held for the session.
     _power: CommonPower<WifiClient>,
     /// The proof that Wi-Fi's module clocks are on.
@@ -61,11 +59,10 @@ pub(crate) fn init() -> u32 {
     let Ok(clocked) = powered.enable_clocks(&mut radio, &clocks) else {
         return WIFI_CLOCKS;
     };
-    let (wifi, interrupts, clocks_on) = clocked.into_running();
+    let (wifi, clocks_on) = clocked.into_running();
     let session = Session {
         radio,
         wifi,
-        interrupts,
         _power: power,
         _clocks_on: clocks_on,
         _clocks: clocks,
