@@ -40,7 +40,7 @@ pub mod diagnostics;
 #[cfg(feature = "esp32s31")]
 pub mod fatal;
 #[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
-pub use fatal::{fatal_halt, reset};
+pub use fatal::{fatal_halt, reset, reset_recording};
 #[cfg(target_arch = "riscv32")]
 #[allow(unsafe_code, reason = "the stage-two reset entry is assembly")]
 mod entry;

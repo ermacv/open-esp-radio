@@ -38,28 +38,39 @@ use oer_diagnostics::Note;
 
 #[cfg(feature = "boot-smoke")]
 use embassy_time::{Duration, Timer};
+use oer_esp32s31_hal::platform::{FromCpu0Irq, SystimerAlarm0};
+#[cfg(feature = "wifi-station")]
+use oer_esp32s31_hal::platform::{FromCpu2Irq, FromCpu3Irq, SystimerAlarm1};
+use oer_esp32s31_hal::usb_serial_jtag::ConsoleInterrupt;
+use oer_esp32s31_hal::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
 use oer_espressif_executor::Executor;
 
 oer_espressif_staged_runtime::interrupt_table! {
     /// Wakes the core-0 executor.
-    wake: ExecutorWake = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu, Hardware;
+    wake: ExecutorWake = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, level 1, hart 0, Hardware;
     #[cfg(not(feature = "wifi-station"))]
     /// The Embassy time driver's alarm (system timer comparator 0).
-    alarm: TimeAlarm = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority1, ProCpu, Hardware;
+    alarm: TimeAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 17, level 1, hart 0, Hardware;
     #[cfg(feature = "wifi-station")]
-    alarm: TimeAlarm = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu, Hardware;
+    /// The application executor's alarm (system timer comparator 1).
+    alarm: TimeAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 17, level 1, hart 0, Hardware;
     #[cfg(feature = "wifi-station")]
-    radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority3, ProCpu, Hardware;
+    /// The radio executor's alarm (system timer comparator 0).
+    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 19, level 3, hart 0, Hardware;
     #[cfg(feature = "wifi-station")]
-    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<wifi_station::RadioTasks>, Priority2, ProCpu, Executor;
+    /// The radio executor (P2), polled in its handler.
+    radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<wifi_station::RadioTasks, FromCpu2Irq>, line 20, level 2, hart 0, Executor;
     #[cfg(feature = "wifi-station")]
-    doorbell: DoorbellToken = FROM_CPU_INTR3 => crate::wifi_station::irq::doorbell, Priority3, ProCpu, Hardware;
+    /// The radio doorbell (P3).
+    doorbell: DoorbellToken = FromCpu3Irq => crate::wifi_station::irq::doorbell, line 21, level 3, hart 0, Hardware;
     #[cfg(feature = "wifi-station")]
-    wifi_mac: WifiMacToken = MODEM_WIFI_MAC => crate::wifi_station::irq::wifi_mac, Priority3, ProCpu, Hardware;
+    /// The Wi-Fi MAC's events.
+    wifi_mac: WifiMacToken = WifiMacInterrupt => crate::wifi_station::irq::wifi_mac, line 22, level 3, hart 0, Hardware;
     #[cfg(feature = "wifi-station")]
-    wifi_pwr: WifiPwrToken = MODEM_WIFI_PWR => crate::wifi_station::irq::wifi_pwr, Priority3, ProCpu, Hardware;
+    /// The Wi-Fi MAC's power events.
+    wifi_pwr: WifiPwrToken = WifiMacPowerInterrupt => crate::wifi_station::irq::wifi_pwr, line 23, level 3, hart 0, Hardware;
     /// The USB Serial/JTAG console: it raises the console endpoint's signal.
-    console_usb: ConsoleUsb = USB_DEVICE => crate::usb::interrupt, Priority1, ProCpu, Hardware;
+    console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 18, level 1, hart 0, Hardware;
 }
 
 #[cfg(feature = "boot-smoke")]
@@ -74,8 +85,6 @@ mod fatal;
     feature = "wifi-station"
 ))]
 mod image_features;
-#[cfg(not(feature = "wifi-station"))]
-mod software_interrupt;
 #[cfg(any(
     feature = "system-watchdog",
     feature = "system-panic-reset",
@@ -107,6 +116,7 @@ oer_espressif_executor::tasks! {
     /// The boot smoke's task.
     BootSmokeTasks: Executor<0> {
         boot_smoke(console: boot_smoke_console::BootSmokeConsole) = boot_smoke;
+        rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
     }
 }
 /// Layout probes: each lives in the section it checks and reads back its
@@ -134,18 +144,24 @@ oer_espressif_staged_runtime::panic_hook!(panic_hook);
 
 #[cfg(feature = "panic-hook")]
 /// The image's record of a panic, which the platform's panic entry calls
-/// after its own record and before it resets the chip (feature
-/// `panic-hook`): it records the post-mortem fault and the machine state,
+/// after its own record, with the other hart stopped, before it resets the
+/// chip (feature `panic-hook`): it records the post-mortem fault and the machine state,
 /// formatting nothing, so the panic path stays a leaf in every stack
 /// bound. The next boot reports what it recorded.
 #[inline(always)]
-fn panic_hook(details: &oer_espressif_staged_runtime::panic::PanicDetails<'_>) {
+fn panic_hook(
+    details: &oer_espressif_staged_runtime::panic::PanicDetails<'_>,
+    stop: Result<
+        &oer_espressif_staged_runtime::fatal::StopTheWorld<'_>,
+        oer_espressif_staged_runtime::fatal::StopError,
+    >,
+) {
     #[cfg(feature = "system-watchdog")]
     system::postmortem::record_panic(details);
     #[cfg(not(feature = "system-watchdog"))]
     let _ = details;
     let stage = 0;
-    fatal::record_panic(stage);
+    fatal::record_panic(stage, stop);
 }
 
 /// The image's entropy owner.
@@ -173,87 +189,87 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
 
     validate_runtime_layout();
 
-    let peripherals =
-        esp_hal::init(esp_hal::Config::default().with_cpu_clock(esp_hal::clock::CpuClock::max()));
+    let Some(root) = oer_esp32s31_hal::root::Root::take() else {
+        fail(fatal::Failure::RootTaken);
+    };
+    let runtime = root.into_runtime();
     // Before anything records a checkpoint over the previous boot's record.
     #[cfg(feature = "system-watchdog")]
     system::postmortem::begin();
     // Before any boot evidence is served: taking it clears the record.
-    #[cfg(any(
-        feature = "system-watchdog",
-        feature = "system-panic-reset",
-        feature = "wifi-station"
-    ))]
+    #[cfg(any(feature = "system-watchdog", feature = "system-panic-reset"))]
     system::take_platform_panic();
     #[cfg(any(feature = "system-watchdog", feature = "system-panic-reset"))]
-    system::read_reset_causes(oer_espressif_esp_hal_soc::handoff::take_reset_causes(
-        peripherals.LP_AON_CLK_RST,
-    ));
+    system::read_reset_causes(runtime.reset_cause);
     // The bootstrap configured PSRAM before entering this separately linked
-    // runtime. `esp_hal::init()` cannot carry process-local mapping metadata
-    // across that ELF boundary, so stage two explicitly adopts the live
-    // hardware mapping without reinitializing the PSRAM device or MMU.
-    let (_psram, adopted) = handoff.adopt(
+    // runtime; stage two adopts the live mapping without reinitializing the
+    // PSRAM device or MMU.
+    let (_psram, mut adopted) = handoff.adopt(
         INTERRUPT_TABLE,
-        oer_esp32s31_board::BootstrapPsram(peripherals.PSRAM),
+        runtime.interrupts.controller,
+        oer_esp32s31_board::BootstrapPsram,
     );
     exception::report_stack_guard();
 
-    let interrupts = Interrupts::take().expect("the image takes its interrupt tokens once");
-    oer_espressif_executor::init::<0, _>(peripherals.SYSTIMER, interrupts.alarm);
-
-    let executor = Executor::<0>::new(software_interrupt::executor0(peripherals.FROM_CPU_INTR0));
-
-    adopted.enable_interrupts();
+    let Some(interrupts) = Interrupts::take() else {
+        fail(fatal::Failure::InterruptTable);
+    };
+    let timer = runtime.system_timer;
+    oer_espressif_executor::init::<0, _, _>(
+        oer_espressif_executor::systimer::SystemTimer {
+            comparators: timer.comparators,
+            counter: timer.counter,
+        },
+        adopted.router(),
+        interrupts.alarm,
+        timer.alarm0,
+    );
+    let console = usb::open(adopted.router(), interrupts.console_usb);
+    let software = runtime.software_interrupts;
+    let executor = Executor::<0>::new(software.line0);
+    let mut router = adopted.enable_interrupts();
+    let wake = (interrupts.wake, software.irq0);
+    let rtc_watchdog = runtime.watchdogs.rtc;
 
     #[cfg(feature = "system-panic-reset")]
     system::panic_reset::start(
         executor,
-        interrupts.wake,
-        usb::open(
-            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
-                .expect("no early record holds the USB Serial/JTAG at the console handoff"),
-            interrupts.console_usb,
-        ),
-        crate::Rng::new(
-            oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
-            oer_embassy_time::EmbassyClock,
-        ),
+        &mut router,
+        wake,
+        console,
+        crate::Rng::new(runtime.entropy, oer_embassy_time::EmbassyClock),
+        rtc_watchdog,
     );
 
     #[cfg(feature = "system-watchdog")]
     system::console::start(
         executor,
-        interrupts.wake,
-        usb::open(
-            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
-                .expect("no early record holds the USB Serial/JTAG at the console handoff"),
-            interrupts.console_usb,
-        ),
-        crate::Rng::new(
-            oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
-            oer_embassy_time::EmbassyClock,
-        ),
-        oer_esp32s31_hal::watchdog::Watchdogs::new(
-            oer_espressif_esp_hal_soc::handoff::take_watchdogs(
-                peripherals.TIMG0,
-                peripherals.TIMG1,
-                peripherals.LP_WDT,
-            ),
-        ),
+        &mut router,
+        wake,
+        console,
+        crate::Rng::new(runtime.entropy, oer_embassy_time::EmbassyClock),
+        runtime.watchdogs.main1,
+        rtc_watchdog,
     );
 
     #[cfg(feature = "boot-smoke")]
-    executor.run(interrupts.wake, move |spawner| {
-        let console = boot_smoke_console::BootSmokeConsole::new(usb::open(
-            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
-                .expect("no early record holds the USB Serial/JTAG at the console handoff"),
-            interrupts.console_usb,
-        ));
-        if BootSmokeTasks::boot_smoke(spawner, console).is_err() {
+    executor.run(&mut router, wake.0, wake.1, move |spawner| {
+        let console = boot_smoke_console::BootSmokeConsole::new(console);
+        if BootSmokeTasks::boot_smoke(spawner, console).is_err()
+            || BootSmokeTasks::rtc_watchdog(spawner, rtc_watchdog).is_err()
+        {
             fail(fatal::Failure::TaskAllocation);
         }
     });
+}
+
+/// Feed the RTC watchdog for good: the image resets when its executor stops
+/// polling.
+pub(crate) async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
+    let period = oer_time::Duration::from_millis(RTC_WATCHDOG_FEED_PERIOD_MS);
+    match watchdog
+        .feed_every(&oer_embassy_time::EmbassyClock, period)
+        .await {}
 }
 
 #[cfg(feature = "boot-smoke")]

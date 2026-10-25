@@ -2246,6 +2246,7 @@ dependencies = [
 name = "oer-firmware-apps-boot-smoke"
 version = "0.1.0"
 dependencies = [
+ "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",
  "oer-esp32s31-hal",

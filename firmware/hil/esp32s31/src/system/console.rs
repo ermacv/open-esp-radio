@@ -3,7 +3,9 @@
 //! in the `usb-jtag-off` image, the switch of the USB Serial/JTAG off its
 //! pads.
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
-use oer_esp32s31_hal::watchdog::{DeadlineBudget, Watchdogs};
+use oer_esp32s31_hal::watchdog::{
+    ArmedRtcWatchdog, DeadlineBudget, MainWatchdog, Mwdt1Registers, RwdtRegisters,
+};
 use oer_hil_protocol::RequestIdentity;
 use oer_hil_protocol::base::{RejectReason, Rejected};
 use oer_hil_protocol::system::{WatchdogArmed, WatchdogTest, WatchdogTestMode};
@@ -31,28 +33,34 @@ oer_espressif_executor::tasks! {
         #[cfg(feature = "usb-jtag-off")]
         disable_on_request(pads: Pads) = usb_off::disable_on_request;
         run(usb: crate::transport::Usb, boot: u64) = run;
+        rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = crate::feed_rtc_watchdog;
     }
 }
 
-pub(crate) fn start(
+pub(crate) fn start<C: oer_interrupt_table::Controller>(
     executor: crate::Executor<0>,
-    wake: crate::ExecutorWake,
+    router: &mut oer_interrupt_table::Router<C>,
+    (wake, line): (crate::ExecutorWake, oer_esp32s31_hal::platform::FromCpu0Irq),
     (usb, pads): (crate::transport::Usb, Pads),
     mut entropy: crate::Rng,
-    watchdogs: Watchdogs,
+    main1: MainWatchdog<Mwdt1Registers>,
+    rtc_watchdog: ArmedRtcWatchdog<RwdtRegisters>,
 ) -> ! {
-    let service = DeadlineWatchdog::new(watchdogs.main1, oer_embassy_time::EmbassyClock);
+    let service = DeadlineWatchdog::new(main1, oer_embassy_time::EmbassyClock);
     let boot = u64::from_le_bytes(entropy.random_bytes()).max(1);
     crate::check_entropy_source(&entropy);
     #[cfg(not(feature = "usb-jtag-off"))]
     let _pads = pads;
     CONSOLE.start(boot);
-    executor.run(wake, |spawner| {
+    executor.run(router, wake, line, |spawner| {
         WatchdogTasks::test_watchdog(spawner, service).expect("system watchdog test task");
         WatchdogTasks::panic_on_request(spawner).expect("panic task");
         #[cfg(feature = "usb-jtag-off")]
         WatchdogTasks::disable_on_request(spawner, pads).expect("USB switch task");
         WatchdogTasks::run(spawner, usb, boot).expect("system console task");
+        if WatchdogTasks::rtc_watchdog(spawner, rtc_watchdog).is_err() {
+            crate::fail(crate::fatal::Failure::TaskAllocation);
+        }
     });
 }
 

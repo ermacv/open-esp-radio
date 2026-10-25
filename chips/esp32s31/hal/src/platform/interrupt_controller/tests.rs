@@ -2,16 +2,16 @@ use std::vec;
 use std::vec::Vec;
 
 use oer_esp32s31_pac::{
-    clic::{self, Clic},
+    clic::{self, Clic, ClicObserver},
     instances,
-    interrupt_core::{self, InterruptCore0},
+    interrupt_core::{self, InterruptCore0, InterruptCore0Observer},
 };
 use oer_interrupt_table::{
     Binding, Class, Controller, Error, LineState, Lines, Router, Table, Trigger, line_control,
 };
 use oer_mmio::{Bits, Host, Index, InterruptSource};
 
-use super::{InterruptController, LEVEL_BITS};
+use super::{InterruptController, InterruptView, LEVEL_BITS, LineObservation, Observer};
 
 /// Host memory of hart 0's bank and of the CLIC.
 struct Memory {
@@ -30,17 +30,42 @@ impl Memory {
 
     fn controller(&mut self) -> InterruptController<Host<'_>, Host<'_>> {
         InterruptController::new(
-            InterruptCore0::host(&mut self.matrix).expect("the memory holds the bank"),
-            Clic::host(&mut self.clic).expect("the memory holds the CLIC"),
+            interrupt_core::interrupt_core0_host(&mut self.matrix)
+                .expect("the memory holds the bank")
+                .0,
+            clic::clic_host(&mut self.clic)
+                .expect("the memory holds the CLIC")
+                .0,
         )
     }
 
     fn matrix(&mut self) -> InterruptCore0<Host<'_>> {
-        InterruptCore0::host(&mut self.matrix).expect("the memory holds the bank")
+        interrupt_core::interrupt_core0_host(&mut self.matrix)
+            .expect("the memory holds the bank")
+            .0
     }
 
     fn clic(&mut self) -> Clic<Host<'_>> {
-        Clic::host(&mut self.clic).expect("the memory holds the CLIC")
+        clic::clic_host(&mut self.clic)
+            .expect("the memory holds the CLIC")
+            .0
+    }
+
+    fn clic_observer(&mut self) -> ClicObserver<Host<'_>> {
+        clic::clic_host(&mut self.clic)
+            .expect("the memory holds the CLIC")
+            .1
+    }
+
+    fn observer(&mut self) -> Observer<Host<'_>, Host<'_>> {
+        let routes: InterruptCore0Observer<Host<'_>> =
+            interrupt_core::interrupt_core0_host(&mut self.matrix)
+                .expect("the memory holds the bank")
+                .1;
+        let lines = clic::clic_host(&mut self.clic)
+            .expect("the memory holds the CLIC")
+            .1;
+        Observer { routes, lines }
     }
 }
 
@@ -53,15 +78,71 @@ fn line(number: u8) -> Index<{ clic::ctrl::COUNT }> {
 }
 
 #[test]
-fn taking_the_controller_sets_three_level_bits_and_keeps_the_other_configuration() {
+fn splitting_the_partition_sets_three_level_bits_and_keeps_the_other_configuration() {
     let mut memory = Memory::filled(u32::MAX);
-    let controller = memory.controller();
-    assert_eq!(controller.level_bits(), LEVEL_BITS);
-    drop(controller);
-    let config = memory.clic().read_int_config();
+    super::set_level_bits(&mut memory.clic_observer());
+    assert_eq!(super::level_bits(&memory.clic_observer()), LEVEL_BITS);
+    let config = memory.clic_observer().read_int_config();
     assert_eq!(config.mnlbits().get(), 3);
     assert!(config.nvbits(), "the vectoring flag stays");
     assert_eq!(config.nmbits().get(), 3, "the mode bits stay");
+}
+
+#[test]
+fn the_fatal_view_reads_exactly_the_routes_and_lines_the_words_hold() {
+    let mut memory = Memory::filled(0);
+    let mut controller = memory.controller();
+    controller.route(12, 20).expect("source 12 and line 20");
+    controller
+        .set_line(
+            20,
+            LineState {
+                enabled: true,
+                vectored: true,
+                trigger: Trigger::PositiveEdge,
+                control: line_control(3, LEVEL_BITS),
+            },
+        )
+        .expect("line 20");
+    drop(controller);
+    memory.clic().modify_ctrl(line(20), |word| {
+        word.set_ip(true);
+    });
+    let matrix_before = memory.matrix.clone();
+    let clic_before = memory.clic.clone();
+    {
+        let observer = memory.observer();
+        let view = InterruptView {
+            observer: &observer,
+        };
+        assert_eq!(view.routed(12), Some(20));
+        assert_eq!(view.routed(11), None, "a silent source");
+        assert_eq!(view.routed(u16::MAX), None, "no source of the bank");
+        assert_eq!(
+            view.line(20),
+            Some(LineObservation {
+                pending: true,
+                state: LineState {
+                    enabled: true,
+                    vectored: true,
+                    trigger: Trigger::PositiveEdge,
+                    control: line_control(3, LEVEL_BITS),
+                },
+            })
+        );
+        assert_eq!(
+            view.line(21),
+            Some(LineObservation {
+                pending: false,
+                state: LineState::DISABLED,
+            })
+        );
+        assert_eq!(view.line(u8::MAX), None, "no line of the CLIC");
+    }
+    assert!(
+        memory.matrix == matrix_before && memory.clic == clic_before,
+        "the view writes nothing"
+    );
 }
 
 #[test]

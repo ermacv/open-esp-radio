@@ -40,7 +40,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     // Before anything can panic and overwrite it.
     let previous = panic::take_previous();
     let Some(root) = Root::take() else {
-        unreachable!("stage two takes the reset root once");
+        fail("root-taken");
     };
     let runtime = root.into_runtime();
     let (_psram, mut adopted) = handoff.adopt(
@@ -82,7 +82,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         &RadioRoot::ClockFailed
     });
     let Some(interrupts) = Interrupts::take() else {
-        unreachable!("the image takes its interrupt tokens once");
+        fail("interrupt-table");
     };
     let timer = runtime.system_timer;
     oer_espressif_executor::init::<0, _, _>(
@@ -104,7 +104,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         software.irq0,
         move |spawner| {
             if Tasks::rtc_watchdog(spawner, watchdog).is_err() {
-                unreachable!("the watchdog's task starts once");
+                fail("task-start");
             }
         },
     )
@@ -126,4 +126,12 @@ const fn wire(clock: PlatformClock) -> radio_root::PlatformClock {
 async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
     let period = oer_time::Duration::from_millis(RTC_WATCHDOG_FEED_PERIOD_MS);
     match watchdog.feed_every(&EmbassyClock, period).await {}
+}
+
+/// Halt the image on a failed boot step, its reason on the console while
+/// no one holds the block.
+fn fail(reason: &'static str) -> ! {
+    oer_espressif_staged_runtime::fatal_halt(|_path| {
+        let _note = usb_serial_jtag::fatal_note(&oer_diagnostics::Note::runtime_fail(reason));
+    })
 }

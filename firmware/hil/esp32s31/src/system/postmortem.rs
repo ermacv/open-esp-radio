@@ -33,13 +33,11 @@ fn with_record<T>(access: impl FnOnce(&mut Record) -> T) -> Option<T> {
 }
 
 fn uptime_ms() -> u32 {
-    esp_hal::time::Instant::now()
-        .duration_since_epoch()
-        .as_millis() as u32
+    embassy_time::Instant::now().as_millis() as u32
 }
 
 fn hart() -> u8 {
-    esp_hal::system::Cpu::current() as u8
+    oer_espressif_staged_runtime::trap::TrapRegisters::read().hart as u8
 }
 
 /// Take what the previous boot left and start this boot's record.

@@ -276,12 +276,29 @@ description = "The interrupt matrix route and pending words and the CLIC configu
 [[partitions.parts]]
 name = "Clic"
 instance = "CLIC"
-registers = ["INT_CONFIG", "CTRL%s"]
+registers = ["CTRL%s"]
+
+[[partitions.parts]]
+name = "ClicObserver"
+instance = "CLIC"
+registers = ["INT_CONFIG"]
+observes = ["CTRL%s"]
+description = "The CLIC's level bits, set once when the root splits the partition, and hart 0's lines as a fatal path reads them after the other hart stopped; it writes no line."
+sources = ["ESP_IDF_4D59230D_S31_CLIC"]
 
 [[partitions.parts]]
 name = "InterruptCore0"
 instance = "INTERRUPT_CORE0"
 registers = ["ROUTE%s"]
+
+[[partitions.parts]]
+name = "InterruptCore0Observer"
+instance = "INTERRUPT_CORE0"
+registers = ["INTERRUPT_DATE"]
+observes = ["ROUTE%s"]
+read-only = true
+description = "Hart 0's routes as a fatal path reads them after the other hart stopped, and the matrix's version word; it writes nothing."
+sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
 
 [[partitions.parts]]
 name = "InterruptCore0Status"
@@ -1221,7 +1238,7 @@ reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "INTERRUPT_CORE0"
-registers = ["SIG_IDX_ASSERT_IN_SEC", "SRC_PASS_IN_S_STATUS_0", "SRC_PASS_IN_S_STATUS_1", "SRC_PASS_IN_S_STATUS_2", "SRC_PASS_IN_S_STATUS_3", "SRC_PASS_IN_S_STATUS_4", "SRC_PASS_IN_S_STATUS_5", "SRC_PASS_IN_M_STATUS_0", "SRC_PASS_IN_M_STATUS_1", "SRC_PASS_IN_M_STATUS_2", "SRC_PASS_IN_M_STATUS_3", "SRC_PASS_IN_M_STATUS_4", "SRC_PASS_IN_M_STATUS_5", "CONFIG_STATE", "S_STATUS", "M_STATUS", "CLOCK_GATE", "INTERRUPT_DATE"]
+registers = ["SIG_IDX_ASSERT_IN_SEC", "SRC_PASS_IN_S_STATUS_0", "SRC_PASS_IN_S_STATUS_1", "SRC_PASS_IN_S_STATUS_2", "SRC_PASS_IN_S_STATUS_3", "SRC_PASS_IN_S_STATUS_4", "SRC_PASS_IN_S_STATUS_5", "SRC_PASS_IN_M_STATUS_0", "SRC_PASS_IN_M_STATUS_1", "SRC_PASS_IN_M_STATUS_2", "SRC_PASS_IN_M_STATUS_3", "SRC_PASS_IN_M_STATUS_4", "SRC_PASS_IN_M_STATUS_5", "CONFIG_STATE", "S_STATUS", "M_STATUS", "CLOCK_GATE"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]

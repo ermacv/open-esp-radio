@@ -79,7 +79,7 @@ pub const STALL_POLLS: u32 = 10_000;
 type ThisHart = PhantomData<*const ()>;
 
 /// A fatal path's key of its hart in the cells.
-const fn key(hart: HpCore) -> u8 {
+pub(crate) const fn key(hart: HpCore) -> u8 {
     match hart {
         HpCore::Core0 => 0,
         HpCore::Core1 => 1,

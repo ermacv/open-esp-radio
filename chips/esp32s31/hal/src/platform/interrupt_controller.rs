@@ -8,17 +8,25 @@
 //! outside the bank or a line outside the CLIC is refused
 //! ([`Error::NoSuchSource`], [`Error::NoSuchLine`]) and nothing is written;
 //! it reads as silent or disabled.
+//!
+//! A fatal path observes hart 0's routes and lines as they are
+//! ([`fatal_view`]): the root publishes the observers of the route and line
+//! words once, and only a fatal path that stopped the other hart
+//! ([`StopTheWorld`]) reads them, without writing.
 
 use oer_esp32s31_pac::{
-    clic::{self, Clic},
+    clic::{self, Clic, ClicObserver},
     instances,
     interrupt_core::{
-        self, InterruptCore0, InterruptCore0Status, InterruptCore1, InterruptCore1Status,
+        self, InterruptCore0, InterruptCore0Observer, InterruptCore0Status, InterruptCore1,
+        InterruptCore1Status,
     },
     ownership::InterruptMatrixPeripherals,
 };
 use oer_interrupt_table::{Controller, Error, LineState, Trigger};
-use oer_memory::zeroed::ZeroedOnce;
+use oer_memory::{ClaimCell, zeroed::ZeroedOnce};
+
+use crate::cores::{StopTheWorld, key};
 use oer_mmio::{Bits, Fixed, Index, Placement};
 
 #[cfg(test)]
@@ -74,8 +82,11 @@ fn pending_in<P: Placement>(status: &InterruptCore0Status<P>, source: u16) -> bo
 }
 
 impl InterruptBlocks {
-    /// Split the root's partition and publish hart 0's pending sources;
-    /// [`InterruptController::new`] sets the CLIC's level bits.
+    /// Split the root's partition: give the CLIC [`LEVEL_BITS`] level bits,
+    /// keeping its other configuration fields, and publish hart 0's pending
+    /// sources and the observers of its routes and lines for a fatal path.
+    /// Every route and line stays as it is until the router installs the
+    /// controller.
     ///
     /// # Panics
     ///
@@ -84,7 +95,9 @@ impl InterruptBlocks {
     pub fn new(peripherals: InterruptMatrixPeripherals) -> Self {
         let InterruptMatrixPeripherals {
             clic,
+            mut clic_observer,
             interrupt_core0,
+            interrupt_core0_observer,
             interrupt_core0_status,
             interrupt_core1,
             interrupt_core1_status,
@@ -94,6 +107,13 @@ impl InterruptBlocks {
             "the root publishes hart 0's pending sources once"
         );
         let _ = PENDING.get_or_init(|| interrupt_core0_status);
+        set_level_bits(&mut clic_observer);
+        // Published beside the pending sources, which the assertion above
+        // finds unpublished: the observers are not installed either.
+        let _installed = OBSERVER.install(Observer {
+            routes: interrupt_core0_observer,
+            lines: clic_observer,
+        });
         Self {
             controller: InterruptController::new(interrupt_core0, clic),
             hart1: Hart1Interrupts {
@@ -102,6 +122,100 @@ impl InterruptBlocks {
             },
         }
     }
+}
+
+/// Give the CLIC [`LEVEL_BITS`] level bits, keeping its other configuration
+/// fields.
+fn set_level_bits<C: Placement>(config: &mut ClicObserver<C>) {
+    config.modify_int_config(|config| {
+        config.set_mnlbits(Bits::constant::<{ LEVEL_BITS as u32 }>());
+    });
+}
+
+/// The level bits the CLIC holds.
+fn level_bits<C: Placement>(config: &ClicObserver<C>) -> u8 {
+    // MNLBITS is four bits wide.
+    config.read_int_config().mnlbits().get() as u8
+}
+
+/// Hart 0's route and line observers, published once by
+/// [`InterruptBlocks::new`] and held for good by the first fatal path that
+/// reads them.
+static OBSERVER: ClaimCell<Observer> = ClaimCell::new();
+
+/// The observers of hart 0's route words and of the CLIC's line words.
+struct Observer<
+    M: Placement = Fixed<{ instances::interrupt_core0::BASE }>,
+    C: Placement = Fixed<{ instances::clic::BASE }>,
+> {
+    routes: InterruptCore0Observer<M>,
+    lines: ClicObserver<C>,
+}
+
+/// Hart 0's routes and lines as a fatal path reads them: what the hardware
+/// holds, not what the image's table declares.
+pub struct InterruptView<
+    'a,
+    M: Placement = Fixed<{ instances::interrupt_core0::BASE }>,
+    C: Placement = Fixed<{ instances::clic::BASE }>,
+> {
+    observer: &'a Observer<M, C>,
+}
+
+/// One CLIC line as a fatal path reads it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LineObservation {
+    /// The line's pending bit (`clicintip`).
+    pub pending: bool,
+    /// Its enable, vectoring, trigger and control byte.
+    pub state: LineState,
+}
+
+impl<M: Placement, C: Placement> InterruptView<'_, M, C> {
+    /// The line `source` is routed to; `None` when it is routed nowhere or
+    /// is no source of the bank.
+    pub fn routed(&self, source: u16) -> Option<u8> {
+        let index = Index::new(usize::from(source)).ok()?;
+        // MAP is six bits wide.
+        let line = self.observer.routes.read_route(index).map().get() as u8;
+        (line != 0).then_some(line)
+    }
+
+    /// The state of `line`; `None` for a line past the CLIC's.
+    pub fn line(&self, line: u8) -> Option<LineObservation> {
+        let index = Index::new(usize::from(line)).ok()?;
+        let word = self.observer.lines.read_ctrl(index);
+        Some(LineObservation {
+            pending: word.ip(),
+            state: LineState {
+                enabled: word.ie(),
+                vectored: word.attr_shv(),
+                trigger: trigger_of(word.attr_trig()),
+                control: word.ctl(),
+            },
+        })
+    }
+
+    /// The level bits the CLIC holds.
+    pub fn level_bits(&self) -> u8 {
+        level_bits(&self.observer.lines)
+    }
+}
+
+/// Read hart 0's routes and lines in `stop`'s fatal path: the other hart
+/// stopped and the image's router writes no more, so the words hold what
+/// the hardware dispatches. The view only reads. `None` before the root
+/// published the observers, or when another hart's fatal path holds them.
+pub fn fatal_view<R>(
+    stop: &StopTheWorld<'_>,
+    observe: impl FnOnce(&InterruptView<'_>) -> R,
+) -> Option<R> {
+    OBSERVER
+        .hold(key(stop.hart()), |observer| {
+            observe(&InterruptView { observer })
+        })
+        .ok()
+        .map(|held| held.value)
 }
 
 /// Hart 1's interrupt-matrix bank and its pending sources. Hart 1 runs no
@@ -125,21 +239,10 @@ pub struct InterruptController<
 }
 
 impl<M: Placement, C: Placement> InterruptController<M, C> {
-    /// Own the bank and the CLIC and give the CLIC [`LEVEL_BITS`] level bits,
-    /// keeping its other configuration fields. Every route and line stays as
-    /// it is until the router installs the controller.
-    pub fn new(matrix: InterruptCore0<M>, mut clic: Clic<C>) -> Self {
-        clic.modify_int_config(|config| {
-            config.set_mnlbits(Bits::constant::<{ LEVEL_BITS as u32 }>());
-        });
+    /// Own the bank and the CLIC's lines. Every route and line stays as it
+    /// is until the router installs the controller.
+    pub const fn new(matrix: InterruptCore0<M>, clic: Clic<C>) -> Self {
         Self { matrix, clic }
-    }
-
-    /// The level bits the CLIC holds.
-    pub fn level_bits(&self) -> u8 {
-        let bits = self.clic.read_int_config().mnlbits().get();
-        // MNLBITS is four bits wide.
-        bits as u8
     }
 }
 
