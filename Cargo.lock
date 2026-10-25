@@ -1945,6 +1945,7 @@ dependencies = [
  "oer-mmio",
  "oer-radio-coex",
  "oer-radio-regulatory",
+ "oer-riscv",
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",

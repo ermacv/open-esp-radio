@@ -35,6 +35,10 @@ impl RomShortDelay {
 fn settle(cycles: u32, mut counter: impl FnMut() -> u32) {
     let start = counter();
     while counter().wrapping_sub(start) < cycles {
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "a named settle of at most MAX_MICROS (20 µs), the one busy-wait the execution rules admit"
+        )]
         core::hint::spin_loop();
     }
 }
