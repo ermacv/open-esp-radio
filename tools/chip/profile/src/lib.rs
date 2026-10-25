@@ -162,6 +162,35 @@ impl Source for Tree<'_> {
     }
 }
 
+/// Size the CPU0 task stack's placement rule by the chip's stack policy
+/// (`default_cpu0_task_stack_bytes`), which the chip's layout links for an
+/// image whose policy names no allocation; an image's own allocation then
+/// replaces it ([`policy::StackPolicy::runtime_profile`]).
+fn default_task_stack(source: &mut dyn Source, facts: &mut Facts) -> Result<()> {
+    let Some(rule) = facts.placement.as_mut().and_then(|placement| {
+        placement
+            .range
+            .iter_mut()
+            .find(|rule| rule.range == ["_stack_end", "_stack_start"])
+    }) else {
+        return Ok(());
+    };
+    if rule.bytes.is_some() {
+        return Err(
+            "the CPU0 task stack's size is the chip's stack policy's, not a placement fact".into(),
+        );
+    }
+    let policy = format!(
+        "{}/stack.toml",
+        oer_espressif_facts::platform_dir(&facts.id)
+    );
+    let text = source.read(&policy)?;
+    let bytes = oer_espressif_facts::generate::default_cpu0_task_stack_bytes(&text)
+        .map_err(|error| format!("{policy}: {error}"))?;
+    rule.bytes = Some(u64::from(bytes));
+    Ok(())
+}
+
 impl Profile {
     /// The profile of `id`, or an error naming the supported chips.
     pub fn load(root: &Path, id: &str) -> Result<Self> {
@@ -204,8 +233,10 @@ impl Profile {
         let registry: Registry = registry
             .try_into()
             .map_err(|error| format!("{top}: {error}"))?;
+        let mut facts = Facts::from_table(id, &top, table)?;
+        default_task_stack(source, &mut facts)?;
         Ok(Self {
-            facts: Facts::from_table(id, &top, table)?,
+            facts,
             hil: registry.hil,
             packages: registry.packages,
             probe: registry.probe,
@@ -345,6 +376,36 @@ mod tests {
     }
 
     #[test]
+    fn the_chip_stack_policy_sizes_the_default_task_stack() {
+        let repository = repository();
+        let root = repository.path();
+        let bytes = || -> Result<Option<u64>> {
+            let placement = Profile::load(root, "esp32c5")?
+                .facts
+                .placement
+                .expect("placement");
+            Ok(placement
+                .range
+                .into_iter()
+                .find(|rule| rule.range == ["_stack_end", "_stack_start"])
+                .and_then(|rule| rule.bytes))
+        };
+        assert_eq!(bytes().unwrap(), Some(0x3_0000));
+        let policy = root.join("chips/esp32c5/platform/stack.toml");
+        let text = std::fs::read_to_string(&policy).unwrap();
+        let key = "default_cpu0_task_stack_bytes = 0x30000";
+        assert!(text.contains(key));
+        std::fs::write(
+            &policy,
+            text.replace(key, "default_cpu0_task_stack_bytes = 0x40000"),
+        )
+        .unwrap();
+        assert_eq!(bytes().unwrap(), Some(0x4_0000));
+        std::fs::write(&policy, text.replace(key, "")).unwrap();
+        assert!(bytes().is_err());
+    }
+
+    #[test]
     fn a_load_records_every_layer_it_reads() {
         let repository = repository();
         let root = repository.path();
@@ -357,6 +418,8 @@ mod tests {
             "chips/esp32c5/platform/chip.toml",
             "chips/esp32c5/platform/modules/esp32-c5-wroom-1-n16r8.toml",
             "chips/esp32c5/platform/boards/esp32-c5-devkit.toml",
+            // The chip's stack policy sizes the default task stack.
+            "chips/esp32c5/platform/stack.toml",
         ]
         .iter()
         .map(|path| root.join(path))

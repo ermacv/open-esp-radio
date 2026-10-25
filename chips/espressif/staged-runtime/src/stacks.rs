@@ -4,7 +4,9 @@
 //! The staged chips take interrupts through a CLIC with hardware vectoring.
 //! The runtime owns both vector registers: `mtvec` names the exception entry
 //! `_start_trap` (CLIC mode) and `mtvt` the hart's table in
-//! `_runtime_mtvt`, 64 words per hart, in SRAM. The word of line `n` holds
+//! `_runtime_mtvt`, `VECTOR_TABLE_WORDS` per hart, in SRAM; the build
+//! generates the tables and every hart's line entries from the chip facts,
+//! and `vectors.s` holds their common entry and exit. The word of line `n` holds
 //! `_runtime_irq_h<hart>_l<n>`, which swaps `sp` with `mscratch` before its
 //! first memory access, saves the interrupted caller registers and
 //! `mstatus`, `mepc`, `mcause` and the CLIC threshold on the hart-local SRAM
@@ -57,8 +59,9 @@ use oer_riscv::{
     trigger::{self, mcontrol},
 };
 
-/// The harts with an interrupt stack.
-const HARTS: usize = if cfg!(feature = "two-harts") { 2 } else { 1 };
+/// The harts with an interrupt stack: the chip facts' harts.
+#[cfg(target_arch = "riscv32")]
+use crate::vectors::HARTS;
 
 /// Whether the trap exit raises the CLIC threshold before it clears
 /// `mstatus.MIE`: on the ESP32-C5 clearing MIE alone does not mask every
@@ -71,9 +74,11 @@ const HARTS: usize = if cfg!(feature = "two-harts") { 2 } else { 1 };
 #[cfg(target_arch = "riscv32")]
 const RAISE_THRESHOLD: bool = cfg!(feature = "esp32c5");
 
-/// The words of one hart's vector table in `_runtime_mtvt`: 256 bytes, the
-/// table's alignment, of which lines 0 to 47 are used.
-pub const VECTOR_TABLE_WORDS: usize = 64;
+/// The words of one hart's vector table in `_runtime_mtvt`, the table's
+/// alignment in words, generated from the chip facts
+/// (`vector-table-hart-slots`).
+#[cfg(any(feature = "esp32s31", feature = "esp32c5"))]
+pub use crate::vectors::VECTOR_TABLE_WORDS;
 
 #[cfg(target_arch = "riscv32")]
 static IRQ_PAINTED: [AtomicBool; HARTS] = [const { AtomicBool::new(false) }; HARTS];
@@ -171,7 +176,7 @@ fn vectors_of(hart: usize) -> (usize, usize) {
 /// # Safety
 ///
 /// Global interrupts must be disabled. The caller must execute on a hart with
-/// an interrupt stack (hart 0, or 1 with `two-harts`) in thread mode and must
+/// an interrupt stack (a hart of the chip's facts) in thread mode and must
 /// not enable interrupts until this function returns. The first installation
 /// must precede the hart's first interrupt admission. Reinstallation
 /// preserves the original paint.
@@ -388,11 +393,11 @@ pub fn current_hart_interrupt_stack_free_bytes() -> usize {
 
 #[cfg(target_arch = "riscv32")]
 core::arch::global_asm!(
+    include_str!(concat!(env!("OUT_DIR"), "/vectors.s")),
     include_str!("vectors.s"),
     fs = const status::FS_MASK,
     mie = const status::MIE,
     mintthresh = const clic::MINTTHRESH,
-    harts = const HARTS,
     raise_threshold = const RAISE_THRESHOLD as u8,
     tcontrol = const trigger::TCONTROL,
     mte = const trigger::TCONTROL_MTE,

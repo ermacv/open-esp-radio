@@ -193,14 +193,14 @@ SECTIONS
   __runtime_data_load_start = LOADADDR(.data);
   __runtime_data_load_end = LOADADDR(.data) + SIZEOF(.data);
 
-  /* PSRAM code is exposed through 64 KiB MMU pages. Keep even a small
+  /* PSRAM code is exposed through MMU pages. Keep even a small
      runtime backed by one complete page; otherwise the bootstrap can hand
      execution to an address whose final cache/MMU page is only partially
      represented by the relocated payload. Larger radio images keep their
      natural size instead of being rounded up on every build. */
   .runtime.payload_end ALIGN(__runtime_data_load_end, 16) : ALIGN(16)
   {
-    . = MAX(., ORIGIN(PSRAM_RUNTIME) + 0x10000 - 1);
+    . = MAX(., ORIGIN(PSRAM_RUNTIME) + MMU_PAGE_BYTES - 1);
     /* Keep one real byte after the final alignment. llvm-objcopy emits flat
        binaries from section contents, so an empty trailing alignment gap
        would otherwise be omitted from the embedded payload. */
@@ -338,13 +338,12 @@ ASSERT(__runtime_dma_bss_end <= ORIGIN(INTERNAL_LOW) + LENGTH(INTERNAL_LOW),
    is the proof the HAL's placement constructor relies on. A chip whose model
    names no DMA window holds no DMA storage. */
 INCLUDE dma-window.x
-/* The bootstrap's largest post-LTO frame is below 0.5 KiB. Keep a bounded
-   8-KiB transient handoff margin until `_runtime_stack_bootstrap` switches
-   CPU0 to PSRAM; unlike the former 64-KiB hole this is not a task stack and
-   cannot silently grow. */
+/* The bootstrap's largest post-LTO frame is below 0.5 KiB. Keep the
+   family's bounded transient handoff margin until `_runtime_stack_bootstrap`
+   switches CPU0 to PSRAM; it is not a task stack and cannot silently grow. */
 ASSERT(__runtime_dma_bss_end <=
-       ORIGIN(INTERNAL_LOW) + LENGTH(INTERNAL_LOW) - 0x2000,
-       "runtime SRAM owners overlap the 8-KiB bootstrap handoff margin");
+       ORIGIN(INTERNAL_LOW) + LENGTH(INTERNAL_LOW) - HANDOFF_SRAM_MARGIN_BYTES,
+       "runtime SRAM owners overlap the bootstrap handoff margin");
 ASSERT((__runtime_isr_load_start & 3) == 0 &&
        ((__runtime_isr_end - __runtime_isr_start) & 3) == 0,
        "runtime interrupt copy must be word aligned");

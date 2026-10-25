@@ -16,6 +16,9 @@ build = ["oer-espressif-staged-layout/build"]
 [dependencies]
 oer-espressif-staged-layout = { path = "../../espressif/staged-layout" }
 
+[build-dependencies]
+oer-espressif-facts = { path = "../../espressif/facts" }
+
 [lints]
 workspace = true
 

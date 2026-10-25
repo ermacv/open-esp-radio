@@ -49,10 +49,21 @@ table-handler = 8
 table-exemption-prefix = "__OER_INTERRUPT_EXEMPT_"
 # Each hart's table of 64 words, the word of line n at 4n; each line's
 # entry calls the line's handler directly and returns through the checked
-# exit (staged-runtime `vectors.s`).
+# exit. The staged runtime's build generates the entries, the tables and the
+# default handler of every line from these facts; `vectors.s` holds the
+# common entry and exit.
 vector-table-symbol = "_runtime_mtvt"
 vector-table-hart-slots = 64
 exception-entry-symbol = "_start_trap"
+# The CLIC of every hart: 48 lines, of which peripheral sources route to 16
+# to 47 (0 to 15 are the core's own), and three level bits, eight levels.
+#
+# SOURCE: ESP-IDF 4d59230d `soc/esp32s31/include/soc/clic_reg.h` and
+# `soc/esp32c5/include/soc/clic_reg.h` (48 lines, `CLIC_EXT_INTR_NUM_OFFSET`
+# 16) and `riscv/include/riscv/csr_clic.h` (`NLBITS` 3).
+lines = 48
+first-source-line = 16
+levels = 8
 # Maximum allocation of each hart's dedicated SRAM interrupt stack.
 irq-stack-bytes = 0x8000
 irq-stack-margin-percent = 10
@@ -67,7 +78,8 @@ level-writers = []
 # entry and hook in SRAM; the interrupt table's handlers in SRAM or ROM.
 # A rule with `per-hart = true` stands once for each of the chip's harts,
 # `{hart}` replaced by its number; `bytes-per-hart` sizes a rule by the
-# number of harts.
+# number of harts; `per-line = true` numbers `{n}` by every vector-entry
+# line (1 to `[interrupts] lines` less one).
 [placement]
 name = "psram-code-psram-data-psram-stack"
 image = { start = "__runtime_image_start", end = "__runtime_payload_end", origin = "runtime-psram" }
@@ -77,12 +89,14 @@ range = [
     { range = ["__runtime_isr_start", "__runtime_isr_end"], region = "sram" },
     { range = ["__runtime_critical_data_start", "__runtime_critical_bss_end"], region = "sram" },
     { range = ["__runtime_dma_data_start", "__runtime_dma_bss_end"], region = "sram" },
-    { range = ["_stack_end", "_stack_start"], region = "psram", bytes = 0x30000 },
+    # Sized by the image's policy, else by the chip's stack policy
+    # (`default_cpu0_task_stack_bytes` of chips/<id>/platform/stack.toml).
+    { range = ["_stack_end", "_stack_start"], region = "psram" },
     { range = ["__runtime_cpu{hart}_irq_stack_bottom", "__runtime_cpu{hart}_irq_stack_top"], region = "sram", maximum-bytes = 0x8000, per-hart = true },
 ]
 symbol = [
     { name = "_start_trap", bytes = 4, region = "sram" },
-    { name = "_runtime_irq_h{hart}_l{n}", numbers = [1, 47], bytes = 4, region = "sram", per-hart = true },
+    { name = "_runtime_irq_h{hart}_l{n}", per-line = true, bytes = 4, region = "sram", per-hart = true },
     { name = "_runtime_irq_exit", bytes = 4, region = "sram" },
     # Each hart's 64-word vector table (`vector-table-hart-slots`).
     { name = "_runtime_mtvt", bytes-per-hart = 256, region = "sram" },
@@ -94,7 +108,7 @@ interrupt-handlers = ["sram", "rom"]
 section = [{ prefix = ".critical", region = "sram" }]
 stack-swap = [
     { name = "_start_trap" },
-    { name = "_runtime_irq_h{hart}_l{n}", numbers = [1, 47], per-hart = true },
+    { name = "_runtime_irq_h{hart}_l{n}", per-line = true, per-hart = true },
 ]
 
 # The staged boot's host contract: the stage-two header the image pipeline
@@ -109,9 +123,26 @@ zeroed-inputs = [
     ".dma.bss", ".dma.bss.*",
     ".psram.bss", ".psram.bss.*", ".sbss", ".sbss.*", ".bss", ".bss.*", "COMMON",
 ]
-# The PSRAM page the bootstrap probes before it copies stage two
-# (chips/espressif/staged-layout memory.rs): stage two lies after it.
+# The PSRAM page the bootstrap probes before it copies stage two: stage two
+# lies after it.
 bootstrap-psram-bytes = 0x1_0000
+# The MMU page that maps flash and PSRAM: stage two's payload fills at least
+# one, and the bootstrap's flash text starts on one, after the image headers.
+#
+# SOURCE: esp-hal 1f646c5 `esp-metadata/devices/esp32s31/soc.toml` and
+# `esp-metadata/devices/esp32c5/soc.toml` (`[device.mmu] page_size = 0x10000`).
+mmu-page-bytes = 0x1_0000
+# The ESP image's 0x18-byte file header and 0x08-byte segment header before
+# the bootstrap's text, so that its flash and virtual addresses agree modulo
+# the MMU page.
+#
+# SOURCE: esp-hal 1f646c5 `esp-hal/ld/esp32s31/memory.x` (`ROM : ORIGIN =
+# 0x40000000 + 0x20`, from ESP-IDF `components/esp_system/ld/esp32s31/memory.ld.in`).
+image-segment-header-bytes = 0x20
+# SRAM at the top the runtime's SRAM sections leave free while CPU0 still
+# runs on the bootstrap's stack, until `_runtime_stack_bootstrap` switches to
+# the PSRAM task stack; the bootstrap's largest frame is below 0.5 KiB.
+handoff-sram-margin-bytes = 0x2000
 
 # The stage-two header: little-endian words; "STG2" magic, the handoff ABI
 # version, the header's own size and the payload CRC-32 (computed with its

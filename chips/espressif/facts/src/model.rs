@@ -70,11 +70,12 @@ impl Region {
     }
 }
 
-/// The address map host tools check images against.
+/// The address map host tools check images against and the chip's layout
+/// crate (`chips/<id>/layout`) generates its `LAYOUT` from.
 ///
-/// The chip names its SRAM, its flash window and where PSRAM lies; the
-/// module names the PSRAM's size; `runtime_psram` is the PSRAM after the
-/// family's bootstrap probe page.
+/// The chip names its SRAM, its flash window, where PSRAM lies and its
+/// retained memory; the module names the PSRAM's size; `runtime_psram` is the
+/// PSRAM after the family's bootstrap probe page.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Memory {
@@ -87,6 +88,14 @@ pub struct Memory {
     /// Where a staged boot's runtime is linked.
     #[serde(default)]
     pub runtime_psram: Option<Region>,
+    /// Memory no reset entry initializes (the chip's RTC fast or LP RAM),
+    /// which keeps the panic record across a reset.
+    #[serde(default)]
+    pub retained: Option<Region>,
+    /// The one cache window flash and PSRAM share, on a chip whose MMU maps
+    /// both through it: `flash-xip` and the PSRAM lie inside it.
+    #[serde(default)]
+    pub cache_window: Option<Region>,
     /// The region the runtime's task stacks lie in, by [`Memory::region`]
     /// name.
     pub task_stacks: String,
@@ -108,6 +117,48 @@ impl Memory {
     /// The region the task stacks lie in.
     pub fn task_stack_region(&self) -> Option<Region> {
         self.region(&self.task_stacks)
+    }
+
+    /// SRAM lies below PSRAM (the trap entries tell an interrupt stack from a
+    /// task stack by address), flash and PSRAM lie in the shared cache window
+    /// of a chip that has one, and the boot chain's loader and retained tail
+    /// lie in SRAM and the retained memory.
+    pub(crate) fn validate(&self, boot_chain: Option<&BootChain>) -> Result<()> {
+        if self
+            .psram
+            .is_some_and(|psram| self.sram.end() > psram.origin)
+        {
+            return Err("SRAM must lie below PSRAM".into());
+        }
+        if let Some(window) = self.cache_window {
+            let inside = |region: Region| {
+                window.contains_range(u64::from(region.origin), u64::from(region.end()))
+            };
+            if !inside(self.flash_xip) || self.psram.is_some_and(|psram| !inside(psram)) {
+                return Err("flash and PSRAM must lie in the shared cache window".into());
+            }
+            if self
+                .psram
+                .is_some_and(|psram| self.flash_xip.end() > psram.origin)
+            {
+                return Err("the flash half of the cache window must end below PSRAM".into());
+            }
+        }
+        if let Some(chain) = boot_chain {
+            if !self.sram.contains_range(
+                u64::from(chain.second_stage_loader_start),
+                u64::from(self.sram.end()),
+            ) {
+                return Err("the second-stage loader must start in SRAM".into());
+            }
+            if self
+                .retained
+                .is_none_or(|retained| chain.retained_reserved_tail > retained.length)
+            {
+                return Err("the boot chain's retained tail needs the retained memory".into());
+            }
+        }
+        Ok(())
     }
 
     /// The cached regions: code there cannot run while the cache is off.
@@ -149,6 +200,14 @@ pub struct InterruptContract {
     /// word `h * vector_table_hart_slots + n`.
     pub vector_table_hart_slots: u32,
     pub exception_entry_symbol: String,
+    /// The CPU lines of each hart's CLIC: `0..lines`, each with its word in
+    /// the hart's vector table; line 0 is the exception entry's.
+    pub lines: u32,
+    /// The first line a peripheral source may be routed to; the lines below
+    /// it are the core's own.
+    pub first_source_line: u32,
+    /// The levels a line can hold: `1..=levels`.
+    pub levels: u32,
     pub harts: Vec<u32>,
     pub level_writers: Vec<LevelWriter>,
     /// Maximum allocation of each hart's dedicated SRAM interrupt stack.
@@ -179,7 +238,27 @@ impl InterruptContract {
         self.irq_stack_bytes - self.irq_stack_guard_bytes[&hart]
     }
 
+    /// The vector-entry lines of each hart: every line but line 0.
+    pub fn vector_lines(&self) -> core::ops::Range<u32> {
+        1..self.lines
+    }
+
     pub(crate) fn validate(&self) -> Result<()> {
+        if self.lines < 2
+            || self.lines > self.vector_table_hart_slots
+            || !self.vector_table_hart_slots.is_power_of_two()
+            || self.first_source_line == 0
+            || self.first_source_line >= self.lines
+        {
+            return Err(
+                "the CLIC's lines must fit the vector table, a power of two of words, \
+                 and the source lines must lie above line 0 and below `lines`"
+                    .into(),
+            );
+        }
+        if self.levels == 0 || self.levels > 256 || !self.levels.is_power_of_two() {
+            return Err("a line's levels must be a power of two from 1 to 256".into());
+        }
         let harts: alloc::collections::BTreeSet<_> = self.harts.iter().copied().collect();
         if harts.len() != self.harts.len()
             || harts.is_empty()
@@ -211,7 +290,33 @@ pub struct StagedBoot {
     /// The PSRAM page the bootstrap probes before it copies stage two; stage
     /// two lies after it.
     pub bootstrap_psram_bytes: u32,
+    /// The page of the MMU that maps flash and PSRAM: stage two's payload
+    /// fills at least one, and the bootstrap's text starts on one.
+    pub mmu_page_bytes: u32,
+    /// The ESP image's file and segment headers before the bootstrap's
+    /// flash-mapped text in its first MMU page.
+    pub image_segment_header_bytes: u32,
+    /// SRAM at the top the runtime's own SRAM sections leave free while the
+    /// bootstrap's stack still runs there, until stage two switches stacks.
+    pub handoff_sram_margin_bytes: u32,
+    /// The cold flash the bootstrap keeps for its flash timing tuning; zero
+    /// on a chip whose bootstrap does not tune flash.
+    pub flash_tuning_reference_bytes: u32,
     pub stage_two: StageTwo,
+}
+
+/// The `[boot-chain]` table: what the pinned ESP-IDF second-stage
+/// bootloader keeps for itself.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct BootChain {
+    /// Start of the loader's `iram_loader_seg`. The loader runs from here
+    /// while it loads the bootstrap image, so every segment of that image it
+    /// loads ends below this address.
+    pub second_stage_loader_start: u32,
+    /// Bytes at the end of the retained memory the bootloader and the RTC
+    /// timer keep.
+    pub retained_reserved_tail: u32,
 }
 
 /// The stage-two image header the image pipeline packs: little-endian
@@ -243,6 +348,9 @@ pub struct Rom {
     /// ROM code no shipped image may call into.
     #[serde(default)]
     pub forbidden: Vec<RomRange>,
+    /// The ROM symbol script the images link with, relative to the chip's
+    /// layout crate's `linker` directory (`chips/<id>/layout/linker`).
+    pub linker_script: String,
 }
 
 /// A named ROM address range, `start..end`.

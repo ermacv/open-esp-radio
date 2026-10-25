@@ -8,13 +8,11 @@ publish = false
 description = "Stage-two entry, relocation, traps, per-hart interrupt stacks, critical-section and panic record of the Espressif staged boot"
 
 [features]
-# The chip; an image selects exactly one. esp-hal remains for the panic's
+# The chip; an image selects exactly one. The build generates the vectors
+# from its facts (its harts and CLIC lines); esp-hal remains for the panic's
 # software reset alone.
 esp32s31 = ["esp-hal/esp32s31"]
 esp32c5 = ["esp-hal/esp32c5"]
-# A second hart: its SRAM interrupt stack and vector table (the chip
-# layout's `harts` is 2).
-two-harts = []
 ## Hart 1 runs code. No image enables it, and the crate refuses it: the
 ## runtime's critical-section masks only the current hart, so a second
 ## running hart needs a cross-hart lock without spinning first.
@@ -33,6 +31,9 @@ oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 critical-section = { workspace = true, features = ["restore-state-u32"] }
 esp-hal = { workspace = true }
+
+[build-dependencies]
+oer-espressif-facts = { path = "../facts" }
 
 [dev-dependencies]
 tempfile = "=3.27.0"

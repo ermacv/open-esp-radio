@@ -9,6 +9,11 @@ coverage_policy = "../../espressif/staged-layout/stack-coverage.toml"
 # selected runtime image.
 max_move_bytes = 4096
 
+# The CPU0 task stack of an image whose policy sets no `allocation_bytes`
+# and that does not declare it proven (192 KiB in PSRAM). The chip's layout
+# crate links it and the chip profile's placement rule holds the image to it.
+default_cpu0_task_stack_bytes = 0x30000
+
 # Each stack is bounded from the function that runs on it from its top: the
 # worst-case call chain of that root, from the image's machine code and the
 # pinned ROM, must leave the stack's storage `minimum_free_bytes`. A root that

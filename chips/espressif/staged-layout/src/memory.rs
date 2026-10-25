@@ -1,6 +1,7 @@
 //! The address map of a staged boot.
 //!
-//! A chip's platform states its [`Layout`] once; sizes describe the board's
+//! Each chip's layout crate (`chips/<chip>/layout`) generates its [`Layout`]
+//! from the chip facts (`oer-espressif-facts`); sizes describe the module's
 //! fitted memories and the staged-boot contract, not universal chip
 //! capabilities.
 
@@ -44,14 +45,6 @@ impl Region {
     }
 }
 
-/// Bytes of the ESP image segment header preceding the bootstrap's
-/// Flash-mapped text in its first MMU page.
-pub const ESP_IMAGE_SEGMENT_HEADER_BYTES: u32 = 0x20;
-
-/// PSRAM page the bootstrap probes before it copies stage two; stage two
-/// starts on the next 64-KiB MMU page.
-pub const BOOTSTRAP_PSRAM_BYTES: u32 = 0x1_0000;
-
 /// One chip's staged-boot address map and stack sizes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Layout {
@@ -68,13 +61,26 @@ pub struct Layout {
     /// The cached external RAM aperture of the fitted PSRAM, where the
     /// bootstrap maps it.
     pub psram: Region,
+    /// PSRAM page the bootstrap probes before it copies stage two; stage two
+    /// starts after it.
+    pub bootstrap_psram_bytes: u32,
+    /// The MMU page that maps flash and PSRAM: stage two's payload fills at
+    /// least one, and the bootstrap's flash text starts on one.
+    pub mmu_page_bytes: u32,
+    /// Bytes of the ESP image's headers preceding the bootstrap's
+    /// flash-mapped text in its first MMU page.
+    pub image_segment_header_bytes: u32,
+    /// SRAM at the top the runtime's SRAM sections leave free while CPU0
+    /// still runs on the bootstrap's stack.
+    pub handoff_sram_margin_bytes: u32,
     /// Memory that no reset entry initializes, which keeps the panic record
     /// across a reset (`.rtc_fast.persistent`).
     pub retained: Region,
     /// Bytes at the end of [`Self::retained`] that ESP-IDF's bootloader and
     /// RTC timer keep.
     pub retained_reserved_tail: u32,
-    /// Stage two's CPU0 task stack in PSRAM.
+    /// Stage two's CPU0 task stack in PSRAM when the image's policy names
+    /// none: the chip's stack policy's `default_cpu0_task_stack_bytes`.
     pub cpu0_task_stack_bytes: u32,
     /// Maximum IRQ allocation per hart; proven images are sized at link time.
     pub irq_stack_bytes: u32,
@@ -84,29 +90,37 @@ pub struct Layout {
     /// zero on a chip whose bootstrap does not tune Flash.
     pub flash_tuning_reference_bytes: u32,
     /// The ROM symbol script of the chip's `linker` directory the images link
-    /// with, such as `rom/esp32s31-eco0.x`.
+    /// with, such as `rom/esp32s31-eco0.x` (`[rom] linker-script`).
     pub rom_script: &'static str,
 }
 
 impl Layout {
     /// The bootstrap's Flash-mapped text, after the ESP image segment header.
     pub const fn bootstrap_flash_text(&self) -> Region {
-        self.flash_xip.after(ESP_IMAGE_SEGMENT_HEADER_BYTES)
+        self.flash_xip.after(self.image_segment_header_bytes)
     }
 
     /// Stage two relocated to PSRAM, following the bootstrap's probe page.
     pub const fn runtime_psram(&self) -> Region {
-        self.psram.after(BOOTSTRAP_PSRAM_BYTES)
+        self.psram.after(self.bootstrap_psram_bytes)
     }
 
     /// Panics unless every derived region stays inside its memory, the loader
-    /// lies in SRAM and the interrupt stacks lie below every task stack (the
-    /// trap entries tell the interrupt stack from a task stack by address).
-    /// A chip's layout calls this in a `const` item.
+    /// lies in SRAM, the interrupt stacks lie below every task stack (the
+    /// trap entries tell the interrupt stack from a task stack by address)
+    /// and the pages are pages. A chip's generated layout calls this in a
+    /// `const` item.
     pub const fn check(&self) {
         assert!(self.flash_xip.contains(self.bootstrap_flash_text()));
         assert!(self.psram.contains(self.runtime_psram()));
-        assert!(self.runtime_psram().origin >= self.psram.origin + BOOTSTRAP_PSRAM_BYTES);
+        assert!(self.runtime_psram().origin >= self.psram.origin + self.bootstrap_psram_bytes);
+        assert!(self.mmu_page_bytes.is_power_of_two());
+        assert!(
+            self.bootstrap_psram_bytes
+                .is_multiple_of(self.mmu_page_bytes)
+        );
+        assert!(self.image_segment_header_bytes < self.mmu_page_bytes);
+        assert!(self.handoff_sram_margin_bytes < self.sram.length);
         assert!(self.sram.contains_range(
             self.second_stage_loader_start as u64,
             self.sram.end() as u64
@@ -117,6 +131,7 @@ impl Layout {
         // Per-hart guards belong to chip.toml and are checked by the image
         // linker; this chip-neutral layout only constrains the allocation.
         assert!(self.irq_stack_bytes >= 16 && self.irq_stack_bytes % 16 == 0);
+        assert!(self.cpu0_task_stack_bytes >= 16 && self.cpu0_task_stack_bytes.is_multiple_of(16));
     }
 }
 

@@ -54,6 +54,7 @@ fn link(bin: &str, layout: &Layout, chip_linker_dir: &Path, scripts: &[&str], en
     ] {
         println!("cargo:rustc-link-arg-bin={bin}={argument}");
     }
+    defsym(bin, "MMU_PAGE_BYTES", layout.mmu_page_bytes);
     for (name, region) in [
         ("SRAM", layout.sram),
         ("PSRAM", layout.psram),
@@ -123,6 +124,10 @@ pub fn configure_runtime(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
         ),
         ("HART_COUNT", layout.harts),
         ("RETAINED_RESERVED_TAIL", layout.retained_reserved_tail),
+        (
+            "HANDOFF_SRAM_MARGIN_BYTES",
+            layout.handoff_sram_margin_bytes,
+        ),
     ] {
         defsym(bin, name, value);
     }
@@ -220,6 +225,11 @@ pub fn configure_bootstrap(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
     let text = layout.bootstrap_flash_text();
     defsym(bin, "BOOTSTRAP_FLASH_TEXT_ORIGIN", text.origin);
     defsym(bin, "BOOTSTRAP_FLASH_TEXT_LENGTH", text.length);
+    defsym(
+        bin,
+        "IMAGE_SEGMENT_HEADER_BYTES",
+        layout.image_segment_header_bytes,
+    );
     defsym(
         bin,
         "SECOND_STAGE_LOADER_START",

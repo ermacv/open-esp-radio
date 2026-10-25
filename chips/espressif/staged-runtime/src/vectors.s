@@ -1,10 +1,14 @@
     // The runtime's traps: the exception entry `mtvec` names, one entry per
     // hart and CPU line in the hart's vector table (`mtvt`), and their one
-    // checked exit. `stacks.rs` assembles this text with its operands:
+    // checked exit. The runtime's build generates, from the chip facts' lines
+    // and harts, the macros `RUNTIME_IRQ_ENTRIES` (an `IRQ_ENTRY hart, line`
+    // for every line but 0 of every hart) and `RUNTIME_VECTOR_TABLES` (each
+    // hart's table); this text holds what every entry shares and invokes
+    // them. `stacks.rs` assembles the generated text and this one with the
+    // operands:
     //   {fs}               mstatus.FS
     //   {mie}              mstatus.MIE
     //   {mintthresh}       the CLIC threshold CSR
-    //   {harts}            the harts with an interrupt stack (1 or 2)
     //   {raise_threshold}  1 when clearing MIE alone does not mask the CLIC
     //   {tcontrol}         the trigger control CSR
     //   {mte}              tcontrol.MTE
@@ -173,16 +177,7 @@ _runtime_irq_h\hart\()_l\line:
     .size _runtime_irq_h\hart\()_l\line, . - _runtime_irq_h\hart\()_l\line
     .endm
 
-    .macro HART_ENTRIES hart
-    .irp line, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47
-    IRQ_ENTRY \hart, \line
-    .endr
-    .endm
-
-    HART_ENTRIES 0
-    .if {harts} > 1
-    HART_ENTRIES 1
-    .endif
+    RUNTIME_IRQ_ENTRIES
 
     .balign 4
     .global _runtime_irq_exit
@@ -223,27 +218,16 @@ _runtime_irq_exit:
     mret
     .size _runtime_irq_exit, . - _runtime_irq_exit
 
-    // Each hart's hardware-vector table: 64 words from a 256-byte boundary,
-    // the word of line n at 4n. Line zero has no entry (exceptions use
-    // mtvec); lines 48 to 63 do not exist.
-    .macro HART_TABLE hart
-    .balign 256
-    .word 0
-    .irp line, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47
-    .word _runtime_irq_h\hart\()_l\line
-    .endr
-    .fill 16, 4, 0
-    .endm
-
+    // Each hart's hardware-vector table (generated): its words from a
+    // boundary of its size, the word of line n at 4n. Line zero has no entry
+    // (exceptions use mtvec), nor have the words past the chip's lines. The
+    // section holds the tables alone, so the first table's alignment is the
+    // section's and `_runtime_mtvt` its first word.
     .section .trap.mtvt, "a", @progbits
-    .balign 256
     .global _runtime_mtvt
     .type _runtime_mtvt, @object
 _runtime_mtvt:
-    HART_TABLE 0
-    .if {harts} > 1
-    HART_TABLE 1
-    .endif
+    RUNTIME_VECTOR_TABLES
     .size _runtime_mtvt, . - _runtime_mtvt
 
     .option pop

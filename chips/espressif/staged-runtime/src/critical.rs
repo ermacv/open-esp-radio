@@ -13,8 +13,8 @@
 //!
 //! The section is hart-local and takes no lock, so only one hart may run
 //! code: an image whose hart 1 runs (`cpu1-runs`) does not build until a
-//! cross-hart lock without spinning exists. `two-harts` alone reserves
-//! hart 1's interrupt stack and vectors and starts nothing.
+//! cross-hart lock without spinning exists. A second hart of the chip's
+//! facts alone has its interrupt stack and vectors and starts nothing.
 //!
 //! SOURCE: esp-hal 1f646c5 `esp-sync/src/raw.rs` (`SingleCoreInterruptLock`:
 //! the raised threshold, the token's layout, the order of release and the

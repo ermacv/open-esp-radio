@@ -36,12 +36,17 @@ bootloader-mode = "dio"
 # How a written image starts: the writer's hard reset.
 start = "reset"
 
-# The staged-boot address map as host tools check images against it: the
-# firmware's own copy is chips/esp32s31/layout (LAYOUT), which the linker
-# scripts read. The PSRAM's size is the module's; stage two lies in it after
-# the bootstrap's probe page (`runtime-psram`).
+# The staged-boot address map: host tools check images against it, and
+# chips/esp32s31/layout generates its LAYOUT, which the linker scripts read,
+# from it. The PSRAM's size is the module's; stage two lies in it after the
+# bootstrap's probe page (`runtime-psram`).
 [memory]
-# Application-owned internal SRAM (ESP-IDF's SRAM_START..SRAM_SEG_END).
+# Application-owned internal SRAM, `SRAM_START..SRAM_SEG_END` of ESP-IDF's
+# application memory map; the ROM boot stack side lies above it.
+#
+# SOURCE: ESP-IDF 4d59230d `components/esp_system/ld/esp32s31/ld.hp_mem_defs:9`
+# (`SRAM_SEG_END 0x2F07AFC0`) and `memory.ld.in:21-26`
+# (`SRAM_SIZE = SRAM_SEG_END - SRAM_START`, without the ULP HP-memory reserve).
 sram = { origin = 0x2f000000, length = 0x0007afc0 }
 # The unified 64-MiB Flash XIP instruction/data window.
 #
@@ -54,8 +59,34 @@ sram = { origin = 0x2f000000, length = 0x0007afc0 }
 flash-xip = { origin = 0x40000000, length = 0x04000000 }
 # Where the module's PSRAM lies: the start of the cached external RAM aperture.
 psram-origin = 0x50000000
+# LP RAM (RTC fast memory), which no reset entry initializes.
+#
+# SOURCE: ESP-IDF 4d59230d `components/esp_system/ld/esp32s31/memory.ld.in`
+# (lp_reserved_seg at 0x2E008000 - RESERVE_RTC_MEM).
+retained = { origin = 0x2e000000, length = 0x8000 }
 # The runtime's task stacks lie in PSRAM.
 task-stacks = "psram"
+
+# What the pinned second-stage bootloader keeps for itself.
+[boot-chain]
+# SOURCE: ESP-IDF 4d59230d
+# `components/bootloader/subproject/main/ld/esp32s31/bootloader.memory.ld.in:39-64`
+# (usable end 0x2f07afb0 minus the 0x2000 stack, 0x5000 `dram_seg` and 0x7000
+# `iram_loader_seg`; asserted as `bootloader_iram_loader_seg_start`).
+second-stage-loader-start = 0x2f06cfb0
+# ESP-IDF keeps the tail of LP RAM as lp_reserved_seg: the RTC timer data
+# (RTC_TIMER_RESERVE_RTC, 24 bytes) + the bootloader's retained data + the
+# secure-boot fast-wake digest; the espflash bootloader this platform boots
+# through enables neither of the last two.
+#
+# SOURCE: ESP-IDF 4d59230d `components/esp_system/ld/esp32s31/memory.ld.in`
+# (lp_reserved_seg, RESERVE_RTC_MEM).
+retained-reserved-tail = 24
+
+# The bootstrap's `Flash::tune_120mhz` needs at least fifteen distinct 4-KiB
+# XIP pages.
+[staged]
+flash-tuning-reference-bytes = 0x1_0000
 
 # The chip's harts and the guard of each one's interrupt stack; the family
 # states the rest of the interrupt contract.
@@ -86,6 +117,9 @@ starters = [
 # checks fail when a root's walk reaches it.
 [rom]
 elf = "rom"
+# SOURCE: ESP-IDF 4d59230d `components/esp_rom/esp32s31/ld/esp32s31.rom.ld`
+# (the ECO0 ROM of the board's revision 0 chip).
+linker-script = "rom/esp32s31-eco0.x"
 summaries = "chips/esp32s31/platform/rom-functions.toml"
 forbidden = [
     { name = "eco0-radio-api", start = 0x2f800bf0, end = 0x2f8016bc },

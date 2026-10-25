@@ -26,6 +26,7 @@ use alloc::{
 use serde::Deserialize;
 use toml::{Table, Value};
 
+pub mod generate;
 mod irq_stack;
 mod layers;
 mod model;
@@ -162,6 +163,8 @@ pub struct Facts {
     pub core_start: Option<CoreStart>,
     /// The staged boot's host contract; a chip with images names it.
     pub staged: Option<StagedBoot>,
+    /// What the pinned second-stage bootloader keeps for itself.
+    pub boot_chain: Option<BootChain>,
     /// Where the host reads why the chip last reset; `None` for a chip whose
     /// stand cannot prove a power loss.
     pub reset_cause: Option<ResetCause>,
@@ -201,6 +204,8 @@ struct Stated {
     #[serde(default)]
     staged: Option<StagedBoot>,
     #[serde(default)]
+    boot_chain: Option<BootChain>,
+    #[serde(default)]
     reset_cause: Option<ResetCause>,
     #[serde(default)]
     observed_functions: Vec<String>,
@@ -239,6 +244,10 @@ struct StatedMemory {
     flash_xip: Region,
     #[serde(default)]
     psram_origin: Option<u32>,
+    #[serde(default)]
+    retained: Option<Region>,
+    #[serde(default)]
+    cache_window: Option<Region>,
     task_stacks: String,
 }
 
@@ -247,7 +256,7 @@ impl Facts {
     /// `origin`, for messages): every fact key, and no other.
     pub fn from_table(id: &str, origin: &str, mut table: Table) -> Result<Self> {
         let at = |error: Error| Error::from(format!("{origin}: {error}"));
-        expand_harts(&mut table).map_err(at)?;
+        expand_rules(&mut table).map_err(at)?;
         let stated: Stated = table
             .try_into()
             .map_err(|error| at(format!("{error}").into()))?;
@@ -335,6 +344,8 @@ impl Facts {
                     flash_xip: memory.flash_xip,
                     psram,
                     runtime_psram,
+                    retained: memory.retained,
+                    cache_window: memory.cache_window,
                     task_stacks: memory.task_stacks,
                 })
             })
@@ -355,6 +366,7 @@ impl Facts {
             placement: stated.placement,
             core_start: stated.core_start,
             staged: stated.staged,
+            boot_chain: stated.boot_chain,
             reset_cause: stated.reset_cause,
             observed_functions: stated.observed_functions,
             module,
@@ -391,6 +403,9 @@ impl Facts {
         if let Some(interrupts) = &self.interrupts {
             interrupts.validate()?;
         }
+        if let Some(memory) = &self.memory {
+            memory.validate(self.boot_chain.as_ref())?;
+        }
         if (self.properties.cores > 1) != self.core_start.is_some() {
             return Err(
                 "`[core-start]` is named by exactly the chips with more than one core".into(),
@@ -408,16 +423,20 @@ impl Facts {
     }
 }
 
-/// Expand the placement rules of the chip's harts: a rule with
+/// Expand the placement rules of the chip's harts and lines: a rule with
 /// `per-hart = true` stands once for each hart, `{hart}` replaced by its
-/// number, and a rule with `bytes-per-hart` has `bytes` of that many for
-/// each hart.
-fn expand_harts(table: &mut Table) -> Result<()> {
-    let harts: Option<Vec<i64>> = table
-        .get("interrupts")
+/// number, a rule with `bytes-per-hart` has `bytes` of that many for each
+/// hart, and a rule with `per-line = true` numbers `{n}` by every vector-entry
+/// line, 1 to `[interrupts] lines` less one.
+fn expand_rules(table: &mut Table) -> Result<()> {
+    let interrupts = table.get("interrupts");
+    let harts: Option<Vec<i64>> = interrupts
         .and_then(|interrupts| interrupts.get("harts"))
         .and_then(Value::as_array)
         .map(|harts| harts.iter().filter_map(Value::as_integer).collect());
+    let lines = interrupts
+        .and_then(|interrupts| interrupts.get("lines"))
+        .and_then(Value::as_integer);
     let Some(Value::Table(placement)) = table.get_mut("placement") else {
         return Ok(());
     };
@@ -431,6 +450,31 @@ fn expand_harts(table: &mut Table) -> Result<()> {
                 expanded.push(rule);
                 continue;
             };
+            match fields.remove("per-line") {
+                None => {}
+                Some(Value::Boolean(true)) => {
+                    if fields.contains_key("numbers") {
+                        return Err(format!(
+                            "a per-line `[placement] {kind}` rule takes its numbers from the lines"
+                        )
+                        .into());
+                    }
+                    let last = lines.filter(|&lines| lines > 1).ok_or_else(|| {
+                        Error::from(format!(
+                            "a per-line `[placement] {kind}` rule needs `[interrupts] lines`"
+                        ))
+                    })? - 1;
+                    fields.insert(
+                        "numbers".to_string(),
+                        Value::Array(alloc::vec![Value::Integer(1), Value::Integer(last)]),
+                    );
+                }
+                Some(_) => {
+                    return Err(
+                        format!("a `[placement] {kind}` rule's `per-line` is not `true`").into(),
+                    );
+                }
+            }
             let per_hart = fields.remove("per-hart");
             let bytes_per_hart = fields.remove("bytes-per-hart");
             if per_hart.is_none() && bytes_per_hart.is_none() {
@@ -639,6 +683,63 @@ pub(crate) mod tests {
             error.to_string().contains("needs `[interrupts] harts`"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn a_per_line_rule_numbers_every_vector_entry_line() {
+        for id in ["esp32s31", "esp32c5"] {
+            let placement = tracked(id).placement.expect("placement");
+            let entries = placement
+                .symbol
+                .iter()
+                .find(|rule| rule.name == "_runtime_irq_h0_l{n}")
+                .expect("hart 0's entries");
+            assert_eq!(entries.numbers, Some([1, 47]), "{id}");
+            assert!(
+                placement
+                    .stack_swap
+                    .iter()
+                    .any(|rule| rule.numbers == Some([1, 47])),
+                "{id}"
+            );
+        }
+        let rule = |extra: &str| {
+            format!(
+                "{CHIP}[interrupts]\nlines = 4\n[placement]\nname = 'p'\n\
+                 symbol = [{{ name = 'e{{n}}', bytes = 4, region = 'sram', per-line = true{extra} }}]\n"
+            )
+        };
+        let table: Table = toml::from_str(&rule("")).expect("valid TOML");
+        let mut table = table;
+        expand_rules(&mut table).expect("expands");
+        assert_eq!(
+            table["placement"]["symbol"][0]["numbers"],
+            Value::Array(alloc::vec![Value::Integer(1), Value::Integer(3)])
+        );
+        let mut doubled: Table = toml::from_str(&rule(", numbers = [1, 2]")).expect("valid");
+        assert!(expand_rules(&mut doubled).is_err());
+        let mut no_lines: Table =
+            toml::from_str(&rule("").replace("lines = 4\n", "")).expect("valid");
+        assert!(expand_rules(&mut no_lines).is_err());
+    }
+
+    #[test]
+    fn flash_and_psram_lie_in_the_shared_cache_window_and_the_loader_in_sram() {
+        let c5 = tracked("esp32c5");
+        let memory = c5.memory.clone().expect("memory");
+        assert!(memory.validate(c5.boot_chain.as_ref()).is_ok());
+        let mut narrow = memory.clone();
+        narrow.cache_window = Some(Region {
+            origin: 0x4200_0000,
+            length: 0x0100_0000,
+        });
+        assert!(narrow.validate(None).is_err(), "PSRAM outside the window");
+        let mut chain = c5.boot_chain.clone().expect("boot chain");
+        chain.second_stage_loader_start = memory.sram.end() + 4;
+        assert!(memory.validate(Some(&chain)).is_err());
+        let mut chain = c5.boot_chain.clone().expect("boot chain");
+        chain.retained_reserved_tail = 0x1_0000;
+        assert!(memory.validate(Some(&chain)).is_err());
     }
 
     #[test]

@@ -44,21 +44,63 @@ bootloader-mode = "dio"
 # reset out of download mode leaves the esp32c5's USB console silent.
 start = "power-on"
 
-# The staged-boot address map as host tools check images against it: the
-# firmware's own copy is chips/esp32c5/layout (LAYOUT), which the linker
-# scripts read. One MMU window (0x42000000..0x44000000) serves flash and
-# PSRAM: the bootstrap's flash pages in its lower half, the module's PSRAM
-# at the fixed start of its upper half. Stage two lies in the PSRAM after the
-# bootstrap's probe page (`runtime-psram`).
+# The staged-boot address map: host tools check images against it, and
+# chips/esp32c5/layout generates its LAYOUT, which the linker scripts read,
+# from it. One MMU window serves flash and PSRAM: the bootstrap's flash pages
+# in its lower half, the module's PSRAM at the fixed start of its upper half.
+# Stage two lies in the PSRAM after the bootstrap's probe page
+# (`runtime-psram`).
 [memory]
-# Application-owned internal SRAM (ESP-IDF's SRAM_START..SRAM_SEG_END).
+# Application-owned internal SRAM, `SRAM_START..SRAM_SEG_END`; the
+# second-stage loader, the ROM's download buffers, its stack and its data lie
+# above it.
+#
+# SOURCE: ESP-IDF 4d59230d `components/esp_system/ld/esp32c5/ld.hp_mem_defs:9`
+# (`SRAM_SEG_END 0x4084E5A0`) and `components/soc/esp32c5/include/soc/soc.h:156`
+# (`SOC_DRAM_LOW 0x40800000`).
 sram = { origin = 0x40800000, length = 0x0004e5a0 }
-# The flash half of the shared cache window.
+# The cache window flash and PSRAM share.
+#
+# SOURCE: ESP-IDF 4d59230d `components/soc/esp32c5/include/soc/soc.h:144-149`
+# (`SOC_IROM_LOW 0x42000000`, `SOC_IROM_HIGH 0x44000000`, DROM the same) and
+# `soc_caps.h:309` (`SOC_MMU_DI_VADDR_SHARED`); esp-hal's metadata places
+# PSRAM in it (`esp-metadata/devices/esp32c5/soc.toml` `extmem_origin`).
+cache-window = { origin = 0x42000000, length = 0x02000000 }
+# The lower half of the cache window: the bootstrap's text and read-only
+# data, mapped by the second-stage loader from the window's start.
 flash-xip = { origin = 0x42000000, length = 0x01000000 }
-# Where the bootstrap maps the module's PSRAM.
+# Where the bootstrap maps the module's PSRAM: the start of the window's
+# upper half, a multiple of its 64-KiB MMU pages (esp-hal `PsramOrigin::Fixed`).
 psram-origin = 0x43000000
+# LP RAM, which no reset entry initializes: the panic record survives every
+# reset but a power loss.
+#
+# SOURCE: ESP-IDF 4d59230d `components/soc/esp32c5/include/soc/soc.h:160-161`
+# (`SOC_RTC_DRAM_LOW 0x50000000`, `SOC_RTC_DRAM_HIGH 0x50004000`).
+retained = { origin = 0x50000000, length = 0x4000 }
 # The runtime's task stacks lie in PSRAM.
 task-stacks = "psram"
+
+# What the pinned second-stage bootloader keeps for itself.
+[boot-chain]
+# SOURCE: ESP-IDF 4d59230d
+# `components/bootloader/subproject/main/ld/esp32c5/bootloader.memory.ld.in:26-51`
+# (usable end 0x4085c5a0 minus the 0x2000 stack, 0x5000 `dram_seg` and 0x7000
+# `iram_loader_seg`; asserted as `bootloader_iram_loader_seg_start`).
+second-stage-loader-start = 0x4084e5a0
+# ESP-IDF keeps the tail of LP RAM as lp_reserved_seg: the RTC timer data
+# (RTC_TIMER_RESERVE_RTC, 24 bytes) + the bootloader's retained data; the
+# espflash bootloader this platform boots through reserves none.
+#
+# SOURCE: ESP-IDF 4d59230d `components/esp_system/ld/esp32c5/memory.ld.in:86-136`
+# (lp_reserved_seg at 0x50004000 - RESERVE_RTC_MEM) and
+# `components/esp_system/ld/ld.common:64`.
+retained-reserved-tail = 24
+
+# The bootstrap does not tune flash: esp-hal runs the ESP32-C5 MSPI at the
+# image header's 80 MHz.
+[staged]
+flash-tuning-reference-bytes = 0
 
 # The chip's hart and the guard of its interrupt stack; the family states
 # the rest of the interrupt contract. One hart, no inter-processor call.
@@ -72,6 +114,9 @@ irq-stack-guard-bytes = { "0" = 4096 }
 # (chips/esp32c5/layout/linker/rom/esp32c5-eco2.x).
 [rom]
 elf = "rom-rev100"
+# SOURCE: ESP-IDF 4d59230d `components/esp_rom/esp32c5/ld/esp32c5.rom.ld`
+# (the ECO2 ROM the images link).
+linker-script = "rom/esp32c5-eco2.x"
 summaries = "chips/esp32c5/platform/rom-functions.toml"
 
 # The HIL agent's graph is the source-only stack: the root lock and

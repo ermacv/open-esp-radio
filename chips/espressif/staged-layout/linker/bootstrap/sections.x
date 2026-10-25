@@ -10,9 +10,10 @@ SECTIONS {
     . = . + SIZEOF(.flash.appdesc);
     . = . + SIZEOF(.rodata);
     . = . + SIZEOF(.rodata.wifi);
-    /* Keep XIP text on the same 64 KiB MMU page boundary encoded in the
-       second-stage bootloader and application descriptor. */
-    . = ALIGN(0x10000) + 0x20;
+    /* Keep XIP text on the same MMU page boundary encoded in the
+       second-stage bootloader and application descriptor, after the image
+       headers. */
+    . = ALIGN(MMU_PAGE_BYTES) + IMAGE_SEGMENT_HEADER_BYTES;
   } > ROTEXT
 }
 INSERT BEFORE .text;
