@@ -433,6 +433,7 @@ pub(crate) fn derive_register(
     fields: &[SvdField<'_>],
     array: bool,
     defined: bool,
+    written: &BTreeSet<&str>,
 ) -> Derived {
     let mut derived = Derived {
         source: format!("esp-idf:{path}:{}", header.line),
@@ -496,9 +497,12 @@ pub(crate) fn derive_register(
             }
             continue;
         };
-        // A field the overlay defines stands even where its header calls
-        // the bits reserved: the overlay cites the driver that writes them.
-        if reserved_description(&header_field.description) && !defined {
+        // A field the overlay defines stands where its header calls the
+        // bits reserved only with the driver's write of it, which the
+        // overlay check verifies (`driver-writes`).
+        if reserved_description(&header_field.description)
+            && !(defined && written.contains(field.name))
+        {
             derived.reserved_fields.insert(field.name.to_owned());
             continue;
         }

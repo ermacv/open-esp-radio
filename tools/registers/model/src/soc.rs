@@ -165,12 +165,78 @@ pub struct RegisterRule {
     /// each takes its class from the header field whose bits hold it.
     #[serde(default)]
     pub define_fields: Vec<DefinedField>,
-    /// The vendor's own driver writes the register's fields its header
-    /// keeps to internal debugging: they keep their header's access. A
-    /// source outside `components/soc/` names the driver's write.
+    /// The fields the vendor's own driver writes, each on the cited line,
+    /// where the header keeps the field to internal debugging or calls a
+    /// defined field's bits reserved: the field keeps its header's access.
     #[serde(default)]
-    pub driver_writes: bool,
+    pub driver_writes: Vec<DriverWrite>,
+    /// The fields the vendor's driver writes through a value it stores in
+    /// the whole word, where one line does not name both.
+    #[serde(default)]
+    pub driver_writes_word: Vec<DriverWordWrite>,
     pub sources: Vec<String>,
+}
+
+impl RegisterRule {
+    /// The fields `driver-writes` and `driver-writes-word` name.
+    pub(crate) fn driver_written(&self) -> BTreeSet<&str> {
+        self.driver_writes
+            .iter()
+            .map(|write| write.field.as_str())
+            .chain(
+                self.driver_writes_word
+                    .iter()
+                    .map(|write| write.field.as_str()),
+            )
+            .collect()
+    }
+}
+
+/// One field the vendor's driver writes on one line (`driver-writes`):
+/// `source` is an `esp-idf:` line outside `components/soc/` that assigns
+/// the field of the register's device member or passes the register and
+/// the field's macro to a register write macro.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct DriverWrite {
+    pub field: String,
+    pub source: String,
+}
+
+/// One field the vendor's driver writes through a stored word
+/// (`driver-writes-word`): `value` assigns an identifier, `store` writes
+/// the whole register word.
+///
+/// Without `return`, `value` names the field's macro and `store`, in the
+/// same function, stores a value holding the identifier. With `return`, a
+/// one-bit field's `value` assigns its bit as a literal, `return` returns
+/// the identifier from the same function and `store` is a whole-word write
+/// of the register in the same file; the caller's path from that function
+/// to the store is not checked but listed, line by line, in
+/// `reviewed-chain`.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct DriverWordWrite {
+    pub field: String,
+    pub value: String,
+    #[serde(default, rename = "return")]
+    pub returned: Option<String>,
+    pub store: String,
+    #[serde(default)]
+    pub reviewed_chain: Vec<String>,
+}
+
+/// Whether `source` is an `esp-idf:<path>:<line>` citation of a file
+/// outside the register headers.
+fn driver_citation(source: &str) -> bool {
+    source
+        .strip_prefix("esp-idf:")
+        .and_then(|rest| rest.rsplit_once(':'))
+        .is_some_and(|(path, line)| {
+            !path.starts_with("components/soc/")
+                && !path.is_empty()
+                && line.parse::<usize>().is_ok_and(|line| line > 0)
+        })
 }
 
 /// One field an overlay register entry defines (`define-fields`).
@@ -382,17 +448,38 @@ impl StrictnessOverlay {
                     taken |= mask;
                 }
             }
-            if rule.driver_writes
-                && !rule.sources.iter().any(|source| {
-                    source.starts_with("esp-hal:")
-                        || source
-                            .strip_prefix("esp-idf:")
-                            .is_some_and(|path| !path.starts_with("components/soc/"))
-                })
-            {
-                return Err(Error::message(format!(
-                    "overlay register {subject}: driver-writes cites no driver outside components/soc/"
-                )));
+            let mut written = BTreeSet::new();
+            let fields = rule
+                .driver_writes
+                .iter()
+                .map(|write| (&write.field, vec![&write.source]))
+                .chain(rule.driver_writes_word.iter().map(|write| {
+                    let mut lines = vec![&write.value, &write.store];
+                    lines.extend(&write.returned);
+                    lines.extend(&write.reviewed_chain);
+                    (&write.field, lines)
+                }));
+            for (field, lines) in fields {
+                if !written.insert(field.as_str()) {
+                    return Err(Error::message(format!(
+                        "overlay register {subject}: driver writes of {field} stated twice"
+                    )));
+                }
+                if let Some(line) = lines.iter().find(|line| !driver_citation(line)) {
+                    return Err(Error::message(format!(
+                        "overlay register {subject}: the driver write of {field} cites {line}, \
+                         not an esp-idf:<path>:<line> outside components/soc/"
+                    )));
+                }
+            }
+            for write in &rule.driver_writes_word {
+                if write.returned.is_some() == write.reviewed_chain.is_empty() {
+                    return Err(Error::message(format!(
+                        "overlay register {subject}: the word write of {} lists a reviewed-chain \
+                         exactly when its value is returned",
+                        write.field
+                    )));
+                }
             }
         }
         let mut seen = BTreeSet::new();
@@ -859,6 +946,7 @@ pub fn render_soc(inputs: &SocInputs<'_>) -> Result<SocRender> {
                     &name,
                     register,
                     rule.is_some_and(|rule| !rule.define_fields.is_empty()),
+                    &rule.map(RegisterRule::driver_written).unwrap_or_default(),
                 )?;
                 let commands = command_rules.get(&key).copied();
                 if commands.is_some() {
@@ -1132,6 +1220,7 @@ fn header_view(
     peripheral: &str,
     register: &svd_rs::Register,
     defined: bool,
+    written: &BTreeSet<&str>,
 ) -> Result<HeaderView> {
     let fields = svd_fields(register);
     let mut derived: Option<Derived> = None;
@@ -1176,6 +1265,7 @@ fn header_view(
                     &fields,
                     matches!(register, MaybeArray::Array(..)),
                     defined,
+                    written,
                 );
                 match &derived {
                     None => derived = Some(next),
@@ -1631,9 +1721,10 @@ fn classify(
                     .then_some(CommandRole::Held)
             }
         });
-        // The vendor's driver writes it: its header access stands.
+        // The vendor's driver writes it, as the overlay check verified: its
+        // header access stands.
         let debug = derived_field.is_some_and(|field| field.debug)
-            && !rule.is_some_and(|rule| rule.driver_writes);
+            && !rule.is_some_and(|rule| rule.driver_written().contains(svd_name.as_str()));
         if debug && matches!(role, Some(CommandRole::Command | CommandRole::Qualifier)) {
             return Err(Error::message(format!(
                 "overlay names {name}.{}.{svd_name} a command or qualifier, but its header keeps it to internal debugging",

@@ -49,6 +49,7 @@ mod review_defaults;
 pub use review_defaults::ReviewMetadata;
 mod shared;
 mod soc;
+mod soc_driver;
 mod soc_headers;
 mod soc_overlay;
 pub use soc::{

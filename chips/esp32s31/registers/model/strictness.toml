@@ -4790,7 +4790,25 @@ define-fields = [
     { name = "SPI_MEM_CLKCNT_N", offset = 16, width = 8, description = "The divider: the flash command port's clock runs at the system clock over SPI_MEM_CLKCNT_N + 1." },
     { name = "SPI_MEM_CLK_EQU_SYSCLK", offset = 31, width = 1, description = "The clock is the system clock, undivided." },
 ]
-sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:379", "esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_struct.h:415", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:759"]
+sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:379", "esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_struct.h:415"]
+# The driver computes the undivided clock's word as bit 31 and stores the
+# word in `spimem_flash_ll_set_clock`; its callers carry it between them.
+[[registers.driver-writes-word]]
+field = "SPI_MEM_CLK_EQU_SYSCLK"
+value = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:759"
+return = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:763"
+store = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:551"
+reviewed-chain = [
+    "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:759",
+    "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:763",
+    "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spi_flash_ll.h:24",
+    "esp-idf:components/esp_hal_mspi/spi_flash_hal.c:60",
+    "esp-idf:components/esp_hal_mspi/spi_flash_hal.c:61",
+    "esp-idf:components/esp_hal_mspi/spi_flash_hal.c:127",
+    "esp-idf:components/esp_hal_mspi/spi_flash_hal_common.inc:53",
+    "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spi_flash_ll.h:91",
+    "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:551",
+]
 
 [[registers]]
 peripheral = "SPI1"
@@ -5252,7 +5270,8 @@ reserved = 0xfffff80f
 sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:514", "esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_struct.h:317"]
 
 # The vendor SVD's field arrays of PSRAM_MSPI0's CACHE_FCTRL, as its header's
-# fields; ESP-IDF's PSRAM driver writes its AXI enable and arbitration.
+# fields; ESP-IDF's PSRAM driver writes its AXI enable, which the header
+# keeps to internal debugging.
 [[registers]]
 peripheral = "MEMSPI2"
 register = "CACHE_FCTRL"
@@ -5274,14 +5293,26 @@ define-fields = [
     { name = "SAME_AW_AR_ADDR_CHK_EN", offset = 30, width = 1, description = "The header's field SAME_AW_AR_ADDR_CHK_EN." },
     { name = "CLOSE_AXI_INF_EN", offset = 31, width = 1, description = "Close the AXI interface to external RAM." },
 ]
-driver-writes = true
-sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:568", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:289", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:290", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:304", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:321", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:334"]
+driver-writes = [
+    { field = "AXI_REQ_EN", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:289" },
+]
+sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:568"]
 
 [[registers]]
 peripheral = "MEMSPI2"
 register = "CACHE_SCTRL"
 reserved = 0xf0003000
-driver-writes = true
+driver-writes = [
+    { field = "CACHE_USR_SADDR_4BYTE", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:120" },
+    { field = "USR_WR_SRAM_DUMMY", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:134" },
+    { field = "USR_RD_SRAM_DUMMY", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:149" },
+    { field = "CACHE_SRAM_USR_RCMD", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:91" },
+    { field = "SRAM_RDUMMY_CYCLELEN", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:150" },
+    { field = "SRAM_WDUMMY_CYCLELEN", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:135" },
+    { field = "SRAM_ADDR_BITLEN", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:107" },
+    { field = "CACHE_SRAM_USR_WCMD", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:74" },
+    { field = "SRAM_OCT", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:244" },
+]
 # The header calls SRAM_OCT reserved, and ESP-IDF's PSRAM driver writes it;
 # the header's fields.
 define-fields = [
@@ -5297,28 +5328,42 @@ define-fields = [
     { name = "SRAM_OCT", offset = 21, width = 1, description = "The cache's external RAM access uses eight lines." },
     { name = "SRAM_WDUMMY_CYCLELEN", offset = 22, width = 6, description = "The write dummy phase's length minus one." },
 ]
-sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:708", "esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_struct.h:753", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:74", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:107", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:120", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:134", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:149", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:244"]
+sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:708", "esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_struct.h:753"]
 
 [[registers]]
 peripheral = "MEMSPI2"
 register = "SRAM_CMD"
 reserved = 0x30002000
-driver-writes = true
-sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:807", "esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_struct.h:881", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:179", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:245", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:246", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:247", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:248", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:261", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:262"]
+driver-writes = [
+    { field = "SDUMMY_WOUT", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:179" },
+    { field = "SCMD_OCT", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:245" },
+    { field = "SADDR_OCT", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:246" },
+    { field = "SDOUT_OCT", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:247" },
+    { field = "SDIN_OCT", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:248" },
+    { field = "SDIN_HEX", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:261" },
+    { field = "SDOUT_HEX", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:262" },
+]
+sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:807", "esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_struct.h:881"]
 
 [[registers]]
 peripheral = "MEMSPI2"
 register = "SRAM_DRD_CMD"
 reserved = 0x0fff0000
-driver-writes = true
-sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:994", "esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_struct.h:903", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:92"]
+driver-writes = [
+    { field = "CACHE_SRAM_USR_RD_CMD_BITLEN", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:92" },
+    { field = "CACHE_SRAM_USR_RD_CMD_VALUE", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:93" },
+]
+sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:994", "esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_struct.h:903"]
 
 [[registers]]
 peripheral = "MEMSPI2"
 register = "SRAM_DWR_CMD"
 reserved = 0x0fff0000
-driver-writes = true
-sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:1019", "esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_struct.h:925", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:75"]
+driver-writes = [
+    { field = "CACHE_SRAM_USR_WR_CMD_BITLEN", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:75" },
+    { field = "CACHE_SRAM_USR_WR_CMD_VALUE", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:76" },
+]
+sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:1019", "esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_struct.h:925"]
 
 # PSRAM_MSPI0's MMU entry: one word in the header, a mixture of the flash
 # and PSRAM entries in the SVD; the fields of a PSRAM entry.
@@ -5337,8 +5382,23 @@ sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:4192", 
 peripheral = "MEMSPI2"
 register = "SRAM_CLK"
 reserved = 0x7f000000
-driver-writes = true
-sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:1044", "esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_struct.h:558", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:494"]
+driver-writes = [
+    { field = "SCLK_EQU_SYSCLK", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:491" },
+]
+sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:1044", "esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_struct.h:558"]
+# The divided clock's fields: computed into one word and stored whole.
+[[registers.driver-writes-word]]
+field = "SCLKCNT_N"
+value = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:493"
+store = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:494"
+[[registers.driver-writes-word]]
+field = "SCLKCNT_H"
+value = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:493"
+store = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:494"
+[[registers.driver-writes-word]]
+field = "SCLKCNT_L"
+value = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:493"
+store = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:494"
 
 [[registers]]
 peripheral = "MEMSPI2"
@@ -5567,7 +5627,10 @@ define-fields = [
     { name = "CLKCNT_N", offset = 16, width = 8, description = "The divider: the PSRAM command port's clock runs at the system clock over CLKCNT_N + 1." },
     { name = "CLK_EQU_SYSCLK", offset = 31, width = 1, description = "The clock is the system clock, undivided." },
 ]
-sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:379", "esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_struct.h:413", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:498", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:500"]
+driver-writes = [
+    { field = "CLK_EQU_SYSCLK", source = "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:498" },
+]
+sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:379", "esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_struct.h:413"]
 
 [[registers]]
 peripheral = "MEMSPI3"

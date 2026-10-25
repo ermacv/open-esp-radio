@@ -273496,62 +273496,6 @@ pub mod soc {
                     self
                 }
 
-                /// Set `CACHE_USR_ADDR_4BYTE`.
-                #[inline]
-                pub fn set_cache_usr_addr_4byte(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
-                    self
-                }
-
-                /// Set `CACHE_FLASH_USR_CMD`.
-                #[inline]
-                pub fn set_cache_flash_usr_cmd(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
-                    self
-                }
-
-                /// Set `FDIN_DUAL`.
-                #[inline]
-                pub fn set_fdin_dual(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
-                    self
-                }
-
-                /// Set `FDOUT_DUAL`.
-                #[inline]
-                pub fn set_fdout_dual(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
-                    self
-                }
-
-                /// Set `FADDR_DUAL`.
-                #[inline]
-                pub fn set_faddr_dual(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000020) | (u32::from(value) << 5);
-                    self
-                }
-
-                /// Set `FDIN_QUAD`.
-                #[inline]
-                pub fn set_fdin_quad(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000040) | (u32::from(value) << 6);
-                    self
-                }
-
-                /// Set `FDOUT_QUAD`.
-                #[inline]
-                pub fn set_fdout_quad(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000080) | (u32::from(value) << 7);
-                    self
-                }
-
-                /// Set `FADDR_QUAD`.
-                #[inline]
-                pub fn set_faddr_quad(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
-                    self
-                }
-
                 /// Set `ARB_WEI_EN`.
                 #[inline]
                 pub fn set_arb_wei_en(&mut self, value: bool) -> &mut Self {
@@ -273758,20 +273702,6 @@ pub mod soc {
                 #[inline]
                 pub fn set_cache_usr_saddr_4byte(&mut self, value: bool) -> &mut Self {
                     self.0 = (self.0 & !0x00000001) | u32::from(value);
-                    self
-                }
-
-                /// Set `USR_SRAM_DIO`.
-                #[inline]
-                pub fn set_usr_sram_dio(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
-                    self
-                }
-
-                /// Set `USR_SRAM_QIO`.
-                #[inline]
-                pub fn set_usr_sram_qio(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
                     self
                 }
 
@@ -274104,69 +274034,6 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
 
-                /// Set `SCLK_MODE`.
-                #[inline]
-                pub fn set_sclk_mode(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                    self.0 = (self.0 & !0x00000003) | value.get();
-                    self
-                }
-
-                /// Set `SWB_MODE`.
-                #[inline]
-                pub fn set_swb_mode(&mut self, value: u8) -> &mut Self {
-                    self.0 = (self.0 & !0x000003fc) | (u32::from(value) << 2);
-                    self
-                }
-
-                /// Set `SDIN_DUAL`.
-                #[inline]
-                pub fn set_sdin_dual(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000400) | (u32::from(value) << 10);
-                    self
-                }
-
-                /// Set `SDOUT_DUAL`.
-                #[inline]
-                pub fn set_sdout_dual(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000800) | (u32::from(value) << 11);
-                    self
-                }
-
-                /// Set `SADDR_DUAL`.
-                #[inline]
-                pub fn set_saddr_dual(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00001000) | (u32::from(value) << 12);
-                    self
-                }
-
-                /// Set `SDIN_QUAD`.
-                #[inline]
-                pub fn set_sdin_quad(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00004000) | (u32::from(value) << 14);
-                    self
-                }
-
-                /// Set `SDOUT_QUAD`.
-                #[inline]
-                pub fn set_sdout_quad(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00008000) | (u32::from(value) << 15);
-                    self
-                }
-
-                /// Set `SADDR_QUAD`.
-                #[inline]
-                pub fn set_saddr_quad(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00010000) | (u32::from(value) << 16);
-                    self
-                }
-
-                /// Set `SCMD_QUAD`.
-                #[inline]
-                pub fn set_scmd_quad(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00020000) | (u32::from(value) << 17);
-                    self
-                }
-
                 /// Set `SDIN_OCT`.
                 #[inline]
                 pub fn set_sdin_oct(&mut self, value: bool) -> &mut Self {
@@ -274192,13 +274059,6 @@ pub mod soc {
                 #[inline]
                 pub fn set_scmd_oct(&mut self, value: bool) -> &mut Self {
                     self.0 = (self.0 & !0x00200000) | (u32::from(value) << 21);
-                    self
-                }
-
-                /// Set `SDUMMY_RIN`.
-                #[inline]
-                pub fn set_sdummy_rin(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
                     self
                 }
 

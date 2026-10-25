@@ -1568,3 +1568,38 @@ id = "esp-idf/components/soc/esp32s31/register/soc/zero_det_struct.h"
 source = "esp-idf"
 path = "components/soc/esp32s31/register/soc/zero_det_struct.h"
 sha256 = "a22ff6f2f549baa6e9c7ee22e9e7fa94ff1315acc159cbda131fb63a7faaf378"
+
+# ESP-IDF driver sources whose lines the strictness overlay cites as the
+# driver's writes of fields the register headers keep to internal
+# debugging or call reserved (`driver-writes`, `driver-writes-word`):
+# `cargo registers generate` opens each cited line.
+
+[[artifact]]
+id = "esp-idf/components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h"
+source = "esp-idf"
+path = "components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h"
+sha256 = "6b8511c9c7660d59324223eac87c34ce35628ca4a8a4cf15a6f8716546b7d591"
+
+[[artifact]]
+id = "esp-idf/components/esp_hal_mspi/esp32s31/include/hal/spi_flash_ll.h"
+source = "esp-idf"
+path = "components/esp_hal_mspi/esp32s31/include/hal/spi_flash_ll.h"
+sha256 = "3c8d371a09a8472cb88f157901bb029a0a1b04c8856dd9ff2ca9c73ae1c6d3be"
+
+[[artifact]]
+id = "esp-idf/components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h"
+source = "esp-idf"
+path = "components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h"
+sha256 = "6e81ae50f3205316c7f560df7f3728e7f7273267cbdd9bddfc67ab1ea2de1177"
+
+[[artifact]]
+id = "esp-idf/components/esp_hal_mspi/spi_flash_hal.c"
+source = "esp-idf"
+path = "components/esp_hal_mspi/spi_flash_hal.c"
+sha256 = "8d50dbbc8dc4d251f1b75f97608890ef95da08b06a68fb4a27a1e6a2a35941a7"
+
+[[artifact]]
+id = "esp-idf/components/esp_hal_mspi/spi_flash_hal_common.inc"
+source = "esp-idf"
+path = "components/esp_hal_mspi/spi_flash_hal_common.inc"
+sha256 = "18b135f6e44078f9ccf3b948fefdb00a26ed10cd4280d549cef4ade17a067bfe"
