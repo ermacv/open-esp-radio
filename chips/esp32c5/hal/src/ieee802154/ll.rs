@@ -306,12 +306,12 @@ pub struct Ieee802154MacOwners {
 }
 
 impl Ieee802154MacOwners {
-    /// Hold the task owner with the interrupt owner it activated.
+    /// Hold the task owner with the interrupt owner it armed.
     pub const fn new(task: Ieee802154TaskOwner, interrupts: Ieee802154InterruptOwner) -> Self {
         Self { task, interrupts }
     }
 
-    /// Separate the owners, for interrupt deactivation.
+    /// Separate the owners, for the interrupt owner's deactivation.
     pub fn into_parts(self) -> (Ieee802154TaskOwner, Ieee802154InterruptOwner) {
         (self.task, self.interrupts)
     }

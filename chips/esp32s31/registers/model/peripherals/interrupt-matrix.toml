@@ -4,46 +4,18 @@ schema = 2
 name = "INTERRUPT_CORE0"
 description = """
 The interrupt-matrix route words of core 0, one per peripheral source, by source
-number. Source 132 (ZB_MAC) is left out: its route word belongs to the
-IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-around it."""
+number, ZB_MAC (source 132) included."""
 baseAddress = 0x20585000
 
 [[peripherals.registers]]
 
 [peripherals.registers.register]
-dim = 132
+dim = 169
 dimIncrement = 0x4
-dimIndex = "0-131"
-name = "MAP_LOW%s"
-description = "Route of source %s (sources 0 to 131)."
+dimIndex = "0-168"
+name = "ROUTE%s"
+description = "Route of source %s."
 addressOffset = 0x0
-size = 32
-access = "read-write"
-reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"] }
-resetValue = 0x0
-
-[[peripherals.registers.register.fields]]
-name = "MAP"
-description = "The CPU interrupt line the source is routed to; zero routes it nowhere."
-bitOffset = 0
-bitWidth = 6
-
-[[peripherals.registers.register.fields]]
-name = "PASS_LEVEL"
-description = "Remap level of the source: zero none, one S-level, two or three M-level."
-bitOffset = 8
-bitWidth = 2
-
-[[peripherals.registers]]
-
-[peripherals.registers.register]
-dim = 36
-dimIncrement = 0x4
-dimIndex = "0-35"
-name = "MAP_HIGH%s"
-description = "Route of source 133 + %s (sources 133 to 168)."
-addressOffset = 0x214
 size = 32
 access = "read-write"
 reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"] }
@@ -168,46 +140,18 @@ bitWidth = 9
 name = "INTERRUPT_CORE1"
 description = """
 The interrupt-matrix route words of core 1, one per peripheral source, by source
-number. Source 132 (ZB_MAC) is left out: its route word belongs to the
-IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-around it."""
+number, ZB_MAC (source 132) included."""
 baseAddress = 0x20585800
 
 [[peripherals.registers]]
 
 [peripherals.registers.register]
-dim = 132
+dim = 169
 dimIncrement = 0x4
-dimIndex = "0-131"
-name = "MAP_LOW%s"
-description = "Route of source %s (sources 0 to 131)."
+dimIndex = "0-168"
+name = "ROUTE%s"
+description = "Route of source %s."
 addressOffset = 0x0
-size = 32
-access = "read-write"
-reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"] }
-resetValue = 0x0
-
-[[peripherals.registers.register.fields]]
-name = "MAP"
-description = "The CPU interrupt line the source is routed to; zero routes it nowhere."
-bitOffset = 0
-bitWidth = 6
-
-[[peripherals.registers.register.fields]]
-name = "PASS_LEVEL"
-description = "Remap level of the source: zero none, one S-level, two or three M-level."
-bitOffset = 8
-bitWidth = 2
-
-[[peripherals.registers]]
-
-[peripherals.registers.register]
-dim = 36
-dimIncrement = 0x4
-dimIndex = "0-35"
-name = "MAP_HIGH%s"
-description = "Route of source 133 + %s (sources 133 to 168)."
-addressOffset = 0x214
 size = 32
 access = "read-write"
 reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"] }

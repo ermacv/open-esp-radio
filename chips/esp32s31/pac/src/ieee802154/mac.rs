@@ -20,11 +20,11 @@ pub use oer_espressif_ieee802154_mac_values::{
     Ieee802154EventObservation, Ieee802154EventObservationError, Ieee802154MacCommand,
     Ieee802154MacControl, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
     Ieee802154ObservedEventState, Ieee802154OperationEventEnableObservation,
-    Ieee802154OperationRxAbortEnableObservation, Ieee802154PanIdentity, Ieee802154RouteState,
-    Ieee802154RxAbortEnableSet, Ieee802154RxAbortEnableState, Ieee802154RxAbortReason,
-    Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode, Ieee802154SecurityPayloadOffset,
-    Ieee802154StateSnapshot, Ieee802154TransmitSecurityControl, Ieee802154TxAbortEnableSet,
-    Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation, Ieee802154TxSecurityError,
+    Ieee802154OperationRxAbortEnableObservation, Ieee802154PanIdentity, Ieee802154RxAbortEnableSet,
+    Ieee802154RxAbortEnableState, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
+    Ieee802154RxStateCode, Ieee802154SecurityPayloadOffset, Ieee802154StateSnapshot,
+    Ieee802154TransmitSecurityControl, Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason,
+    Ieee802154TxAbortReasonObservation, Ieee802154TxSecurityError,
     Ieee802154TxSecurityErrorObservation, Ieee802154TxStateCode, Ieee802154TxStatus,
     Ieee802154ValidationEdDurationState, Ieee802154ValidationEventEnableState,
 };
@@ -507,8 +507,6 @@ impl Ieee802154FoundationSnapshot {
 #[doc(hidden)]
 pub struct Ieee802154RegisterLease<'registers> {
     registers: &'registers mut crate::ieee802154::ownership::TaskRegisters,
-    interrupt_route:
-        &'registers crate::generated::ieee802154_interrupt_route::Ieee802154InterruptRoute,
     etm: &'registers crate::modem::etm::Ieee802154EtmChannels,
     rx_info: &'registers crate::ieee802154::baseband::Ieee802154BasebandRxInfo,
 }
@@ -1035,17 +1033,6 @@ impl Ieee802154PolledRegisterLease<'_> {
         crate::device_fence();
         events
     }
-
-    /// Classify both source-132 routes without exposing register images.
-    #[doc(hidden)]
-    pub fn interrupt_route_state(&self) -> Ieee802154RouteState {
-        let core0 = self.task.interrupt_route.read_core0_route();
-        let core1 = self.task.interrupt_route.read_core1_route();
-        Ieee802154RouteState::from_observation(
-            core0.map().get() != 0 || core1.map().get() != 0,
-            core0.pass_level().get() != 0 || core1.pass_level().get() != 0,
-        )
-    }
 }
 
 /// Borrowed task owner plus the disjoint raw interrupt partition for one
@@ -1226,7 +1213,6 @@ impl Ieee802154TaskRegisters {
     pub fn ieee802154_register_lease(&mut self) -> Ieee802154RegisterLease<'_> {
         Ieee802154RegisterLease {
             registers: &mut self.peripherals.ieee802154_mac,
-            interrupt_route: &self.peripherals.ieee802154_interrupt_route,
             etm: &self.peripherals.etm,
             rx_info: &self.peripherals.rx_info,
         }

@@ -1288,6 +1288,9 @@ pub struct InterruptRegisters {
 }
 
 impl InterruptRegisters {
+    /// The interrupt-matrix source of the MAC's generated interrupt side.
+    pub(crate) const SOURCE: u16 = <Ieee802154MacIrq as oer_mmio::InterruptSource>::SOURCE;
+
     /// Sample the complete thirteen-bit event field exactly once.
     #[inline]
     pub fn sample_event_status(&self) -> mac::event_status::Snapshot {

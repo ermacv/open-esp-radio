@@ -49,6 +49,29 @@ where
     port.order_device_accesses();
 }
 
+/// Arm the interrupt side for its binding: the first part of the
+/// activation, with every event left masked.
+///
+/// Both abort fields take their runtime baseline and the stale affine W1C
+/// transaction is consumed while `EVENT_ENABLE` stays zero; the final fence
+/// precedes transfer of the hard-IRQ owner to its binding. The task publishes
+/// the runtime events afterwards, once the binding proves the handler holds
+/// the owner.
+#[doc(hidden)]
+pub fn execute_interrupt_arming<Port>(port: &mut Port, _plan: Ieee802154InterruptActivationPlan)
+where
+    Port: Ieee802154InterruptTransitionPort,
+{
+    port.mask_all_events();
+    port.enable_runtime_tx_aborts();
+    port.enable_runtime_rx_aborts();
+    port.order_device_accesses();
+
+    let stale = port.sample_events();
+    port.acknowledge_events(stale);
+    port.order_device_accesses();
+}
+
 /// Execute the complete teardown after the platform CPU route is disabled.
 ///
 /// The operation and both MAC timers are stopped before all three enable

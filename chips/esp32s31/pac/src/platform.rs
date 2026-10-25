@@ -352,10 +352,10 @@ handoff!(
     "The caller consumed esp-hal's `SoftwareInterrupt<3>` for good, the only esp-hal writer of the line."
 );
 handoff!(
-    /// Proof that the image's interrupt table took esp-hal's routing
-    /// capability after esp-hal's vectoring.
+    /// Proof that the interrupt controller's owner consumed esp-hal's
+    /// interrupt-matrix singletons after `esp_hal::init`.
     InterruptMatrixHandoff => InterruptMatrixPeripherals: InterruptMatrixPeripheralsClaims,
-    "The caller took esp-hal's one `InterruptRoutes` and keeps each core's routes beside that core's matrix owner, and esp-hal's vectoring of this boot has run: esp-hal still writes the route and line words only as `shared-words.toml` reviews."
+    "The caller consumed esp-hal's `INTERRUPT_CORE0`, `INTERRUPT_CORE1` and `CLIC` singletons for good after `esp_hal::init`, whose `setup_interrupts` is esp-hal's last write of the route and line words; no image calls esp-hal's interrupt API, as `shared-words.toml` reviews. The chip HAL's interrupt controller is the words' one writer afterwards."
 );
 
 #[cfg(any(test, feature = "test-support"))]

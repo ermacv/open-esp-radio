@@ -1,5 +1,7 @@
 //! Platform values the image reads from blocks taken from esp-hal: entropy
-//! from the random number generator and why the HP core last left reset.
+//! from the random number generator and why the HP core last left reset;
+//! and the hart's interrupt controller ([`interrupt_controller`]), which the
+//! interrupt table's router writes.
 //!
 //! Each owner is built from the PAC owner of its domain, which an esp-hal
 //! adapter makes from its handoff.
@@ -23,8 +25,10 @@ use oer_mmio::Placement;
 use oer_time::settle::{Settle, SettleLimit, settle};
 use oer_time::{Clock, Duration, Instant};
 
+pub use interrupt_controller::{InterruptBlocks, InterruptController};
 pub use reset_cause::ResetCause;
 
+pub mod interrupt_controller;
 mod reset_cause;
 #[cfg(test)]
 mod tests;

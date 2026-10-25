@@ -7169,38 +7169,6 @@
       </registers>
     </peripheral>
     <peripheral>
-      <name>IEEE802154_INTERRUPT_ROUTE</name>
-      <description>The CPU interrupt-matrix word for ESP32-C5 modem source 12 (ZB_MAC). This
-source-specific view is retained with the IEEE 802.15.4 owner and publishes
-only the generated field readers needed to prove that a polled or validation
-transaction starts with the CPU route detached.</description>
-      <baseAddress>0x60010030</baseAddress>
-      <registers>
-        <register>
-          <name>CORE0_ROUTE</name>
-          <description>Project-assigned name. Destination and security routing for ZB_MAC.</description>
-          <addressOffset>0x0</addressOffset>
-          <size>0x20</size>
-          <access>read-write</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-            <field>
-              <name>MAP</name>
-              <description>Project-assigned name. CPU-interrupt destination selected for the peripheral source.</description>
-              <bitOffset>0</bitOffset>
-              <bitWidth>6</bitWidth>
-            </field>
-            <field>
-              <name>PASS_IN_SEC</name>
-              <description>Project-assigned name. Secure-world pass-through selection for the peripheral source.</description>
-              <bitOffset>8</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-          </fields>
-        </register>
-      </registers>
-    </peripheral>
-    <peripheral>
       <name>MODEM_ETM</name>
       <description>ESP32-C5 modem event-task matrix at MODEM_BASE + 0x8800. The public
 IEEE 802.15.4 driver names the channel-enable, set and clear words and the
@@ -11962,43 +11930,16 @@ holds the number of level bits of each line's control byte.</description>
     <peripheral>
       <name>INTERRUPT_CORE0</name>
       <description>The interrupt-matrix route words of core 0, one per peripheral source, by source
-number. Source 12 (ZB_MAC) is left out: its route word belongs to the
-IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-around it.</description>
+number, ZB_MAC (source 12) included.</description>
       <baseAddress>0x60010000</baseAddress>
       <registers>
         <register>
-          <dim>12</dim>
+          <dim>84</dim>
           <dimIncrement>0x4</dimIncrement>
-          <dimIndex>0-11</dimIndex>
-          <name>MAP_LOW%s</name>
-          <description>Project-assigned name. Route of source %s (sources 0 to 11).</description>
+          <dimIndex>0-83</dimIndex>
+          <name>ROUTE%s</name>
+          <description>Project-assigned name. Route of source %s.</description>
           <addressOffset>0x0</addressOffset>
-          <size>0x20</size>
-          <access>read-write</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-            <field>
-              <name>MAP</name>
-              <description>Project-assigned name. The CPU interrupt line the source is routed to; zero routes it nowhere.</description>
-              <bitOffset>0</bitOffset>
-              <bitWidth>6</bitWidth>
-            </field>
-            <field>
-              <name>PASS_IN_SEC</name>
-              <description>Project-assigned name. The PASS_IN_SEC flag of the source.</description>
-              <bitOffset>8</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-          </fields>
-        </register>
-        <register>
-          <dim>71</dim>
-          <dimIncrement>0x4</dimIncrement>
-          <dimIndex>0-70</dimIndex>
-          <name>MAP_HIGH%s</name>
-          <description>Project-assigned name. Route of source 13 + %s (sources 13 to 83).</description>
-          <addressOffset>0x34</addressOffset>
           <size>0x20</size>
           <access>read-write</access>
           <resetValue>0x00000000</resetValue>

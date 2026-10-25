@@ -23,7 +23,7 @@ description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7:
 
 [[sources]]
 id = "ESP_IDF_4D59230D_C5_INTERRUPT_SOURCES"
-description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32c5/include/soc/interrupts.h, sha256 b9c461a3a6a86e77ba2ee0f8db999dc75f098bae31aa4f8ade0fcf7a070def00. The hardware source table assigns ETS_ZB_MAC_INTR_SOURCE to 12."
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32c5/include/soc/interrupts.h, sha256 b9c461a3a6a86e77ba2ee0f8db999dc75f098bae31aa4f8ade0fcf7a070def00. The hardware source table assigns ETS_ZB_MAC_INTR_SOURCE to 12 (line 30), ETS_FROM_CPU_INTR0_SOURCE to ETS_FROM_CPU_INTR3_SOURCE to 23 to 26 (lines 41 to 44) and ETS_USB_SERIAL_JTAG_INTR_SOURCE to 54 (line 72), counting from ETS_WIFI_MAC_INTR_SOURCE = 0 at line 18."
 
 [[sources]]
 id = "ESP_PACS_5CD68D2_C5_INTERRUPT_MATRIX"

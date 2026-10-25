@@ -8,7 +8,6 @@ allow-clippy-empty-docs = true
 # console) are claimed by their own platform handoffs.
 typed-peripherals = [
     "IEEE802154_MAC",
-    "IEEE802154_INTERRUPT_ROUTE",
     "MODEM_ETM",
     "MODEM_SYSCON_RADIO",
     "MODEM_LPCON_SHARED_CLOCK",
@@ -125,8 +124,8 @@ peripherals = ["CLIC", "INTERRUPT_CORE0", "INTERRUPT_CORE0_STATUS"]
 [[ownership-partitions]]
 name = "Ieee802154Peripherals"
 member = "ieee802154"
-description = "IEEE 802.15.4 MAC and source-specific interrupt-route registers owned by the IEEE 802.15.4 hardware lifecycle."
-peripherals = ["IEEE802154_MAC", "IEEE802154_INTERRUPT_ROUTE"]
+description = "IEEE 802.15.4 MAC registers owned by the IEEE 802.15.4 hardware lifecycle; its interrupt route word is the interrupt matrix's."
+peripherals = ["IEEE802154_MAC"]
 
 [[ownership-partitions]]
 name = "ModemEtmPeripherals"
@@ -186,6 +185,31 @@ sources = ["esp-idf-4d59230d-ieee802154-common-ll"]
 [[interrupt-sources]]
 peripheral = "IEEE802154_MAC"
 source = 12
+sources = ["ESP_IDF_4D59230D_C5_INTERRUPT_SOURCES"]
+
+[[interrupt-sources]]
+peripheral = "FROM_CPU_0"
+source = 23
+sources = ["ESP_IDF_4D59230D_C5_INTERRUPT_SOURCES"]
+
+[[interrupt-sources]]
+peripheral = "FROM_CPU_1"
+source = 24
+sources = ["ESP_IDF_4D59230D_C5_INTERRUPT_SOURCES"]
+
+[[interrupt-sources]]
+peripheral = "FROM_CPU_2"
+source = 25
+sources = ["ESP_IDF_4D59230D_C5_INTERRUPT_SOURCES"]
+
+[[interrupt-sources]]
+peripheral = "FROM_CPU_3"
+source = 26
+sources = ["ESP_IDF_4D59230D_C5_INTERRUPT_SOURCES"]
+
+[[interrupt-sources]]
+peripheral = "USB_SERIAL_JTAG"
+source = 54
 sources = ["ESP_IDF_4D59230D_C5_INTERRUPT_SOURCES"]
 
 [[enum-domains]]

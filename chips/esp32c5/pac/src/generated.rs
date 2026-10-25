@@ -1225,6 +1225,11 @@ pub mod clic {
 /// context and the line's handler lowers it, so it is a shared block whose one
 /// register is stored whole.
 pub mod from_cpu_0 {
+    /// The interrupt-matrix source of the block's interrupt.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_C5_INTERRUPT_SOURCES.
+    pub const SOURCE: u16 = 23;
+
     /// The block's base address.
     pub const BASE: usize = 0x600c5090;
     /// The bytes from [`BASE`] to the end of the block's last word: the
@@ -1285,6 +1290,10 @@ pub mod from_cpu_0 {
         }
     }
 
+    impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for FromCpu0<P> {
+        const SOURCE: u16 = 23;
+    }
+
     /// The `LINE` register.
     ///
     /// Project-assigned name. The level of software interrupt line 0.
@@ -1315,6 +1324,11 @@ pub mod from_cpu_0 {
 /// context and the line's handler lowers it, so it is a shared block whose one
 /// register is stored whole.
 pub mod from_cpu_1 {
+    /// The interrupt-matrix source of the block's interrupt.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_C5_INTERRUPT_SOURCES.
+    pub const SOURCE: u16 = 24;
+
     /// The block's base address.
     pub const BASE: usize = 0x600c5094;
     /// The bytes from [`BASE`] to the end of the block's last word: the
@@ -1375,6 +1389,10 @@ pub mod from_cpu_1 {
         }
     }
 
+    impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for FromCpu1<P> {
+        const SOURCE: u16 = 24;
+    }
+
     /// The `LINE` register.
     ///
     /// Project-assigned name. The level of software interrupt line 1.
@@ -1405,6 +1423,11 @@ pub mod from_cpu_1 {
 /// context and the line's handler lowers it, so it is a shared block whose one
 /// register is stored whole.
 pub mod from_cpu_2 {
+    /// The interrupt-matrix source of the block's interrupt.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_C5_INTERRUPT_SOURCES.
+    pub const SOURCE: u16 = 25;
+
     /// The block's base address.
     pub const BASE: usize = 0x600c5098;
     /// The bytes from [`BASE`] to the end of the block's last word: the
@@ -1465,6 +1488,10 @@ pub mod from_cpu_2 {
         }
     }
 
+    impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for FromCpu2<P> {
+        const SOURCE: u16 = 25;
+    }
+
     /// The `LINE` register.
     ///
     /// Project-assigned name. The level of software interrupt line 2.
@@ -1495,6 +1522,11 @@ pub mod from_cpu_2 {
 /// context and the line's handler lowers it, so it is a shared block whose one
 /// register is stored whole.
 pub mod from_cpu_3 {
+    /// The interrupt-matrix source of the block's interrupt.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_C5_INTERRUPT_SOURCES.
+    pub const SOURCE: u16 = 26;
+
     /// The block's base address.
     pub const BASE: usize = 0x600c509c;
     /// The bytes from [`BASE`] to the end of the block's last word: the
@@ -1553,6 +1585,10 @@ pub mod from_cpu_3 {
         pub fn store_line(&self, value: bool) {
             self.0.write_shared::<0x0>(u32::from(value));
         }
+    }
+
+    impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for FromCpu3<P> {
+        const SOURCE: u16 = 26;
     }
 
     /// The `LINE` register.
@@ -2649,127 +2685,6 @@ pub mod i2c_ana_mst {
             && oer_mmio::check::within(0x00000600, ana_conf0::FIELDS),
         "set_phy_i2c_master_register_mode replaces declared fields only"
     );
-}
-
-/// The `IEEE802154_INTERRUPT_ROUTE` register block.
-///
-/// The CPU interrupt-matrix word for ESP32-C5 modem source 12 (ZB_MAC). This
-/// source-specific view is retained with the IEEE 802.15.4 owner and publishes
-/// only the generated field readers needed to prove that a polled or validation
-/// transaction starts with the CPU route detached.
-pub mod ieee802154_interrupt_route {
-    /// The block's base address.
-    pub const BASE: usize = 0x60010030;
-    /// The bytes from [`BASE`] to the end of the block's last word: the
-    /// host memory a test block needs.
-    pub const SIZE: usize = 0x4;
-
-    /// The block's declared words, as byte offsets from [`BASE`]: its
-    /// whole register authority.
-    pub struct BlockWords;
-
-    impl oer_mmio::Registers for BlockWords {
-        const WORDS: &'static [usize] = &[0x0];
-    }
-
-    /// The block's device registers, as the PAC root claims them.
-    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x60010030>, BlockWords>;
-
-    /// The exclusive owner of the `IEEE802154_INTERRUPT_ROUTE` registers.
-    #[must_use = "dropping a register owner permanently loses its register authority"]
-    pub struct Ieee802154InterruptRoute<P: oer_mmio::Placement = oer_mmio::Fixed<0x60010030>>(
-        oer_mmio::Block<P, BlockWords>,
-    );
-
-    impl Ieee802154InterruptRoute {
-        /// The owner of the block's device registers.
-        pub const fn new(block: Claim) -> Self {
-            Self(block)
-        }
-    }
-
-    impl<'a> Ieee802154InterruptRoute<oer_mmio::Host<'a>> {
-        /// The block over host memory, for tests of its accessors.
-        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
-            oer_mmio::Block::host(words).map(Self)
-        }
-    }
-
-    impl<P: oer_mmio::Placement> Ieee802154InterruptRoute<P> {
-        /// Read `CORE0_ROUTE`.
-        #[inline]
-        pub fn read_core0_route(&self) -> core0_route::R {
-            core0_route::R(self.0.read::<0x0>())
-        }
-
-        /// Read `CORE0_ROUTE`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_core0_route(&mut self, change: impl FnOnce(&mut core0_route::W)) {
-            let mut value = core0_route::W(self.0.read::<0x0>());
-            change(&mut value);
-            self.0.write::<0x0>(value.0);
-        }
-    }
-
-    /// The `CORE0_ROUTE` register.
-    ///
-    /// Project-assigned name. Destination and security routing for ZB_MAC.
-    pub mod core0_route {
-        /// The bits of the register's declared fields.
-        pub const FIELDS: u32 = 0x0000013f;
-        /// The register's byte offset in its block.
-        pub const OFFSET: usize = 0x0;
-
-        /// One observation of the register.
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub struct R(pub(super) u32);
-
-        impl R {
-            /// Project-assigned name. CPU-interrupt destination selected for the peripheral source.
-            #[inline]
-            pub const fn map(self) -> oer_mmio::Bits<6> {
-                oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// Project-assigned name. Secure-world pass-through selection for the peripheral source.
-            #[inline]
-            pub const fn pass_in_sec(self) -> bool {
-                (self.0 & 0x00000100) != 0
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name. CPU-interrupt destination selected for the peripheral source.
-            #[inline]
-            pub const fn map(&self) -> oer_mmio::Bits<6> {
-                oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// Project-assigned name. Secure-world pass-through selection for the peripheral source.
-            #[inline]
-            pub const fn pass_in_sec(&self) -> bool {
-                (self.0 & 0x00000100) != 0
-            }
-
-            /// Set `MAP`.
-            #[inline]
-            pub fn set_map(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
-                self.0 = (self.0 & !0x0000003f) | value.get();
-                self
-            }
-
-            /// Set `PASS_IN_SEC`.
-            #[inline]
-            pub fn set_pass_in_sec(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
-                self
-            }
-        }
-    }
 }
 
 /// The `IEEE802154_MAC` register block.
@@ -8494,9 +8409,7 @@ pub mod ieee802154_mac {
 /// The `INTERRUPT_CORE0` register block.
 ///
 /// The interrupt-matrix route words of core 0, one per peripheral source, by source
-/// number. Source 12 (ZB_MAC) is left out: its route word belongs to the
-/// IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-/// around it.
+/// number, ZB_MAC (source 12) included.
 pub mod interrupt_core0 {
     /// The block's base address.
     pub const BASE: usize = 0x60010000;
@@ -8510,13 +8423,13 @@ pub mod interrupt_core0 {
 
     impl oer_mmio::Registers for BlockWords {
         const WORDS: &'static [usize] = &[
-            0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x34, 0x38, 0x3c,
-            0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c, 0x70, 0x74,
-            0x78, 0x7c, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xa4, 0xa8, 0xac,
-            0xb0, 0xb4, 0xb8, 0xbc, 0xc0, 0xc4, 0xc8, 0xcc, 0xd0, 0xd4, 0xd8, 0xdc, 0xe0, 0xe4,
-            0xe8, 0xec, 0xf0, 0xf4, 0xf8, 0xfc, 0x100, 0x104, 0x108, 0x10c, 0x110, 0x114, 0x118,
-            0x11c, 0x120, 0x124, 0x128, 0x12c, 0x130, 0x134, 0x138, 0x13c, 0x140, 0x144, 0x148,
-            0x14c,
+            0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38,
+            0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c, 0x70,
+            0x74, 0x78, 0x7c, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xa4, 0xa8,
+            0xac, 0xb0, 0xb4, 0xb8, 0xbc, 0xc0, 0xc4, 0xc8, 0xcc, 0xd0, 0xd4, 0xd8, 0xdc, 0xe0,
+            0xe4, 0xe8, 0xec, 0xf0, 0xf4, 0xf8, 0xfc, 0x100, 0x104, 0x108, 0x10c, 0x110, 0x114,
+            0x118, 0x11c, 0x120, 0x124, 0x128, 0x12c, 0x130, 0x134, 0x138, 0x13c, 0x140, 0x144,
+            0x148, 0x14c,
         ];
     }
 
@@ -8544,49 +8457,30 @@ pub mod interrupt_core0 {
     }
 
     impl<P: oer_mmio::Placement> InterruptCore0<P> {
-        /// Read `MAP_LOW%s`.
+        /// Read `ROUTE%s`.
         #[inline]
-        pub fn read_map_low(&self, index: oer_mmio::Index<12>) -> map_low::R {
-            map_low::R(self.0.read_indexed::<0x0, 0x4, 12>(index))
+        pub fn read_route(&self, index: oer_mmio::Index<84>) -> route::R {
+            route::R(self.0.read_indexed::<0x0, 0x4, 84>(index))
         }
 
-        /// Read `MAP_LOW%s`, change fields and write it back; every other bit keeps
+        /// Read `ROUTE%s`, change fields and write it back; every other bit keeps
         /// the value read.
         #[inline]
-        pub fn modify_map_low(
+        pub fn modify_route(
             &mut self,
-            index: oer_mmio::Index<12>,
-            change: impl FnOnce(&mut map_low::W),
+            index: oer_mmio::Index<84>,
+            change: impl FnOnce(&mut route::W),
         ) {
-            let mut value = map_low::W(self.0.read_indexed::<0x0, 0x4, 12>(index));
+            let mut value = route::W(self.0.read_indexed::<0x0, 0x4, 84>(index));
             change(&mut value);
-            self.0.write_indexed::<0x0, 0x4, 12>(index, value.0);
-        }
-
-        /// Read `MAP_HIGH%s`.
-        #[inline]
-        pub fn read_map_high(&self, index: oer_mmio::Index<71>) -> map_high::R {
-            map_high::R(self.0.read_indexed::<0x34, 0x4, 71>(index))
-        }
-
-        /// Read `MAP_HIGH%s`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_map_high(
-            &mut self,
-            index: oer_mmio::Index<71>,
-            change: impl FnOnce(&mut map_high::W),
-        ) {
-            let mut value = map_high::W(self.0.read_indexed::<0x34, 0x4, 71>(index));
-            change(&mut value);
-            self.0.write_indexed::<0x34, 0x4, 71>(index, value.0);
+            self.0.write_indexed::<0x0, 0x4, 84>(index, value.0);
         }
     }
 
-    /// The `MAP_LOW%s` register.
+    /// The `ROUTE%s` register.
     ///
-    /// Project-assigned name. Route of source %s (sources 0 to 11).
-    pub mod map_low {
+    /// Project-assigned name. Route of source %s.
+    pub mod route {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x0000013f;
         /// The register's byte offset in its block.
@@ -8595,71 +8489,7 @@ pub mod interrupt_core0 {
         /// The byte distance between two elements of the array.
         pub const STRIDE: usize = 0x4;
         /// The array's element count.
-        pub const COUNT: usize = 12;
-
-        /// One observation of the register.
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub struct R(pub(super) u32);
-
-        impl R {
-            /// Project-assigned name. The CPU interrupt line the source is routed to; zero routes it nowhere.
-            #[inline]
-            pub const fn map(self) -> oer_mmio::Bits<6> {
-                oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// Project-assigned name. The PASS_IN_SEC flag of the source.
-            #[inline]
-            pub const fn pass_in_sec(self) -> bool {
-                (self.0 & 0x00000100) != 0
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name. The CPU interrupt line the source is routed to; zero routes it nowhere.
-            #[inline]
-            pub const fn map(&self) -> oer_mmio::Bits<6> {
-                oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// Project-assigned name. The PASS_IN_SEC flag of the source.
-            #[inline]
-            pub const fn pass_in_sec(&self) -> bool {
-                (self.0 & 0x00000100) != 0
-            }
-
-            /// Set `MAP`.
-            #[inline]
-            pub fn set_map(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
-                self.0 = (self.0 & !0x0000003f) | value.get();
-                self
-            }
-
-            /// Set `PASS_IN_SEC`.
-            #[inline]
-            pub fn set_pass_in_sec(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
-                self
-            }
-        }
-    }
-
-    /// The `MAP_HIGH%s` register.
-    ///
-    /// Project-assigned name. Route of source 13 + %s (sources 13 to 83).
-    pub mod map_high {
-        /// The bits of the register's declared fields.
-        pub const FIELDS: u32 = 0x0000013f;
-        /// The register's byte offset in its block.
-        pub const OFFSET: usize = 0x34;
-
-        /// The byte distance between two elements of the array.
-        pub const STRIDE: usize = 0x4;
-        /// The array's element count.
-        pub const COUNT: usize = 71;
+        pub const COUNT: usize = 84;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -17016,6 +16846,11 @@ pub mod timg1_wdt {
 ///
 /// USB Serial/JTAG controller: the CDC-ACM data FIFO, its configuration and the two interrupts of the serial endpoints. The JTAG side and the other interrupt sources are not described.
 pub mod usb_serial_jtag {
+    /// The interrupt-matrix source of the block's interrupt.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_C5_INTERRUPT_SOURCES.
+    pub const SOURCE: u16 = 54;
+
     /// The block's base address.
     pub const BASE: usize = 0x6000f000;
     /// The bytes from [`BASE`] to the end of the block's last word: the
@@ -17218,6 +17053,10 @@ pub mod usb_serial_jtag {
             change(&mut value);
             self.0.write::<0x14>(value.0);
         }
+    }
+
+    impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for UsbSerialJtagIrq<P> {
+        const SOURCE: u16 = 54;
     }
 
     /// The words [`UsbSerialJtagTask`] owns and observes.
@@ -22545,10 +22384,9 @@ pub mod peripheral_ownership {
         }
     }
 
-    /// IEEE 802.15.4 MAC and source-specific interrupt-route registers owned by the IEEE 802.15.4 hardware lifecycle.
+    /// IEEE 802.15.4 MAC registers owned by the IEEE 802.15.4 hardware lifecycle; its interrupt route word is the interrupt matrix's.
     pub struct Ieee802154Peripherals {
         pub ieee802154_mac: super::ieee802154_mac::Ieee802154Mac,
-        pub ieee802154_interrupt_route: super::ieee802154_interrupt_route::Ieee802154InterruptRoute,
     }
 
     /// Modem event-task matrix channels zero and one, programmed by the IEEE 802.15.4 driver.
@@ -22596,7 +22434,7 @@ pub mod peripheral_ownership {
 
     /// Every typed partition.
     pub struct PeripheralPartitions {
-        /// IEEE 802.15.4 MAC and source-specific interrupt-route registers owned by the IEEE 802.15.4 hardware lifecycle.
+        /// IEEE 802.15.4 MAC registers owned by the IEEE 802.15.4 hardware lifecycle; its interrupt route word is the interrupt matrix's.
         pub ieee802154: Ieee802154Peripherals,
         /// Modem event-task matrix channels zero and one, programmed by the IEEE 802.15.4 driver.
         pub modem_etm: ModemEtmPeripherals,
@@ -22617,36 +22455,35 @@ pub mod peripheral_ownership {
     pub type Claims = (
         (
             super::ieee802154_mac::Claim,
-            super::ieee802154_interrupt_route::Claim,
             super::modem_etm::Claim,
+            super::modem_syscon_radio::Claim,
         ),
         (
-            super::modem_syscon_radio::Claim,
             super::modem_lpcon_shared_clock::Claim,
             super::i2c_ana_mst::Claim,
+            super::pmu_radio::Claim,
         ),
         (
-            super::pmu_radio::Claim,
             super::phy_baseband_config::Claim,
             super::lp_aon_radio::Claim,
+            super::apb_saradc_radio::Claim,
         ),
         (
-            super::apb_saradc_radio::Claim,
             super::pcr_radio::Claim,
             super::wifi_mac_aux_tsf_control::Claim,
+            super::wifi_mac_bssid_policy::Claim,
         ),
         (
-            super::wifi_mac_bssid_policy::Claim,
             super::wifi_mac_interface_address::Claim,
             super::wifi_mac_rtc_timer_update::Claim,
+            super::wifi_mac_sta_beacon_filter::Claim,
         ),
         (
-            super::wifi_mac_sta_beacon_filter::Claim,
             super::wifi_mac_sta_tsf_load::Claim,
             super::wifi_mac_tx_common::Claim,
+            super::wifi_mac_ersu_ack_rate::Claim,
         ),
         (
-            super::wifi_mac_ersu_ack_rate::Claim,
             super::wifi_mac_interrupt::Claim,
             super::wifi_mac_power_interrupt::Claim,
         ),
@@ -22656,21 +22493,17 @@ pub mod peripheral_ownership {
     #[inline]
     pub fn partition(claims: Claims) -> PeripheralPartitions {
         let (
-            (ieee802154_mac, ieee802154_interrupt_route, modem_etm),
-            (modem_syscon_radio, modem_lpcon_shared_clock, i2c_ana_mst),
-            (pmu_radio, phy_baseband_config, lp_aon_radio),
-            (apb_saradc_radio, pcr_radio, wifi_mac_aux_tsf_control),
-            (wifi_mac_bssid_policy, wifi_mac_interface_address, wifi_mac_rtc_timer_update),
-            (wifi_mac_sta_beacon_filter, wifi_mac_sta_tsf_load, wifi_mac_tx_common),
-            (wifi_mac_ersu_ack_rate, wifi_mac_interrupt, wifi_mac_power_interrupt),
+            (ieee802154_mac, modem_etm, modem_syscon_radio),
+            (modem_lpcon_shared_clock, i2c_ana_mst, pmu_radio),
+            (phy_baseband_config, lp_aon_radio, apb_saradc_radio),
+            (pcr_radio, wifi_mac_aux_tsf_control, wifi_mac_bssid_policy),
+            (wifi_mac_interface_address, wifi_mac_rtc_timer_update, wifi_mac_sta_beacon_filter),
+            (wifi_mac_sta_tsf_load, wifi_mac_tx_common, wifi_mac_ersu_ack_rate),
+            (wifi_mac_interrupt, wifi_mac_power_interrupt),
         ) = claims;
         PeripheralPartitions {
             ieee802154: Ieee802154Peripherals {
                 ieee802154_mac: super::ieee802154_mac::Ieee802154Mac::new(ieee802154_mac),
-                ieee802154_interrupt_route:
-                    super::ieee802154_interrupt_route::Ieee802154InterruptRoute::new(
-                        ieee802154_interrupt_route,
-                    ),
             },
             modem_etm: ModemEtmPeripherals {
                 modem_etm: super::modem_etm::ModemEtm::new(modem_etm),
@@ -22765,10 +22598,6 @@ const _: () = assert!(
         (
             i2c_ana_mst::BASE,
             <i2c_ana_mst::BlockWords as oer_mmio::Registers>::WORDS
-        ),
-        (
-            ieee802154_interrupt_route::BASE,
-            <ieee802154_interrupt_route::BlockWords as oer_mmio::Registers>::WORDS
         ),
         (
             ieee802154_mac::BASE,
@@ -170475,10 +170304,6 @@ pub mod soc {
             (
                 super::i2c_ana_mst::BASE,
                 <super::i2c_ana_mst::BlockWords as oer_mmio::Registers>::WORDS
-            ),
-            (
-                super::ieee802154_interrupt_route::BASE,
-                <super::ieee802154_interrupt_route::BlockWords as oer_mmio::Registers>::WORDS
             ),
             (
                 super::ieee802154_mac::BASE,

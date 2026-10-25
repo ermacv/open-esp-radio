@@ -1,7 +1,6 @@
 //! Hardware ownership, capabilities, and affine lifecycle transitions.
 
 use crate::generated::{
-    ieee802154_interrupt_route::Ieee802154InterruptRoute,
     ieee802154_mac::Ieee802154Mac,
     peripheral_ownership::{
         self, Claims, PeripheralPartitions, WifiInterruptPeripherals, WifiMacPeripherals,
@@ -10,20 +9,19 @@ use crate::generated::{
 
 /// Physical owners used by one IEEE 802.15.4 task register set.
 ///
-/// The MAC, its interrupt route and its ETM channels are the whole IEEE
-/// 802.15.4 authority. Its clocks and resets belong to the modem clock owner;
-/// the common PHY it depends on is not modelled by this crate yet.
+/// The MAC and its ETM channels are the whole IEEE 802.15.4 authority; its
+/// interrupt route word is the interrupt matrix's. Its clocks and resets
+/// belong to the modem clock owner; the common PHY it depends on is not
+/// modelled by this crate yet.
 pub(crate) struct Ieee802154TaskPeripheralOwners {
     pub(crate) ieee802154_mac: crate::ieee802154::ownership::TaskRegisters,
-    pub(crate) ieee802154_interrupt_route: Ieee802154InterruptRoute,
     pub(crate) etm: crate::modem::etm::Ieee802154EtmChannels,
 }
 
-/// Opaque IEEE 802.15.4 MAC and interrupt-route register partition.
+/// Opaque IEEE 802.15.4 MAC register partition.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct Ieee802154Partition {
     mac: Ieee802154Mac,
-    interrupt_route: Ieee802154InterruptRoute,
     etm: crate::modem::etm::Ieee802154EtmChannels,
 }
 
@@ -120,7 +118,6 @@ impl RadioPartitions {
         Self {
             ieee802154: Ieee802154Partition {
                 mac: ieee802154.ieee802154_mac,
-                interrupt_route: ieee802154.ieee802154_interrupt_route,
                 etm: crate::modem::etm::ieee802154_channels(modem_etm),
             },
             modem_clock: crate::modem::clock::ModemClockRegisters::new(modem_clock),
@@ -167,17 +164,12 @@ impl Ieee802154TaskRegisters {
     /// Assemble the task register set and split the MAC block into its
     /// disjoint task and interrupt owners. This performs no MMIO.
     pub fn new(partition: Ieee802154Partition) -> (Self, Ieee802154InterruptSetup) {
-        let Ieee802154Partition {
-            mac,
-            interrupt_route: ieee802154_interrupt_route,
-            etm,
-        } = partition;
+        let Ieee802154Partition { mac, etm } = partition;
         let (task_mac, interrupt_mac) = crate::ieee802154::ownership::split(mac);
         (
             Self {
                 peripherals: Ieee802154TaskPeripheralOwners {
                     ieee802154_mac: task_mac,
-                    ieee802154_interrupt_route,
                     etm,
                 },
             },
@@ -192,12 +184,10 @@ impl Ieee802154TaskRegisters {
     pub fn into_partition(self, interrupts: Ieee802154InterruptSetup) -> Ieee802154Partition {
         let Ieee802154TaskPeripheralOwners {
             ieee802154_mac: task_mac,
-            ieee802154_interrupt_route,
             etm,
         } = self.peripherals;
         Ieee802154Partition {
             mac: crate::ieee802154::ownership::reunite(task_mac, interrupts.registers),
-            interrupt_route: ieee802154_interrupt_route,
             etm,
         }
     }

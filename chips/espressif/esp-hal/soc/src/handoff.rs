@@ -1,6 +1,7 @@
 //! The per-domain transfers of platform blocks from esp-hal's singletons to
 //! the chip PAC: the eFuse MAC words, the true random number generator, the
-//! reset causes, the watchdogs and the USB Serial/JTAG console.
+//! reset causes, the watchdogs, the interrupt matrix with the CLIC and the
+//! USB Serial/JTAG console.
 //!
 //! Each function consumes the domain's esp-hal singletons, which esp-hal
 //! hands out once, and never returns them, so it runs at most once per
@@ -8,15 +9,46 @@
 //! `EFUSE` singleton, so the eFuse transfer succeeds once per program by a
 //! flag instead. No function makes an MMIO access.
 
-use esp_hal::peripherals::{LP_AON_CLK_RST, LP_PERI, LP_WDT, RNG, TIMG0, TIMG1, USB_DEVICE};
+use esp_hal::peripherals::{
+    CLIC, INTERRUPT_CORE0, INTERRUPT_CORE1, LP_AON_CLK_RST, LP_PERI, LP_WDT, RNG, TIMG0, TIMG1,
+    USB_DEVICE,
+};
+use oer_esp32s31_hal::platform::InterruptBlocks;
 use oer_esp32s31_hal::usb_serial_jtag::{
     RetireError, UsbSerialJtagHandoff, UsbSerialJtagRegisters, retire_early_writer,
 };
 use oer_esp32s31_pac::platform::{
-    EfuseHandoff, EfuseRegisters, EntropyHandoff, EntropyRegisters, ResetCauseHandoff,
-    ResetCauseRegisters,
+    EfuseHandoff, EfuseRegisters, EntropyHandoff, EntropyRegisters, InterruptMatrixHandoff,
+    InterruptMatrixPeripherals, ResetCauseHandoff, ResetCauseRegisters,
 };
 use oer_esp32s31_pac::watchdog::{WatchdogBlocks, WatchdogHandoff};
+
+/// Transfer the interrupt matrix and the CLIC: hart 0's controller, which
+/// the interrupt table's router installs, the pending sources, and hart 1's
+/// bank.
+///
+/// Call it after `esp_hal::init`, whose `setup_interrupts` is esp-hal's last
+/// write of the route and line words.
+pub fn take_interrupt_controller(
+    interrupt_core0: INTERRUPT_CORE0<'static>,
+    interrupt_core1: INTERRUPT_CORE1<'static>,
+    clic: CLIC<'static>,
+) -> InterruptBlocks {
+    let _consumed = (interrupt_core0, interrupt_core1, clic);
+    #[allow(
+        unsafe_code,
+        reason = "the consumed esp-hal owners prove the permanent interrupt-matrix handoff"
+    )]
+    // SAFETY: esp-hal issues `INTERRUPT_CORE0`, `INTERRUPT_CORE1` and `CLIC`
+    // once; all three are consumed above and never returned, so this runs at
+    // most once. esp-hal writes the route and CLIC words only in
+    // `esp_hal::init`, which has returned, and in its interrupt API
+    // (`interrupt::enable`, `map`, `bind_interrupt` and the drivers'
+    // interrupt handlers), which no image calls; the words are reviewed in
+    // `registers/shared-words.toml`.
+    let handoff = unsafe { InterruptMatrixHandoff::assume_exclusive() };
+    InterruptBlocks::new(InterruptMatrixPeripherals::from_handoff(handoff))
+}
 
 /// Whether the eFuse words were transferred.
 static EFUSE_TAKEN: crate::once::Once = crate::once::Once::new();

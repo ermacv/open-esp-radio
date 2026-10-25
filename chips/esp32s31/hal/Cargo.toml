@@ -20,6 +20,7 @@ oer-espressif-efuse = { path = "../../espressif/efuse" }
 oer-espressif-watchdog = { path = "../../espressif/watchdog" }
 oer-espressif-boot = { path = "../../espressif/boot" }
 oer-mmio = { path = "../../../portable/mmio" }
+oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
 pin-project = "1.1.13"
 vcell = "0.1.3"
