@@ -152,6 +152,7 @@ read and a write do; there is no separate access key.
 | `hardware-written` | `R/W/SS`, `R/W/SS/SC`, ... | getter only, unless it is a data port's field |
 | `read-clears` | `R_SS_RC`, "cleared by a read" | nothing: its register has no API |
 | `debug-only` | "Do not use it in applications" | getter only; never written |
+| `unknown` | none: no source states the access | nothing: neither a read nor a write |
 
 Register-level constructs live in the type file:
 
@@ -160,10 +161,10 @@ Register-level constructs live in the type file:
   its argument; `held` names every other one-bit `self-clearing` field of
   the register. Together they are the register's exclusive group: a start
   refuses, writing nothing, while any of them reads one. A command register
-  has no `write-trigger` or `read-clears` field and no port or read side
-  effect;
+  has no `write-trigger`, `read-clears` or `unknown` field and no port or
+  read side effect;
 - `fifo = { sources }`: a FIFO port, popped and pushed only; one field, no
-  `dim`, not `write-one-to-clear`;
+  `dim`, neither `write-one-to-clear` nor `unknown`;
 - `data-port = { sources }`: a command port's data word, read and stored
   whole; one `plain` or `hardware-written` field;
 - `read-side-effect = { sources }`: a read changes the hardware; no API;
@@ -174,8 +175,9 @@ Register-level constructs live in the type file:
   subrange of one field). Read-safe qualification needs readable fields,
   and its comparison mask covers only readable field bits; without a mask
   it qualifies all declared fields. `write-only` and `write-trigger` have
-  no readable value. FIFO, read-side-effect and read-clears registers never
-  qualify, even when the comparison mask excludes the affected bits.
+  no readable value, and neither has `unknown`. FIFO, read-side-effect and
+  read-clears registers never qualify, even when the comparison mask
+  excludes the affected bits.
 
 A whole-word fixed image is a transaction, so it stays in the PAC policy
 (`fixed-register-images`, `whole-word = true`).
@@ -211,6 +213,20 @@ from the block's base (a group register at the group's first element; a
 register. The first group member's combined offset must fit `u32`, the
 positional naming domain. An observation of one instance is a source of
 that instance in the root, not a second review.
+
+An entity no source is recorded for has an override with
+`unsourced = "<reason>"` and at most a `naming` that differs from its
+default. It states no `sources`, `provenance`, `accuracy` or
+`completeness` and inherits none: it resolves to no sources, no
+provenance and `unknown` accuracy and completeness, so it claims nothing
+beyond its bits and name and is no reviewed assertion. A `vendor` name
+needs a source, so an unsourced entity is `descriptive` or `opaque`.
+`ChipModel::unsourced_reviews` lists every such review with its reason.
+
+```toml
+[review.entity."CONTROL.GAIN"]
+unsourced = "The curated review names it without a source."
+```
 
 ### Chip root file (`schema = 4`)
 

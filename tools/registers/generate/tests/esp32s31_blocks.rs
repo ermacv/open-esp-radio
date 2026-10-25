@@ -162,3 +162,46 @@ fn curated_registers_keep_their_absolute_words() {
             .any(|instance| instance.name == "BBPLL")
     );
 }
+
+#[test]
+fn unestablished_facts_stay_unestablished() {
+    use oer_registers_contracts::{FactAccuracy, FactCompleteness};
+    use oer_registers_model::chip_model::FieldClass;
+
+    let model = model();
+    // A review without a source claims no provenance or classification.
+    let unsourced = model.unsourced_reviews().collect::<Vec<_>>();
+    assert!(!unsourced.is_empty());
+    for review in &unsourced {
+        let annotation = &model.types()[review.block_type].reviews[review.key];
+        assert!(annotation.sources.is_empty(), "{}", annotation.entity);
+        assert_eq!(annotation.provenance, None, "{}", annotation.entity);
+        assert_eq!(annotation.accuracy, Some(FactAccuracy::Unknown));
+        assert_eq!(annotation.completeness, Some(FactCompleteness::Unknown));
+    }
+    let class = |identity: &str| model.field(identity).expect("the field exists").class;
+    // No source states the access of this analog field.
+    assert_eq!(
+        class("MPLL.I2C_MPLL_IR_CAL_EXT_CAP.I2C_MPLL_IR_CAL_EXT_CAP"),
+        FieldClass::Unknown
+    );
+    // The header's class stands against an observed read-modify-write.
+    for field in [
+        "TIE_HIGH_XPD_BB_I2C",
+        "TIE_HIGH_XPD_XTALX2",
+        "TIE_HIGH_XPD_XTAL",
+    ] {
+        assert_eq!(
+            class(&format!("PMU.IMM_HP_CK_POWER_0.{field}")),
+            FieldClass::WriteTrigger
+        );
+    }
+    // A header-reserved bit the ROM writes and never reads.
+    for host in ["I2C0_CTRL", "I2C1_CTRL"] {
+        let field = model
+            .field(&format!("I2C_ANA_MST.{host}.START_OR_RESET"))
+            .expect("the reset bit exists");
+        assert_eq!(field.class, FieldClass::WriteOnly);
+        assert_eq!(field.review.sources, ["ROM_REV0_PHY_I2C"]);
+    }
+}

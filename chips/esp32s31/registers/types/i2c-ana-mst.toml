@@ -46,10 +46,10 @@ completeness = "unknown"
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
 
 [review.entity."I2C0_CTRL.START_OR_RESET"]
-sources = ["S31_ESP_PACS_SVD"]
+sources = ["ROM_REV0_PHY_I2C"]
 provenance = "observed"
-accuracy = "unknown"
-completeness = "unknown"
+completeness = "partial"
+naming = "descriptive"
 
 [review.entity."I2C1_CTRL"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
@@ -82,10 +82,10 @@ completeness = "unknown"
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
 
 [review.entity."I2C1_CTRL.START_OR_RESET"]
-sources = ["S31_ESP_PACS_SVD"]
+sources = ["ROM_REV0_PHY_I2C"]
 provenance = "observed"
-accuracy = "unknown"
-completeness = "unknown"
+completeness = "partial"
+naming = "descriptive"
 
 [review.entity."I2C1_CTRL.BITS_27_31_OPAQUE"]
 sources = ["S31_MMIO_USE_2010F804", "S31_MMIO_DECLARED_2010F804"]
@@ -97,10 +97,7 @@ completeness = "partial"
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
 
 [review.entity."ANA_CONF0.BBPLL_CAL_MODE"]
-sources = ["S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 naming = "descriptive"
 
 [review.entity."ANA_CONF0.PHY_REGISTER_ENABLE"]
@@ -145,12 +142,6 @@ completeness = "unknown"
 [review.entity."ANA_CONF1"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
 
-[review.entity."ANA_CONF1.ANA_CONF1"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
-
-[review.entity."ANA_CONF1.ANA_STATUS1"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
-
 [review.entity."ANA_CONF2"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
 
@@ -177,31 +168,10 @@ completeness = "partial"
 [review.entity."I2C0_CTRL1"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
 
-[review.entity."I2C0_CTRL1.I2C0_SCL_PULSE_DUR"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
-
-[review.entity."I2C0_CTRL1.I2C0_SDA_SIDE_GUARD"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
-
 [review.entity."I2C1_CTRL1"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
 
-[review.entity."I2C1_CTRL1.I2C1_SCL_PULSE_DUR"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
-
-[review.entity."I2C1_CTRL1.I2C1_SDA_SIDE_GUARD"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
-
 [review.entity."HW_I2C_CTRL"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
-
-[review.entity."HW_I2C_CTRL.HW_I2C_SCL_PULSE_DUR"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
-
-[review.entity."HW_I2C_CTRL.HW_I2C_SDA_SIDE_GUARD"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
-
-[review.entity."HW_I2C_CTRL.ARBITER_DIS"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
 
 [review.entity."HW_I2C_CTRL.BITS_12_31_OPAQUE"]
@@ -248,8 +218,8 @@ class = "read-only"
 [[registers.fields]]
 name = "START_OR_RESET"
 bits = "26"
-class = "plain"
-description = "The ESP-IDF header marks these bits reserved; the cited sources use them."
+class = "write-only"
+description = "The ESP-IDF header marks bit 26 reserved. The complete ROM phy_i2c_master_reset stores 0x04000000, this bit alone, to the word to reset the host, and no complete ROM body reads the bit; a start role and a read value are not established."
 
 [[registers]]
 name = "I2C1_CTRL"
@@ -288,8 +258,8 @@ class = "read-only"
 [[registers.fields]]
 name = "START_OR_RESET"
 bits = "26"
-class = "plain"
-description = "The ESP-IDF header marks these bits reserved; the cited sources use them."
+class = "write-only"
+description = "The ESP-IDF header marks bit 26 reserved. The complete ROM phy_i2c_master_reset stores 0x04000000, this bit alone, to the word to reset the host, and no complete ROM body reads the bit; a start role and a read value are not established."
 
 [[registers.fields]]
 name = "BITS_27_31_OPAQUE"

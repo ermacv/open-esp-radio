@@ -26,12 +26,12 @@ width = 8
 [[registers.fields]]
 name = "I2C_BBPLL_IR_CAL_DELAY"
 bits = "3:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_BBPLL_IR_CAL_CK_DIV"
 bits = "7:4"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_BBPLL_IR_CAL_EXT_CAP"
@@ -41,27 +41,27 @@ width = 8
 [[registers.fields]]
 name = "I2C_BBPLL_IR_CAL_EXT_CAP"
 bits = "3:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_BBPLL_IR_CAL_ENX_CAP"
 bits = "4"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_BBPLL_IR_CAL_RSTB"
 bits = "5"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_BBPLL_IR_CAL_START"
 bits = "6"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_BBPLL_IR_CAL_UNSTOP"
 bits = "7"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_BBPLL_OC_REF_DIV"
@@ -71,12 +71,12 @@ width = 8
 [[registers.fields]]
 name = "I2C_BBPLL_OC_REF_DIV"
 bits = "3:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_BBPLL_OC_DCHGP"
 bits = "6:4"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_BBPLL_OC_DIV_7_0"
@@ -86,7 +86,7 @@ width = 8
 [[registers.fields]]
 name = "I2C_BBPLL_OC_DIV_7_0"
 bits = "7:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_BBPLL_RSTB_DIV_ADC"
@@ -128,17 +128,17 @@ width = 8
 [[registers.fields]]
 name = "I2C_BBPLL_OC_DR1"
 bits = "2:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_BBPLL_OC_DR3"
 bits = "6:4"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_BBPLL_EN_USB"
 bits = "7"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_BBPLL_OC_DHREF_SEL"
@@ -148,12 +148,12 @@ width = 8
 [[registers.fields]]
 name = "I2C_BBPLL_OC_DHREF_SEL"
 bits = "5:4"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_BBPLL_OC_DLREF_SEL"
 bits = "7:6"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_BBPLL_OR_CAL_UDF"
@@ -163,22 +163,22 @@ width = 8
 [[registers.fields]]
 name = "I2C_BBPLL_OR_CAL_UDF"
 bits = "4"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_BBPLL_OR_CAL_OVF"
 bits = "5"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_BBPLL_OR_CAL_END"
 bits = "6"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_BBPLL_OR_LOCK"
 bits = "7"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_BBPLL_OC_VCO_DBIAS"
@@ -188,7 +188,7 @@ width = 8
 [[registers.fields]]
 name = "I2C_BBPLL_OC_VCO_DBIAS"
 bits = "1:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_BBPLL_ENT_PLL"
@@ -198,9 +198,9 @@ width = 8
 [[registers.fields]]
 name = "I2C_BBPLL_ENT_PLL"
 bits = "3"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_BBPLL_DTEST"
 bits = "5:4"
-class = "plain"
+class = "unknown"

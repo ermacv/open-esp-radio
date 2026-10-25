@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_registers_contracts::NameOrigin;
+use oer_registers_contracts::{FactAccuracy, FactCompleteness, NameOrigin};
 
 use super::{
     Error, ErrorKind,
@@ -169,6 +169,8 @@ pub struct BlockType {
     /// The resolved review of every template register (`KEY`) and field
     /// (`KEY.FIELD`).
     pub reviews: BTreeMap<String, ReviewAnnotation>,
+    /// The reason of every review that records no source, by the same key.
+    pub unsourced: BTreeMap<String, String>,
 }
 
 impl BlockType {
@@ -264,13 +266,17 @@ impl BlockType {
         check_elements(context, space, &name, &elements)?;
         check_group_spans(context, &name, &file.groups, &elements)?;
         check_commands(context, &name, &file.commands, &templates)?;
-        let reviews = resolve_reviews(context, &file, &templates)?;
+        let Reviews {
+            resolved: reviews,
+            unsourced,
+        } = resolve_reviews(context, &file, &templates)?;
         Ok(Self {
             path,
             file,
             templates,
             elements,
             reviews,
+            unsourced,
         })
     }
 }
@@ -501,10 +507,10 @@ fn check_ports(context: Context<'_>, entity: &str, register: &Register) -> Resul
     if register.fifo.is_some()
         && (register.dim.is_some()
             || !matches!(register.fields.as_slice(),
-                [field] if field.class != FieldClass::WriteOneToClear))
+                [field] if !matches!(field.class, FieldClass::WriteOneToClear | FieldClass::Unknown)))
     {
         return Err(fail(
-            "a FIFO port is one register, no dim, with one field that is not write-one-to-clear",
+            "a FIFO port is one register, no dim, with one field that is neither write-one-to-clear nor unknown",
         ));
     }
     if register.data_port.is_some()
@@ -802,8 +808,8 @@ fn check_group_spans(
 }
 
 /// A command register's commands, qualifiers and held bits are each one
-/// self-clearing bit of it, together every one; it holds no write trigger
-/// and no field a read clears, and is no port.
+/// self-clearing bit of it, together every one; it holds no write trigger,
+/// no field a read clears and no field of unknown class, and is no port.
 fn check_commands(
     context: Context<'_>,
     name: &str,
@@ -869,7 +875,7 @@ fn check_commands(
             }
             if matches!(
                 field.class,
-                FieldClass::WriteTrigger | FieldClass::ReadClears
+                FieldClass::WriteTrigger | FieldClass::ReadClears | FieldClass::Unknown
             ) {
                 return Err(fail(format!(
                     "holds the {} field {}",
@@ -952,15 +958,22 @@ fn review_entities(
     Ok(out)
 }
 
+/// The resolved reviews of a type and the reasons of its unsourced ones.
+struct Reviews {
+    resolved: BTreeMap<String, ReviewAnnotation>,
+    unsourced: BTreeMap<String, String>,
+}
+
 /// Every register's and field's review: its default (`[review]`, or
 /// `[review.opaque]` with naming `opaque` for an `*_OPAQUE` name) with its
 /// override's keys, each of which differs from the default; complete,
-/// cited and named by the naming rules.
+/// cited and named by the naming rules. An `unsourced` override keeps only
+/// the default's naming.
 fn resolve_reviews(
     context: Context<'_>,
     file: &TypeFile,
     templates: &BTreeMap<String, Register>,
-) -> Result<BTreeMap<String, ReviewAnnotation>, Error> {
+) -> Result<Reviews, Error> {
     let type_name = &file.header.name;
     let review = &file.review;
     if let Some(sources) = &review.sources {
@@ -974,7 +987,9 @@ fn resolve_reviews(
         context.sources(&format!("{type_name}.review.opaque"), sources)?;
     }
     for (key, annotation) in &review.entity {
-        if let Some(sources) = &annotation.sources {
+        if let Some(sources) = &annotation.sources
+            && annotation.unsourced.is_none()
+        {
             context.sources(&format!("{type_name}.{key}"), sources)?;
         }
     }
@@ -987,12 +1002,14 @@ fn resolve_reviews(
         return Err(context.error(format!("{type_name}.{key}"), ErrorKind::ReviewUnknownEntity));
     }
     let mut resolved = BTreeMap::new();
+    let mut unsourced = BTreeMap::new();
     for entity in entities {
         let path = format!("{type_name}.{}", entity.key);
         let fail = |kind| context.error(&path, kind);
         let default = if entity.opaque {
             let opaque = review.opaque.clone().unwrap_or_default();
             ReviewOverride {
+                unsourced: None,
                 sources: opaque.sources,
                 provenance: opaque.provenance,
                 accuracy: opaque.accuracy,
@@ -1001,6 +1018,7 @@ fn resolve_reviews(
             }
         } else {
             ReviewOverride {
+                unsourced: None,
                 sources: review.sources.clone(),
                 provenance: review.provenance,
                 accuracy: review.accuracy,
@@ -1008,7 +1026,18 @@ fn resolve_reviews(
                 naming: review.naming,
             }
         };
-        let merged = match review.entity.get(&entity.key) {
+        let stated = review.entity.get(&entity.key);
+        if let Some((stated, reason)) =
+            stated.and_then(|stated| Some((stated, stated.unsourced.as_ref()?)))
+        {
+            let annotation = unsourced_review(&path, default, stated, reason).map_err(fail)?;
+            crate::validate_naming(&path, Some(&annotation), &entity.position)
+                .map_err(|error| fail(ErrorKind::Naming(error.to_string())))?;
+            unsourced.insert(entity.key.clone(), reason.clone());
+            resolved.insert(entity.key, annotation);
+            continue;
+        }
+        let merged = match stated {
             None => default,
             Some(stated) => merge(default, stated).map_err(fail)?,
         };
@@ -1046,7 +1075,52 @@ fn resolve_reviews(
             .map_err(|error| fail(ErrorKind::Naming(error.to_string())))?;
         resolved.insert(entity.key, annotation);
     }
-    Ok(resolved)
+    Ok(Reviews {
+        resolved,
+        unsourced,
+    })
+}
+
+/// The review of an entity no source is recorded for: no sources, no
+/// provenance, `unknown` accuracy and completeness, and the naming the
+/// override or its default gives.
+fn unsourced_review(
+    path: &str,
+    default: ReviewOverride,
+    stated: &ReviewOverride,
+    reason: &str,
+) -> Result<ReviewAnnotation, ErrorKind> {
+    if reason.trim().is_empty() {
+        return Err(ErrorKind::ReviewUnsourced(
+            "needs a nonblank reason".to_owned(),
+        ));
+    }
+    let claims = [
+        ("sources", stated.sources.is_some()),
+        ("provenance", stated.provenance.is_some()),
+        ("accuracy", stated.accuracy.is_some()),
+        ("completeness", stated.completeness.is_some()),
+    ];
+    if let Some((key, _)) = claims.iter().find(|(_, stated)| *stated) {
+        return Err(ErrorKind::ReviewUnsourced(format!(
+            "states {key}; an unsourced review records none"
+        )));
+    }
+    let naming = stated
+        .naming
+        .or(default.naming)
+        .ok_or(ErrorKind::ReviewIncomplete("naming"))?;
+    if stated.naming.is_some() && stated.naming == default.naming {
+        return Err(ErrorKind::ReviewRepeatsDefault("naming"));
+    }
+    Ok(ReviewAnnotation {
+        entity: path.to_owned(),
+        sources: Vec::new(),
+        provenance: None,
+        accuracy: Some(FactAccuracy::Unknown),
+        completeness: Some(FactCompleteness::Unknown),
+        naming: Some(naming),
+    })
 }
 
 /// `default` with the keys `stated` sets, each of which must differ.
@@ -1065,6 +1139,7 @@ fn merge(default: ReviewOverride, stated: &ReviewOverride) -> Result<ReviewOverr
         }
     }
     Ok(ReviewOverride {
+        unsourced: None,
         sources: pick("sources", default.sources, &stated.sources)?,
         provenance: pick("provenance", default.provenance, &stated.provenance)?,
         accuracy: pick("accuracy", default.accuracy, &stated.accuracy)?,

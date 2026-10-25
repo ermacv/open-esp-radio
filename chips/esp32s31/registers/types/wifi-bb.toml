@@ -8,10 +8,10 @@ description = "The Wi-Fi baseband at DR_REG_WIFI_BB_BASE: AGC, NRX and BB words.
 sources = ["ESP_IDF_25FE69F_S31_PHY_RETENTION", "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK", "ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_POWER_DETECTOR", "ROM_REV0_PHY_IQ_COEFFICIENTS", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG", "ROM_REV0_PHY_AGC", "ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_ANT_INIT", "BLOB_LIBPHY_PHY_DC_MEM_CLR", "BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE", "BLOB_LIBPHY_PHY_SET_RX_COMP_NEW", "ROM_REV0_PHY_READ_NOISE_FLOOR", "ROM_REV0_PHY_LOW_RATE", "ROM_REV0_PHY_RX11BLR_CFG", "BLOB_LIBRFTEST_ADCTRIG", "BLOB_LIBRFTEST_SET_DUMP_MODE", "BLOB_LIBRFTEST_PRINT_DUMP_DATA", "S31_MMIO_MODEM_RADIO_CORE_LOW", "ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_LIBPHY_PHY_BB_INIT", "BLOB_LIBPHY_REGISTER_CHIPV7_PHY", "ROM_REV0_PHY_OPEN_FE_BB_CLK", "ROM_REV0_PHY_FE_REG_INIT", "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK"]
 
 [review]
-sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
 provenance = "observed"
-accuracy = "unknown"
-completeness = "unknown"
+accuracy = "exact"
+completeness = "complete"
 naming = "descriptive"
 
 [review.opaque]
@@ -22,6 +22,8 @@ completeness = "unknown"
 
 [review.entity."WORD_0010_OPAQUE.RX_SENSE"]
 sources = ["S31_MMIO_DECLARED_20107010"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."WORD_0010_OPAQUE.BITS_0_22_OPAQUE"]
 sources = ["S31_MMIO_USE_20107010", "S31_MMIO_DECLARED_20107010"]
@@ -30,6 +32,8 @@ completeness = "partial"
 
 [review.entity."WORD_0014_OPAQUE.RX_SENSE"]
 sources = ["S31_MMIO_DECLARED_20107014"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."WORD_0014_OPAQUE.BITS_0_22_OPAQUE"]
 sources = ["S31_MMIO_USE_20107014", "S31_MMIO_DECLARED_20107014"]
@@ -37,8 +41,7 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."NOISE_FLOOR_CONTROL"]
-accuracy = "exact"
-completeness = "complete"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
 
 [review.entity."NOISE_FLOOR_CONTROL.BIT_23_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20107018"]
@@ -63,6 +66,8 @@ completeness = "partial"
 
 [review.entity."WORD_001C_OPAQUE.CCA_THRESHOLD"]
 sources = ["S31_MMIO_DECLARED_2010701C"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."WORD_001C_OPAQUE.BITS_8_31_OPAQUE"]
 sources = ["S31_MMIO_USE_2010701C", "S31_MMIO_DECLARED_2010701C"]
@@ -71,7 +76,7 @@ completeness = "partial"
 
 [review.entity."AGC_SHARED_CONTROL"]
 sources = ["ROM_REV0_PHY_AGC", "ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_FORCE_RX_GAIN", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE", "BLOB_LIBPHY_PHY_SET_RX_COMP_NEW"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."AGC_SHARED_CONTROL.BITS_0_7_OPAQUE"]
 sources = ["BLOB_LIBPHY_PHY_SET_RX_COMP_NEW", "S31_MMIO_DECLARED_2010702C"]
@@ -79,15 +84,15 @@ accuracy = "exact"
 
 [review.entity."AGC_SHARED_CONTROL.WIFI_MAX_GAIN_INDEX"]
 sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE", "BLOB_LIBRFTEST_RX_MAX_GAIN"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."AGC_SHARED_CONTROL.FORCED_GAIN_ENABLE"]
 sources = ["ROM_REV0_PHY_AGC", "ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_FORCE_RX_GAIN", "BLOB_LIBRFTEST_FORCE_RX_GAIN"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."AGC_SHARED_CONTROL.FORCED_GAIN_INDEX"]
 sources = ["ROM_REV0_PHY_AGC", "ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_FORCE_RX_GAIN", "BLOB_LIBRFTEST_FORCE_RX_GAIN"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."AGC_SHARED_CONTROL.BITS_15_22_OPAQUE"]
 sources = ["S31_MMIO_USE_2010702C", "S31_MMIO_DECLARED_2010702C"]
@@ -96,12 +101,10 @@ completeness = "partial"
 
 [review.entity."AGC_ANTENNA_CONTROL"]
 sources = ["ROM_REV0_PHY_AGC", "ROM_REV0_PHY_ANT_INIT", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."AGC_ANTENNA_CONTROL.FREQUENCY_BAND_INVERSE"]
 sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
-accuracy = "exact"
-completeness = "complete"
 
 [review.entity."AGC_ANTENNA_CONTROL.BITS_11_17_OPAQUE"]
 sources = ["ROM_REV0_PHY_ANT_INIT", "S31_MMIO_DECLARED_20107030"]
@@ -127,7 +130,7 @@ completeness = "partial"
 
 [review.entity."DC_MEMORY_CONTROL"]
 sources = ["BLOB_LIBPHY_PHY_DC_MEM_CLR"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."DC_MEMORY_CONTROL.BIT_20_OPAQUE"]
 sources = ["BLOB_LIBPHY_PHY_DC_MEM_CLR", "S31_MMIO_DECLARED_2010703C"]
@@ -135,11 +138,10 @@ accuracy = "exact"
 
 [review.entity."RX_11B_PATH_CONTROL_0"]
 sources = ["ROM_REV0_PHY_AGC"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."RX_11B_PATH_CONTROL_0.RX_SENSE"]
 sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
-accuracy = "exact"
 completeness = "partial"
 
 [review.entity."RX_11B_PATH_CONTROL_0.BITS_8_13_OPAQUE"]
@@ -168,10 +170,12 @@ accuracy = "exact"
 
 [review.entity."WORD_0050_OPAQUE.NOISE_FLOOR"]
 sources = ["S31_MMIO_DECLARED_20107050"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."AGC_SATURATION_CONTROL"]
 sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."AGC_SATURATION_CONTROL.BITS_0_18_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_2010705C"]
@@ -194,22 +198,24 @@ sources = ["S31_MMIO_DECLARED_2010705C"]
 
 [review.entity."SATURATION_GAIN_LOW"]
 sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
-accuracy = "exact"
-completeness = "complete"
 
 [review.entity."SATURATION_GAIN_LOW.VALUE"]
 sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."RF_RX_SATURATION_CONFIG"]
 sources = ["ROM_REV0_PHY_AGC"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."RF_RX_SATURATION_CONFIG.VALUE"]
 sources = ["ROM_REV0_PHY_AGC"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."WORD_006C_OPAQUE.RSSI_ABOVE_NOISE_FLOOR"]
 sources = ["S31_MMIO_DECLARED_2010706C"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."WORD_0074_OPAQUE.BITS_0_31_OPAQUE"]
 sources = ["S31_MMIO_USE_20107074", "S31_MMIO_DECLARED_20107074"]
@@ -219,25 +225,21 @@ completeness = "partial"
 [review.entity."NOISE_FLOOR_MEASUREMENT"]
 sources = ["ROM_REV0_PHY_READ_NOISE_FLOOR", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30", "BLOB_LIBRFTEST_RF_RX_SATURATION_PROBES"]
 provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
 
 [review.entity."NOISE_FLOOR_MEASUREMENT.SIGNED_SIXTEENTH_DB_CODE"]
 sources = ["ROM_REV0_PHY_READ_NOISE_FLOOR", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
 provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
 
 [review.entity."NOISE_FLOOR_MEASUREMENT.BITS_12_18_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_2010708C"]
 
 [review.entity."AGC_GAIN_LIMIT_LOW"]
 sources = ["ROM_REV0_PHY_AGC"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."AGC_GAIN_LIMIT_LOW.INITIAL_GAIN_INDEX"]
 sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBRFTEST_RX_INIT_GAIN"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."AGC_GAIN_LIMIT_LOW.BITS_0_1_OPAQUE"]
 sources = ["S31_MMIO_USE_20107094", "S31_MMIO_DECLARED_20107094"]
@@ -251,7 +253,7 @@ completeness = "partial"
 
 [review.entity."RX_COMPENSATION_HIGH_CONTROL"]
 sources = ["BLOB_LIBPHY_PHY_SET_RX_COMP_NEW"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."RX_COMPENSATION_HIGH_CONTROL.BITS_24_31_OPAQUE"]
 sources = ["BLOB_LIBPHY_PHY_SET_RX_COMP_NEW", "S31_MMIO_DECLARED_201070A0"]
@@ -259,11 +261,9 @@ accuracy = "exact"
 
 [review.entity."CSI_DUMP_FORCE_CONTROL"]
 sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
-accuracy = "exact"
-completeness = "complete"
 
 [review.entity."CSI_DUMP_FORCE_CONTROL.FORCE_LLTF"]
-sources = ["ROM_REV0_PHY_AGC", "ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_FORCE_RX_GAIN", "BLOB_LIBRFTEST_FORCE_RX_GAIN"]
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."CSI_DUMP_FORCE_CONTROL.BITS_0_14_OPAQUE"]
 sources = ["S31_MMIO_USE_201070A4", "S31_MMIO_DECLARED_201070A4"]
@@ -301,10 +301,12 @@ completeness = "partial"
 
 [review.entity."WORD_00F4_OPAQUE.RIFS_MODE_ENABLE"]
 sources = ["S31_MMIO_DECLARED_201070F4"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."RX_11B_WINDOW_CONTROL"]
 sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."RX_11B_WINDOW_CONTROL.BITS_0_8_OPAQUE"]
 sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "S31_MMIO_DECLARED_20107104"]
@@ -317,15 +319,15 @@ completeness = "partial"
 
 [review.entity."SATURATION_GAIN_HIGH"]
 sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
-accuracy = "exact"
-completeness = "complete"
 
 [review.entity."SATURATION_GAIN_HIGH.VALUE"]
 sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."ANTENNA_CONTROL_0"]
 sources = ["ROM_REV0_PHY_ANT_INIT", "ROM_REV0_PHY_ANT_DFT_CFG"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."ANTENNA_CONTROL_0.BITS_0_10_OPAQUE"]
 sources = ["ROM_REV0_PHY_ANT_INIT", "S31_MMIO_DECLARED_2010711C"]
@@ -347,7 +349,7 @@ completeness = "partial"
 
 [review.entity."ANTENNA_CONTROL_2"]
 sources = ["ROM_REV0_PHY_ANT_INIT"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."ANTENNA_CONTROL_2.BITS_8_15_OPAQUE"]
 sources = ["ROM_REV0_PHY_ANT_INIT", "S31_MMIO_DECLARED_20107120"]
@@ -359,7 +361,7 @@ accuracy = "exact"
 
 [review.entity."RX_11B_PATH_CONTROL_1"]
 sources = ["ROM_REV0_PHY_AGC"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."RX_11B_PATH_CONTROL_1.BITS_0_3_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20107124"]
@@ -379,18 +381,18 @@ completeness = "partial"
 
 [review.entity."AGC_INIT_HIGH_CONTROL"]
 sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPP_HAL_HE_INIT_PREFIX"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."AGC_INIT_HIGH_CONTROL.BITS_24_31_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20107128"]
 
 [review.entity."RX_GAIN_LIMIT_CONTROL"]
 sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."RX_GAIN_LIMIT_CONTROL.INITIAL_GAIN_INDEX"]
 sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE", "BLOB_LIBRFTEST_RX_INIT_GAIN"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."RX_GAIN_LIMIT_CONTROL.BIT_25_OPAQUE"]
 sources = ["S31_MMIO_USE_2010713C", "S31_MMIO_DECLARED_2010713C"]
@@ -493,8 +495,15 @@ sources = ["S31_MMIO_DECLARED_2010743C"]
 
 [review.entity."TX_OUTPUT_FILTER_CONTROL"]
 sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
-accuracy = "exact"
-completeness = "complete"
+
+[review.entity."TX_OUTPUT_FILTER_CONTROL.FILTER_INPUT_2"]
+unsourced = "The curated model's review names this entity without a source."
+
+[review.entity."TX_OUTPUT_FILTER_CONTROL.FILTER_INPUT_0"]
+unsourced = "The curated model's review names this entity without a source."
+
+[review.entity."TX_OUTPUT_FILTER_CONTROL.FILTER_INPUT_1"]
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."TX_OUTPUT_FILTER_CONTROL.BITS_0_3_OPAQUE"]
 sources = ["S31_MMIO_USE_20107440", "S31_MMIO_DECLARED_20107440"]
@@ -508,8 +517,9 @@ completeness = "partial"
 
 [review.entity."TX_POWER_TRACK_CONTROL_0"]
 sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
-accuracy = "exact"
-completeness = "complete"
+
+[review.entity."TX_POWER_TRACK_CONTROL_0.TRACK_ENABLE"]
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."TX_POWER_TRACK_CONTROL_0.BITS_1_4_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20107454"]
@@ -519,8 +529,6 @@ sources = ["S31_MMIO_DECLARED_20107454"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_1"]
 sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
-accuracy = "exact"
-completeness = "complete"
 
 [review.entity."TX_POWER_TRACK_CONTROL_1.BIT_0_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20107458"]
@@ -539,8 +547,6 @@ sources = ["S31_MMIO_DECLARED_20107458"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_2"]
 sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
-accuracy = "exact"
-completeness = "complete"
 
 [review.entity."TX_POWER_TRACK_CONTROL_2.BITS_0_7_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_2010745C"]
@@ -556,24 +562,12 @@ sources = ["S31_MMIO_DECLARED_2010745C"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_3"]
 sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
-accuracy = "exact"
-completeness = "complete"
 
 [review.entity."TX_POWER_TRACK_CONTROL_3.BITS_0_7_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20107460"]
 
 [review.entity."TX_POWER_TRACK_CONTROL_3.BITS_8_15_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20107460"]
-
-[review.entity."HCCFR_CONTROL"]
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
-accuracy = "exact"
-completeness = "complete"
-
-[review.entity."HCCFR_CONTROL.ENABLE"]
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
-accuracy = "exact"
-completeness = "complete"
 
 [review.entity."HCCFR_CONTROL.BITS_0_21_OPAQUE"]
 sources = ["S31_MMIO_USE_20107468", "S31_MMIO_DECLARED_20107468"]
@@ -585,51 +579,29 @@ sources = ["S31_MMIO_USE_20107468", "S31_MMIO_DECLARED_20107468"]
 accuracy = "exact"
 completeness = "partial"
 
-[review.entity."HCCFR_VALUE"]
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
-accuracy = "exact"
-completeness = "complete"
-
-[review.entity."HCCFR_VALUE.VALUE"]
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
-accuracy = "exact"
-completeness = "complete"
-
 [review.entity."HCCFR_VALUE.BITS_12_31_OPAQUE"]
 sources = ["S31_MMIO_USE_2010746C", "S31_MMIO_DECLARED_2010746C"]
 accuracy = "exact"
 completeness = "partial"
 
-[review.entity."ICCFR_FORCE_CONTROL"]
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
-accuracy = "exact"
-completeness = "complete"
+[review.entity."ICCFR_FORCE_CONTROL.FORCE_MODE_LOW"]
+unsourced = "The curated model's review names this entity without a source."
 
-[review.entity."ICCFR_FORCE_CONTROL.FORCE_ENABLE"]
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
-accuracy = "exact"
-completeness = "complete"
+[review.entity."ICCFR_FORCE_CONTROL.FORCE_MODE_HIGH"]
+unsourced = "The curated model's review names this entity without a source."
 
-[review.entity."ICCFR_FORCE_CONTROL.FORCE_VALUE"]
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
-accuracy = "exact"
-completeness = "complete"
-
-[review.entity."ICCFR_ENABLE_CONTROL"]
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
-accuracy = "exact"
-completeness = "complete"
-
-[review.entity."ICCFR_ENABLE_CONTROL.GATE"]
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
-accuracy = "exact"
-completeness = "complete"
+[review.entity."ICCFR_FORCE_CONTROL.FORCE_TRIGGER"]
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."WORD_0800_OPAQUE.FFT_SCALE_FORCE"]
 sources = ["S31_MMIO_DECLARED_20107800"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."WORD_0800_OPAQUE.FFT_SCALE"]
 sources = ["S31_MMIO_DECLARED_20107800"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."WORD_0800_OPAQUE.BITS_0_18_OPAQUE"]
 sources = ["S31_MMIO_USE_20107800", "S31_MMIO_DECLARED_20107800"]
@@ -663,7 +635,6 @@ completeness = "partial"
 
 [review.entity."NRX_FREQUENCY_CONTROL"]
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-accuracy = "exact"
 completeness = "partial"
 
 [review.entity."NRX_FREQUENCY_CONTROL.BITS_0_23_OPAQUE"]
@@ -682,9 +653,13 @@ completeness = "complete"
 
 [review.entity."WORD_0890_OPAQUE.HE_RU26_GOOD_RESPONSE_ENABLE"]
 sources = ["S31_MMIO_DECLARED_20107890"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."WORD_0890_OPAQUE.HE_RU26_GOOD_RESPONSE_DISABLE"]
 sources = ["S31_MMIO_DECLARED_20107890"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."WORD_0898_OPAQUE.BITS_0_9_OPAQUE"]
 sources = ["S31_MMIO_USE_20107898", "S31_MMIO_DECLARED_20107898"]
@@ -707,7 +682,7 @@ sources = ["S31_MMIO_DECLARED_201078B8"]
 
 [review.entity."POST_INIT_RX_CONTROL"]
 sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."POST_INIT_RX_CONTROL.BITS_0_6_OPAQUE"]
 sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "S31_MMIO_DECLARED_201078C8"]
@@ -751,9 +726,13 @@ sources = ["S31_MMIO_DECLARED_2010790C"]
 
 [review.entity."WORD_090C_OPAQUE.LLTF_MASK_INPUT_1"]
 sources = ["S31_MMIO_DECLARED_2010790C"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."WORD_090C_OPAQUE.LLTF_MASK_INPUT_0"]
 sources = ["S31_MMIO_DECLARED_2010790C"]
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."WORD_090C_OPAQUE.BITS_0_3_OPAQUE"]
 sources = ["S31_MMIO_USE_2010790C", "S31_MMIO_DECLARED_2010790C"]
@@ -786,7 +765,6 @@ sources = ["S31_MMIO_DECLARED_20107A28"]
 
 [review.entity."BASEBAND_TX_PA_CONTROL"]
 sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CHAN_DUMP_CFG"]
-accuracy = "exact"
 completeness = "partial"
 
 [review.entity."BASEBAND_TX_PA_CONTROL.BIT_9_OPAQUE"]
@@ -822,12 +800,10 @@ completeness = "partial"
 
 [review.entity."BASEBAND_WATCHDOG_STATUS"]
 sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
-accuracy = "exact"
+completeness = "unknown"
 
 [review.entity."BASEBAND_WATCHDOG_STATUS.STATUS"]
 sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
-accuracy = "exact"
-completeness = "complete"
 
 [review.entity."WORD_0C14_OPAQUE"]
 sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
@@ -858,7 +834,7 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."BASEBAND_TX_PA_TIMING"]
-accuracy = "exact"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
 completeness = "partial"
 
 [review.entity."BASEBAND_TX_PA_TIMING.BITS_0_9_OPAQUE"]
@@ -868,8 +844,7 @@ sources = ["S31_MMIO_DECLARED_20107C30"]
 sources = ["S31_MMIO_DECLARED_20107C30"]
 
 [review.entity."BASEBAND_WATCHDOG_CONTROL"]
-accuracy = "exact"
-completeness = "complete"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
 
 [review.entity."BASEBAND_WATCHDOG_CONTROL.BITS_0_15_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20107C3C"]
@@ -889,8 +864,15 @@ completeness = "partial"
 
 [review.entity."BASEBAND_WATCHDOG_ENABLE"]
 sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
-accuracy = "exact"
-completeness = "complete"
+
+[review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_TIMEOUT_CLEAR"]
+unsourced = "The curated model's review names this entity without a source."
+
+[review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_INTERRUPT_ENABLE"]
+unsourced = "The curated model's review names this entity without a source."
+
+[review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_ENABLE"]
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."BASEBAND_WATCHDOG_ENABLE.BITS_0_28_OPAQUE"]
 sources = ["S31_MMIO_USE_20107C40", "S31_MMIO_DECLARED_20107C40"]
@@ -898,15 +880,13 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."NOISE_FLOOR_ENABLE_0"]
-accuracy = "exact"
-completeness = "complete"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
 
 [review.entity."NOISE_FLOOR_ENABLE_0.BIT_0_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20107C44"]
 
 [review.entity."NOISE_FLOOR_ENABLE_1"]
-accuracy = "exact"
-completeness = "complete"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
 
 [review.entity."NOISE_FLOOR_ENABLE_1.BIT_0_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20107C50"]
@@ -914,34 +894,50 @@ sources = ["S31_MMIO_DECLARED_20107C50"]
 [review.entity."CCA_COUNTER_CONTROL"]
 sources = ["ROM_REV0_PHY_CCA_COUNTER"]
 provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."CCA_COUNTER_CONTROL.WINDOW"]
 sources = ["ROM_REV0_PHY_CCA_COUNTER"]
 provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."CCA_COUNTER_CONTROL.CONTROL"]
 sources = ["ROM_REV0_PHY_CCA_COUNTER"]
 provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."CCA_COUNTER_RESULT_0"]
 sources = ["ROM_REV0_PHY_CCA_COUNTER"]
 provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."CCA_COUNTER_RESULT_0.RESULT"]
 sources = ["ROM_REV0_PHY_CCA_COUNTER"]
 provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."CCA_COUNTER_RESULT_0.FLAG"]
 sources = ["ROM_REV0_PHY_CCA_COUNTER"]
 provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."CCA_COUNTER_RESULT_1"]
 sources = ["ROM_REV0_PHY_CCA_COUNTER"]
 provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."CCA_COUNTER_RESULT_1.RESULT"]
 sources = ["ROM_REV0_PHY_CCA_COUNTER"]
 provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
 
 [review.entity."WORD_0C6C_OPAQUE"]
 sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
@@ -957,7 +953,6 @@ accuracy = "exact"
 
 [review.entity."WORD_0C80_OPAQUE.STATE"]
 sources = ["S31_MMIO_MANUAL_20107C80"]
-accuracy = "exact"
 completeness = "partial"
 
 [review.entity."WORD_0CA8_OPAQUE"]
@@ -989,8 +984,6 @@ sources = ["S31_MMIO_DECLARED_20107CD0"]
 
 [review.entity."CHANNEL_CBW_CONTROL_0"]
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-accuracy = "exact"
-completeness = "complete"
 
 [review.entity."CHANNEL_CBW_CONTROL_0.BITS_0_1_OPAQUE"]
 sources = ["S31_MMIO_MANUAL_20107CE0"]
@@ -999,8 +992,6 @@ completeness = "partial"
 
 [review.entity."CHANNEL_CBW_CONTROL_1"]
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
-accuracy = "exact"
-completeness = "complete"
 
 [review.entity."CHANNEL_CBW_CONTROL_1.BITS_0_1_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_20107CE4"]
@@ -1009,7 +1000,7 @@ sources = ["S31_MMIO_DECLARED_20107CE4"]
 sources = ["S31_MMIO_DECLARED_20107CE4"]
 
 [review.entity."CHANNEL_CBW_CONTROL_1.VHT_SUPPORT"]
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."CHANNEL_CBW_CONTROL_1.BITS_6_31_OPAQUE"]
 sources = ["S31_MMIO_USE_20107CE4", "S31_MMIO_DECLARED_20107CE4"]
@@ -1040,13 +1031,9 @@ completeness = "partial"
 
 [review.entity."FTM_CONTROL"]
 sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
-accuracy = "exact"
-completeness = "complete"
 
 [review.entity."FTM_CONTROL.ENABLE"]
 sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
-accuracy = "exact"
-completeness = "complete"
 
 [[registers]]
 name = "WORD_0010_OPAQUE"

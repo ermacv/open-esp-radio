@@ -120,15 +120,6 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F
 [review.entity."IMM_HP_CK_POWER_0"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW", "BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907"]
 
-[review.entity."IMM_HP_CK_POWER_0.TIE_HIGH_XPD_BB_I2C"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW", "BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907"]
-
-[review.entity."IMM_HP_CK_POWER_0.TIE_HIGH_XPD_XTALX2"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_PMU_HEADERS"]
-
-[review.entity."IMM_HP_CK_POWER_0.TIE_HIGH_XPD_XTAL"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_PMU_HEADERS"]
-
 [review.entity."IMM_SLEEP_SYSCLK"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
 
@@ -1904,7 +1895,7 @@ description = "need_des"
 [[registers]]
 name = "IMM_HP_CK_POWER_0"
 offset = 0xf0
-description = "Immediate high-power clock ties. The reviewed complete PHY body reads this word before its preserving update, overriding the write-only access class in the uncorrected public SVD."
+description = "Immediate high-power clock ties. The ESP-IDF header classes TIE_HIGH_XPD_BB_I2C, TIE_HIGH_XPD_XTALX2 and TIE_HIGH_XPD_XTAL write-trigger. The complete libphy bodies phy_open_i2c_xpd_new and phy_xpd_rf_new set or clear bit 28 in one read-modify-write of this word; what a read of these bits returns is not established."
 reset = { value = 0x0 }
 reserved = { mask = 0x21ffff90, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
 
@@ -1965,20 +1956,20 @@ description = "need_des"
 [[registers.fields]]
 name = "TIE_HIGH_XPD_BB_I2C"
 bits = "28"
-class = "plain"
-description = "The ESP-IDF header classes these bits write-trigger; the complete PHY body reads the word before its preserving update. Force the baseband analog-I2C power control high."
+class = "write-trigger"
+description = "Force the baseband analog-I2C power control high."
 
 [[registers.fields]]
 name = "TIE_HIGH_XPD_XTALX2"
 bits = "30"
-class = "plain"
-description = "The ESP-IDF header classes these bits write-trigger; the complete PHY body reads the word before its preserving update. Force the doubled-crystal power control high."
+class = "write-trigger"
+description = "Force the doubled-crystal power control high."
 
 [[registers.fields]]
 name = "TIE_HIGH_XPD_XTAL"
 bits = "31"
-class = "plain"
-description = "The ESP-IDF header classes these bits write-trigger; the complete PHY body reads the word before its preserving update. Force the crystal power control high."
+class = "write-trigger"
+description = "Force the crystal power control high."
 
 [[registers]]
 name = "IMM_HP_CK_POWER_1"

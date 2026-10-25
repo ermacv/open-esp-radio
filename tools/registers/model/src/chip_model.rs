@@ -74,6 +74,16 @@ pub struct ExpandedRegister {
     pub review: ReviewAnnotation,
 }
 
+/// A register or field review that records no source.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UnsourcedReview<'a> {
+    pub block_type: &'a str,
+    /// The template key: `REGISTER`, `REGISTER.FIELD`, `GROUP.REGISTER` or
+    /// `GROUP.REGISTER.FIELD`.
+    pub key: &'a str,
+    pub reason: &'a str,
+}
+
 /// A loaded, checked and expanded chip.
 #[derive(Clone, Debug)]
 pub struct ChipModel {
@@ -213,6 +223,20 @@ impl ChipModel {
     /// root order and then offset order.
     pub fn registers(&self) -> &[ExpandedRegister] {
         &self.registers
+    }
+
+    /// Every review that records no source, by type and key.
+    pub fn unsourced_reviews(&self) -> impl Iterator<Item = UnsourcedReview<'_>> {
+        self.types.iter().flat_map(|(block_type, types)| {
+            types
+                .unsourced
+                .iter()
+                .map(move |(key, reason)| UnsourcedReview {
+                    block_type,
+                    key,
+                    reason,
+                })
+        })
     }
 
     /// The register element `INSTANCE.REGISTER`.

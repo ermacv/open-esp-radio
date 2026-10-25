@@ -42,7 +42,7 @@ width = 8
 [[registers.fields]]
 name = "I2C_BOD_THRESHOLD"
 bits = "2:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "XTAL_DUTY_CALIBRATION_PATH_ENABLE"

@@ -117,6 +117,12 @@ pub struct OpaqueReview {
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ReviewOverride {
+    /// No source is recorded for the entity, and why. Such a review states
+    /// no sources, provenance, accuracy or completeness: it resolves to no
+    /// sources, no provenance and `unknown` accuracy and completeness, and
+    /// is no reviewed assertion.
+    #[serde(default)]
+    pub unsourced: Option<String>,
     #[serde(default)]
     pub sources: Option<Vec<String>>,
     #[serde(default)]
@@ -245,12 +251,14 @@ pub enum FieldClass {
     ReadClears,
     /// "Do not use it in applications": never written.
     DebugOnly,
+    /// No source states what a read or a write does: neither is generated.
+    Unknown,
 }
 
 impl FieldClass {
     /// Whether a read has a defined value, independently of read side effects.
     pub fn readable(self) -> bool {
-        !matches!(self, Self::WriteOnly | Self::WriteTrigger)
+        !matches!(self, Self::WriteOnly | Self::WriteTrigger | Self::Unknown)
     }
 
     pub fn label(self) -> &'static str {
@@ -265,12 +273,16 @@ impl FieldClass {
             Self::HardwareWritten => "hardware-written",
             Self::ReadClears => "read-clears",
             Self::DebugOnly => "debug-only",
+            Self::Unknown => "unknown",
         }
     }
 
     /// Whether software writes a value of the field's own choosing.
     pub fn written(self) -> bool {
-        !matches!(self, Self::ReadOnly | Self::ReadClears | Self::DebugOnly)
+        !matches!(
+            self,
+            Self::ReadOnly | Self::ReadClears | Self::DebugOnly | Self::Unknown
+        )
     }
 }
 

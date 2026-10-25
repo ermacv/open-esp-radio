@@ -87,6 +87,8 @@ pub enum ErrorKind {
     ReviewIncomplete(&'static str),
     #[error("a hint is navigation, not a reviewed assertion")]
     ReviewHint,
+    #[error("unsourced review: {0}")]
+    ReviewUnsourced(String),
     #[error("naming: {0}")]
     Naming(String),
     #[error("names type {0:?}, which no included file declares")]

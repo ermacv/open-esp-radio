@@ -22,12 +22,12 @@ width = 8
 [[registers.fields]]
 name = "I2C_DIG_REG_EXT_RTC_DREG"
 bits = "4:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_DIG_REG_ENX_RTC_DREG"
 bits = "7"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_DIG_REG_EXT_RTC_DREG_SLEEP"
@@ -37,12 +37,12 @@ width = 8
 [[registers.fields]]
 name = "I2C_DIG_REG_EXT_RTC_DREG_SLEEP"
 bits = "4:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_DIG_REG_ENIF_RTC_DREG"
 bits = "7"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_DIG_REG_EXT_DIG_DREG"
@@ -52,12 +52,12 @@ width = 8
 [[registers.fields]]
 name = "I2C_DIG_REG_EXT_DIG_DREG"
 bits = "4:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_DIG_REG_ENX_DIG_DREG"
 bits = "7"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_DIG_REG_EXT_DIG_DREG_SLEEP"
@@ -67,12 +67,12 @@ width = 8
 [[registers.fields]]
 name = "I2C_DIG_REG_EXT_DIG_DREG_SLEEP"
 bits = "4:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_DIG_REG_ENIF_DIG_DREG"
 bits = "7"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_DIG_REG_OR_EN_CONT_CAL"
@@ -82,7 +82,7 @@ width = 8
 [[registers.fields]]
 name = "I2C_DIG_REG_OR_EN_CONT_CAL"
 bits = "7"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_DIG_REG_XPD_RTC_REG"
@@ -92,12 +92,12 @@ width = 8
 [[registers.fields]]
 name = "I2C_DIG_REG_XPD_RTC_REG"
 bits = "2"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_DIG_REG_XPD_DIG_REG"
 bits = "3"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_DIG_REG_SCK_DCAP"
@@ -107,4 +107,4 @@ width = 8
 [[registers.fields]]
 name = "I2C_DIG_REG_SCK_DCAP"
 bits = "7:0"
-class = "plain"
+class = "unknown"

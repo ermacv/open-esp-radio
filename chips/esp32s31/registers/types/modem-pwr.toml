@@ -177,18 +177,14 @@ sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 completeness = "unknown"
 
 [review.entity."TSF_STATUS.STATION_ACTIVE"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."WAKEUP_SIGNAL_CLEAR"]
 sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
 completeness = "unknown"
 
 [review.entity."WAKEUP_SIGNAL_CLEAR.CLEAR"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."WAKEUP_SIGNAL_CLEAR.BITS_1_31_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D810_RUN", "S31_MMIO_DECLARED_2010D810"]
@@ -225,33 +221,25 @@ completeness = "partial"
 sources = ["BLOB_LIBPP_HAL_TSF"]
 
 [review.entity."VALUE_LOW.VALUE"]
-sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."VALUE_HIGH"]
 sources = ["BLOB_LIBPP_HAL_TSF"]
 
 [review.entity."VALUE_HIGH.VALUE"]
-sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."SNAPSHOT_LOW"]
 sources = ["ROM_REV0_HAL_GET_STA_TSF", "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015"]
 
 [review.entity."SNAPSHOT_LOW.VALUE"]
-sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."SNAPSHOT_HIGH"]
 sources = ["ROM_REV0_HAL_GET_STA_TSF", "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015"]
 
 [review.entity."SNAPSHOT_HIGH.VALUE"]
-sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."TSF_DEVIATION_CONTROL"]
 sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
@@ -279,9 +267,7 @@ sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 completeness = "unknown"
 
 [review.entity."TARGET.TSF_BITS_35_10"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."TARGET.BITS_26_31_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D82C", "S31_MMIO_DECLARED_2010D82C"]
@@ -337,9 +323,7 @@ sources = ["BLOB_LIBPP_HAL_PWR"]
 completeness = "unknown"
 
 [review.entity."SOC_WAKEUP_CLEAR.CLEAR_REQUEST"]
-sources = ["BLOB_LIBPP_HAL_PWR"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."SOC_WAKEUP_CLEAR.CLEAR_BEACON_INFO"]
 sources = ["BLOB_LIBPP_HAL_PWR"]
@@ -403,9 +387,7 @@ completeness = "unknown"
 sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 
 [review.entity."STA_LIGHT_SLEEP_WAKE_AHEAD.TIME"]
-sources = ["BLOB_LIBPP_HAL_PWR"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."STA_LIGHT_SLEEP_WAKE_AHEAD.BITS_0_15_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D840", "S31_MMIO_DECLARED_2010D840"]
@@ -416,9 +398,7 @@ sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
 completeness = "unknown"
 
 [review.entity."TBTT_RF_CONTROL_WAIT_CYCLES.WAIT_CYCLES"]
-sources = ["BLOB_LIBPP_HAL_PWR"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."WORD_0848_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D848"]
@@ -445,9 +425,7 @@ sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME", "BLOB_LIBPP_HAL_PWR"]
 completeness = "partial"
 
 [review.entity."RX_BEACON_TIME_LOW.VALUE"]
-sources = ["BLOB_LIBPP_HAL_PWR"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."RX_BEACON_TIME_LOW.BITS_16_31_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D854", "S31_MMIO_DECLARED_2010D854"]
@@ -509,9 +487,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."SOFTAP_CONTROL.TSF_ENABLE"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."SOFTAP_CONTROL.BITS_0_29_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D860", "S31_MMIO_DECLARED_2010D860"]
@@ -538,19 +514,13 @@ sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 completeness = "unknown"
 
 [review.entity."NAN_CONTROL.TSF_MODE"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."NAN_CONTROL.TSF_ENABLE_LOW"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."NAN_CONTROL.TSF_ENABLE_HIGH"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."NAN_CONTROL.BITS_0_18_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868"]
@@ -585,19 +555,13 @@ sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 completeness = "unknown"
 
 [review.entity."BTWT_CONTROL.TSF_MODE"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."BTWT_CONTROL.TSF_ENABLE_LOW"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."BTWT_CONTROL.TSF_ENABLE_HIGH"]
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."BTWT_CONTROL.BITS_0_18_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870"]
@@ -659,9 +623,7 @@ completeness = "partial"
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
 
 [review.entity."TARGET%s.VALUE"]
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."CLEAR_REQUEST"]
 sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
@@ -676,9 +638,7 @@ completeness = "unknown"
 sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
 
 [review.entity."RX_BEACON_TIME_HIGH.VALUE"]
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."RX_BEACON_TIME_HIGH.BITS_8_31_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D8A0", "S31_MMIO_DECLARED_2010D8A0"]
@@ -700,9 +660,7 @@ completeness = "partial"
 sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
 
 [review.entity."SHARED_RX_PTI.PTI"]
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."SHARED_RX_PTI.BITS_4_31_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D8A8", "S31_MMIO_DECLARED_2010D8A8"]
@@ -712,9 +670,7 @@ completeness = "partial"
 sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
 
 [review.entity."RX_BEACON_PTI.PTI"]
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
-accuracy = "unknown"
-completeness = "unknown"
+unsourced = "The curated model's review names this entity without a source."
 
 [review.entity."RX_BEACON_PTI.BITS_0_11_OPAQUE"]
 sources = ["S31_MMIO_USE_2010D8AC", "S31_MMIO_DECLARED_2010D8AC"]

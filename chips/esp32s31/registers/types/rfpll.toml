@@ -248,7 +248,7 @@ width = 8
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "BYTE_15_OPAQUE"
@@ -258,4 +258,4 @@ width = 8
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
-class = "plain"
+class = "unknown"

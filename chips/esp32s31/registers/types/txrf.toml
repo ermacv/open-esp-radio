@@ -130,7 +130,7 @@ width = 8
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "BYTE_04_OPAQUE"
@@ -140,7 +140,7 @@ width = 8
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "BYTE_05_OPAQUE"
@@ -150,7 +150,7 @@ width = 8
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "BYTE_06_OPAQUE"
@@ -160,7 +160,7 @@ width = 8
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "BYTE_08_OPAQUE"
@@ -170,7 +170,7 @@ width = 8
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "BYTE_09_OPAQUE"
@@ -180,7 +180,7 @@ width = 8
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "BYTE_0A_OPAQUE"
@@ -190,7 +190,7 @@ width = 8
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "BYTE_0B_OPAQUE"
@@ -200,7 +200,7 @@ width = 8
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "BYTE_0C_OPAQUE"
@@ -210,7 +210,7 @@ width = 8
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "BYTE_0D_OPAQUE"
@@ -220,7 +220,7 @@ width = 8
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "BYTE_0E_OPAQUE"
@@ -230,4 +230,4 @@ width = 8
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
-class = "plain"
+class = "unknown"

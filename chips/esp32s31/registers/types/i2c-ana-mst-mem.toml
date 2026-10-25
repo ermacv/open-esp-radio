@@ -8,20 +8,20 @@ description = "The analog-I2C master's command memory at DR_REG_I2C_ANA_MST_MEM_
 sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE", "BLOB_LIBPHY_PHY_I2C", "BLOB_LIBPHY_PHY_DEBUG_I2C"]
 
 [review]
-sources = ["BLOB_LIBPHY_PHY_DEBUG_I2C"]
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE", "BLOB_LIBPHY_PHY_I2C"]
 provenance = "observed"
-accuracy = "unknown"
-completeness = "unknown"
+accuracy = "exact"
+completeness = "complete"
 naming = "descriptive"
 
-[review.entity."COMMAND_MEMORY%s"]
-sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE", "BLOB_LIBPHY_PHY_I2C"]
-accuracy = "exact"
-completeness = "complete"
-
 [review.entity."COMMAND_MEMORY%s.BLOCK"]
-accuracy = "exact"
-completeness = "complete"
+sources = ["BLOB_LIBPHY_PHY_DEBUG_I2C"]
+
+[review.entity."COMMAND_MEMORY%s.REGISTER"]
+unsourced = "The curated model's review names this entity without a source."
+
+[review.entity."COMMAND_MEMORY%s.DATA"]
+unsourced = "The curated model's review names this entity without a source."
 
 [[registers]]
 name = "COMMAND_MEMORY%s"

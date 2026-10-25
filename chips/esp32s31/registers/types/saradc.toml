@@ -22,7 +22,7 @@ width = 8
 [[registers.fields]]
 name = "I2C_SARADC_SAR1_INIT_CODE_LSB"
 bits = "7:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_SARADC_SAR1_INIT_CODE_MSB"
@@ -32,7 +32,7 @@ width = 8
 [[registers.fields]]
 name = "I2C_SARADC_SAR1_INIT_CODE_MSB"
 bits = "3:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "ADC_SAR1_SAMPLE_CYCLE_ADDR"
@@ -42,12 +42,12 @@ width = 8
 [[registers.fields]]
 name = "ADC_SAR1_SAMPLE_CYCLE_ADDR"
 bits = "2:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "ADC_SAR1_DREF_ADDR"
 bits = "6:4"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "ADC_SAR2_INITIAL_CODE_LOW_ADDR"
@@ -57,7 +57,7 @@ width = 8
 [[registers.fields]]
 name = "ADC_SAR2_INITIAL_CODE_LOW_ADDR"
 bits = "7:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "ADC_SAR2_INITIAL_CODE_HIGH_ADDR"
@@ -78,12 +78,12 @@ width = 8
 [[registers.fields]]
 name = "ADC_SAR2_SAMPLE_CYCLE_ADDR"
 bits = "2:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "ADC_SAR2_DREF_ADDR"
 bits = "6:4"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_SARADC_TSENS_DAC"
@@ -104,12 +104,12 @@ width = 8
 [[registers.fields]]
 name = "ADC_SARADC_DTEST_RTC_ADDR"
 bits = "1:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "ADC_SARADC_ENT_TSENS_ADDR"
 bits = "2"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "POWER_GLITCH_XPD_VDET_PERIF"
@@ -119,42 +119,42 @@ width = 8
 [[registers.fields]]
 name = "POWER_GLITCH_XPD_VDET_PERIF"
 bits = "0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "POWER_GLITCH_XPD_VDET_VDDPST"
 bits = "1"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "POWER_GLITCH_XPD_VDET_PLLBB"
 bits = "2"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "POWER_GLITCH_XPD_VDET_PLL"
 bits = "3"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "POWER_GLITCH_MODE_VDET_PERIF"
 bits = "4"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "POWER_GLITCH_MODE_VDET_VDDPST"
 bits = "5"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "POWER_GLITCH_MODE_VDET_PLLBB"
 bits = "6"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "POWER_GLITCH_MODE_VDET_PLL"
 bits = "7"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "POWER_GLITCH_DREF_VDET_PERIF"
@@ -164,12 +164,12 @@ width = 8
 [[registers.fields]]
 name = "POWER_GLITCH_DREF_VDET_PERIF"
 bits = "2:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "POWER_GLITCH_DREF_VDET_VDDPST"
 bits = "6:4"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "POWER_GLITCH_DREF_VDET_PLLBB"
@@ -179,9 +179,9 @@ width = 8
 [[registers.fields]]
 name = "POWER_GLITCH_DREF_VDET_PLLBB"
 bits = "2:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "POWER_GLITCH_DREF_VDET_PLL"
 bits = "6:4"
-class = "plain"
+class = "unknown"

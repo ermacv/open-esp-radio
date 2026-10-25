@@ -22,27 +22,27 @@ width = 8
 [[registers.fields]]
 name = "I2C_APLL_IR_CAL_DELAY"
 bits = "3:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_IR_CAL_RSTB"
 bits = "4"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_IR_CAL_START"
 bits = "5"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_IR_CAL_UNSTOP"
 bits = "6"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_OC_ENB_FCAL"
 bits = "7"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_APLL_IR_CAL_EXT_CAP"
@@ -52,17 +52,17 @@ width = 8
 [[registers.fields]]
 name = "I2C_APLL_IR_CAL_EXT_CAP"
 bits = "4:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_IR_CAL_ENX_CAP"
 bits = "5"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_OC_LBW"
 bits = "6"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_APLL_IR_CAL_CK_DIV"
@@ -72,17 +72,17 @@ width = 8
 [[registers.fields]]
 name = "I2C_APLL_IR_CAL_CK_DIV"
 bits = "3:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_OC_DCHGP"
 bits = "6:4"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_OC_ENB_VCON"
 bits = "7"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_APLL_OR_CAL_CAP"
@@ -92,22 +92,22 @@ width = 8
 [[registers.fields]]
 name = "I2C_APLL_OR_CAL_CAP"
 bits = "4:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_OR_CAL_UDF"
 bits = "5"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_OR_CAL_OVF"
 bits = "6"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_OR_CAL_END"
 bits = "7"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_APLL_OR_OUTPUT_DIV"
@@ -117,17 +117,17 @@ width = 8
 [[registers.fields]]
 name = "I2C_APLL_OR_OUTPUT_DIV"
 bits = "4:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_OC_TSCHGP"
 bits = "6"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_EN_FAST_CAL"
 bits = "7"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_APLL_OC_DHREF_SEL"
@@ -137,27 +137,27 @@ width = 8
 [[registers.fields]]
 name = "I2C_APLL_OC_DHREF_SEL"
 bits = "1:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_OC_DLREF_SEL"
 bits = "3:2"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_SDM_DITHER"
 bits = "4"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_SDM_STOP"
 bits = "5"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_SDM_RSTB"
 bits = "6"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_APLL_OC_DVDD"
@@ -167,12 +167,12 @@ width = 8
 [[registers.fields]]
 name = "I2C_APLL_OC_DVDD"
 bits = "4:0"
-class = "plain"
+class = "unknown"
 
 [[registers.fields]]
 name = "I2C_APLL_OC_REF_DIV"
 bits = "7:5"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_APLL_DSDM2"
@@ -182,7 +182,7 @@ width = 8
 [[registers.fields]]
 name = "I2C_APLL_DSDM2"
 bits = "5:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_APLL_DSDM1"
@@ -192,7 +192,7 @@ width = 8
 [[registers.fields]]
 name = "I2C_APLL_DSDM1"
 bits = "7:0"
-class = "plain"
+class = "unknown"
 
 [[registers]]
 name = "I2C_APLL_DSDM0"
@@ -202,4 +202,4 @@ width = 8
 [[registers.fields]]
 name = "I2C_APLL_DSDM0"
 bits = "7:0"
-class = "plain"
+class = "unknown"
