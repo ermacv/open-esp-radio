@@ -159236,10 +159236,24 @@ pub mod spi1_mem_c {
             w0::R(self.0.read::<0x58>())
         }
 
+        /// Store the data word `SPI_MEM_W0` whole: its one field `SPI_MEM_BUF0`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w0(&mut self, value: u32) {
+            self.0.write::<0x58>(value);
+        }
+
         /// Read `SPI_MEM_W1`.
         #[inline]
         pub fn read_w1(&self) -> w1::R {
             w1::R(self.0.read::<0x5c>())
+        }
+
+        /// Store the data word `SPI_MEM_W1` whole: its one field `SPI_MEM_BUF1`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w1(&mut self, value: u32) {
+            self.0.write::<0x5c>(value);
         }
 
         /// Read `SPI_MEM_W2`.
@@ -159248,10 +159262,24 @@ pub mod spi1_mem_c {
             w2::R(self.0.read::<0x60>())
         }
 
+        /// Store the data word `SPI_MEM_W2` whole: its one field `SPI_MEM_BUF2`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w2(&mut self, value: u32) {
+            self.0.write::<0x60>(value);
+        }
+
         /// Read `SPI_MEM_W3`.
         #[inline]
         pub fn read_w3(&self) -> w3::R {
             w3::R(self.0.read::<0x64>())
+        }
+
+        /// Store the data word `SPI_MEM_W3` whole: its one field `SPI_MEM_BUF3`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w3(&mut self, value: u32) {
+            self.0.write::<0x64>(value);
         }
 
         /// Read `SPI_MEM_W4`.
@@ -159260,10 +159288,24 @@ pub mod spi1_mem_c {
             w4::R(self.0.read::<0x68>())
         }
 
+        /// Store the data word `SPI_MEM_W4` whole: its one field `SPI_MEM_BUF4`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w4(&mut self, value: u32) {
+            self.0.write::<0x68>(value);
+        }
+
         /// Read `SPI_MEM_W5`.
         #[inline]
         pub fn read_w5(&self) -> w5::R {
             w5::R(self.0.read::<0x6c>())
+        }
+
+        /// Store the data word `SPI_MEM_W5` whole: its one field `SPI_MEM_BUF5`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w5(&mut self, value: u32) {
+            self.0.write::<0x6c>(value);
         }
 
         /// Read `SPI_MEM_W6`.
@@ -159272,10 +159314,24 @@ pub mod spi1_mem_c {
             w6::R(self.0.read::<0x70>())
         }
 
+        /// Store the data word `SPI_MEM_W6` whole: its one field `SPI_MEM_BUF6`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w6(&mut self, value: u32) {
+            self.0.write::<0x70>(value);
+        }
+
         /// Read `SPI_MEM_W7`.
         #[inline]
         pub fn read_w7(&self) -> w7::R {
             w7::R(self.0.read::<0x74>())
+        }
+
+        /// Store the data word `SPI_MEM_W7` whole: its one field `SPI_MEM_BUF7`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w7(&mut self, value: u32) {
+            self.0.write::<0x74>(value);
         }
 
         /// Read `SPI_MEM_W8`.
@@ -159284,10 +159340,24 @@ pub mod spi1_mem_c {
             w8::R(self.0.read::<0x78>())
         }
 
+        /// Store the data word `SPI_MEM_W8` whole: its one field `SPI_MEM_BUF8`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w8(&mut self, value: u32) {
+            self.0.write::<0x78>(value);
+        }
+
         /// Read `SPI_MEM_W9`.
         #[inline]
         pub fn read_w9(&self) -> w9::R {
             w9::R(self.0.read::<0x7c>())
+        }
+
+        /// Store the data word `SPI_MEM_W9` whole: its one field `SPI_MEM_BUF9`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w9(&mut self, value: u32) {
+            self.0.write::<0x7c>(value);
         }
 
         /// Read `SPI_MEM_W10`.
@@ -159296,10 +159366,24 @@ pub mod spi1_mem_c {
             w10::R(self.0.read::<0x80>())
         }
 
+        /// Store the data word `SPI_MEM_W10` whole: its one field `SPI_MEM_BUF10`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w10(&mut self, value: u32) {
+            self.0.write::<0x80>(value);
+        }
+
         /// Read `SPI_MEM_W11`.
         #[inline]
         pub fn read_w11(&self) -> w11::R {
             w11::R(self.0.read::<0x84>())
+        }
+
+        /// Store the data word `SPI_MEM_W11` whole: its one field `SPI_MEM_BUF11`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w11(&mut self, value: u32) {
+            self.0.write::<0x84>(value);
         }
 
         /// Read `SPI_MEM_W12`.
@@ -159308,10 +159392,24 @@ pub mod spi1_mem_c {
             w12::R(self.0.read::<0x88>())
         }
 
+        /// Store the data word `SPI_MEM_W12` whole: its one field `SPI_MEM_BUF12`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w12(&mut self, value: u32) {
+            self.0.write::<0x88>(value);
+        }
+
         /// Read `SPI_MEM_W13`.
         #[inline]
         pub fn read_w13(&self) -> w13::R {
             w13::R(self.0.read::<0x8c>())
+        }
+
+        /// Store the data word `SPI_MEM_W13` whole: its one field `SPI_MEM_BUF13`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w13(&mut self, value: u32) {
+            self.0.write::<0x8c>(value);
         }
 
         /// Read `SPI_MEM_W14`.
@@ -159320,10 +159418,24 @@ pub mod spi1_mem_c {
             w14::R(self.0.read::<0x90>())
         }
 
+        /// Store the data word `SPI_MEM_W14` whole: its one field `SPI_MEM_BUF14`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w14(&mut self, value: u32) {
+            self.0.write::<0x90>(value);
+        }
+
         /// Read `SPI_MEM_W15`.
         #[inline]
         pub fn read_w15(&self) -> w15::R {
             w15::R(self.0.read::<0x94>())
+        }
+
+        /// Store the data word `SPI_MEM_W15` whole: its one field `SPI_MEM_BUF15`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w15(&mut self, value: u32) {
+            self.0.write::<0x94>(value);
         }
 
         /// Read `SPI_MEM_TIMING_CALI`.
@@ -162369,6 +162481,13 @@ pub mod spi1_mem_s {
         #[inline]
         pub fn read_w(&self, index: oer_mmio::Index<16>) -> w::R {
             w::R(self.0.read_indexed::<0x58, 0x4, 16>(index))
+        }
+
+        /// Store the data word `W%s` whole: its one field `BUF`, zero in every
+        /// other bit; the hardware also writes it, so it is never modified.
+        #[inline]
+        pub fn write_w(&mut self, index: oer_mmio::Index<16>, value: u32) {
+            self.0.write_indexed::<0x58, 0x4, 16>(index, value);
         }
 
         /// Read `DDR`.

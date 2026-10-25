@@ -797,6 +797,56 @@ fn a_word_with_an_unknown_lane_has_no_writer_from_zero() {
     assert!(!rust.contains("pub fn write_command("), "{rust}");
 }
 
+/// The data port `RAD_PORT` with its one field `hardware-written`, the
+/// command port's data word the hardware also fills; with `port` false the
+/// same word is no data port.
+fn hardware_written_port(port: bool) -> String {
+    let mut edits = vec![(
+        "types/radio.toml",
+        "name = \"VALUE\"\nbits = \"31:0\"\nclass = \"plain\"",
+        "name = \"VALUE\"\nbits = \"31:0\"\nclass = \"hardware-written\"",
+    )];
+    if !port {
+        edits.push((
+            "types/radio.toml",
+            "name = \"RAD_PORT\"\noffset = 0x20\ndata-port = { sources = [\"SRC_HEADER\"] }\n",
+            "name = \"RAD_PORT\"\noffset = 0x20\n",
+        ));
+    }
+    rendered_with(&edits)
+}
+
+#[test]
+fn a_data_port_stores_its_hardware_written_word_whole() {
+    let rust = hardware_written_port(true);
+    assert!(rust.contains("pub fn write_port("), "{rust}");
+    let output = run(
+        &rust,
+        r#"fn main() {
+    let mut memory = [0_u32; 64];
+    memory[0x20 / 4] = 0x1111_1111;
+    {
+        let (mut task, _irq) = radio::radio0_host(&mut memory).expect("memory holds the block");
+        task.write_port(0xdead_beef);
+        println!("read {:08x}", task.read_port().value());
+    }
+    println!("port {:08x}", memory[0x20 / 4]);
+}
+"#,
+    );
+    assert_eq!(
+        output.lines().collect::<Vec<_>>(),
+        ["read deadbeef", "port deadbeef"]
+    );
+}
+
+#[test]
+fn a_hardware_written_word_outside_a_data_port_has_no_writer() {
+    let rust = hardware_written_port(false);
+    assert!(rust.contains("pub fn read_port("), "{rust}");
+    assert!(!rust.contains("pub fn write_port("), "{rust}");
+}
+
 #[test]
 fn a_command_start_refuses_a_lane_it_can_neither_keep_nor_zero() {
     let error = rejection(&[(

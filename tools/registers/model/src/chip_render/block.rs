@@ -115,6 +115,18 @@ impl FieldPlan<'_> {
             && self.prefix.is_none()
     }
 
+    /// A data port's whole-word store sets the field: a `plain` or
+    /// `write-only` field, or the `hardware-written` field the hardware also
+    /// fills, which no other writer sets.
+    pub(super) fn port_setter(&self) -> bool {
+        matches!(
+            self.class,
+            FieldClass::Plain | FieldClass::WriteOnly | FieldClass::HardwareWritten
+        ) && !self.zero
+            && self.role.is_none()
+            && self.prefix.is_none()
+    }
+
     /// Zero is a value a write may give the field: no write range above
     /// it, no value list without it, and no address it would forge.
     pub(super) fn zero_admitted(&self) -> bool {
@@ -1329,7 +1341,7 @@ fn render_owned(
     }
     if template.port {
         if let [field] = template.fields.as_slice()
-            && field.setter()
+            && field.port_setter()
         {
             let _ = writeln!(
                 body,
