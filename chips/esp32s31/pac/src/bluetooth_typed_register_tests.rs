@@ -67,7 +67,11 @@ fn a_whole_word_vendor_image_also_writes_the_bits_the_model_leaves_undeclared() 
 fn a_memory_list_pointer_is_cleared_then_ored_and_keeps_its_other_fields() {
     let mut words = memory(core::SIZE, u32::MAX);
     let mut block = BluetoothControllerCore::host(&mut words).expect("memory holds the block");
-    block.clear_bluetooth_memory_list_1_pointer_a();
+    block.modify_global_rxlink_1_current(|writer| {
+        writer.set_compressed_sram_pointer(
+            core::global_rxlink_1_current::CompressedSramPointerImage::NULL,
+        );
+    });
     let cleared = block.read_global_rxlink_1_current();
     assert_eq!(cleared.compressed_sram_pointer().get(), 0);
     assert!(cleared.rx_valid(), "the pointer clear keeps RX_VALID");
@@ -89,7 +93,9 @@ fn a_scheduler_head_replaces_only_the_pointer_of_its_entry() {
     let image = table::entry::HeadPointerImage::new(crate::test_memory::reference(0x2f00_0100))
         .expect("a placed item is encodable");
     let index = Index::constant::<3>();
-    block.publish_bluetooth_scheduler_hardware_list_head(index, image);
+    block.modify_entry(index, |writer| {
+        writer.set_head_pointer(image);
+    });
     assert_eq!(block.read_entry(index).head_pointer().get(), image.bits());
     assert_eq!(
         block
@@ -159,7 +165,11 @@ fn a_stale_source_clear_never_acknowledges_an_enabled_event() {
         enable.source_15() && enable.source_0(),
         "the other enabled sources keep their events"
     );
-    block.enable_bluetooth_scheduler_run_interrupts_bank_0();
+    block.modify_irq_enable_0(|writer| {
+        writer
+            .set_source_21(true)
+            .set_sources_27_28(oer_mmio::Bits::constant::<0b11>());
+    });
     let enable = block.read_irq_enable_0();
     assert!(enable.source_21() && enable.sources_27_28().get() == 0b11);
 }

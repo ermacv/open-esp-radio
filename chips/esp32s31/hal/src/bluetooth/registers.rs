@@ -451,4 +451,4 @@ pub(crate) const fn field_byte<const WIDTH: u32>(bits: oer_mmio::Bits<WIDTH>) ->
 }
 
 #[cfg(test)]
-mod equivalence_tests;
+mod tests;

@@ -55,11 +55,11 @@ fn each_etm_part_strobes_only_its_own_channel_bits() {
         1 << 1
     );
     assert_eq!(
-        strobe(|_, phy, _| phy.enable_bluetooth_phy_etm_channel2()),
+        strobe(|_, phy, _| phy.trigger_channel_enable_set_ch2()),
         1 << 2
     );
     assert_eq!(
-        strobe(|_, phy, _| phy.disable_bluetooth_phy_etm_channel2()),
+        strobe(|_, phy, _| phy.trigger_channel_enable_clear_ch2()),
         1 << 2
     );
     assert_eq!(

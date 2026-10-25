@@ -140,13 +140,12 @@ pub use frequency::PhyFrequencyI2cNumberAddresses;
 pub use oer_espressif_ieee80211_pac::MacInterface;
 
 pub use generated::{
-    BluetoothDeviceTableEntryCount, CoexTimerClientValue, CoexTimerClockDividerMinusOne,
-    CoexTimerClockSource, CoexTimerPtiValue, CoexTimerTickInput, MacAssociationId,
-    MacExtraSoftApRxBlockAckEntryIndex, MacHeBssColor, MacHeDefaultPacketExtensionDuration,
-    MacHePacketPaddingDuration, MacItwtClearIndex, MacKeyEntryIndex, MacMinimumMpduStartSpacing,
-    MacPti, MacRxBlockAckEntryIndex, MacRxBlockAckStartingSequence, MacRxBlockAckTid,
-    MacRxBlockAckWindow, MacTxPtiCount, MacTxQueueIndex, ModemLowPowerClockDivider,
-    PhyForcedPowerIndex, PhyFtmEnableVendorArgument,
+    CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource, CoexTimerPtiValue,
+    CoexTimerTickInput, MacAssociationId, MacExtraSoftApRxBlockAckEntryIndex, MacHeBssColor,
+    MacHeDefaultPacketExtensionDuration, MacHePacketPaddingDuration, MacItwtClearIndex,
+    MacKeyEntryIndex, MacMinimumMpduStartSpacing, MacPti, MacRxBlockAckEntryIndex,
+    MacRxBlockAckStartingSequence, MacRxBlockAckTid, MacRxBlockAckWindow, MacTxPtiCount,
+    MacTxQueueIndex, ModemLowPowerClockDivider, PhyForcedPowerIndex, PhyFtmEnableVendorArgument,
 };
 
 pub use modem::{
@@ -265,11 +264,3 @@ pub(crate) mod wifi;
 
 // Generated analog-I2C identities, fields and transport routes.
 include!("analog_generated.rs");
-
-// TEMPORARY-D5-EQUIVALENCE
-#[doc(hidden)]
-pub use generated::{
-    BluetoothBasebandGainParameterByte, BluetoothHalInitByte, BluetoothHalSleepTimerShift,
-    BluetoothModemLpTimerCompareImage, BluetoothPhyInitTimingByte,
-    BluetoothSchedulerCancellationHardwareListIndex, BluetoothSchedulerLockModifyHardwareListIndex,
-};
