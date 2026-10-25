@@ -82,6 +82,14 @@ pub struct PacApiPack {
     /// Typed registers that are FIFO ports: a read takes an element out.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fifo_ports: Vec<FifoPort>,
+    /// Typed registers written only by starts of commands the hardware
+    /// clears when done.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub command_registers: Vec<CommandRegister>,
+    /// Typed register arrays that are the data words of a command port: each
+    /// word read and stored whole, never modified.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub data_ports: Vec<DataPort>,
     /// Read-only owners given up from a typed block's writes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub read_capabilities: Vec<ReadCapability>,
@@ -155,6 +163,39 @@ pub struct WriteTriggerField {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct FifoPort {
+    pub peripheral: String,
+    pub register: String,
+    pub sources: Vec<String>,
+}
+
+/// A command register: its `commands` are one-bit fields software writes
+/// one to start, and the hardware clears when the command is done. The
+/// register is written only by `start_<register>_<command>`, which takes a
+/// `bool` per `qualifier` (a one-bit field written with the command) and
+/// refuses, writing nothing, while any of its commands, qualifiers or
+/// `held` bits (self-clearing bits no start sets) reads one; so the zero a
+/// start writes to the others never lands on a running command.
+/// `<register>_<command>_busy` reads a command. Every other field is only
+/// read.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct CommandRegister {
+    pub peripheral: String,
+    pub register: String,
+    pub commands: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub qualifiers: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub held: Vec<String>,
+    pub sources: Vec<String>,
+}
+
+/// The data words of a command port: one register (or array) with one
+/// field the hardware also writes. Each word is read and stored whole
+/// (`write_<register>`), never read-modify-written.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct DataPort {
     pub peripheral: String,
     pub register: String,
     pub sources: Vec<String>,
@@ -863,6 +904,37 @@ impl PacApiPack {
                 )));
             }
         }
+        let mut commands = BTreeSet::new();
+        for command in &self.command_registers {
+            let mut fields = BTreeSet::new();
+            if command.sources.is_empty()
+                || command.commands.is_empty()
+                || !commands.insert((&command.peripheral, &command.register))
+                || !command
+                    .commands
+                    .iter()
+                    .chain(&command.qualifiers)
+                    .chain(&command.held)
+                    .all(|field| fields.insert(field))
+                || triggers.iter().any(|(peripheral, register, _)| {
+                    **peripheral == command.peripheral && **register == command.register
+                })
+            {
+                return Err(Error::message(format!(
+                    "PAC API command register {}.{} needs sources and a command, is named once, names each field once and holds no write trigger",
+                    command.peripheral, command.register
+                )));
+            }
+        }
+        let mut data = BTreeSet::new();
+        for port in &self.data_ports {
+            if port.sources.is_empty() || !data.insert((&port.peripheral, &port.register)) {
+                return Err(Error::message(format!(
+                    "PAC API data port {}.{} has no sources or is repeated",
+                    port.peripheral, port.register
+                )));
+            }
+        }
         let mut ports = BTreeSet::new();
         for port in &self.fifo_ports {
             if port.sources.is_empty() || !ports.insert((&port.peripheral, &port.register)) {
@@ -1565,6 +1637,12 @@ impl PacApiPack {
                     )
                     .chain(self.fifo_ports.iter().map(|port| port.sources.as_slice()))
                     .chain(
+                        self.command_registers
+                            .iter()
+                            .map(|command| command.sources.as_slice()),
+                    )
+                    .chain(self.data_ports.iter().map(|port| port.sources.as_slice()))
+                    .chain(
                         self.read_capabilities
                             .iter()
                             .map(|capability| capability.sources.as_slice()),
@@ -2114,6 +2192,8 @@ impl PacApiPack {
             interrupt_sources: Vec::new(),
             write_trigger_fields: Vec::new(),
             fifo_ports: Vec::new(),
+            command_registers: Vec::new(),
+            data_ports: Vec::new(),
             read_capabilities: Vec::new(),
             register_divisions: Vec::new(),
             shared_blocks: Vec::new(),

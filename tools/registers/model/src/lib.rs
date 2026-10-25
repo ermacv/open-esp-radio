@@ -52,21 +52,21 @@ mod soc;
 mod soc_headers;
 mod soc_overlay;
 pub use soc::{
-    FieldKind, FieldRule, HeaderRule, InterruptRule, OverlayAccess, RegisterApi, RegisterRule,
-    RegisterVerdict, SocInputs, SocRender, StrictnessOverlay, ValueRule, render_soc,
+    CommandRule, FieldKind, FieldRule, HeaderRule, InterruptRule, OverlayAccess, RegisterApi,
+    RegisterRule, RegisterVerdict, SocInputs, SocRender, StrictnessOverlay, ValueRule, render_soc,
 };
 pub use soc_overlay::{HeaderTree, OverlayCheck, OverlayImport, check_overlay, import_overlay};
 
 pub use pac_api::{
     BitwiseComposedDomain, BitwiseComposedDomainArgument, BitwiseComposedValueType, BoundedDomain,
-    DivisionElements, DivisionPart, DivisionTrigger, EnumDomain, EnumValue, FieldOrModify,
-    FifoPort, FixedRegisterImage, FixedRegisterSequence, FixedRegisterSequenceStep,
-    FixedRegisterWrite, FlagDomain, FlagValue, FullRegisterRead, FullRegisterValue,
-    FullRegisterWrite, InterruptSnapshot, InterruptSource, MaskedRegisterModify, OpaqueDomain,
-    OwnershipPartition, PacApiExposure, PacApiOptions, PacApiPack, PartitionImageRead,
-    PointerField, ReadCapability, RegisterDivision, RegisterImageRead, RegisterImageWrite,
-    RegisterPointerEncoding, RegisterSides, SharedBlock, W1cRegisterSnapshot, WriteTriggerField,
-    ZeroBasedFieldWrite, ZeroRegisterWrite,
+    CommandRegister, DataPort, DivisionElements, DivisionPart, DivisionTrigger, EnumDomain,
+    EnumValue, FieldOrModify, FifoPort, FixedRegisterImage, FixedRegisterSequence,
+    FixedRegisterSequenceStep, FixedRegisterWrite, FlagDomain, FlagValue, FullRegisterRead,
+    FullRegisterValue, FullRegisterWrite, InterruptSnapshot, InterruptSource, MaskedRegisterModify,
+    OpaqueDomain, OwnershipPartition, PacApiExposure, PacApiOptions, PacApiPack,
+    PartitionImageRead, PointerField, ReadCapability, RegisterDivision, RegisterImageRead,
+    RegisterImageWrite, RegisterPointerEncoding, RegisterSides, SharedBlock, W1cRegisterSnapshot,
+    WriteTriggerField, ZeroBasedFieldWrite, ZeroRegisterWrite,
 };
 pub use pac_bindings::{generate_binding_index, validate_pac_crate_name};
 pub use partition_image::PartitionRegister;

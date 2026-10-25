@@ -1,5 +1,5 @@
-//! Run the typed renderer's write-trigger field, FIFO port and shared block
-//! over host memory: the policy declares the kinds, the rendered blocks are compiled
+//! Run the typed renderer's write-trigger field, FIFO port, shared block,
+//! command register and data port over host memory: the policy declares the kinds, the rendered blocks are compiled
 //! against `oer-mmio` in its own directory and its tests observe the words.
 use std::fs;
 
@@ -31,12 +31,30 @@ const SVD: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 <field><name>LEVEL</name><bitOffset>0</bitOffset><bitWidth>1</bitWidth></field>
 </fields></register>
 </registers></peripheral>
+<peripheral><name>CACHE</name><baseAddress>0x60002000</baseAddress><registers>
+<register><name>CTRL</name><addressOffset>0x0</addressOffset><size>32</size><access>read-write</access><fields>
+<field><name>INVALIDATE</name><bitOffset>0</bitOffset><bitWidth>1</bitWidth></field>
+<field><name>CLEAN</name><bitOffset>1</bitOffset><bitWidth>1</bitWidth></field>
+<field><name>ERASE</name><bitOffset>2</bitOffset><bitWidth>1</bitWidth></field>
+<field><name>PROBE</name><bitOffset>3</bitOffset><bitWidth>1</bitWidth></field>
+<field><name>DONE</name><bitOffset>4</bitOffset><bitWidth>1</bitWidth><access>read-only</access></field>
+<field><name>RGID</name><bitOffset>5</bitOffset><bitWidth>4</bitWidth><access>read-only</access></field>
+</fields></register>
+<register><name>W%s</name><addressOffset>0x4</addressOffset><size>32</size><access>read-write</access>
+<dim>4</dim><dimIncrement>4</dimIncrement><fields>
+<field><name>BUF</name><bitOffset>0</bitOffset><bitWidth>32</bitWidth></field>
+</fields></register>
+<register><name>TIE</name><addressOffset>0x14</addressOffset><size>32</size><access>write-only</access><fields>
+<field><name>LOW</name><bitOffset>0</bitOffset><bitWidth>4</bitWidth></field>
+<field><name>HIGH</name><bitOffset>4</bitOffset><bitWidth>4</bitWidth></field>
+</fields></register>
+</registers></peripheral>
 </peripherals></device>"#;
 
 const POLICY: &str = r#"schema = 5
 
 [options]
-typed-peripherals = ["RADIO", "COUNTER"]
+typed-peripherals = ["RADIO", "COUNTER", "CACHE"]
 
 [[write-trigger-fields]]
 peripheral = "RADIO"
@@ -59,6 +77,31 @@ sources = ["FIXTURE"]
 peripheral = "COUNTER"
 register = "OP"
 field = "UPDATE"
+sources = ["FIXTURE"]
+
+[[command-registers]]
+peripheral = "CACHE"
+register = "CTRL"
+commands = ["INVALIDATE", "CLEAN"]
+qualifiers = ["ERASE"]
+held = ["PROBE"]
+sources = ["FIXTURE"]
+
+[[data-ports]]
+peripheral = "CACHE"
+register = "W%s"
+sources = ["FIXTURE"]
+
+[[write-trigger-fields]]
+peripheral = "CACHE"
+register = "TIE"
+field = "LOW"
+sources = ["FIXTURE"]
+
+[[write-trigger-fields]]
+peripheral = "CACHE"
+register = "TIE"
+field = "HIGH"
 sources = ["FIXTURE"]
 
 [[shared-blocks]]
@@ -135,10 +178,69 @@ fn a_shared_block_strobes_and_stores_whole_words_through_shared_borrows() {
     drop(block);
     assert_eq!(memory, [1 << 30, u32::MAX, 0]);
 }
+
+const INVALIDATE: u32 = 1 << 0;
+const CLEAN: u32 = 1 << 1;
+const ERASE: u32 = 1 << 2;
+const PROBE: u32 = 1 << 3;
+const RGID: u32 = 0b1111 << 5;
+const CTRL: usize = 0;
+
+#[test]
+fn a_start_sets_its_command_and_qualifier_in_one_write_and_keeps_the_rest() {
+    let mut memory = vec![RGID | (1 << 20); cache::SIZE / 4];
+    let mut block = cache::Cache::host(&mut memory).expect("memory holds the block");
+    assert!(!block.ctrl_invalidate_busy());
+    assert_eq!(block.start_ctrl_invalidate(true), Ok(()));
+    assert!(block.ctrl_invalidate_busy());
+    assert_eq!(block.read_ctrl().rgid().get(), 0b1111);
+    drop(block);
+    assert_eq!(memory[CTRL], RGID | (1 << 20) | INVALIDATE | ERASE);
+}
+
+#[test]
+fn a_start_refuses_while_any_self_clearing_bit_runs_and_writes_nothing() {
+    for running in [INVALIDATE, CLEAN, ERASE, PROBE] {
+        let mut memory = vec![RGID | running; cache::SIZE / 4];
+        let mut block = cache::Cache::host(&mut memory).expect("memory holds the block");
+        assert_eq!(
+            block.start_ctrl_clean(false),
+            Err(oer_mmio::CommandBusy { running })
+        );
+        drop(block);
+        assert_eq!(memory[CTRL], RGID | running, "a refused start writes nothing");
+    }
+}
+
+#[test]
+fn starts_one_after_another_never_clear_a_running_command_or_its_qualifier() {
+    let mut memory = vec![0; cache::SIZE / 4];
+    let mut block = cache::Cache::host(&mut memory).expect("memory holds the block");
+    assert_eq!(block.start_ctrl_invalidate(true), Ok(()));
+    assert_eq!(
+        block.start_ctrl_clean(false),
+        Err(oer_mmio::CommandBusy { running: INVALIDATE | ERASE })
+    );
+    drop(block);
+    assert_eq!(memory[CTRL], INVALIDATE | ERASE);
+}
+
+#[test]
+fn a_data_port_stores_whole_words_and_a_wide_trigger_writes_its_value() {
+    let mut memory = vec![u32::MAX; cache::SIZE / 4];
+    let mut block = cache::Cache::host(&mut memory).expect("memory holds the block");
+    let index = oer_mmio::Index::constant::<2>();
+    block.write_w(index, 0x1234_5678);
+    assert_eq!(block.read_w(index).buf(), 0x1234_5678);
+    block.trigger_tie_high(oer_mmio::Bits::constant::<0b0101>());
+    drop(block);
+    assert_eq!(memory[1..5], [u32::MAX, u32::MAX, 0x1234_5678, u32::MAX]);
+    assert_eq!(memory[5], 0b0101 << 4, "a write-only trigger word is written from zero");
+}
 "#;
 
 #[test]
-fn write_trigger_fields_fifo_ports_and_shared_blocks_behave_over_host_memory() {
+fn write_triggers_fifo_ports_shared_blocks_commands_and_data_ports_behave_over_host_memory() {
     let directory = tempfile::tempdir().expect("typed-kind fixture directory");
     let path = |name| directory.path().join(name);
     fs::write(path("api.toml"), POLICY).unwrap();

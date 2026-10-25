@@ -23337,18 +23337,11 @@ pub mod soc {
                 self.0.write::<0x44>(value.0);
             }
 
-            /// Read `TRIGGER`.
-            #[inline]
-            pub fn read_trigger(&self) -> trigger::R {
-                trigger::R(self.0.read::<0x48>())
-            }
-
             /// Write one to the write-trigger field `TRIGGER` of `TRIGGER`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_trigger_trigger(&mut self) {
-                self.0
-                    .write::<0x48>((self.0.read::<0x48>() & !trigger::TRIGGERS) | 0x00000001);
+                self.0.write::<0x48>(0x00000001);
             }
 
             /// Read `STATE`.
@@ -23450,18 +23443,11 @@ pub mod soc {
                 self.0.write::<0xa4>(value.0);
             }
 
-            /// Read `INT_CLEAR`.
-            #[inline]
-            pub fn read_int_clear(&self) -> int_clear::R {
-                int_clear::R(self.0.read::<0xac>())
-            }
-
             /// Write one to the write-trigger field `INT_CLEAR` of `INT_CLEAR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clear_int_clear(&mut self) {
-                self.0
-                    .write::<0xac>((self.0.read::<0xac>() & !int_clear::TRIGGERS) | 0x00000001);
+                self.0.write::<0xac>(0x00000001);
             }
 
             /// Read `INT_ENA`.
@@ -23479,46 +23465,25 @@ pub mod soc {
                 self.0.write::<0xb0>(value.0);
             }
 
-            /// Read `DMA_EXIT`.
-            #[inline]
-            pub fn read_dma_exit(&self) -> dma_exit::R {
-                dma_exit::R(self.0.read::<0xb8>())
-            }
-
             /// Write one to the write-trigger field `DMA_EXIT` of `DMA_EXIT`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_dma_exit_dma_exit(&mut self) {
-                self.0
-                    .write::<0xb8>((self.0.read::<0xb8>() & !dma_exit::TRIGGERS) | 0x00000001);
-            }
-
-            /// Read `RX_RESET`.
-            #[inline]
-            pub fn read_rx_reset(&self) -> rx_reset::R {
-                rx_reset::R(self.0.read::<0xc0>())
+                self.0.write::<0xb8>(0x00000001);
             }
 
             /// Write one to the write-trigger field `RX_RESET` of `RX_RESET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_rx_reset_rx_reset(&mut self) {
-                self.0
-                    .write::<0xc0>((self.0.read::<0xc0>() & !rx_reset::TRIGGERS) | 0x00000001);
-            }
-
-            /// Read `TX_RESET`.
-            #[inline]
-            pub fn read_tx_reset(&self) -> tx_reset::R {
-                tx_reset::R(self.0.read::<0xc4>())
+                self.0.write::<0xc0>(0x00000001);
             }
 
             /// Write one to the write-trigger field `TX_RESET` of `TX_RESET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_tx_reset_tx_reset(&mut self) {
-                self.0
-                    .write::<0xc4>((self.0.read::<0xc4>() & !tx_reset::TRIGGERS) | 0x00000001);
+                self.0.write::<0xc4>(0x00000001);
             }
 
             /// Read `PSEUDO`.
@@ -24273,12 +24238,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `STATE` register.
@@ -24555,12 +24514,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `INT_ENA` register.
@@ -24615,12 +24568,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `RX_RESET` register.
@@ -24635,12 +24582,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `TX_RESET` register.
@@ -24655,12 +24596,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `PSEUDO` register.
@@ -27924,66 +27859,53 @@ pub mod soc {
                 int_st::R(self.0.read::<0x48>())
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x4c>())
-            }
-
             /// Write one to the write-trigger field `APB_SARADC_TSENS_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_apb_saradc_tsens_int_clr(&mut self) {
-                self.0
-                    .write::<0x4c>((self.0.read::<0x4c>() & !int_clr::TRIGGERS) | 0x02000000);
+                self.0.write::<0x4c>(0x02000000);
             }
 
             /// Write one to the write-trigger field `APB_SARADC_THRES1_LOW_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_apb_saradc_thres1_low_int_clr(&mut self) {
-                self.0
-                    .write::<0x4c>((self.0.read::<0x4c>() & !int_clr::TRIGGERS) | 0x04000000);
+                self.0.write::<0x4c>(0x04000000);
             }
 
             /// Write one to the write-trigger field `APB_SARADC_THRES0_LOW_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_apb_saradc_thres0_low_int_clr(&mut self) {
-                self.0
-                    .write::<0x4c>((self.0.read::<0x4c>() & !int_clr::TRIGGERS) | 0x08000000);
+                self.0.write::<0x4c>(0x08000000);
             }
 
             /// Write one to the write-trigger field `APB_SARADC_THRES1_HIGH_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_apb_saradc_thres1_high_int_clr(&mut self) {
-                self.0
-                    .write::<0x4c>((self.0.read::<0x4c>() & !int_clr::TRIGGERS) | 0x10000000);
+                self.0.write::<0x4c>(0x10000000);
             }
 
             /// Write one to the write-trigger field `APB_SARADC_THRES0_HIGH_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_apb_saradc_thres0_high_int_clr(&mut self) {
-                self.0
-                    .write::<0x4c>((self.0.read::<0x4c>() & !int_clr::TRIGGERS) | 0x20000000);
+                self.0.write::<0x4c>(0x20000000);
             }
 
             /// Write one to the write-trigger field `APB_SARADC2_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_apb_saradc2_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x4c>((self.0.read::<0x4c>() & !int_clr::TRIGGERS) | 0x40000000);
+                self.0.write::<0x4c>(0x40000000);
             }
 
             /// Write one to the write-trigger field `APB_SARADC1_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_apb_saradc1_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x4c>((self.0.read::<0x4c>() & !int_clr::TRIGGERS) | 0x80000000);
+                self.0.write::<0x4c>(0x80000000);
             }
 
             /// Read `DMA_CONF`.
@@ -29557,12 +29479,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xfe000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `DMA_CONF` register.
@@ -31372,90 +31288,74 @@ pub mod soc {
                 self.0.write::<0x8>(value.0);
             }
 
-            /// Read `CORE_0_INTR_CLR`.
-            #[inline]
-            pub fn read_core_0_intr_clr(&self) -> core_0_intr_clr::R {
-                core_0_intr_clr::R(self.0.read::<0xc>())
-            }
-
             /// Write one to the write-trigger field `CORE_0_AREA_DRAM0_0_RD_CLR` of `CORE_0_INTR_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_core_0_intr_clr_core_0_area_dram0_0_rd_clr(&mut self) {
-                self.0
-                    .write::<0xc>((self.0.read::<0xc>() & !core_0_intr_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0xc>(0x00000001);
             }
 
             /// Write one to the write-trigger field `CORE_0_AREA_DRAM0_0_WR_CLR` of `CORE_0_INTR_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_core_0_intr_clr_core_0_area_dram0_0_wr_clr(&mut self) {
-                self.0
-                    .write::<0xc>((self.0.read::<0xc>() & !core_0_intr_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0xc>(0x00000002);
             }
 
             /// Write one to the write-trigger field `CORE_0_AREA_DRAM0_1_RD_CLR` of `CORE_0_INTR_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_core_0_intr_clr_core_0_area_dram0_1_rd_clr(&mut self) {
-                self.0
-                    .write::<0xc>((self.0.read::<0xc>() & !core_0_intr_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0xc>(0x00000004);
             }
 
             /// Write one to the write-trigger field `CORE_0_AREA_DRAM0_1_WR_CLR` of `CORE_0_INTR_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_core_0_intr_clr_core_0_area_dram0_1_wr_clr(&mut self) {
-                self.0
-                    .write::<0xc>((self.0.read::<0xc>() & !core_0_intr_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0xc>(0x00000008);
             }
 
             /// Write one to the write-trigger field `CORE_0_AREA_PIF_0_RD_CLR` of `CORE_0_INTR_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_core_0_intr_clr_core_0_area_pif_0_rd_clr(&mut self) {
-                self.0
-                    .write::<0xc>((self.0.read::<0xc>() & !core_0_intr_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0xc>(0x00000010);
             }
 
             /// Write one to the write-trigger field `CORE_0_AREA_PIF_0_WR_CLR` of `CORE_0_INTR_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_core_0_intr_clr_core_0_area_pif_0_wr_clr(&mut self) {
-                self.0
-                    .write::<0xc>((self.0.read::<0xc>() & !core_0_intr_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0xc>(0x00000020);
             }
 
             /// Write one to the write-trigger field `CORE_0_AREA_PIF_1_RD_CLR` of `CORE_0_INTR_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_core_0_intr_clr_core_0_area_pif_1_rd_clr(&mut self) {
-                self.0
-                    .write::<0xc>((self.0.read::<0xc>() & !core_0_intr_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0xc>(0x00000040);
             }
 
             /// Write one to the write-trigger field `CORE_0_AREA_PIF_1_WR_CLR` of `CORE_0_INTR_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_core_0_intr_clr_core_0_area_pif_1_wr_clr(&mut self) {
-                self.0
-                    .write::<0xc>((self.0.read::<0xc>() & !core_0_intr_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0xc>(0x00000080);
             }
 
             /// Write one to the write-trigger field `CORE_0_SP_SPILL_MIN_CLR` of `CORE_0_INTR_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_core_0_intr_clr_core_0_sp_spill_min_clr(&mut self) {
-                self.0
-                    .write::<0xc>((self.0.read::<0xc>() & !core_0_intr_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0xc>(0x00000100);
             }
 
             /// Write one to the write-trigger field `CORE_0_SP_SPILL_MAX_CLR` of `CORE_0_INTR_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_core_0_intr_clr_core_0_sp_spill_max_clr(&mut self) {
-                self.0
-                    .write::<0xc>((self.0.read::<0xc>() & !core_0_intr_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0xc>(0x00000200);
             }
 
             /// Read `CORE_0_AREA_DRAM0_0_MIN`.
@@ -32270,12 +32170,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x000003ff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `CORE_0_AREA_DRAM0_0_MIN` register.
@@ -33106,47 +33000,25 @@ pub mod soc {
         }
 
         impl<P: oer_mmio::Placement> Ds<P> {
-            /// Read `SET_START`.
-            #[inline]
-            pub fn read_set_start(&self) -> set_start::R {
-                set_start::R(self.0.read::<0xe00>())
-            }
-
             /// Write one to the write-trigger field `SET_START` of `SET_START`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_set_start_set_start(&mut self) {
-                self.0
-                    .write::<0xe00>((self.0.read::<0xe00>() & !set_start::TRIGGERS) | 0x00000001);
-            }
-
-            /// Read `SET_CONTINUE`.
-            #[inline]
-            pub fn read_set_continue(&self) -> set_continue::R {
-                set_continue::R(self.0.read::<0xe04>())
+                self.0.write::<0xe00>(0x00000001);
             }
 
             /// Write one to the write-trigger field `SET_CONTINUE` of `SET_CONTINUE`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_set_continue_set_continue(&mut self) {
-                self.0.write::<0xe04>(
-                    (self.0.read::<0xe04>() & !set_continue::TRIGGERS) | 0x00000001,
-                );
-            }
-
-            /// Read `SET_FINISH`.
-            #[inline]
-            pub fn read_set_finish(&self) -> set_finish::R {
-                set_finish::R(self.0.read::<0xe08>())
+                self.0.write::<0xe04>(0x00000001);
             }
 
             /// Write one to the write-trigger field `SET_FINISH` of `SET_FINISH`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_set_finish_set_finish(&mut self) {
-                self.0
-                    .write::<0xe08>((self.0.read::<0xe08>() & !set_finish::TRIGGERS) | 0x00000001);
+                self.0.write::<0xe08>(0x00000001);
             }
 
             /// Read `QUERY_BUSY`.
@@ -33195,12 +33067,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `SET_CONTINUE` register.
@@ -33215,12 +33081,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `SET_FINISH` register.
@@ -33235,12 +33095,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `QUERY_BUSY` register.
@@ -33443,18 +33297,11 @@ pub mod soc {
                 self.0.write::<0x14>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x18>())
-            }
-
             /// Write one to the write-trigger field `CALC_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_calc_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x18>((self.0.read::<0x18>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x18>(0x00000001);
             }
 
             /// Read `CONF`.
@@ -33606,12 +33453,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `CONF` register.
@@ -33829,72 +33670,53 @@ pub mod soc {
                 self.0.write::<0x14>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x18>())
-            }
-
             /// Write one to the write-trigger field `PREP_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_prep_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x18>((self.0.read::<0x18>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x18>(0x00000001);
             }
 
             /// Write one to the write-trigger field `PROC_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_proc_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x18>((self.0.read::<0x18>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x18>(0x00000002);
             }
 
             /// Write one to the write-trigger field `POST_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_post_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x18>((self.0.read::<0x18>() & !int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x18>(0x00000004);
             }
 
             /// Write one to the write-trigger field `SHA_RELEASE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_sha_release_int_clr(&mut self) {
-                self.0
-                    .write::<0x18>((self.0.read::<0x18>() & !int_clr::TRIGGERS) | 0x00000008);
-            }
-
-            /// Read `START`.
-            #[inline]
-            pub fn read_start(&self) -> start::R {
-                start::R(self.0.read::<0x1c>())
+                self.0.write::<0x18>(0x00000008);
             }
 
             /// Write one to the write-trigger field `START` of `START`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_start_start(&mut self) {
-                self.0
-                    .write::<0x1c>((self.0.read::<0x1c>() & !start::TRIGGERS) | 0x00000001);
+                self.0.write::<0x1c>(0x00000001);
             }
 
             /// Write one to the write-trigger field `LOAD_DONE` of `START`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_start_load_done(&mut self) {
-                self.0
-                    .write::<0x1c>((self.0.read::<0x1c>() & !start::TRIGGERS) | 0x00000002);
+                self.0.write::<0x1c>(0x00000002);
             }
 
             /// Write one to the write-trigger field `GET_DONE` of `START`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_start_get_done(&mut self) {
-                self.0
-                    .write::<0x1c>((self.0.read::<0x1c>() & !start::TRIGGERS) | 0x00000004);
+                self.0.write::<0x1c>(0x00000004);
             }
 
             /// Read `STATE`.
@@ -33930,33 +33752,18 @@ pub mod soc {
                 sha_mode::R(self.0.read::<0x200>())
             }
 
-            /// Read `SHA_START`.
-            #[inline]
-            pub fn read_sha_start(&self) -> sha_start::R {
-                sha_start::R(self.0.read::<0x210>())
-            }
-
             /// Write one to the write-trigger field `SHA_START` of `SHA_START`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_sha_start_sha_start(&mut self) {
-                self.0
-                    .write::<0x210>((self.0.read::<0x210>() & !sha_start::TRIGGERS) | 0x00000001);
-            }
-
-            /// Read `SHA_CONTINUE`.
-            #[inline]
-            pub fn read_sha_continue(&self) -> sha_continue::R {
-                sha_continue::R(self.0.read::<0x214>())
+                self.0.write::<0x210>(0x00000001);
             }
 
             /// Write one to the write-trigger field `SHA_CONTINUE` of `SHA_CONTINUE`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_sha_continue_sha_continue(&mut self) {
-                self.0.write::<0x214>(
-                    (self.0.read::<0x214>() & !sha_continue::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x214>(0x00000001);
             }
 
             /// Read `SHA_BUSY`.
@@ -34271,12 +34078,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x0000000f;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `START` register.
@@ -34291,12 +34092,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000007;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `STATE` register.
@@ -34417,12 +34212,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `SHA_CONTINUE` register.
@@ -34437,12 +34226,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `SHA_BUSY` register.
@@ -34836,26 +34619,18 @@ pub mod soc {
                 self.0.write::<0x1e4>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x1e8>())
-            }
-
             /// Write one to the write-trigger field `READ_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_read_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x1e8>((self.0.read::<0x1e8>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x1e8>(0x00000001);
             }
 
             /// Write one to the write-trigger field `PGM_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_pgm_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x1e8>((self.0.read::<0x1e8>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x1e8>(0x00000002);
             }
 
             /// Read `DAC_CONF`.
@@ -37527,12 +37302,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000003;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `DAC_CONF` register.
@@ -40905,16 +40674,18 @@ pub mod soc {
                 out::R(self.0.read::<0x4>())
             }
 
-            /// Read `OUT_W1TS`.
+            /// Write `value` to the write-trigger field `OUT_W1TS` of `OUT_W1TS`, starting its
+            /// hardware action once; every other bit is zero.
             #[inline]
-            pub fn read_out_w1ts(&self) -> out_w1ts::R {
-                out_w1ts::R(self.0.read::<0x8>())
+            pub fn trigger_out_w1ts_out_w1ts(&mut self, value: u32) {
+                self.0.write::<0x8>(value);
             }
 
-            /// Read `OUT_W1TC`.
+            /// Write `value` to the write-trigger field `OUT_W1TC` of `OUT_W1TC`, starting its
+            /// hardware action once; every other bit is zero.
             #[inline]
-            pub fn read_out_w1tc(&self) -> out_w1tc::R {
-                out_w1tc::R(self.0.read::<0xc>())
+            pub fn trigger_out_w1tc_out_w1tc(&mut self, value: u32) {
+                self.0.write::<0xc>(value);
             }
 
             /// Read `OUT1`.
@@ -40923,32 +40694,18 @@ pub mod soc {
                 out1::R(self.0.read::<0x10>())
             }
 
-            /// Read `OUT1_W1TS`.
-            #[inline]
-            pub fn read_out1_w1ts(&self) -> out1_w1ts::R {
-                out1_w1ts::R(self.0.read::<0x14>())
-            }
-
             /// Write one to the write-trigger field `OUT1_W1TS` of `OUT1_W1TS`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_out1_w1ts_out1_w1ts(&mut self) {
-                self.0
-                    .write::<0x14>((self.0.read::<0x14>() & !out1_w1ts::TRIGGERS) | 0x00000001);
-            }
-
-            /// Read `OUT1_W1TC`.
-            #[inline]
-            pub fn read_out1_w1tc(&self) -> out1_w1tc::R {
-                out1_w1tc::R(self.0.read::<0x18>())
+                self.0.write::<0x14>(0x00000001);
             }
 
             /// Write one to the write-trigger field `OUT1_W1TC` of `OUT1_W1TC`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_out1_w1tc_out1_w1tc(&mut self) {
-                self.0
-                    .write::<0x18>((self.0.read::<0x18>() & !out1_w1tc::TRIGGERS) | 0x00000001);
+                self.0.write::<0x18>(0x00000001);
             }
 
             /// Read `ENABLE`.
@@ -40957,16 +40714,18 @@ pub mod soc {
                 enable::R(self.0.read::<0x34>())
             }
 
-            /// Read `ENABLE_W1TS`.
+            /// Write `value` to the write-trigger field `ENABLE_W1TS` of `ENABLE_W1TS`, starting its
+            /// hardware action once; every other bit is zero.
             #[inline]
-            pub fn read_enable_w1ts(&self) -> enable_w1ts::R {
-                enable_w1ts::R(self.0.read::<0x38>())
+            pub fn trigger_enable_w1ts_enable_w1ts(&mut self, value: u32) {
+                self.0.write::<0x38>(value);
             }
 
-            /// Read `ENABLE_W1TC`.
+            /// Write `value` to the write-trigger field `ENABLE_W1TC` of `ENABLE_W1TC`, starting its
+            /// hardware action once; every other bit is zero.
             #[inline]
-            pub fn read_enable_w1tc(&self) -> enable_w1tc::R {
-                enable_w1tc::R(self.0.read::<0x3c>())
+            pub fn trigger_enable_w1tc_enable_w1tc(&mut self, value: u32) {
+                self.0.write::<0x3c>(value);
             }
 
             /// Read `ENABLE1`.
@@ -40975,32 +40734,18 @@ pub mod soc {
                 enable1::R(self.0.read::<0x40>())
             }
 
-            /// Read `ENABLE1_W1TS`.
-            #[inline]
-            pub fn read_enable1_w1ts(&self) -> enable1_w1ts::R {
-                enable1_w1ts::R(self.0.read::<0x44>())
-            }
-
             /// Write one to the write-trigger field `ENABLE1_W1TS` of `ENABLE1_W1TS`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_enable1_w1ts_enable1_w1ts(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !enable1_w1ts::TRIGGERS) | 0x00000001);
-            }
-
-            /// Read `ENABLE1_W1TC`.
-            #[inline]
-            pub fn read_enable1_w1tc(&self) -> enable1_w1tc::R {
-                enable1_w1tc::R(self.0.read::<0x48>())
+                self.0.write::<0x44>(0x00000001);
             }
 
             /// Write one to the write-trigger field `ENABLE1_W1TC` of `ENABLE1_W1TC`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_enable1_w1tc_enable1_w1tc(&mut self) {
-                self.0
-                    .write::<0x48>((self.0.read::<0x48>() & !enable1_w1tc::TRIGGERS) | 0x00000001);
+                self.0.write::<0x48>(0x00000001);
             }
 
             /// Read `IN1`.
@@ -41015,16 +40760,18 @@ pub mod soc {
                 status::R(self.0.read::<0x74>())
             }
 
-            /// Read `STATUS_W1TS`.
+            /// Write `value` to the write-trigger field `STATUS_W1TS` of `STATUS_W1TS`, starting its
+            /// hardware action once; every other bit is zero.
             #[inline]
-            pub fn read_status_w1ts(&self) -> status_w1ts::R {
-                status_w1ts::R(self.0.read::<0x78>())
+            pub fn trigger_status_w1ts_status_w1ts(&mut self, value: u32) {
+                self.0.write::<0x78>(value);
             }
 
-            /// Read `STATUS_W1TC`.
+            /// Write `value` to the write-trigger field `STATUS_W1TC` of `STATUS_W1TC`, starting its
+            /// hardware action once; every other bit is zero.
             #[inline]
-            pub fn read_status_w1tc(&self) -> status_w1tc::R {
-                status_w1tc::R(self.0.read::<0x7c>())
+            pub fn trigger_status_w1tc_status_w1tc(&mut self, value: u32) {
+                self.0.write::<0x7c>(value);
             }
 
             /// Read `STATUS1`.
@@ -41033,32 +40780,18 @@ pub mod soc {
                 status1::R(self.0.read::<0x80>())
             }
 
-            /// Read `STATUS1_W1TS`.
-            #[inline]
-            pub fn read_status1_w1ts(&self) -> status1_w1ts::R {
-                status1_w1ts::R(self.0.read::<0x84>())
-            }
-
             /// Write one to the write-trigger field `STATUS1_W1TS` of `STATUS1_W1TS`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_status1_w1ts_status1_w1ts(&mut self) {
-                self.0
-                    .write::<0x84>((self.0.read::<0x84>() & !status1_w1ts::TRIGGERS) | 0x00000001);
-            }
-
-            /// Read `STATUS1_W1TC`.
-            #[inline]
-            pub fn read_status1_w1tc(&self) -> status1_w1tc::R {
-                status1_w1tc::R(self.0.read::<0x88>())
+                self.0.write::<0x84>(0x00000001);
             }
 
             /// Write one to the write-trigger field `STATUS1_W1TC` of `STATUS1_W1TC`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_status1_w1tc_status1_w1tc(&mut self) {
-                self.0
-                    .write::<0x88>((self.0.read::<0x88>() & !status1_w1tc::TRIGGERS) | 0x00000001);
+                self.0.write::<0x88>(0x00000001);
             }
 
             /// Read `PROCPU_INT`.
@@ -41264,17 +40997,9 @@ pub mod soc {
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x8;
 
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {
-                /// Configures whether or not to set the output register GPIO_OUT_REG of GPIO0 ~ GPIO31.\\ 0: Not set\\ 1: The corresponding bit in GPIO_OUT_REG will be set to 1\\ Bit0 ~ bit31 are corresponding to GPIO0 ~ GPIO31. Bitxx ~ bitxx is invalid. \\ Recommended operation: use this register to set GPIO_OUT_REG. \\
-                #[inline]
-                pub const fn out_w1ts(self) -> u32 {
-                    self.0
-                }
-            }
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xffffffff;
         }
 
         /// The `OUT_W1TC` register.
@@ -41286,17 +41011,9 @@ pub mod soc {
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0xc;
 
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {
-                /// Configures whether or not to clear the output register GPIO_OUT_REG of GPIO0 ~ GPIO31 output.\\ 0: Not clear\\ 1: The corresponding bit in GPIO_OUT_REG will be cleared.\\ Bit0 ~ bit31 are corresponding to GPIO0 ~ GPIO31. Bitxx ~ bitxx is invalid. \\ Recommended operation: use this register to clear GPIO_OUT_REG. \\
-                #[inline]
-                pub const fn out_w1tc(self) -> u32 {
-                    self.0
-                }
-            }
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xffffffff;
         }
 
         /// The `OUT1` register.
@@ -41333,12 +41050,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `OUT1_W1TC` register.
@@ -41353,12 +41064,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `ENABLE` register.
@@ -41392,17 +41097,9 @@ pub mod soc {
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x38;
 
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {
-                /// Configures whether or not to set the output enable register GPIO_ENABLE_REG of GPIO0 ~ GPIO31.\\ 0: Not set\\ 1: The corresponding bit in GPIO_ENABLE_REG will be set to 1\\ Bit0 ~ bit31 are corresponding to GPIO0 ~ GPIO31. Bitxx ~ bitxx is invalid. \\ Recommended operation: use this register to set GPIO_ENABLE_REG.\\
-                #[inline]
-                pub const fn enable_w1ts(self) -> u32 {
-                    self.0
-                }
-            }
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xffffffff;
         }
 
         /// The `ENABLE_W1TC` register.
@@ -41414,17 +41111,9 @@ pub mod soc {
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x3c;
 
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {
-                /// Configures whether or not to clear the output enable register GPIO_ENABLE_REG of GPIO0 ~ GPIO31. \\ 0: Not clear\\ 1: The corresponding bit in GPIO_ENABLE_REG will be cleared\\ Bit0 ~ bit31 are corresponding to GPIO0 ~ GPIO31. Bitxx ~ bitxx is invalid. \\ Recommended operation: use this register to clear GPIO_ENABLE_REG.\\
-                #[inline]
-                pub const fn enable_w1tc(self) -> u32 {
-                    self.0
-                }
-            }
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xffffffff;
         }
 
         /// The `ENABLE1` register.
@@ -41461,12 +41150,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `ENABLE1_W1TC` register.
@@ -41481,12 +41164,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `IN1` register.
@@ -41542,17 +41219,9 @@ pub mod soc {
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x78;
 
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {
-                /// Configures whether or not to set the interrupt status register GPIO_STATUS_INTERRUPT of GPIO0 ~ GPIO31. - Bit0 ~ bit31 are corresponding to GPIO0 ~ GPIO31. Bitxx ~ bitxx is invalid. - If the value 1 is written to a bit here, the corresponding bit in GPIO_STATUS_INTERRUPT will be set to 1. \item Recommended operation: use this register to set GPIO_STATUS_INTERRUPT.
-                #[inline]
-                pub const fn status_w1ts(self) -> u32 {
-                    self.0
-                }
-            }
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xffffffff;
         }
 
         /// The `STATUS_W1TC` register.
@@ -41564,17 +41233,9 @@ pub mod soc {
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x7c;
 
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {
-                /// Configures whether or not to clear the interrupt status register GPIO_STATUS_INTERRUPT of GPIO0 ~ GPIO31. - Bit0 ~ bit31 are corresponding to GPIO0 ~ GPIO31. Bitxx ~ bitxx is invalid. - If the value 1 is written to a bit here, the corresponding bit in GPIO_STATUS_INTERRUPT will be cleared. \item Recommended operation: use this register to clear GPIO_STATUS_INTERRUPT.
-                #[inline]
-                pub const fn status_w1tc(self) -> u32 {
-                    self.0
-                }
-            }
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xffffffff;
         }
 
         /// The `STATUS1` register.
@@ -41611,12 +41272,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `STATUS1_W1TC` register.
@@ -41631,12 +41286,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `PROCPU_INT` register.
@@ -42739,49 +42388,31 @@ pub mod soc {
                 self.0.write::<0x1d8>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x1dc>())
-            }
-
             /// Write one to the write-trigger field `COMP_NEG_0_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_comp_neg_0_int_clr(&mut self) {
-                self.0
-                    .write::<0x1dc>((self.0.read::<0x1dc>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x1dc>(0x00000001);
             }
 
             /// Write one to the write-trigger field `COMP_POS_0_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_comp_pos_0_int_clr(&mut self) {
-                self.0
-                    .write::<0x1dc>((self.0.read::<0x1dc>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x1dc>(0x00000002);
             }
 
             /// Write one to the write-trigger field `COMP_ALL_0_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_comp_all_0_int_clr(&mut self) {
-                self.0
-                    .write::<0x1dc>((self.0.read::<0x1dc>() & !int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x1dc>(0x00000004);
             }
 
             /// Read `PIN_CTRL`.
             #[inline]
             pub fn read_pin_ctrl(&self) -> pin_ctrl::R {
                 pin_ctrl::R(self.0.read::<0x1e0>())
-            }
-
-            /// Read `PIN_CTRL`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_pin_ctrl(&mut self, change: impl FnOnce(&mut pin_ctrl::W)) {
-                let mut value = pin_ctrl::W(self.0.read::<0x1e0>());
-                change(&mut value);
-                self.0.write::<0x1e0>(value.0);
             }
 
             /// Read `VERSION`.
@@ -44666,12 +44297,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000007;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `PIN_CTRL` register.
@@ -44704,50 +44329,6 @@ pub mod soc {
                 #[inline]
                 pub const fn clk_out3(self) -> oer_mmio::Bits<5> {
                     oer_mmio::Bits::truncate(self.0 >> 10)
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// If you want to output clock for I2S to CLK_OUT_out1, set this register to 0x0. CLK_OUT_out1 can be found in peripheral output signals.
-                #[inline]
-                pub const fn clk_out1(&self) -> oer_mmio::Bits<5> {
-                    oer_mmio::Bits::truncate(self.0)
-                }
-
-                /// If you want to output clock for I2S to CLK_OUT_out2, set this register to 0x0. CLK_OUT_out2 can be found in peripheral output signals.
-                #[inline]
-                pub const fn clk_out2(&self) -> oer_mmio::Bits<5> {
-                    oer_mmio::Bits::truncate(self.0 >> 5)
-                }
-
-                /// If you want to output clock for I2S to CLK_OUT_out3, set this register to 0x0. CLK_OUT_out3 can be found in peripheral output signals.
-                #[inline]
-                pub const fn clk_out3(&self) -> oer_mmio::Bits<5> {
-                    oer_mmio::Bits::truncate(self.0 >> 10)
-                }
-
-                /// Set `CLK_OUT1`.
-                #[inline]
-                pub fn set_clk_out1(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
-                    self.0 = (self.0 & !0x0000001f) | value.get();
-                    self
-                }
-
-                /// Set `CLK_OUT2`.
-                #[inline]
-                pub fn set_clk_out2(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
-                    self.0 = (self.0 & !0x000003e0) | (value.get() << 5);
-                    self
-                }
-
-                /// Set `CLK_OUT3`.
-                #[inline]
-                pub fn set_clk_out3(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
-                    self.0 = (self.0 & !0x00007c00) | (value.get() << 10);
-                    self
                 }
             }
         }
@@ -45096,18 +44677,11 @@ pub mod soc {
                 m0_status::R(self.0.read::<0xc8>())
             }
 
-            /// Read `M0_STATUS_CLR`.
-            #[inline]
-            pub fn read_m0_status_clr(&self) -> m0_status_clr::R {
-                m0_status_clr::R(self.0.read::<0xcc>())
-            }
-
             /// Write one to the write-trigger field `M0_EXCEPTION_STATUS_CLR` of `M0_STATUS_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_m0_status_clr_m0_exception_status_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !m0_status_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0xcc>(0x00000001);
             }
 
             /// Read `M0_EXCEPTION_INFO0`.
@@ -45128,18 +44702,11 @@ pub mod soc {
                 m1_status::R(self.0.read::<0xd8>())
             }
 
-            /// Read `M1_STATUS_CLR`.
-            #[inline]
-            pub fn read_m1_status_clr(&self) -> m1_status_clr::R {
-                m1_status_clr::R(self.0.read::<0xdc>())
-            }
-
             /// Write one to the write-trigger field `M1_EXCEPTION_STATUS_CLR` of `M1_STATUS_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_m1_status_clr_m1_exception_status_clr(&mut self) {
-                self.0
-                    .write::<0xdc>((self.0.read::<0xdc>() & !m1_status_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0xdc>(0x00000001);
             }
 
             /// Read `M1_EXCEPTION_INFO0`.
@@ -45160,18 +44727,11 @@ pub mod soc {
                 m2_status::R(self.0.read::<0xe8>())
             }
 
-            /// Read `M2_STATUS_CLR`.
-            #[inline]
-            pub fn read_m2_status_clr(&self) -> m2_status_clr::R {
-                m2_status_clr::R(self.0.read::<0xec>())
-            }
-
             /// Write one to the write-trigger field `M2_EXCEPTION_STATUS_CLR` of `M2_STATUS_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_m2_status_clr_m2_exception_status_clr(&mut self) {
-                self.0
-                    .write::<0xec>((self.0.read::<0xec>() & !m2_status_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0xec>(0x00000001);
             }
 
             /// Read `M2_EXCEPTION_INFO0`.
@@ -45192,18 +44752,11 @@ pub mod soc {
                 m3_status::R(self.0.read::<0xf8>())
             }
 
-            /// Read `M3_STATUS_CLR`.
-            #[inline]
-            pub fn read_m3_status_clr(&self) -> m3_status_clr::R {
-                m3_status_clr::R(self.0.read::<0xfc>())
-            }
-
             /// Write one to the write-trigger field `M3_EXCEPTION_STATUS_CLR` of `M3_STATUS_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_m3_status_clr_m3_exception_status_clr(&mut self) {
-                self.0
-                    .write::<0xfc>((self.0.read::<0xfc>() & !m3_status_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0xfc>(0x00000001);
             }
 
             /// Read `M3_EXCEPTION_INFO0`.
@@ -45224,19 +44777,11 @@ pub mod soc {
                 m4_status::R(self.0.read::<0x108>())
             }
 
-            /// Read `M4_STATUS_CLR`.
-            #[inline]
-            pub fn read_m4_status_clr(&self) -> m4_status_clr::R {
-                m4_status_clr::R(self.0.read::<0x10c>())
-            }
-
             /// Write one to the write-trigger field `M4_EXCEPTION_STATUS_CLR` of `M4_STATUS_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_m4_status_clr_m4_exception_status_clr(&mut self) {
-                self.0.write::<0x10c>(
-                    (self.0.read::<0x10c>() & !m4_status_clr::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x10c>(0x00000001);
             }
 
             /// Read `M4_EXCEPTION_INFO0`.
@@ -45793,12 +45338,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `M0_EXCEPTION_INFO0` register.
@@ -45891,12 +45430,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `M1_EXCEPTION_INFO0` register.
@@ -45989,12 +45522,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `M2_EXCEPTION_INFO0` register.
@@ -46087,12 +45614,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `M3_EXCEPTION_INFO0` register.
@@ -46185,12 +45706,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `M4_EXCEPTION_INFO0` register.
@@ -46629,29 +46144,6 @@ pub mod soc {
                 modem_peri_timeout_conf::R(self.0.read::<0x24>())
             }
 
-            /// Write one to the write-trigger field `MODEM_PERI_TIMEOUT_INT_CLEAR` of `MODEM_PERI_TIMEOUT_CONF`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
-            #[inline]
-            pub fn trigger_modem_peri_timeout_conf_modem_peri_timeout_int_clear(&mut self) {
-                self.0.write::<0x24>(
-                    (self.0.read::<0x24>() & !modem_peri_timeout_conf::TRIGGERS) | 0x00010000,
-                );
-            }
-
-            /// Read `MODEM_PERI_TIMEOUT_CONF`, change fields and write it back; every other bit keeps
-            /// the value read and every write-trigger field is zero.
-            #[inline]
-            pub fn modify_modem_peri_timeout_conf(
-                &mut self,
-                change: impl FnOnce(&mut modem_peri_timeout_conf::W),
-            ) {
-                let mut value = modem_peri_timeout_conf::W(
-                    self.0.read::<0x24>() & !modem_peri_timeout_conf::TRIGGERS,
-                );
-                change(&mut value);
-                self.0.write::<0x24>(value.0);
-            }
-
             /// Read `MODEM_PERI_TIMEOUT_ADDR`.
             #[inline]
             pub fn read_modem_peri_timeout_addr(&self) -> modem_peri_timeout_addr::R {
@@ -46733,15 +46225,6 @@ pub mod soc {
                 mem_test_conf::R(self.0.read::<0x44>())
             }
 
-            /// Read `MEM_TEST_CONF`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_mem_test_conf(&mut self, change: impl FnOnce(&mut mem_test_conf::W)) {
-                let mut value = mem_test_conf::W(self.0.read::<0x44>());
-                change(&mut value);
-                self.0.write::<0x44>(value.0);
-            }
-
             /// Read `BITSCRAMBLER_PERI_SEL`.
             #[inline]
             pub fn read_bitscrambler_peri_sel(&self) -> bitscrambler_peri_sel::R {
@@ -46766,28 +46249,10 @@ pub mod soc {
                 rnd_eco::R(self.0.read::<0x3e0>())
             }
 
-            /// Read `RND_ECO`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_rnd_eco(&mut self, change: impl FnOnce(&mut rnd_eco::W)) {
-                let mut value = rnd_eco::W(self.0.read::<0x3e0>());
-                change(&mut value);
-                self.0.write::<0x3e0>(value.0);
-            }
-
             /// Read `RND_ECO_LOW`.
             #[inline]
             pub fn read_rnd_eco_low(&self) -> rnd_eco_low::R {
                 rnd_eco_low::R(self.0.read::<0x3e4>())
-            }
-
-            /// Read `RND_ECO_LOW`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_rnd_eco_low(&mut self, change: impl FnOnce(&mut rnd_eco_low::W)) {
-                let mut value = rnd_eco_low::W(self.0.read::<0x3e4>());
-                change(&mut value);
-                self.0.write::<0x3e4>(value.0);
             }
 
             /// Read `RND_ECO_HIGH`.
@@ -46796,28 +46261,10 @@ pub mod soc {
                 rnd_eco_high::R(self.0.read::<0x3e8>())
             }
 
-            /// Read `RND_ECO_HIGH`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_rnd_eco_high(&mut self, change: impl FnOnce(&mut rnd_eco_high::W)) {
-                let mut value = rnd_eco_high::W(self.0.read::<0x3e8>());
-                change(&mut value);
-                self.0.write::<0x3e8>(value.0);
-            }
-
             /// Read `CLOCK_GATE`.
             #[inline]
             pub fn read_clock_gate(&self) -> clock_gate::R {
                 clock_gate::R(self.0.read::<0x3f8>())
-            }
-
-            /// Read `CLOCK_GATE`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_clock_gate(&mut self, change: impl FnOnce(&mut clock_gate::W)) {
-                let mut value = clock_gate::W(self.0.read::<0x3f8>());
-                change(&mut value);
-                self.0.write::<0x3f8>(value.0);
             }
 
             /// Read `DATE`.
@@ -47255,9 +46702,9 @@ pub mod soc {
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x24;
 
-            /// The bits of the write-trigger fields: zero in every
-            /// read-modify-write, one only in a field's explicit trigger.
-            pub const TRIGGERS: u32 = 0x00010000;
+            /// The bits of the fields whose one permitted value is zero: zero in
+            /// every write.
+            pub const ZERO: u32 = 0x00010000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -47274,37 +46721,6 @@ pub mod soc {
                 #[inline]
                 pub const fn modem_peri_timeout_protect_en(self) -> bool {
                     (self.0 & 0x00020000) != 0
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// Set the timeout threshold for bus access, corresponding to the number of clock cycles of the clock domain.
-                #[inline]
-                pub const fn modem_peri_timeout_thres(&self) -> u16 {
-                    (self.0) as u16
-                }
-
-                /// Set this bit as 1 to enable timeout protection for accessing modem registers
-                #[inline]
-                pub const fn modem_peri_timeout_protect_en(&self) -> bool {
-                    (self.0 & 0x00020000) != 0
-                }
-
-                /// Set `MODEM_PERI_TIMEOUT_THRES`.
-                #[inline]
-                pub fn set_modem_peri_timeout_thres(&mut self, value: u16) -> &mut Self {
-                    self.0 = (self.0 & !0x0000ffff) | u32::from(value);
-                    self
-                }
-
-                /// Set `MODEM_PERI_TIMEOUT_PROTECT_EN`.
-                #[inline]
-                pub fn set_modem_peri_timeout_protect_en(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00020000) | (u32::from(value) << 17);
-                    self
                 }
             }
         }
@@ -47576,50 +46992,6 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 6)
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// This field controls hp system memory WPULSE parameter.
-                #[inline]
-                pub const fn hp_mem_wpulse(&self) -> oer_mmio::Bits<3> {
-                    oer_mmio::Bits::truncate(self.0)
-                }
-
-                /// This field controls hp system memory WA parameter.
-                #[inline]
-                pub const fn hp_mem_wa(&self) -> oer_mmio::Bits<3> {
-                    oer_mmio::Bits::truncate(self.0 >> 3)
-                }
-
-                /// This field controls hp system memory RA parameter.
-                #[inline]
-                pub const fn hp_mem_ra(&self) -> oer_mmio::Bits<2> {
-                    oer_mmio::Bits::truncate(self.0 >> 6)
-                }
-
-                /// Set `HP_MEM_WPULSE`.
-                #[inline]
-                pub fn set_hp_mem_wpulse(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
-                    self.0 = (self.0 & !0x00000007) | value.get();
-                    self
-                }
-
-                /// Set `HP_MEM_WA`.
-                #[inline]
-                pub fn set_hp_mem_wa(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
-                    self.0 = (self.0 & !0x00000038) | (value.get() << 3);
-                    self
-                }
-
-                /// Set `HP_MEM_RA`.
-                #[inline]
-                pub fn set_hp_mem_ra(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                    self.0 = (self.0 & !0x000000c0) | (value.get() << 6);
-                    self
-                }
-            }
         }
 
         /// The `BITSCRAMBLER_PERI_SEL` register.
@@ -47707,30 +47079,6 @@ pub mod soc {
                     (self.0 & 0x00000002) != 0
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// Only reserved for ECO.
-                #[inline]
-                pub const fn redcy_ena(&self) -> bool {
-                    (self.0 & 0x00000001) != 0
-                }
-
-                /// Only reserved for ECO.
-                #[inline]
-                pub const fn redcy_result(&self) -> bool {
-                    (self.0 & 0x00000002) != 0
-                }
-
-                /// Set `REDCY_ENA`.
-                #[inline]
-                pub fn set_redcy_ena(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000001) | u32::from(value);
-                    self
-                }
-            }
         }
 
         /// The `RND_ECO_LOW` register.
@@ -47751,24 +47099,6 @@ pub mod soc {
                 #[inline]
                 pub const fn redcy_low(self) -> u32 {
                     self.0
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// Only reserved for ECO.
-                #[inline]
-                pub const fn redcy_low(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `REDCY_LOW`.
-                #[inline]
-                pub fn set_redcy_low(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
                 }
             }
         }
@@ -47793,24 +47123,6 @@ pub mod soc {
                     self.0
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// Only reserved for ECO.
-                #[inline]
-                pub const fn redcy_high(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `REDCY_HIGH`.
-                #[inline]
-                pub fn set_redcy_high(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
-                }
-            }
         }
 
         /// The `CLOCK_GATE` register.
@@ -47831,24 +47143,6 @@ pub mod soc {
                 #[inline]
                 pub const fn clk_en(self) -> bool {
                     (self.0 & 0x00000001) != 0
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// Set this bit as 1 to force on clock gating.
-                #[inline]
-                pub const fn clk_en(&self) -> bool {
-                    (self.0 & 0x00000001) != 0
-                }
-
-                /// Set `CLK_EN`.
-                #[inline]
-                pub fn set_clk_en(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000001) | u32::from(value);
-                    self
                 }
             }
         }
@@ -47997,34 +47291,25 @@ pub mod soc {
                 self.0.write::<0x10>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x14>())
-            }
-
             /// Write one to the write-trigger field `PREP_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_prep_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x14>(0x00000001);
             }
 
             /// Write one to the write-trigger field `PROC_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_proc_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x14>(0x00000002);
             }
 
             /// Write one to the write-trigger field `POST_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_post_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x14>(0x00000004);
             }
 
             /// Read `CONF`.
@@ -48354,12 +47639,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000007;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `CONF` register.
@@ -48691,162 +47970,137 @@ pub mod soc {
                 self.0.write::<0x20>(snapshot.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x24>())
-            }
-
             /// Write one to the write-trigger field `RXFIFO_WM_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rxfifo_wm_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x24>(0x00000001);
             }
 
             /// Write one to the write-trigger field `TXFIFO_WM_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_txfifo_wm_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x24>(0x00000002);
             }
 
             /// Write one to the write-trigger field `RXFIFO_OVF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rxfifo_ovf_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x24>(0x00000004);
             }
 
             /// Write one to the write-trigger field `END_DETECT_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_end_detect_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x24>(0x00000008);
             }
 
             /// Write one to the write-trigger field `BYTE_TRANS_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_byte_trans_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0x24>(0x00000010);
             }
 
             /// Write one to the write-trigger field `ARBITRATION_LOST_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_arbitration_lost_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0x24>(0x00000020);
             }
 
             /// Write one to the write-trigger field `MST_TXFIFO_UDF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_mst_txfifo_udf_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0x24>(0x00000040);
             }
 
             /// Write one to the write-trigger field `TRANS_COMPLETE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_trans_complete_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0x24>(0x00000080);
             }
 
             /// Write one to the write-trigger field `TIME_OUT_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_time_out_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0x24>(0x00000100);
             }
 
             /// Write one to the write-trigger field `TRANS_START_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_trans_start_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0x24>(0x00000200);
             }
 
             /// Write one to the write-trigger field `NACK_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_nack_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00000400);
+                self.0.write::<0x24>(0x00000400);
             }
 
             /// Write one to the write-trigger field `TXFIFO_OVF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_txfifo_ovf_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00000800);
+                self.0.write::<0x24>(0x00000800);
             }
 
             /// Write one to the write-trigger field `RXFIFO_UDF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rxfifo_udf_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00001000);
+                self.0.write::<0x24>(0x00001000);
             }
 
             /// Write one to the write-trigger field `SCL_ST_TO_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_scl_st_to_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00002000);
+                self.0.write::<0x24>(0x00002000);
             }
 
             /// Write one to the write-trigger field `SCL_MAIN_ST_TO_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_scl_main_st_to_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00004000);
+                self.0.write::<0x24>(0x00004000);
             }
 
             /// Write one to the write-trigger field `DET_START_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_det_start_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00008000);
+                self.0.write::<0x24>(0x00008000);
             }
 
             /// Write one to the write-trigger field `SLAVE_STRETCH_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_slave_stretch_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00010000);
+                self.0.write::<0x24>(0x00010000);
             }
 
             /// Write one to the write-trigger field `GENERAL_CALL_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_general_call_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00020000);
+                self.0.write::<0x24>(0x00020000);
             }
 
             /// Write one to the write-trigger field `SLAVE_ADDR_UNMATCH_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_slave_addr_unmatch_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !int_clr::TRIGGERS) | 0x00040000);
+                self.0.write::<0x24>(0x00040000);
             }
 
             /// Read `INT_ENA`.
@@ -50277,12 +49531,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x0007ffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `INT_ENA` register.
@@ -51930,42 +51178,32 @@ pub mod soc {
                 self.0.write::<0x14>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x18>())
-            }
-
             /// Write one to the write-trigger field `RX_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rx_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x18>((self.0.read::<0x18>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x18>(0x00000001);
             }
 
             /// Write one to the write-trigger field `TX_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tx_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x18>((self.0.read::<0x18>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x18>(0x00000002);
             }
 
             /// Write one to the write-trigger field `RX_HUNG_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rx_hung_int_clr(&mut self) {
-                self.0
-                    .write::<0x18>((self.0.read::<0x18>() & !int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x18>(0x00000004);
             }
 
             /// Write one to the write-trigger field `TX_HUNG_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tx_hung_int_clr(&mut self) {
-                self.0
-                    .write::<0x18>((self.0.read::<0x18>() & !int_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x18>(0x00000008);
             }
 
             /// Read `RX_CONF`.
@@ -52596,12 +51834,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x0000000f;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `RX_CONF` register.
@@ -56128,34 +55360,25 @@ pub mod soc {
                 self.0.write::<0x10>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x14>())
-            }
-
             /// Write one to the write-trigger field `PREP_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_prep_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x14>(0x00000001);
             }
 
             /// Write one to the write-trigger field `PROC_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_proc_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x14>(0x00000002);
             }
 
             /// Write one to the write-trigger field `POST_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_post_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x14>(0x00000004);
             }
 
             /// Read `LOCK`.
@@ -56499,12 +55722,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000007;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `LOCK` register.
@@ -57008,138 +56225,116 @@ pub mod soc {
                 self.0.write::<0xc8>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0xcc>())
-            }
-
             /// Write one to the write-trigger field `TIMER0_OVF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timer0_ovf_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0xcc>(0x00000001);
             }
 
             /// Write one to the write-trigger field `TIMER1_OVF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timer1_ovf_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0xcc>(0x00000002);
             }
 
             /// Write one to the write-trigger field `TIMER2_OVF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timer2_ovf_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0xcc>(0x00000004);
             }
 
             /// Write one to the write-trigger field `TIMER3_OVF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timer3_ovf_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0xcc>(0x00000008);
             }
 
             /// Write one to the write-trigger field `DUTY_CHNG_END_CH0_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_duty_chng_end_ch0_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0xcc>(0x00000010);
             }
 
             /// Write one to the write-trigger field `DUTY_CHNG_END_CH1_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_duty_chng_end_ch1_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0xcc>(0x00000020);
             }
 
             /// Write one to the write-trigger field `DUTY_CHNG_END_CH2_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_duty_chng_end_ch2_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0xcc>(0x00000040);
             }
 
             /// Write one to the write-trigger field `DUTY_CHNG_END_CH3_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_duty_chng_end_ch3_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0xcc>(0x00000080);
             }
 
             /// Write one to the write-trigger field `DUTY_CHNG_END_CH4_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_duty_chng_end_ch4_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0xcc>(0x00000100);
             }
 
             /// Write one to the write-trigger field `DUTY_CHNG_END_CH5_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_duty_chng_end_ch5_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0xcc>(0x00000200);
             }
 
             /// Write one to the write-trigger field `OVF_CNT_CH0_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ovf_cnt_ch0_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00001000);
+                self.0.write::<0xcc>(0x00001000);
             }
 
             /// Write one to the write-trigger field `OVF_CNT_CH1_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ovf_cnt_ch1_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00002000);
+                self.0.write::<0xcc>(0x00002000);
             }
 
             /// Write one to the write-trigger field `OVF_CNT_CH2_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ovf_cnt_ch2_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00004000);
+                self.0.write::<0xcc>(0x00004000);
             }
 
             /// Write one to the write-trigger field `OVF_CNT_CH3_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ovf_cnt_ch3_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00008000);
+                self.0.write::<0xcc>(0x00008000);
             }
 
             /// Write one to the write-trigger field `OVF_CNT_CH4_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ovf_cnt_ch4_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00010000);
+                self.0.write::<0xcc>(0x00010000);
             }
 
             /// Write one to the write-trigger field `OVF_CNT_CH5_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ovf_cnt_ch5_int_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !int_clr::TRIGGERS) | 0x00020000);
+                self.0.write::<0xcc>(0x00020000);
             }
 
             /// Read `CH%s_GAMMA_CONF`.
@@ -58524,12 +57719,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x0003f3ff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `CH%s_GAMMA_CONF` register.
@@ -61035,18 +60224,11 @@ pub mod soc {
                 self.0.write::<0x18>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x1c>())
-            }
-
             /// Write one to the write-trigger field `BOD_MODE0_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_bod_mode0_int_clr(&mut self) {
-                self.0
-                    .write::<0x1c>((self.0.read::<0x1c>() & !int_clr::TRIGGERS) | 0x80000000);
+                self.0.write::<0x1c>(0x80000000);
             }
 
             /// Read `LP_INT_RAW`.
@@ -61089,18 +60271,11 @@ pub mod soc {
                 self.0.write::<0x28>(value.0);
             }
 
-            /// Read `LP_INT_CLR`.
-            #[inline]
-            pub fn read_lp_int_clr(&self) -> lp_int_clr::R {
-                lp_int_clr::R(self.0.read::<0x2c>())
-            }
-
             /// Write one to the write-trigger field `BOD_MODE0_LP_INT_CLR` of `LP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_lp_int_clr_bod_mode0_lp_int_clr(&mut self) {
-                self.0
-                    .write::<0x2c>((self.0.read::<0x2c>() & !lp_int_clr::TRIGGERS) | 0x80000000);
+                self.0.write::<0x2c>(0x80000000);
             }
 
             /// Read `DATE`.
@@ -61535,12 +60710,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x80000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `LP_INT_RAW` register.
@@ -61666,12 +60835,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x80000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `DATE` register.
@@ -62079,28 +61242,10 @@ pub mod soc {
                 modem_bus::R(self.0.read::<0x58>())
             }
 
-            /// Read `MODEM_BUS`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_modem_bus(&mut self, change: impl FnOnce(&mut modem_bus::W)) {
-                let mut value = modem_bus::W(self.0.read::<0x58>());
-                change(&mut value);
-                self.0.write::<0x58>(value.0);
-            }
-
             /// Read `SPRAM_CTRL`.
             #[inline]
             pub fn read_spram_ctrl(&self) -> spram_ctrl::R {
                 spram_ctrl::R(self.0.read::<0x60>())
-            }
-
-            /// Read `SPRAM_CTRL`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spram_ctrl(&mut self, change: impl FnOnce(&mut spram_ctrl::W)) {
-                let mut value = spram_ctrl::W(self.0.read::<0x60>());
-                change(&mut value);
-                self.0.write::<0x60>(value.0);
             }
 
             /// Read `SPRF_CTRL`.
@@ -62109,43 +61254,16 @@ pub mod soc {
                 sprf_ctrl::R(self.0.read::<0x64>())
             }
 
-            /// Read `SPRF_CTRL`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_sprf_ctrl(&mut self, change: impl FnOnce(&mut sprf_ctrl::W)) {
-                let mut value = sprf_ctrl::W(self.0.read::<0x64>());
-                change(&mut value);
-                self.0.write::<0x64>(value.0);
-            }
-
             /// Read `DEBUG_SEL0`.
             #[inline]
             pub fn read_debug_sel0(&self) -> debug_sel0::R {
                 debug_sel0::R(self.0.read::<0x68>())
             }
 
-            /// Read `DEBUG_SEL0`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_debug_sel0(&mut self, change: impl FnOnce(&mut debug_sel0::W)) {
-                let mut value = debug_sel0::W(self.0.read::<0x68>());
-                change(&mut value);
-                self.0.write::<0x68>(value.0);
-            }
-
             /// Read `DEBUG_SEL1`.
             #[inline]
             pub fn read_debug_sel1(&self) -> debug_sel1::R {
                 debug_sel1::R(self.0.read::<0x6c>())
-            }
-
-            /// Read `DEBUG_SEL1`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_debug_sel1(&mut self, change: impl FnOnce(&mut debug_sel1::W)) {
-                let mut value = debug_sel1::W(self.0.read::<0x6c>());
-                change(&mut value);
-                self.0.write::<0x6c>(value.0);
             }
 
             /// Read `BACKUP_DMA_CFG0`.
@@ -62803,20 +61921,6 @@ pub mod soc {
                     self.0 = (self.0 & !0x000000ff) | u32::from(value);
                     self
                 }
-
-                /// Set `CPU_CORE0_STAT_VECTOR_SEL`.
-                #[inline]
-                pub fn set_cpu_core0_stat_vector_sel(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
-                    self
-                }
-
-                /// Set `CPU_CORE0_DRESET_MASK`.
-                #[inline]
-                pub fn set_cpu_core0_dreset_mask(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
-                    self
-                }
             }
         }
 
@@ -63116,24 +62220,6 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// enable modem sync bridge or not 1: enable 0: disable
-                #[inline]
-                pub const fn modem_sync_bridge_en(&self) -> bool {
-                    (self.0 & 0x80000000) != 0
-                }
-
-                /// Set `MODEM_SYNC_BRIDGE_EN`.
-                #[inline]
-                pub fn set_modem_sync_bridge_en(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
-                    self
-                }
-            }
         }
 
         /// The `SPRAM_CTRL` register.
@@ -63156,24 +62242,6 @@ pub mod soc {
                     self.0
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// configure lp memory power status
-                #[inline]
-                pub const fn spram_mem_aux_ctrl(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPRAM_MEM_AUX_CTRL`.
-                #[inline]
-                pub fn set_spram_mem_aux_ctrl(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
-                }
-            }
         }
 
         /// The `SPRF_CTRL` register.
@@ -63194,24 +62262,6 @@ pub mod soc {
                 #[inline]
                 pub const fn sprf_mem_aux_ctrl(self) -> u32 {
                     self.0
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// configure memory in lp system power status
-                #[inline]
-                pub const fn sprf_mem_aux_ctrl(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPRF_MEM_AUX_CTRL`.
-                #[inline]
-                pub fn set_sprf_mem_aux_ctrl(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
                 }
             }
         }
@@ -63254,63 +62304,6 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 21)
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// need des
-                #[inline]
-                pub const fn lp_debug_sel0(&self) -> oer_mmio::Bits<7> {
-                    oer_mmio::Bits::truncate(self.0)
-                }
-
-                /// need des
-                #[inline]
-                pub const fn lp_debug_sel1(&self) -> oer_mmio::Bits<7> {
-                    oer_mmio::Bits::truncate(self.0 >> 7)
-                }
-
-                /// need des
-                #[inline]
-                pub const fn lp_debug_sel2(&self) -> oer_mmio::Bits<7> {
-                    oer_mmio::Bits::truncate(self.0 >> 14)
-                }
-
-                /// need des
-                #[inline]
-                pub const fn lp_debug_sel3(&self) -> oer_mmio::Bits<7> {
-                    oer_mmio::Bits::truncate(self.0 >> 21)
-                }
-
-                /// Set `LP_DEBUG_SEL0`.
-                #[inline]
-                pub fn set_lp_debug_sel0(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
-                    self.0 = (self.0 & !0x0000007f) | value.get();
-                    self
-                }
-
-                /// Set `LP_DEBUG_SEL1`.
-                #[inline]
-                pub fn set_lp_debug_sel1(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
-                    self.0 = (self.0 & !0x00003f80) | (value.get() << 7);
-                    self
-                }
-
-                /// Set `LP_DEBUG_SEL2`.
-                #[inline]
-                pub fn set_lp_debug_sel2(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
-                    self.0 = (self.0 & !0x001fc000) | (value.get() << 14);
-                    self
-                }
-
-                /// Set `LP_DEBUG_SEL3`.
-                #[inline]
-                pub fn set_lp_debug_sel3(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
-                    self.0 = (self.0 & !0x0fe00000) | (value.get() << 21);
-                    self
-                }
-            }
         }
 
         /// The `DEBUG_SEL1` register.
@@ -63331,24 +62324,6 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_debug_sel4(self) -> oer_mmio::Bits<7> {
                     oer_mmio::Bits::truncate(self.0)
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// need des
-                #[inline]
-                pub const fn lp_debug_sel4(&self) -> oer_mmio::Bits<7> {
-                    oer_mmio::Bits::truncate(self.0)
-                }
-
-                /// Set `LP_DEBUG_SEL4`.
-                #[inline]
-                pub fn set_lp_debug_sel4(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
-                    self.0 = (self.0 & !0x0000007f) | value.get();
-                    self
                 }
             }
         }
@@ -63850,18 +62825,11 @@ pub mod soc {
                 m0_status::R(self.0.read::<0xc8>())
             }
 
-            /// Read `M0_STATUS_CLR`.
-            #[inline]
-            pub fn read_m0_status_clr(&self) -> m0_status_clr::R {
-                m0_status_clr::R(self.0.read::<0xcc>())
-            }
-
             /// Write one to the write-trigger field `M0_EXCEPTION_STATUS_CLR` of `M0_STATUS_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_m0_status_clr_m0_exception_status_clr(&mut self) {
-                self.0
-                    .write::<0xcc>((self.0.read::<0xcc>() & !m0_status_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0xcc>(0x00000001);
             }
 
             /// Read `M0_EXCEPTION_INFO0`.
@@ -63882,18 +62850,11 @@ pub mod soc {
                 m1_status::R(self.0.read::<0xd8>())
             }
 
-            /// Read `M1_STATUS_CLR`.
-            #[inline]
-            pub fn read_m1_status_clr(&self) -> m1_status_clr::R {
-                m1_status_clr::R(self.0.read::<0xdc>())
-            }
-
             /// Write one to the write-trigger field `M1_EXCEPTION_STATUS_CLR` of `M1_STATUS_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_m1_status_clr_m1_exception_status_clr(&mut self) {
-                self.0
-                    .write::<0xdc>((self.0.read::<0xdc>() & !m1_status_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0xdc>(0x00000001);
             }
 
             /// Read `M1_EXCEPTION_INFO0`.
@@ -64375,12 +63336,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `M0_EXCEPTION_INFO0` register.
@@ -64473,12 +63428,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `M1_EXCEPTION_INFO0` register.
@@ -66087,138 +65036,116 @@ pub mod soc {
                 self.0.write::<0x20>(snapshot.0);
             }
 
-            /// Read `I2C_INT_CLR`.
-            #[inline]
-            pub fn read_i2c_int_clr(&self) -> i2c_int_clr::R {
-                i2c_int_clr::R(self.0.read::<0x24>())
-            }
-
             /// Write one to the write-trigger field `I2C_RXFIFO_WM_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_rxfifo_wm_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x24>(0x00000001);
             }
 
             /// Write one to the write-trigger field `I2C_TXFIFO_WM_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_txfifo_wm_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x24>(0x00000002);
             }
 
             /// Write one to the write-trigger field `I2C_RXFIFO_OVF_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_rxfifo_ovf_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x24>(0x00000004);
             }
 
             /// Write one to the write-trigger field `I2C_END_DETECT_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_end_detect_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x24>(0x00000008);
             }
 
             /// Write one to the write-trigger field `I2C_BYTE_TRANS_DONE_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_byte_trans_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0x24>(0x00000010);
             }
 
             /// Write one to the write-trigger field `I2C_ARBITRATION_LOST_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_arbitration_lost_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0x24>(0x00000020);
             }
 
             /// Write one to the write-trigger field `I2C_MST_TXFIFO_UDF_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_mst_txfifo_udf_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0x24>(0x00000040);
             }
 
             /// Write one to the write-trigger field `I2C_TRANS_COMPLETE_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_trans_complete_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0x24>(0x00000080);
             }
 
             /// Write one to the write-trigger field `I2C_TIME_OUT_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_time_out_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0x24>(0x00000100);
             }
 
             /// Write one to the write-trigger field `I2C_TRANS_START_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_trans_start_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0x24>(0x00000200);
             }
 
             /// Write one to the write-trigger field `I2C_NACK_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_nack_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00000400);
+                self.0.write::<0x24>(0x00000400);
             }
 
             /// Write one to the write-trigger field `I2C_TXFIFO_OVF_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_txfifo_ovf_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00000800);
+                self.0.write::<0x24>(0x00000800);
             }
 
             /// Write one to the write-trigger field `I2C_RXFIFO_UDF_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_rxfifo_udf_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00001000);
+                self.0.write::<0x24>(0x00001000);
             }
 
             /// Write one to the write-trigger field `I2C_SCL_ST_TO_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_scl_st_to_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00002000);
+                self.0.write::<0x24>(0x00002000);
             }
 
             /// Write one to the write-trigger field `I2C_SCL_MAIN_ST_TO_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_scl_main_st_to_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00004000);
+                self.0.write::<0x24>(0x00004000);
             }
 
             /// Write one to the write-trigger field `I2C_DET_START_INT_CLR` of `I2C_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_i2c_int_clr_i2c_det_start_int_clr(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !i2c_int_clr::TRIGGERS) | 0x00008000);
+                self.0.write::<0x24>(0x00008000);
             }
 
             /// Read `I2C_INT_ENA`.
@@ -67380,12 +66307,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x0000ffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `I2C_INT_ENA` register.
@@ -71001,18 +69922,11 @@ pub mod soc {
                 main_buf1_high::R(self.0.read::<0x20>())
             }
 
-            /// Read `MAIN_OVERFLOW`.
-            #[inline]
-            pub fn read_main_overflow(&self) -> main_overflow::R {
-                main_overflow::R(self.0.read::<0x24>())
-            }
-
             /// Write one to the write-trigger field `MAIN_TIMER_ALARM_LOAD` of `MAIN_OVERFLOW`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_main_overflow_main_timer_alarm_load(&mut self) {
-                self.0
-                    .write::<0x24>((self.0.read::<0x24>() & !main_overflow::TRIGGERS) | 0x80000000);
+                self.0.write::<0x24>(0x80000000);
             }
 
             /// Read `INT_RAW`.
@@ -71055,26 +69969,18 @@ pub mod soc {
                 self.0.write::<0x30>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x34>())
-            }
-
             /// Write one to the write-trigger field `OVERFLOW_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_overflow_clr(&mut self) {
-                self.0
-                    .write::<0x34>((self.0.read::<0x34>() & !int_clr::TRIGGERS) | 0x40000000);
+                self.0.write::<0x34>(0x40000000);
             }
 
             /// Write one to the write-trigger field `SOC_WAKEUP_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_soc_wakeup_int_clr(&mut self) {
-                self.0
-                    .write::<0x34>((self.0.read::<0x34>() & !int_clr::TRIGGERS) | 0x80000000);
+                self.0.write::<0x34>(0x80000000);
             }
 
             /// Read `LP_INT_RAW`.
@@ -71117,26 +70023,18 @@ pub mod soc {
                 self.0.write::<0x40>(value.0);
             }
 
-            /// Read `LP_INT_CLR`.
-            #[inline]
-            pub fn read_lp_int_clr(&self) -> lp_int_clr::R {
-                lp_int_clr::R(self.0.read::<0x44>())
-            }
-
             /// Write one to the write-trigger field `MAIN_TIMER_OVERFLOW_LP_INT_CLR` of `LP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_lp_int_clr_main_timer_overflow_lp_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !lp_int_clr::TRIGGERS) | 0x40000000);
+                self.0.write::<0x44>(0x40000000);
             }
 
             /// Write one to the write-trigger field `MAIN_TIMER_LP_INT_CLR` of `LP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_lp_int_clr_main_timer_lp_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !lp_int_clr::TRIGGERS) | 0x80000000);
+                self.0.write::<0x44>(0x80000000);
             }
 
             /// Read `DATE`.
@@ -71526,12 +70424,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x80000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `INT_RAW` register.
@@ -71703,12 +70595,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xc0000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `LP_INT_RAW` register.
@@ -71880,12 +70766,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xc0000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `DATE` register.
@@ -72039,146 +70919,123 @@ pub mod soc {
                 self.0.write::<0xc>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x10>())
-            }
-
             /// Write one to the write-trigger field `RXFIFO_FULL_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rxfifo_full_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x10>(0x00000001);
             }
 
             /// Write one to the write-trigger field `TXFIFO_EMPTY_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_txfifo_empty_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x10>(0x00000002);
             }
 
             /// Write one to the write-trigger field `PARITY_ERR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_parity_err_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x10>(0x00000004);
             }
 
             /// Write one to the write-trigger field `FRM_ERR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_frm_err_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x10>(0x00000008);
             }
 
             /// Write one to the write-trigger field `RXFIFO_OVF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rxfifo_ovf_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0x10>(0x00000010);
             }
 
             /// Write one to the write-trigger field `DSR_CHG_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_dsr_chg_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0x10>(0x00000020);
             }
 
             /// Write one to the write-trigger field `CTS_CHG_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cts_chg_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0x10>(0x00000040);
             }
 
             /// Write one to the write-trigger field `BRK_DET_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_brk_det_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0x10>(0x00000080);
             }
 
             /// Write one to the write-trigger field `RXFIFO_TOUT_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rxfifo_tout_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0x10>(0x00000100);
             }
 
             /// Write one to the write-trigger field `SW_XON_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_sw_xon_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0x10>(0x00000200);
             }
 
             /// Write one to the write-trigger field `SW_XOFF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_sw_xoff_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000400);
+                self.0.write::<0x10>(0x00000400);
             }
 
             /// Write one to the write-trigger field `GLITCH_DET_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_glitch_det_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000800);
+                self.0.write::<0x10>(0x00000800);
             }
 
             /// Write one to the write-trigger field `TX_BRK_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tx_brk_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00001000);
+                self.0.write::<0x10>(0x00001000);
             }
 
             /// Write one to the write-trigger field `TX_BRK_IDLE_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tx_brk_idle_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00002000);
+                self.0.write::<0x10>(0x00002000);
             }
 
             /// Write one to the write-trigger field `TX_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tx_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00004000);
+                self.0.write::<0x10>(0x00004000);
             }
 
             /// Write one to the write-trigger field `AT_CMD_CHAR_DET_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_at_cmd_char_det_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00040000);
+                self.0.write::<0x10>(0x00040000);
             }
 
             /// Write one to the write-trigger field `WAKEUP_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_wakeup_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00080000);
+                self.0.write::<0x10>(0x00080000);
             }
 
             /// Read `CLKDIV_SYNC`.
@@ -73414,12 +72271,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x000c7fff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `CLKDIV_SYNC` register.
@@ -75430,18 +74281,11 @@ pub mod soc {
                 self.0.write::<0x10>(value.0);
             }
 
-            /// Read `FEED`.
-            #[inline]
-            pub fn read_feed(&self) -> feed::R {
-                feed::R(self.0.read::<0x14>())
-            }
-
             /// Write one to the write-trigger field `RTC_WDT_FEED` of `FEED`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_feed_rtc_wdt_feed(&mut self) {
-                self.0
-                    .write::<0x14>((self.0.read::<0x14>() & !feed::TRIGGERS) | 0x80000000);
+                self.0.write::<0x14>(0x80000000);
             }
 
             /// Read `INT_RAW`.
@@ -75484,26 +74328,18 @@ pub mod soc {
                 self.0.write::<0x2c>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x30>())
-            }
-
             /// Write one to the write-trigger field `SUPER_WDT_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_super_wdt_int_clr(&mut self) {
-                self.0
-                    .write::<0x30>((self.0.read::<0x30>() & !int_clr::TRIGGERS) | 0x40000000);
+                self.0.write::<0x30>(0x40000000);
             }
 
             /// Write one to the write-trigger field `LP_WDT_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_lp_wdt_int_clr(&mut self) {
-                self.0
-                    .write::<0x30>((self.0.read::<0x30>() & !int_clr::TRIGGERS) | 0x80000000);
+                self.0.write::<0x30>(0x80000000);
             }
 
             /// Read `DATE`.
@@ -75698,12 +74534,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x80000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `INT_RAW` register.
@@ -75875,12 +74705,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xc0000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `DATE` register.
@@ -76469,250 +75293,214 @@ pub mod soc {
                 int_st::R(self.0.read::<0x118>())
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x11c>())
-            }
-
             /// Write one to the write-trigger field `TIMER0_STOP_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timer0_stop_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x11c>(0x00000001);
             }
 
             /// Write one to the write-trigger field `TIMER1_STOP_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timer1_stop_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x11c>(0x00000002);
             }
 
             /// Write one to the write-trigger field `TIMER2_STOP_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timer2_stop_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x11c>(0x00000004);
             }
 
             /// Write one to the write-trigger field `TIMER0_TEZ_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timer0_tez_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x11c>(0x00000008);
             }
 
             /// Write one to the write-trigger field `TIMER1_TEZ_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timer1_tez_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0x11c>(0x00000010);
             }
 
             /// Write one to the write-trigger field `TIMER2_TEZ_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timer2_tez_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0x11c>(0x00000020);
             }
 
             /// Write one to the write-trigger field `TIMER0_TEP_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timer0_tep_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0x11c>(0x00000040);
             }
 
             /// Write one to the write-trigger field `TIMER1_TEP_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timer1_tep_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0x11c>(0x00000080);
             }
 
             /// Write one to the write-trigger field `TIMER2_TEP_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timer2_tep_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0x11c>(0x00000100);
             }
 
             /// Write one to the write-trigger field `FAULT0_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_fault0_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0x11c>(0x00000200);
             }
 
             /// Write one to the write-trigger field `FAULT1_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_fault1_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00000400);
+                self.0.write::<0x11c>(0x00000400);
             }
 
             /// Write one to the write-trigger field `FAULT2_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_fault2_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00000800);
+                self.0.write::<0x11c>(0x00000800);
             }
 
             /// Write one to the write-trigger field `FAULT0_CLR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_fault0_clr_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00001000);
+                self.0.write::<0x11c>(0x00001000);
             }
 
             /// Write one to the write-trigger field `FAULT1_CLR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_fault1_clr_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00002000);
+                self.0.write::<0x11c>(0x00002000);
             }
 
             /// Write one to the write-trigger field `FAULT2_CLR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_fault2_clr_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00004000);
+                self.0.write::<0x11c>(0x00004000);
             }
 
             /// Write one to the write-trigger field `CMPR0_TEA_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cmpr0_tea_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00008000);
+                self.0.write::<0x11c>(0x00008000);
             }
 
             /// Write one to the write-trigger field `CMPR1_TEA_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cmpr1_tea_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00010000);
+                self.0.write::<0x11c>(0x00010000);
             }
 
             /// Write one to the write-trigger field `CMPR2_TEA_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cmpr2_tea_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00020000);
+                self.0.write::<0x11c>(0x00020000);
             }
 
             /// Write one to the write-trigger field `CMPR0_TEB_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cmpr0_teb_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00040000);
+                self.0.write::<0x11c>(0x00040000);
             }
 
             /// Write one to the write-trigger field `CMPR1_TEB_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cmpr1_teb_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00080000);
+                self.0.write::<0x11c>(0x00080000);
             }
 
             /// Write one to the write-trigger field `CMPR2_TEB_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cmpr2_teb_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00100000);
+                self.0.write::<0x11c>(0x00100000);
             }
 
             /// Write one to the write-trigger field `TZ0_CBC_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tz0_cbc_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00200000);
+                self.0.write::<0x11c>(0x00200000);
             }
 
             /// Write one to the write-trigger field `TZ1_CBC_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tz1_cbc_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00400000);
+                self.0.write::<0x11c>(0x00400000);
             }
 
             /// Write one to the write-trigger field `TZ2_CBC_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tz2_cbc_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x00800000);
+                self.0.write::<0x11c>(0x00800000);
             }
 
             /// Write one to the write-trigger field `TZ0_OST_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tz0_ost_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x01000000);
+                self.0.write::<0x11c>(0x01000000);
             }
 
             /// Write one to the write-trigger field `TZ1_OST_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tz1_ost_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x02000000);
+                self.0.write::<0x11c>(0x02000000);
             }
 
             /// Write one to the write-trigger field `TZ2_OST_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tz2_ost_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x04000000);
+                self.0.write::<0x11c>(0x04000000);
             }
 
             /// Write one to the write-trigger field `CAP0_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cap0_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x08000000);
+                self.0.write::<0x11c>(0x08000000);
             }
 
             /// Write one to the write-trigger field `CAP1_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cap1_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x10000000);
+                self.0.write::<0x11c>(0x10000000);
             }
 
             /// Write one to the write-trigger field `CAP2_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cap2_int_clr(&mut self) {
-                self.0
-                    .write::<0x11c>((self.0.read::<0x11c>() & !int_clr::TRIGGERS) | 0x20000000);
+                self.0.write::<0x11c>(0x20000000);
             }
 
             /// Read `EVT_EN`.
@@ -81283,12 +80071,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x3fffffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `EVT_EN` register.
@@ -82762,16 +81544,46 @@ pub mod soc {
                 self.0.write::<0x14>(value.0);
             }
 
-            /// Read `LOG_MON_ADDR_UPDATE_0`.
+            /// Write `value` to the write-trigger field `LOG_MON_ADDR_CORE_UPDATE` of `LOG_MON_ADDR_UPDATE_0`, starting its
+            /// hardware action once; every other bit is zero.
             #[inline]
-            pub fn read_log_mon_addr_update_0(&self) -> log_mon_addr_update_0::R {
-                log_mon_addr_update_0::R(self.0.read::<0x18>())
+            pub fn trigger_log_mon_addr_update_0_log_mon_addr_core_update(&mut self, value: u8) {
+                self.0.write::<0x18>(u32::from(value));
             }
 
-            /// Read `LOG_MON_ADDR_UPDATE_1`.
+            /// Write one to the write-trigger field `LOG_MON_ADDR_ALL_UPDATE` of `LOG_MON_ADDR_UPDATE_0`, starting its
+            /// hardware action once; every other bit is zero.
             #[inline]
-            pub fn read_log_mon_addr_update_1(&self) -> log_mon_addr_update_1::R {
-                log_mon_addr_update_1::R(self.0.read::<0x1c>())
+            pub fn trigger_log_mon_addr_update_0_log_mon_addr_all_update(&mut self) {
+                self.0.write::<0x18>(0x80000000);
+            }
+
+            /// Write `value` to the write-trigger field `LOG_MON_ADDR_DMA_0_UPDATE` of `LOG_MON_ADDR_UPDATE_1`, starting its
+            /// hardware action once; every other bit is zero.
+            #[inline]
+            pub fn trigger_log_mon_addr_update_1_log_mon_addr_dma_0_update(&mut self, value: u8) {
+                self.0.write::<0x1c>(u32::from(value));
+            }
+
+            /// Write `value` to the write-trigger field `LOG_MON_ADDR_DMA_1_UPDATE` of `LOG_MON_ADDR_UPDATE_1`, starting its
+            /// hardware action once; every other bit is zero.
+            #[inline]
+            pub fn trigger_log_mon_addr_update_1_log_mon_addr_dma_1_update(&mut self, value: u8) {
+                self.0.write::<0x1c>(u32::from(value) << 8);
+            }
+
+            /// Write `value` to the write-trigger field `LOG_MON_ADDR_DMA_2_UPDATE` of `LOG_MON_ADDR_UPDATE_1`, starting its
+            /// hardware action once; every other bit is zero.
+            #[inline]
+            pub fn trigger_log_mon_addr_update_1_log_mon_addr_dma_2_update(&mut self, value: u8) {
+                self.0.write::<0x1c>(u32::from(value) << 16);
+            }
+
+            /// Write `value` to the write-trigger field `LOG_MON_ADDR_DMA_3_UPDATE` of `LOG_MON_ADDR_UPDATE_1`, starting its
+            /// hardware action once; every other bit is zero.
+            #[inline]
+            pub fn trigger_log_mon_addr_update_1_log_mon_addr_dma_3_update(&mut self, value: u8) {
+                self.0.write::<0x1c>(u32::from(value) << 24);
             }
 
             /// Read `LOG_MEM_START`.
@@ -82810,19 +81622,11 @@ pub mod soc {
                 log_mem_current_addr::R(self.0.read::<0x28>())
             }
 
-            /// Read `LOG_MEM_ADDR_UPDATE`.
-            #[inline]
-            pub fn read_log_mem_addr_update(&self) -> log_mem_addr_update::R {
-                log_mem_addr_update::R(self.0.read::<0x2c>())
-            }
-
             /// Write one to the write-trigger field `LOG_MEM_ADDR_UPDATE` of `LOG_MEM_ADDR_UPDATE`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_log_mem_addr_update_log_mem_addr_update(&mut self) {
-                self.0.write::<0x2c>(
-                    (self.0.read::<0x2c>() & !log_mem_addr_update::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x2c>(0x00000001);
             }
 
             /// Read `LOG_MEM_FULL_FLAG`.
@@ -83215,23 +82019,9 @@ pub mod soc {
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x18;
 
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {
-                /// Configures the monitored address space of the certain master. Bit\[0\]: Configures the address space of from MEM_MONITOR_LOG_MIN_REG to MEM_MONITOR_LOG_MAX_REG as the monitored address space of the HP CPU bus.1: Update\\ 0: Not update\\ Bit\[7:1\]: Reserved\\
-                #[inline]
-                pub const fn log_mon_addr_core_update(self) -> u8 {
-                    (self.0) as u8
-                }
-
-                /// Configures the address space of from MEM_MONITOR_LOG_MIN_REG to MEM_MONITOR_LOG_MAX_REG as the monitored address space of all masters.1: Update\\ 0: Not update\\
-                #[inline]
-                pub const fn log_mon_addr_all_update(self) -> bool {
-                    (self.0 & 0x80000000) != 0
-                }
-            }
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x800000ff;
         }
 
         /// The `LOG_MON_ADDR_UPDATE_1` register.
@@ -83243,35 +82033,9 @@ pub mod soc {
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x1c;
 
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {
-                /// Configures the monitored address space of the certain master. Bit\[0\]: Configures the address space of from MEM_MONITOR_LOG_MIN_REG to MEM_MONITOR_LOG_MAX_REG as the monitored address space of the DMA_0 bus.1: Update\\ 0: Not update\\ Bit\[7:1\]: Reserved\\
-                #[inline]
-                pub const fn log_mon_addr_dma_0_update(self) -> u8 {
-                    (self.0) as u8
-                }
-
-                /// Configures the monitored address space of the certain master. Bit\[0\]: Configures the address space of from MEM_MONITOR_LOG_MIN_REG to MEM_MONITOR_LOG_MAX_REG as the monitored address space of the DMA_1 bus.1: Update\\ 0: Not update\\ Bit\[7:1\]: Reserved\\
-                #[inline]
-                pub const fn log_mon_addr_dma_1_update(self) -> u8 {
-                    (self.0 >> 8) as u8
-                }
-
-                /// Configures the monitored address space of the certain master. Bit\[0\]: Configures the address space of from MEM_MONITOR_LOG_MIN_REG to MEM_MONITOR_LOG_MAX_REG as the monitored address space of the DMA_2 bus.1: Update\\ 0: Not update\\ Bit\[7:1\]: Reserved\\
-                #[inline]
-                pub const fn log_mon_addr_dma_2_update(self) -> u8 {
-                    (self.0 >> 16) as u8
-                }
-
-                /// Configures the monitored address space of the certain master. Bit\[0\]: Configures the address space of from MEM_MONITOR_LOG_MIN_REG to MEM_MONITOR_LOG_MAX_REG as the monitored address space of the DMA_3 bus.1: Update\\ 0: Not update\\ Bit\[7:1\]: Reserved\\
-                #[inline]
-                pub const fn log_mon_addr_dma_3_update(self) -> u8 {
-                    (self.0 >> 24) as u8
-                }
-            }
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xffffffff;
         }
 
         /// The `LOG_MEM_START` register.
@@ -83388,12 +82152,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `LOG_MEM_FULL_FLAG` register.
@@ -83668,18 +82426,11 @@ pub mod soc {
                 self.0.write::<0x1c>(value.0);
             }
 
-            /// Read `REG_UPDATE`.
-            #[inline]
-            pub fn read_reg_update(&self) -> reg_update::R {
-                reg_update::R(self.0.read::<0x20>())
-            }
-
             /// Write one to the write-trigger field `RX_REG_UPDATE` of `REG_UPDATE`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_reg_update_rx_reg_update(&mut self) {
-                self.0
-                    .write::<0x20>((self.0.read::<0x20>() & !reg_update::TRIGGERS) | 0x80000000);
+                self.0.write::<0x20>(0x80000000);
             }
 
             /// Read `ST`.
@@ -83728,34 +82479,25 @@ pub mod soc {
                 int_st::R(self.0.read::<0x30>())
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x34>())
-            }
-
             /// Write one to the write-trigger field `TX_FIFO_REMPTY_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tx_fifo_rempty_int_clr(&mut self) {
-                self.0
-                    .write::<0x34>((self.0.read::<0x34>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x34>(0x00000001);
             }
 
             /// Write one to the write-trigger field `RX_FIFO_WOVF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rx_fifo_wovf_int_clr(&mut self) {
-                self.0
-                    .write::<0x34>((self.0.read::<0x34>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x34>(0x00000002);
             }
 
             /// Write one to the write-trigger field `TX_EOF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tx_eof_int_clr(&mut self) {
-                self.0
-                    .write::<0x34>((self.0.read::<0x34>() & !int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x34>(0x00000004);
             }
 
             /// Read `RX_ST0`.
@@ -84454,12 +83196,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x80000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `ST` register.
@@ -84699,12 +83435,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000007;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `RX_ST0` register.
@@ -85179,26 +83909,18 @@ pub mod soc {
                 self.0.write::<0x1c>(snapshot.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x20>())
-            }
-
             /// Write one to the write-trigger field `DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x20>((self.0.read::<0x20>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x20>(0x00000001);
             }
 
             /// Write one to the write-trigger field `ERROR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_error_int_clr(&mut self) {
-                self.0
-                    .write::<0x20>((self.0.read::<0x20>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x20>(0x00000002);
             }
 
             /// Read `INT_ST`.
@@ -85700,12 +84422,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000003;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `INT_ST` register.
@@ -85950,42 +84666,32 @@ pub mod soc {
                 self.0.write::<0x58>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x5c>())
-            }
-
             /// Write one to the write-trigger field `CNT_THR_EVENT_U0_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cnt_thr_event_u0_int_clr(&mut self) {
-                self.0
-                    .write::<0x5c>((self.0.read::<0x5c>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x5c>(0x00000001);
             }
 
             /// Write one to the write-trigger field `CNT_THR_EVENT_U1_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cnt_thr_event_u1_int_clr(&mut self) {
-                self.0
-                    .write::<0x5c>((self.0.read::<0x5c>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x5c>(0x00000002);
             }
 
             /// Write one to the write-trigger field `CNT_THR_EVENT_U2_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cnt_thr_event_u2_int_clr(&mut self) {
-                self.0
-                    .write::<0x5c>((self.0.read::<0x5c>() & !int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x5c>(0x00000004);
             }
 
             /// Write one to the write-trigger field `CNT_THR_EVENT_U3_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cnt_thr_event_u3_int_clr(&mut self) {
-                self.0
-                    .write::<0x5c>((self.0.read::<0x5c>() & !int_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x5c>(0x00000008);
             }
 
             /// Read `U%s_STATUS`.
@@ -86820,12 +85526,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x0000000f;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `U%s_STATUS` register.
@@ -96149,10 +94849,14 @@ pub mod soc {
                 self.0.write::<0xa0>(value.0);
             }
 
-            /// Read `HP_SLEEP_LP_DCDC_RESERVE`.
+            /// Write `value` to the write-trigger field `HP_SLEEP_LP_DCDC_RESERVE` of `HP_SLEEP_LP_DCDC_RESERVE`, starting its
+            /// hardware action once; every other bit is zero.
             #[inline]
-            pub fn read_hp_sleep_lp_dcdc_reserve(&self) -> hp_sleep_lp_dcdc_reserve::R {
-                hp_sleep_lp_dcdc_reserve::R(self.0.read::<0xa4>())
+            pub fn trigger_hp_sleep_lp_dcdc_reserve_hp_sleep_lp_dcdc_reserve(
+                &mut self,
+                value: u32,
+            ) {
+                self.0.write::<0xa4>(value);
             }
 
             /// Read `HP_SLEEP_LP_DIG_POWER`.
@@ -96191,10 +94895,14 @@ pub mod soc {
                 self.0.write::<0xac>(value.0);
             }
 
-            /// Read `LP_SLEEP_LP_BIAS_RESERVE`.
+            /// Write `value` to the write-trigger field `LP_SLEEP_LP_BIAS_RESERVE` of `LP_SLEEP_LP_BIAS_RESERVE`, starting its
+            /// hardware action once; every other bit is zero.
             #[inline]
-            pub fn read_lp_sleep_lp_bias_reserve(&self) -> lp_sleep_lp_bias_reserve::R {
-                lp_sleep_lp_bias_reserve::R(self.0.read::<0xb0>())
+            pub fn trigger_lp_sleep_lp_bias_reserve_lp_sleep_lp_bias_reserve(
+                &mut self,
+                value: u32,
+            ) {
+                self.0.write::<0xb0>(value);
             }
 
             /// Read `LP_SLEEP_LP_REGULATOR0`.
@@ -96299,176 +95007,109 @@ pub mod soc {
                 self.0.write::<0xc8>(value.0);
             }
 
-            /// Read `IMM_SLEEP_SYSCLK`.
-            #[inline]
-            pub fn read_imm_sleep_sysclk(&self) -> imm_sleep_sysclk::R {
-                imm_sleep_sysclk::R(self.0.read::<0xd0>())
-            }
-
             /// Write one to the write-trigger field `UPDATE_DIG_ICG_SWITCH` of `IMM_SLEEP_SYSCLK`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_imm_sleep_sysclk_update_dig_icg_switch(&mut self) {
-                self.0.write::<0xd0>(
-                    (self.0.read::<0xd0>() & !imm_sleep_sysclk::TRIGGERS) | 0x10000000,
-                );
+                self.0.write::<0xd0>(0x10000000);
             }
 
             /// Write one to the write-trigger field `TIE_LOW_ICG_SLP_SEL` of `IMM_SLEEP_SYSCLK`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_imm_sleep_sysclk_tie_low_icg_slp_sel(&mut self) {
-                self.0.write::<0xd0>(
-                    (self.0.read::<0xd0>() & !imm_sleep_sysclk::TRIGGERS) | 0x20000000,
-                );
+                self.0.write::<0xd0>(0x20000000);
             }
 
             /// Write one to the write-trigger field `TIE_HIGH_ICG_SLP_SEL` of `IMM_SLEEP_SYSCLK`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_imm_sleep_sysclk_tie_high_icg_slp_sel(&mut self) {
-                self.0.write::<0xd0>(
-                    (self.0.read::<0xd0>() & !imm_sleep_sysclk::TRIGGERS) | 0x40000000,
-                );
+                self.0.write::<0xd0>(0x40000000);
             }
 
             /// Write one to the write-trigger field `UPDATE_DIG_SYS_CLK_SEL` of `IMM_SLEEP_SYSCLK`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_imm_sleep_sysclk_update_dig_sys_clk_sel(&mut self) {
-                self.0.write::<0xd0>(
-                    (self.0.read::<0xd0>() & !imm_sleep_sysclk::TRIGGERS) | 0x80000000,
-                );
-            }
-
-            /// Read `IMM_HP_FUNC_ICG`.
-            #[inline]
-            pub fn read_imm_hp_func_icg(&self) -> imm_hp_func_icg::R {
-                imm_hp_func_icg::R(self.0.read::<0xd4>())
+                self.0.write::<0xd0>(0x80000000);
             }
 
             /// Write one to the write-trigger field `UPDATE_DIG_ICG_FUNC_EN` of `IMM_HP_FUNC_ICG`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_imm_hp_func_icg_update_dig_icg_func_en(&mut self) {
-                self.0.write::<0xd4>(
-                    (self.0.read::<0xd4>() & !imm_hp_func_icg::TRIGGERS) | 0x80000000,
-                );
-            }
-
-            /// Read `IMM_HP_APB_ICG`.
-            #[inline]
-            pub fn read_imm_hp_apb_icg(&self) -> imm_hp_apb_icg::R {
-                imm_hp_apb_icg::R(self.0.read::<0xd8>())
+                self.0.write::<0xd4>(0x80000000);
             }
 
             /// Write one to the write-trigger field `UPDATE_DIG_ICG_APB_EN` of `IMM_HP_APB_ICG`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_imm_hp_apb_icg_update_dig_icg_apb_en(&mut self) {
-                self.0.write::<0xd8>(
-                    (self.0.read::<0xd8>() & !imm_hp_apb_icg::TRIGGERS) | 0x80000000,
-                );
-            }
-
-            /// Read `IMM_MODEM_ICG`.
-            #[inline]
-            pub fn read_imm_modem_icg(&self) -> imm_modem_icg::R {
-                imm_modem_icg::R(self.0.read::<0xdc>())
+                self.0.write::<0xd8>(0x80000000);
             }
 
             /// Write one to the write-trigger field `UPDATE_DIG_ICG_MODEM_EN` of `IMM_MODEM_ICG`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_imm_modem_icg_update_dig_icg_modem_en(&mut self) {
-                self.0
-                    .write::<0xdc>((self.0.read::<0xdc>() & !imm_modem_icg::TRIGGERS) | 0x80000000);
-            }
-
-            /// Read `IMM_LP_ICG`.
-            #[inline]
-            pub fn read_imm_lp_icg(&self) -> imm_lp_icg::R {
-                imm_lp_icg::R(self.0.read::<0xe0>())
+                self.0.write::<0xdc>(0x80000000);
             }
 
             /// Write one to the write-trigger field `TIE_LOW_LP_ROOTCLK_SEL` of `IMM_LP_ICG`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_imm_lp_icg_tie_low_lp_rootclk_sel(&mut self) {
-                self.0
-                    .write::<0xe0>((self.0.read::<0xe0>() & !imm_lp_icg::TRIGGERS) | 0x40000000);
+                self.0.write::<0xe0>(0x40000000);
             }
 
             /// Write one to the write-trigger field `TIE_HIGH_LP_ROOTCLK_SEL` of `IMM_LP_ICG`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_imm_lp_icg_tie_high_lp_rootclk_sel(&mut self) {
-                self.0
-                    .write::<0xe0>((self.0.read::<0xe0>() & !imm_lp_icg::TRIGGERS) | 0x80000000);
-            }
-
-            /// Read `IMM_PAD_HOLD_ALL`.
-            #[inline]
-            pub fn read_imm_pad_hold_all(&self) -> imm_pad_hold_all::R {
-                imm_pad_hold_all::R(self.0.read::<0xe4>())
+                self.0.write::<0xe0>(0x80000000);
             }
 
             /// Write one to the write-trigger field `TIE_HIGH_LP_PAD_HOLD_ALL` of `IMM_PAD_HOLD_ALL`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_imm_pad_hold_all_tie_high_lp_pad_hold_all(&mut self) {
-                self.0.write::<0xe4>(
-                    (self.0.read::<0xe4>() & !imm_pad_hold_all::TRIGGERS) | 0x10000000,
-                );
+                self.0.write::<0xe4>(0x10000000);
             }
 
             /// Write one to the write-trigger field `TIE_LOW_LP_PAD_HOLD_ALL` of `IMM_PAD_HOLD_ALL`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_imm_pad_hold_all_tie_low_lp_pad_hold_all(&mut self) {
-                self.0.write::<0xe4>(
-                    (self.0.read::<0xe4>() & !imm_pad_hold_all::TRIGGERS) | 0x20000000,
-                );
+                self.0.write::<0xe4>(0x20000000);
             }
 
             /// Write one to the write-trigger field `TIE_HIGH_HP_PAD_HOLD_ALL` of `IMM_PAD_HOLD_ALL`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_imm_pad_hold_all_tie_high_hp_pad_hold_all(&mut self) {
-                self.0.write::<0xe4>(
-                    (self.0.read::<0xe4>() & !imm_pad_hold_all::TRIGGERS) | 0x40000000,
-                );
+                self.0.write::<0xe4>(0x40000000);
             }
 
             /// Write one to the write-trigger field `TIE_LOW_HP_PAD_HOLD_ALL` of `IMM_PAD_HOLD_ALL`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_imm_pad_hold_all_tie_low_hp_pad_hold_all(&mut self) {
-                self.0.write::<0xe4>(
-                    (self.0.read::<0xe4>() & !imm_pad_hold_all::TRIGGERS) | 0x80000000,
-                );
-            }
-
-            /// Read `IMM_I2C_ISO`.
-            #[inline]
-            pub fn read_imm_i2c_iso(&self) -> imm_i2c_iso::R {
-                imm_i2c_iso::R(self.0.read::<0xe8>())
+                self.0.write::<0xe4>(0x80000000);
             }
 
             /// Write one to the write-trigger field `TIE_HIGH_I2C_ISO_EN` of `IMM_I2C_ISO`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_imm_i2c_iso_tie_high_i2c_iso_en(&mut self) {
-                self.0
-                    .write::<0xe8>((self.0.read::<0xe8>() & !imm_i2c_iso::TRIGGERS) | 0x40000000);
+                self.0.write::<0xe8>(0x40000000);
             }
 
             /// Write one to the write-trigger field `TIE_LOW_I2C_ISO_EN` of `IMM_I2C_ISO`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_imm_i2c_iso_tie_low_i2c_iso_en(&mut self) {
-                self.0
-                    .write::<0xe8>((self.0.read::<0xe8>() & !imm_i2c_iso::TRIGGERS) | 0x80000000);
+                self.0.write::<0xe8>(0x80000000);
             }
 
             /// Read `POWER_WAIT_TIMER0`.
@@ -96720,19 +95361,11 @@ pub mod soc {
                 self.0.write::<0x120>(value.0);
             }
 
-            /// Read `SLP_WAKEUP_CNTL0`.
-            #[inline]
-            pub fn read_slp_wakeup_cntl0(&self) -> slp_wakeup_cntl0::R {
-                slp_wakeup_cntl0::R(self.0.read::<0x124>())
-            }
-
             /// Write one to the write-trigger field `SLEEP_REQ` of `SLP_WAKEUP_CNTL0`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_slp_wakeup_cntl0_sleep_req(&mut self) {
-                self.0.write::<0x124>(
-                    (self.0.read::<0x124>() & !slp_wakeup_cntl0::TRIGGERS) | 0x80000000,
-                );
+                self.0.write::<0x124>(0x80000000);
             }
 
             /// Read `SLP_WAKEUP_CNTL1`.
@@ -96789,19 +95422,11 @@ pub mod soc {
                 self.0.write::<0x130>(value.0);
             }
 
-            /// Read `SLP_WAKEUP_CNTL4`.
-            #[inline]
-            pub fn read_slp_wakeup_cntl4(&self) -> slp_wakeup_cntl4::R {
-                slp_wakeup_cntl4::R(self.0.read::<0x134>())
-            }
-
             /// Write one to the write-trigger field `SLP_REJECT_CAUSE_CLR` of `SLP_WAKEUP_CNTL4`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_slp_wakeup_cntl4_slp_reject_cause_clr(&mut self) {
-                self.0.write::<0x134>(
-                    (self.0.read::<0x134>() & !slp_wakeup_cntl4::TRIGGERS) | 0x80000000,
-                );
+                self.0.write::<0x134>(0x80000000);
             }
 
             /// Read `SLP_WAKEUP_CNTL5`.
@@ -96961,50 +95586,39 @@ pub mod soc {
                 self.0.write::<0x168>(value.0);
             }
 
-            /// Read `HP_INT_CLR`.
-            #[inline]
-            pub fn read_hp_int_clr(&self) -> hp_int_clr::R {
-                hp_int_clr::R(self.0.read::<0x16c>())
-            }
-
             /// Write one to the write-trigger field `LP_CPU_EXC_INT_CLR` of `HP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_hp_int_clr_lp_cpu_exc_int_clr(&mut self) {
-                self.0
-                    .write::<0x16c>((self.0.read::<0x16c>() & !hp_int_clr::TRIGGERS) | 0x08000000);
+                self.0.write::<0x16c>(0x08000000);
             }
 
             /// Write one to the write-trigger field `SDIO_IDLE_INT_CLR` of `HP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_hp_int_clr_sdio_idle_int_clr(&mut self) {
-                self.0
-                    .write::<0x16c>((self.0.read::<0x16c>() & !hp_int_clr::TRIGGERS) | 0x10000000);
+                self.0.write::<0x16c>(0x10000000);
             }
 
             /// Write one to the write-trigger field `SW_INT_CLR` of `HP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_hp_int_clr_sw_int_clr(&mut self) {
-                self.0
-                    .write::<0x16c>((self.0.read::<0x16c>() & !hp_int_clr::TRIGGERS) | 0x20000000);
+                self.0.write::<0x16c>(0x20000000);
             }
 
             /// Write one to the write-trigger field `SOC_SLEEP_REJECT_INT_CLR` of `HP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_hp_int_clr_soc_sleep_reject_int_clr(&mut self) {
-                self.0
-                    .write::<0x16c>((self.0.read::<0x16c>() & !hp_int_clr::TRIGGERS) | 0x40000000);
+                self.0.write::<0x16c>(0x40000000);
             }
 
             /// Write one to the write-trigger field `SOC_WAKEUP_INT_CLR` of `HP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_hp_int_clr_soc_wakeup_int_clr(&mut self) {
-                self.0
-                    .write::<0x16c>((self.0.read::<0x16c>() & !hp_int_clr::TRIGGERS) | 0x80000000);
+                self.0.write::<0x16c>(0x80000000);
             }
 
             /// Read `LP_INT_RAW`.
@@ -97047,106 +95661,88 @@ pub mod soc {
                 self.0.write::<0x178>(value.0);
             }
 
-            /// Read `LP_INT_CLR`.
-            #[inline]
-            pub fn read_lp_int_clr(&self) -> lp_int_clr::R {
-                lp_int_clr::R(self.0.read::<0x17c>())
-            }
-
             /// Write one to the write-trigger field `LP_CPU_WAKEUP_INT_CLR` of `LP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_lp_int_clr_lp_cpu_wakeup_int_clr(&mut self) {
-                self.0
-                    .write::<0x17c>((self.0.read::<0x17c>() & !lp_int_clr::TRIGGERS) | 0x00100000);
+                self.0.write::<0x17c>(0x00100000);
             }
 
             /// Write one to the write-trigger field `MODEM_SWITCH_ACTIVE_END_INT_CLR` of `LP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_lp_int_clr_modem_switch_active_end_int_clr(&mut self) {
-                self.0
-                    .write::<0x17c>((self.0.read::<0x17c>() & !lp_int_clr::TRIGGERS) | 0x00200000);
+                self.0.write::<0x17c>(0x00200000);
             }
 
             /// Write one to the write-trigger field `SLEEP_SWITCH_ACTIVE_END_INT_CLR` of `LP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_lp_int_clr_sleep_switch_active_end_int_clr(&mut self) {
-                self.0
-                    .write::<0x17c>((self.0.read::<0x17c>() & !lp_int_clr::TRIGGERS) | 0x00400000);
+                self.0.write::<0x17c>(0x00400000);
             }
 
             /// Write one to the write-trigger field `SLEEP_SWITCH_MODEM_END_INT_CLR` of `LP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_lp_int_clr_sleep_switch_modem_end_int_clr(&mut self) {
-                self.0
-                    .write::<0x17c>((self.0.read::<0x17c>() & !lp_int_clr::TRIGGERS) | 0x00800000);
+                self.0.write::<0x17c>(0x00800000);
             }
 
             /// Write one to the write-trigger field `MODEM_SWITCH_SLEEP_END_INT_CLR` of `LP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_lp_int_clr_modem_switch_sleep_end_int_clr(&mut self) {
-                self.0
-                    .write::<0x17c>((self.0.read::<0x17c>() & !lp_int_clr::TRIGGERS) | 0x01000000);
+                self.0.write::<0x17c>(0x01000000);
             }
 
             /// Write one to the write-trigger field `ACTIVE_SWITCH_SLEEP_END_INT_CLR` of `LP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_lp_int_clr_active_switch_sleep_end_int_clr(&mut self) {
-                self.0
-                    .write::<0x17c>((self.0.read::<0x17c>() & !lp_int_clr::TRIGGERS) | 0x02000000);
+                self.0.write::<0x17c>(0x02000000);
             }
 
             /// Write one to the write-trigger field `MODEM_SWITCH_ACTIVE_START_INT_CLR` of `LP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_lp_int_clr_modem_switch_active_start_int_clr(&mut self) {
-                self.0
-                    .write::<0x17c>((self.0.read::<0x17c>() & !lp_int_clr::TRIGGERS) | 0x04000000);
+                self.0.write::<0x17c>(0x04000000);
             }
 
             /// Write one to the write-trigger field `SLEEP_SWITCH_ACTIVE_START_INT_CLR` of `LP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_lp_int_clr_sleep_switch_active_start_int_clr(&mut self) {
-                self.0
-                    .write::<0x17c>((self.0.read::<0x17c>() & !lp_int_clr::TRIGGERS) | 0x08000000);
+                self.0.write::<0x17c>(0x08000000);
             }
 
             /// Write one to the write-trigger field `SLEEP_SWITCH_MODEM_START_INT_CLR` of `LP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_lp_int_clr_sleep_switch_modem_start_int_clr(&mut self) {
-                self.0
-                    .write::<0x17c>((self.0.read::<0x17c>() & !lp_int_clr::TRIGGERS) | 0x10000000);
+                self.0.write::<0x17c>(0x10000000);
             }
 
             /// Write one to the write-trigger field `MODEM_SWITCH_SLEEP_START_INT_CLR` of `LP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_lp_int_clr_modem_switch_sleep_start_int_clr(&mut self) {
-                self.0
-                    .write::<0x17c>((self.0.read::<0x17c>() & !lp_int_clr::TRIGGERS) | 0x20000000);
+                self.0.write::<0x17c>(0x20000000);
             }
 
             /// Write one to the write-trigger field `ACTIVE_SWITCH_SLEEP_START_INT_CLR` of `LP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_lp_int_clr_active_switch_sleep_start_int_clr(&mut self) {
-                self.0
-                    .write::<0x17c>((self.0.read::<0x17c>() & !lp_int_clr::TRIGGERS) | 0x40000000);
+                self.0.write::<0x17c>(0x40000000);
             }
 
             /// Write one to the write-trigger field `HP_SW_TRIGGER_INT_CLR` of `LP_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_lp_int_clr_hp_sw_trigger_int_clr(&mut self) {
-                self.0
-                    .write::<0x17c>((self.0.read::<0x17c>() & !lp_int_clr::TRIGGERS) | 0x80000000);
+                self.0.write::<0x17c>(0x80000000);
             }
 
             /// Read `LP_CPU_PWR0`.
@@ -97187,28 +95783,18 @@ pub mod soc {
                 self.0.write::<0x184>(value.0);
             }
 
-            /// Read `HP_LP_CPU_COMM`.
-            #[inline]
-            pub fn read_hp_lp_cpu_comm(&self) -> hp_lp_cpu_comm::R {
-                hp_lp_cpu_comm::R(self.0.read::<0x188>())
-            }
-
             /// Write one to the write-trigger field `LP_TRIGGER_HP` of `HP_LP_CPU_COMM`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_hp_lp_cpu_comm_lp_trigger_hp(&mut self) {
-                self.0.write::<0x188>(
-                    (self.0.read::<0x188>() & !hp_lp_cpu_comm::TRIGGERS) | 0x40000000,
-                );
+                self.0.write::<0x188>(0x40000000);
             }
 
             /// Write one to the write-trigger field `HP_TRIGGER_LP` of `HP_LP_CPU_COMM`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_hp_lp_cpu_comm_hp_trigger_lp(&mut self) {
-                self.0.write::<0x188>(
-                    (self.0.read::<0x188>() & !hp_lp_cpu_comm::TRIGGERS) | 0x80000000,
-                );
+                self.0.write::<0x188>(0x80000000);
             }
 
             /// Read `HP_REGULATOR_CFG`.
@@ -101301,17 +99887,9 @@ pub mod soc {
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0xa4;
 
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {
-                /// need_des
-                #[inline]
-                pub const fn hp_sleep_lp_dcdc_reserve(self) -> u32 {
-                    self.0
-                }
-            }
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xffffffff;
         }
 
         /// The `HP_SLEEP_LP_DIG_POWER` register.
@@ -101479,17 +100057,9 @@ pub mod soc {
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0xb0;
 
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {
-                /// need_des
-                #[inline]
-                pub const fn lp_sleep_lp_bias_reserve(self) -> u32 {
-                    self.0
-                }
-            }
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xffffffff;
         }
 
         /// The `LP_SLEEP_LP_REGULATOR0` register.
@@ -101943,12 +100513,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xf0000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `IMM_HP_FUNC_ICG` register.
@@ -101963,12 +100527,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x80000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `IMM_HP_APB_ICG` register.
@@ -101983,12 +100541,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x80000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `IMM_MODEM_ICG` register.
@@ -102003,12 +100555,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x80000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `IMM_LP_ICG` register.
@@ -102023,12 +100569,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xc0000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `IMM_PAD_HOLD_ALL` register.
@@ -102043,12 +100583,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xf0000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `IMM_I2C_ISO` register.
@@ -102063,12 +100597,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xc0000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `POWER_WAIT_TIMER0` register.
@@ -103764,12 +102292,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x80000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `SLP_WAKEUP_CNTL1` register.
@@ -103961,12 +102483,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x80000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `SLP_WAKEUP_CNTL5` register.
@@ -104639,12 +103155,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xf8000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `LP_INT_RAW` register.
@@ -105276,12 +103786,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xfff00000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `LP_CPU_PWR0` register.
@@ -105518,12 +104022,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xc0000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `HP_REGULATOR_CFG` register.
@@ -114314,122 +112812,102 @@ pub mod soc {
                 self.0.write::<0x40>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x44>())
-            }
-
             /// Write one to the write-trigger field `CH0_TX_END_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ch0_tx_end_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x44>(0x00000001);
             }
 
             /// Write one to the write-trigger field `CH1_TX_END_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ch1_tx_end_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x44>(0x00000002);
             }
 
             /// Write one to the write-trigger field `CH2_RX_END_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ch2_rx_end_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x44>(0x00000004);
             }
 
             /// Write one to the write-trigger field `CH3_RX_END_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ch3_rx_end_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !int_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x44>(0x00000008);
             }
 
             /// Write one to the write-trigger field `CH0_ERR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ch0_err_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !int_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0x44>(0x00000010);
             }
 
             /// Write one to the write-trigger field `CH1_ERR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ch1_err_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !int_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0x44>(0x00000020);
             }
 
             /// Write one to the write-trigger field `CH2_ERR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ch2_err_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !int_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0x44>(0x00000040);
             }
 
             /// Write one to the write-trigger field `CH3_ERR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ch3_err_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !int_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0x44>(0x00000080);
             }
 
             /// Write one to the write-trigger field `CH0_TX_THR_EVENT_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ch0_tx_thr_event_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !int_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0x44>(0x00000100);
             }
 
             /// Write one to the write-trigger field `CH1_TX_THR_EVENT_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ch1_tx_thr_event_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !int_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0x44>(0x00000200);
             }
 
             /// Write one to the write-trigger field `CH2_RX_THR_EVENT_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ch2_rx_thr_event_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !int_clr::TRIGGERS) | 0x00000400);
+                self.0.write::<0x44>(0x00000400);
             }
 
             /// Write one to the write-trigger field `CH3_RX_THR_EVENT_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ch3_rx_thr_event_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !int_clr::TRIGGERS) | 0x00000800);
+                self.0.write::<0x44>(0x00000800);
             }
 
             /// Write one to the write-trigger field `CH0_TX_LOOP_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ch0_tx_loop_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !int_clr::TRIGGERS) | 0x00001000);
+                self.0.write::<0x44>(0x00001000);
             }
 
             /// Write one to the write-trigger field `CH1_TX_LOOP_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_ch1_tx_loop_int_clr(&mut self) {
-                self.0
-                    .write::<0x44>((self.0.read::<0x44>() & !int_clr::TRIGGERS) | 0x00002000);
+                self.0.write::<0x44>(0x00002000);
             }
 
             /// Read `CH%sCARRIER_DUTY`.
@@ -114550,42 +113028,32 @@ pub mod soc {
                 self.0.write::<0x6c>(value.0);
             }
 
-            /// Read `REF_CNT_RST`.
-            #[inline]
-            pub fn read_ref_cnt_rst(&self) -> ref_cnt_rst::R {
-                ref_cnt_rst::R(self.0.read::<0x70>())
-            }
-
             /// Write one to the write-trigger field `REF_CNT_RST_CH0` of `REF_CNT_RST`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ref_cnt_rst_ref_cnt_rst_ch0(&mut self) {
-                self.0
-                    .write::<0x70>((self.0.read::<0x70>() & !ref_cnt_rst::TRIGGERS) | 0x00000001);
+                self.0.write::<0x70>(0x00000001);
             }
 
             /// Write one to the write-trigger field `REF_CNT_RST_CH1` of `REF_CNT_RST`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ref_cnt_rst_ref_cnt_rst_ch1(&mut self) {
-                self.0
-                    .write::<0x70>((self.0.read::<0x70>() & !ref_cnt_rst::TRIGGERS) | 0x00000002);
+                self.0.write::<0x70>(0x00000002);
             }
 
             /// Write one to the write-trigger field `REF_CNT_RST_CH2` of `REF_CNT_RST`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ref_cnt_rst_ref_cnt_rst_ch2(&mut self) {
-                self.0
-                    .write::<0x70>((self.0.read::<0x70>() & !ref_cnt_rst::TRIGGERS) | 0x00000004);
+                self.0.write::<0x70>(0x00000004);
             }
 
             /// Write one to the write-trigger field `REF_CNT_RST_CH3` of `REF_CNT_RST`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ref_cnt_rst_ref_cnt_rst_ch3(&mut self) {
-                self.0
-                    .write::<0x70>((self.0.read::<0x70>() & !ref_cnt_rst::TRIGGERS) | 0x00000008);
+                self.0.write::<0x70>(0x00000008);
             }
 
             /// Read `DATE`.
@@ -115683,12 +114151,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00003fff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `CH%sCARRIER_DUTY` register.
@@ -116271,12 +114733,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x0000000f;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `DATE` register.
@@ -116406,49 +114862,25 @@ pub mod soc {
                 query_clean::R(self.0.read::<0x808>())
             }
 
-            /// Read `SET_START_MODEXP`.
-            #[inline]
-            pub fn read_set_start_modexp(&self) -> set_start_modexp::R {
-                set_start_modexp::R(self.0.read::<0x80c>())
-            }
-
             /// Write one to the write-trigger field `SET_START_MODEXP` of `SET_START_MODEXP`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_set_start_modexp_set_start_modexp(&mut self) {
-                self.0.write::<0x80c>(
-                    (self.0.read::<0x80c>() & !set_start_modexp::TRIGGERS) | 0x00000001,
-                );
-            }
-
-            /// Read `SET_START_MODMULT`.
-            #[inline]
-            pub fn read_set_start_modmult(&self) -> set_start_modmult::R {
-                set_start_modmult::R(self.0.read::<0x810>())
+                self.0.write::<0x80c>(0x00000001);
             }
 
             /// Write one to the write-trigger field `SET_START_MODMULT` of `SET_START_MODMULT`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_set_start_modmult_set_start_modmult(&mut self) {
-                self.0.write::<0x810>(
-                    (self.0.read::<0x810>() & !set_start_modmult::TRIGGERS) | 0x00000001,
-                );
-            }
-
-            /// Read `SET_START_MULT`.
-            #[inline]
-            pub fn read_set_start_mult(&self) -> set_start_mult::R {
-                set_start_mult::R(self.0.read::<0x814>())
+                self.0.write::<0x810>(0x00000001);
             }
 
             /// Write one to the write-trigger field `SET_START_MULT` of `SET_START_MULT`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_set_start_mult_set_start_mult(&mut self) {
-                self.0.write::<0x814>(
-                    (self.0.read::<0x814>() & !set_start_mult::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x814>(0x00000001);
             }
 
             /// Read `QUERY_IDLE`.
@@ -116457,18 +114889,11 @@ pub mod soc {
                 query_idle::R(self.0.read::<0x818>())
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x81c>())
-            }
-
             /// Write one to the write-trigger field `CLEAR_INTERRUPT` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_clear_interrupt(&mut self) {
-                self.0
-                    .write::<0x81c>((self.0.read::<0x81c>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x81c>(0x00000001);
             }
 
             /// Read `CONSTANT_TIME`.
@@ -116665,12 +115090,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `SET_START_MODMULT` register.
@@ -116685,12 +115104,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `SET_START_MULT` register.
@@ -116705,12 +115118,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `QUERY_IDLE` register.
@@ -116747,12 +115154,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `CONSTANT_TIME` register.
@@ -117015,15 +115416,6 @@ pub mod soc {
                 t_string::R(self.0.read::<0x4>())
             }
 
-            /// Read `T_STRING`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_t_string(&mut self, change: impl FnOnce(&mut t_string::W)) {
-                let mut value = t_string::W(self.0.read::<0x4>());
-                change(&mut value);
-                self.0.write::<0x4>(value.0);
-            }
-
             /// Read `T_LENGTH`.
             #[inline]
             pub fn read_t_length(&self) -> t_length::R {
@@ -117117,24 +115509,6 @@ pub mod soc {
                 #[inline]
                 pub const fn t_string(self) -> u32 {
                     self.0
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// Sha t_string (used if and only if mode == SHA_512/t).
-                #[inline]
-                pub const fn t_string(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `T_STRING`.
-                #[inline]
-                pub fn set_t_string(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
                 }
             }
         }
@@ -117345,528 +115719,452 @@ pub mod soc {
                 ch_ena_ad0::R(self.0.read::<0x0>())
             }
 
-            /// Read `CH_ENA_AD0_SET`.
-            #[inline]
-            pub fn read_ch_ena_ad0_set(&self) -> ch_ena_ad0_set::R {
-                ch_ena_ad0_set::R(self.0.read::<0x4>())
-            }
-
             /// Write one to the write-trigger field `CH_ENABLE0` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable0(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00000001);
+                self.0.write::<0x4>(0x00000001);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE1` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable1(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00000002);
+                self.0.write::<0x4>(0x00000002);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE2` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable2(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00000004);
+                self.0.write::<0x4>(0x00000004);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE3` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable3(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00000008);
+                self.0.write::<0x4>(0x00000008);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE4` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable4(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00000010);
+                self.0.write::<0x4>(0x00000010);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE5` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable5(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00000020);
+                self.0.write::<0x4>(0x00000020);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE6` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable6(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00000040);
+                self.0.write::<0x4>(0x00000040);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE7` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable7(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00000080);
+                self.0.write::<0x4>(0x00000080);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE8` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable8(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00000100);
+                self.0.write::<0x4>(0x00000100);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE9` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable9(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00000200);
+                self.0.write::<0x4>(0x00000200);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE10` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable10(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00000400);
+                self.0.write::<0x4>(0x00000400);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE11` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable11(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00000800);
+                self.0.write::<0x4>(0x00000800);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE12` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable12(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00001000);
+                self.0.write::<0x4>(0x00001000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE13` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable13(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00002000);
+                self.0.write::<0x4>(0x00002000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE14` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable14(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00004000);
+                self.0.write::<0x4>(0x00004000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE15` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable15(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00008000);
+                self.0.write::<0x4>(0x00008000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE16` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable16(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00010000);
+                self.0.write::<0x4>(0x00010000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE17` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable17(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00020000);
+                self.0.write::<0x4>(0x00020000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE18` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable18(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00040000);
+                self.0.write::<0x4>(0x00040000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE19` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable19(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00080000);
+                self.0.write::<0x4>(0x00080000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE20` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable20(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00100000);
+                self.0.write::<0x4>(0x00100000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE21` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable21(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00200000);
+                self.0.write::<0x4>(0x00200000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE22` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable22(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00400000);
+                self.0.write::<0x4>(0x00400000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE23` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable23(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x00800000);
+                self.0.write::<0x4>(0x00800000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE24` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable24(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x01000000);
+                self.0.write::<0x4>(0x01000000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE25` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable25(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x02000000);
+                self.0.write::<0x4>(0x02000000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE26` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable26(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x04000000);
+                self.0.write::<0x4>(0x04000000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE27` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable27(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x08000000);
+                self.0.write::<0x4>(0x08000000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE28` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable28(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x10000000);
+                self.0.write::<0x4>(0x10000000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE29` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable29(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x20000000);
+                self.0.write::<0x4>(0x20000000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE30` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable30(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x40000000);
+                self.0.write::<0x4>(0x40000000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE31` of `CH_ENA_AD0_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_set_ch_enable31(&mut self) {
-                self.0
-                    .write::<0x4>((self.0.read::<0x4>() & !ch_ena_ad0_set::TRIGGERS) | 0x80000000);
-            }
-
-            /// Read `CH_ENA_AD0_CLR`.
-            #[inline]
-            pub fn read_ch_ena_ad0_clr(&self) -> ch_ena_ad0_clr::R {
-                ch_ena_ad0_clr::R(self.0.read::<0x8>())
+                self.0.write::<0x4>(0x80000000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE0` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable0(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x8>(0x00000001);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE1` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable1(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x8>(0x00000002);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE2` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable2(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x8>(0x00000004);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE3` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable3(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x8>(0x00000008);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE4` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable4(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0x8>(0x00000010);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE5` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable5(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0x8>(0x00000020);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE6` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable6(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0x8>(0x00000040);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE7` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable7(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0x8>(0x00000080);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE8` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable8(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0x8>(0x00000100);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE9` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable9(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0x8>(0x00000200);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE10` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable10(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00000400);
+                self.0.write::<0x8>(0x00000400);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE11` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable11(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00000800);
+                self.0.write::<0x8>(0x00000800);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE12` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable12(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00001000);
+                self.0.write::<0x8>(0x00001000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE13` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable13(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00002000);
+                self.0.write::<0x8>(0x00002000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE14` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable14(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00004000);
+                self.0.write::<0x8>(0x00004000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE15` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable15(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00008000);
+                self.0.write::<0x8>(0x00008000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE16` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable16(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00010000);
+                self.0.write::<0x8>(0x00010000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE17` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable17(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00020000);
+                self.0.write::<0x8>(0x00020000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE18` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable18(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00040000);
+                self.0.write::<0x8>(0x00040000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE19` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable19(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00080000);
+                self.0.write::<0x8>(0x00080000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE20` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable20(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00100000);
+                self.0.write::<0x8>(0x00100000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE21` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable21(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00200000);
+                self.0.write::<0x8>(0x00200000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE22` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable22(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00400000);
+                self.0.write::<0x8>(0x00400000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE23` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable23(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x00800000);
+                self.0.write::<0x8>(0x00800000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE24` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable24(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x01000000);
+                self.0.write::<0x8>(0x01000000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE25` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable25(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x02000000);
+                self.0.write::<0x8>(0x02000000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE26` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable26(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x04000000);
+                self.0.write::<0x8>(0x04000000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE27` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable27(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x08000000);
+                self.0.write::<0x8>(0x08000000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE28` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable28(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x10000000);
+                self.0.write::<0x8>(0x10000000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE29` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable29(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x20000000);
+                self.0.write::<0x8>(0x20000000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE30` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable30(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x40000000);
+                self.0.write::<0x8>(0x40000000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE31` of `CH_ENA_AD0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad0_clr_ch_disable31(&mut self) {
-                self.0
-                    .write::<0x8>((self.0.read::<0x8>() & !ch_ena_ad0_clr::TRIGGERS) | 0x80000000);
+                self.0.write::<0x8>(0x80000000);
             }
 
             /// Read `CH_ENA_AD1`.
@@ -117875,340 +116173,256 @@ pub mod soc {
                 ch_ena_ad1::R(self.0.read::<0xc>())
             }
 
-            /// Read `CH_ENA_AD1_SET`.
-            #[inline]
-            pub fn read_ch_ena_ad1_set(&self) -> ch_ena_ad1_set::R {
-                ch_ena_ad1_set::R(self.0.read::<0x10>())
-            }
-
             /// Write one to the write-trigger field `CH_ENABLE32` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable32(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x10>(0x00000001);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE33` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable33(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00000002,
-                );
+                self.0.write::<0x10>(0x00000002);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE34` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable34(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00000004,
-                );
+                self.0.write::<0x10>(0x00000004);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE35` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable35(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00000008,
-                );
+                self.0.write::<0x10>(0x00000008);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE36` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable36(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00000010,
-                );
+                self.0.write::<0x10>(0x00000010);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE37` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable37(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00000020,
-                );
+                self.0.write::<0x10>(0x00000020);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE38` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable38(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00000040,
-                );
+                self.0.write::<0x10>(0x00000040);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE39` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable39(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00000080,
-                );
+                self.0.write::<0x10>(0x00000080);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE40` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable40(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00000100,
-                );
+                self.0.write::<0x10>(0x00000100);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE41` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable41(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00000200,
-                );
+                self.0.write::<0x10>(0x00000200);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE42` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable42(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00000400,
-                );
+                self.0.write::<0x10>(0x00000400);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE43` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable43(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00000800,
-                );
+                self.0.write::<0x10>(0x00000800);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE44` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable44(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00001000,
-                );
+                self.0.write::<0x10>(0x00001000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE45` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable45(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00002000,
-                );
+                self.0.write::<0x10>(0x00002000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE46` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable46(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00004000,
-                );
+                self.0.write::<0x10>(0x00004000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE47` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable47(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00008000,
-                );
+                self.0.write::<0x10>(0x00008000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE48` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable48(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00010000,
-                );
+                self.0.write::<0x10>(0x00010000);
             }
 
             /// Write one to the write-trigger field `CH_ENABLE49` of `CH_ENA_AD1_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_set_ch_enable49(&mut self) {
-                self.0.write::<0x10>(
-                    (self.0.read::<0x10>() & !ch_ena_ad1_set::TRIGGERS) | 0x00020000,
-                );
-            }
-
-            /// Read `CH_ENA_AD1_CLR`.
-            #[inline]
-            pub fn read_ch_ena_ad1_clr(&self) -> ch_ena_ad1_clr::R {
-                ch_ena_ad1_clr::R(self.0.read::<0x14>())
+                self.0.write::<0x10>(0x00020000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE32` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable32(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x14>(0x00000001);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE33` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable33(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00000002,
-                );
+                self.0.write::<0x14>(0x00000002);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE34` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable34(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00000004,
-                );
+                self.0.write::<0x14>(0x00000004);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE35` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable35(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00000008,
-                );
+                self.0.write::<0x14>(0x00000008);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE36` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable36(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00000010,
-                );
+                self.0.write::<0x14>(0x00000010);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE37` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable37(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00000020,
-                );
+                self.0.write::<0x14>(0x00000020);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE38` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable38(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00000040,
-                );
+                self.0.write::<0x14>(0x00000040);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE39` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable39(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00000080,
-                );
+                self.0.write::<0x14>(0x00000080);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE40` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable40(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00000100,
-                );
+                self.0.write::<0x14>(0x00000100);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE41` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable41(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00000200,
-                );
+                self.0.write::<0x14>(0x00000200);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE42` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable42(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00000400,
-                );
+                self.0.write::<0x14>(0x00000400);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE43` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable43(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00000800,
-                );
+                self.0.write::<0x14>(0x00000800);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE44` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable44(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00001000,
-                );
+                self.0.write::<0x14>(0x00001000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE45` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable45(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00002000,
-                );
+                self.0.write::<0x14>(0x00002000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE46` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable46(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00004000,
-                );
+                self.0.write::<0x14>(0x00004000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE47` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable47(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00008000,
-                );
+                self.0.write::<0x14>(0x00008000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE48` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable48(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00010000,
-                );
+                self.0.write::<0x14>(0x00010000);
             }
 
             /// Write one to the write-trigger field `CH_DISABLE49` of `CH_ENA_AD1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_ch_ena_ad1_clr_ch_disable49(&mut self) {
-                self.0.write::<0x14>(
-                    (self.0.read::<0x14>() & !ch_ena_ad1_clr::TRIGGERS) | 0x00020000,
-                );
+                self.0.write::<0x14>(0x00020000);
             }
 
             /// Read `CH%s_EVT_ID`.
@@ -118268,266 +116482,228 @@ pub mod soc {
                 self.0.write::<0x1a8>(snapshot.0);
             }
 
-            /// Read `EVT_ST0_CLR`.
-            #[inline]
-            pub fn read_evt_st0_clr(&self) -> evt_st0_clr::R {
-                evt_st0_clr::R(self.0.read::<0x1ac>())
-            }
-
             /// Write one to the write-trigger field `GPIO_EVT_CH0_RISE_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch0_rise_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x1ac>(0x00000001);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH1_RISE_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch1_rise_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x1ac>(0x00000002);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH2_RISE_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch2_rise_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x1ac>(0x00000004);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH3_RISE_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch3_rise_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x1ac>(0x00000008);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH4_RISE_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch4_rise_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0x1ac>(0x00000010);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH5_RISE_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch5_rise_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0x1ac>(0x00000020);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH6_RISE_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch6_rise_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0x1ac>(0x00000040);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH7_RISE_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch7_rise_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0x1ac>(0x00000080);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH0_FALL_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch0_fall_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0x1ac>(0x00000100);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH1_FALL_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch1_fall_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0x1ac>(0x00000200);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH2_FALL_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch2_fall_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00000400);
+                self.0.write::<0x1ac>(0x00000400);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH3_FALL_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch3_fall_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00000800);
+                self.0.write::<0x1ac>(0x00000800);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH4_FALL_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch4_fall_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00001000);
+                self.0.write::<0x1ac>(0x00001000);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH5_FALL_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch5_fall_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00002000);
+                self.0.write::<0x1ac>(0x00002000);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH6_FALL_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch6_fall_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00004000);
+                self.0.write::<0x1ac>(0x00004000);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH7_FALL_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch7_fall_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00008000);
+                self.0.write::<0x1ac>(0x00008000);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH0_ANY_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch0_any_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00010000);
+                self.0.write::<0x1ac>(0x00010000);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH1_ANY_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch1_any_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00020000);
+                self.0.write::<0x1ac>(0x00020000);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH2_ANY_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch2_any_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00040000);
+                self.0.write::<0x1ac>(0x00040000);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH3_ANY_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch3_any_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00080000);
+                self.0.write::<0x1ac>(0x00080000);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH4_ANY_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch4_any_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00100000);
+                self.0.write::<0x1ac>(0x00100000);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH5_ANY_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch5_any_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00200000);
+                self.0.write::<0x1ac>(0x00200000);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH6_ANY_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch6_any_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00400000);
+                self.0.write::<0x1ac>(0x00400000);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_CH7_ANY_EDGE_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_ch7_any_edge_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x00800000);
+                self.0.write::<0x1ac>(0x00800000);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_ZERO_DET_POS0_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_zero_det_pos0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x01000000);
+                self.0.write::<0x1ac>(0x01000000);
             }
 
             /// Write one to the write-trigger field `GPIO_EVT_ZERO_DET_NEG0_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_gpio_evt_zero_det_neg0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x02000000);
+                self.0.write::<0x1ac>(0x02000000);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_DUTY_CHNG_END_CH0_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_ledc_evt_duty_chng_end_ch0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x04000000);
+                self.0.write::<0x1ac>(0x04000000);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_DUTY_CHNG_END_CH1_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_ledc_evt_duty_chng_end_ch1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x08000000);
+                self.0.write::<0x1ac>(0x08000000);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_DUTY_CHNG_END_CH2_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_ledc_evt_duty_chng_end_ch2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x10000000);
+                self.0.write::<0x1ac>(0x10000000);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_DUTY_CHNG_END_CH3_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_ledc_evt_duty_chng_end_ch3_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x20000000);
+                self.0.write::<0x1ac>(0x20000000);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_DUTY_CHNG_END_CH4_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_ledc_evt_duty_chng_end_ch4_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x40000000);
+                self.0.write::<0x1ac>(0x40000000);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_DUTY_CHNG_END_CH5_ST_CLR` of `EVT_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st0_clr_ledc_evt_duty_chng_end_ch5_st_clr(&mut self) {
-                self.0
-                    .write::<0x1ac>((self.0.read::<0x1ac>() & !evt_st0_clr::TRIGGERS) | 0x80000000);
+                self.0.write::<0x1ac>(0x80000000);
             }
 
             /// Read `EVT_ST1`.
@@ -118549,266 +116725,228 @@ pub mod soc {
                 self.0.write::<0x1b0>(snapshot.0);
             }
 
-            /// Read `EVT_ST1_CLR`.
-            #[inline]
-            pub fn read_evt_st1_clr(&self) -> evt_st1_clr::R {
-                evt_st1_clr::R(self.0.read::<0x1b4>())
-            }
-
             /// Write one to the write-trigger field `LEDC_EVT_OVF_CNT_PLS_CH0_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_ledc_evt_ovf_cnt_pls_ch0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x1b4>(0x00000001);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_OVF_CNT_PLS_CH1_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_ledc_evt_ovf_cnt_pls_ch1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x1b4>(0x00000002);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_OVF_CNT_PLS_CH2_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_ledc_evt_ovf_cnt_pls_ch2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x1b4>(0x00000004);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_OVF_CNT_PLS_CH3_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_ledc_evt_ovf_cnt_pls_ch3_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x1b4>(0x00000008);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_OVF_CNT_PLS_CH4_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_ledc_evt_ovf_cnt_pls_ch4_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0x1b4>(0x00000010);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_OVF_CNT_PLS_CH5_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_ledc_evt_ovf_cnt_pls_ch5_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0x1b4>(0x00000020);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_TIME_OVF_TIMER0_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_ledc_evt_time_ovf_timer0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0x1b4>(0x00000040);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_TIME_OVF_TIMER1_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_ledc_evt_time_ovf_timer1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0x1b4>(0x00000080);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_TIME_OVF_TIMER2_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_ledc_evt_time_ovf_timer2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0x1b4>(0x00000100);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_TIME_OVF_TIMER3_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_ledc_evt_time_ovf_timer3_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0x1b4>(0x00000200);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_TIMER0_CMP_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_ledc_evt_timer0_cmp_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00000400);
+                self.0.write::<0x1b4>(0x00000400);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_TIMER1_CMP_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_ledc_evt_timer1_cmp_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00000800);
+                self.0.write::<0x1b4>(0x00000800);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_TIMER2_CMP_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_ledc_evt_timer2_cmp_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00001000);
+                self.0.write::<0x1b4>(0x00001000);
             }
 
             /// Write one to the write-trigger field `LEDC_EVT_TIMER3_CMP_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_ledc_evt_timer3_cmp_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00002000);
+                self.0.write::<0x1b4>(0x00002000);
             }
 
             /// Write one to the write-trigger field `TG0_EVT_CNT_CMP_TIMER0_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_tg0_evt_cnt_cmp_timer0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00004000);
+                self.0.write::<0x1b4>(0x00004000);
             }
 
             /// Write one to the write-trigger field `TG0_EVT_CNT_CMP_TIMER1_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_tg0_evt_cnt_cmp_timer1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00008000);
+                self.0.write::<0x1b4>(0x00008000);
             }
 
             /// Write one to the write-trigger field `TG1_EVT_CNT_CMP_TIMER0_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_tg1_evt_cnt_cmp_timer0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00010000);
+                self.0.write::<0x1b4>(0x00010000);
             }
 
             /// Write one to the write-trigger field `TG1_EVT_CNT_CMP_TIMER1_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_tg1_evt_cnt_cmp_timer1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00020000);
+                self.0.write::<0x1b4>(0x00020000);
             }
 
             /// Write one to the write-trigger field `SYSTIMER_EVT_CNT_CMP0_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_systimer_evt_cnt_cmp0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00040000);
+                self.0.write::<0x1b4>(0x00040000);
             }
 
             /// Write one to the write-trigger field `SYSTIMER_EVT_CNT_CMP1_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_systimer_evt_cnt_cmp1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00080000);
+                self.0.write::<0x1b4>(0x00080000);
             }
 
             /// Write one to the write-trigger field `SYSTIMER_EVT_CNT_CMP2_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_systimer_evt_cnt_cmp2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00100000);
+                self.0.write::<0x1b4>(0x00100000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_TIMER0_STOP_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_mcpwm0_evt_timer0_stop_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00200000);
+                self.0.write::<0x1b4>(0x00200000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_TIMER1_STOP_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_mcpwm0_evt_timer1_stop_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00400000);
+                self.0.write::<0x1b4>(0x00400000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_TIMER2_STOP_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_mcpwm0_evt_timer2_stop_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x00800000);
+                self.0.write::<0x1b4>(0x00800000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_TIMER0_TEZ_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_mcpwm0_evt_timer0_tez_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x01000000);
+                self.0.write::<0x1b4>(0x01000000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_TIMER1_TEZ_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_mcpwm0_evt_timer1_tez_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x02000000);
+                self.0.write::<0x1b4>(0x02000000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_TIMER2_TEZ_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_mcpwm0_evt_timer2_tez_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x04000000);
+                self.0.write::<0x1b4>(0x04000000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_TIMER0_TEP_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_mcpwm0_evt_timer0_tep_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x08000000);
+                self.0.write::<0x1b4>(0x08000000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_TIMER1_TEP_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_mcpwm0_evt_timer1_tep_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x10000000);
+                self.0.write::<0x1b4>(0x10000000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_TIMER2_TEP_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_mcpwm0_evt_timer2_tep_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x20000000);
+                self.0.write::<0x1b4>(0x20000000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_OP0_TEA_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_mcpwm0_evt_op0_tea_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x40000000);
+                self.0.write::<0x1b4>(0x40000000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_OP1_TEA_ST_CLR` of `EVT_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st1_clr_mcpwm0_evt_op1_tea_st_clr(&mut self) {
-                self.0
-                    .write::<0x1b4>((self.0.read::<0x1b4>() & !evt_st1_clr::TRIGGERS) | 0x80000000);
+                self.0.write::<0x1b4>(0x80000000);
             }
 
             /// Read `EVT_ST2`.
@@ -118830,266 +116968,228 @@ pub mod soc {
                 self.0.write::<0x1b8>(snapshot.0);
             }
 
-            /// Read `EVT_ST2_CLR`.
-            #[inline]
-            pub fn read_evt_st2_clr(&self) -> evt_st2_clr::R {
-                evt_st2_clr::R(self.0.read::<0x1bc>())
-            }
-
             /// Write one to the write-trigger field `MCPWM0_EVT_OP2_TEA_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_op2_tea_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x1bc>(0x00000001);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_OP0_TEB_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_op0_teb_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x1bc>(0x00000002);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_OP1_TEB_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_op1_teb_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x1bc>(0x00000004);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_OP2_TEB_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_op2_teb_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x1bc>(0x00000008);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_F0_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_f0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0x1bc>(0x00000010);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_F1_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_f1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0x1bc>(0x00000020);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_F2_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_f2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0x1bc>(0x00000040);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_F0_CLR_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_f0_clr_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0x1bc>(0x00000080);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_F1_CLR_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_f1_clr_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0x1bc>(0x00000100);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_F2_CLR_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_f2_clr_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0x1bc>(0x00000200);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_TZ0_CBC_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_tz0_cbc_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00000400);
+                self.0.write::<0x1bc>(0x00000400);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_TZ1_CBC_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_tz1_cbc_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00000800);
+                self.0.write::<0x1bc>(0x00000800);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_TZ2_CBC_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_tz2_cbc_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00001000);
+                self.0.write::<0x1bc>(0x00001000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_TZ0_OST_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_tz0_ost_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00002000);
+                self.0.write::<0x1bc>(0x00002000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_TZ1_OST_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_tz1_ost_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00004000);
+                self.0.write::<0x1bc>(0x00004000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_TZ2_OST_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_tz2_ost_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00008000);
+                self.0.write::<0x1bc>(0x00008000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_CAP0_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_cap0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00010000);
+                self.0.write::<0x1bc>(0x00010000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_CAP1_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_cap1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00020000);
+                self.0.write::<0x1bc>(0x00020000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_CAP2_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_cap2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00040000);
+                self.0.write::<0x1bc>(0x00040000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_OP0_TEE1_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_op0_tee1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00080000);
+                self.0.write::<0x1bc>(0x00080000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_OP1_TEE1_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_op1_tee1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00100000);
+                self.0.write::<0x1bc>(0x00100000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_OP2_TEE1_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_op2_tee1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00200000);
+                self.0.write::<0x1bc>(0x00200000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_OP0_TEE2_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_op0_tee2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00400000);
+                self.0.write::<0x1bc>(0x00400000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_OP1_TEE2_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_op1_tee2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x00800000);
+                self.0.write::<0x1bc>(0x00800000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_EVT_OP2_TEE2_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_mcpwm0_evt_op2_tee2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x01000000);
+                self.0.write::<0x1bc>(0x01000000);
             }
 
             /// Write one to the write-trigger field `ADC_EVT_CONV_CMPLT0_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_adc_evt_conv_cmplt0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x02000000);
+                self.0.write::<0x1bc>(0x02000000);
             }
 
             /// Write one to the write-trigger field `ADC_EVT_EQ_ABOVE_THRESH0_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_adc_evt_eq_above_thresh0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x04000000);
+                self.0.write::<0x1bc>(0x04000000);
             }
 
             /// Write one to the write-trigger field `ADC_EVT_EQ_ABOVE_THRESH1_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_adc_evt_eq_above_thresh1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x08000000);
+                self.0.write::<0x1bc>(0x08000000);
             }
 
             /// Write one to the write-trigger field `ADC_EVT_EQ_BELOW_THRESH0_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_adc_evt_eq_below_thresh0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x10000000);
+                self.0.write::<0x1bc>(0x10000000);
             }
 
             /// Write one to the write-trigger field `ADC_EVT_EQ_BELOW_THRESH1_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_adc_evt_eq_below_thresh1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x20000000);
+                self.0.write::<0x1bc>(0x20000000);
             }
 
             /// Write one to the write-trigger field `ADC_EVT_RESULT_DONE0_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_adc_evt_result_done0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x40000000);
+                self.0.write::<0x1bc>(0x40000000);
             }
 
             /// Write one to the write-trigger field `ADC_EVT_STOPPED0_ST_CLR` of `EVT_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st2_clr_adc_evt_stopped0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1bc>((self.0.read::<0x1bc>() & !evt_st2_clr::TRIGGERS) | 0x80000000);
+                self.0.write::<0x1bc>(0x80000000);
             }
 
             /// Read `EVT_ST3`.
@@ -119111,266 +117211,228 @@ pub mod soc {
                 self.0.write::<0x1c0>(snapshot.0);
             }
 
-            /// Read `EVT_ST3_CLR`.
-            #[inline]
-            pub fn read_evt_st3_clr(&self) -> evt_st3_clr::R {
-                evt_st3_clr::R(self.0.read::<0x1c4>())
-            }
-
             /// Write one to the write-trigger field `ADC_EVT_STARTED0_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_adc_evt_started0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x1c4>(0x00000001);
             }
 
             /// Write one to the write-trigger field `REGDMA_EVT_DONE0_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_regdma_evt_done0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x1c4>(0x00000002);
             }
 
             /// Write one to the write-trigger field `REGDMA_EVT_DONE1_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_regdma_evt_done1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x1c4>(0x00000004);
             }
 
             /// Write one to the write-trigger field `REGDMA_EVT_DONE2_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_regdma_evt_done2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x1c4>(0x00000008);
             }
 
             /// Write one to the write-trigger field `REGDMA_EVT_DONE3_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_regdma_evt_done3_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0x1c4>(0x00000010);
             }
 
             /// Write one to the write-trigger field `REGDMA_EVT_ERR0_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_regdma_evt_err0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0x1c4>(0x00000020);
             }
 
             /// Write one to the write-trigger field `REGDMA_EVT_ERR1_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_regdma_evt_err1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0x1c4>(0x00000040);
             }
 
             /// Write one to the write-trigger field `REGDMA_EVT_ERR2_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_regdma_evt_err2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0x1c4>(0x00000080);
             }
 
             /// Write one to the write-trigger field `REGDMA_EVT_ERR3_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_regdma_evt_err3_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0x1c4>(0x00000100);
             }
 
             /// Write one to the write-trigger field `TMPSNSR_EVT_OVER_LIMIT_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_tmpsnsr_evt_over_limit_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0x1c4>(0x00000200);
             }
 
             /// Write one to the write-trigger field `I2S0_EVT_RX_DONE_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_i2s0_evt_rx_done_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00000400);
+                self.0.write::<0x1c4>(0x00000400);
             }
 
             /// Write one to the write-trigger field `I2S0_EVT_TX_DONE_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_i2s0_evt_tx_done_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00000800);
+                self.0.write::<0x1c4>(0x00000800);
             }
 
             /// Write one to the write-trigger field `I2S0_EVT_X_WORDS_RECEIVED_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_i2s0_evt_x_words_received_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00001000);
+                self.0.write::<0x1c4>(0x00001000);
             }
 
             /// Write one to the write-trigger field `I2S0_EVT_X_WORDS_SENT_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_i2s0_evt_x_words_sent_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00002000);
+                self.0.write::<0x1c4>(0x00002000);
             }
 
             /// Write one to the write-trigger field `ULP_EVT_ERR_INTR_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_ulp_evt_err_intr_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00004000);
+                self.0.write::<0x1c4>(0x00004000);
             }
 
             /// Write one to the write-trigger field `ULP_EVT_HALT_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_ulp_evt_halt_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00008000);
+                self.0.write::<0x1c4>(0x00008000);
             }
 
             /// Write one to the write-trigger field `ULP_EVT_START_INTR_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_ulp_evt_start_intr_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00010000);
+                self.0.write::<0x1c4>(0x00010000);
             }
 
             /// Write one to the write-trigger field `RTC_EVT_TICK_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_rtc_evt_tick_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00020000);
+                self.0.write::<0x1c4>(0x00020000);
             }
 
             /// Write one to the write-trigger field `RTC_EVT_OVF_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_rtc_evt_ovf_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00040000);
+                self.0.write::<0x1c4>(0x00040000);
             }
 
             /// Write one to the write-trigger field `RTC_EVT_CMP_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_rtc_evt_cmp_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00080000);
+                self.0.write::<0x1c4>(0x00080000);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_IN_DONE_CH0_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_gdma_evt_in_done_ch0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00100000);
+                self.0.write::<0x1c4>(0x00100000);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_IN_DONE_CH1_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_gdma_evt_in_done_ch1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00200000);
+                self.0.write::<0x1c4>(0x00200000);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_IN_DONE_CH2_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_gdma_evt_in_done_ch2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00400000);
+                self.0.write::<0x1c4>(0x00400000);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_IN_SUC_EOF_CH0_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_gdma_evt_in_suc_eof_ch0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x00800000);
+                self.0.write::<0x1c4>(0x00800000);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_IN_SUC_EOF_CH1_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_gdma_evt_in_suc_eof_ch1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x01000000);
+                self.0.write::<0x1c4>(0x01000000);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_IN_SUC_EOF_CH2_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_gdma_evt_in_suc_eof_ch2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x02000000);
+                self.0.write::<0x1c4>(0x02000000);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_IN_FIFO_EMPTY_CH0_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_gdma_evt_in_fifo_empty_ch0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x04000000);
+                self.0.write::<0x1c4>(0x04000000);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_IN_FIFO_EMPTY_CH1_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_gdma_evt_in_fifo_empty_ch1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x08000000);
+                self.0.write::<0x1c4>(0x08000000);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_IN_FIFO_EMPTY_CH2_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_gdma_evt_in_fifo_empty_ch2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x10000000);
+                self.0.write::<0x1c4>(0x10000000);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_IN_FIFO_FULL_CH0_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_gdma_evt_in_fifo_full_ch0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x20000000);
+                self.0.write::<0x1c4>(0x20000000);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_IN_FIFO_FULL_CH1_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_gdma_evt_in_fifo_full_ch1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x40000000);
+                self.0.write::<0x1c4>(0x40000000);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_IN_FIFO_FULL_CH2_ST_CLR` of `EVT_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st3_clr_gdma_evt_in_fifo_full_ch2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1c4>((self.0.read::<0x1c4>() & !evt_st3_clr::TRIGGERS) | 0x80000000);
+                self.0.write::<0x1c4>(0x80000000);
             }
 
             /// Read `EVT_ST4`.
@@ -119392,138 +117454,116 @@ pub mod soc {
                 self.0.write::<0x1c8>(snapshot.0);
             }
 
-            /// Read `EVT_ST4_CLR`.
-            #[inline]
-            pub fn read_evt_st4_clr(&self) -> evt_st4_clr::R {
-                evt_st4_clr::R(self.0.read::<0x1cc>())
-            }
-
             /// Write one to the write-trigger field `GDMA_EVT_OUT_DONE_CH0_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_gdma_evt_out_done_ch0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x1cc>(0x00000001);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_OUT_DONE_CH1_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_gdma_evt_out_done_ch1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x1cc>(0x00000002);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_OUT_DONE_CH2_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_gdma_evt_out_done_ch2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x1cc>(0x00000004);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_OUT_EOF_CH0_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_gdma_evt_out_eof_ch0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x1cc>(0x00000008);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_OUT_EOF_CH1_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_gdma_evt_out_eof_ch1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0x1cc>(0x00000010);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_OUT_EOF_CH2_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_gdma_evt_out_eof_ch2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0x1cc>(0x00000020);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_OUT_TOTAL_EOF_CH0_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_gdma_evt_out_total_eof_ch0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0x1cc>(0x00000040);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_OUT_TOTAL_EOF_CH1_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_gdma_evt_out_total_eof_ch1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0x1cc>(0x00000080);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_OUT_TOTAL_EOF_CH2_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_gdma_evt_out_total_eof_ch2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0x1cc>(0x00000100);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_OUT_FIFO_EMPTY_CH0_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_gdma_evt_out_fifo_empty_ch0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0x1cc>(0x00000200);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_OUT_FIFO_EMPTY_CH1_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_gdma_evt_out_fifo_empty_ch1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00000400);
+                self.0.write::<0x1cc>(0x00000400);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_OUT_FIFO_EMPTY_CH2_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_gdma_evt_out_fifo_empty_ch2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00000800);
+                self.0.write::<0x1cc>(0x00000800);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_OUT_FIFO_FULL_CH0_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_gdma_evt_out_fifo_full_ch0_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00001000);
+                self.0.write::<0x1cc>(0x00001000);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_OUT_FIFO_FULL_CH1_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_gdma_evt_out_fifo_full_ch1_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00002000);
+                self.0.write::<0x1cc>(0x00002000);
             }
 
             /// Write one to the write-trigger field `GDMA_EVT_OUT_FIFO_FULL_CH2_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_gdma_evt_out_fifo_full_ch2_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00004000);
+                self.0.write::<0x1cc>(0x00004000);
             }
 
             /// Write one to the write-trigger field `PMU_EVT_SLEEP_WEEKUP_ST_CLR` of `EVT_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_evt_st4_clr_pmu_evt_sleep_weekup_st_clr(&mut self) {
-                self.0
-                    .write::<0x1cc>((self.0.read::<0x1cc>() & !evt_st4_clr::TRIGGERS) | 0x00008000);
+                self.0.write::<0x1cc>(0x00008000);
             }
 
             /// Read `TASK_ST0`.
@@ -119545,298 +117585,228 @@ pub mod soc {
                 self.0.write::<0x1d0>(snapshot.0);
             }
 
-            /// Read `TASK_ST0_CLR`.
-            #[inline]
-            pub fn read_task_st0_clr(&self) -> task_st0_clr::R {
-                task_st0_clr::R(self.0.read::<0x1d4>())
-            }
-
             /// Write one to the write-trigger field `GPIO_TASK_CH0_SET_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch0_set_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x1d4>(0x00000001);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH1_SET_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch1_set_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00000002,
-                );
+                self.0.write::<0x1d4>(0x00000002);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH2_SET_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch2_set_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00000004,
-                );
+                self.0.write::<0x1d4>(0x00000004);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH3_SET_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch3_set_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00000008,
-                );
+                self.0.write::<0x1d4>(0x00000008);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH4_SET_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch4_set_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00000010,
-                );
+                self.0.write::<0x1d4>(0x00000010);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH5_SET_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch5_set_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00000020,
-                );
+                self.0.write::<0x1d4>(0x00000020);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH6_SET_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch6_set_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00000040,
-                );
+                self.0.write::<0x1d4>(0x00000040);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH7_SET_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch7_set_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00000080,
-                );
+                self.0.write::<0x1d4>(0x00000080);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH0_CLEAR_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch0_clear_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00000100,
-                );
+                self.0.write::<0x1d4>(0x00000100);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH1_CLEAR_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch1_clear_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00000200,
-                );
+                self.0.write::<0x1d4>(0x00000200);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH2_CLEAR_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch2_clear_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00000400,
-                );
+                self.0.write::<0x1d4>(0x00000400);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH3_CLEAR_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch3_clear_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00000800,
-                );
+                self.0.write::<0x1d4>(0x00000800);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH4_CLEAR_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch4_clear_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00001000,
-                );
+                self.0.write::<0x1d4>(0x00001000);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH5_CLEAR_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch5_clear_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00002000,
-                );
+                self.0.write::<0x1d4>(0x00002000);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH6_CLEAR_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch6_clear_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00004000,
-                );
+                self.0.write::<0x1d4>(0x00004000);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH7_CLEAR_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch7_clear_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00008000,
-                );
+                self.0.write::<0x1d4>(0x00008000);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH0_TOGGLE_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch0_toggle_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00010000,
-                );
+                self.0.write::<0x1d4>(0x00010000);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH1_TOGGLE_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch1_toggle_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00020000,
-                );
+                self.0.write::<0x1d4>(0x00020000);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH2_TOGGLE_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch2_toggle_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00040000,
-                );
+                self.0.write::<0x1d4>(0x00040000);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH3_TOGGLE_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch3_toggle_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00080000,
-                );
+                self.0.write::<0x1d4>(0x00080000);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH4_TOGGLE_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch4_toggle_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00100000,
-                );
+                self.0.write::<0x1d4>(0x00100000);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH5_TOGGLE_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch5_toggle_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00200000,
-                );
+                self.0.write::<0x1d4>(0x00200000);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH6_TOGGLE_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch6_toggle_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00400000,
-                );
+                self.0.write::<0x1d4>(0x00400000);
             }
 
             /// Write one to the write-trigger field `GPIO_TASK_CH7_TOGGLE_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_gpio_task_ch7_toggle_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x00800000,
-                );
+                self.0.write::<0x1d4>(0x00800000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER0_RES_UPDATE_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_ledc_task_timer0_res_update_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x01000000,
-                );
+                self.0.write::<0x1d4>(0x01000000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER1_RES_UPDATE_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_ledc_task_timer1_res_update_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x02000000,
-                );
+                self.0.write::<0x1d4>(0x02000000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER2_RES_UPDATE_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_ledc_task_timer2_res_update_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x04000000,
-                );
+                self.0.write::<0x1d4>(0x04000000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER3_RES_UPDATE_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_ledc_task_timer3_res_update_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x08000000,
-                );
+                self.0.write::<0x1d4>(0x08000000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_DUTY_SCALE_UPDATE_CH0_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_ledc_task_duty_scale_update_ch0_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x10000000,
-                );
+                self.0.write::<0x1d4>(0x10000000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_DUTY_SCALE_UPDATE_CH1_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_ledc_task_duty_scale_update_ch1_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x20000000,
-                );
+                self.0.write::<0x1d4>(0x20000000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_DUTY_SCALE_UPDATE_CH2_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_ledc_task_duty_scale_update_ch2_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x40000000,
-                );
+                self.0.write::<0x1d4>(0x40000000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_DUTY_SCALE_UPDATE_CH3_ST_CLR` of `TASK_ST0_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st0_clr_ledc_task_duty_scale_update_ch3_st_clr(&mut self) {
-                self.0.write::<0x1d4>(
-                    (self.0.read::<0x1d4>() & !task_st0_clr::TRIGGERS) | 0x80000000,
-                );
+                self.0.write::<0x1d4>(0x80000000);
             }
 
             /// Read `TASK_ST1`.
@@ -119858,298 +117828,228 @@ pub mod soc {
                 self.0.write::<0x1d8>(snapshot.0);
             }
 
-            /// Read `TASK_ST1_CLR`.
-            #[inline]
-            pub fn read_task_st1_clr(&self) -> task_st1_clr::R {
-                task_st1_clr::R(self.0.read::<0x1dc>())
-            }
-
             /// Write one to the write-trigger field `LEDC_TASK_DUTY_SCALE_UPDATE_CH4_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_duty_scale_update_ch4_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x1dc>(0x00000001);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_DUTY_SCALE_UPDATE_CH5_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_duty_scale_update_ch5_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00000002,
-                );
+                self.0.write::<0x1dc>(0x00000002);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER0_CAP_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer0_cap_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00000004,
-                );
+                self.0.write::<0x1dc>(0x00000004);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER1_CAP_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer1_cap_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00000008,
-                );
+                self.0.write::<0x1dc>(0x00000008);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER2_CAP_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer2_cap_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00000010,
-                );
+                self.0.write::<0x1dc>(0x00000010);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER3_CAP_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer3_cap_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00000020,
-                );
+                self.0.write::<0x1dc>(0x00000020);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_SIG_OUT_DIS_CH0_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_sig_out_dis_ch0_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00000040,
-                );
+                self.0.write::<0x1dc>(0x00000040);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_SIG_OUT_DIS_CH1_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_sig_out_dis_ch1_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00000080,
-                );
+                self.0.write::<0x1dc>(0x00000080);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_SIG_OUT_DIS_CH2_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_sig_out_dis_ch2_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00000100,
-                );
+                self.0.write::<0x1dc>(0x00000100);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_SIG_OUT_DIS_CH3_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_sig_out_dis_ch3_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00000200,
-                );
+                self.0.write::<0x1dc>(0x00000200);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_SIG_OUT_DIS_CH4_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_sig_out_dis_ch4_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00000400,
-                );
+                self.0.write::<0x1dc>(0x00000400);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_SIG_OUT_DIS_CH5_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_sig_out_dis_ch5_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00000800,
-                );
+                self.0.write::<0x1dc>(0x00000800);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_OVF_CNT_RST_CH0_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_ovf_cnt_rst_ch0_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00001000,
-                );
+                self.0.write::<0x1dc>(0x00001000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_OVF_CNT_RST_CH1_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_ovf_cnt_rst_ch1_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00002000,
-                );
+                self.0.write::<0x1dc>(0x00002000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_OVF_CNT_RST_CH2_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_ovf_cnt_rst_ch2_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00004000,
-                );
+                self.0.write::<0x1dc>(0x00004000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_OVF_CNT_RST_CH3_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_ovf_cnt_rst_ch3_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00008000,
-                );
+                self.0.write::<0x1dc>(0x00008000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_OVF_CNT_RST_CH4_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_ovf_cnt_rst_ch4_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00010000,
-                );
+                self.0.write::<0x1dc>(0x00010000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_OVF_CNT_RST_CH5_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_ovf_cnt_rst_ch5_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00020000,
-                );
+                self.0.write::<0x1dc>(0x00020000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER0_RST_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer0_rst_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00040000,
-                );
+                self.0.write::<0x1dc>(0x00040000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER1_RST_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer1_rst_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00080000,
-                );
+                self.0.write::<0x1dc>(0x00080000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER2_RST_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer2_rst_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00100000,
-                );
+                self.0.write::<0x1dc>(0x00100000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER3_RST_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer3_rst_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00200000,
-                );
+                self.0.write::<0x1dc>(0x00200000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER0_RESUME_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer0_resume_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00400000,
-                );
+                self.0.write::<0x1dc>(0x00400000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER1_RESUME_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer1_resume_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x00800000,
-                );
+                self.0.write::<0x1dc>(0x00800000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER2_RESUME_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer2_resume_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x01000000,
-                );
+                self.0.write::<0x1dc>(0x01000000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER3_RESUME_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer3_resume_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x02000000,
-                );
+                self.0.write::<0x1dc>(0x02000000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER0_PAUSE_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer0_pause_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x04000000,
-                );
+                self.0.write::<0x1dc>(0x04000000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER1_PAUSE_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer1_pause_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x08000000,
-                );
+                self.0.write::<0x1dc>(0x08000000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER2_PAUSE_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer2_pause_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x10000000,
-                );
+                self.0.write::<0x1dc>(0x10000000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_TIMER3_PAUSE_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_timer3_pause_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x20000000,
-                );
+                self.0.write::<0x1dc>(0x20000000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_RESTART_CH0_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_gamma_restart_ch0_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x40000000,
-                );
+                self.0.write::<0x1dc>(0x40000000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_RESTART_CH1_ST_CLR` of `TASK_ST1_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st1_clr_ledc_task_gamma_restart_ch1_st_clr(&mut self) {
-                self.0.write::<0x1dc>(
-                    (self.0.read::<0x1dc>() & !task_st1_clr::TRIGGERS) | 0x80000000,
-                );
+                self.0.write::<0x1dc>(0x80000000);
             }
 
             /// Read `TASK_ST2`.
@@ -120171,298 +118071,228 @@ pub mod soc {
                 self.0.write::<0x1e0>(snapshot.0);
             }
 
-            /// Read `TASK_ST2_CLR`.
-            #[inline]
-            pub fn read_task_st2_clr(&self) -> task_st2_clr::R {
-                task_st2_clr::R(self.0.read::<0x1e4>())
-            }
-
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_RESTART_CH2_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_restart_ch2_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x1e4>(0x00000001);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_RESTART_CH3_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_restart_ch3_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00000002,
-                );
+                self.0.write::<0x1e4>(0x00000002);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_RESTART_CH4_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_restart_ch4_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00000004,
-                );
+                self.0.write::<0x1e4>(0x00000004);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_RESTART_CH5_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_restart_ch5_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00000008,
-                );
+                self.0.write::<0x1e4>(0x00000008);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_PAUSE_CH0_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_pause_ch0_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00000010,
-                );
+                self.0.write::<0x1e4>(0x00000010);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_PAUSE_CH1_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_pause_ch1_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00000020,
-                );
+                self.0.write::<0x1e4>(0x00000020);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_PAUSE_CH2_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_pause_ch2_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00000040,
-                );
+                self.0.write::<0x1e4>(0x00000040);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_PAUSE_CH3_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_pause_ch3_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00000080,
-                );
+                self.0.write::<0x1e4>(0x00000080);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_PAUSE_CH4_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_pause_ch4_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00000100,
-                );
+                self.0.write::<0x1e4>(0x00000100);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_PAUSE_CH5_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_pause_ch5_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00000200,
-                );
+                self.0.write::<0x1e4>(0x00000200);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_RESUME_CH0_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_resume_ch0_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00000400,
-                );
+                self.0.write::<0x1e4>(0x00000400);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_RESUME_CH1_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_resume_ch1_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00000800,
-                );
+                self.0.write::<0x1e4>(0x00000800);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_RESUME_CH2_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_resume_ch2_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00001000,
-                );
+                self.0.write::<0x1e4>(0x00001000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_RESUME_CH3_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_resume_ch3_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00002000,
-                );
+                self.0.write::<0x1e4>(0x00002000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_RESUME_CH4_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_resume_ch4_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00004000,
-                );
+                self.0.write::<0x1e4>(0x00004000);
             }
 
             /// Write one to the write-trigger field `LEDC_TASK_GAMMA_RESUME_CH5_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_ledc_task_gamma_resume_ch5_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00008000,
-                );
+                self.0.write::<0x1e4>(0x00008000);
             }
 
             /// Write one to the write-trigger field `TG0_TASK_CNT_START_TIMER0_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg0_task_cnt_start_timer0_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00010000,
-                );
+                self.0.write::<0x1e4>(0x00010000);
             }
 
             /// Write one to the write-trigger field `TG0_TASK_ALARM_START_TIMER0_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg0_task_alarm_start_timer0_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00020000,
-                );
+                self.0.write::<0x1e4>(0x00020000);
             }
 
             /// Write one to the write-trigger field `TG0_TASK_CNT_STOP_TIMER0_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg0_task_cnt_stop_timer0_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00040000,
-                );
+                self.0.write::<0x1e4>(0x00040000);
             }
 
             /// Write one to the write-trigger field `TG0_TASK_CNT_RELOAD_TIMER0_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg0_task_cnt_reload_timer0_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00080000,
-                );
+                self.0.write::<0x1e4>(0x00080000);
             }
 
             /// Write one to the write-trigger field `TG0_TASK_CNT_CAP_TIMER0_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg0_task_cnt_cap_timer0_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00100000,
-                );
+                self.0.write::<0x1e4>(0x00100000);
             }
 
             /// Write one to the write-trigger field `TG0_TASK_CNT_START_TIMER1_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg0_task_cnt_start_timer1_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00200000,
-                );
+                self.0.write::<0x1e4>(0x00200000);
             }
 
             /// Write one to the write-trigger field `TG0_TASK_ALARM_START_TIMER1_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg0_task_alarm_start_timer1_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00400000,
-                );
+                self.0.write::<0x1e4>(0x00400000);
             }
 
             /// Write one to the write-trigger field `TG0_TASK_CNT_STOP_TIMER1_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg0_task_cnt_stop_timer1_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x00800000,
-                );
+                self.0.write::<0x1e4>(0x00800000);
             }
 
             /// Write one to the write-trigger field `TG0_TASK_CNT_RELOAD_TIMER1_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg0_task_cnt_reload_timer1_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x01000000,
-                );
+                self.0.write::<0x1e4>(0x01000000);
             }
 
             /// Write one to the write-trigger field `TG0_TASK_CNT_CAP_TIMER1_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg0_task_cnt_cap_timer1_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x02000000,
-                );
+                self.0.write::<0x1e4>(0x02000000);
             }
 
             /// Write one to the write-trigger field `TG1_TASK_CNT_START_TIMER0_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg1_task_cnt_start_timer0_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x04000000,
-                );
+                self.0.write::<0x1e4>(0x04000000);
             }
 
             /// Write one to the write-trigger field `TG1_TASK_ALARM_START_TIMER0_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg1_task_alarm_start_timer0_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x08000000,
-                );
+                self.0.write::<0x1e4>(0x08000000);
             }
 
             /// Write one to the write-trigger field `TG1_TASK_CNT_STOP_TIMER0_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg1_task_cnt_stop_timer0_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x10000000,
-                );
+                self.0.write::<0x1e4>(0x10000000);
             }
 
             /// Write one to the write-trigger field `TG1_TASK_CNT_RELOAD_TIMER0_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg1_task_cnt_reload_timer0_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x20000000,
-                );
+                self.0.write::<0x1e4>(0x20000000);
             }
 
             /// Write one to the write-trigger field `TG1_TASK_CNT_CAP_TIMER0_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg1_task_cnt_cap_timer0_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x40000000,
-                );
+                self.0.write::<0x1e4>(0x40000000);
             }
 
             /// Write one to the write-trigger field `TG1_TASK_CNT_START_TIMER1_ST_CLR` of `TASK_ST2_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st2_clr_tg1_task_cnt_start_timer1_st_clr(&mut self) {
-                self.0.write::<0x1e4>(
-                    (self.0.read::<0x1e4>() & !task_st2_clr::TRIGGERS) | 0x80000000,
-                );
+                self.0.write::<0x1e4>(0x80000000);
             }
 
             /// Read `TASK_ST3`.
@@ -120484,298 +118314,228 @@ pub mod soc {
                 self.0.write::<0x1e8>(snapshot.0);
             }
 
-            /// Read `TASK_ST3_CLR`.
-            #[inline]
-            pub fn read_task_st3_clr(&self) -> task_st3_clr::R {
-                task_st3_clr::R(self.0.read::<0x1ec>())
-            }
-
             /// Write one to the write-trigger field `TG1_TASK_ALARM_START_TIMER1_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_tg1_task_alarm_start_timer1_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x1ec>(0x00000001);
             }
 
             /// Write one to the write-trigger field `TG1_TASK_CNT_STOP_TIMER1_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_tg1_task_cnt_stop_timer1_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00000002,
-                );
+                self.0.write::<0x1ec>(0x00000002);
             }
 
             /// Write one to the write-trigger field `TG1_TASK_CNT_RELOAD_TIMER1_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_tg1_task_cnt_reload_timer1_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00000004,
-                );
+                self.0.write::<0x1ec>(0x00000004);
             }
 
             /// Write one to the write-trigger field `TG1_TASK_CNT_CAP_TIMER1_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_tg1_task_cnt_cap_timer1_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00000008,
-                );
+                self.0.write::<0x1ec>(0x00000008);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_CMPR0_A_UP_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_cmpr0_a_up_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00000010,
-                );
+                self.0.write::<0x1ec>(0x00000010);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_CMPR1_A_UP_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_cmpr1_a_up_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00000020,
-                );
+                self.0.write::<0x1ec>(0x00000020);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_CMPR2_A_UP_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_cmpr2_a_up_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00000040,
-                );
+                self.0.write::<0x1ec>(0x00000040);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_CMPR0_B_UP_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_cmpr0_b_up_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00000080,
-                );
+                self.0.write::<0x1ec>(0x00000080);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_CMPR1_B_UP_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_cmpr1_b_up_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00000100,
-                );
+                self.0.write::<0x1ec>(0x00000100);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_CMPR2_B_UP_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_cmpr2_b_up_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00000200,
-                );
+                self.0.write::<0x1ec>(0x00000200);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_GEN_STOP_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_gen_stop_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00000400,
-                );
+                self.0.write::<0x1ec>(0x00000400);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_TIMER0_SYN_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_timer0_syn_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00000800,
-                );
+                self.0.write::<0x1ec>(0x00000800);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_TIMER1_SYN_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_timer1_syn_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00001000,
-                );
+                self.0.write::<0x1ec>(0x00001000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_TIMER2_SYN_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_timer2_syn_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00002000,
-                );
+                self.0.write::<0x1ec>(0x00002000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_TIMER0_PERIOD_UP_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_timer0_period_up_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00004000,
-                );
+                self.0.write::<0x1ec>(0x00004000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_TIMER1_PERIOD_UP_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_timer1_period_up_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00008000,
-                );
+                self.0.write::<0x1ec>(0x00008000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_TIMER2_PERIOD_UP_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_timer2_period_up_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00010000,
-                );
+                self.0.write::<0x1ec>(0x00010000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_TZ0_OST_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_tz0_ost_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00020000,
-                );
+                self.0.write::<0x1ec>(0x00020000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_TZ1_OST_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_tz1_ost_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00040000,
-                );
+                self.0.write::<0x1ec>(0x00040000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_TZ2_OST_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_tz2_ost_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00080000,
-                );
+                self.0.write::<0x1ec>(0x00080000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_CLR0_OST_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_clr0_ost_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00100000,
-                );
+                self.0.write::<0x1ec>(0x00100000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_CLR1_OST_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_clr1_ost_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00200000,
-                );
+                self.0.write::<0x1ec>(0x00200000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_CLR2_OST_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_clr2_ost_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00400000,
-                );
+                self.0.write::<0x1ec>(0x00400000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_CAP0_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_cap0_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x00800000,
-                );
+                self.0.write::<0x1ec>(0x00800000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_CAP1_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_cap1_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x01000000,
-                );
+                self.0.write::<0x1ec>(0x01000000);
             }
 
             /// Write one to the write-trigger field `MCPWM0_TASK_CAP2_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_mcpwm0_task_cap2_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x02000000,
-                );
+                self.0.write::<0x1ec>(0x02000000);
             }
 
             /// Write one to the write-trigger field `ADC_TASK_SAMPLE0_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_adc_task_sample0_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x04000000,
-                );
+                self.0.write::<0x1ec>(0x04000000);
             }
 
             /// Write one to the write-trigger field `ADC_TASK_SAMPLE1_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_adc_task_sample1_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x08000000,
-                );
+                self.0.write::<0x1ec>(0x08000000);
             }
 
             /// Write one to the write-trigger field `ADC_TASK_START0_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_adc_task_start0_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x10000000,
-                );
+                self.0.write::<0x1ec>(0x10000000);
             }
 
             /// Write one to the write-trigger field `ADC_TASK_STOP0_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_adc_task_stop0_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x20000000,
-                );
+                self.0.write::<0x1ec>(0x20000000);
             }
 
             /// Write one to the write-trigger field `REGDMA_TASK_START0_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_regdma_task_start0_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x40000000,
-                );
+                self.0.write::<0x1ec>(0x40000000);
             }
 
             /// Write one to the write-trigger field `REGDMA_TASK_START1_ST_CLR` of `TASK_ST3_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st3_clr_regdma_task_start1_st_clr(&mut self) {
-                self.0.write::<0x1ec>(
-                    (self.0.read::<0x1ec>() & !task_st3_clr::TRIGGERS) | 0x80000000,
-                );
+                self.0.write::<0x1ec>(0x80000000);
             }
 
             /// Read `TASK_ST4`.
@@ -120797,199 +118557,151 @@ pub mod soc {
                 self.0.write::<0x1f0>(snapshot.0);
             }
 
-            /// Read `TASK_ST4_CLR`.
-            #[inline]
-            pub fn read_task_st4_clr(&self) -> task_st4_clr::R {
-                task_st4_clr::R(self.0.read::<0x1f4>())
-            }
-
             /// Write one to the write-trigger field `REGDMA_TASK_START2_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_regdma_task_start2_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x1f4>(0x00000001);
             }
 
             /// Write one to the write-trigger field `REGDMA_TASK_START3_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_regdma_task_start3_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00000002,
-                );
+                self.0.write::<0x1f4>(0x00000002);
             }
 
             /// Write one to the write-trigger field `TMPSNSR_TASK_START_SAMPLE_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_tmpsnsr_task_start_sample_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00000004,
-                );
+                self.0.write::<0x1f4>(0x00000004);
             }
 
             /// Write one to the write-trigger field `TMPSNSR_TASK_STOP_SAMPLE_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_tmpsnsr_task_stop_sample_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00000008,
-                );
+                self.0.write::<0x1f4>(0x00000008);
             }
 
             /// Write one to the write-trigger field `I2S0_TASK_START_RX_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_i2s0_task_start_rx_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00000010,
-                );
+                self.0.write::<0x1f4>(0x00000010);
             }
 
             /// Write one to the write-trigger field `I2S0_TASK_START_TX_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_i2s0_task_start_tx_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00000020,
-                );
+                self.0.write::<0x1f4>(0x00000020);
             }
 
             /// Write one to the write-trigger field `I2S0_TASK_STOP_RX_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_i2s0_task_stop_rx_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00000040,
-                );
+                self.0.write::<0x1f4>(0x00000040);
             }
 
             /// Write one to the write-trigger field `I2S0_TASK_STOP_TX_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_i2s0_task_stop_tx_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00000080,
-                );
+                self.0.write::<0x1f4>(0x00000080);
             }
 
             /// Write one to the write-trigger field `ULP_TASK_WAKEUP_CPU_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_ulp_task_wakeup_cpu_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00000100,
-                );
+                self.0.write::<0x1f4>(0x00000100);
             }
 
             /// Write one to the write-trigger field `ULP_TASK_INT_CPU_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_ulp_task_int_cpu_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00000200,
-                );
+                self.0.write::<0x1f4>(0x00000200);
             }
 
             /// Write one to the write-trigger field `RTC_TASK_START_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_rtc_task_start_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00000400,
-                );
+                self.0.write::<0x1f4>(0x00000400);
             }
 
             /// Write one to the write-trigger field `RTC_TASK_STOP_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_rtc_task_stop_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00000800,
-                );
+                self.0.write::<0x1f4>(0x00000800);
             }
 
             /// Write one to the write-trigger field `RTC_TASK_CLR_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_rtc_task_clr_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00001000,
-                );
+                self.0.write::<0x1f4>(0x00001000);
             }
 
             /// Write one to the write-trigger field `RTC_TASK_TRIGGERFLW_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_rtc_task_triggerflw_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00002000,
-                );
+                self.0.write::<0x1f4>(0x00002000);
             }
 
             /// Write one to the write-trigger field `GDMA_TASK_IN_START_CH0_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_gdma_task_in_start_ch0_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00004000,
-                );
+                self.0.write::<0x1f4>(0x00004000);
             }
 
             /// Write one to the write-trigger field `GDMA_TASK_IN_START_CH1_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_gdma_task_in_start_ch1_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00008000,
-                );
+                self.0.write::<0x1f4>(0x00008000);
             }
 
             /// Write one to the write-trigger field `GDMA_TASK_IN_START_CH2_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_gdma_task_in_start_ch2_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00010000,
-                );
+                self.0.write::<0x1f4>(0x00010000);
             }
 
             /// Write one to the write-trigger field `GDMA_TASK_OUT_START_CH0_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_gdma_task_out_start_ch0_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00020000,
-                );
+                self.0.write::<0x1f4>(0x00020000);
             }
 
             /// Write one to the write-trigger field `GDMA_TASK_OUT_START_CH1_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_gdma_task_out_start_ch1_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00040000,
-                );
+                self.0.write::<0x1f4>(0x00040000);
             }
 
             /// Write one to the write-trigger field `GDMA_TASK_OUT_START_CH2_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_gdma_task_out_start_ch2_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00080000,
-                );
+                self.0.write::<0x1f4>(0x00080000);
             }
 
             /// Write one to the write-trigger field `PMU_TASK_SLEEP_REQ_ST_CLR` of `TASK_ST4_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_task_st4_clr_pmu_task_sleep_req_st_clr(&mut self) {
-                self.0.write::<0x1f4>(
-                    (self.0.read::<0x1f4>() & !task_st4_clr::TRIGGERS) | 0x00100000,
-                );
+                self.0.write::<0x1f4>(0x00100000);
             }
 
             /// Read `CLK_EN`.
@@ -121243,12 +118955,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xffffffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `CH_ENA_AD0_CLR` register.
@@ -121263,12 +118969,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xffffffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `CH_ENA_AD1` register.
@@ -121407,12 +119107,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x0003ffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `CH_ENA_AD1_CLR` register.
@@ -121427,12 +119121,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x0003ffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `CH%s_EVT_ID` register.
@@ -122237,12 +119925,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xffffffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `EVT_ST1` register.
@@ -122957,12 +120639,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xffffffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `EVT_ST2` register.
@@ -123677,12 +121353,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xffffffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `EVT_ST3` register.
@@ -124397,12 +122067,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xffffffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `EVT_ST4` register.
@@ -124781,12 +122445,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x0000ffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `TASK_ST0` register.
@@ -125501,12 +123159,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xffffffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `TASK_ST1` register.
@@ -126221,12 +123873,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xffffffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `TASK_ST2` register.
@@ -126941,12 +124587,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xffffffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `TASK_ST3` register.
@@ -127661,12 +125301,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xffffffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `TASK_ST4` register.
@@ -128150,12 +125784,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x001fffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `CLK_EN` register.
@@ -128405,15 +126033,6 @@ pub mod soc {
                 mem_rd_status::R(self.0.read::<0x2c>())
             }
 
-            /// Read `MEM_RD_STATUS`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_mem_rd_status(&mut self, change: impl FnOnce(&mut mem_rd_status::W)) {
-                let mut value = mem_rd_status::W(self.0.read::<0x2c>());
-                change(&mut value);
-                self.0.write::<0x2c>(value.0);
-            }
-
             /// Read `MEM_MISC`.
             #[inline]
             pub fn read_mem_misc(&self) -> mem_misc::R {
@@ -128516,15 +126135,6 @@ pub mod soc {
                 mem_sram_clk::R(self.0.read::<0x50>())
             }
 
-            /// Read `MEM_SRAM_CLK`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_mem_sram_clk(&mut self, change: impl FnOnce(&mut mem_sram_clk::W)) {
-                let mut value = mem_sram_clk::W(self.0.read::<0x50>());
-                change(&mut value);
-                self.0.write::<0x50>(value.0);
-            }
-
             /// Read `MEM_FSM`.
             #[inline]
             pub fn read_mem_fsm(&self) -> mem_fsm::R {
@@ -128537,98 +126147,81 @@ pub mod soc {
                 mem_int_ena::R(self.0.read::<0xc0>())
             }
 
-            /// Read `MEM_INT_CLR`.
-            #[inline]
-            pub fn read_mem_int_clr(&self) -> mem_int_clr::R {
-                mem_int_clr::R(self.0.read::<0xc4>())
-            }
-
             /// Write one to the write-trigger field `MEM_SLV_ST_END_INT_CLR` of `MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_mem_int_clr_mem_slv_st_end_int_clr(&mut self) {
-                self.0
-                    .write::<0xc4>((self.0.read::<0xc4>() & !mem_int_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0xc4>(0x00000008);
             }
 
             /// Write one to the write-trigger field `MEM_MST_ST_END_INT_CLR` of `MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_mem_int_clr_mem_mst_st_end_int_clr(&mut self) {
-                self.0
-                    .write::<0xc4>((self.0.read::<0xc4>() & !mem_int_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0xc4>(0x00000010);
             }
 
             /// Write one to the write-trigger field `MEM_ECC_ERR_INT_CLR` of `MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_mem_int_clr_mem_ecc_err_int_clr(&mut self) {
-                self.0
-                    .write::<0xc4>((self.0.read::<0xc4>() & !mem_int_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0xc4>(0x00000020);
             }
 
             /// Write one to the write-trigger field `MEM_PMS_REJECT_INT_CLR` of `MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_mem_int_clr_mem_pms_reject_int_clr(&mut self) {
-                self.0
-                    .write::<0xc4>((self.0.read::<0xc4>() & !mem_int_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0xc4>(0x00000040);
             }
 
             /// Write one to the write-trigger field `MEM_AXI_RADDR_ERR_INT_CLR` of `MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_mem_int_clr_mem_axi_raddr_err_int_clr(&mut self) {
-                self.0
-                    .write::<0xc4>((self.0.read::<0xc4>() & !mem_int_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0xc4>(0x00000080);
             }
 
             /// Write one to the write-trigger field `MEM_AXI_WR_FLASH_ERR_INT_CLR` of `MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_mem_int_clr_mem_axi_wr_flash_err_int_clr(&mut self) {
-                self.0
-                    .write::<0xc4>((self.0.read::<0xc4>() & !mem_int_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0xc4>(0x00000100);
             }
 
             /// Write one to the write-trigger field `MEM_AXI_WADDR_ERR_INT_CLR` of `MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_mem_int_clr_mem_axi_waddr_err_int_clr(&mut self) {
-                self.0
-                    .write::<0xc4>((self.0.read::<0xc4>() & !mem_int_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0xc4>(0x00000200);
             }
 
             /// Write one to the write-trigger field `MEM_DQS0_AFIFO_OVF_INT_CLR` of `MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_mem_int_clr_mem_dqs0_afifo_ovf_int_clr(&mut self) {
-                self.0
-                    .write::<0xc4>((self.0.read::<0xc4>() & !mem_int_clr::TRIGGERS) | 0x10000000);
+                self.0.write::<0xc4>(0x10000000);
             }
 
             /// Write one to the write-trigger field `MEM_DQS1_AFIFO_OVF_INT_CLR` of `MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_mem_int_clr_mem_dqs1_afifo_ovf_int_clr(&mut self) {
-                self.0
-                    .write::<0xc4>((self.0.read::<0xc4>() & !mem_int_clr::TRIGGERS) | 0x20000000);
+                self.0.write::<0xc4>(0x20000000);
             }
 
             /// Write one to the write-trigger field `MEM_BUS_FIFO1_UDF_INT_CLR` of `MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_mem_int_clr_mem_bus_fifo1_udf_int_clr(&mut self) {
-                self.0
-                    .write::<0xc4>((self.0.read::<0xc4>() & !mem_int_clr::TRIGGERS) | 0x40000000);
+                self.0.write::<0xc4>(0x40000000);
             }
 
             /// Write one to the write-trigger field `MEM_BUS_FIFO0_UDF_INT_CLR` of `MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_mem_int_clr_mem_bus_fifo0_udf_int_clr(&mut self) {
-                self.0
-                    .write::<0xc4>((self.0.read::<0xc4>() & !mem_int_clr::TRIGGERS) | 0x80000000);
+                self.0.write::<0xc4>(0x80000000);
             }
 
             /// Read `MEM_INT_RAW`.
@@ -129267,49 +126860,25 @@ pub mod soc {
                 self.0.write::<0x348>(value.0);
             }
 
-            /// Read `MEM_XTS_TRIGGER`.
-            #[inline]
-            pub fn read_mem_xts_trigger(&self) -> mem_xts_trigger::R {
-                mem_xts_trigger::R(self.0.read::<0x34c>())
-            }
-
             /// Write one to the write-trigger field `XTS_TRIGGER` of `MEM_XTS_TRIGGER`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_mem_xts_trigger_xts_trigger(&mut self) {
-                self.0.write::<0x34c>(
-                    (self.0.read::<0x34c>() & !mem_xts_trigger::TRIGGERS) | 0x00000001,
-                );
-            }
-
-            /// Read `MEM_XTS_RELEASE`.
-            #[inline]
-            pub fn read_mem_xts_release(&self) -> mem_xts_release::R {
-                mem_xts_release::R(self.0.read::<0x350>())
+                self.0.write::<0x34c>(0x00000001);
             }
 
             /// Write one to the write-trigger field `XTS_RELEASE` of `MEM_XTS_RELEASE`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_mem_xts_release_xts_release(&mut self) {
-                self.0.write::<0x350>(
-                    (self.0.read::<0x350>() & !mem_xts_release::TRIGGERS) | 0x00000001,
-                );
-            }
-
-            /// Read `MEM_XTS_DESTROY`.
-            #[inline]
-            pub fn read_mem_xts_destroy(&self) -> mem_xts_destroy::R {
-                mem_xts_destroy::R(self.0.read::<0x354>())
+                self.0.write::<0x350>(0x00000001);
             }
 
             /// Write one to the write-trigger field `XTS_DESTROY` of `MEM_XTS_DESTROY`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_mem_xts_destroy_xts_destroy(&mut self) {
-                self.0.write::<0x354>(
-                    (self.0.read::<0x354>() & !mem_xts_destroy::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x354>(0x00000001);
             }
 
             /// Read `MEM_XTS_STATE`.
@@ -130431,50 +128000,6 @@ pub mod soc {
                     (self.0 & 0x08000000) != 0
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// Mode bits in the flash fast read mode it is combined with spi_mem_fastrd_mode bit.
-                #[inline]
-                pub const fn mem_wb_mode(&self) -> u8 {
-                    (self.0 >> 16) as u8
-                }
-
-                /// Mode bits length for flash fast read mode.
-                #[inline]
-                pub const fn mem_wb_mode_bitlen(&self) -> oer_mmio::Bits<3> {
-                    oer_mmio::Bits::truncate(self.0 >> 24)
-                }
-
-                /// Mode bits is valid while this bit is enable. 1: enable 0: disable.
-                #[inline]
-                pub const fn mem_wb_mode_en(&self) -> bool {
-                    (self.0 & 0x08000000) != 0
-                }
-
-                /// Set `MEM_WB_MODE`.
-                #[inline]
-                pub fn set_mem_wb_mode(&mut self, value: u8) -> &mut Self {
-                    self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
-                    self
-                }
-
-                /// Set `MEM_WB_MODE_BITLEN`.
-                #[inline]
-                pub fn set_mem_wb_mode_bitlen(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
-                    self.0 = (self.0 & !0x07000000) | (value.get() << 24);
-                    self
-                }
-
-                /// Set `MEM_WB_MODE_EN`.
-                #[inline]
-                pub fn set_mem_wb_mode_en(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
-                    self
-                }
-            }
         }
 
         /// The `MEM_MISC` register.
@@ -131575,63 +129100,6 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// For SPI0 external RAM interface, it must be equal to spi_mem_clkcnt_N.
-                #[inline]
-                pub const fn mem_sclkcnt_l(&self) -> u8 {
-                    (self.0) as u8
-                }
-
-                /// For SPI0 external RAM interface, it must be floor((spi_mem_clkcnt_N+1)/2-1).
-                #[inline]
-                pub const fn mem_sclkcnt_h(&self) -> u8 {
-                    (self.0 >> 8) as u8
-                }
-
-                /// For SPI0 external RAM interface, it is the divider of spi_mem_clk. So spi_mem_clk frequency is system/(spi_mem_clkcnt_N+1)
-                #[inline]
-                pub const fn mem_sclkcnt_n(&self) -> u8 {
-                    (self.0 >> 16) as u8
-                }
-
-                /// For SPI0 external RAM interface, 1: spi_mem_clk is eqaul to system 0: spi_mem_clk is divided from system clock.
-                #[inline]
-                pub const fn mem_sclk_equ_sysclk(&self) -> bool {
-                    (self.0 & 0x80000000) != 0
-                }
-
-                /// Set `MEM_SCLKCNT_L`.
-                #[inline]
-                pub fn set_mem_sclkcnt_l(&mut self, value: u8) -> &mut Self {
-                    self.0 = (self.0 & !0x000000ff) | u32::from(value);
-                    self
-                }
-
-                /// Set `MEM_SCLKCNT_H`.
-                #[inline]
-                pub fn set_mem_sclkcnt_h(&mut self, value: u8) -> &mut Self {
-                    self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
-                    self
-                }
-
-                /// Set `MEM_SCLKCNT_N`.
-                #[inline]
-                pub fn set_mem_sclkcnt_n(&mut self, value: u8) -> &mut Self {
-                    self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
-                    self
-                }
-
-                /// Set `MEM_SCLK_EQU_SYSCLK`.
-                #[inline]
-                pub fn set_mem_sclk_equ_sysclk(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
-                    self
-                }
-            }
         }
 
         /// The `MEM_FSM` register.
@@ -131756,12 +129224,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0xf00003f8;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `MEM_INT_RAW` register.
@@ -136361,12 +133823,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `MEM_XTS_RELEASE` register.
@@ -136381,12 +133837,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `MEM_XTS_DESTROY` register.
@@ -136401,12 +133851,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `MEM_XTS_STATE` register.
@@ -136686,13 +134130,6 @@ pub mod soc {
                 #[inline]
                 pub fn set_mem_aux_ctrl(&mut self, value: oer_mmio::Bits<14>) -> &mut Self {
                     self.0 = (self.0 & !0x3fff0000) | (value.get() << 16);
-                    self
-                }
-
-                /// Set `MEM_RDN_ENA`.
-                #[inline]
-                pub fn set_mem_rdn_ena(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
                     self
                 }
             }
@@ -137047,6 +134484,36 @@ pub mod soc {
                 spi_mem_cmd::R(self.0.read::<0x0>())
             }
 
+            /// Whether the command `SPI_MEM_USR` of `SPI_MEM_CMD` still runs: the hardware
+            /// clears the field when the command is done.
+            #[inline]
+            pub fn spi_mem_cmd_spi_mem_usr_busy(&self) -> bool {
+                (self.0.read::<0x0>() & 0x00040000) != 0
+            }
+
+            /// Start the command `SPI_MEM_USR` of `SPI_MEM_CMD`: one write sets it with `SPI_MEM_FLASH_PE` as given; every
+            /// other field keeps the value read, every other self-clearing bit is
+            /// zero. It refuses, writing nothing, while any self-clearing bit of
+            /// the register reads one (`BUSY`).
+            #[inline]
+            pub fn start_spi_mem_cmd_spi_mem_usr(
+                &mut self,
+                spi_mem_flash_pe: bool,
+            ) -> Result<(), oer_mmio::CommandBusy> {
+                let value = self.0.read::<0x0>();
+                if value & spi_mem_cmd::BUSY != 0 {
+                    return Err(oer_mmio::CommandBusy {
+                        running: value & spi_mem_cmd::BUSY,
+                    });
+                }
+                self.0.write::<0x0>(
+                    (value & !spi_mem_cmd::BUSY)
+                        | 0x00040000
+                        | if spi_mem_flash_pe { 0x00020000 } else { 0 },
+                );
+                Ok(())
+            }
+
             /// Read `SPI_MEM_ADDR`.
             #[inline]
             pub fn read_spi_mem_addr(&self) -> spi_mem_addr::R {
@@ -137083,18 +134550,11 @@ pub mod soc {
                 spi_mem_ctrl1::R(self.0.read::<0xc>())
             }
 
-            /// Read `SPI_MEM_CTRL2`.
-            #[inline]
-            pub fn read_spi_mem_ctrl2(&self) -> spi_mem_ctrl2::R {
-                spi_mem_ctrl2::R(self.0.read::<0x10>())
-            }
-
             /// Write one to the write-trigger field `SPI_MEM_SYNC_RESET` of `SPI_MEM_CTRL2`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_mem_ctrl2_spi_mem_sync_reset(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !spi_mem_ctrl2::TRIGGERS) | 0x80000000);
+                self.0.write::<0x10>(0x80000000);
             }
 
             /// Read `SPI_MEM_CLOCK`.
@@ -137244,10 +134704,24 @@ pub mod soc {
                 spi_mem_w0::R(self.0.read::<0x58>())
             }
 
+            /// Store the data word `SPI_MEM_W0` whole: its one field `SPI_MEM_BUF0`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w0(&mut self, value: u32) {
+                self.0.write::<0x58>(value);
+            }
+
             /// Read `SPI_MEM_W1`.
             #[inline]
             pub fn read_spi_mem_w1(&self) -> spi_mem_w1::R {
                 spi_mem_w1::R(self.0.read::<0x5c>())
+            }
+
+            /// Store the data word `SPI_MEM_W1` whole: its one field `SPI_MEM_BUF1`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w1(&mut self, value: u32) {
+                self.0.write::<0x5c>(value);
             }
 
             /// Read `SPI_MEM_W2`.
@@ -137256,10 +134730,24 @@ pub mod soc {
                 spi_mem_w2::R(self.0.read::<0x60>())
             }
 
+            /// Store the data word `SPI_MEM_W2` whole: its one field `SPI_MEM_BUF2`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w2(&mut self, value: u32) {
+                self.0.write::<0x60>(value);
+            }
+
             /// Read `SPI_MEM_W3`.
             #[inline]
             pub fn read_spi_mem_w3(&self) -> spi_mem_w3::R {
                 spi_mem_w3::R(self.0.read::<0x64>())
+            }
+
+            /// Store the data word `SPI_MEM_W3` whole: its one field `SPI_MEM_BUF3`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w3(&mut self, value: u32) {
+                self.0.write::<0x64>(value);
             }
 
             /// Read `SPI_MEM_W4`.
@@ -137268,10 +134756,24 @@ pub mod soc {
                 spi_mem_w4::R(self.0.read::<0x68>())
             }
 
+            /// Store the data word `SPI_MEM_W4` whole: its one field `SPI_MEM_BUF4`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w4(&mut self, value: u32) {
+                self.0.write::<0x68>(value);
+            }
+
             /// Read `SPI_MEM_W5`.
             #[inline]
             pub fn read_spi_mem_w5(&self) -> spi_mem_w5::R {
                 spi_mem_w5::R(self.0.read::<0x6c>())
+            }
+
+            /// Store the data word `SPI_MEM_W5` whole: its one field `SPI_MEM_BUF5`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w5(&mut self, value: u32) {
+                self.0.write::<0x6c>(value);
             }
 
             /// Read `SPI_MEM_W6`.
@@ -137280,10 +134782,24 @@ pub mod soc {
                 spi_mem_w6::R(self.0.read::<0x70>())
             }
 
+            /// Store the data word `SPI_MEM_W6` whole: its one field `SPI_MEM_BUF6`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w6(&mut self, value: u32) {
+                self.0.write::<0x70>(value);
+            }
+
             /// Read `SPI_MEM_W7`.
             #[inline]
             pub fn read_spi_mem_w7(&self) -> spi_mem_w7::R {
                 spi_mem_w7::R(self.0.read::<0x74>())
+            }
+
+            /// Store the data word `SPI_MEM_W7` whole: its one field `SPI_MEM_BUF7`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w7(&mut self, value: u32) {
+                self.0.write::<0x74>(value);
             }
 
             /// Read `SPI_MEM_W8`.
@@ -137292,10 +134808,24 @@ pub mod soc {
                 spi_mem_w8::R(self.0.read::<0x78>())
             }
 
+            /// Store the data word `SPI_MEM_W8` whole: its one field `SPI_MEM_BUF8`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w8(&mut self, value: u32) {
+                self.0.write::<0x78>(value);
+            }
+
             /// Read `SPI_MEM_W9`.
             #[inline]
             pub fn read_spi_mem_w9(&self) -> spi_mem_w9::R {
                 spi_mem_w9::R(self.0.read::<0x7c>())
+            }
+
+            /// Store the data word `SPI_MEM_W9` whole: its one field `SPI_MEM_BUF9`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w9(&mut self, value: u32) {
+                self.0.write::<0x7c>(value);
             }
 
             /// Read `SPI_MEM_W10`.
@@ -137304,10 +134834,24 @@ pub mod soc {
                 spi_mem_w10::R(self.0.read::<0x80>())
             }
 
+            /// Store the data word `SPI_MEM_W10` whole: its one field `SPI_MEM_BUF10`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w10(&mut self, value: u32) {
+                self.0.write::<0x80>(value);
+            }
+
             /// Read `SPI_MEM_W11`.
             #[inline]
             pub fn read_spi_mem_w11(&self) -> spi_mem_w11::R {
                 spi_mem_w11::R(self.0.read::<0x84>())
+            }
+
+            /// Store the data word `SPI_MEM_W11` whole: its one field `SPI_MEM_BUF11`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w11(&mut self, value: u32) {
+                self.0.write::<0x84>(value);
             }
 
             /// Read `SPI_MEM_W12`.
@@ -137316,10 +134860,24 @@ pub mod soc {
                 spi_mem_w12::R(self.0.read::<0x88>())
             }
 
+            /// Store the data word `SPI_MEM_W12` whole: its one field `SPI_MEM_BUF12`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w12(&mut self, value: u32) {
+                self.0.write::<0x88>(value);
+            }
+
             /// Read `SPI_MEM_W13`.
             #[inline]
             pub fn read_spi_mem_w13(&self) -> spi_mem_w13::R {
                 spi_mem_w13::R(self.0.read::<0x8c>())
+            }
+
+            /// Store the data word `SPI_MEM_W13` whole: its one field `SPI_MEM_BUF13`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w13(&mut self, value: u32) {
+                self.0.write::<0x8c>(value);
             }
 
             /// Read `SPI_MEM_W14`.
@@ -137328,10 +134886,24 @@ pub mod soc {
                 spi_mem_w14::R(self.0.read::<0x90>())
             }
 
+            /// Store the data word `SPI_MEM_W14` whole: its one field `SPI_MEM_BUF14`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w14(&mut self, value: u32) {
+                self.0.write::<0x90>(value);
+            }
+
             /// Read `SPI_MEM_W15`.
             #[inline]
             pub fn read_spi_mem_w15(&self) -> spi_mem_w15::R {
                 spi_mem_w15::R(self.0.read::<0x94>())
+            }
+
+            /// Store the data word `SPI_MEM_W15` whole: its one field `SPI_MEM_BUF15`, zero in every
+            /// other bit; the hardware also writes it, so it is never modified.
+            #[inline]
+            pub fn write_spi_mem_w15(&mut self, value: u32) {
+                self.0.write::<0x94>(value);
             }
 
             /// Read `SPI_MEM_FLASH_WAITI_CTRL`.
@@ -137415,64 +134987,46 @@ pub mod soc {
                 self.0.write::<0xc0>(value.0);
             }
 
-            /// Read `SPI_MEM_INT_CLR`.
-            #[inline]
-            pub fn read_spi_mem_int_clr(&self) -> spi_mem_int_clr::R {
-                spi_mem_int_clr::R(self.0.read::<0xc4>())
-            }
-
             /// Write one to the write-trigger field `SPI_MEM_PER_END_INT_CLR` of `SPI_MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_mem_int_clr_spi_mem_per_end_int_clr(&mut self) {
-                self.0.write::<0xc4>(
-                    (self.0.read::<0xc4>() & !spi_mem_int_clr::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0xc4>(0x00000001);
             }
 
             /// Write one to the write-trigger field `SPI_MEM_PES_END_INT_CLR` of `SPI_MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_mem_int_clr_spi_mem_pes_end_int_clr(&mut self) {
-                self.0.write::<0xc4>(
-                    (self.0.read::<0xc4>() & !spi_mem_int_clr::TRIGGERS) | 0x00000002,
-                );
+                self.0.write::<0xc4>(0x00000002);
             }
 
             /// Write one to the write-trigger field `SPI_MEM_WPE_END_INT_CLR` of `SPI_MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_mem_int_clr_spi_mem_wpe_end_int_clr(&mut self) {
-                self.0.write::<0xc4>(
-                    (self.0.read::<0xc4>() & !spi_mem_int_clr::TRIGGERS) | 0x00000004,
-                );
+                self.0.write::<0xc4>(0x00000004);
             }
 
             /// Write one to the write-trigger field `SPI_MEM_SLV_ST_END_INT_CLR` of `SPI_MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_mem_int_clr_spi_mem_slv_st_end_int_clr(&mut self) {
-                self.0.write::<0xc4>(
-                    (self.0.read::<0xc4>() & !spi_mem_int_clr::TRIGGERS) | 0x00000008,
-                );
+                self.0.write::<0xc4>(0x00000008);
             }
 
             /// Write one to the write-trigger field `SPI_MEM_MST_ST_END_INT_CLR` of `SPI_MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_mem_int_clr_spi_mem_mst_st_end_int_clr(&mut self) {
-                self.0.write::<0xc4>(
-                    (self.0.read::<0xc4>() & !spi_mem_int_clr::TRIGGERS) | 0x00000010,
-                );
+                self.0.write::<0xc4>(0x00000010);
             }
 
             /// Write one to the write-trigger field `SPI_MEM_BROWN_OUT_INT_CLR` of `SPI_MEM_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_mem_int_clr_spi_mem_brown_out_int_clr(&mut self) {
-                self.0.write::<0xc4>(
-                    (self.0.read::<0xc4>() & !spi_mem_int_clr::TRIGGERS) | 0x00000400,
-                );
+                self.0.write::<0xc4>(0x00000400);
             }
 
             /// Read `SPI_MEM_INT_RAW`.
@@ -137575,6 +135129,12 @@ pub mod soc {
             pub const FIELDS: u32 = 0xfffe00ff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x0;
+
+            /// The bits of the commands: each set only by its start.
+            pub const COMMANDS: u32 = 0x00040000;
+
+            /// The self-clearing bits: a start refuses while any reads one.
+            pub const BUSY: u32 = 0xfffe0000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -138147,12 +135707,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x80000000;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `SPI_MEM_CLOCK` register.
@@ -139965,12 +137519,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x0000041f;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `SPI_MEM_INT_RAW` register.
@@ -140873,199 +138421,151 @@ pub mod soc {
                 self.0.write::<0x34>(value.0);
             }
 
-            /// Read `SPI_DMA_INT_CLR`.
-            #[inline]
-            pub fn read_spi_dma_int_clr(&self) -> spi_dma_int_clr::R {
-                spi_dma_int_clr::R(self.0.read::<0x38>())
-            }
-
             /// Write one to the write-trigger field `SPI_DMA_INFIFO_FULL_ERR_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_dma_infifo_full_err_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x38>(0x00000001);
             }
 
             /// Write one to the write-trigger field `SPI_DMA_OUTFIFO_EMPTY_ERR_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_dma_outfifo_empty_err_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00000002,
-                );
+                self.0.write::<0x38>(0x00000002);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_EX_QPI_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_slv_ex_qpi_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00000004,
-                );
+                self.0.write::<0x38>(0x00000004);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_EN_QPI_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_slv_en_qpi_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00000008,
-                );
+                self.0.write::<0x38>(0x00000008);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_CMD7_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_slv_cmd7_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00000010,
-                );
+                self.0.write::<0x38>(0x00000010);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_CMD8_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_slv_cmd8_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00000020,
-                );
+                self.0.write::<0x38>(0x00000020);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_CMD9_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_slv_cmd9_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00000040,
-                );
+                self.0.write::<0x38>(0x00000040);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_CMDA_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_slv_cmda_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00000080,
-                );
+                self.0.write::<0x38>(0x00000080);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_RD_DMA_DONE_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_slv_rd_dma_done_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00000100,
-                );
+                self.0.write::<0x38>(0x00000100);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_WR_DMA_DONE_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_slv_wr_dma_done_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00000200,
-                );
+                self.0.write::<0x38>(0x00000200);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_RD_BUF_DONE_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_slv_rd_buf_done_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00000400,
-                );
+                self.0.write::<0x38>(0x00000400);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_WR_BUF_DONE_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_slv_wr_buf_done_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00000800,
-                );
+                self.0.write::<0x38>(0x00000800);
             }
 
             /// Write one to the write-trigger field `SPI_TRANS_DONE_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_trans_done_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00001000,
-                );
+                self.0.write::<0x38>(0x00001000);
             }
 
             /// Write one to the write-trigger field `SPI_DMA_SEG_TRANS_DONE_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_dma_seg_trans_done_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00002000,
-                );
+                self.0.write::<0x38>(0x00002000);
             }
 
             /// Write one to the write-trigger field `SPI_SEG_MAGIC_ERR_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_seg_magic_err_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00004000,
-                );
+                self.0.write::<0x38>(0x00004000);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_BUF_ADDR_ERR_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_slv_buf_addr_err_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00008000,
-                );
+                self.0.write::<0x38>(0x00008000);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_CMD_ERR_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_slv_cmd_err_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00010000,
-                );
+                self.0.write::<0x38>(0x00010000);
             }
 
             /// Write one to the write-trigger field `SPI_MST_RX_AFIFO_WFULL_ERR_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_mst_rx_afifo_wfull_err_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00020000,
-                );
+                self.0.write::<0x38>(0x00020000);
             }
 
             /// Write one to the write-trigger field `SPI_MST_TX_AFIFO_REMPTY_ERR_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_mst_tx_afifo_rempty_err_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00040000,
-                );
+                self.0.write::<0x38>(0x00040000);
             }
 
             /// Write one to the write-trigger field `SPI_APP2_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_app2_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00080000,
-                );
+                self.0.write::<0x38>(0x00080000);
             }
 
             /// Write one to the write-trigger field `SPI_APP1_INT_CLR` of `SPI_DMA_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_clr_spi_app1_int_clr(&mut self) {
-                self.0.write::<0x38>(
-                    (self.0.read::<0x38>() & !spi_dma_int_clr::TRIGGERS) | 0x00100000,
-                );
+                self.0.write::<0x38>(0x00100000);
             }
 
             /// Read `SPI_DMA_INT_RAW`.
@@ -141093,199 +138593,151 @@ pub mod soc {
                 spi_dma_int_st::R(self.0.read::<0x40>())
             }
 
-            /// Read `SPI_DMA_INT_SET`.
-            #[inline]
-            pub fn read_spi_dma_int_set(&self) -> spi_dma_int_set::R {
-                spi_dma_int_set::R(self.0.read::<0x44>())
-            }
-
             /// Write one to the write-trigger field `SPI_DMA_INFIFO_FULL_ERR_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_dma_infifo_full_err_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x44>(0x00000001);
             }
 
             /// Write one to the write-trigger field `SPI_DMA_OUTFIFO_EMPTY_ERR_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_dma_outfifo_empty_err_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00000002,
-                );
+                self.0.write::<0x44>(0x00000002);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_EX_QPI_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_slv_ex_qpi_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00000004,
-                );
+                self.0.write::<0x44>(0x00000004);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_EN_QPI_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_slv_en_qpi_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00000008,
-                );
+                self.0.write::<0x44>(0x00000008);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_CMD7_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_slv_cmd7_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00000010,
-                );
+                self.0.write::<0x44>(0x00000010);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_CMD8_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_slv_cmd8_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00000020,
-                );
+                self.0.write::<0x44>(0x00000020);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_CMD9_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_slv_cmd9_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00000040,
-                );
+                self.0.write::<0x44>(0x00000040);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_CMDA_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_slv_cmda_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00000080,
-                );
+                self.0.write::<0x44>(0x00000080);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_RD_DMA_DONE_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_slv_rd_dma_done_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00000100,
-                );
+                self.0.write::<0x44>(0x00000100);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_WR_DMA_DONE_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_slv_wr_dma_done_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00000200,
-                );
+                self.0.write::<0x44>(0x00000200);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_RD_BUF_DONE_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_slv_rd_buf_done_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00000400,
-                );
+                self.0.write::<0x44>(0x00000400);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_WR_BUF_DONE_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_slv_wr_buf_done_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00000800,
-                );
+                self.0.write::<0x44>(0x00000800);
             }
 
             /// Write one to the write-trigger field `SPI_TRANS_DONE_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_trans_done_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00001000,
-                );
+                self.0.write::<0x44>(0x00001000);
             }
 
             /// Write one to the write-trigger field `SPI_DMA_SEG_TRANS_DONE_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_dma_seg_trans_done_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00002000,
-                );
+                self.0.write::<0x44>(0x00002000);
             }
 
             /// Write one to the write-trigger field `SPI_SEG_MAGIC_ERR_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_seg_magic_err_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00004000,
-                );
+                self.0.write::<0x44>(0x00004000);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_BUF_ADDR_ERR_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_slv_buf_addr_err_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00008000,
-                );
+                self.0.write::<0x44>(0x00008000);
             }
 
             /// Write one to the write-trigger field `SPI_SLV_CMD_ERR_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_slv_cmd_err_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00010000,
-                );
+                self.0.write::<0x44>(0x00010000);
             }
 
             /// Write one to the write-trigger field `SPI_MST_RX_AFIFO_WFULL_ERR_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_mst_rx_afifo_wfull_err_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00020000,
-                );
+                self.0.write::<0x44>(0x00020000);
             }
 
             /// Write one to the write-trigger field `SPI_MST_TX_AFIFO_REMPTY_ERR_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_mst_tx_afifo_rempty_err_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00040000,
-                );
+                self.0.write::<0x44>(0x00040000);
             }
 
             /// Write one to the write-trigger field `SPI_APP2_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_app2_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00080000,
-                );
+                self.0.write::<0x44>(0x00080000);
             }
 
             /// Write one to the write-trigger field `SPI_APP1_INT_SET` of `SPI_DMA_INT_SET`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_spi_dma_int_set_spi_app1_int_set(&mut self) {
-                self.0.write::<0x44>(
-                    (self.0.read::<0x44>() & !spi_dma_int_set::TRIGGERS) | 0x00100000,
-                );
+                self.0.write::<0x44>(0x00100000);
             }
 
             /// Read `SPI_W0`.
@@ -143624,12 +141076,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x001fffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `SPI_DMA_INT_RAW` register.
@@ -144255,12 +141701,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x001fffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `SPI_W0` register.
@@ -145140,32 +142580,18 @@ pub mod soc {
                 unit1_value_lo::R(self.0.read::<0x4c>())
             }
 
-            /// Read `UNIT0_LOAD`.
-            #[inline]
-            pub fn read_unit0_load(&self) -> unit0_load::R {
-                unit0_load::R(self.0.read::<0x5c>())
-            }
-
             /// Write one to the write-trigger field `TIMER_UNIT0_LOAD` of `UNIT0_LOAD`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_unit0_load_timer_unit0_load(&mut self) {
-                self.0
-                    .write::<0x5c>((self.0.read::<0x5c>() & !unit0_load::TRIGGERS) | 0x00000001);
-            }
-
-            /// Read `UNIT1_LOAD`.
-            #[inline]
-            pub fn read_unit1_load(&self) -> unit1_load::R {
-                unit1_load::R(self.0.read::<0x60>())
+                self.0.write::<0x5c>(0x00000001);
             }
 
             /// Write one to the write-trigger field `TIMER_UNIT1_LOAD` of `UNIT1_LOAD`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_unit1_load_timer_unit1_load(&mut self) {
-                self.0
-                    .write::<0x60>((self.0.read::<0x60>() & !unit1_load::TRIGGERS) | 0x00000001);
+                self.0.write::<0x60>(0x00000001);
             }
 
             /// Read `INT_RAW`.
@@ -145489,12 +142915,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `UNIT1_LOAD` register.
@@ -145509,12 +142929,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `INT_RAW` register.
@@ -146185,10 +143599,11 @@ pub mod soc {
                 self.0.write::<0x1c>(value.0);
             }
 
-            /// Read `T0LOAD`.
+            /// Write `value` to the write-trigger field `T0_LOAD` of `T0LOAD`, starting its
+            /// hardware action once; every other bit is zero.
             #[inline]
-            pub fn read_t0load(&self) -> t0load::R {
-                t0load::R(self.0.read::<0x20>())
+            pub fn trigger_t0load_t0_load(&mut self, value: u32) {
+                self.0.write::<0x20>(value);
             }
 
             /// Read `WDTCONFIG3`.
@@ -146297,28 +143712,18 @@ pub mod soc {
                 int_st_timers::R(self.0.read::<0x78>())
             }
 
-            /// Read `INT_CLR_TIMERS`.
-            #[inline]
-            pub fn read_int_clr_timers(&self) -> int_clr_timers::R {
-                int_clr_timers::R(self.0.read::<0x7c>())
-            }
-
             /// Write one to the write-trigger field `T0_INT_CLR` of `INT_CLR_TIMERS`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timers_t0_int_clr(&mut self) {
-                self.0.write::<0x7c>(
-                    (self.0.read::<0x7c>() & !int_clr_timers::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x7c>(0x00000001);
             }
 
             /// Write one to the write-trigger field `WDT_INT_CLR` of `INT_CLR_TIMERS`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timers_wdt_int_clr(&mut self) {
-                self.0.write::<0x7c>(
-                    (self.0.read::<0x7c>() & !int_clr_timers::TRIGGERS) | 0x00000004,
-                );
+                self.0.write::<0x7c>(0x00000004);
             }
 
             /// Read `RTCCALICFG2`.
@@ -146654,17 +144059,9 @@ pub mod soc {
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x20;
 
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {
-                /// Write any value to trigger a timer 0 time-base counter reload.
-                #[inline]
-                pub const fn t0_load(self) -> u32 {
-                    self.0
-                }
-            }
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xffffffff;
         }
 
         /// The `WDTCONFIG3` register.
@@ -147074,12 +144471,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000005;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `RTCCALICFG2` register.
@@ -147388,10 +144779,11 @@ pub mod soc {
                 self.0.write::<0x1c>(value.0);
             }
 
-            /// Read `T0LOAD`.
+            /// Write `value` to the write-trigger field `T0_LOAD` of `T0LOAD`, starting its
+            /// hardware action once; every other bit is zero.
             #[inline]
-            pub fn read_t0load(&self) -> t0load::R {
-                t0load::R(self.0.read::<0x20>())
+            pub fn trigger_t0load_t0_load(&mut self, value: u32) {
+                self.0.write::<0x20>(value);
             }
 
             /// Read `WDTCONFIG3`.
@@ -147500,28 +144892,18 @@ pub mod soc {
                 int_st_timers::R(self.0.read::<0x78>())
             }
 
-            /// Read `INT_CLR_TIMERS`.
-            #[inline]
-            pub fn read_int_clr_timers(&self) -> int_clr_timers::R {
-                int_clr_timers::R(self.0.read::<0x7c>())
-            }
-
             /// Write one to the write-trigger field `T0_INT_CLR` of `INT_CLR_TIMERS`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timers_t0_int_clr(&mut self) {
-                self.0.write::<0x7c>(
-                    (self.0.read::<0x7c>() & !int_clr_timers::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0x7c>(0x00000001);
             }
 
             /// Write one to the write-trigger field `WDT_INT_CLR` of `INT_CLR_TIMERS`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_timers_wdt_int_clr(&mut self) {
-                self.0.write::<0x7c>(
-                    (self.0.read::<0x7c>() & !int_clr_timers::TRIGGERS) | 0x00000004,
-                );
+                self.0.write::<0x7c>(0x00000004);
             }
 
             /// Read `RTCCALICFG2`.
@@ -147857,17 +145239,9 @@ pub mod soc {
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x20;
 
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {
-                /// Write any value to trigger a timer 0 time-base counter reload.
-                #[inline]
-                pub const fn t0_load(self) -> u32 {
-                    self.0
-                }
-            }
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xffffffff;
         }
 
         /// The `WDTCONFIG3` register.
@@ -148277,12 +145651,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000005;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `RTCCALICFG2` register.
@@ -148548,18 +145916,11 @@ pub mod soc {
                 mem_current_addr::R(self.0.read::<0x8>())
             }
 
-            /// Read `MEM_ADDR_UPDATE`.
-            #[inline]
-            pub fn read_mem_addr_update(&self) -> mem_addr_update::R {
-                mem_addr_update::R(self.0.read::<0xc>())
-            }
-
             /// Write one to the write-trigger field `MEM_CURRENT_ADDR_UPDATE` of `MEM_ADDR_UPDATE`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_mem_addr_update_mem_current_addr_update(&mut self) {
-                self.0
-                    .write::<0xc>((self.0.read::<0xc>() & !mem_addr_update::TRIGGERS) | 0x00000001);
+                self.0.write::<0xc>(0x00000001);
             }
 
             /// Read `FIFO_STATUS`.
@@ -148589,26 +145950,18 @@ pub mod soc {
                 intr_raw::R(self.0.read::<0x18>())
             }
 
-            /// Read `INTR_CLR`.
-            #[inline]
-            pub fn read_intr_clr(&self) -> intr_clr::R {
-                intr_clr::R(self.0.read::<0x1c>())
-            }
-
             /// Write one to the write-trigger field `FIFO_OVERFLOW_INTR_CLR` of `INTR_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_intr_clr_fifo_overflow_intr_clr(&mut self) {
-                self.0
-                    .write::<0x1c>((self.0.read::<0x1c>() & !intr_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x1c>(0x00000001);
             }
 
             /// Write one to the write-trigger field `MEM_FULL_INTR_CLR` of `INTR_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_intr_clr_mem_full_intr_clr(&mut self) {
-                self.0
-                    .write::<0x1c>((self.0.read::<0x1c>() & !intr_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x1c>(0x00000002);
             }
 
             /// Read `TRIGGER`.
@@ -148926,12 +146279,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `FIFO_STATUS` register.
@@ -149061,12 +146408,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000003;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `TRIGGER` register.
@@ -150372,19 +147713,11 @@ pub mod soc {
                 self.0.write::<0xfe0>(value.0);
             }
 
-            /// Read `TIMER_INT_CLR`.
-            #[inline]
-            pub fn read_timer_int_clr(&self) -> timer_int_clr::R {
-                timer_int_clr::R(self.0.read::<0xfe4>())
-            }
-
             /// Write one to the write-trigger field `TIMER_OVERFLOW_INT_CLR` of `TIMER_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_timer_int_clr_timer_overflow_int_clr(&mut self) {
-                self.0.write::<0xfe4>(
-                    (self.0.read::<0xfe4>() & !timer_int_clr::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0xfe4>(0x00000001);
             }
 
             /// Read `TIMER_CFG`.
@@ -153276,12 +150609,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `TIMER_CFG` register.
@@ -154045,19 +151372,11 @@ pub mod soc {
                 self.0.write::<0xfe0>(value.0);
             }
 
-            /// Read `TIMER_INT_CLR`.
-            #[inline]
-            pub fn read_timer_int_clr(&self) -> timer_int_clr::R {
-                timer_int_clr::R(self.0.read::<0xfe4>())
-            }
-
             /// Write one to the write-trigger field `TIMER_OVERFLOW_INT_CLR` of `TIMER_INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_timer_int_clr_timer_overflow_int_clr(&mut self) {
-                self.0.write::<0xfe4>(
-                    (self.0.read::<0xfe4>() & !timer_int_clr::TRIGGERS) | 0x00000001,
-                );
+                self.0.write::<0xfe4>(0x00000001);
             }
 
             /// Read `TIMER_CFG`.
@@ -156949,12 +154268,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `TIMER_CFG` register.
@@ -157331,170 +154644,144 @@ pub mod soc {
                 self.0.write::<0xc>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x10>())
-            }
-
             /// Write one to the write-trigger field `RXFIFO_FULL_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rxfifo_full_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x10>(0x00000001);
             }
 
             /// Write one to the write-trigger field `TXFIFO_EMPTY_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_txfifo_empty_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x10>(0x00000002);
             }
 
             /// Write one to the write-trigger field `PARITY_ERR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_parity_err_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x10>(0x00000004);
             }
 
             /// Write one to the write-trigger field `FRM_ERR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_frm_err_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x10>(0x00000008);
             }
 
             /// Write one to the write-trigger field `RXFIFO_OVF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rxfifo_ovf_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0x10>(0x00000010);
             }
 
             /// Write one to the write-trigger field `DSR_CHG_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_dsr_chg_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0x10>(0x00000020);
             }
 
             /// Write one to the write-trigger field `CTS_CHG_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cts_chg_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0x10>(0x00000040);
             }
 
             /// Write one to the write-trigger field `BRK_DET_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_brk_det_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0x10>(0x00000080);
             }
 
             /// Write one to the write-trigger field `RXFIFO_TOUT_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rxfifo_tout_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0x10>(0x00000100);
             }
 
             /// Write one to the write-trigger field `SW_XON_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_sw_xon_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0x10>(0x00000200);
             }
 
             /// Write one to the write-trigger field `SW_XOFF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_sw_xoff_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000400);
+                self.0.write::<0x10>(0x00000400);
             }
 
             /// Write one to the write-trigger field `GLITCH_DET_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_glitch_det_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000800);
+                self.0.write::<0x10>(0x00000800);
             }
 
             /// Write one to the write-trigger field `TX_BRK_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tx_brk_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00001000);
+                self.0.write::<0x10>(0x00001000);
             }
 
             /// Write one to the write-trigger field `TX_BRK_IDLE_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tx_brk_idle_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00002000);
+                self.0.write::<0x10>(0x00002000);
             }
 
             /// Write one to the write-trigger field `TX_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tx_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00004000);
+                self.0.write::<0x10>(0x00004000);
             }
 
             /// Write one to the write-trigger field `RS485_PARITY_ERR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rs485_parity_err_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00008000);
+                self.0.write::<0x10>(0x00008000);
             }
 
             /// Write one to the write-trigger field `RS485_FRM_ERR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rs485_frm_err_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00010000);
+                self.0.write::<0x10>(0x00010000);
             }
 
             /// Write one to the write-trigger field `RS485_CLASH_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rs485_clash_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00020000);
+                self.0.write::<0x10>(0x00020000);
             }
 
             /// Write one to the write-trigger field `AT_CMD_CHAR_DET_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_at_cmd_char_det_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00040000);
+                self.0.write::<0x10>(0x00040000);
             }
 
             /// Write one to the write-trigger field `WAKEUP_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_wakeup_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00080000);
+                self.0.write::<0x10>(0x00080000);
             }
 
             /// Read `CLKDIV_SYNC`.
@@ -158898,12 +156185,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x000fffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `CLKDIV_SYNC` register.
@@ -161235,170 +158516,144 @@ pub mod soc {
                 self.0.write::<0xc>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x10>())
-            }
-
             /// Write one to the write-trigger field `RXFIFO_FULL_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rxfifo_full_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x10>(0x00000001);
             }
 
             /// Write one to the write-trigger field `TXFIFO_EMPTY_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_txfifo_empty_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x10>(0x00000002);
             }
 
             /// Write one to the write-trigger field `PARITY_ERR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_parity_err_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x10>(0x00000004);
             }
 
             /// Write one to the write-trigger field `FRM_ERR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_frm_err_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x10>(0x00000008);
             }
 
             /// Write one to the write-trigger field `RXFIFO_OVF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rxfifo_ovf_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0x10>(0x00000010);
             }
 
             /// Write one to the write-trigger field `DSR_CHG_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_dsr_chg_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0x10>(0x00000020);
             }
 
             /// Write one to the write-trigger field `CTS_CHG_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_cts_chg_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0x10>(0x00000040);
             }
 
             /// Write one to the write-trigger field `BRK_DET_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_brk_det_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0x10>(0x00000080);
             }
 
             /// Write one to the write-trigger field `RXFIFO_TOUT_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rxfifo_tout_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0x10>(0x00000100);
             }
 
             /// Write one to the write-trigger field `SW_XON_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_sw_xon_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000200);
+                self.0.write::<0x10>(0x00000200);
             }
 
             /// Write one to the write-trigger field `SW_XOFF_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_sw_xoff_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000400);
+                self.0.write::<0x10>(0x00000400);
             }
 
             /// Write one to the write-trigger field `GLITCH_DET_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_glitch_det_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000800);
+                self.0.write::<0x10>(0x00000800);
             }
 
             /// Write one to the write-trigger field `TX_BRK_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tx_brk_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00001000);
+                self.0.write::<0x10>(0x00001000);
             }
 
             /// Write one to the write-trigger field `TX_BRK_IDLE_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tx_brk_idle_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00002000);
+                self.0.write::<0x10>(0x00002000);
             }
 
             /// Write one to the write-trigger field `TX_DONE_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tx_done_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00004000);
+                self.0.write::<0x10>(0x00004000);
             }
 
             /// Write one to the write-trigger field `RS485_PARITY_ERR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rs485_parity_err_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00008000);
+                self.0.write::<0x10>(0x00008000);
             }
 
             /// Write one to the write-trigger field `RS485_FRM_ERR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rs485_frm_err_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00010000);
+                self.0.write::<0x10>(0x00010000);
             }
 
             /// Write one to the write-trigger field `RS485_CLASH_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rs485_clash_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00020000);
+                self.0.write::<0x10>(0x00020000);
             }
 
             /// Write one to the write-trigger field `AT_CMD_CHAR_DET_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_at_cmd_char_det_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00040000);
+                self.0.write::<0x10>(0x00040000);
             }
 
             /// Write one to the write-trigger field `WAKEUP_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_wakeup_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00080000);
+                self.0.write::<0x10>(0x00080000);
             }
 
             /// Read `CLKDIV_SYNC`.
@@ -162802,12 +160057,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x000fffff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `CLKDIV_SYNC` register.
@@ -165141,82 +162390,67 @@ pub mod soc {
                 self.0.write::<0xc>(value.0);
             }
 
-            /// Read `INT_CLR`.
-            #[inline]
-            pub fn read_int_clr(&self) -> int_clr::R {
-                int_clr::R(self.0.read::<0x10>())
-            }
-
             /// Write one to the write-trigger field `RX_START_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rx_start_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000001);
+                self.0.write::<0x10>(0x00000001);
             }
 
             /// Write one to the write-trigger field `TX_START_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tx_start_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000002);
+                self.0.write::<0x10>(0x00000002);
             }
 
             /// Write one to the write-trigger field `RX_HUNG_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_rx_hung_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000004);
+                self.0.write::<0x10>(0x00000004);
             }
 
             /// Write one to the write-trigger field `TX_HUNG_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_tx_hung_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000008);
+                self.0.write::<0x10>(0x00000008);
             }
 
             /// Write one to the write-trigger field `SEND_S_REG_Q_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_send_s_reg_q_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000010);
+                self.0.write::<0x10>(0x00000010);
             }
 
             /// Write one to the write-trigger field `SEND_A_REG_Q_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_send_a_reg_q_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000020);
+                self.0.write::<0x10>(0x00000020);
             }
 
             /// Write one to the write-trigger field `OUTLINK_EOF_ERR_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_outlink_eof_err_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000040);
+                self.0.write::<0x10>(0x00000040);
             }
 
             /// Write one to the write-trigger field `APP_CTRL0_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_app_ctrl0_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000080);
+                self.0.write::<0x10>(0x00000080);
             }
 
             /// Write one to the write-trigger field `APP_CTRL1_INT_CLR` of `INT_CLR`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_int_clr_app_ctrl1_int_clr(&mut self) {
-                self.0
-                    .write::<0x10>((self.0.read::<0x10>() & !int_clr::TRIGGERS) | 0x00000100);
+                self.0.write::<0x10>(0x00000100);
             }
 
             /// Read `CONF1`.
@@ -166215,12 +163449,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x000001ff;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `CONF1` register.
@@ -168080,18 +165308,11 @@ pub mod soc {
                 self.0.write::<0x5c>(value.0);
             }
 
-            /// Read `CONFIG_UPDATE`.
-            #[inline]
-            pub fn read_config_update(&self) -> config_update::R {
-                config_update::R(self.0.read::<0x60>())
-            }
-
             /// Write one to the write-trigger field `CONFIG_UPDATE` of `CONFIG_UPDATE`, starting its
-            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            /// hardware action once; every other bit is zero.
             #[inline]
             pub fn trigger_config_update_config_update(&mut self) {
-                self.0
-                    .write::<0x60>((self.0.read::<0x60>() & !config_update::TRIGGERS) | 0x00000001);
+                self.0.write::<0x60>(0x00000001);
             }
 
             /// Read `SER_AFIFO_CONFIG`.
@@ -169405,12 +166626,6 @@ pub mod soc {
             /// The bits of the write-trigger fields: zero in every
             /// read-modify-write, one only in a field's explicit trigger.
             pub const TRIGGERS: u32 = 0x00000001;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {}
         }
 
         /// The `SER_AFIFO_CONFIG` register.

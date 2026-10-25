@@ -30,7 +30,7 @@ use svd_rs::{MaybeArray, RegisterCluster};
 
 use crate::soc_headers::Lookup;
 use crate::{
-    Error, FieldKind, FieldRule, InterruptRule, OverlayAccess, RegisterRule, Result,
+    CommandRule, Error, FieldKind, FieldRule, InterruptRule, OverlayAccess, RegisterRule, Result,
     StrictnessOverlay,
 };
 
@@ -658,6 +658,25 @@ pub(crate) fn check_device(
                 .push(format!("{subject}: enumerated values are not parsed"));
         }
     }
+    for rule in &overlay.commands {
+        let subject = format!("commands {}.{}", rule.peripheral, rule.register);
+        match check_commands(rule, &svd, &mut headers, &subject)? {
+            Verdict::Checked => result.checked += 1,
+            Verdict::Unchecked(why) => result.unchecked.push(format!("{subject}: {why}")),
+            Verdict::Failed(why) => result.failures.extend(why),
+        }
+        let (cited, other) = idf_sources(&rule.sources);
+        let code = cited
+            .iter()
+            .filter(|source| !source.path.ends_with("_reg.h"))
+            .count();
+        if code + other > 0 {
+            result.unchecked.push(format!(
+                "{subject}: {} sources beside the register header are not parsed",
+                code + other
+            ));
+        }
+    }
     for rule in &overlay.interrupts {
         let subject = format!("interrupt {}", rule.name);
         match check_interrupt(rule, &mut headers, &subject)? {
@@ -801,8 +820,11 @@ fn check_register(
             }
         }
     }
-    let wants_header =
-        rule.access.is_some() || rule.write_one_to_clear || rule.raw_status_writable || rule.fifo;
+    let wants_header = rule.access.is_some()
+        || rule.write_one_to_clear
+        || rule.raw_status_writable
+        || rule.fifo
+        || rule.data_port;
     if wants_header && header.is_none() && failures.is_empty() {
         failures.push(format!("{subject}: cites no register definition"));
     }
@@ -830,6 +852,84 @@ fn check_register(
         if rule.raw_status_writable && !rule.write_one_to_clear {
             failures.push(format!(
                 "{subject}: raw-status-writable without write-one-to-clear"
+            ));
+        }
+    }
+    Ok(if failures.is_empty() {
+        Verdict::Checked
+    } else {
+        Verdict::Failed(failures)
+    })
+}
+
+/// A command register's entry: its `*_reg.h` source defines the register,
+/// and the header makes each command and qualifier one self-clearing bit
+/// (`R/W/SC`, `R/W/WTC`) an application may use.
+fn check_commands(
+    rule: &CommandRule,
+    svd: &Svd,
+    headers: &mut Headers<'_>,
+    subject: &str,
+) -> Result<Verdict> {
+    let Some(register) = svd
+        .peripherals
+        .get(&rule.peripheral)
+        .and_then(|registers| registers.iter().find(|r| r.name == rule.register))
+    else {
+        return Ok(Verdict::Failed(vec![format!(
+            "{subject}: not in the vendor SVD"
+        )]));
+    };
+    let (cited, _) = idf_sources(&rule.sources);
+    let mut failures = Vec::new();
+    let mut header = None;
+    for source in cited
+        .iter()
+        .filter(|source| source.path.ends_with("_reg.h"))
+    {
+        let cite = format!("{subject}: {}:{}", source.path, source.line);
+        match headers
+            .registers(source.path)?
+            .iter()
+            .find(|r| r.line == source.line)
+        {
+            None => failures.push(format!("{cite} is not a register definition")),
+            Some(found) if !same_register(found, register) => failures.push(format!(
+                "{cite} defines {}, not a register named {}",
+                found.name, register.name
+            )),
+            Some(found) => header = Some(found.clone()),
+        }
+    }
+    let Some(header) = header else {
+        failures.push(format!("{subject}: cites no register definition"));
+        return Ok(Verdict::Failed(failures));
+    };
+    for name in rule.fields.iter().chain(&rule.qualifiers) {
+        let Some(field) = register.fields.iter().find(|f| &f.name == name) else {
+            failures.push(format!("{subject}: field {name} is not in the vendor SVD"));
+            continue;
+        };
+        let Some(found) = header
+            .fields
+            .iter()
+            .find(|h| h.low == field.low && h.width() == field.width)
+        else {
+            failures.push(format!(
+                "{subject}: the header has no field at {name}'s bits"
+            ));
+            continue;
+        };
+        if found.width() != 1 || !matches!(found.access.as_str(), "R/W/SC" | "R/W/WTC") {
+            failures.push(format!(
+                "{subject}: {} is {} [{}:{}], not one self-clearing bit (R/W/SC, R/W/WTC)",
+                found.name, found.access, found.high, found.low
+            ));
+        }
+        if crate::soc_headers::debug_only(&found.description) {
+            failures.push(format!(
+                "{subject}: the header keeps {} to internal debugging",
+                found.name
             ));
         }
     }

@@ -9,8 +9,8 @@ schema = 1
 peripherals = 100
 skipped-peripherals = 3
 registers = 4724
-full = 2477
-read = 1368
+full = 2506
+read = 1339
 none = 879
 renamed-fields = 29
 
@@ -256,6 +256,12 @@ reasons = ["its module name is not a unique identifier"]
 
 [[register]]
 peripheral = "AES"
+register = "ENDIAN"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "AES"
 register = "STATE"
 api = "read"
 reasons = []
@@ -283,6 +289,18 @@ peripheral = "AES"
 register = "T0_MEM[%s]"
 api = "none"
 reasons = ["8 bits wide"]
+
+[[register]]
+peripheral = "AES"
+register = "AAD_BLOCK_NUM"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "AES"
+register = "REMAINDER_BIT_NUM"
+api = "read"
+reasons = []
 
 [[register]]
 peripheral = "AES"
@@ -2326,12 +2344,6 @@ reasons = ["field LOCK_ENA is R/W/SC (esp-idf:components/soc/esp32s31/register/s
 
 [[register]]
 peripheral = "CACHE"
-register = "SYNC_CTRL"
-api = "read"
-reasons = ["field CLEAN_ENA is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1586): the hardware also changes it", "field INVALIDATE_ENA is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1575): the hardware also changes it", "field WRITEBACK_ENA is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1595): the hardware also changes it", "field WRITEBACK_INVALIDATE_ENA is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1604): the hardware also changes it"]
-
-[[register]]
-peripheral = "CACHE"
 register = "L1_ICACHE0_PRELOAD_CTRL"
 api = "read"
 reasons = ["field L1_ICACHE0_PRELOAD_ENA is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1673): the hardware also changes it"]
@@ -2908,6 +2920,12 @@ reasons = []
 
 [[register]]
 peripheral = "CACHE"
+register = "L2_CACHE_ACS_CNT_INT_RAW"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "CACHE"
 register = "L2_CACHE_ACS_CNT_INT_ST"
 api = "read"
 reasons = []
@@ -2921,6 +2939,12 @@ reasons = []
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_ACS_FAIL_INT_ENA"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "CACHE"
+register = "L2_CACHE_ACS_FAIL_INT_RAW"
 api = "read"
 reasons = []
 
@@ -3166,6 +3190,12 @@ reasons = []
 
 [[register]]
 peripheral = "CACHE"
+register = "L2_CACHE_SYNC_PRELOAD_INT_RAW"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "CACHE"
 register = "L2_CACHE_SYNC_PRELOAD_INT_ST"
 api = "read"
 reasons = []
@@ -3226,9 +3256,39 @@ reasons = []
 
 [[register]]
 peripheral = "CACHE"
+register = "L2_CACHE_DEBUG_BUS"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "CACHE"
 register = "LEVEL_SPLIT1"
 api = "none"
 reasons = ["no readable field remains"]
+
+[[register]]
+peripheral = "CACHE"
+register = "REDUNDANCY_SIG0"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "CACHE"
+register = "REDUNDANCY_SIG1"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "CACHE"
+register = "REDUNDANCY_SIG2"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "CACHE"
+register = "REDUNDANCY_SIG3"
+api = "read"
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -5482,33 +5542,9 @@ reasons = ["field DATA_ORIG is R/W/SC/WTC (esp-idf:components/soc/esp32s31/regis
 
 [[register]]
 peripheral = "GPIO"
-register = "OUT_W1TS"
-api = "read"
-reasons = ["field OUT_W1TS is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:54): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "GPIO"
-register = "OUT_W1TC"
-api = "read"
-reasons = ["field OUT_W1TC is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:70): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "GPIO"
 register = "OUT1"
 api = "read"
 reasons = ["field DATA_ORIG is R/W/SC/WTC (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:87): the hardware also changes it"]
-
-[[register]]
-peripheral = "GPIO"
-register = "OUT1_W1TS"
-api = "read"
-reasons = ["field OUT1_W1TS is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:103): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "GPIO"
-register = "OUT1_W1TC"
-api = "read"
-reasons = ["field OUT1_W1TC is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:120): a multi-bit write trigger"]
 
 [[register]]
 peripheral = "GPIO"
@@ -5518,33 +5554,9 @@ reasons = ["field DATA_ORIG is R/W/SC/WTC (esp-idf:components/soc/esp32s31/regis
 
 [[register]]
 peripheral = "GPIO"
-register = "OUT2_W1TS"
-api = "read"
-reasons = ["field OUT2_W1TS is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:153): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "GPIO"
-register = "OUT2_W1TC"
-api = "read"
-reasons = ["field OUT2_W1TC is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:170): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "GPIO"
 register = "ENABLE"
 api = "read"
 reasons = ["field DATA is R/W/WTC (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:187): the hardware also changes it"]
-
-[[register]]
-peripheral = "GPIO"
-register = "ENABLE_W1TS"
-api = "read"
-reasons = ["field ENABLE_W1TS is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:202): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "GPIO"
-register = "ENABLE_W1TC"
-api = "read"
-reasons = ["field ENABLE_W1TC is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:219): a multi-bit write trigger"]
 
 [[register]]
 peripheral = "GPIO"
@@ -5554,33 +5566,9 @@ reasons = ["field DATA is R/W/WTC (esp-idf:components/soc/esp32s31/register/soc/
 
 [[register]]
 peripheral = "GPIO"
-register = "ENABLE1_W1TS"
-api = "read"
-reasons = ["field ENABLE1_W1TS is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:251): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "GPIO"
-register = "ENABLE1_W1TC"
-api = "read"
-reasons = ["field ENABLE1_W1TC is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:268): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "GPIO"
 register = "ENABLE2"
 api = "read"
 reasons = ["field DATA is R/W/WTC (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:285): the hardware also changes it"]
-
-[[register]]
-peripheral = "GPIO"
-register = "ENABLE2_W1TS"
-api = "read"
-reasons = ["field ENABLE2_W1TS is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:300): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "GPIO"
-register = "ENABLE2_W1TC"
-api = "read"
-reasons = ["field ENABLE2_W1TC is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:317): a multi-bit write trigger"]
 
 [[register]]
 peripheral = "GPIO"
@@ -5608,51 +5596,15 @@ reasons = ["field INTERRUPT is R/W/WTC (esp-idf:components/soc/esp32s31/register
 
 [[register]]
 peripheral = "GPIO"
-register = "STATUS_W1TS"
-api = "read"
-reasons = ["field STATUS_W1TS is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:402): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "GPIO"
-register = "STATUS_W1TC"
-api = "read"
-reasons = ["field STATUS_W1TC is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:420): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "GPIO"
 register = "STATUS1"
 api = "read"
 reasons = ["field INTERRUPT is R/W/WTC (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:438): the hardware also changes it"]
 
 [[register]]
 peripheral = "GPIO"
-register = "STATUS1_W1TS"
-api = "read"
-reasons = ["field STATUS1_W1TS is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:459): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "GPIO"
-register = "STATUS1_W1TC"
-api = "read"
-reasons = ["field STATUS1_W1TC is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:477): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "GPIO"
 register = "STATUS2"
 api = "read"
 reasons = ["field INTERRUPT is R/W/WTC (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:495): the hardware also changes it"]
-
-[[register]]
-peripheral = "GPIO"
-register = "STATUS2_W1TS"
-api = "read"
-reasons = ["field STATUS2_W1TS is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:516): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "GPIO"
-register = "STATUS2_W1TC"
-api = "read"
-reasons = ["field STATUS2_W1TC is WT (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:534): a multi-bit write trigger"]
 
 [[register]]
 peripheral = "GPIO"
@@ -6463,12 +6415,6 @@ peripheral = "HP_SYS"
 register = "CPU_PWAIT_MODE"
 api = "read"
 reasons = []
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "ROOT_CLK_CTRL0"
-api = "read"
-reasons = ["field REG_SOC_CLK_UPDATE is R/W/WTC (esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h:122): the hardware also changes it"]
 
 [[register]]
 peripheral = "HP_SYS_CLKRST"
@@ -7528,33 +7474,9 @@ reasons = ["field DATA_ORIG is R/W/WTC (esp-idf:components/soc/esp32s31/register
 
 [[register]]
 peripheral = "LP_GPIO"
-register = "OUT_W1TS"
-api = "read"
-reasons = ["field OUT_W1TS is WT (esp-idf:components/soc/esp32s31/register/soc/lp_gpio_reg.h:33): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "LP_GPIO"
-register = "OUT_W1TC"
-api = "read"
-reasons = ["field OUT_W1TC is WT (esp-idf:components/soc/esp32s31/register/soc/lp_gpio_reg.h:50): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "LP_GPIO"
 register = "ENABLE"
 api = "read"
 reasons = ["field DATA is R/W/WTC (esp-idf:components/soc/esp32s31/register/soc/lp_gpio_reg.h:67): the hardware also changes it"]
-
-[[register]]
-peripheral = "LP_GPIO"
-register = "ENABLE_W1TS"
-api = "read"
-reasons = ["field ENABLE_W1TS is WT (esp-idf:components/soc/esp32s31/register/soc/lp_gpio_reg.h:82): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "LP_GPIO"
-register = "ENABLE_W1TC"
-api = "read"
-reasons = ["field ENABLE_W1TC is WT (esp-idf:components/soc/esp32s31/register/soc/lp_gpio_reg.h:99): a multi-bit write trigger"]
 
 [[register]]
 peripheral = "LP_GPIO"
@@ -7567,18 +7489,6 @@ peripheral = "LP_GPIO"
 register = "STATUS"
 api = "read"
 reasons = ["field INTERRUPT is R/W/WTC (esp-idf:components/soc/esp32s31/register/soc/lp_gpio_reg.h:132): the hardware also changes it"]
-
-[[register]]
-peripheral = "LP_GPIO"
-register = "STATUS_W1TS"
-api = "read"
-reasons = ["field STATUS_W1TS is WT (esp-idf:components/soc/esp32s31/register/soc/lp_gpio_reg.h:153): a multi-bit write trigger"]
-
-[[register]]
-peripheral = "LP_GPIO"
-register = "STATUS_W1TC"
-api = "read"
-reasons = ["field STATUS_W1TC is WT (esp-idf:components/soc/esp32s31/register/soc/lp_gpio_reg.h:171): a multi-bit write trigger"]
 
 [[register]]
 peripheral = "LP_GPIO"
@@ -7900,33 +7810,9 @@ reasons = []
 
 [[register]]
 peripheral = "MEM_MONITOR0"
-register = "LOG_MON_ADDR_UPDATE_0"
-api = "read"
-reasons = ["field LOG_MON_ADDR_CORE_UPDATE is WT (esp-idf:components/soc/esp32s31/register/soc/mem_monitor_reg.h:173): a multi-bit write trigger", "field LOG_MON_ADDR_CORE_UPDATE: a write-trigger candidate"]
-
-[[register]]
-peripheral = "MEM_MONITOR0"
-register = "LOG_MON_ADDR_UPDATE_1"
-api = "read"
-reasons = ["field LOG_MON_ADDR_DMA_0_UPDATE is WT (esp-idf:components/soc/esp32s31/register/soc/mem_monitor_reg.h:199): a multi-bit write trigger", "field LOG_MON_ADDR_DMA_1_UPDATE is WT (esp-idf:components/soc/esp32s31/register/soc/mem_monitor_reg.h:210): a multi-bit write trigger", "field LOG_MON_ADDR_DMA_2_UPDATE is WT (esp-idf:components/soc/esp32s31/register/soc/mem_monitor_reg.h:221): a multi-bit write trigger", "field LOG_MON_ADDR_DMA_3_UPDATE is WT (esp-idf:components/soc/esp32s31/register/soc/mem_monitor_reg.h:232): a multi-bit write trigger", "field LOG_MON_ADDR_DMA_0_UPDATE: a write-trigger candidate", "field LOG_MON_ADDR_DMA_1_UPDATE: a write-trigger candidate", "field LOG_MON_ADDR_DMA_2_UPDATE: a write-trigger candidate", "field LOG_MON_ADDR_DMA_3_UPDATE: a write-trigger candidate"]
-
-[[register]]
-peripheral = "MEM_MONITOR0"
 register = "LOG_MEM_CURRENT_ADDR"
 api = "read"
 reasons = []
-
-[[register]]
-peripheral = "MEM_MONITOR1"
-register = "LOG_MON_ADDR_UPDATE_0"
-api = "read"
-reasons = ["field LOG_MON_ADDR_CORE_UPDATE is WT (esp-idf:components/soc/esp32s31/register/soc/mem_monitor_reg.h:173): a multi-bit write trigger", "field LOG_MON_ADDR_CORE_UPDATE: a write-trigger candidate"]
-
-[[register]]
-peripheral = "MEM_MONITOR1"
-register = "LOG_MON_ADDR_UPDATE_1"
-api = "read"
-reasons = ["field LOG_MON_ADDR_DMA_0_UPDATE is WT (esp-idf:components/soc/esp32s31/register/soc/mem_monitor_reg.h:199): a multi-bit write trigger", "field LOG_MON_ADDR_DMA_1_UPDATE is WT (esp-idf:components/soc/esp32s31/register/soc/mem_monitor_reg.h:210): a multi-bit write trigger", "field LOG_MON_ADDR_DMA_2_UPDATE is WT (esp-idf:components/soc/esp32s31/register/soc/mem_monitor_reg.h:221): a multi-bit write trigger", "field LOG_MON_ADDR_DMA_3_UPDATE is WT (esp-idf:components/soc/esp32s31/register/soc/mem_monitor_reg.h:232): a multi-bit write trigger", "field LOG_MON_ADDR_DMA_0_UPDATE: a write-trigger candidate", "field LOG_MON_ADDR_DMA_1_UPDATE: a write-trigger candidate", "field LOG_MON_ADDR_DMA_2_UPDATE: a write-trigger candidate", "field LOG_MON_ADDR_DMA_3_UPDATE: a write-trigger candidate"]
 
 [[register]]
 peripheral = "MEM_MONITOR1"
@@ -8065,12 +7951,6 @@ peripheral = "PMU"
 register = "IMM_HP_CK_POWER_0"
 api = "none"
 reasons = ["the curated model's PMU_RADIO describes its word"]
-
-[[register]]
-peripheral = "PMU"
-register = "IMM_HP_CK_POWER_1"
-api = "read"
-reasons = ["field TIE_HIGH_GLOBAL_PLL_ICG is WT (esp-idf:components/soc/esp32s31/register/soc/pmu_reg.h:1943): a multi-bit write trigger", "field TIE_HIGH_XPD_PLL is WT (esp-idf:components/soc/esp32s31/register/soc/pmu_reg.h:1957): a multi-bit write trigger", "field TIE_HIGH_XPD_PLL_I2C is WT (esp-idf:components/soc/esp32s31/register/soc/pmu_reg.h:1950): a multi-bit write trigger", "field TIE_LOW_GLOBAL_PLL_ICG is WT (esp-idf:components/soc/esp32s31/register/soc/pmu_reg.h:1936): a multi-bit write trigger", "field TIE_LOW_XPD_PLL is WT (esp-idf:components/soc/esp32s31/register/soc/pmu_reg.h:1929): a multi-bit write trigger", "field TIE_LOW_XPD_PLL_I2C is WT (esp-idf:components/soc/esp32s31/register/soc/pmu_reg.h:1922): a multi-bit write trigger"]
 
 [[register]]
 peripheral = "PMU"
@@ -8776,6 +8656,18 @@ reasons = ["no API for the peripheral: R/W reset bits that hardware clears, desc
 
 [[register]]
 peripheral = "SHA"
+register = "T_STRING"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SHA"
+register = "T_LENGTH"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SHA"
 register = "START"
 api = "none"
 reasons = ["write-only field START: a write-trigger candidate", "undeclared bits 0x00000001", "no readable field remains"]
@@ -8872,7 +8764,19 @@ reasons = []
 
 [[register]]
 peripheral = "SPI0"
+register = "SPI_MEM_RD_STATUS"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI0"
 register = "SPI_MEM_CACHE_SCTRL"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI0"
+register = "SPI_MEM_SRAM_CMD"
 api = "read"
 reasons = []
 
@@ -9051,10 +8955,16 @@ api = "read"
 reasons = ["field PADDR: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [9:0]", "field ACCESS_SPIRAM: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [10:10]", "field SPIRAM_VALID: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [11:11]", "field VALID: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [12:12]", "field SPIRAM_SENSITIVE: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [12:12]", "field SENSITIVE: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [13:13]", "overlapping fields SPIRAM_SENSITIVE, VALID", "undeclared bits 0xffffd000"]
 
 [[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_CMD"
+peripheral = "SPI0"
+register = "SPI_MEM_REGISTERRND_ECO_HIGH"
 api = "read"
-reasons = ["field SPI_MEM_FLASH_BE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:88): the hardware also changes it", "field SPI_MEM_FLASH_CE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:79): the hardware also changes it", "field SPI_MEM_FLASH_DP is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:70): the hardware also changes it", "field SPI_MEM_FLASH_HPM is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:51): the hardware also changes it", "field SPI_MEM_FLASH_PE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:33): the hardware also changes it", "field SPI_MEM_FLASH_PP is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:106): the hardware also changes it", "field SPI_MEM_FLASH_RDID is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:134): the hardware also changes it", "field SPI_MEM_FLASH_RDSR is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:125): the hardware also changes it", "field SPI_MEM_FLASH_READ is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:161): the hardware also changes it", "field SPI_MEM_FLASH_RES is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:60): the hardware also changes it", "field SPI_MEM_FLASH_SE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:97): the hardware also changes it", "field SPI_MEM_FLASH_WRDI is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:143): the hardware also changes it", "field SPI_MEM_FLASH_WREN is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:152): the hardware also changes it", "field SPI_MEM_FLASH_WRSR is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:116): the hardware also changes it", "field SPI_MEM_USR is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:43): the hardware also changes it"]
+reasons = []
+
+[[register]]
+peripheral = "SPI0"
+register = "SPI_MEM_REGISTERRND_ECO_LOW"
+api = "read"
+reasons = []
 
 [[register]]
 peripheral = "SPI1"
@@ -9070,99 +8980,9 @@ reasons = []
 
 [[register]]
 peripheral = "SPI1"
-register = "SPI_MEM_W0"
+register = "SPI_MEM_CACHE_FCTRL"
 api = "read"
-reasons = ["field SPI_MEM_BUF0 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:732): the hardware also changes it"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_W1"
-api = "read"
-reasons = ["field SPI_MEM_BUF1 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:744): the hardware also changes it"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_W2"
-api = "read"
-reasons = ["field SPI_MEM_BUF2 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:756): the hardware also changes it"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_W3"
-api = "read"
-reasons = ["field SPI_MEM_BUF3 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:768): the hardware also changes it"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_W4"
-api = "read"
-reasons = ["field SPI_MEM_BUF4 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:780): the hardware also changes it"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_W5"
-api = "read"
-reasons = ["field SPI_MEM_BUF5 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:792): the hardware also changes it"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_W6"
-api = "read"
-reasons = ["field SPI_MEM_BUF6 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:804): the hardware also changes it"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_W7"
-api = "read"
-reasons = ["field SPI_MEM_BUF7 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:816): the hardware also changes it"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_W8"
-api = "read"
-reasons = ["field SPI_MEM_BUF8 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:828): the hardware also changes it"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_W9"
-api = "read"
-reasons = ["field SPI_MEM_BUF9 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:840): the hardware also changes it"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_W10"
-api = "read"
-reasons = ["field SPI_MEM_BUF10 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:852): the hardware also changes it"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_W11"
-api = "read"
-reasons = ["field SPI_MEM_BUF11 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:864): the hardware also changes it"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_W12"
-api = "read"
-reasons = ["field SPI_MEM_BUF12 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:876): the hardware also changes it"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_W13"
-api = "read"
-reasons = ["field SPI_MEM_BUF13 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:888): the hardware also changes it"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_W14"
-api = "read"
-reasons = ["field SPI_MEM_BUF14 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:900): the hardware also changes it"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_W15"
-api = "read"
-reasons = ["field SPI_MEM_BUF15 is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:912): the hardware also changes it"]
+reasons = []
 
 [[register]]
 peripheral = "SPI1"
@@ -9196,9 +9016,39 @@ reasons = []
 
 [[register]]
 peripheral = "MEMSPI2"
+register = "RD_STATUS"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "MEMSPI2"
 register = "CACHE_FCTRL"
 api = "none"
 reasons = ["a field array"]
+
+[[register]]
+peripheral = "MEMSPI2"
+register = "CACHE_SCTRL"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "MEMSPI2"
+register = "SRAM_DRD_CMD"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "MEMSPI2"
+register = "SRAM_DWR_CMD"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "MEMSPI2"
+register = "SRAM_CLK"
+api = "read"
+reasons = []
 
 [[register]]
 peripheral = "MEMSPI2"
@@ -9363,10 +9213,16 @@ api = "read"
 reasons = []
 
 [[register]]
-peripheral = "MEMSPI3"
-register = "CMD"
+peripheral = "MEMSPI2"
+register = "REGISTERRND_ECO_HIGH"
 api = "read"
-reasons = ["field FLASH_BE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:88): the hardware also changes it", "field FLASH_CE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:79): the hardware also changes it", "field FLASH_DP is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:70): the hardware also changes it", "field FLASH_HPM is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:51): the hardware also changes it", "field FLASH_PE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:33): the hardware also changes it", "field FLASH_PP is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:106): the hardware also changes it", "field FLASH_RDID is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:134): the hardware also changes it", "field FLASH_RDSR is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:125): the hardware also changes it", "field FLASH_READ is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:161): the hardware also changes it", "field FLASH_RES is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:60): the hardware also changes it", "field FLASH_SE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:97): the hardware also changes it", "field FLASH_WRDI is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:143): the hardware also changes it", "field FLASH_WREN is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:152): the hardware also changes it", "field FLASH_WRSR is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:116): the hardware also changes it", "field USR is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:43): the hardware also changes it"]
+reasons = []
+
+[[register]]
+peripheral = "MEMSPI2"
+register = "REGISTERRND_ECO_LOW"
+api = "read"
+reasons = []
 
 [[register]]
 peripheral = "MEMSPI3"
@@ -9388,9 +9244,9 @@ reasons = []
 
 [[register]]
 peripheral = "MEMSPI3"
-register = "W%s"
+register = "CACHE_FCTRL"
 api = "read"
-reasons = ["field BUF is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:727): the hardware also changes it"]
+reasons = []
 
 [[register]]
 peripheral = "MEMSPI3"
@@ -9922,12 +9778,6 @@ reasons = ["field T_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/s
 
 [[register]]
 peripheral = "TIMG0"
-register = "T0LOAD"
-api = "read"
-reasons = ["field T_LOAD is WT (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:179): a multi-bit write trigger", "field T_LOAD: a write-trigger candidate"]
-
-[[register]]
-peripheral = "TIMG0"
 register = "T1CONFIG"
 api = "read"
 reasons = ["field T_ALARM_EN is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:192): the hardware also changes it", "field T_EN is R/W/SS/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:237): the hardware also changes it"]
@@ -9949,12 +9799,6 @@ peripheral = "TIMG0"
 register = "T1UPDATE"
 api = "read"
 reasons = ["field T_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:279): the hardware also changes it"]
-
-[[register]]
-peripheral = "TIMG0"
-register = "T1LOAD"
-api = "read"
-reasons = ["field T_LOAD is WT (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:349): a multi-bit write trigger", "field T_LOAD: a write-trigger candidate"]
 
 [[register]]
 peripheral = "TIMG0"
@@ -10024,12 +9868,6 @@ reasons = ["field T_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/s
 
 [[register]]
 peripheral = "TIMG1"
-register = "T0LOAD"
-api = "read"
-reasons = ["field T_LOAD is WT (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:179): a multi-bit write trigger", "field T_LOAD: a write-trigger candidate"]
-
-[[register]]
-peripheral = "TIMG1"
 register = "T1CONFIG"
 api = "read"
 reasons = ["field T_ALARM_EN is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:192): the hardware also changes it", "field T_EN is R/W/SS/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:237): the hardware also changes it"]
@@ -10051,12 +9889,6 @@ peripheral = "TIMG1"
 register = "T1UPDATE"
 api = "read"
 reasons = ["field T_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:279): the hardware also changes it"]
-
-[[register]]
-peripheral = "TIMG1"
-register = "T1LOAD"
-api = "read"
-reasons = ["field T_LOAD is WT (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:349): a multi-bit write trigger", "field T_LOAD: a write-trigger candidate"]
 
 [[register]]
 peripheral = "TIMG1"
@@ -10225,12 +10057,6 @@ peripheral = "LP_TOUCH"
 register = "CHN_TMP_STATUS"
 api = "read"
 reasons = []
-
-[[register]]
-peripheral = "LP_TOUCH_AON"
-register = "CLR"
-api = "read"
-reasons = ["field TOUCH_CHANNEL_CLR is WT (esp-idf:components/soc/esp32s31/register/soc/touch_aon_reg.h:382): a multi-bit write trigger", "field TOUCH_CHANNEL_CLR: a write-trigger candidate"]
 
 [[register]]
 peripheral = "LP_TOUCH_AON"

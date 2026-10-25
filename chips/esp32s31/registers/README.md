@@ -19,7 +19,7 @@ analysis read this model; neither owns a second copy.
 | `evidence/` | Source identities, provenance, reviewed confidence and supporting records |
 | `upstream/platform-radio-deps.svd` | Reviewed upstream platform PAC input for analysis |
 | `upstream/esp32s31.svd` | The vendor SVD, unmodified (esp-pacs `a1f6cf68e` base SVD, Apache-2.0); every peripheral the curated model does not describe renders into the PAC's `soc` module |
-| `model/strictness.toml` | The strictness overlay over the vendor SVD: each peripheral's pinned ESP-IDF header, from which the generator derives the API, corrected offsets, access, reserved bits, write triggers, write-one-to-clear, FIFO ports and the interrupt sources the SVD lacks, each citing its ESP-IDF header line |
+| `model/strictness.toml` | The strictness overlay over the vendor SVD: each peripheral's pinned ESP-IDF header, from which the generator derives the API, corrected offsets, access, reserved bits, write triggers, command registers, write-one-to-clear, FIFO ports, command data ports and the interrupt sources the SVD lacks, each citing its ESP-IDF header line |
 | `published/soc.report.toml` | Generated report of every vendor field the API names after its header and every register the conservative pass narrowed, with its reasons |
 | `published/radio.svd` | Generated portable CMSIS-SVD representation |
 | `published/radio.bindings.toml` | Generated binding index |

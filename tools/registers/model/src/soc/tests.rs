@@ -152,11 +152,15 @@ fn soc(registers: &str, reg: &str, overlay: &str) -> crate::Result<SocRender> {
 }
 
 fn api(render: &SocRender, register: &str) -> RegisterApi {
+    api_of(render, "TIMER", register)
+}
+
+fn api_of(render: &SocRender, peripheral: &str, register: &str) -> RegisterApi {
     render
         .verdicts
         .iter()
-        .find(|verdict| verdict.peripheral == "TIMER" && verdict.register == register)
-        .unwrap_or_else(|| panic!("{register} has a verdict"))
+        .find(|verdict| verdict.peripheral == peripheral && verdict.register == register)
+        .unwrap_or_else(|| panic!("{peripheral}.{register} has a verdict"))
         .api
 }
 
@@ -309,6 +313,254 @@ fn a_field_the_hardware_also_changes_leaves_its_register_read_only() {
         reasons(&render, "ALARM")
     );
     assert!(!render.rust.contains("pub fn modify_alarm("));
+}
+
+/// `SYNC`: two one-bit commands (`R/W/SC`, `R/W/WTC`), a qualifier, a
+/// debugging command, a done flag and a plain group id, like
+/// CACHE.SYNC_CTRL (`cache_reg.h:1574`) and SPI1.CMD (`spi1_mem_reg.h:16`).
+fn sync() -> (String, String) {
+    let svd = register(
+        "SYNC",
+        0x14,
+        "read-write",
+        &(field("INVALIDATE_ENA", 0, 1, "read-write")
+            + &field("CLEAN_ENA", 1, 1, "read-write")
+            + &field("ERASE", 2, 1, "read-write")
+            + &field("PROBE", 3, 1, "read-write")
+            + &field("DONE", 4, 1, "read-only")
+            + &field("RGID", 5, 27, "read-write")),
+    );
+    let header = reg_h(&[(
+        "SYNC",
+        0x14,
+        &[
+            (
+                "INVALIDATE_ENA",
+                "R/W/SC",
+                0,
+                1,
+                "Cleared by hardware when done.",
+            ),
+            (
+                "CLEAN_ENA",
+                "R/W/WTC",
+                1,
+                1,
+                "Cleared by hardware when done.",
+            ),
+            (
+                "ERASE",
+                "R/W/SC",
+                2,
+                1,
+                "Combined with a command. Cleared by hardware when done.",
+            ),
+            (
+                "PROBE",
+                "R/W/SC",
+                3,
+                1,
+                "Cleared by hardware when done. This field is only for internal debugging \
+                 purposes. Do not use it in applications.",
+            ),
+            ("DONE", "RO", 4, 1, "The operation has finished."),
+            ("RGID", "R/W", 5, 27, "The group id."),
+        ],
+    )]);
+    (svd, header)
+}
+
+/// The `[[commands]]` entry of `SYNC`: `fields` and `qualifiers` as given.
+fn commands(header: &str, fields: &str, qualifiers: &str) -> String {
+    format!(
+        "[[commands]]\nperipheral = \"TIMER\"\nregister = \"SYNC\"\nfields = [{fields}]\n\
+         qualifiers = [{qualifiers}]\nsources = [\"esp-idf:{REG}:{}\"]\n",
+        line(header, "#define TIMER_SYNC_REG")
+    )
+}
+
+#[test]
+fn a_self_clearing_field_without_a_commands_entry_leaves_its_register_read_only() {
+    // A run control (I2S RX_START) and a level the hardware clears (GPIO
+    // ENABLE1, STATUS1): that a bit clears itself does not say that writing
+    // zero to it is harmless, so no start is inferred from the class.
+    let (svd, header) = sync();
+    let render = soc(&svd, &header, "").expect("renders");
+    assert_eq!(api(&render, "SYNC"), RegisterApi::Read);
+    assert!(
+        reasons(&render, "SYNC").contains("INVALIDATE_ENA is R/W/SC"),
+        "{}",
+        reasons(&render, "SYNC")
+    );
+    assert!(
+        reasons(&render, "SYNC").contains("CLEAN_ENA is R/W/WTC"),
+        "{}",
+        reasons(&render, "SYNC")
+    );
+    for absent in ["pub fn start_", "pub fn modify_sync(", "_busy("] {
+        assert!(!render.rust.contains(absent), "{absent}\n{}", render.rust);
+    }
+}
+
+#[test]
+fn a_commands_entry_makes_a_register_written_only_by_starts_that_wait_for_every_bit() {
+    let (svd, header) = sync();
+    let entry = commands(&header, "\"INVALIDATE_ENA\", \"CLEAN_ENA\"", "\"ERASE\"");
+    let render = soc(&svd, &header, &entry).expect("renders");
+    assert_eq!(
+        api(&render, "SYNC"),
+        RegisterApi::Full,
+        "{}",
+        reasons(&render, "SYNC")
+    );
+    for item in [
+        "pub fn start_sync_invalidate_ena(",
+        "pub fn start_sync_clean_ena(",
+        "erase: bool",
+        "-> Result<(), oer_mmio::CommandBusy>",
+        "pub fn sync_clean_ena_busy(",
+        // The debugging command is held: a start waits for it and writes zero.
+        "pub const BUSY: u32 = 0x0000000f;",
+        "pub const COMMANDS: u32 = 0x00000003;",
+        "pub const fn rgid(",
+    ] {
+        assert!(render.rust.contains(item), "{item}\n{}", render.rust);
+    }
+    for absent in [
+        "pub fn modify_sync(",
+        "pub fn set_rgid(",
+        "pub fn start_sync_erase(",
+        "pub fn start_sync_probe(",
+    ] {
+        assert!(!render.rust.contains(absent), "{absent}\n{}", render.rust);
+    }
+    // TIMER1 derives the register but has no entry: it stays read-only.
+    assert_eq!(api_of(&render, "TIMER1", "SYNC"), RegisterApi::Read);
+}
+
+#[test]
+fn a_commands_entry_names_only_self_clearing_bits_an_application_may_start() {
+    let (svd, header) = sync();
+    for (fields, qualifiers, expected) in [
+        ("\"RGID\"", "", "R/W [31:5]"),
+        ("\"DONE\"", "", "RO [4:4]"),
+        ("\"PROBE\"", "", "internal debugging"),
+        ("\"INVALIDATE_ENA\"", "\"PROBE\"", "internal debugging"),
+    ] {
+        let entry = commands(&header, fields, qualifiers);
+        let error = soc(&svd, &header, &entry)
+            .err()
+            .unwrap_or_else(|| panic!("{fields} {qualifiers} is refused"));
+        assert!(error.to_string().contains(expected), "{expected}: {error}");
+    }
+    // A field the hardware also sets stays a reason the register is only read.
+    let set = header.replace("RGID : R/W;", "RGID : R/W/SS;");
+    let entry = commands(&set, "\"INVALIDATE_ENA\"", "");
+    let error = soc(&svd, &set, &entry)
+        .err()
+        .expect("RGID is set by the hardware");
+    assert!(error.to_string().contains("stays read-only"), "{error}");
+}
+
+#[test]
+fn a_debugging_field_is_read_only_and_a_debugging_trigger_a_zero_lane() {
+    let svd = register(
+        "DEBUG",
+        0x30,
+        "read-write",
+        &(field("MODE", 0, 2, "read-write")
+            + &field("PROBE", 2, 2, "read-write")
+            + &field("KICK", 4, 1, "write-only")),
+    );
+    let debug = "Only for internal debugging purposes. Do not use it in applications.";
+    let fields: &[(&str, &str, u32, u32, &str)] = &[
+        ("MODE", "R/W", 0, 2, "The mode."),
+        ("PROBE", "R/W", 2, 2, debug),
+        ("KICK", "WT", 4, 1, debug),
+    ];
+    let header = reg_h(&[("DEBUG", 0x30, fields)]);
+    let render = soc(&svd, &header, "").expect("renders");
+    assert_eq!(api(&render, "DEBUG"), RegisterApi::Full);
+    for item in [
+        "pub fn set_mode(",
+        "pub const fn probe(",
+        "pub const ZERO: u32 = 0x00000010;",
+    ] {
+        assert!(render.rust.contains(item), "{item}\n{}", render.rust);
+    }
+    for absent in ["pub fn set_probe(", "pub fn trigger_debug_kick("] {
+        assert!(!render.rust.contains(absent), "{absent}\n{}", render.rust);
+    }
+}
+
+#[test]
+fn a_data_port_lifts_the_hardware_written_narrowing_and_a_wide_trigger_takes_a_value() {
+    let words = register(
+        "W%s",
+        0x18,
+        "read-write",
+        &field("BUF", 0, 32, "read-write"),
+    )
+    .replace(
+        "<register>",
+        "<register><dim>2</dim><dimIncrement>4</dimIncrement>",
+    );
+    let tie = register(
+        "TIE",
+        0x24,
+        "write-only",
+        &(field("LOW", 0, 4, "write-only") + &field("HIGH", 4, 4, "write-only")),
+    );
+    let header = reg_h(&[
+        ("W0", 0x18, &[("BUF0", "R/W/SS", 0, 32, "data buffer")]),
+        ("W1", 0x1c, &[("BUF1", "R/W/SS", 0, 32, "data buffer")]),
+        (
+            "TIE",
+            0x24,
+            &[
+                ("LOW", "WT", 0, 4, "Ties low."),
+                ("HIGH", "WT", 4, 4, "Ties high."),
+            ],
+        ),
+    ]);
+    let registers = words.clone() + &tie;
+    let render = soc(&registers, &header, "").expect("renders");
+    assert_eq!(api(&render, "W%s"), RegisterApi::Read);
+    assert_eq!(
+        api(&render, "TIE"),
+        RegisterApi::Full,
+        "{}",
+        reasons(&render, "TIE")
+    );
+    assert!(
+        render.rust.contains("pub fn trigger_tie_high("),
+        "{}",
+        render.rust
+    );
+    // A word of write triggers alone is written from zero, never read.
+    assert!(
+        render
+            .rust
+            .contains("self.0.write::<0x24>(value.get() << 4);"),
+        "{}",
+        render.rust
+    );
+    assert!(!render.rust.contains("pub fn read_tie("), "{}", render.rust);
+    let port = soc(
+        &registers,
+        &header,
+        "[[registers]]\nperipheral = \"TIMER\"\nregister = \"W%s\"\ndata-port = true\n\
+         sources = [\"trm:SPI, data buffer\"]\n",
+    )
+    .expect("renders");
+    assert_eq!(
+        api(&port, "W%s"),
+        RegisterApi::Full,
+        "{}",
+        reasons(&port, "W%s")
+    );
+    assert!(port.rust.contains("pub fn write_w("), "{}", port.rust);
+    assert!(!port.rust.contains("pub fn modify_w("));
 }
 
 /// SOC_ETM.EVT_ST0 (`soc_etm_reg.h:2297`): R/WTC/SS status bits the SVD

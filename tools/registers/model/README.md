@@ -82,14 +82,21 @@ as pinned artifacts of the chip's `artifacts.toml` (`cargo pins fetch`) and
 finds every vendor register in its header by name and offset. From the
 header (`soc_headers.rs`):
 
-- `R/W` is a plain field, `RO`/`R`/`HRO` a read-only one, a one-bit `WT` a
-  write trigger written only by its trigger;
+- `R/W` is a plain field, `RO`/`R`/`HRO` a read-only one, a `WT` a write
+  trigger written only by its trigger (a wider one with its value); a
+  register of write triggers alone is write-only, written from zero and
+  never read;
 - a register whose every field is write-one-to-clear (`WTC`, `W1C`) is
   sampled and acknowledged with exactly that sample, never modified;
-- a writable field the hardware also changes (`R/W/SC`, `R/W/SS`,
-  `R/W/WTC`), a set-only one (`W1S`, `WTS`, `WS`, `R/W1`), a multi-bit `WT`,
-  an unknown class and a write-one-to-clear field beside others leave the
-  register read-only;
+- a writable field the hardware also changes (`R/W/SC`, `R/W/WTC`,
+  `R/W/SS`, ...), a set-only one (`W1S`, `WTS`, `WS`, `R/W1`), an unknown
+  class and a write-one-to-clear field beside others leave the register
+  read-only, except in a command register or a command port's data words:
+  that a field clears itself does not say that writing zero to it is
+  harmless, so no command is inferred from a class;
+- a field the header keeps to internal debugging ("Do not use it in
+  applications") is never written: read only, and a write trigger among
+  them a lane every write leaves zero;
 - a field the header describes as `Reserved`, and bits no header field
   declares, are reserved: no accessor, kept by every write;
 - a field a read clears ("cleared by a read", "cleared when read",
@@ -119,9 +126,20 @@ sharing a word or whose word the curated model describes is not rendered.
 `derivedFrom` peripherals take their base's registers, corrected. The
 chip's `model/strictness.toml` ([`StrictnessOverlay`]) also states what the
 headers do not, per register (`offset`, `add`, `access`, `reserved`,
-`read-side-effect`, `fifo`, `write-one-to-clear`, `raw-status-writable`)
-and per field (`rename`, `access`, `kind = "plain" | "write-trigger"`,
-`values`), and lists the interrupt sources the SVD does not. Every entry
+`read-side-effect`, `fifo`, `write-one-to-clear`, `raw-status-writable`,
+`data-port`: a command port's data words, one field the hardware also
+writes, read and stored whole) and per field (`rename`, `access`,
+`kind = "plain" | "write-trigger"`, `values`), the command registers
+(`[[commands]]`: `fields`, optional `qualifiers`, `sources`) and the
+interrupt sources the SVD does not. A command register's `fields` are
+one-bit `R/W/SC` or `R/W/WTC` fields its sources state software starts and
+the hardware clears when done; its `qualifiers` are such bits a start
+writes together with the command, by its argument. The register is written
+only by those starts, and each refuses, writing nothing, while any
+self-clearing bit of the register reads one (the named ones and every other
+one-bit `R/W/SC`/`R/W/WTC` field, held at zero): the zero a start writes
+never lands on a running command. Every other field of it is only read.
+Every entry
 names existing vendor geometry and cites `esp-idf:<path>:<line>` (at the
 overlay's `esp-idf` pin, which must be the chip's pinned ESP-IDF),
 `esp-hal:<path>:<line>` (at its `esp-hal` pin) or `trm:<section>`. An

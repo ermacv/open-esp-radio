@@ -2423,11 +2423,12 @@ sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:3796"]
 
 # SPI1: components/soc/esp32c5/register/soc/spi1_mem_reg.h and spi1_mem_struct.h.
 
-[[registers]]
+[[commands]]
 peripheral = "SPI1"
 register = "SPI_MEM_CMD"
-access = "read-only"
-sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:16"]
+fields = ["SPI_MEM_USR"]
+qualifiers = ["SPI_MEM_FLASH_PE"]
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:16", "esp-idf:components/esp_hal_mspi/esp32c5/include/hal/spimem_flash_ll.h:453"]
 
 [[registers]]
 peripheral = "SPI1"
@@ -2500,97 +2501,97 @@ sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:636", "es
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W0"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:696"]
 
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W1"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:708"]
 
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W2"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:720"]
 
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W3"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:732"]
 
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W4"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:744"]
 
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W5"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:756"]
 
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W6"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:768"]
 
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W7"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:780"]
 
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W8"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:792"]
 
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W9"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:804"]
 
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W10"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:816"]
 
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W11"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:828"]
 
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W12"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:840"]
 
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W13"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:852"]
 
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W14"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:864"]
 
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_W15"
-access = "read-only"
+data-port = true
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:876"]
 
 [[registers]]
