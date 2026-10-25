@@ -111,6 +111,7 @@ impl ChipPolicy {
         let index = Index::new(context, model)?;
         let coverage = ownership::check(context, &index, &file)?;
         let owners = transactions::check(context, &index, &coverage, &file)?;
+        check_interrupts(context, model, &file)?;
         let claims = coverage.claims(&index);
         Ok(Self {
             path: path.to_owned(),
@@ -155,6 +156,45 @@ impl ChipPolicy {
     pub fn owner(&self, transaction: &str) -> Option<PartId> {
         self.owners.get(transaction).copied()
     }
+}
+
+/// Each part's interrupt is a source of the root bound to the part's
+/// instance and served by that part alone; an interrupt handler's part
+/// names its interrupt.
+fn check_interrupts(
+    context: Context<'_>,
+    model: &ChipModel,
+    file: &PolicyFile,
+) -> Result<(), Error> {
+    let mut served = BTreeSet::new();
+    for partition in &file.partitions {
+        for part in &partition.parts {
+            let entity = format!("{}.{}", partition.name, part.name);
+            let fail = |reason: String| context.error(&entity, ErrorKind::Interrupt(reason));
+            let Some(name) = &part.interrupt else {
+                if part.irq_side {
+                    return Err(fail(
+                        "an interrupt handler's part names its interrupt".to_owned(),
+                    ));
+                }
+                continue;
+            };
+            let bound = model
+                .interrupts()
+                .iter()
+                .any(|interrupt| interrupt.name == *name && interrupt.instance == part.instance);
+            if !bound {
+                return Err(fail(format!(
+                    "{name} is no interrupt source bound to {}",
+                    part.instance
+                )));
+            }
+            if !served.insert(name.as_str()) {
+                return Err(fail(format!("{name} is served by another part")));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The clear element of each snapshot: the one its status register's type

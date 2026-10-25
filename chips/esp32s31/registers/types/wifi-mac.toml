@@ -6638,7 +6638,7 @@ description = "RX descriptor-walker gate, hardware-beacon reload selection and l
 [[registers.fields]]
 name = "APPEND_DESCRIPTOR_RELOAD"
 bits = "0"
-class = "write-trigger"
+class = "self-clearing"
 description = "Write one after publishing old_tail.next to make a prepared live-list append visible. Hardware clears the bit after accepting the append."
 
 [[registers.fields]]
@@ -14512,3 +14512,12 @@ description = "Observed source use; the individual hardware meaning is unknown."
 status = "STATUS"
 clear = "CLEAR"
 sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT"]
+
+# rom[]::wDev_AppendRxBlocks sets the bit by a read-modify-write of
+# RX_CONTROL and waits for it to clear; rom[]::hal_mac_rx_enable and
+# hal_mac_rx_disable change WALKER_ENABLE by a read-modify-write that
+# writes back the bit as read.
+[[doorbells]]
+register = "RX_CONTROL"
+field = "APPEND_DESCRIPTOR_RELOAD"
+sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_GATE"]

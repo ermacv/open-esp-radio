@@ -37,8 +37,7 @@ pub(super) struct Owner<'p> {
     /// The division the part is a member of, if its instance's parts
     /// observe or split each other's words.
     pub(super) division: Option<usize>,
-    /// The interrupt source its instance is bound to, if exactly one and
-    /// the part is an interrupt handler's.
+    /// The interrupt source the policy names for the part.
     pub(super) source: Option<u16>,
 }
 
@@ -149,12 +148,15 @@ pub(super) fn plan<'p>(model: &ChipModel, policy: &'p ChipPolicy) -> Result<Owne
                     format!("instance {} is no MMIO instance", part.instance),
                 )
             })?;
-            let bound = model
-                .interrupts()
-                .iter()
-                .filter(|interrupt| interrupt.instance == part.instance)
-                .map(|interrupt| interrupt.source)
-                .collect::<Vec<_>>();
+            // The policy names each part's interrupt; its loader checked the
+            // source is bound to the part's instance.
+            let source = part.interrupt.as_ref().and_then(|name| {
+                model
+                    .interrupts()
+                    .iter()
+                    .find(|interrupt| interrupt.name == *name)
+                    .map(|interrupt| interrupt.source)
+            });
             index.insert(id, owners.len());
             owners.push(Owner {
                 id,
@@ -168,10 +170,7 @@ pub(super) fn plan<'p>(model: &ChipModel, policy: &'p ChipPolicy) -> Result<Owne
                     triggers: BTreeMap::new(),
                 },
                 division: None,
-                source: match (part.irq_side, bound.as_slice()) {
-                    (true, [source]) => Some(*source),
-                    _ => None,
-                },
+                source,
             });
         }
     }

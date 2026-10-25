@@ -264,6 +264,7 @@ impl BlockType {
         check_elements(context, space, &name, &elements)?;
         check_group_spans(context, &name, &file.groups, &elements)?;
         check_commands(context, &name, &file.commands, &templates)?;
+        check_doorbells(context, &name, &file, &templates)?;
         let reviews = resolve_reviews(context, &file, &templates)?;
         Ok(Self {
             path,
@@ -910,6 +911,62 @@ fn check_commands(
             ));
         }
         context.sources(&entity, &command.sources)?;
+    }
+    Ok(())
+}
+
+/// A doorbell is one self-clearing bit of a register that is no command
+/// register, FIFO, data port or word a read changes, and whose other
+/// fields a read-modify-write may write back: plain, read-only or
+/// write-trigger ones (a trigger is written zero).
+fn check_doorbells(
+    context: Context<'_>,
+    name: &str,
+    file: &TypeFile,
+    templates: &BTreeMap<String, Register>,
+) -> Result<(), Error> {
+    let mut seen = BTreeSet::new();
+    for doorbell in &file.doorbells {
+        let entity = format!("{name}.{}.{}", doorbell.register, doorbell.field);
+        let fail = |reason: &str| context.error(&entity, ErrorKind::Doorbell(reason.to_owned()));
+        let register = templates
+            .get(&doorbell.register)
+            .ok_or_else(|| fail("its register is not in the type"))?;
+        if !seen.insert((doorbell.register.as_str(), doorbell.field.as_str())) {
+            return Err(context.error(&entity, ErrorKind::Duplicate(entity.clone())));
+        }
+        let one_bit = register.fields.iter().any(|field| {
+            field.name == doorbell.field
+                && field.class == FieldClass::SelfClearing
+                && parse_bits(&field.bits).is_ok_and(|(_, width)| width == 1)
+        });
+        if !one_bit {
+            return Err(fail("is not one self-clearing bit of its register"));
+        }
+        if file
+            .commands
+            .iter()
+            .any(|command| command.register == doorbell.register)
+            || register.fifo.is_some()
+            || register.data_port.is_some()
+            || register.read_side_effect.is_some()
+        {
+            return Err(fail(
+                "its register is a command register, a FIFO or data port, or a read changes it",
+            ));
+        }
+        if register.fields.iter().any(|field| {
+            field.name != doorbell.field
+                && !matches!(
+                    field.class,
+                    FieldClass::Plain | FieldClass::ReadOnly | FieldClass::WriteTrigger
+                )
+        }) {
+            return Err(fail(
+                "its register holds a field a read-modify-write cannot write back",
+            ));
+        }
+        context.sources(&entity, &doorbell.sources)?;
     }
     Ok(())
 }

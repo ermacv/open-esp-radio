@@ -14,6 +14,7 @@ registers = ["RAD_CONFIG", "RAD_COMMAND", "RAD_STATUS", "RAD_CMD", "RAD_FIFO", "
 [[partitions.parts]]
 name = "Irq"
 instance = "RADIO0"
+interrupt = "RADIO0_INTR"
 registers = ["RAD_EVENTS", "RAD_EVENT_CLR", "RAD_ENABLE"]
 observes = ["RAD_CONFIG"]
 irq-side = true

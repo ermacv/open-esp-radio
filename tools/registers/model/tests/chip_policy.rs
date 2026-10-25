@@ -357,7 +357,7 @@ placement = ["dma-window"]
 const ROOT: &str = r#"
 schema = 4
 chip = "testchip"
-interrupt-sources = { count = 0, sources = ["SRC_HEADER"] }
+interrupt-sources = { count = 2, sources = ["SRC_HEADER"] }
 types = ["types/timer.toml", "types/etm.toml", "types/counter.toml", "types/pll.toml"]
 layouts = ["layouts/rx-descriptor.toml"]
 
@@ -396,6 +396,18 @@ base = 0x60004000
 extent = { size = 0x1000 }
 sources = ["SRC_HEADER"]
 
+[[interrupts]]
+name = "TIMER0_INTR"
+source = 0
+instance = "TIMER0"
+sources = ["SRC_HEADER"]
+
+[[interrupts]]
+name = "TIMER1_INTR"
+source = 1
+instance = "TIMER1"
+sources = ["SRC_HEADER"]
+
 [[analog-i2c.instances]]
 name = "PLL"
 type = "PLL"
@@ -430,6 +442,7 @@ registers = ["CONFIG", "VALUE", "LOAD", "FIFO", "ALARM_%s", "ADDR", "STATE", "WO
 [[partitions.parts]]
 name = "Irq"
 instance = "TIMER0"
+interrupt = "TIMER0_INTR"
 registers = ["INT_ENA", "INT_RAW", "INT_CLR"]
 observes = ["VALUE"]
 irq-side = true
@@ -1392,6 +1405,29 @@ rejects!(
         "register = \"TIMER0.FIFO\"\nsources"
     )],
     ErrorKind::Register(_)
+);
+rejects!(
+    handler_part_names_its_interrupt,
+    [("interrupt = \"TIMER0_INTR\"\n", "")],
+    ErrorKind::Interrupt(_)
+);
+rejects!(
+    part_interrupt_is_bound_to_its_instance,
+    [("interrupt = \"TIMER0_INTR\"", "interrupt = \"TIMER1_INTR\"")],
+    ErrorKind::Interrupt(_)
+);
+rejects!(
+    one_part_serves_an_interrupt,
+    [(
+        "name = \"Task\"\ninstance = \"TIMER0\"\n",
+        "name = \"Task\"\ninstance = \"TIMER0\"\ninterrupt = \"TIMER0_INTR\"\n"
+    )],
+    ErrorKind::Interrupt(_)
+);
+rejects!(
+    part_interrupt_is_a_source_of_the_root,
+    [("interrupt = \"TIMER0_INTR\"", "interrupt = \"MISSING\"")],
+    ErrorKind::Interrupt(_)
 );
 rejects!(
     snapshot_status_needs_an_interrupt_pair,

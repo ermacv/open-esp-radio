@@ -29,6 +29,8 @@ pub struct TypeFile {
     pub commands: Vec<Command>,
     #[serde(default)]
     pub interrupt_pairs: Vec<InterruptPair>,
+    #[serde(default)]
+    pub doorbells: Vec<Doorbell>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -387,6 +389,19 @@ pub struct Command {
     pub qualifiers: Vec<String>,
     #[serde(default)]
     pub held: Vec<String>,
+    pub sources: Vec<String>,
+}
+
+/// A self-clearing bit outside a command register that software sets to
+/// request one hardware action and the hardware clears when it accepts it:
+/// a read-modify-write of its register may write back the value it read,
+/// as the vendor's own read-modify-writes do.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Doorbell {
+    /// `REGISTER` or `GROUP.REGISTER`.
+    pub register: String,
+    pub field: String,
     pub sources: Vec<String>,
 }
 

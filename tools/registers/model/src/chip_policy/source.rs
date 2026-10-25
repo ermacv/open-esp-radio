@@ -101,6 +101,11 @@ pub struct Part {
     /// Owned by an interrupt handler, not a task.
     #[serde(default)]
     pub irq_side: bool,
+    /// The interrupt source of the root (its name) whose handler the part
+    /// serves: one bound to the part's instance, named by no other part.
+    /// An interrupt handler's part names one.
+    #[serde(default)]
+    pub interrupt: Option<String>,
     /// Reached by every execution context at once through `&self`.
     #[serde(default)]
     pub shared: bool,

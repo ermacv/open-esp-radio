@@ -75,6 +75,8 @@ pub enum ErrorKind {
     WordOverlap { offset: u64, other: String },
     #[error("command register: {0}")]
     Command(String),
+    #[error("doorbell: {0}")]
+    Doorbell(String),
     #[error("port: {0}")]
     Port(String),
     #[error("{0} is allowed only in an analog-I2C type")]

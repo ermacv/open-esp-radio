@@ -17,6 +17,7 @@ registers = ["EP1", "EP1_CONF", "INT_ST", "INT_ENA"]
 [[partitions.parts]]
 name = "UsbSerialJtagIrq"
 instance = "USB_DEVICE"
+interrupt = "USB_SERIAL_JTAG"
 registers = ["INT_CLR"]
 observes = ["INT_ST"]
 irq-side = true
@@ -162,6 +163,7 @@ description = "Software interrupt line 0, owned by the line's owner (an executor
 [[partitions.parts]]
 name = "FromCpu0"
 instance = "HP_SYS"
+interrupt = "CPU_INTR_FROM_CPU_0"
 registers = ["HP_CPU_INT_FROM_CPU_0"]
 shared = true
 description = "Software interrupt line 0: wakers raise it from every context and its handler lowers it."
@@ -175,6 +177,7 @@ description = "Software interrupt line 1, owned by the line's owner (an executor
 [[partitions.parts]]
 name = "FromCpu1"
 instance = "HP_SYS"
+interrupt = "CPU_INTR_FROM_CPU_1"
 registers = ["HP_CPU_INT_FROM_CPU_1"]
 shared = true
 description = "Software interrupt line 1: wakers raise it from every context and its handler lowers it."
@@ -188,6 +191,7 @@ description = "Software interrupt line 2, owned by the line's owner (an executor
 [[partitions.parts]]
 name = "FromCpu2"
 instance = "HP_SYS"
+interrupt = "CPU_INTR_FROM_CPU_2"
 registers = ["HP_CPU_INT_FROM_CPU_2"]
 shared = true
 description = "Software interrupt line 2: wakers raise it from every context and its handler lowers it."
@@ -201,6 +205,7 @@ description = "Software interrupt line 3, owned by the line's owner (an executor
 [[partitions.parts]]
 name = "FromCpu3"
 instance = "HP_SYS"
+interrupt = "CPU_INTR_FROM_CPU_3"
 registers = ["HP_CPU_INT_FROM_CPU_3"]
 shared = true
 description = "Software interrupt line 3: wakers raise it from every context and its handler lowers it."
@@ -860,6 +865,7 @@ description = "Bluetooth modem low-power timer registers transferred independent
 [[partitions.parts]]
 name = "BtdmRuntimeControl"
 instance = "MODEM_PWR"
+interrupt = "MODEM_LP_TIMER"
 registers = ["RUNTIME_TIMER_START_COMMAND", "WORD_0004_OPAQUE", "WORD_0008_OPAQUE", "WORD_0010_OPAQUE", "WORD_0014_OPAQUE", "WORD_001C_OPAQUE", "WORD_0020_OPAQUE", "WORD_0024_OPAQUE", "WORD_002C_OPAQUE", "WORD_0034_OPAQUE", "WORD_0038_OPAQUE", "WORD_0040_OPAQUE", "WORD_0044_OPAQUE", "WORD_0048_OPAQUE", "WORD_004C_OPAQUE", "WORD_0058_OPAQUE", "WORD_0064_OPAQUE", "WORD_0068_OPAQUE", "WORD_006C_OPAQUE", "WORD_0078_OPAQUE"]
 
 [[partitions]]
@@ -870,6 +876,7 @@ description = "Bluetooth controller interrupt registers transferred independentl
 [[partitions.parts]]
 name = "BluetoothInterruptBank"
 instance = "BT_MAC"
+interrupt = "MODEM_BT_MAC"
 registers = ["IRQ_CONTROL_0", "IRQ_CONTROL_1", "IRQ_CONTROL_2", "IRQ_ENABLE_0", "IRQ_CLEAR_0", "IRQ_STATUS_0", "IRQ_ENABLE_1", "IRQ_CLEAR_1", "IRQ_STATUS_1", "IRQ_DIAGNOSTIC_STATE", "IRQ_DIAGNOSTIC_DETAIL_0", "IRQ_DIAGNOSTIC_DETAIL_1", "IRQ_STATUS_SNAPSHOT_0", "IRQ_STATUS_SNAPSHOT_1"]
 
 [[partitions.parts]]
@@ -958,6 +965,7 @@ registers = ["COMMAND", "CONTROL", "CHANNEL", "TX_POWER", "ED_DURATION", "ED_CON
 [[partitions.parts]]
 name = "Ieee802154MacIrq"
 instance = "IEEE802154"
+interrupt = "MODEM_ZB_MAC"
 registers = ["EVENT_STATUS"]
 observes = ["RX_STATUS", "TX_STATUS", "ED_CONFIG"]
 irq-side = true
