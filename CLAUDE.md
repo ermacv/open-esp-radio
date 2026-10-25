@@ -19,12 +19,12 @@ system these rules serve.
   method accesses, not only its type name.
 - **No compatibility layers.** Change an interface together with all its
   callers: no deprecated aliases, re-export shims or fallback paths.
-- **No esp-* crates or bridges.** The S31 workspace has no esp-hal,
-  esp-pacs, esp-riscv-rt, esp-rom-sys or their companion crates. Host
-  `espflash` and its transitive image-format dependency remain host tools.
-  The reset root and the typed PAC/HAL own the chip; no vendor-singleton
-  adapter, `take_*` handoff, `handoff = true` partition, shared-word inventory
-  or platform allowlist is permitted. C5 stays outside the workspace.
+- **Chip ownership.** The S31 workspace contains no esp-* platform crates
+  or bridges. Host `espflash` and its transitive image-format dependency are
+  host tools. The PAC's single `take()` claims the chip; the HAL's
+  `Root::take` splits it through `into_bootstrap` or `into_runtime`.
+  Only these owned partitions grant register access. C5 stays outside the
+  workspace.
 - **Compile time first.** Every check that can run at compile time runs there.
 - **Panics.** Input from outside never panics: frames from the air, any peer
   value (counters, PNs, sequence numbers, lengths, indices), host and API
@@ -52,13 +52,14 @@ system these rules serve.
   cannot express is written by hand.
 - **Hardware access.** MMIO only through typed PAC accessors. A missing field
   is added to `chips/<chip>/registers/` and regenerated (`cargo registers
-  generate`), never written as a local mask or shift. Code preserves reserved
-  and unknown bits; the one exception is a PAC policy fixed image marked
-  `whole-word`, a vendor's store of a whole word with its `SOURCE:`. Generated register code has no `unsafe`: volatile access
-  lives in `portable/mmio` alone (svd2rust-rendered PAC domains keep theirs
-  until they move). `unsafe` stays in `portable/mmio`, architectural instructions in `portable/riscv`, the PAC (svd2rust-rendered
-  domains and hand-written roots), probe images, the placement constructor and
-  the HAL's protocol core, narrow and with `// SAFETY:`
+  generate --chip <chip>`), never written as a local mask or shift. Code
+  preserves reserved and unknown bits; the one exception is a PAC policy
+  fixed image marked `whole-word`, a vendor's store of a whole word with
+  its `SOURCE:`.
+  Generated register code has no `unsafe`: volatile access lives in
+  `portable/mmio` alone. `unsafe` stays in `portable/mmio`, architectural
+  instructions in `portable/riscv`, the PAC's one root claim, probe images,
+  the placement constructor and the HAL's protocol core, narrow and with `// SAFETY:`
   ([docs/unsafe.md](docs/unsafe.md)); crates above the HAL forbid it.
 - **Air formats** use the `oer-wire` field macro and its bounded cursor; each
   field names its clause of the standard. No hand-written masks or shifts.
@@ -71,11 +72,14 @@ system these rules serve.
   time. The one exception is the pinned toolchain (`cargo`, `rustc`, `lld`)
   run into the test's own build directory for compile-fail and
   compiler-driven cases.
-- **Generated files** (`*/pac-raw/src/lib.rs`, `*/pac/src/generated.rs`,
-  `registers/**/published/*`, `vendor/facts/**`, `vendor/phy-baselines/*/*.json`,
-  all below `chips/`) are never read whole or edited by hand: grep them by
-  path, regenerate them. `chips/*/layout/linker/dma-window.x` may be read,
-  never edited.
+- **Generated files.** `chips/*/pac/src/generated.rs`,
+  `chips/*/vendor/facts/**/*.toml` (including TOML files directly in `facts/`)
+  and `chips/*/vendor/phy-baselines/*/*.json` are never read whole or edited
+  by hand: grep them by path, regenerate them. `cargo registers generate
+  --chip <chip>` renders the PAC and
+  `chips/*/layout/linker/dma-window.x`; the linker fragment may be read,
+  never edited. Its inputs are `chips/<chip>/registers/chip.toml`, `types/`,
+  `layouts/`, `evidence/` and the schema-6 `policy.toml`.
 - **Sources.** No vendor binaries, disassembly or credentials in git. A
   recovered value carries its `SOURCE:`. From sources without a license only
   facts, never code or verbatim tables
@@ -133,7 +137,7 @@ system these rules serve.
   on a conflict or when main changed the same files. Cite commit hashes as
   `git` prints them. Pass lists of paths as arrays, not one string.
 - **GitHub.** Act only in the owner's repositories; upstream projects are
-  read-only (fixes to esp-hal go to the owner's fork).
+  read-only.
 - **Documents state the current state,** in English. No plans, history or
   "the owner decided" in the repository. An owner decision changes this file,
   [docs/architecture.md](docs/architecture.md) or the README of the code it

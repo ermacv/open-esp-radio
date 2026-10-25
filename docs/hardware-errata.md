@@ -52,12 +52,13 @@ fault.
 
 - Every ESP-IDF image hung on a USB reset (the IEEE 802.15.4 and OpenThread
   peers on ESP-IDF master `4d59230d` and on v6.1, with the radio enabled or
-  disabled), while esp-hal images booted normally after the same reset.
-- The LP-domain registers of a running esp-hal image and a running ESP-IDF
+  disabled). Comparison images that left the state map at ACTIVE only
+  booted normally after the same reset.
+- The LP-domain registers of the comparison image and a running ESP-IDF
   image, read over the chip's JTAG with OpenOCD, differ in PMU state
   configuration, `LP_ANA` brown-out control, `LPPERI` clock enables and
   `MODEM_LPCON` `CLK_CONF_POWER_ST`.
-- Writing the esp-hal values into the running ESP-IDF image before the USB
+- Writing the comparison values into the running ESP-IDF image before the USB
   reset, group by group, isolated the fault: restoring `clk_i2c_mst_st_map`
   alone to ACTIVE made the ESP-IDF image boot normally after the reset;
   restoring every other differing register left it hanging.

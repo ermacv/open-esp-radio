@@ -1,8 +1,9 @@
 # radio-root
 
-This ESP32-S31 staged application adopts PSRAM, takes the radio hardware
-root from esp-hal, and acquires and releases each platform clock once. It
-initializes no RF, PHY or MAC. The hardware root remains held until reset.
+This ESP32-S31 staged application adopts PSRAM, owns `RadioHardware` from
+the HAL root's `into_runtime()`, and acquires and releases each platform
+clock once. It initializes no RF, PHY or MAC. The hardware root remains
+held until reset.
 
 ```console
 cargo fw build radio-root

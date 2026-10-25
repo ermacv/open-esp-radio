@@ -126,4 +126,5 @@ The interrupt table uses numeric levels and harts and each part's
 `InterruptSource`, with no vendor enum. Executor start and timer binding
 consume the table token and interrupt part through `Router::bind`. Doorbell
 setup returns its acknowledger before the image binds the handler's part.
-No constructor performs an unsafe hardware claim or a singleton handoff.
+Constructors consume owned HAL parts from the reset root; only the PAC
+root claims hardware.

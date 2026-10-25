@@ -28,12 +28,12 @@ conditions and dates:
 | Note | Subject |
 | --- | --- |
 | [Bring-up order](bring-up-order.md) | Wi-Fi PHY and coexistence before common power; the failed orders |
-| [How core 1 starts](core1-boot.md) | What ROM, the esp-hal fork and the image gate each guarantee about core 1 |
+| [How core 1 starts](core1-boot.md) | Core-1 boot sources and the image gate's containment checks |
 | [Core 1 sampling](core1-sampling.md) | Reading core 1's PC and SP from the debug-assist record |
 | [CCA counter](phy/cca-counter.md) | Unresolved measurement-window ownership and limits of the caller analysis; no comparison exclusion |
 
-[Registers](../../espressif/registers/README.md) owns reviewed hardware models
-and publication; vendor artifact pins are in
+[Registers](../registers/README.md) owns the chip's block types, layouts,
+evidence and ownership policy; vendor artifact pins are in
 [`vendor/artifacts.toml`](../vendor/artifacts.toml). Production behavior belongs
 to the crates ([architecture](../../../docs/architecture.md)). Source hashes and artifact identities are
 provenance constraints, not a claim that the implementation is equivalent.

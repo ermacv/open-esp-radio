@@ -61,7 +61,7 @@ it; the HAL says in which order and who owns it.
 
 ### 1. Layout: the register model and the generated PAC
 
-A new kind of model entry, a **memory layout**, beside peripherals:
+A **memory layout** describes RAM beside the MMIO block types:
 `chips/<chip>/registers/layouts/<name>.toml`, included by the chip root
 `chip.toml`, whose `[[layout-placements]]` place it in RAM regions.
 
@@ -214,7 +214,8 @@ The generator emits, in the chip's PAC (`generated.rs`):
 - the placement as constants the HAL checks against (`StableDmaRange`,
   `placement.rs`).
 
-No protocol logic in the PAC: no ordering, no fences, no ownership.
+The PAC supplies layout types and accessors. Ordering, fences and the
+CPU/hardware ownership protocol belong to the HAL.
 
 ### 2. Protocol: the HAL
 
@@ -232,8 +233,7 @@ A DMA static is declared with the chip HAL's `dma_static!`: a zeroed
 `DmaStatic<T>` in a `.dma.bss.<block>` section (the macro refuses any other
 section name), claimed once as a `Placed<T>`. The register generator writes
 each chip's `layout/linker/dma-window.x` from the model: the `dma-window`
-region and the width of S31's `RX_NEXT_DESCRIPTOR.ADDRESS_LOW` or C5's
-full-width `IEEE802154_MAC.RX_DMA_ADDRESS.ADDRESS`. The
+region and the low address bits its pointers keep. The
 runtime linker script includes it and asserts that all DMA storage lies in
 the window and holds no address whose low address bits are zero; the
 runtime link uses `--orphan-handling=error`, so a mistyped section name
@@ -346,17 +346,16 @@ route removal before reset and channel reuse.
   hardware writes back (`NEXT`, `LAST`) is outside input and stays checked,
   against the arena rather than the window. Host tests keep the `HostDma`
   space with the same types.
-- **The unsafe boundary.** Three narrow places, all in the PAC and the HAL:
-  the generated volatile word accesses (a safe API over plain words); the one
+- **The unsafe boundary.** Volatile word access lives in `portable/mmio`;
+  generated layout accessors use its safe API. The HAL holds the one
   placement constructor (justified by the linker assertion and a single
-  `take`); and the protocol core, where a CPU view of a buffer is created
+  `take`) and the protocol core, where a CPU view of a buffer is created
   after the completion proof and where a buffer is handed back to the
   hardware. Crates above the HAL carry `#![forbid(unsafe_code)]`.
 
-## Open questions
+## Model access
 
-- **Home of a layout shared by chips.** The Wi-Fi descriptor is likely common
-  to several Espressif chips; it lives in the S31 model, and moves to a
-  shared model when a second chip's Wi-Fi DMA is described.
-- **SVD and the binding index.** A layout has no address, so it does not go
-  into the SVD; whether vendor analysis needs it in the binding index is open.
+S31 layouts live in `chips/esp32s31/registers/layouts/` and are included by
+`chip.toml`. Host tools load the same register model through
+`oer_registers_model::Chip::load`; generated layout accessors live in the
+PAC's `generated.rs`.

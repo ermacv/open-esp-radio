@@ -120,8 +120,8 @@ hart's exception), CPU0 (stage two's entry) and each task root in the
 runtime, and the bootstrap root; it runs with the stack and interrupts
 checks, over their bounds' `reached` inventories. A site belongs to the
 layer of the crate its function's demangled name starts with (the self type
-of `<T as Trait>`): workspace crates by directory (`chips/**/pac`,
-`pac-raw`, `*-pac`, `*-pac-raw` are `pac`; `chips/*/hal` is `hal`; the rest
+of `<T as Trait>`): workspace crates by directory (`chips/*/pac` is `pac`;
+`chips/*/hal` is `hal`; the rest
 of `chips/` is `chips`; `portable`, `protocols`, `firmware`), then `core`
 (core, alloc, compiler_builtins), `embassy` (`embassy_*`), `third-party` (every other crate) and `unnamed` (names
 without a crate: `#[no_mangle]` and assembly symbols). An inlined call counts in the function it is inlined into.

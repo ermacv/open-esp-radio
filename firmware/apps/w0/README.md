@@ -30,6 +30,6 @@ cargo fw run w0 --board s31-a
 
 Nothing is transmitted. eFuse is only read: the base MAC and its extension
 word (`MAC_EXT`) for the calibration identity, and the station and
-access-point addresses that esp-hal's `interface_mac_address` derives from
-the base MAC. No RTC slow-clock calibration is supplied to the MAC
-(`MacSlowClockCalibration::Unavailable`).
+access-point addresses derived from the base MAC by the HAL's
+`platform::FactoryIdentity::address`. No RTC slow-clock calibration is
+supplied to the MAC (`MacSlowClockCalibration::Unavailable`).

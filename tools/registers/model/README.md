@@ -6,8 +6,8 @@
 and the block type files it includes; `Chip::load(checkout, chip)` loads
 `chips/<chip>/registers/chip.toml` with every evidence catalog of its
 `evidence/` directory, and `Chip::policy()` its ownership policy
-`policy.toml`. `cargo registers generate` renders the PAC from them
-([generate](../generate/README.md)).
+`policy.toml`. `cargo registers generate --chip <chip>` renders the PAC
+from them ([generate](../generate/README.md)).
 
 A **block type** is one hardware block, one TOML file, without an address:
 every register has an offset from the block's base. A type is never a
