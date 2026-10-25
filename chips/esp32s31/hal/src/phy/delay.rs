@@ -10,6 +10,12 @@ pub struct RomShortDelay;
 #[allow(unsafe_code)]
 unsafe extern "C" {
     fn ets_delay_us(micros: u32);
+
+    /// Set the ROM delay calibration to the CPU's ticks per microsecond.
+    ///
+    /// SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7
+    /// `components/esp_rom/esp32s31/ld/esp32s31.rom.ld:32`.
+    pub(crate) fn ets_update_cpu_frequency(ticks_per_us: u32);
 }
 
 impl RomShortDelay {

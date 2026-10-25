@@ -5,6 +5,41 @@ schema = 6
 chip = "esp32s31"
 
 [[partitions]]
+name = "BootPeripherals"
+member = "soc"
+description = "The bootstrap SoC initializer: access-path filters and the LP TRNG clock, reset, sampling, conditioning and health tests. Core containment is owned by CoreControlPeripherals."
+
+[[partitions.parts]]
+name = "LpApmFilter"
+instance = "LP_APM"
+registers = ["FUNC_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L990"]
+
+[[partitions.parts]]
+name = "HpApmFilter"
+instance = "HP_APM"
+registers = ["FUNC_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1950"]
+
+[[partitions.parts]]
+name = "HpMemApmFilter"
+instance = "HP_MEM_APM"
+registers = ["FUNC_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_MEM_APM_REG_H_L1214"]
+
+[[partitions.parts]]
+name = "TrngInit"
+instance = "TRNG"
+registers = ["CONF", "DEBUG_CONF", "DATE"]
+sources = ["ESP_IDF_4D59230D_HAL_ESP32S31_INCLUDE_HAL_RNG_LL_H_L163"]
+
+[[partitions.parts]]
+name = "LpPericlkrstRngInit"
+instance = "LP_PERICLKRST"
+registers = ["RNG_CTRL"]
+sources = ["ESP_IDF_4D59230D_HAL_ESP32S31_INCLUDE_HAL_RNG_LL_H_L163"]
+
+[[partitions]]
 name = "UsbSerialJtagPeripherals"
 member = "usb_serial_jtag"
 description = "The USB Serial/JTAG console: its data FIFO, interrupts and pads, written by the early writer before the console's driver exists and by the driver after."
@@ -77,17 +112,15 @@ registers = ["RD_MAC_SYS0", "RD_MAC_SYS1", "RD_MAC_SYS3"]
 [[partitions]]
 name = "EntropyPeripherals"
 member = "entropy"
-description = "The true random number generator and its clock and reset word, read by the entropy owner."
+description = "The conditioned TRNG output and error word, with read-only views of the configuration held by the bootstrap SoC initializer."
 
 [[partitions.parts]]
 name = "Trng"
 instance = "TRNG"
-registers = ["CONF", "DEBUG_CONF", "INT_RAW", "CRC_SYNC_DATA"]
-
-[[partitions.parts]]
-name = "LpPericlkrstRng"
-instance = "LP_PERICLKRST"
-registers = ["RNG_CTRL"]
+registers = ["INT_RAW", "CRC_SYNC_DATA"]
+observes = ["CONF", "DEBUG_CONF"]
+description = "The entropy owner reads the conditioned output and health status; only the bootstrap initializer configures sampling and health tests."
+sources = ["ESP_IDF_4D59230D_S31_TRNG"]
 
 [[partitions]]
 name = "ResetCausePeripherals"
@@ -1118,7 +1151,7 @@ reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "TRNG"
-registers = ["CONDITION_KEY0", "CONDITION_KEY1", "CONDITION_KEY2", "CONDITION_KEY3", "CONDITION_KEY4", "CONDITION_KEY5", "CONDITION_KEY6", "CONDITION_KEY7", "INT_ENA", "INT_CLR", "INT_ST", "ARBIT_CFG", "SW_READ", "SW_READ_ST", "CRC_DATA", "DATE"]
+registers = ["CONDITION_KEY0", "CONDITION_KEY1", "CONDITION_KEY2", "CONDITION_KEY3", "CONDITION_KEY4", "CONDITION_KEY5", "CONDITION_KEY6", "CONDITION_KEY7", "INT_ENA", "INT_CLR", "INT_ST", "ARBIT_CFG", "SW_READ", "SW_READ_ST", "CRC_DATA"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]

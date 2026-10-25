@@ -1892,3 +1892,10 @@ id = "esp-idf-clocks/components/bootloader_support/src/bootloader_init.c"
 source = "esp-idf-clocks"
 path = "components/bootloader_support/src/bootloader_init.c"
 sha256 = "61752b7c541d1bd5d0437a667f3c4c0895f81d8388f2b602f2d77d2b766a97ad"
+
+# The nonradio ROM ABI used by bootstrap delay calibration.
+[[artifact]]
+id = "esp-idf/components/esp_rom/esp32s31/ld/esp32s31.rom.ld"
+source = "esp-idf"
+path = "components/esp_rom/esp32s31/ld/esp32s31.rom.ld"
+sha256 = "51a7555a36ef01b7a3dec77081de15915f753ee7aceb9ae35a0bd21ec17775e2"
