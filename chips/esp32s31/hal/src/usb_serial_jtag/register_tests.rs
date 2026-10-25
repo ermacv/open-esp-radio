@@ -1,6 +1,6 @@
 //! The console's owners over host memory: each test fills the blocks with
-//! one pattern and observes the words through the generated readers, never
-//! where a word lies or which bit a field holds.
+//! one pattern and observes the words through the generated readers and
+//! the write-only clear word's generated offset, with no fixed addresses or bits.
 
 use std::{vec, vec::Vec};
 
@@ -91,6 +91,10 @@ fn enabling_sets_both_console_interrupts_and_keeps_the_others() {
 
 #[test]
 fn the_handler_acknowledges_exactly_the_events_it_read() {
+    let console_events = status_word_for(UsbEvents {
+        in_empty: true,
+        out_received: true,
+    });
     for events in [
         UsbEvents {
             in_empty: true,
@@ -106,11 +110,11 @@ fn the_handler_acknowledges_exactly_the_events_it_read() {
         },
     ] {
         let mut words = memory(usb_serial_jtag::SIZE, 0);
-        set_status(&mut words, status_word_for(events));
+        let expected_acknowledgement = status_word_for(events);
+        set_status(&mut words, expected_acknowledgement | !console_events);
         let mut reference = words.clone();
-        let mut view = usb_serial_jtag::UsbSerialJtag::host(&mut reference).expect("host block");
-        let sample = view.sample_usb_console_interrupt();
-        view.acknowledge_usb_console_interrupt(sample);
+        // INT_CLR uses the status bits, independently of the generated snapshot.
+        reference[usb_serial_jtag::int_clr::OFFSET / 4] = expected_acknowledgement;
         let mut pads = memory(usb_serial_jtag_pads::SIZE, 0);
         let (_, mut interrupt, _) = parts(owners(&mut words, &mut pads));
         assert_eq!(interrupt.take_events(), events);
