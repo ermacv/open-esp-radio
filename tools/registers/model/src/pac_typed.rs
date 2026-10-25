@@ -1272,9 +1272,19 @@ impl<'a> TypedBlock<'a> {
                 let enable = registers
                     .iter()
                     .find(|register| register.info.name == *masks);
+                // A plain enable register is read back and stored: never a
+                // data port or a command register, which only their own
+                // stores and starts write.
                 if cleared.contains(masks.as_str())
                     || fifos.contains(&masks.as_str())
-                    || !enable.is_some_and(|enable| enable.array.is_none())
+                    || ports.contains(masks.as_str())
+                    || commands.keys().any(|(command, _)| command == masks)
+                    || !enable.is_some_and(|enable| {
+                        enable.array.is_none()
+                            && enable.readable
+                            && enable.writable
+                            && !enable.clears_on_read
+                    })
                 {
                     return Err(Error::message(format!(
                         "fixed-register-image {:?} masks {name}.{masks}, which is no plain enable register of the block",

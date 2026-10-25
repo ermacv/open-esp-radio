@@ -1260,6 +1260,18 @@ fn a_clear_register_image_without_its_proof_is_refused() {
         "no plain enable register",
     );
     let mut pack = stale_clear_pack(Some("ENABLE"), None);
+    pack.data_ports.push(crate::DataPort {
+        peripheral: "RADIO".to_owned(),
+        register: "ENABLE".to_owned(),
+        sources: vec!["SOURCE".to_owned()],
+    });
+    refused(
+        &pack,
+        &(events(&field("DONE", 0, 1, ""))
+            + &register("ENABLE", 8, "read-write", "", &field("DONE", 0, 1, ""))),
+        "no plain enable register",
+    );
+    let mut pack = stale_clear_pack(Some("ENABLE"), None);
     pack.fixed_register_images[0].register = "ENABLE".to_owned();
     refused(&pack, &enabled_events(), "is no snapshot's clear register");
 }
