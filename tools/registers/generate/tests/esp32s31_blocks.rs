@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use oer_registers_model::{
     RegisterEvidenceSet,
     chip_import::ImportSpec,
-    chip_model::{ChipModel, Location},
+    chip_model::{ChipModel, ControlKind, FieldClass, Location},
     chip_policy::{ChipPolicy, Claim, Holder},
 };
 
@@ -325,4 +325,108 @@ fn the_esp32s31_policy_loads_over_the_root() {
         policy.claim("UART0.FIFO"),
         Some(Claim::Whole(Holder::Unclaimed(_)))
     ));
+}
+
+#[test]
+fn timg0_keeps_its_bus_timer_watchdog_gates_and_group_reset() {
+    let model = model();
+    for (kind, role, field) in [
+        (ControlKind::Clock, "bus", "REG_TIMERGRP0_APB_CLK_EN"),
+        (ControlKind::Clock, "t0", "REG_TIMERGRP0_T0_CLK_EN"),
+        (ControlKind::Clock, "t1", "REG_TIMERGRP0_T1_CLK_EN"),
+        (ControlKind::Clock, "wdt", "REG_TIMERGRP0_WDT_CLK_EN"),
+        (ControlKind::Reset, "group", "REG_TIMERGRP0_RST_EN"),
+    ] {
+        let link = model
+            .controls()
+            .iter()
+            .find(|link| link.instance == "TIMG0" && link.kind == kind && link.role == role)
+            .expect("TIMG0 has the sourced control role");
+        assert_eq!(
+            link.field.identity,
+            format!("HP_SYS_CLKRST.TIMERGRP0_CTRL0.{field}")
+        );
+        assert!(!link.sources.is_empty());
+    }
+    let timer_mux = model
+        .controls()
+        .iter()
+        .find(|link| link.instance == "TIMG0" && link.kind == ControlKind::Mux && link.role == "t0")
+        .expect("TIMG0 has its T0 source selector");
+    assert_eq!(
+        timer_mux
+            .inputs
+            .iter()
+            .map(|(code, name)| (*code, name.as_str()))
+            .collect::<Vec<_>>(),
+        [(0, "XTAL"), (1, "RC_FAST"), (2, "REF_F80M")]
+    );
+}
+
+#[test]
+fn bluetooth_and_ieee802154_share_the_bt_baseband_gate() {
+    let model = model();
+    let common = model
+        .shared_controls()
+        .iter()
+        .find(|control| control.name == "BT_I154_COMMON_BB")
+        .expect("the common BT/IEEE 802.15.4 baseband gate is explicit");
+    assert_eq!(common.field, "MODEM_SYSCON.CLK_CONF1.CLK_BTBB_EN");
+    assert_eq!(common.instances, ["BT_BB", "IEEE802154"]);
+    for instance in &common.instances {
+        assert!(model.controls().iter().any(|link| {
+            &link.instance == instance
+                && link.kind == ControlKind::Clock
+                && link.role == "baseband"
+                && link.field.identity == common.field
+        }));
+    }
+}
+
+#[test]
+fn modem_power_and_coexistence_keep_pulse_resets_and_the_common_32k_mux() {
+    let model = model();
+    for (instance, role, field) in [
+        ("MODEM_PWR", "wifi-power", "RST_WIFIPWR"),
+        ("MODEM_PWR", "lp-timer", "RST_LP_TIMER"),
+        ("COEX", "block", "RST_COEX"),
+        ("I2C_ANA_MST", "master", "RST_I2C_MST"),
+    ] {
+        let reset = model
+            .controls()
+            .iter()
+            .find(|link| {
+                link.instance == instance && link.kind == ControlKind::Reset && link.role == role
+            })
+            .expect("the LPCON pulse reset is sourced");
+        assert_eq!(
+            reset.field.identity,
+            format!("MODEM_LPCON.RST_CONF.{field}")
+        );
+        assert_eq!(reset.field.class, FieldClass::WriteOnly);
+    }
+    let common = model
+        .shared_controls()
+        .iter()
+        .find(|control| control.name == "MODEM_32K")
+        .expect("the 32 kHz selector is shared");
+    assert_eq!(common.instances, ["COEX", "MODEM_PWR"]);
+    for instance in &common.instances {
+        let mux = model
+            .controls()
+            .iter()
+            .find(|link| {
+                &link.instance == instance
+                    && link.kind == ControlKind::Mux
+                    && link.field.identity == common.field
+            })
+            .expect("each user links to the common selector");
+        assert_eq!(
+            mux.inputs
+                .iter()
+                .map(|(code, name)| (*code, name.as_str()))
+                .collect::<Vec<_>>(),
+            [(0, "XTAL32K"), (1, "RC32K"), (2, "EXT32K")]
+        );
+    }
 }

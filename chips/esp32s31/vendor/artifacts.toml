@@ -1880,3 +1880,9 @@ id = "esp-idf-clocks/components/soc/esp32s31/register/soc/cnnt_sys_struct.h"
 source = "esp-idf-clocks"
 path = "components/soc/esp32s31/register/soc/cnnt_sys_struct.h"
 sha256 = "cb61b31dd2cd531e1e06dd04624fb60c3e7155b0f8add8a5b7ae8fc50747255e"
+
+[[artifact]]
+id = "esp-idf-clocks/components/soc/esp32s31/include/soc/clk_tree_defs.h"
+source = "esp-idf-clocks"
+path = "components/soc/esp32s31/include/soc/clk_tree_defs.h"
+sha256 = "2bc8b7ba38679ccd52c30893248dbadb20b4a5dc750686b65c6e72a54d4dd7b6"
