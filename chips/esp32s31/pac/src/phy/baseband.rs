@@ -98,19 +98,6 @@ impl TxDcPwdetFields {
     }
 }
 
-pub(crate) const fn decode_noise_floor_quarter_db(raw_low_twelve: u16) -> i32 {
-    // Complete ROM `phy_read_hw_noisefloor` subtracts 0x1000 from the
-    // generated twelve-bit field unconditionally and shifts by two.
-    let signed_sixteenth_db = raw_low_twelve as i32 - 0x1000;
-    signed_sixteenth_db >> 2
-}
-
-pub(crate) const fn quarter_db_to_dbm(quarter_db: i32) -> i8 {
-    // Complete blob `wDev_GetNoiseFloor` consumes the quarter-dB ROM result,
-    // adds two, shifts by two and stores a byte.
-    ((quarter_db + 2) >> 2) as i8
-}
-
 const fn saturate_tx_iq_gain(coefficient: i8) -> i8 {
     // Complete ROM `phy_txiq_set_reg` deliberately excludes the most
     // negative two's-complement endpoint before publishing the six-bit

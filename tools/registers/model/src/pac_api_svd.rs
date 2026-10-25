@@ -66,12 +66,15 @@ impl PacApiPack {
                 &operation.peripheral,
                 &operation.status_register,
             )?;
-            require_size_access(
-                &operation.name,
-                status,
-                Access::ReadOnly,
-                "read-only status",
-            )?;
+            // A word of write-one-to-clear fields alone is its own status.
+            if operation.status_register != operation.clear_register {
+                require_size_access(
+                    &operation.name,
+                    status,
+                    Access::ReadOnly,
+                    "read-only status",
+                )?;
+            }
             let clear = register(
                 &device,
                 &operation.name,

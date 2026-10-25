@@ -37,17 +37,19 @@ impl RadioPhyRegisters {
     }
 
     /// Sample the counter the SDM-stability deadline measures: the Wi-Fi
-    /// MAC local time ([`crate::MacLocalTime`]).
+    /// MAC local time.
     ///
     /// Complete rev0 ROM `phy_wait_i2c_sdm_stable` at `0x2f823e76` samples it
     /// and compares wrapping differences; the deadline counts the
     /// counter's microseconds.
     pub fn sample_sdm_deadline_counter(&mut self) -> u32 {
-        self.mac_local_time.now()
+        self.mac_local_time.read_counter().value()
     }
 
     /// The MAC local-time read this owner holds a copy of.
-    pub const fn mac_local_time(&self) -> crate::MacLocalTime {
+    pub const fn mac_local_time(
+        &self,
+    ) -> crate::wifi_mac_local_time::WifiMacLocalTimeCounter {
         self.mac_local_time
     }
 }

@@ -92,7 +92,12 @@ description = "Fourth full-word cold-init store, cleared by complete hal_crypto_
 addressOffset = 0xC
 size = 32
 access = "read-write"
-fields = []
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 32
 
 [[peripherals.registers]]
 
@@ -269,6 +274,7 @@ opaque-entities = [
     "WIFI_MAC_CRYPTO_CONTROL.INTERFACE_CONTROL%s.BITS_30_31_OPAQUE",
     "WIFI_MAC_CRYPTO_CONTROL.POLICY_CONTROL.BITS_6_21_OPAQUE",
     "WIFI_MAC_CRYPTO_CONTROL.WORD_000C_OPAQUE",
+    "WIFI_MAC_CRYPTO_CONTROL.WORD_000C_OPAQUE.BITS_0_31_OPAQUE",
 ]
 
 [peripheral-review.peripheral]
@@ -296,6 +302,14 @@ completeness = "unknown"
 
 [[review]]
 entity = "WIFI_MAC_CRYPTO_CONTROL.WORD_000C_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_HAL_CRYPTO_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.WORD_000C_OPAQUE.BITS_0_31_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBPP_HAL_CRYPTO_INIT"]
 provenance = "observed"

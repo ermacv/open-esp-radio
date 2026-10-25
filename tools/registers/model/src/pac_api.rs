@@ -154,6 +154,10 @@ pub struct WriteTriggerField {
     pub peripheral: String,
     pub register: String,
     pub field: String,
+    /// A doorbell the hardware clears once it accepted the request: the
+    /// field also reads back whether the request is still pending.
+    #[serde(default, skip_serializing_if = "core::ops::Not::not")]
+    pub reads_pending: bool,
     pub sources: Vec<String>,
 }
 
@@ -450,10 +454,25 @@ macro_rules! common_operation {
     };
 }
 
-common_operation!(InterruptSnapshot {
-    status_register: String,
-    clear_register: String,
-});
+/// One status-to-clear protocol: a sample of the status register,
+/// acknowledged once in the clear register.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct InterruptSnapshot {
+    pub name: String,
+    pub peripheral: String,
+    pub status_register: String,
+    pub clear_register: String,
+    /// The event the caller consumed elsewhere, whose one selected field of
+    /// `consumed-fields` the acknowledgement writes beside the sample.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumed_event: Option<String>,
+    /// One-bit `write-one-to-clear` fields of the clear register, one of
+    /// which the acknowledgement writes with the sample.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub consumed_fields: Vec<String>,
+    pub sources: Vec<String>,
+}
 
 /// A register field's layout target and its generated typed image encoder.
 /// The existing register transaction owns its write/RMW ordering.
@@ -1351,6 +1370,15 @@ impl PacApiPack {
                 &operation.status_register,
             )?;
             validate_component("clear-register", &operation.name, &operation.clear_register)?;
+            if operation.consumed_event.is_some() == operation.consumed_fields.is_empty() {
+                return Err(Error::message(format!(
+                    "PAC API interrupt snapshot {:?} names a consumed event exactly with its consumed fields",
+                    operation.name
+                )));
+            }
+            for field in &operation.consumed_fields {
+                validate_component("consumed-fields", &operation.name, field)?;
+            }
         }
         for operation in &self.zero_based_field_writes {
             if operation.fields.is_empty() {

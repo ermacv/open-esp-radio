@@ -13814,6 +13814,14 @@
           <addressOffset>0xC</addressOffset>
           <size>0x20</size>
           <access>read-write</access>
+          <fields>
+            <field>
+              <name>BITS_0_31_OPAQUE</name>
+              <description>Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
         </register>
         <register>
           <name>KEY_VALID_BITMAP</name>

@@ -1,16 +1,7 @@
 use super::{
     BluetoothTaskRegisters, Ieee802154TaskRegisters, RadioPartitions, SharedRadioParts,
-    SharedRadioRegisters, WifiRadioRegisters,
+    SharedRadioRegisters,
 };
-
-fn wifi_registers(partitions: RadioPartitions) -> (WifiRadioRegisters, super::MacInterruptSetup) {
-    let RadioPartitions {
-        wifi_mac,
-        wifi_interrupts,
-        ..
-    } = partitions;
-    (WifiRadioRegisters::new(wifi_mac), wifi_interrupts)
-}
 
 fn shared_registers(partitions: RadioPartitions) -> SharedRadioRegisters {
     let RadioPartitions {
@@ -24,12 +15,6 @@ fn shared_registers(partitions: RadioPartitions) -> SharedRadioRegisters {
         coexistence,
         shared_radio,
     })
-}
-
-#[test]
-fn wifi_register_set_returns_its_mac_partition() {
-    let (registers, _interrupts) = wifi_registers(RadioPartitions::for_host_test());
-    let _partition = registers.into_partition();
 }
 
 #[test]

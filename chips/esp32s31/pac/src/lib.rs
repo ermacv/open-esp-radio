@@ -231,8 +231,6 @@ pub use modem::syscon::{
     ModemSysconIeee802154ResetObservation, ModemSysconPowerObservation, WifiBasebandAgcUpdate,
 };
 
-use oer_esp32s31_pac_raw as svd;
-
 pub use phy::{
     agc::runtime::ForcedRxGain,
     i2c::{
@@ -244,64 +242,6 @@ pub use phy::{
 
 pub use table_memory::{PbusMemoryGroupBoundary, PhyGainMemoryEntry, PhyMemoryError};
 
-pub use wifi::mac::{
-    block_ack::{
-        ExtraSoftApRxBlockAckEntrySnapshot, InternalTxBlockAckSnapshot, RxBlockAckEntrySnapshot,
-        TxBlockAckDiagnosticSnapshot, TxBlockAckPayload,
-    },
-    coex::init::MacCoexPrioritySnapshot,
-    crypto::{MacCcmpKeyIdentity, MacKeyInstallOutcome, MacSppMode},
-    hal_init_tail::MacRtcCalibration,
-    he::{
-        beamforming::{
-            MacHeBeamformingReportProfile, MacHeBeamformingReportProfileError,
-            MacHeErSuAckRateProfile,
-        },
-        init_suffix::MacHeTxMpduLengthLink,
-        ofdma::{
-            MacBeamformingAverageSnr, MacHeBeamformingConfigurationSnapshot,
-            MacHeBeamformingDiagnostics, MacHeBufferStatusSnapshot, MacHeCustomReceiveType,
-            MacHeEdcaQueueConfiguration, MacHeMuEdcaTimerSnapshot, MacHeQueueSchedulingSnapshot,
-            MacHeReceiveConfigurationSnapshot, MacHeRxPowerSaveSnapshot, MacHeTbLinkReservation,
-            MacHeTbProgramError, MacHeTbTidLimit, MacHeTid, MacHeTriggerQueueConfiguration,
-            MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot,
-        },
-        peer::{MacHe20PeerConfig, MacHe20PeerError},
-        tb::{MacHeTbStatistics, MacHeTbTxDiagnostics},
-    },
-    interrupt::{
-        ConnectedStaWithoutPowerSavePrepared, MacInterruptEnableState, MacInterruptRegisters,
-        MacInterruptSetup, MacPowerInterruptRegisters,
-    },
-    rx::{
-        dma::{MacRxDmaSnapshot, MacRxNextDescriptorObservation},
-        policy::{
-            MacApReceivePolicySnapshot, MacRoleReceivePolicy, MacStaApReceivePlan,
-            MacStaPolicyMode, MacStaReceivePolicySnapshot,
-        },
-        statistics::{
-            MacHeColorCollisionSnapshot, MacRxDecodeErrorStatistics,
-            MacRxDecodeErrorStatisticsDelta, MacRxHangStatistics, MacRxHangStatisticsDelta,
-            MacRxPrimaryStatistics, MacRxPrimaryStatisticsDelta, MacRxStatisticsSnapshot,
-        },
-    },
-    tsf::StaTbttSchedule,
-    tx::{
-        MacHeFecCoding, MacHeGuardIntervalAndLtf, MacHeMcs, MacHeRate, MacHeTxFormat,
-        MacHeTxParameters, MacHeTxProgram, MacHtAmpduCompletionObservation, MacHtChannelWidth,
-        MacHtGuardInterval, MacHtMcs, MacHtProtectionSpacing, MacHtRate, MacHtTxFormat,
-        MacHtTxParameters, MacHtTxProgram, MacLegacyRate, MacLegacyTxParameters,
-        MacLegacyTxProgram, MacLegacyTxResponse, MacOrdinaryTxQueueSnapshot,
-        MacTxCompletionObservation, MacTxControlFrame, MacTxDetachOutcome, MacTxDetachReason,
-        MacTxProtection, MacTxPtiProgram, MacTxQueueDetached,
-        power_init::{
-            MAC_TX_POWER_RATE_COUNT, MacPartialRuPowerSelector, MacTxPowerIndex, MacTxPowerPair,
-            MacTxPowerTable,
-        },
-        statistics::MacTxStatisticsSnapshot,
-    },
-    txrx_init::MacDelaySlot,
-};
 pub mod boot;
 pub mod ownership;
 pub mod platform;
@@ -313,11 +253,33 @@ pub use ownership::BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER;
 pub use ownership::{
     BluetoothControllerPartition, BluetoothInterruptRegisters, BluetoothInterruptSetup,
     BluetoothTaskRegisters, CoexistencePartition, Ieee802154InterruptRegisters,
-    Ieee802154InterruptSetup, Ieee802154Partition, Ieee802154TaskRegisters, MacInterruptEvents,
-    MacInterruptObservation, MacInterruptSnapshot, MacLocalTime, MacPowerInterruptObservation,
-    MacPowerInterruptSnapshot, RadioHandoff, RadioPartitions, RadioPhyRegisters,
-    SharedRadioPartition, SharedRadioParts, SharedRadioRegisters, WifiMacPartition,
-    WifiRadioRegisters, WifiRxDmaRegisters,
+    Ieee802154InterruptSetup, Ieee802154Partition, Ieee802154TaskRegisters, RadioHandoff,
+    RadioPartitions, RadioPhyRegisters, SharedRadioPartition, SharedRadioParts,
+    SharedRadioRegisters, WifiInterruptPartition, WifiMacPartition,
+};
+
+/// The Wi-Fi MAC's generated blocks: the HAL's Wi-Fi register owners hold
+/// them and drive them through their field accessors.
+pub use generated::peripheral_ownership::WifiMacPeripherals;
+pub use generated::{
+    shared_radio_init_control, wifi_mac_antenna_init, wifi_mac_aux_tsf_control,
+    wifi_mac_beacon_ie_crc, wifi_mac_beamforming_feedback_test, wifi_mac_beamforming_report,
+    wifi_mac_block_ack, wifi_mac_bssid_policy, wifi_mac_coex_init, wifi_mac_coex_runtime,
+    wifi_mac_cold_handshake, wifi_mac_control, wifi_mac_core_enable, wifi_mac_crypto_control,
+    wifi_mac_csi_dump, wifi_mac_diagnostic_statistics, wifi_mac_he_buffer_status,
+    wifi_mac_he_color_collision, wifi_mac_he_init_prefix, wifi_mac_he_init_suffix,
+    wifi_mac_he_mu_edca_timer, wifi_mac_he_obss_narrow_band_ru, wifi_mac_he_tb_diagnostics,
+    wifi_mac_he_tb_statistics, wifi_mac_he_trigger_rx_diagnostics, wifi_mac_interface_address,
+    wifi_mac_internal_tx_block_ack, wifi_mac_interrupt, wifi_mac_key_table,
+    wifi_mac_last_rx_buffer, wifi_mac_local_time, wifi_mac_power_interrupt,
+    wifi_mac_regdma_control, wifi_mac_rtc_timer_update, wifi_mac_rx_bssid_list,
+    wifi_mac_rx_csi_control, wifi_mac_rx_custom_type, wifi_mac_rx_dma, wifi_mac_rx_end_state,
+    wifi_mac_rx_filter, wifi_mac_rx_hang_statistics, wifi_mac_rx_power_save,
+    wifi_mac_rx_runtime_results, wifi_mac_rx_statistics, wifi_mac_sta_beacon_filter,
+    wifi_mac_sta_tbtt_target, wifi_mac_tsf_load, wifi_mac_tsf_status, wifi_mac_tsf_timer,
+    wifi_mac_tx_common, wifi_mac_tx_completion, wifi_mac_tx_power_init,
+    wifi_mac_tx_queue_control, wifi_mac_tx_queue_vector, wifi_mac_tx_statistics,
+    wifi_mac_txrx_callbacks, wifi_mac_txrx_prefix, wifi_mac_txrx_suffix, wifi_phy_rate_oracle,
 };
 
 pub(crate) use ownership::device_fence;
@@ -329,7 +291,6 @@ pub(crate) mod modem;
 #[doc(hidden)]
 pub mod validation;
 pub mod watchdog;
-pub(crate) mod wifi;
 
 // Generated analog-I2C identities, fields and transport routes.
 include!("analog_generated.rs");

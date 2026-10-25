@@ -561,6 +561,10 @@ description = "The free-running Wi-Fi MAC local-time counter. Reading it has no 
 name = "WifiMacLocalTime"
 instance = "MODEM_PWR"
 registers = ["COUNTER"]
+read-only = true
+copy = true
+description = "The read of the free-running MAC local-time counter, which the radio PHY (its SDM-stability deadline) and the Wi-Fi MAC (the time its receive timestamps count in) both hold. Reading it has no side effect and nothing writes it, so the capability is `Copy`."
+sources = ["ROM_REV0_PHY_WAIT_I2C_SDM_STABLE", "BLOB_LIBPP_MAC_LOCAL_TIME", "HIL_OPEN_MAC_LOCAL_TIME_RATE_2026_10_03"]
 
 [[partitions]]
 name = "RadioPhyPeripherals"
@@ -1397,16 +1401,6 @@ description = "Publish the nonzero-CBW FBW selection."
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 
 [[enum-domains]]
-name = "MacRxBeaconClearRequest"
-description = "Reviewed receive-beacon clear requests. The type cannot select an unknown request bit."
-
-[[enum-domains.values]]
-name = "Beacon"
-value = 0
-description = "The bit-zero receive-beacon clear request traced from hal_clear_rx_beacon_pti."
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
-
-[[enum-domains]]
 name = "CoexTimerClockSource"
 description = "One-hot coexistence timer clock selector that complete coex_hw_timer_freq_set publishes in the low nibble of COEX_LP_CLK_CONF."
 
@@ -1687,22 +1681,6 @@ description = "Enable the selected runtime AGC behavior."
 sources = ["ROM_REV0_PHY_ANT_DFT_CFG", "ROM_REV0_PHY_FORCE_RX_GAIN", "S31_ESP_PACS_SVD"]
 
 [[enum-domains]]
-name = "PhyLowRateState"
-description = "Boolean state shared by the three separately ordered low-rate control edges."
-
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "Disable the selected PHY low-rate control edge."
-sources = ["ROM_REV0_PHY_LOW_RATE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 1
-description = "Enable the selected PHY low-rate control edge."
-sources = ["ROM_REV0_PHY_LOW_RATE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
 name = "PhyTxPowerTrackingState"
 description = "Boolean state accepted by the complete PHY baseband TX-power tracking transaction."
 
@@ -1724,13 +1702,6 @@ description = "Number of entries of the Controller-SRAM device table, published 
 min = 0
 max = 255
 sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
-
-[[bounded-domains]]
-name = "MacSlowClockCalibrationValue"
-description = "The eighteen-bit slow-clock calibration hal_timer_update_by_rtc publishes."
-min = 0
-max = 262143
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
 
 [[bounded-domains]]
 name = "WifiDescriptorAddressLow"
@@ -2055,13 +2026,6 @@ max = 4294967295
 sources = ["BLOB_LIBCOEX_HW_TIMER"]
 
 [[bounded-domains]]
-name = "StationTbttTargetBits35To10"
-description = "Low 26-bit station-TBTT target image formed from station TSF bits 35:10 by complete hal_set_sta_tbtt."
-min = 0
-max = 67108863
-sources = ["BLOB_LIBPP_HAL_TSF"]
-
-[[bounded-domains]]
 name = "Ieee802154EdDurationUnits"
 description = "Sixteen-bit energy-detection duration subset accepted by the reviewed public IEEE 802.15.4 common LL setter; physical units remain outside the PAC."
 min = 0
@@ -2132,13 +2096,6 @@ max = 255
 sources = ["ROM_REV0_PHY_AGC"]
 
 [[bounded-domains]]
-name = "PhyRx11bLowRateArgument"
-description = "Complete 32-bit caller ABI consumed through its low bit by rev0 phy_rx11blr_cfg."
-min = 0
-max = 4294967295
-sources = ["ROM_REV0_PHY_RX11BLR_CFG"]
-
-[[bounded-domains]]
 name = "PhyRxGainTableLastIndex"
 description = "Complete final Wi-Fi RX-gain-table index consumed by the reviewed limit tail."
 min = 0
@@ -2190,18 +2147,6 @@ register = "IEEE802154.TIMER1_VALUE"
 sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 
 [[opaque-domains]]
-name = "StationTsfLowWord"
-description = "Low word of one station TSF value; sequencing remains owned by the station-TSF capability."
-register = "MODEM_PWR.VALUE_LOW"
-sources = ["BLOB_LIBPP_HAL_TSF"]
-
-[[opaque-domains]]
-name = "StationTsfHighWord"
-description = "High word of one station TSF value; sequencing remains owned by the station-TSF capability."
-register = "MODEM_PWR.VALUE_HIGH"
-sources = ["BLOB_LIBPP_HAL_TSF"]
-
-[[opaque-domains]]
 name = "PhyMemoryData0"
 description = "Opaque table-memory word for PHY memory data register 0."
 register = "FE.DATA_0"
@@ -2230,12 +2175,6 @@ name = "AgcSaturationGainHigh"
 description = "Register-specific high AGC saturation-gain image."
 register = "WIFI_BB.SATURATION_GAIN_HIGH"
 sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
-
-[[opaque-domains]]
-name = "MacItwtControlMaskedInput"
-description = "Zero-or-one control image accepted only by the reviewed hal_set_itwt_pti low-byte replacement helper."
-register = "MODEM_PWR.ITWT_CONTROL"
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
 
 [[opaque-domains]]
 name = "BluetoothModemLpTimerCompareImage"
@@ -2364,6 +2303,14 @@ output-mask = 0xffffffff
 sources = ["ROM_REV0_PHY_SET_PBUS_MEM"]
 
 [[interrupt-snapshots]]
+name = "mac_tx_completion"
+status = "WIFI_MAC.COMPLETE_CLEAR"
+clear = "WIFI_MAC.COMPLETE_CLEAR"
+consumed-event = "The selected ordinary queue's completion, which the TX path read in COMPLETE_STATE."
+consumed-fields = ["WIFI_MAC.COMPLETE_CLEAR.QUEUE_0", "WIFI_MAC.COMPLETE_CLEAR.QUEUE_1", "WIFI_MAC.COMPLETE_CLEAR.QUEUE_2", "WIFI_MAC.COMPLETE_CLEAR.QUEUE_3"]
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "PROMOTED_LMAC_TX"]
+
+[[interrupt-snapshots]]
 name = "mac_interrupt"
 status = "WIFI_MAC.STATUS"
 clear = "WIFI_MAC.CLEAR"
@@ -2399,29 +2346,6 @@ status = "BT_MAC.IRQ_STATUS_1"
 clear = "BT_MAC.IRQ_CLEAR_1"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
-[[interrupt-snapshots]]
-name = "acknowledge_mac_tx_completion"
-status = "WIFI_MAC.COMPLETE_CLEAR"
-clear = "WIFI_MAC.COMPLETE_CLEAR"
-consumed-event = "The selected ordinary queue's completion, which the TX path read in COMPLETE_STATE."
-consumed-fields = ["WIFI_MAC.COMPLETE_CLEAR.QUEUE_0", "WIFI_MAC.COMPLETE_CLEAR.QUEUE_1", "WIFI_MAC.COMPLETE_CLEAR.QUEUE_2", "WIFI_MAC.COMPLETE_CLEAR.QUEUE_3"]
-sources = ["BLOB_LIBPP_HAL_MAC_TX", "PROMOTED_LMAC_TX"]
-
-[[field-reads]]
-name = "read_mac_local_time"
-field = "MODEM_PWR.COUNTER.VALUE"
-sources = ["ROM_REV0_PHY_WAIT_I2C_SDM_STABLE", "BLOB_LIBPP_MAC_LOCAL_TIME"]
-
-[[field-reads]]
-name = "observe_phy_low_rate_enabled"
-field = "WIFI_BB_BRX.LOW_RATE_PRIMARY_CONTROL.LOW_RATE_ENABLE_FIRST"
-sources = ["ROM_REV0_PHY_LOW_RATE", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_phy_noise_floor_sixteenth_db_code"
-field = "WIFI_BB.NOISE_FLOOR_MEASUREMENT.SIGNED_SIXTEENTH_DB_CODE"
-sources = ["ROM_REV0_PHY_READ_NOISE_FLOOR", "S31_ESP_PACS_SVD"]
-
 [[full-register-reads]]
 name = "observe_ieee802154_timer0_value"
 field = "IEEE802154.TIMER0_VALUE.VALUE"
@@ -2438,18 +2362,6 @@ sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 name = "radio_phy_register_image"
 partition = "RadioPhyPeripherals"
 sources = ["HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27"]
-
-[[full-register-writes]]
-name = "station_tsf_value_low"
-field = "MODEM_PWR.VALUE_LOW.VALUE"
-domain = "StationTsfLowWord"
-sources = ["BLOB_LIBPP_HAL_TSF"]
-
-[[full-register-writes]]
-name = "station_tsf_value_high"
-field = "MODEM_PWR.VALUE_HIGH.VALUE"
-domain = "StationTsfHighWord"
-sources = ["BLOB_LIBPP_HAL_TSF"]
 
 [[full-register-writes]]
 name = "rx_descriptor_base"
@@ -2564,6 +2476,13 @@ name = "publish_transmit_gain_data_2"
 field = "FE.DATA_2.VALUE"
 domain = "PhyTransmitGainData2"
 sources = ["ROM_REV0_PHY_WRITE_GAIN_MEM"]
+
+[[pointer-fields]]
+name = "mac_tx_queue_head_pointer_image"
+field = "WIFI_MAC.CONTROL%s.DESCRIPTOR_ADDRESS_LOW"
+points-to = "WIFI_TX_DMA_DESCRIPTOR"
+encoding = "low-bits"
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "PROMOTED_LMAC_TX"]
 
 [[pointer-fields]]
 name = "bluetooth_rxlink_1_current_pointer_image"
@@ -2691,26 +2610,6 @@ fields = ["BT_MAC.SCHEDULER_FINISHED_LIST_REPORT.FINISHED_LIST_MASK"]
 sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS", "PUBLIC_ESP32S31_BLE_COMPLETION_ROLES"]
 
 [[zero-based-field-writes]]
-name = "publish_mac_tx_prepared_control"
-fields = ["WIFI_MAC.CONTROL%s.DESCRIPTOR_ADDRESS_LOW", "WIFI_MAC.CONTROL%s.BITS_20_21_OPAQUE", "WIFI_MAC.CONTROL%s.BIT_22_OPAQUE", "WIFI_MAC.CONTROL%s.PLCP_FORMAT"]
-sources = ["BLOB_LIBPP_HAL_MAC_TX", "PROMOTED_LMAC_TX"]
-
-[[zero-based-field-writes]]
-name = "publish_mac_tx_rts_threshold"
-fields = ["WIFI_MAC.HE_RTS_CONTROL%s.RTS_THRESHOLD_BYTES", "WIFI_MAC.HE_RTS_CONTROL%s.RTS_THRESHOLD_VALID"]
-sources = ["BLOB_LIBPP_TX_PROTECTION_ARGUMENTS"]
-
-[[zero-based-field-writes]]
-name = "clear_mac_tx_collision_state"
-fields = ["WIFI_MAC.QUEUE_STATE_CLEAR.COLLISION_QUEUE_0", "WIFI_MAC.QUEUE_STATE_CLEAR.COLLISION_QUEUE_1", "WIFI_MAC.QUEUE_STATE_CLEAR.COLLISION_QUEUE_2", "WIFI_MAC.QUEUE_STATE_CLEAR.COLLISION_QUEUE_3"]
-sources = ["BLOB_LIBPP_HAL_MAC_TX"]
-
-[[zero-based-field-writes]]
-name = "clear_mac_tx_timeout_state"
-fields = ["WIFI_MAC.QUEUE_STATE_CLEAR.TIMEOUT_QUEUE_0", "WIFI_MAC.QUEUE_STATE_CLEAR.TIMEOUT_QUEUE_1", "WIFI_MAC.QUEUE_STATE_CLEAR.TIMEOUT_QUEUE_2", "WIFI_MAC.QUEUE_STATE_CLEAR.TIMEOUT_QUEUE_3"]
-sources = ["BLOB_LIBPP_HAL_MAC_TX"]
-
-[[zero-based-field-writes]]
 name = "publish_bluetooth_scheduler_lock_modify_request"
 fields = ["BT_MAC.SCHEDULER_LOCK_MODIFY_REQUEST.COMPRESSED_SRAM_POINTER", "BT_MAC.SCHEDULER_LOCK_MODIFY_REQUEST.START"]
 sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_SCHEDULER_INSERTION_BRANCH", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
@@ -2726,154 +2625,9 @@ fields = ["BT_MAC.HAL_INIT_LOW_20.CONFIG_LOW_20"]
 sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
 
 [[zero-based-field-writes]]
-name = "publish_mac_tx_plcp1_fields"
-fields = ["WIFI_MAC.PLCP1%s.LEGACY_SIGNAL", "WIFI_MAC.PLCP1%s.RATE", "WIFI_MAC.PLCP1%s.KEY_ENTRY_INDEX", "WIFI_MAC.PLCP1%s.BSSID_SELECT", "WIFI_MAC.PLCP1%s.VECTOR_FORMAT", "WIFI_MAC.PLCP1%s.CBW40"]
-sources = ["BLOB_LIBPP_HAL_MAC_TX"]
-
-[[zero-based-field-writes]]
-name = "publish_mac_tx_ht_signal_fields"
-fields = ["WIFI_MAC.HT_SIGNAL%s.MCS", "WIFI_MAC.HT_SIGNAL%s.CBW40", "WIFI_MAC.HT_SIGNAL%s.LENGTH", "WIFI_MAC.HT_SIGNAL%s.SMOOTHING", "WIFI_MAC.HT_SIGNAL%s.NOT_SOUNDING", "WIFI_MAC.HT_SIGNAL%s.REQUIRED_ONE", "WIFI_MAC.HT_SIGNAL%s.AGGREGATION", "WIFI_MAC.HT_SIGNAL%s.SHORT_GI"]
-sources = ["BLOB_LIBPP_HAL_MAC_TX"]
-
-[[zero-based-field-writes]]
-name = "publish_mac_tx_he_signal_a1_fields"
-fields = ["WIFI_MAC.HE_SU_SIGNAL_A1%s.FORMAT", "WIFI_MAC.HE_SU_SIGNAL_A1%s.BEAM_CHANGE", "WIFI_MAC.HE_SU_SIGNAL_A1%s.UPLINK", "WIFI_MAC.HE_SU_SIGNAL_A1%s.MCS", "WIFI_MAC.HE_SU_SIGNAL_A1%s.DCM", "WIFI_MAC.HE_SU_SIGNAL_A1%s.BSS_COLOR", "WIFI_MAC.HE_SU_SIGNAL_A1%s.VECTOR_REQUIRED_14", "WIFI_MAC.HE_SU_SIGNAL_A1%s.SPATIAL_REUSE", "WIFI_MAC.HE_SU_SIGNAL_A1%s.BANDWIDTH", "WIFI_MAC.HE_SU_SIGNAL_A1%s.GI_LTF", "WIFI_MAC.HE_SU_SIGNAL_A1%s.NSTS_AND_MIDAMBLE_PERIODICITY", "WIFI_MAC.HE_SU_SIGNAL_A1%s.VECTOR_REQUIRED_HIGH"]
-sources = ["BLOB_LIBPP_HAL_HE_TX"]
-
-[[zero-based-field-writes]]
-name = "publish_mac_tx_he_signal_a2_fields"
-fields = ["WIFI_MAC.HE_SU_SIGNAL_A2_LENGTH%s.CONTROL_REQUIRED_0", "WIFI_MAC.HE_SU_SIGNAL_A2_LENGTH%s.FEC_CODING", "WIFI_MAC.HE_SU_SIGNAL_A2_LENGTH%s.CONTROL_REQUIRED_2", "WIFI_MAC.HE_SU_SIGNAL_A2_LENGTH%s.CONTROL_REQUIRED_8", "WIFI_MAC.HE_SU_SIGNAL_A2_LENGTH%s.DESCRIPTOR_CLASS_MATCH", "WIFI_MAC.HE_SU_SIGNAL_A2_LENGTH%s.APEP_LENGTH", "WIFI_MAC.HE_SU_SIGNAL_A2_LENGTH%s.AMPDU_LENGTH_VALID"]
-sources = ["BLOB_LIBPP_HAL_HE_TX"]
-
-[[zero-based-field-writes]]
-name = "publish_mac_tx_he_control_field"
-fields = ["WIFI_MAC.HE_CONTROL%s.VALUE"]
-sources = ["BLOB_LIBPP_HAL_HE_TX", "BLOB_LIBNET80211_HE_CONTROL_TX"]
-
-[[zero-based-field-writes]]
-name = "publish_mac_tx_power_fields"
-fields = ["WIFI_MAC.POWER%s.DATA_PRIMARY", "WIFI_MAC.POWER%s.DATA_ALTERNATE", "WIFI_MAC.POWER%s.RTS_PRIMARY", "WIFI_MAC.POWER%s.RTS_ALTERNATE"]
-sources = ["BLOB_LIBPP_HAL_MAC_TX"]
-
-[[zero-based-field-writes]]
-name = "publish_mac_tx_data_length_fields"
-fields = ["WIFI_MAC.DATA_LENGTH%s.HT40_LENGTH", "WIFI_MAC.DATA_LENGTH%s.HT40_EOF_COUNT", "WIFI_MAC.DATA_LENGTH%s.HT40_MCS"]
-sources = ["BLOB_LIBPP_HAL_MAC_TX"]
-
-[[zero-based-field-writes]]
-name = "publish_mac_tx_length_control_fields"
-fields = ["WIFI_MAC.LENGTH_CONTROL%s.TXRX_QUEUE_ANTENNA_ENABLE", "WIFI_MAC.LENGTH_CONTROL%s.RTS_RATE", "WIFI_MAC.LENGTH_CONTROL%s.HT20_EOF_COUNT"]
-sources = ["BLOB_LIBPP_HAL_MAC_TX"]
-
-[[zero-based-field-writes]]
-name = "publish_mac_tx_he_descriptor_counts"
-fields = ["WIFI_MAC.HT_DESCRIPTOR_COUNTS%s.DESCRIPTOR_COUNT_A", "WIFI_MAC.HT_DESCRIPTOR_COUNTS%s.DESCRIPTOR_COUNT_B", "WIFI_MAC.HT_DESCRIPTOR_COUNTS%s.DESCRIPTOR_COUNT_A_COPY"]
-sources = ["BLOB_LIBPP_HAL_MAC_TX"]
-
-[[zero-based-field-writes]]
-name = "ersu_ack_rate_baseline"
-fields = ["WIFI_MAC.ERSU_ACK_RATE.RATE_0", "WIFI_MAC.ERSU_ACK_RATE.RATE_1", "WIFI_MAC.ERSU_ACK_RATE.RATE_2", "WIFI_MAC.ERSU_ACK_RATE.RATE_3"]
-sources = ["BLOB_LIBPP_HAL_BF_CONFIG"]
-
-[[zero-based-field-writes]]
-name = "rx_block_ack_peer_head"
-fields = ["WIFI_MAC.RX_BLOCK_ACK_ENTRY%s_PEER_HEAD.PEER_ADDRESS_HEAD"]
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
-
-[[zero-based-field-writes]]
-name = "rx_block_ack_peer_tail_and_policy"
-fields = ["WIFI_MAC.RX_BLOCK_ACK_ENTRY%s_PEER_TAIL_AND_POLICY.PEER_ADDRESS_TAIL", "WIFI_MAC.RX_BLOCK_ACK_ENTRY%s_PEER_TAIL_AND_POLICY.INTERFACE", "WIFI_MAC.RX_BLOCK_ACK_ENTRY%s_PEER_TAIL_AND_POLICY.WINDOW"]
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
-
-[[zero-based-field-writes]]
-name = "rx_block_ack_active_control"
-fields = ["WIFI_MAC.RX_BLOCK_ACK_ENTRY%s_CONTROL.ENABLE", "WIFI_MAC.RX_BLOCK_ACK_ENTRY%s_CONTROL.TID", "WIFI_MAC.RX_BLOCK_ACK_ENTRY%s_CONTROL.WRITE", "WIFI_MAC.RX_BLOCK_ACK_ENTRY%s_CONTROL.VALID"]
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
-
-[[zero-based-field-writes]]
-name = "extra_softap_rx_block_ack_peer_head"
-fields = ["WIFI_MAC.EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_HEAD.PEER_ADDRESS_HEAD"]
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
-
-[[zero-based-field-writes]]
-name = "extra_softap_rx_block_ack_peer_tail_and_policy"
-fields = ["WIFI_MAC.EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY.PEER_ADDRESS_TAIL", "WIFI_MAC.EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY.INTERFACE", "WIFI_MAC.EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY.WINDOW"]
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
-
-[[zero-based-field-writes]]
-name = "extra_softap_rx_block_ack_active_control"
-fields = ["WIFI_MAC.EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL.ENABLE", "WIFI_MAC.EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL.INDEX", "WIFI_MAC.EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL.TID", "WIFI_MAC.EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL.WRITE", "WIFI_MAC.EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL.VALID"]
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
-
-[[zero-based-field-writes]]
 name = "phy_i2c_command_memory"
 fields = ["I2C_ANA_MST_MEM.COMMAND_MEMORY%s.BLOCK", "I2C_ANA_MST_MEM.COMMAND_MEMORY%s.REGISTER", "I2C_ANA_MST_MEM.COMMAND_MEMORY%s.DATA"]
 sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE", "BLOB_LIBPHY_PHY_I2C"]
-
-[[zero-based-field-writes]]
-name = "mac_bssid_address_low"
-fields = ["WIFI_MAC.BSSID_LOW%s.BYTES_0_3"]
-sources = ["BLOB_LIBPP_HAL_MAC_SET_BSSID"]
-
-[[zero-based-field-writes]]
-name = "mac_crypto_interface_control"
-fields = ["WIFI_MAC.INTERFACE_CONTROL%s.BITS_0_1_OPAQUE", "WIFI_MAC.INTERFACE_CONTROL%s.BIT_8_OPAQUE", "WIFI_MAC.INTERFACE_CONTROL%s.SPP_AMSDU", "WIFI_MAC.INTERFACE_CONTROL%s.BITS_16_17_OPAQUE", "WIFI_MAC.INTERFACE_CONTROL%s.BIT_28_OPAQUE", "WIFI_MAC.INTERFACE_CONTROL%s.BITS_30_31_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_LIBPP_HAL_CRYPTO_INIT", "BLOB_LIBPP_SPP_AMSDU"]
-
-[[zero-based-field-writes]]
-name = "publish_mac_crypto_key_valid_entries"
-fields = ["WIFI_MAC.KEY_VALID_BITMAP.ENTRY_0_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_1_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_2_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_3_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_4_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_5_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_6_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_7_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_8_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_9_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_10_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_11_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_12_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_13_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_14_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_15_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_16_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_17_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_18_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_19_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_20_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_21_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_22_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_23_VALID", "WIFI_MAC.KEY_VALID_BITMAP.ENTRY_24_VALID"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-
-[[zero-based-field-writes]]
-name = "mac_key_entry_peer_low"
-fields = ["WIFI_MAC.ENTRY_PEER_LOW%s.PEER_LOW"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-
-[[zero-based-field-writes]]
-name = "mac_key_entry_peer_control"
-fields = ["WIFI_MAC.ENTRY_PEER_CONTROL%s.PEER_HIGH", "WIFI_MAC.ENTRY_PEER_CONTROL%s.BITS_16_17_OPAQUE", "WIFI_MAC.ENTRY_PEER_CONTROL%s.ALGORITHM", "WIFI_MAC.ENTRY_PEER_CONTROL%s.BIT_20_OPAQUE", "WIFI_MAC.ENTRY_PEER_CONTROL%s.DIRECTION", "WIFI_MAC.ENTRY_PEER_CONTROL%s.INTERFACE", "WIFI_MAC.ENTRY_PEER_CONTROL%s.BIT_26_OPAQUE", "WIFI_MAC.ENTRY_PEER_CONTROL%s.LOGICAL_INDEX_NOT_THREE", "WIFI_MAC.ENTRY_PEER_CONTROL%s.LOGICAL_KEY_INDEX"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-
-[[zero-based-field-writes]]
-name = "mac_key_entry_key_word_0"
-fields = ["WIFI_MAC.ENTRY_KEY_WORD_0%s.VALUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-
-[[zero-based-field-writes]]
-name = "mac_key_entry_key_word_1"
-fields = ["WIFI_MAC.ENTRY_KEY_WORD_1%s.VALUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-
-[[zero-based-field-writes]]
-name = "mac_key_entry_key_word_2"
-fields = ["WIFI_MAC.ENTRY_KEY_WORD_2%s.VALUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-
-[[zero-based-field-writes]]
-name = "mac_key_entry_key_word_3"
-fields = ["WIFI_MAC.ENTRY_KEY_WORD_3%s.VALUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-
-[[zero-based-field-writes]]
-name = "mac_key_entry_tail_word_0"
-fields = ["WIFI_MAC.ENTRY_TAIL_WORD_0%s.VALUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-
-[[zero-based-field-writes]]
-name = "mac_key_entry_tail_word_1"
-fields = ["WIFI_MAC.ENTRY_TAIL_WORD_1%s.VALUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-
-[[zero-based-field-writes]]
-name = "mac_key_entry_tail_word_2"
-fields = ["WIFI_MAC.ENTRY_TAIL_WORD_2%s.VALUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-
-[[zero-based-field-writes]]
-name = "mac_key_entry_tail_word_3"
-fields = ["WIFI_MAC.ENTRY_TAIL_WORD_3%s.VALUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
 
 [[zero-based-field-writes]]
 name = "publish_ieee802154_security_address_low"
@@ -2889,26 +2643,6 @@ sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 name = "publish_ieee802154_security_key_word"
 fields = ["IEEE802154.SECURITY_KEY%s.KEY_WORD"]
 sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[zero-based-field-writes]]
-name = "mac_he_trigger_queue_control"
-fields = ["WIFI_MAC.QUEUE_CONTROL%s.QOS_NULL_TO_TRANSLATED_BSS", "WIFI_MAC.QUEUE_CONTROL%s.TRIGGER_BASED_ENABLE", "WIFI_MAC.QUEUE_CONTROL%s.MU_EDCA_TIMER_SELECT", "WIFI_MAC.QUEUE_CONTROL%s.MPDU_LENGTH_LINK_ADDRESS", "WIFI_MAC.QUEUE_CONTROL%s.TID"]
-sources = ["BLOB_LIBPP_MAC_TX_SET_TB", "ROM_REV0_MAC_TX_SET_TB"]
-
-[[zero-based-field-writes]]
-name = "mac_he_obss_narrow_band_ru_disable_bitmap"
-fields = ["WIFI_MAC.DISABLE_BITMAP.VALUE"]
-sources = ["BLOB_LIBPP_HAL_HE_OBSS_NARROW_BAND_RU"]
-
-[[zero-based-field-writes]]
-name = "mac_ack_rate_table"
-fields = ["WIFI_MAC.ACK_RATE_TABLE.BPSK_RATE", "WIFI_MAC.ACK_RATE_TABLE.QPSK_RATE", "WIFI_MAC.ACK_RATE_TABLE.QAM16_RATE", "WIFI_MAC.ACK_RATE_TABLE.BITS_24_31_OPAQUE"]
-sources = ["BLOB_LIBPP_MAC_TXRX_CALLBACKS"]
-
-[[zero-based-field-writes]]
-name = "mac_cts_rate_table"
-fields = ["WIFI_MAC.CTS_RATE_TABLE.BPSK_RATE", "WIFI_MAC.CTS_RATE_TABLE.QPSK_RATE", "WIFI_MAC.CTS_RATE_TABLE.QAM16_RATE", "WIFI_MAC.CTS_RATE_TABLE.BITS_24_31_OPAQUE"]
-sources = ["BLOB_LIBPP_MAC_TXRX_CALLBACKS"]
 
 [[zero-based-field-writes]]
 name = "frequency_memory_data"
@@ -3006,67 +2740,19 @@ name = "preserve_ble_phy_interrupt_source_17"
 field = "BT_MAC.INTERRUPT_ENABLE.SOURCE_17"
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
-[[zero-register-writes]]
-name = "disable_mac_interrupt_raw"
-register = "WIFI_MAC.RAW"
-sources = ["BLOB_LIBPP_HAL_DISABLE_MAC"]
-
-[[zero-register-writes]]
-name = "disable_mac_interrupt_1_raw"
-register = "WIFI_MAC.INTERRUPT_1_RAW"
-sources = ["BLOB_LIBPP_HAL_DISABLE_MAC"]
-
-[[zero-register-writes]]
-name = "clear_rx_block_ack_bitmap_low_load"
-register = "WIFI_MAC.RX_BLOCK_ACK_ENTRY%s_BITMAP_LOW_LOAD"
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
-
-[[zero-register-writes]]
-name = "clear_rx_block_ack_bitmap_high_load"
-register = "WIFI_MAC.RX_BLOCK_ACK_ENTRY%s_BITMAP_HIGH_LOAD"
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
-
-[[zero-register-writes]]
-name = "clear_rx_block_ack_entry_control"
-register = "WIFI_MAC.RX_BLOCK_ACK_ENTRY%s_CONTROL"
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
-
-[[zero-register-writes]]
-name = "clear_extra_softap_rx_block_ack_bitmap_low"
-register = "WIFI_MAC.EXTRA_SOFTAP_RX_BLOCK_ACK_BITMAP_LOW"
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
-
-[[zero-register-writes]]
-name = "clear_extra_softap_rx_block_ack_bitmap_high"
-register = "WIFI_MAC.EXTRA_SOFTAP_RX_BLOCK_ACK_BITMAP_HIGH"
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
-
-[[zero-register-writes]]
-name = "open_mac_control_cold"
-register = "WIFI_MAC.CONTROL"
-sources = ["OPEN_DRIVER_PROMISCUOUS_RX_FRONTIER"]
-
-[[zero-register-writes]]
-name = "clear_mac_crypto_init_aux"
-register = "WIFI_MAC.WORD_080C_OPAQUE"
-sources = ["BLOB_LIBPP_HAL_CRYPTO_INIT"]
-
-[[zero-register-writes]]
-name = "clear_mac_crypto_policy"
-register = "WIFI_MAC.POLICY_CONTROL"
-sources = ["BLOB_LIBPP_HAL_CRYPTO_INIT"]
-
-[[zero-register-writes]]
-name = "clear_mac_he_mpdu_length_link"
-register = "WIFI_MAC.HE_SCRATCH%s"
-sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX"]
-
 [[fixed-register-images]]
 name = "mac_interrupt_clear"
 register = "WIFI_MAC.CLEAR"
 value = 0xffffffff
 masks = "WIFI_MAC.ENABLE"
 sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT"]
+
+[[fixed-register-images]]
+name = "clear_all_mac_power_interrupts"
+register = "MODEM_PWR.CLEAR"
+value = 0xffffffff
+masks = "MODEM_PWR.ENABLE"
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT"]
 
 [[fixed-register-images]]
 name = "clear_bluetooth_scheduler_reference"
@@ -3121,13 +2807,6 @@ name = "close_modem_pll_source_gate"
 register = "HP_SYS_CLKRST.MODEM_CONF"
 value = 0x00000025
 sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK"]
-
-[[fixed-register-images]]
-name = "clear_all_mac_power_interrupts"
-register = "MODEM_PWR.CLEAR"
-value = 0xffffffff
-masks = "MODEM_PWR.ENABLE"
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT"]
 
 [[fixed-register-images]]
 name = "clear_bluetooth_primary_baseline_bank_0"
@@ -3399,24 +3078,6 @@ masks = "BT_MAC.IRQ_ENABLE_1"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
 
 [[fixed-register-images]]
-name = "mask_mac_power_interrupts"
-register = "MODEM_PWR.ENABLE"
-value = 0
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
-
-[[fixed-register-images]]
-name = "mask_mac_interrupts"
-register = "WIFI_MAC.ENABLE"
-value = 0
-sources = ["BLOB_LIBPP_HAL_ENABLE_MAC"]
-
-[[fixed-register-images]]
-name = "enable_station_mac_interrupts"
-register = "WIFI_MAC.ENABLE"
-value = 0x19a878e0
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "POLICY_STATION_BSS_COLOR_MASK"]
-
-[[fixed-register-images]]
 name = "prepare_bluetooth_interrupt_output"
 register = "BT_MAC.IRQ_CONTROL_0"
 value = 1
@@ -3605,18 +3266,6 @@ whole-word = true
 sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
 
 [[fixed-register-images]]
-name = "mac_ack_cck_rate_table"
-register = "WIFI_MAC.ACK_CCK_RATE_TABLE"
-value = 0x00050100
-sources = ["BLOB_LIBPP_MAC_TXRX_CALLBACKS"]
-
-[[fixed-register-images]]
-name = "mac_cts_cck_rate_table"
-register = "WIFI_MAC.CTS_CCK_RATE_TABLE"
-value = 0x00050100
-sources = ["BLOB_LIBPP_MAC_TXRX_CALLBACKS"]
-
-[[fixed-register-images]]
 name = "frequency_parameter_1_initialization"
 register = "FE.FREQUENCY_PARAMETER_1_STATUS"
 value = 0x25824e58
@@ -3743,6 +3392,11 @@ value = 0
 sources = ["BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907", "S31_PMU_HEADERS"]
 
 [[fixed-register-sequences]]
+name = "initialize_mac_last_rx_buffer_entries"
+steps = [{ register = "WIFI_MAC.ENTRY_CONTROL0", value = 0x00023006 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A0", value = 0x00000608 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B0", value = 0x0000ffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL1", value = 0x00023006 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A1", value = 0x00000808 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B1", value = 0x0000ffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL2", value = 0x00023006 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A2", value = 0x00008e88 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B2", value = 0x0000ffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL3", value = 0x0002301c }, { register = "WIFI_MAC.ENTRY_PARAMETER_A3", value = 0x44004300 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B3", value = 0xffffffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL4", value = 0x0002301c }, { register = "WIFI_MAC.ENTRY_PARAMETER_A4", value = 0x43004400 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B4", value = 0xffffffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL5", value = 0x00023011 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A5", value = 1 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B5", value = 0x000000ff }]
+sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
+
+[[fixed-register-sequences]]
 name = "initialize_bluetooth_low_power_config"
 steps = [{ register = "MODEM_ETM.CHANNEL_ENABLE_CLEAR", value = 0x00000020 }, { register = "MODEM_ETM.CH5_EVENT", value = 0x00000043 }, { register = "MODEM_ETM.CH5_TASK", value = 0x00000012 }, { register = "MODEM_ETM.CHANNEL_ENABLE_CLEAR", value = 0x00000010 }, { register = "MODEM_ETM.CH4_EVENT", value = 0x00000045 }, { register = "MODEM_ETM.CH4_TASK", value = 0x00000011 }, { register = "MODEM_ETM.CHANNEL_ENABLE_CLEAR", value = 0x00000040 }, { register = "MODEM_ETM.CH6_EVENT", value = 0x00000046 }, { register = "MODEM_ETM.CH6_TASK", value = 0x00000011 }, { register = "MODEM_ETM.CHANNEL_ENABLE_CLEAR", value = 0x00000080 }, { register = "MODEM_ETM.CH7_EVENT", value = 0x00000046 }, { register = "MODEM_ETM.CH7_TASK", value = 0x0000000f }]
 sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
@@ -3767,11 +3421,6 @@ name = "route_ieee802154_etm_timer1_to_rx_start"
 steps = [{ register = "MODEM_ETM.CH1_EVENT", value = 0x0000004f }, { register = "MODEM_ETM.CH1_TASK", value = 0x00000055 }]
 sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
 
-[[fixed-register-sequences]]
-name = "initialize_mac_last_rx_buffer_entries"
-steps = [{ register = "WIFI_MAC.ENTRY_CONTROL0", value = 0x00023006 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A0", value = 0x00000608 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B0", value = 0x0000ffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL1", value = 0x00023006 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A1", value = 0x00000808 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B1", value = 0x0000ffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL2", value = 0x00023006 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A2", value = 0x00008e88 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B2", value = 0x0000ffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL3", value = 0x0002301c }, { register = "WIFI_MAC.ENTRY_PARAMETER_A3", value = 0x44004300 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B3", value = 0xffffffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL4", value = 0x0002301c }, { register = "WIFI_MAC.ENTRY_PARAMETER_A4", value = 0x43004400 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B4", value = 0xffffffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL5", value = 0x00023011 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A5", value = 1 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B5", value = 0x000000ff }]
-sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
-
 [[masked-register-modifies]]
 name = "publish_bluetooth_device_table_entry_count"
 register = "BT_MAC.DEVICE_TABLE_CONTROL"
@@ -3789,15 +3438,6 @@ preserve-mask = 0xfffffffe
 input-mask = 1
 set-mask = 0
 sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
-
-[[masked-register-modifies]]
-name = "publish_station_tbtt_target"
-register = "MODEM_PWR.TARGET"
-domain = "StationTbttTargetBits35To10"
-preserve-mask = 0xfc000000
-input-mask = 0x03ffffff
-set-mask = 0
-sources = ["BLOB_LIBPP_HAL_TSF"]
 
 [[masked-register-modifies]]
 name = "configure_modem_power_tick_for_xtal_40mhz"
@@ -3924,15 +3564,6 @@ preserve-mask = 0xfffe0001
 input-mask = 0x0001fffc
 set-mask = 2
 sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_RX_DCO"]
-
-[[masked-register-modifies]]
-name = "publish_mac_itwt_control"
-register = "MODEM_PWR.ITWT_CONTROL"
-domain = "MacItwtControlMaskedInput"
-preserve-mask = 0xffffff00
-input-mask = 0x000000ff
-set-mask = 0
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
 
 [[field-or-modifies]]
 name = "or_bluetooth_memory_list_1_pointer_a"
@@ -4291,24 +3922,6 @@ name = "lower_phy_pbus_work_mode_pulse"
 fields = [{ field = "WIFI_BB.AGC_SHARED_CONTROL.FORCED_GAIN_ENABLE", source-bit-offset = 0 }]
 value = 0
 sources = ["ROM_REV0_PHY_PBUS", "S31_ESP_PACS_SVD"]
-
-[[field-replace-modifies]]
-name = "publish_mac_rx_beacon_pti"
-fields = [{ field = "MODEM_PWR.RX_BEACON_PTI.PTI", source-bit-offset = 0 }]
-domain = "MacPti"
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
-
-[[field-replace-modifies]]
-name = "publish_mac_shared_rx_pti"
-fields = [{ field = "MODEM_PWR.SHARED_RX_PTI.PTI", source-bit-offset = 0 }]
-domain = "MacPti"
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
-
-[[field-replace-modifies]]
-name = "set_mac_slow_clock_calibration"
-fields = [{ field = "MODEM_PWR.SLOW_CLOCK_CALIBRATION.VALUE", source-bit-offset = 0 }]
-domain = "MacSlowClockCalibrationValue"
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
 
 [[field-replace-modifies]]
 name = "set_coex_external_priority_0"
@@ -5807,12 +5420,6 @@ value = 0x0000019f
 sources = ["BLOB_LIBBTBB_BT_BB_V2_INIT"]
 
 [[field-replace-modifies]]
-name = "enable_wifi_mac_core"
-fields = [{ field = "WIFI_MAC.CORE_ENABLE_CONTROL.BITS_4_7_OPAQUE", source-bit-offset = 0 }]
-value = 0
-sources = ["BLOB_LIBPP_HAL_ENABLE_MAC"]
-
-[[field-replace-modifies]]
 name = "deselect_bluetooth_low_power_timer_slow_oscillator"
 fields = [{ field = "MODEM_LPCON.LP_TIMER_CONF.CLK_LP_TIMER_SEL_OSC_SLOW", source-bit-offset = 0 }]
 value = 0
@@ -6661,24 +6268,6 @@ input-transform = { wrapping-subtract = 0, retain-mask = 1 }
 sources = ["ROM_REV0_PHY_FORCE_RX_GAIN", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
-name = "configure_phy_low_rate_first_state"
-fields = [{ field = "WIFI_BB_BRX.LOW_RATE_PRIMARY_CONTROL.LOW_RATE_ENABLE_FIRST", source-bit-offset = 0 }]
-domain = "PhyLowRateState"
-sources = ["ROM_REV0_PHY_LOW_RATE", "S31_ESP_PACS_SVD"]
-
-[[field-replace-modifies]]
-name = "configure_phy_low_rate_second_state"
-fields = [{ field = "WIFI_BB_BRX.LOW_RATE_PRIMARY_CONTROL.LOW_RATE_ENABLE_SECOND", source-bit-offset = 0 }]
-domain = "PhyLowRateState"
-sources = ["ROM_REV0_PHY_LOW_RATE", "S31_ESP_PACS_SVD"]
-
-[[field-replace-modifies]]
-name = "configure_phy_low_rate_secondary_state"
-fields = [{ field = "WIFI_BB_BRX.LOW_RATE_SECONDARY_CONTROL.LOW_RATE_ENABLE", source-bit-offset = 0 }]
-domain = "PhyLowRateState"
-sources = ["ROM_REV0_PHY_LOW_RATE", "S31_ESP_PACS_SVD"]
-
-[[field-replace-modifies]]
 name = "configure_phy_agc_initial_rx_gain_limit"
 fields = [{ field = "WIFI_BB.RX_GAIN_LIMIT_CONTROL.INITIAL_GAIN_INDEX", source-bit-offset = 0 }]
 domain = "PhyAgcParameterByte"
@@ -6759,27 +6348,6 @@ name = "configure_phy_agc_initial_antenna_paths"
 fields = [{ field = "WIFI_BB.ANTENNA_CONTROL_2.BITS_8_15_OPAQUE", source-bit-offset = 0 }, { field = "WIFI_BB.ANTENNA_CONTROL_2.BITS_24_31_OPAQUE", source-bit-offset = 8 }]
 value = 0x00001e1e
 sources = ["ROM_REV0_PHY_ANT_INIT", "S31_ESP_PACS_SVD"]
-
-[[field-replace-modifies]]
-name = "configure_phy_rx11b_first_low_rate_state"
-fields = [{ field = "WIFI_BB_BRX.LOW_RATE_PRIMARY_CONTROL.LOW_RATE_ENABLE_FIRST", source-bit-offset = 0 }]
-domain = "PhyRx11bLowRateArgument"
-input-transform = { wrapping-subtract = 0, retain-mask = 1 }
-sources = ["ROM_REV0_PHY_RX11BLR_CFG", "S31_ESP_PACS_SVD"]
-
-[[field-replace-modifies]]
-name = "configure_phy_rx11b_second_low_rate_state"
-fields = [{ field = "WIFI_BB_BRX.LOW_RATE_PRIMARY_CONTROL.LOW_RATE_ENABLE_SECOND", source-bit-offset = 0 }]
-domain = "PhyRx11bLowRateArgument"
-input-transform = { wrapping-subtract = 0, retain-mask = 1 }
-sources = ["ROM_REV0_PHY_RX11BLR_CFG", "S31_ESP_PACS_SVD"]
-
-[[field-replace-modifies]]
-name = "configure_phy_rx11b_secondary_low_rate_state"
-fields = [{ field = "WIFI_BB_BRX.LOW_RATE_SECONDARY_CONTROL.LOW_RATE_ENABLE", source-bit-offset = 0 }]
-domain = "PhyRx11bLowRateArgument"
-input-transform = { wrapping-subtract = 0, retain-mask = 1 }
-sources = ["ROM_REV0_PHY_RX11BLR_CFG", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
 name = "enable_phy_rf_rx_saturation_state"
@@ -7989,21 +7557,3 @@ name = "release_lp_tsens_reset"
 fields = [{ field = "LP_PERICLKRST.TSENS_CTRL.LP_TSENS_RST_EN", source-bit-offset = 0 }]
 value = 0
 sources = ["S31_ESP_PACS_SVD", "IDF_S31_TSENS_POWER_LIFECYCLE"]
-
-[[indexed-bit-set-modifies]]
-name = "request_rx_block_ack_entry_update"
-field = "WIFI_MAC.RX_BLOCK_ACK_AGREEMENT_UPDATE.ORDINARY_ENTRY_UPDATE"
-domain = "MacRxBlockAckEntryIndex"
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
-
-[[indexed-bit-set-modifies]]
-name = "request_mac_rx_beacon_clear"
-field = "MODEM_PWR.CLEAR_REQUEST.BITS_0_31_OPAQUE"
-domain = "MacRxBeaconClearRequest"
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
-
-[[indexed-bit-set-modifies]]
-name = "request_mac_itwt_clear"
-field = "MODEM_PWR.CLEAR_REQUEST.BITS_0_31_OPAQUE"
-domain = "MacItwtClearIndex"
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]

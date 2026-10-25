@@ -21,7 +21,6 @@ oer-espressif-boot = { path = "../../espressif/boot" }
 oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-values" }
 oer-memory = { path = "../../../portable/memory" }
 oer-espressif-ieee80211-pac = { path = "../../espressif/ieee80211-pac" }
-oer-esp32s31-pac-raw = { path = "../pac-raw", features = ["critical-section"] }
 
 
 [dev-dependencies]

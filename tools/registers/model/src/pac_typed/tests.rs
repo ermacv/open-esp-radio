@@ -845,6 +845,7 @@ fn trigger(register: &str, field: &str) -> crate::WriteTriggerField {
         peripheral: "RADIO".to_owned(),
         register: register.to_owned(),
         field: field.to_owned(),
+        reads_pending: false,
         sources: vec!["SOURCE".to_owned()],
     }
 }

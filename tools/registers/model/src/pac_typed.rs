@@ -789,6 +789,8 @@ struct TypedField<'a> {
     image: Option<&'a PointerField>,
     /// A write-trigger field: only its explicit trigger writes one to it.
     trigger: bool,
+    /// A write-trigger doorbell that reads back its pending request.
+    pending: bool,
     /// A bit of a command register: a command, a qualifier or a held bit.
     command: Option<CommandBit>,
     /// A field whose one permitted value is zero: zero in every write.
@@ -842,9 +844,13 @@ impl TypedField<'_> {
     }
 
     /// Whether a reader returns the field: a trigger reads back nothing the
-    /// register keeps, and a constant-zero field holds nothing.
+    /// register keeps but a doorbell its pending request, and a
+    /// constant-zero field holds nothing.
     fn has_getter(&self) -> bool {
-        self.readable && !self.trigger && !self.zero && self.class != FieldClass::ReadClears
+        self.readable
+            && (!self.trigger || self.pending)
+            && !self.zero
+            && self.class != FieldClass::ReadClears
     }
 
     /// The type of a policy pointer field's image, in its register module.
@@ -973,11 +979,14 @@ impl TypedRegister<'_> {
         }
     }
 
-    /// The bits of the register's write-trigger fields.
+    /// The bits of the register's write-trigger fields that a
+    /// read-modify-write zeroes: every trigger but a doorbell reading back
+    /// its pending request, whose value read is written back as the
+    /// vendor's read-modify-writes do.
     fn triggers(&self) -> u32 {
         self.fields
             .iter()
-            .filter(|field| field.trigger)
+            .filter(|field| field.trigger && !field.pending)
             .fold(0, |mask, field| mask | field.mask())
     }
 
@@ -1063,6 +1072,9 @@ struct DeclaredKinds<'k, 'p> {
     images: &'k BTreeMap<(&'p str, &'p str), &'p PointerField>,
     /// The `(register, field)` write-trigger fields.
     triggers: &'k BTreeSet<(&'p str, &'p str)>,
+    /// The `(register, field)` write-trigger doorbells that read back
+    /// whether their request is pending.
+    pending: &'k BTreeSet<(&'p str, &'p str)>,
     /// The `(register, field)` bits of command registers.
     commands: &'k BTreeMap<(&'p str, &'p str), CommandBit>,
     /// Whether the register is a FIFO port.
@@ -1221,6 +1233,12 @@ impl<'a> TypedBlock<'a> {
             .filter(|trigger| trigger.peripheral == name)
             .map(|trigger| (trigger.register.as_str(), trigger.field.as_str()))
             .collect::<BTreeSet<_>>();
+        let pending = policy
+            .write_trigger_fields
+            .iter()
+            .filter(|trigger| trigger.peripheral == name && trigger.reads_pending)
+            .map(|trigger| (trigger.register.as_str(), trigger.field.as_str()))
+            .collect::<BTreeSet<_>>();
         let fifos = policy
             .fifo_ports
             .iter()
@@ -1302,6 +1320,7 @@ impl<'a> TypedBlock<'a> {
                 pointers: &pointers,
                 images: &images,
                 triggers: &triggers,
+                pending: &pending,
                 commands: &commands,
                 fifo: fifos.contains(info.name.as_str()),
                 port: ports.contains(info.name.as_str()),
@@ -1555,7 +1574,10 @@ impl<'a> TypedBlock<'a> {
                     snapshot.name
                 )))
             };
-            if !Self::reads_freely(status) || status.w1c || status.array.is_some() {
+            // A word of write-one-to-clear fields alone may be its own status.
+            let own_status = snapshot.status_register == snapshot.clear_register;
+            if !Self::reads_freely(status) || (status.w1c && !own_status) || status.array.is_some()
+            {
                 return refuse(
                     "its status register is one word read without a side effect and acknowledged by its clear register",
                 );
@@ -1588,8 +1610,38 @@ impl<'a> TypedBlock<'a> {
                     field.info.name
                 ));
             }
+            for consumed in &snapshot.consumed_fields {
+                let Some(field) = clear
+                    .fields
+                    .iter()
+                    .find(|field| field.info.name == *consumed)
+                else {
+                    return refuse(&format!(
+                        "its clear register has no consumed field {consumed}"
+                    ));
+                };
+                if field.width != 1 || field.class != FieldClass::WriteOneToClear {
+                    return refuse(&format!(
+                        "consumed field {consumed} is no one-bit write-one-to-clear field"
+                    ));
+                }
+            }
         }
         Ok(())
+    }
+
+    /// The consumed fields of `snapshot`: the one-bit fields of its clear
+    /// register its acknowledgement writes beside the sample.
+    fn consumed_fields<'s>(
+        &'s self,
+        snapshot: &'s InterruptSnapshot,
+    ) -> Result<Vec<&'s TypedField<'a>>> {
+        let clear = self.register(&snapshot.clear_register)?;
+        Ok(snapshot
+            .consumed_fields
+            .iter()
+            .filter_map(|name| clear.fields.iter().find(|field| field.info.name == *name))
+            .collect())
     }
 
     fn validate_capability(&self) -> Result<()> {
@@ -2391,6 +2443,43 @@ impl<'a> TypedBlock<'a> {
                 );
             }
             output.push_str("}\n\n");
+            let consumed = self.consumed_fields(snapshot)?;
+            if consumed.is_empty() {
+                continue;
+            }
+            let consumed_name = format!("{}Consumed", type_binding_name(&snapshot.name));
+            let _ = writeln!(
+                output,
+                "/// The event the caller consumed elsewhere, whose field of `{}` the\n\
+                 /// acknowledgement of a [`{name}`] writes beside the sample: {}\n\
+                 #[derive(Clone, Copy, Debug, Eq, PartialEq)]\n\
+                 pub enum {consumed_name} {{",
+                snapshot.clear_register,
+                clean(snapshot.consumed_event.as_deref().unwrap_or_default()).replace('\n', " "),
+            );
+            for field in &consumed {
+                let _ = writeln!(
+                    output,
+                    "/// `{}`.\n{},",
+                    field.info.name,
+                    type_binding_name(&field.info.name)
+                );
+            }
+            let _ = writeln!(
+                output,
+                "}}\n\nimpl {consumed_name} {{\n\
+                 /// The field's bit in the clear register.\n\
+                 pub const fn bits(self) -> u32 {{\nmatch self {{"
+            );
+            for field in &consumed {
+                let _ = writeln!(
+                    output,
+                    "Self::{} => 0x{:08x},",
+                    type_binding_name(&field.info.name),
+                    field.mask()
+                );
+            }
+            output.push_str("}\n}\n}\n\n");
         }
         Ok(())
     }
@@ -2405,6 +2494,27 @@ impl<'a> TypedBlock<'a> {
             let status = self.register(&snapshot.status_register)?;
             let clear = self.register(&snapshot.clear_register)?;
             let name = format!("{}Snapshot", type_binding_name(&snapshot.name));
+            if !snapshot.consumed_fields.is_empty() {
+                let consumed = format!("{}Consumed", type_binding_name(&snapshot.name));
+                let _ = writeln!(
+                    body,
+                    "/// Sample `{}` once, keeping the events `{}` acknowledges.\n\
+                     #[inline]\npub fn sample_{method}(&self) -> {name} {{\n\
+                     {name}(self.0.{} & {name}::EVENTS)\n}}\n\n\
+                     /// Acknowledge the sampled events and the event the caller\n\
+                     /// consumed: one to each bit of `{}` the snapshot holds and to\n\
+                     /// `consumed`'s field, zero to every other bit.\n\
+                     #[inline]\npub fn acknowledge_{method}(&mut self, snapshot: {name}, consumed: {consumed}) {{\n\
+                     self.0.{};\n}}\n",
+                    snapshot.status_register,
+                    snapshot.clear_register,
+                    status.read_call(),
+                    snapshot.clear_register,
+                    clear.write_call("snapshot.0 | consumed.bits()"),
+                    method = snapshot.name,
+                );
+                continue;
+            }
             let _ = writeln!(
                 body,
                 "/// Sample `{}` once, keeping the events `{}` acknowledges.\n\
@@ -4087,6 +4197,16 @@ impl<'a> TypedField<'a> {
                 )));
             }
         }
+        if kinds.pending.contains(&key)
+            && (class != FieldClass::WriteTrigger
+                || width != 1
+                || !access.is_none_or(Access::can_read))
+        {
+            return Err(Error::message(format!(
+                "write-trigger doorbell {peripheral}.{}.{} reads pending: it is a readable one-bit write-trigger field",
+                register.name, info.name
+            )));
+        }
         Ok(Self {
             info,
             method: field_method(&info.name),
@@ -4104,6 +4224,7 @@ impl<'a> TypedField<'a> {
             address: kinds.pointers.get(&key).copied(),
             image,
             trigger: class == FieldClass::WriteTrigger,
+            pending: class == FieldClass::WriteTrigger && kinds.pending.contains(&key),
             command: match class {
                 FieldClass::SelfClearing(bit) => Some(bit),
                 _ => None,

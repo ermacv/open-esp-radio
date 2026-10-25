@@ -1842,6 +1842,7 @@ fn classify(
                 peripheral: name.to_owned(),
                 register: register.name.clone(),
                 field: info.name.clone(),
+                reads_pending: false,
                 sources: cited(),
             });
         } else if field_access == Access::WriteOnly && kind != Some(FieldKind::Plain) {
