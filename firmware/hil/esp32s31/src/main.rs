@@ -40,7 +40,7 @@ use oer_diagnostics::Note;
 use embassy_time::{Duration, Timer};
 use oer_esp32s31_hal::platform::{FromCpu0Irq, SystimerAlarm0};
 #[cfg(feature = "wifi-station")]
-use oer_esp32s31_hal::platform::{FromCpu2Irq, FromCpu3Irq, SystimerAlarm1};
+use oer_esp32s31_hal::platform::{FromCpu2Irq, SystimerAlarm1};
 use oer_esp32s31_hal::usb_serial_jtag::ConsoleInterrupt;
 use oer_esp32s31_hal::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
 use oer_espressif_executor::Executor;
@@ -61,14 +61,8 @@ oer_espressif_staged_runtime::interrupt_table! {
     /// The radio executor (P2), polled in its handler.
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<wifi_station::RadioTasks, FromCpu2Irq>, line 20, level 2, hart 0, Executor;
     #[cfg(feature = "wifi-station")]
-    /// The radio doorbell (P3).
-    doorbell: DoorbellToken = FromCpu3Irq => crate::wifi_station::irq::doorbell, line 21, level 3, hart 0, Hardware;
-    #[cfg(feature = "wifi-station")]
-    /// The Wi-Fi MAC's events.
-    wifi_mac: WifiMacToken = WifiMacInterrupt => crate::wifi_station::irq::wifi_mac, line 22, level 3, hart 0, Hardware;
-    #[cfg(feature = "wifi-station")]
-    /// The Wi-Fi MAC's power events.
-    wifi_pwr: WifiPwrToken = WifiMacPowerInterrupt => crate::wifi_station::irq::wifi_pwr, line 23, level 3, hart 0, Hardware;
+    /// The radio handler (P3): both Wi-Fi MAC banks and the doorbell.
+    wifi: WifiToken = wifi_station::irq::WifiPart => crate::wifi_station::irq::on_wifi, line 21, level 3, hart 0, Hardware;
     /// The USB Serial/JTAG console: it raises the console endpoint's signal.
     console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 18, level 1, hart 0, Hardware;
 }

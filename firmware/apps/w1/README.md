@@ -7,9 +7,10 @@ runner's provisional constants (`IMMEDIATE_CONTINUATIONS`,
 
 The radio system brings Wi-Fi up as in W0, on the configured channel. The
 receive runner (`oer-esp32s31-ieee80211-driver::rx::receive`) binds its arena on the
-radio executor (P2), polled in the handler of `FROM_CPU` line 2; the MAC and
-WDEVPWR interrupts and the radio doorbell (`FROM_CPU` line 3) run the
-interrupt line at P3. Staged frames reach the application (thread mode, P1)
+radio executor (P2), polled in the handler of `FROM_CPU` line 2; one P3
+handler, bound once at start, holds the MAC and WDEVPWR interrupt banks and
+the radio doorbell (`FROM_CPU` line 3), which share its line, and runs the
+interrupt line. Staged frames reach the application (thread mode, P1)
 through the SPSC queue; it normalizes each and, in the window, hands it to
 the survey (`oer-ieee80211-runtime::survey`).
 

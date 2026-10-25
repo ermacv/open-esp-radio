@@ -3,31 +3,26 @@
 //! which raises the endpoint's static signal.
 
 use oer_esp32s31_hal::usb_serial_jtag::{
-    ConsoleEndpoint, ConsoleInterrupt, UsbPads, UsbSerialJtagRegisters, console_parts,
+    ConsoleEndpoint, ConsoleInterrupt, RetireError, UsbPads, retire_early_writer,
 };
 use oer_espressif_executor::Executor;
 use oer_espressif_staged_runtime::panic::PanicRecord;
 use oer_espressif_usb_serial_jtag::{Endpoint, Interrupt};
+use oer_interrupt_table::{Controller, Router};
 
 /// The console's endpoint, polled by the core-0 executor's task.
 pub(crate) type Console = Endpoint<Executor<0>, ConsoleEndpoint>;
 
 oer_espressif_staged_runtime::placed_static! {
-    /// The console's interrupt: its handler's registers and the endpoint's
-    /// signal.
+    /// The console's interrupt: the endpoint's signal.
     static INTERRUPT: Interrupt<Executor<0>, ConsoleInterrupt> = Interrupt::new(), in critical_data "console_usb";
 }
 
-/// The console's `Hardware` interrupt handler: it acknowledges the events
-/// it read and raises them to the console's task, calling no waker.
-pub(crate) fn interrupt() {
-    let _ = INTERRUPT.service();
-}
-
-/// Writes `note` before the console opens; the early writer waits for room
-/// within its budget and counts what it drops.
-pub(crate) fn early(note: &oer_diagnostics::Note<'_>) {
-    let _ = oer_esp32s31_hal::usb_serial_jtag::early_note(note);
+/// The console's `Hardware` interrupt handler, over the part its entry
+/// holds: it acknowledges the events it read and raises them to the
+/// console's task, calling no waker.
+pub(crate) fn interrupt(part: &mut ConsoleInterrupt) {
+    INTERRUPT.service(part);
 }
 
 /// Writes the previous boot's panic before the console opens.
@@ -50,19 +45,35 @@ pub(crate) async fn text(console: &mut Console, bytes: &[u8]) {
     let _ = console.write_all(bytes).await;
 }
 
-/// Opens the console over the block the esp-hal adapter took from the early
-/// writer and esp-hal (`take_usb_serial_jtag`): it gives the handler its
-/// registers, then routes the interrupt. The pads stay apart, held so that
-/// nothing switches them off.
-pub(crate) fn open(
-    registers: UsbSerialJtagRegisters,
-    route: crate::ConsoleUsb,
-) -> (Console, UsbPads) {
-    let (endpoint, interrupt, pads) = console_parts(registers);
-    let signal = INTERRUPT.install(interrupt);
-    let routed = oer_espressif_esp_hal_irq::enable(&route);
-    let (Ok(signal), Ok(())) = (signal, routed) else {
-        panic!("the console's USB interrupt");
-    };
-    (Endpoint::new(endpoint, signal), pads)
+/// Why the console did not open.
+pub(crate) enum OpenError {
+    /// The early writer kept the block.
+    Retire,
+    /// The router refused the console's entry.
+    Bind,
+}
+
+impl OpenError {
+    /// The reason the image's failure names.
+    pub(crate) const fn reason(&self) -> &'static str {
+        match self {
+            Self::Retire => "console-retire",
+            Self::Bind => "console-bind",
+        }
+    }
+}
+
+/// Opens the console over the block the early writer retires: the router
+/// moves the interrupt's part to its handler and routes it. The pads stay
+/// apart, held so that nothing switches them off.
+pub(crate) fn open<C: Controller>(
+    router: &mut Router<C>,
+    token: crate::ConsoleUsb,
+) -> Result<(Console, UsbPads), OpenError> {
+    let (endpoint, interrupt, pads) =
+        retire_early_writer().map_err(|_held: RetireError| OpenError::Retire)?;
+    let _bound = router
+        .bind(token, interrupt)
+        .map_err(|_refused| OpenError::Bind)?;
+    Ok((Endpoint::new(endpoint, INTERRUPT.signal()), pads))
 }

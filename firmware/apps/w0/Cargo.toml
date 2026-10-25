@@ -19,6 +19,7 @@ oer-espressif-executor = { path = "../../../chips/espressif/executor", features 
 oer-espressif-usb-serial-jtag.workspace = true
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-time = { path = "../../../portable/time" }
+oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
 oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client" }

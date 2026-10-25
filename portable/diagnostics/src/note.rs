@@ -975,7 +975,7 @@ topics! {
     W1StartTrack = 273, w1_start_track, ""
         ("tracking_us" tracking_us: dash, "cold_mask" cold_mask: name, "expected_mask" expected_mask: hexa10);
     W1Irq = 274, w1_irq, "OER w1 irq"
-        ("spurious_mac" spurious_mac: dec, "auxiliary_mac" auxiliary_mac: dec, "unhandled_mac" unhandled_mac: dec, "spurious_power" spurious_power: dec, "route_errors" route_errors: dec);
+        ("spurious_mac" spurious_mac: dec, "auxiliary_mac" auxiliary_mac: dec, "unhandled_mac" unhandled_mac: dec, "closed" closed: dec);
     W1NoFrame = 275, w1_no_frame, "OER w1 no frame within 5 s: the window did not open" ();
     W1ExitUnexpected = 276, w1_exit_unexpected, "OER w1 exit"
         ("cause" cause: name, "end" end: name);

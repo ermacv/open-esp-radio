@@ -60,12 +60,9 @@ pub async fn prepare<B: PlatformClockBackend, T>(
     wifi: WifiClocked,
     previous: Option<Prepared>,
 ) -> (WifiClocked, Result<Prepared>) {
-    let (mut runtime, interrupts, clocks) = wifi.into_running();
+    let (mut runtime, clocks) = wifi.into_running();
     let result = prepare_inner(domain, &mut runtime, previous).await;
-    (
-        WifiClocked::from_running(runtime, interrupts, clocks),
-        result,
-    )
+    (WifiClocked::from_running(runtime, clocks), result)
 }
 
 async fn prepare_inner<B: PlatformClockBackend, T>(
@@ -107,7 +104,7 @@ pub async fn run<B: PlatformClockBackend, T>(
     prepared: Option<Prepared>,
     #[cfg(feature = "diagnostic-radio-health")] health: Option<&mut crate::health::Store>,
 ) -> (WifiClocked, Result<()>) {
-    let (mut runtime, interrupts, clocks) = wifi.into_running();
+    let (mut runtime, clocks) = wifi.into_running();
     crate::transport::CONSOLE
         .note_reliably(&Note::cca_rx_begin(
             channel.into(),
@@ -124,10 +121,7 @@ pub async fn run<B: PlatformClockBackend, T>(
         health,
     )
     .await;
-    (
-        WifiClocked::from_running(runtime, interrupts, clocks),
-        result,
-    )
+    (WifiClocked::from_running(runtime, clocks), result)
 }
 
 async fn experiment<B: PlatformClockBackend, T>(

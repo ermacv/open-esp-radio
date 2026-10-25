@@ -1,87 +1,5 @@
-//! Boot and transport of the separate radio-health image.
+//! Transport and the radio task of the separate radio-health image.
 use crate::*;
-
-pub(crate) fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    oer_esp32s31_hal::usb_serial_jtag::early_note(&oer_diagnostics::Note::diagnostic_start("phy"));
-    let peripherals = esp_hal::init(esp_hal::Config::default());
-    let (psram, adopted) = handoff.adopt(
-        INTERRUPT_TABLE,
-        oer_esp32s31_board::BootstrapPsram(peripherals.PSRAM),
-    );
-    let interrupts = Interrupts::take().expect("diagnostic interrupt table claimed once");
-    let factory = oer_esp32s31_hal::platform::FactoryIdentity::read(
-        oer_espressif_esp_hal_soc::handoff::take_efuse()
-            .expect("the image takes the eFuse words once"),
-    );
-    let identity = PhyCalibrationIdentity {
-        rf_cal_version: phy_get_rf_cal_version(),
-        base_mac_address: factory.base_mac(),
-        mac_extension: factory.mac_extension(),
-    };
-    let station = factory.address(oer_esp32s31_hal::platform::Interface::Station);
-    let access_point = factory.address(oer_esp32s31_hal::platform::Interface::AccessPoint);
-    let (hardware, clocks) = take_radio(
-        RadioSingletons {
-            i2c_ana_mst: peripherals.I2C_ANA_MST,
-            modem_syscon: peripherals.MODEM_SYSCON,
-            modem_lpcon: peripherals.MODEM_LPCON,
-            wifi: peripherals.WIFI,
-            bt: peripherals.BT,
-            ieee802154: peripherals.IEEE802154,
-            lp_tsens: peripherals.LP_TSENS,
-        },
-        &psram,
-        todo!("integration PR: bootstrap root provides PllPowerReleased"),
-    );
-    let (domain, partitions) =
-        hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
-    let mut rng = Rng::new(
-        oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
-        oer_embassy_time::EmbassyClock,
-    );
-    let boot = (u64::from(rng.random()) << 32 | u64::from(rng.random())).max(1);
-    let radio = radio::Radio::place(
-        RADIO.uninit(),
-        domain,
-        partitions.wifi,
-        partitions.wifi_coex,
-        ieee802154::Rx::new(
-            partitions.ieee802154,
-            partitions.ieee802154_coex,
-            interrupts.mac,
-        ),
-        clocks,
-        identity,
-        station,
-        access_point,
-        rng,
-    );
-    radio.set_health_boot(boot);
-    oer_espressif_executor::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
-    oer_espressif_executor::bind::<0, _>(interrupts.app_alarm);
-    let radio_spawner =
-        InterruptExecutor::<2>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR2))
-            .start(interrupts.radio, LEVELS);
-    RadioTasks::serve_radio(&radio_spawner, radio).expect("radio diagnostic task");
-    let poster = SLOT.claim().expect("one diagnostic requester");
-    let chip = transport::Chip(oer_esp32s31_hal::platform::ResetCauses::read(
-        oer_espressif_esp_hal_soc::handoff::take_reset_causes(peripherals.LP_AON_CLK_RST),
-    ));
-    let usb = transport::open_usb(
-        oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
-            .expect("no early record holds the USB Serial/JTAG at the console handoff"),
-        interrupts.console_usb,
-    );
-    transport::CONSOLE.start(boot);
-    adopted.enable_interrupts();
-    Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0)).run(
-        interrupts.wake,
-        move |spawner| {
-            AppTasks::console(spawner, usb, boot, chip).expect("diagnostic console task");
-            AppTasks::dispatch(spawner, poster).expect("diagnostic dispatch task");
-        },
-    );
-}
 
 pub(crate) async fn console(usb: transport::Usb, boot: u64, chip: transport::Chip) {
     let keys = oer_hil_protocol::feature_keys::image_keys(&|feature| {
@@ -222,6 +140,7 @@ pub(crate) async fn serve_radio(radio: &'static mut radio::Radio) {
         } else {
             poll_fn(|cx| DOORBELL.poll_rung(cx)).await;
         }
+        ieee802154::poll();
         // A started PHY future always reaches its terminal result before a command.
         {
             let mut hold = core::pin::pin!(radio.service_hold());

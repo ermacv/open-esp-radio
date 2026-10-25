@@ -2290,6 +2290,7 @@ dependencies = [
  "oer-ieee80211-port",
  "oer-ieee80211-softmac",
  "oer-ieee80211-wire",
+ "oer-interrupt-table",
  "oer-radio-regulatory",
  "oer-time",
  "static_cell",

@@ -21,9 +21,15 @@ mod transport;
 mod tx_rate_checkpoint;
 
 use core::future::poll_fn;
-use esp_hal::interrupt::software::SoftwareInterrupt;
+use oer_esp32s31_hal::{
+    ieee802154::mac::Ieee802154InterruptOwner,
+    platform::{FromCpu0Irq, FromCpu2Irq, SystimerAlarm0, SystimerAlarm1},
+    power::ChipClocks,
+    root::Root,
+    usb_serial_jtag::ConsoleInterrupt,
+    watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
+};
 use oer_esp32s31_phy::{PhyCalibrationIdentity, concurrent::ConcurrentPhy, phy_get_rf_cal_version};
-use oer_espressif_esp_hal_radio::{RadioSingletons, take_radio};
 use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder};
 use oer_hil_agent::base::Intake;
 use oer_hil_protocol::{
@@ -34,13 +40,20 @@ use oer_hil_protocol::{
 use oer_memory::{Doorbell, Poster, RequestSlot};
 use static_cell::StaticCell;
 
+// The IEEE 802.15.4 MAC's source has no entry: the radio task polls the
+// engine (`ieee802154::poll`), with the router's proof that no line
+// receives it.
 oer_espressif_staged_runtime::interrupt_table! {
-    wake: WakeToken = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu, Hardware;
-    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<RadioTasks>, Priority2, ProCpu, Executor;
-    mac: MacToken = MODEM_ZB_MAC => ieee802154::interrupt, Priority2, ProCpu, Exempt(ExecutorLevel, "the IEEE 802.15.4 engine stays on P2 until its port to P3");
-    radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority3, ProCpu, Hardware;
-    app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu, Hardware;
-    console_usb: ConsoleUsb = USB_DEVICE => crate::transport::usb_interrupt, Priority1, ProCpu, Hardware;
+    /// The application executor's wake (thread mode).
+    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, level 1, hart 0, Hardware;
+    /// The radio executor (P2), polled in its handler.
+    radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, level 2, hart 0, Executor;
+    /// The radio executor's timer alarm; it only acknowledges and pends.
+    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 18, level 3, hart 0, Hardware;
+    /// The application executor's timer alarm.
+    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 19, level 1, hart 0, Hardware;
+    /// The console's USB Serial/JTAG interrupt; it raises the endpoint's signal.
+    console_usb: ConsoleUsb = ConsoleInterrupt => crate::transport::usb_interrupt, line 20, level 1, hart 0, Hardware;
 }
 
 const LEVELS: LevelOrder<RadioAlarmToken, RadioToken, WakeToken> = LevelOrder::new();
@@ -65,6 +78,7 @@ oer_espressif_executor::tasks! {
         dispatch(poster: Poster<Request, Answer>) = dispatch;
         #[cfg(feature = "diagnostic-radio-health")]
         dispatch(poster: Poster<Request, Answer>) = health::startup::dispatch;
+        rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
     }
 }
 static RADIO: StaticCell<radio::Radio> = StaticCell::new();
@@ -118,19 +132,24 @@ static REQUESTS: embassy_sync::channel::Channel<
 pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<oer_embassy_time::EmbassyClock>;
 
 oer_espressif_staged_runtime::entry!(main);
-#[cfg(not(feature = "diagnostic-radio-health"))]
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     oer_esp32s31_hal::usb_serial_jtag::early_note(&oer_diagnostics::Note::diagnostic_start("phy"));
-    let peripherals = esp_hal::init(esp_hal::Config::default());
-    let (psram, adopted) = handoff.adopt(
+    let Some(root) = Root::take() else {
+        fail("root-taken");
+    };
+    let runtime = root.into_runtime();
+    let (_psram, mut adopted) = handoff.adopt(
         INTERRUPT_TABLE,
-        oer_esp32s31_board::BootstrapPsram(peripherals.PSRAM),
+        runtime.interrupts.controller,
+        oer_esp32s31_board::BootstrapPsram,
     );
-    let interrupts = Interrupts::take().expect("diagnostic interrupt table claimed once");
-    let factory = oer_esp32s31_hal::platform::FactoryIdentity::read(
-        oer_espressif_esp_hal_soc::handoff::take_efuse()
-            .expect("the image takes the eFuse words once"),
-    );
+    let Some(interrupts) = Interrupts::take() else {
+        fail("interrupt-table");
+    };
+    let Ok(silent) = adopted.router().silent::<Ieee802154InterruptOwner>() else {
+        fail("ieee802154-route");
+    };
+    let factory = oer_esp32s31_hal::platform::FactoryIdentity::read(runtime.efuse);
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
         base_mac_address: factory.base_mac(),
@@ -138,67 +157,90 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     };
     let station = factory.address(oer_esp32s31_hal::platform::Interface::Station);
     let access_point = factory.address(oer_esp32s31_hal::platform::Interface::AccessPoint);
-    let (hardware, clocks) = take_radio(
-        RadioSingletons {
-            i2c_ana_mst: peripherals.I2C_ANA_MST,
-            modem_syscon: peripherals.MODEM_SYSCON,
-            modem_lpcon: peripherals.MODEM_LPCON,
-            wifi: peripherals.WIFI,
-            bt: peripherals.BT,
-            ieee802154: peripherals.IEEE802154,
-            lp_tsens: peripherals.LP_TSENS,
-        },
-        &psram,
-        todo!("integration PR: bootstrap root provides PllPowerReleased"),
-    );
-    let (domain, partitions) =
-        hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
-    let mut rng = Rng::new(
-        oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
-        oer_embassy_time::EmbassyClock,
-    );
+    let (domain, partitions) = runtime.radio.split::<ChipClocks, _>(ConcurrentPhy::new());
+    let mut rng = Rng::new(runtime.entropy, oer_embassy_time::EmbassyClock);
     let boot = (u64::from(rng.random()) << 32 | u64::from(rng.random())).max(1);
     let radio = radio::Radio::place(
         RADIO.uninit(),
         domain,
         partitions.wifi,
         partitions.wifi_coex,
-        ieee802154::Rx::new(
-            partitions.ieee802154,
-            partitions.ieee802154_coex,
-            interrupts.mac,
-        ),
-        clocks,
+        ieee802154::Rx::new(partitions.ieee802154, partitions.ieee802154_coex, silent),
+        runtime.clocks,
         identity,
         station,
         access_point,
         rng,
     );
-    oer_espressif_executor::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
-    oer_espressif_executor::bind::<0, _>(interrupts.app_alarm);
-    let radio_spawner =
-        InterruptExecutor::<2>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR2))
-            .start(interrupts.radio, LEVELS);
-    RadioTasks::serve_radio(&radio_spawner, radio).expect("radio diagnostic task");
-    let poster = SLOT.claim().expect("one diagnostic requester");
-    let chip = transport::Chip(oer_esp32s31_hal::platform::ResetCauses::read(
-        oer_espressif_esp_hal_soc::handoff::take_reset_causes(peripherals.LP_AON_CLK_RST),
-    ));
-    let usb = transport::open_usb(
-        oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
-            .expect("no early record holds the USB Serial/JTAG at the console handoff"),
-        interrupts.console_usb,
+    #[cfg(feature = "diagnostic-radio-health")]
+    radio.set_health_boot(boot);
+    let timer = runtime.system_timer;
+    oer_espressif_executor::init::<2, _, _>(
+        oer_espressif_executor::systimer::SystemTimer {
+            comparators: timer.comparators,
+            counter: timer.counter,
+        },
+        adopted.router(),
+        interrupts.radio_alarm,
+        timer.alarm0,
     );
+    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1);
+    let software = runtime.software_interrupts;
+    let radio_spawner = InterruptExecutor::<2>::new(software.line2).start(
+        adopted.router(),
+        interrupts.radio,
+        software.irq2,
+        LEVELS,
+    );
+    if RadioTasks::serve_radio(&radio_spawner, radio).is_err() {
+        fail("task-start");
+    }
+    let Some(poster) = SLOT.claim() else {
+        fail("requester");
+    };
+    let chip = transport::Chip(oer_esp32s31_hal::platform::ResetCauses::read(
+        runtime.reset_cause,
+    ));
+    let Ok((usb, _pads)) = transport::open_usb(adopted.router(), interrupts.console_usb) else {
+        fail("console");
+    };
     transport::CONSOLE.start(boot);
-    adopted.enable_interrupts();
-    Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0)).run(
+    let mut router = adopted.enable_interrupts();
+    let watchdog = runtime.watchdogs.rtc;
+    Executor::<0>::new(software.line0).run(
+        &mut router,
         interrupts.wake,
+        software.irq0,
         move |spawner| {
-            AppTasks::console(spawner, usb, boot, chip).expect("diagnostic console task");
-            AppTasks::dispatch(spawner, poster).expect("diagnostic dispatch task");
+            if AppTasks::console(spawner, usb, boot, chip).is_err()
+                || AppTasks::dispatch(spawner, poster).is_err()
+                || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
+            {
+                fail("task-start");
+            }
         },
     );
 }
+
+/// Halt the image on a failed boot step, its reason on the console while
+/// no one holds the block.
+fn fail(reason: &'static str) -> ! {
+    oer_espressif_staged_runtime::fatal_halt(|_path| {
+        let _note = oer_esp32s31_hal::usb_serial_jtag::fatal_note(
+            &oer_diagnostics::Note::runtime_fail(reason),
+        );
+    })
+}
+
+/// Feed the RTC watchdog for good: the image resets when this executor stops
+/// polling.
+async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
+    let period = oer_time::Duration::from_millis(RTC_WATCHDOG_FEED_PERIOD_MS);
+    match watchdog
+        .feed_every(&oer_embassy_time::EmbassyClock, period)
+        .await {}
+}
+
 #[cfg(not(feature = "diagnostic-radio-health"))]
 async fn console(usb: transport::Usb, boot: u64, chip: transport::Chip) {
     let keys = oer_hil_protocol::feature_keys::image_keys(&|feature| feature == "diagnostic-phy");
@@ -313,6 +355,7 @@ async fn serve_radio(radio: &'static mut radio::Radio) {
         } else {
             poll_fn(|cx| DOORBELL.poll_rung(cx)).await;
         }
+        ieee802154::poll();
         // A started PHY future always reaches its terminal result before a command.
         {
             let mut hold = core::pin::pin!(radio.service_hold());
@@ -359,6 +402,3 @@ type IntakeRequest = Request;
 type IntakeRequest = oer_hil_agent::base::Either<Request, health::Request>;
 #[cfg(feature = "diagnostic-radio-health")]
 static HEALTH_SLOT: RequestSlot<health::Request, health::Answer> = RequestSlot::new(&DOORBELL, 1);
-
-#[cfg(feature = "diagnostic-radio-health")]
-use health::startup::main;

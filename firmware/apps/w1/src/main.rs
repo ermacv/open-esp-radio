@@ -35,13 +35,18 @@ mod usb;
 use core::convert::Infallible;
 
 use embassy_futures::select::{Either, select};
-use esp_hal::interrupt::software::SoftwareInterrupt;
 use oer_diagnostics::{DiagPath, DiagnosticPath, Note};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
-use oer_esp32s31_hal::platform::{FactoryIdentity, Interface};
-use oer_esp32s31_hal::root::ProtocolPartitions;
+use oer_esp32s31_hal::boot::CpuProfile;
+use oer_esp32s31_hal::platform::{
+    FactoryIdentity, FromCpu0Irq, FromCpu2Irq, FromCpu3Irq, Interface, SystimerAlarm0,
+    SystimerAlarm1,
+};
+use oer_esp32s31_hal::root::{ProtocolPartitions, Root};
 use oer_esp32s31_hal::types::MacInterruptEnableState;
+use oer_esp32s31_hal::usb_serial_jtag::ConsoleInterrupt;
+use oer_esp32s31_hal::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
 use oer_esp32s31_ieee80211_driver::{
     runtime::{WifiRoleMaterialized, materialize_esp32s31_wifi_role},
     rx::{counters::WifiRxCounters, returns::HeldRxFrame, upper::FrameReceiver},
@@ -56,9 +61,8 @@ use oer_esp32s31_phy::{
 };
 use oer_esp32s31_radio_client::{Failure, LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
-use oer_espressif_esp_hal_radio::{PlatformClocks, RadioSingletons, take_radio};
 use oer_espressif_executor::{
-    Executor, InterruptExecutor, LevelOrder, Spawner, timer_observation::Window,
+    Doorbell, Executor, InterruptExecutor, LevelOrder, Spawner, timer_observation::Window,
 };
 use oer_espressif_staged_runtime::{panic, stacks};
 use oer_ieee80211_runtime::survey::Survey;
@@ -79,8 +83,8 @@ use {
 };
 
 use crate::{
-    irq::{BUFFER, Bound, ImageDoorbell, ImageRoutes, P1Ends, SLOTS},
-    measure::{Phase, TickStamped, TimedEspHal, TimerLine},
+    irq::{BUFFER, Bound, ImageDoorbell, Lower, P1Ends, SLOTS, WifiPart},
+    measure::{Phase, TickStamped, TimedChipClocks, TimerLine},
     own::{CYCLES, Check, Cycle, Fingerprint, Order},
 };
 
@@ -101,25 +105,25 @@ include!(concat!(env!("OUT_DIR"), "/w1_config.rs"));
 
 oer_espressif_staged_runtime::interrupt_table! {
     /// The application executor's wake (thread mode).
-    wake: WakeToken = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, level 1, hart 0, Hardware;
     /// The radio executor (P2), polled in its handler, which times each run.
-    radio: RadioToken = FROM_CPU_INTR2 => crate::irq::radio_executor, Priority2, ProCpu, Executor;
-    /// The radio doorbell: P2's requests to the interrupt line.
-    doorbell: DoorbellToken = FROM_CPU_INTR3 => crate::irq::doorbell, Priority3, ProCpu, Hardware;
-    /// The Wi-Fi MAC interrupt.
-    wifi_mac: WifiMacToken = MODEM_WIFI_MAC => crate::irq::wifi_mac, Priority3, ProCpu, Hardware;
-    /// The Wi-Fi WDEVPWR interrupt.
-    wifi_pwr: WifiPwrToken = MODEM_WIFI_PWR => crate::irq::wifi_pwr, Priority3, ProCpu, Hardware;
+    radio: RadioToken = FromCpu2Irq => crate::irq::radio_executor, line 17, level 2, hart 0, Executor;
+    /// The radio interrupt: the Wi-Fi MAC and WDEVPWR banks and the radio
+    /// doorbell, P2's requests to the line.
+    wifi: WifiToken = WifiPart => crate::irq::on_wifi, line 18, level 3, hart 0, Hardware;
     /// The radio executor's timer alarm; it only acknowledges and pends.
-    radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority3, ProCpu, Hardware;
+    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 19, level 3, hart 0, Hardware;
     /// The application executor's timer alarm.
-    app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu, Hardware;
+    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 20, level 1, hart 0, Hardware;
     /// The console's USB Serial/JTAG interrupt; it raises the endpoint's signal.
-    console_usb: ConsoleUsb = USB_DEVICE => crate::usb::interrupt, Priority1, ProCpu, Hardware;
+    console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 21, level 1, hart 0, Hardware;
 }
 
 /// The radio executor between the radio interrupts and the application.
-const LEVELS: LevelOrder<WifiMacToken, RadioToken, WakeToken> = LevelOrder::new();
+const LEVELS: LevelOrder<WifiToken, RadioToken, WakeToken> = LevelOrder::new();
+
+/// The CPU clock the bootstrap selects (`firmware/bootstrap/esp32s31`).
+const CPU_HZ: u32 = CpuProfile::Mhz160.clock().rates.cpu_hz;
 
 /// The survey window, from the first frame.
 const WINDOW: Duration = Duration::from_millis(10_000);
@@ -161,8 +165,7 @@ oer_espressif_executor::tasks! {
         p2_timers(lines: oer_memory::AffineSpscSender<'static, TimerLine, 2>) = measure::p2_timers;
         rx_task(
             registers: oer_esp32s31_hal::owner::RadioAccess,
-            interrupt_setup: oer_esp32s31_hal::owner::MacInterruptSetup,
-            routes: ImageRoutes,
+            bound_part: oer_interrupt_table::Bound<WifiPart>,
             doorbell: ImageDoorbell,
             bound: oer_memory::AffineSpscSender<'static, Bound, 1>,
         ) = irq::rx_task;
@@ -173,6 +176,7 @@ oer_espressif_executor::tasks! {
     /// The application executor's tasks.
     AppTasks: Executor<0> {
         w1(boot: Boot) = w1;
+        rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
     }
 }
 static BOUND: static_cell::ConstStaticCell<AffineSpscQueue<Bound, 1>> =
@@ -194,7 +198,7 @@ type Actor = RadioSystem<
     RcSlow,
     TickStamped<
         Esp32s31Radio<
-            PlatformClocks<TimedEspHal>,
+            TimedChipClocks,
             oer_espressif_executor::Cooperative<EmbassyClock>,
             NoopPhyTargetObserver,
         >,
@@ -213,7 +217,7 @@ struct Boot {
     station: [u8; 6],
     access_point: [u8; 6],
     radio: Spawner<RadioTasks>,
-    routes: ImageRoutes,
+    wifi_bound: oer_interrupt_table::Bound<WifiPart>,
     doorbell: ImageDoorbell,
     bound: (
         oer_memory::AffineSpscSender<'static, Bound, 1>,
@@ -230,20 +234,23 @@ oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     // Before anything can panic and overwrite it.
     let previous = panic::take_previous();
-    let peripherals = esp_hal::init(esp_hal::Config::default());
-    let (psram, adopted) = handoff.adopt(INTERRUPT_TABLE, board::BootstrapPsram(peripherals.PSRAM));
+    let Some(root) = Root::take() else {
+        fail("root-taken")
+    };
+    let runtime = root.into_runtime();
+    let (_psram, mut adopted) = handoff.adopt(
+        INTERRUPT_TABLE,
+        runtime.interrupts.controller,
+        board::BootstrapPsram,
+    );
     if let Some(record) = previous {
         usb::early_previous_panic(&record);
     }
     let Some(interrupts) = Interrupts::take() else {
-        usb::early(&Note::w1_fail("interrupt-table"));
-        park()
+        fail("interrupt-table")
     };
 
-    let factory = FactoryIdentity::read(
-        oer_espressif_esp_hal_soc::handoff::take_efuse()
-            .expect("the image takes the eFuse words once"),
-    );
+    let factory = FactoryIdentity::read(runtime.efuse);
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
         base_mac_address: factory.base_mac(),
@@ -252,26 +259,12 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let station = factory.address(Interface::Station);
     let access_point = factory.address(Interface::AccessPoint);
 
-    let singletons = RadioSingletons {
-        i2c_ana_mst: peripherals.I2C_ANA_MST,
-        modem_syscon: peripherals.MODEM_SYSCON,
-        modem_lpcon: peripherals.MODEM_LPCON,
-        wifi: peripherals.WIFI,
-        bt: peripherals.BT,
-        ieee802154: peripherals.IEEE802154,
-        lp_tsens: peripherals.LP_TSENS,
-    };
-    // esp-hal's clocks come back as a provider over its backend; the image
-    // times the same backend instead.
-    let (hardware, _esp_hal_clocks) = take_radio(
-        singletons,
-        &psram,
-        todo!("integration PR: bootstrap root provides PllPowerReleased"),
-    );
-    let (domain, partitions) = hardware.split::<TimedEspHal, _>(ConcurrentPhy::new());
+    // The image times the root's platform clock owner.
+    let (domain, partitions) = runtime
+        .radio
+        .split::<TimedChipClocks, _>(ConcurrentPhy::new());
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
-        usb::early(&Note::w1_fail("claim"));
-        park()
+        fail("claim")
     };
     let ProtocolPartitions {
         wifi, wifi_coex, ..
@@ -279,7 +272,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let backend = TickStamped(Esp32s31Radio::new(
         domain,
         wifi_coex,
-        PlatformClocks::<TimedEspHal>::new(),
+        TimedChipClocks::new(runtime.clocks),
         oer_espressif_executor::Cooperative::new(EmbassyClock),
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
@@ -288,78 +281,88 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
 
     // The radio executor writes the system timer; the application executor
     // publishes its deadlines to it.
-    oer_espressif_executor::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
-    oer_espressif_executor::bind::<0, _>(interrupts.app_alarm);
-    let doorbell = match ImageDoorbell::new(
-        SoftwareInterrupt::new(peripherals.FROM_CPU_INTR3),
-        interrupts.doorbell,
-    ) {
-        Ok(doorbell) => doorbell,
-        Err(error) => {
-            {
-                let (name, source, first, second) = match error {
-                    oer_interrupt_table::Error::WrongCore {
-                        source,
-                        core,
-                        current,
-                    } => ("WrongCore", source as u32, core as u32, current as u32),
-                    oer_interrupt_table::Error::ForeignHandler { source } => {
-                        ("ForeignHandler", source as u32, 0, 0)
-                    }
-                    oer_interrupt_table::Error::WrongLevel { source, level } => {
-                        ("WrongLevel", source as u32, level as u32, 0)
-                    }
-                    oer_interrupt_table::Error::Duplicate { source } => {
-                        ("Duplicate", source as u32, 0, 0)
-                    }
-                    oer_interrupt_table::Error::NotInTable { source } => {
-                        ("NotInTable", source as u32, 0, 0)
-                    }
-                    oer_interrupt_table::Error::NotRouted { source } => {
-                        ("NotRouted", source as u32, 0, 0)
-                    }
-                };
-                usb::early(&Note::w1_doorbell_fail(name, source, first, second));
-            }
-            park()
-        }
-    };
-    let (timer_sender, timer_lines) = TIMER_LINES.take().split();
-    let radio = InterruptExecutor::<2>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR2))
-        .start(interrupts.radio, LEVELS);
-    RadioTasks::radio_actor(&radio, actor).expect("the radio actor's first start");
-    RadioTasks::p2_timers(&radio, timer_sender).expect("the P2 timers' first start");
-    let executor = Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0));
-    adopted.enable_interrupts();
-    let rng = Rng::new(
-        oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
-        EmbassyClock,
+    let timer = runtime.system_timer;
+    oer_espressif_executor::init::<2, _, _>(
+        oer_espressif_executor::systimer::SystemTimer {
+            comparators: timer.comparators,
+            counter: timer.counter,
+        },
+        adopted.router(),
+        interrupts.radio_alarm,
+        timer.alarm0,
     );
-    let routes = ImageRoutes {
-        mac: interrupts.wifi_mac,
-        power: interrupts.wifi_pwr,
+    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1);
+    // The radio handler's part holds both banks and the doorbell's lowering
+    // half from the start; the doorbell rings once the part is bound.
+    let software = runtime.software_interrupts;
+    let (bell, acknowledger) = Doorbell::<3>::split(software.line3);
+    let Ok(wifi_bound) = adopted.router().bind(
+        interrupts.wifi,
+        WifiPart::new(runtime.wifi_interrupts, software.irq3, Lower(acknowledger)),
+    ) else {
+        fail("wifi-interrupt")
     };
-    executor.run(interrupts.wake, move |spawner| {
-        let (console, pads) = usb::open(
-            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
-                .expect("no early record holds the USB Serial/JTAG at the console handoff"),
-            interrupts.console_usb,
-        );
-        let boot = Boot {
-            console,
-            _pads: pads,
-            cell: cells.wifi,
-            wifi,
-            rng,
-            station,
-            access_point,
-            radio,
-            routes,
-            doorbell,
-            bound: BOUND.take().split(),
-            timer_lines,
-        };
-        AppTasks::w1(spawner, boot).expect("the run's first start");
+    let doorbell = ImageDoorbell(Doorbell::new::<FromCpu3Irq, _>(bell, &wifi_bound));
+    let (timer_sender, timer_lines) = TIMER_LINES.take().split();
+    let radio = InterruptExecutor::<2>::new(software.line2).start(
+        adopted.router(),
+        interrupts.radio,
+        software.irq2,
+        LEVELS,
+    );
+    if RadioTasks::radio_actor(&radio, actor).is_err()
+        || RadioTasks::p2_timers(&radio, timer_sender).is_err()
+    {
+        fail("radio-tasks")
+    }
+    let (console, pads) = match usb::open(adopted.router(), interrupts.console_usb) {
+        Ok(console) => console,
+        Err(error) => fail(error.reason()),
+    };
+    let executor = Executor::<0>::new(software.line0);
+    let mut router = adopted.enable_interrupts();
+    let rng = Rng::new(runtime.entropy, EmbassyClock);
+    let rtc_watchdog = runtime.watchdogs.rtc;
+    executor.run(
+        &mut router,
+        interrupts.wake,
+        software.irq0,
+        move |spawner| {
+            let boot = Boot {
+                console,
+                _pads: pads,
+                cell: cells.wifi,
+                wifi,
+                rng,
+                station,
+                access_point,
+                radio,
+                wifi_bound,
+                doorbell,
+                bound: BOUND.take().split(),
+                timer_lines,
+            };
+            if AppTasks::w1(spawner, boot).is_err()
+                || AppTasks::rtc_watchdog(spawner, rtc_watchdog).is_err()
+            {
+                fail("app-tasks")
+            }
+        },
+    )
+}
+
+/// Feed the RTC watchdog for good: the image resets when this executor
+/// stops polling.
+async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
+    let period = Duration::from_millis(RTC_WATCHDOG_FEED_PERIOD_MS);
+    match watchdog.feed_every(&EmbassyClock, period).await {}
+}
+
+/// Halt the image on a failed boot step, its reason on the console while
+/// no one holds the block.
+fn fail(reason: &'static str) -> ! {
+    oer_espressif_staged_runtime::fatal_halt(|_path| {
+        let _note = oer_esp32s31_hal::usb_serial_jtag::fatal_note(&Note::w1_fail(reason));
     })
 }
 
@@ -387,7 +390,7 @@ async fn w1(boot: Boot) {
         station: boot.station,
         access_point: boot.access_point,
         radio: boot.radio,
-        routes: boot.routes,
+        wifi_bound: boot.wifi_bound,
         doorbell: boot.doorbell,
         bound: boot.bound,
         timer_lines: boot.timer_lines,
@@ -405,7 +408,7 @@ struct Parts {
     station: [u8; 6],
     access_point: [u8; 6],
     radio: Spawner<RadioTasks>,
-    routes: ImageRoutes,
+    wifi_bound: oer_interrupt_table::Bound<WifiPart>,
     doorbell: ImageDoorbell,
     bound: (
         oer_memory::AffineSpscSender<'static, Bound, 1>,
@@ -648,7 +651,7 @@ async fn run(
         station,
         access_point,
         radio,
-        routes,
+        wifi_bound,
         doorbell,
         bound: (bound_sender, bound),
         timer_lines,
@@ -702,24 +705,13 @@ async fn run(
     let WifiRoleMaterialized {
         owner,
         registers,
-        interrupt_setup,
         resources: (),
     } = materialize_esp32s31_wifi_role(stopped, ());
     let start_report = owner.start_report();
-    let cold_mask = owner.transition_report().cold_interrupt_mask;
     let applied = owner.current_channel();
     let rx_channel = Channel::from(applied);
     // A second start is refused: the receive runner binds its arena once.
-    if RadioTasks::rx_task(
-        &radio,
-        registers,
-        interrupt_setup,
-        routes,
-        doorbell,
-        bound_sender,
-    )
-    .is_err()
-    {
+    if RadioTasks::rx_task(&radio, registers, wifi_bound, doorbell, bound_sender).is_err() {
         return Err("rx-spawn");
     }
     let bind_deadline = after(BIND);
@@ -738,6 +730,7 @@ async fn run(
         counters,
         ring_base,
         storage,
+        requests,
     } = match bound {
         Bound::Ends(ends) => ends,
         Bound::Refused(error) => {
@@ -873,7 +866,9 @@ async fn run(
     }
     let ticks = measure::ticks();
     let rx = counters.report();
-    let cpu_hz = esp_hal::clock::cpu_clock().as_hz();
+    let cpu_hz = CPU_HZ;
+    // The MAC interrupt enable image the line read after its last requests.
+    let mac_enable = requests.mac_interrupt_enable();
 
     // Outside the block: what its lines do not carry.
     match start_report.phy {
@@ -910,10 +905,11 @@ async fn run(
                 .track
                 .tracking_micros
                 .map(|micros| u32::try_from(micros).unwrap_or(u32::MAX)),
-            match cold_mask {
-                MacInterruptEnableState::Disabled => "Disabled",
-                MacInterruptEnableState::Station => "Station",
-                MacInterruptEnableState::Unknown => "Unknown",
+            match mac_enable {
+                Some(MacInterruptEnableState::Disabled) => "Disabled",
+                Some(MacInterruptEnableState::Station) => "Station",
+                Some(MacInterruptEnableState::Unknown) => "Unknown",
+                None => "Unread",
             },
             MAC_STATION_INTERRUPT_MASK.bits(),
         ),
@@ -925,8 +921,7 @@ async fn run(
             rx.spurious_mac_irqs,
             rx.auxiliary_mac_irqs,
             rx.unhandled_mac_irqs,
-            rx.spurious_power_irqs,
-            irq::ROUTE_ERRORS.load(core::sync::atomic::Ordering::Relaxed),
+            rx.closed_irqs,
         ),
     )
     .await;
@@ -1012,8 +1007,4 @@ fn failure_name(cause: Failure) -> &'static str {
         Failure::ClientFailed => "ClientFailed",
         Failure::Poisoned(_) => "Poisoned",
     }
-}
-
-fn park() -> ! {
-    oer_espressif_staged_runtime::idle()
 }

@@ -3,7 +3,9 @@ use oer_diagnostics::Note;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
     domain::RadioDomain,
-    phy::i2c::{self, fields::SARADC_ADC_SAR2_INITIAL_CODE_HIGH_ADDR},
+    phy::i2c::{
+        self, analog_i2c::saradc::adc_sar2_initial_code_high_addr::ADC_SAR2_INITIAL_CODE_HIGH_ADDR,
+    },
     power::PlatformClockBackend,
 };
 use oer_hil_protocol::base::RejectReason;
@@ -33,7 +35,7 @@ pub async fn observe<B: PlatformClockBackend, T>(
     domain: &mut RadioDomain<B, T>,
     point: Point,
 ) -> Result<(), RejectReason> {
-    let field = SARADC_ADC_SAR2_INITIAL_CODE_HIGH_ADDR;
+    let field = ADC_SAR2_INITIAL_CODE_HIGH_ADDR;
     let address = field.address();
     let mut registers = domain.phy_hal();
     let mut started = false;
