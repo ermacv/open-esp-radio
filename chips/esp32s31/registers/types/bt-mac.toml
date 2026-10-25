@@ -1804,48 +1804,48 @@ description = "First controller interrupt-clear bank. Primary and NRT handlers c
 [[registers.fields]]
 name = "BITS_0_6_OPAQUE"
 bits = "6:0"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers.fields]]
 name = "SOURCE_7"
 bits = "7"
-class = "write-trigger"
 description = "Acknowledged with complete image 0x80 by the scheduler cancellation path before it sets BLUETOOTH_CONTROLLER_CORE.WORD_0204_OPAQUE bit zero."
+class = "write-one-to-clear"
 
 [[registers.fields]]
 name = "BITS_8_14_OPAQUE"
 bits = "14:8"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers.fields]]
 name = "SOURCE_15"
 bits = "15"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers.fields]]
 name = "BITS_16_20_OPAQUE"
 bits = "20:16"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers.fields]]
 name = "SOURCE_21"
 bits = "21"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers.fields]]
 name = "BITS_22_26_OPAQUE"
 bits = "26:22"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers.fields]]
 name = "SOURCES_27_28"
 bits = "28:27"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers.fields]]
 name = "BITS_29_31_OPAQUE"
 bits = "31:29"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers]]
 name = "IRQ_STATUS_0"
@@ -1964,42 +1964,42 @@ description = "Second controller interrupt-clear bank. Primary and NRT handlers 
 [[registers.fields]]
 name = "BITS_0_2_OPAQUE"
 bits = "2:0"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers.fields]]
 name = "SOURCE_3"
 bits = "3"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers.fields]]
 name = "BITS_4_7_OPAQUE"
 bits = "7:4"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers.fields]]
 name = "SOURCE_8"
 bits = "8"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers.fields]]
 name = "SOURCE_9"
 bits = "9"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers.fields]]
 name = "BITS_10_11_OPAQUE"
 bits = "11:10"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers.fields]]
 name = "SOURCE_12"
 bits = "12"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers.fields]]
 name = "BITS_13_31_OPAQUE"
 bits = "31:13"
-class = "write-trigger"
+class = "write-one-to-clear"
 
 [[registers]]
 name = "IRQ_STATUS_1"
@@ -2151,13 +2151,13 @@ description = "Complete BTDM HAL initialization replaces bytes zero and one with
 name = "VALUE_0"
 bits = "7:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xff }
+value-range = { min = 0x0, max = 0xff, sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"] }
 
 [[registers.fields]]
 name = "VALUE_1"
 bits = "15:8"
 class = "plain"
-write-range = { min = 0x0, max = 0xff }
+value-range = { min = 0x0, max = 0xff, sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"] }
 
 [[registers]]
 name = "WORD_0088_OPAQUE"
@@ -2453,7 +2453,7 @@ description = "Scheduler skip request for one listed item. The cancellation path
 name = "COMPRESSED_SRAM_POINTER"
 bits = "19:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xfffff }
+pointer = { points-to = "BLE_SCHEDULER_ITEM", placement = "dma-window", encoding = { width = 0x14, shift = 0x2 }, sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION"] }
 
 [[registers.fields]]
 name = "HARDWARE_LIST_INDEX"
@@ -2698,7 +2698,7 @@ description = "The scheduler insert-with-lock-modify path publishes START with a
 name = "COMPRESSED_SRAM_POINTER"
 bits = "19:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xfffff }
+pointer = { points-to = "BLE_SCHEDULER_ITEM", placement = "dma-window", encoding = { width = 0x14, shift = 0x2 }, sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"] }
 
 [[registers.fields]]
 name = "ZERO_IMAGE_20_26"
@@ -2788,7 +2788,7 @@ name = "ADDRESS"
 bits = "31:0"
 class = "write-only"
 description = "CPU address published for the BLE PHY environment member at +0x4d."
-write-range = { min = 0x0, max = 0xffffffff }
+pointer = { points-to = "BLE_PHY_ENVIRONMENT", placement = "dma-window", encoding = { width = 0x20, shift = 0x0 }, sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"], member-offset = 0x4d }
 
 [[registers]]
 name = "HAL_INIT_SCHEDULER_CONTROL"
@@ -2821,7 +2821,7 @@ description = "First scheduler command/status transaction. The insertion executi
 name = "COMPRESSED_SRAM_POINTER"
 bits = "19:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xfffff }
+pointer = { points-to = "BLE_SCHEDULER_ITEM", placement = "dma-window", encoding = { width = 0x14, shift = 0x2 }, sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS"] }
 
 [[registers.fields]]
 name = "HARDWARE_LIST_INDEX"
@@ -2992,7 +2992,7 @@ description = "Current pointer of global RX link 1 (r_obh_link_global_rxlink_cur
 name = "COMPRESSED_SRAM_POINTER"
 bits = "19:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xfffff }
+pointer = { points-to = "BLE_BUFFER_HEADER", placement = "dma-window", encoding = { width = 0x14, shift = 0x2 }, sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"] }
 
 [[registers.fields]]
 name = "RX_VALID"
@@ -3014,7 +3014,7 @@ description = "Next pointer of global RX link 1 (r_obh_link_global_rxlink_next_p
 name = "COMPRESSED_SRAM_POINTER"
 bits = "19:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xfffff }
+pointer = { points-to = "BLE_BUFFER_HEADER", placement = "dma-window", encoding = { width = 0x14, shift = 0x2 }, sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"] }
 
 [[registers.fields]]
 name = "BITS_20_31_OPAQUE"
@@ -3031,7 +3031,7 @@ description = "Current pointer of global RX link 2 (r_obh_link_global_rxlink_cur
 name = "COMPRESSED_SRAM_POINTER"
 bits = "19:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xfffff }
+pointer = { points-to = "BLE_BUFFER_HEADER", placement = "dma-window", encoding = { width = 0x14, shift = 0x2 }, sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"] }
 
 [[registers.fields]]
 name = "RX_VALID"
@@ -3053,7 +3053,7 @@ description = "Next pointer of global RX link 2 (r_obh_link_global_rxlink_next_p
 name = "COMPRESSED_SRAM_POINTER"
 bits = "19:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xfffff }
+pointer = { points-to = "BLE_BUFFER_HEADER", placement = "dma-window", encoding = { width = 0x14, shift = 0x2 }, sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"] }
 
 [[registers.fields]]
 name = "BITS_20_31_OPAQUE"
@@ -3070,7 +3070,7 @@ description = "Current pointer of global RX link 3 (r_obh_link_global_rxlink_cur
 name = "COMPRESSED_SRAM_POINTER"
 bits = "19:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xfffff }
+pointer = { points-to = "BLE_BUFFER_HEADER", placement = "dma-window", encoding = { width = 0x14, shift = 0x2 }, sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"] }
 
 [[registers.fields]]
 name = "RX_VALID"
@@ -3092,7 +3092,7 @@ description = "Next pointer of global RX link 3 (r_obh_link_global_rxlink_next_p
 name = "COMPRESSED_SRAM_POINTER"
 bits = "19:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xfffff }
+pointer = { points-to = "BLE_BUFFER_HEADER", placement = "dma-window", encoding = { width = 0x14, shift = 0x2 }, sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"] }
 
 [[registers.fields]]
 name = "BITS_20_31_OPAQUE"
@@ -3393,14 +3393,14 @@ name = "LOCK_MODIFY_HARDWARE_LIST_INDEX"
 bits = "3:0"
 class = "plain"
 description = "Zero-based hardware-list index cleared and then published by scheduler insert-with-lock-modify."
-write-range = { min = 0x0, max = 0xf }
+value-range = { min = 0x0, max = 0xf, sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "PUBLIC_ESP32S31_BT_SCHEDULER_LIST_INDEX"] }
 
 [[registers.fields]]
 name = "CANCELLATION_HARDWARE_LIST_INDEX"
 bits = "7:4"
 class = "plain"
 description = "Zero-based hardware-list index cleared and then published by the scheduler cancellation path before it sets WORD_0204_OPAQUE bit zero."
-write-range = { min = 0x0, max = 0xf }
+value-range = { min = 0x0, max = 0xf, sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"] }
 
 [[registers]]
 name = "WORD_0380_OPAQUE"
@@ -3839,12 +3839,14 @@ name = "LC_TX_ON_DELAY"
 bits = "7:0"
 class = "plain"
 description = "Low byte printed as lc_tx_on_delay by complete ble_tx_config_check. BLE PHY initialization stores a configuration byte minus one."
+value-range = { min = 0x0, max = 0xff, sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"] }
 
 [[registers.fields]]
 name = "INIT_DUPLICATE_BYTE"
 bits = "23:16"
 class = "plain"
 description = "BLE PHY initialization receives the same configuration-byte-minus-one image as LC_TX_ON_DELAY. No independent semantic name is claimed."
+value-range = { min = 0x0, max = 0xff, sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"] }
 
 [[registers.fields]]
 name = "BITS_8_15_OPAQUE"
@@ -3961,6 +3963,7 @@ name = "ENTRY_COUNT"
 bits = "7:0"
 class = "plain"
 description = "Number of entries of the Controller-SRAM device table the filter accept list and the resolving list share, valid or not; hardware walks this many entries."
+value-range = { min = 0x0, max = 0xff, sources = ["BLOB_LIBBLE_DEVICE_TABLE"] }
 
 [[registers.fields]]
 name = "BIT_18_OPAQUE"
@@ -3984,7 +3987,7 @@ name = "COMPRESSED_ADDRESS"
 bits = "19:0"
 class = "write-only"
 description = "Controller-SRAM byte address of the first entry shifted right by two, in the twenty-bit compressed link encoding."
-write-range = { min = 0x0, max = 0xfffff }
+pointer = { points-to = "BLE_DEVICE_TABLE", placement = "dma-window", encoding = { width = 0x14, shift = 0x2 }, sources = ["BLOB_LIBBLE_DEVICE_TABLE"] }
 
 [[registers]]
 name = "VALUE_0"
@@ -4016,7 +4019,7 @@ name = "COMPRESSED_SRAM_POINTER"
 bits = "19:0"
 class = "write-only"
 description = "Bits 0..19 contain address >> 2; bits 20..31 are written as zero."
-write-range = { min = 0x0, max = 0xfffff }
+pointer = { points-to = "BLE_RESOLVING_LIST", placement = "dma-window", encoding = { width = 0x14, shift = 0x2 }, sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"] }
 
 [[registers]]
 name = "PHY_ENVIRONMENT_MEMBER_POINTER"
@@ -4028,7 +4031,7 @@ name = "ADDRESS"
 bits = "31:0"
 class = "plain"
 description = "CPU address published for the BLE PHY environment member at +0x2c."
-write-range = { min = 0x0, max = 0xffffffff }
+pointer = { points-to = "BLE_PHY_ENVIRONMENT", placement = "dma-window", encoding = { width = 0x20, shift = 0x0 }, sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"], member-offset = 0x2c }
 
 [[registers]]
 name = "WORD_08A4_OPAQUE"
@@ -4308,6 +4311,7 @@ name = "COMPRESSED_DESCRIPTOR_POINTER"
 bits = "19:0"
 class = "plain"
 description = "Low-twenty-bit controller-SRAM pointer reconstructed with the fixed 0x2f prefix and four-byte alignment."
+pointer = { points-to = "BLE_DIRECTION_FINDING_DESCRIPTOR", placement = "dma-window", encoding = { width = 0x14, shift = 0x2 }, sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"] }
 
 [[registers]]
 name = "BUFFER_STATE%s"
@@ -4431,3 +4435,23 @@ name = "BITS_0_31_OPAQUE"
 bits = "31:0"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
+
+[[interrupt-pairs]]
+status = "IRQ_STATUS_0"
+clear = "IRQ_CLEAR_0"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[[interrupt-pairs]]
+status = "IRQ_STATUS_SNAPSHOT_0"
+clear = "IRQ_CLEAR_0"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[[interrupt-pairs]]
+status = "IRQ_STATUS_1"
+clear = "IRQ_CLEAR_1"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[[interrupt-pairs]]
+status = "IRQ_STATUS_SNAPSHOT_1"
+clear = "IRQ_CLEAR_1"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]

@@ -604,6 +604,8 @@ name = "REG_MODEM_CLK_EN"
 bits = "0"
 class = "plain"
 description = "Modem control/register-bus clock enable."
+values = [{ name = "DISABLED", value = 0x0, description = "The selected MODEM_SYSCON clock gate is disabled.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "The selected MODEM_SYSCON clock gate is enabled.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }]
+write-values-only = true
 
 [[registers]]
 name = "MISC_CTRL0"

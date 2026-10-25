@@ -31,10 +31,10 @@ mod transactions;
 pub use error::{Error, ErrorKind};
 pub use source::{
     BitwiseComposedDomain, BoundedDomain, ComposedArgument, ComposedValueType, DomainValue,
-    Elements, EnumDomain, FieldBitModify, FieldRead, FieldReplaceModify, FixedRegisterImage,
-    FixedRegisterSequence, FlagDomain, FullRegisterRead, FullRegisterWrite, IndexedBitSetModify,
-    InputTransform, InterruptSnapshot, MaskedRegisterModify, OpaqueDomain, POLICY_SCHEMA, Part,
-    Partition, PartitionImageRead, PointerEncoding, PointerField, PolicyFile, Projection,
+    Elements, EnumDomain, FieldBitModify, FieldDomain, FieldRead, FieldReplaceModify,
+    FixedRegisterImage, FixedRegisterSequence, FlagDomain, FullRegisterRead, FullRegisterWrite,
+    IndexedBitSetModify, InputTransform, InterruptSnapshot, MaskedRegisterModify, OpaqueDomain,
+    POLICY_SCHEMA, Part, Partition, PartitionImageRead, PointerField, PolicyFile, Projection,
     SampledBitZeroWrite, SequenceStep, Triggers, Unclaimed, WholeWordBits, ZeroBasedFieldWrite,
     ZeroRegisterWrite,
 };
@@ -109,7 +109,7 @@ impl ChipPolicy {
         }
         let index = Index::new(context, model)?;
         let coverage = ownership::check(context, &index, &file)?;
-        let owners = transactions::check(context, &index, &coverage, &file, model)?;
+        let owners = transactions::check(context, &index, &coverage, &file)?;
         let claims = coverage.claims(&index);
         Ok(Self {
             path: path.to_owned(),
@@ -203,7 +203,7 @@ struct Word<'m> {
     command: bool,
 }
 
-impl Word<'_> {
+impl<'m> Word<'m> {
     fn identity(&self) -> &str {
         &self.register.identity
     }
@@ -300,7 +300,7 @@ impl Word<'_> {
     }
 
     /// The type file's declaration of `field`.
-    fn source(&self, field: &ExpandedField) -> Option<&Field> {
+    fn source(&self, field: &ExpandedField) -> Option<&'m Field> {
         self.template
             .fields
             .iter()
@@ -314,6 +314,12 @@ impl Word<'_> {
         let ones = field_ones(field.width);
         let range = source
             .write_range
+            .or_else(|| {
+                source.value_range.as_ref().map(|range| WriteRange {
+                    min: range.min,
+                    max: range.max,
+                })
+            })
             .filter(|range| range.min != 0 || range.max != ones);
         let values = source
             .write_values_only

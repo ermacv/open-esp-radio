@@ -1741,3 +1741,5 @@ fn included_types_share_the_materialization_budget() -> TestResult {
 }
 #[path = "chip_model/controls.rs"]
 mod controls;
+#[path = "chip_model/facts.rs"]
+mod facts;

@@ -1261,6 +1261,7 @@ description = "Complete hal_set_sta_tbtt replaces bits 25:0 with bits 35:10 of t
 name = "TSF_BITS_35_10"
 bits = "25:0"
 class = "plain"
+value-range = { min = 0x0, max = 0x3ffffff, sources = ["BLOB_LIBPP_HAL_TSF"] }
 
 [[registers.fields]]
 name = "BITS_26_31_OPAQUE"
@@ -1788,7 +1789,7 @@ name = "VALUE"
 bits = "17:0"
 class = "plain"
 description = "Any eighteen-bit value returned by the OS-adapter calibration callback is published without interpretation."
-write-range = { min = 0x0, max = 0x3ffff }
+value-range = { min = 0x0, max = 0x3ffff, sources = ["BLOB_LIBPP_HAL_INIT_TAIL"] }
 
 [[registers.fields]]
 name = "BITS_18_31_OPAQUE"
@@ -1890,6 +1891,7 @@ description = "Shared receive PTI word updated from the second argument by compl
 name = "PTI"
 bits = "3:0"
 class = "plain"
+value-range = { min = 0x0, max = 0xf, sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME", "BLOB_LIBPP_HAL_INIT_COEX", "BLOB_LIBPP_HAL_MAC_TX"] }
 
 [[registers.fields]]
 name = "BITS_4_31_OPAQUE"
@@ -1906,6 +1908,7 @@ description = "Complete hal_set_rx_beacon_pti replaces bits 15:12 from the low n
 name = "PTI"
 bits = "15:12"
 class = "plain"
+value-range = { min = 0x0, max = 0xf, sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME", "BLOB_LIBPP_HAL_INIT_COEX", "BLOB_LIBPP_HAL_MAC_TX"] }
 
 [[registers.fields]]
 name = "BITS_0_11_OPAQUE"

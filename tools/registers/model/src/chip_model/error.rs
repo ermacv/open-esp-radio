@@ -59,6 +59,10 @@ pub enum ErrorKind {
     Reset(String),
     #[error("values or write constraint: {0}")]
     Values(String),
+    #[error("pointer: {0}")]
+    Pointer(String),
+    #[error("interrupt pair: {0}")]
+    InterruptPair(String),
     #[error("dim: {0}")]
     Dim(String),
     #[error("group: {0}")]

@@ -140,6 +140,7 @@ offset = 0x28
 name = "ADDR"
 bits = "31:0"
 class = "plain"
+pointer = { points-to = "RX_DESCRIPTOR", placement = "dma-window", encoding = { width = 32, shift = 0 }, sources = ["SRC_HEADER"] }
 
 [[registers]]
 name = "STATE"
@@ -571,7 +572,6 @@ sources = ["SRC_DRIVER"]
 [[pointer-fields]]
 name = "timer0_descriptor"
 field = "TIMER0.ADDR.ADDR"
-points-to = "RX_DESCRIPTOR"
 sources = ["SRC_DRIVER"]
 
 [[full-register-writes]]
@@ -1247,10 +1247,10 @@ rejects!(
     ErrorKind::Transaction(_)
 );
 rejects!(
-    pointer_to_unknown_layout,
+    pointer_without_hardware_fact,
     [(
-        "points-to = \"RX_DESCRIPTOR\"",
-        "points-to = \"TX_DESCRIPTOR\""
+        "field = \"TIMER0.ADDR.ADDR\"",
+        "field = \"TIMER0.CONFIG.DIV\""
     )],
     ErrorKind::Pointer(_)
 );
@@ -1258,9 +1258,9 @@ rejects!(
     full_write_takes_one_value,
     [(
         "domain = \"AlarmImage\"",
-        "domain = \"AlarmImage\"\nplacement = \"dma-window\""
+        "domain = \"AlarmImage\"\npointer = true"
     )],
-    ErrorKind::Transaction(_)
+    ErrorKind::Pointer(_)
 );
 rejects!(
     modify_takes_domain_or_value,
@@ -1609,78 +1609,73 @@ fn integer_writers_cannot_forge_a_pointer() -> TestResult {
 }
 
 #[test]
-fn pointer_encoding_fills_its_field() -> TestResult {
+fn full_pointer_write_references_hardware_fact() -> TestResult {
     let fixture = Fixture::new()?;
-    fixture.edit(
-        "policy.toml",
-        "points-to = \"RX_DESCRIPTOR\"",
-        "points-to = \"RX_DESCRIPTOR\"\nencoding = \"ble-compressed\"",
-    )?;
+    fixture.edit("policy.toml", "domain = \"AlarmImage\"", "pointer = true")?;
     assert!(matches!(kind_of(&fixture)?, ErrorKind::Pointer(_)));
-    Ok(())
-}
-
-#[test]
-fn pointer_targets_a_layout_in_the_dma_window() -> TestResult {
-    let fixture = Fixture::new()?;
     fixture.edit(
-        "root.toml",
-        "[[layout-placements]]\nlayout = \"RX_DESCRIPTOR\"\nregions = [\"dma-window\"]",
-        "",
-    )?;
-    assert!(matches!(kind_of(&fixture)?, ErrorKind::Pointer(_)));
-    Ok(())
-}
-
-#[test]
-fn compressed_pointer_names_a_word() -> TestResult {
-    let fixture = Fixture::new()?;
-    fixture
-        .edit(
-            "types/timer.toml",
-            "name = \"ADDR\"\nbits = \"31:0\"",
-            "name = \"ADDR\"\nbits = \"19:0\"",
-        )?
-        .edit(
-            "policy.toml",
-            "points-to = \"RX_DESCRIPTOR\"",
-            "points-to = \"RX_DESCRIPTOR\"\nencoding = \"ble-compressed\"\nmember-offset = 4",
-        )?;
-    fixture.load()?;
-    fixture.edit("policy.toml", "member-offset = 4", "member-offset = 1")?;
-    assert!(matches!(kind_of(&fixture)?, ErrorKind::Pointer(_)));
-    Ok(())
-}
-
-#[test]
-fn buffer_address_lies_in_the_dma_window() -> TestResult {
-    let fixture = Fixture::new()?;
-    fixture.edit(
-        "policy.toml",
-        "domain = \"AlarmImage\"",
-        "placement = \"dma-window\"",
+        "types/timer.toml",
+        "name = \"ALARM\"\nbits = \"31:0\"\nclass = \"plain\"",
+        "name = \"ALARM\"\nbits = \"31:0\"\nclass = \"plain\"\npointer = { placement = \"dma-window\", encoding = { width = 32, shift = 0 }, sources = [\"SRC_HEADER\"] }",
     )?;
     fixture.load()?;
+    Ok(())
+}
+
+#[test]
+fn hardware_pointer_is_protected_without_a_policy_pointer_operation() -> TestResult {
+    let fixture = Fixture::new()?;
     fixture
-        .edit("root.toml", "name = \"dma-window\"", "name = \"scratch\"")?
-        .edit(
-            "types/../layouts/rx-descriptor.toml",
-            "placement = [\"dma-window\"]\n",
-            "",
-        )?
-        .edit(
-            "root.toml",
-            "[[layout-placements]]\nlayout = \"RX_DESCRIPTOR\"\nregions = [\"dma-window\"]",
-            "",
-        )?
         .remove("pointer-fields", "timer0_descriptor")?
         .remove("field-or-modifies", "point_timer0_descriptor")?
-        .edit(
-            "policy.toml",
-            "placement = \"dma-window\"",
-            "placement = \"scratch\"",
-        )?;
+        .append(FORGE_IMAGE)?;
     assert!(matches!(kind_of(&fixture)?, ErrorKind::Pointer(_)));
+    Ok(())
+}
+
+#[test]
+fn policy_cannot_redeclare_pointer_facts() -> TestResult {
+    for fact in [
+        "points-to = \"RX_DESCRIPTOR\"",
+        "encoding = \"ble-compressed\"",
+        "member-offset = 4",
+        "placement = \"dma-window\"",
+    ] {
+        let fixture = Fixture::new()?;
+        fixture.edit(
+            "policy.toml",
+            "name = \"timer0_descriptor\"",
+            &format!("name = \"timer0_descriptor\"\n{fact}"),
+        )?;
+        assert!(matches!(kind_of(&fixture)?, ErrorKind::Parse(_)));
+    }
+    Ok(())
+}
+
+#[test]
+fn policy_references_bounded_and_enum_hardware_domains() -> TestResult {
+    for fact in [
+        "value-range = { min = 0, max = 65535, sources = [\"SRC_HEADER\"] }",
+        "values = [{ name = \"LOW\", value = 0, sources = [\"SRC_HEADER\"] }, { name = \"HIGH\", value = 15, sources = [\"SRC_HEADER\"] }]",
+    ] {
+        let fixture = Fixture::new()?;
+        fixture.edit(
+            "types/timer.toml",
+            "name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"",
+            &format!("name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"\n{fact}"),
+        )?;
+        fixture.append(
+            "\n[[field-domains]]\nname = \"HardwareDivider\"\nfield = \"TIMER0.CONFIG.DIV\"\n",
+        )?;
+        fixture.append("\n[[field-replace-modifies]]\nname = \"replace_from_hardware_domain\"\nfields = [{ field = \"TIMER0.CONFIG.DIV\", source-bit-offset = 0 }]\ndomain = \"HardwareDivider\"\nsources = [\"SRC_DRIVER\"]\n")?;
+        fixture.load()?;
+        fixture.edit(
+            "policy.toml",
+            "name = \"HardwareDivider\"\nfield = \"TIMER0.CONFIG.DIV\"",
+            "name = \"HardwareDivider\"\nfield = \"TIMER0.CONFIG.EN\"",
+        )?;
+        assert!(matches!(kind_of(&fixture)?, ErrorKind::Domain(_)));
+    }
     Ok(())
 }
 
@@ -2420,5 +2415,63 @@ fn shared_word_never_writes_one_to_a_write_one_to_clear_flag() -> TestResult {
             "{error}"
         );
     }
+    Ok(())
+}
+
+#[test]
+fn shifted_enum_reference_supplies_masked_images_without_copying_values() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timer.toml",
+        "name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"",
+        "name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"\nvalues = [{ name = \"OFF\", value = 0 }, { name = \"ON\", value = 1 }]",
+    )?;
+    fixture.append(
+        "\n[[field-domains]]\nname = \"ShiftedDivider\"\nfield = \"TIMER0.CONFIG.DIV\"\nleft-shift = 31\n\n[[masked-register-modifies]]\nname = \"shifted_mask_image\"\nregister = \"TIMER0.CONFIG\"\ndomain = \"ShiftedDivider\"\npreserve-mask = 0x7fffffff\ninput-mask = 0x80000000\nset-mask = 0\nsources = [\"SRC_DRIVER\"]\n",
+    )?;
+    fixture.load()?;
+    fixture.edit("policy.toml", "left-shift = 31", "left-shift = 32")?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Domain(_)));
+    fixture
+        .edit("policy.toml", "left-shift = 32", "left-shift = 31")?
+        .edit(
+            "types/timer.toml",
+            "name = \"ON\", value = 1",
+            "name = \"ON\", value = 2",
+        )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Domain(_)));
+    Ok(())
+}
+
+#[test]
+fn referenced_ranges_bound_writes_and_cannot_be_shifted_or_redeclared() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timer.toml",
+        "name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"",
+        "name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"\nvalue-range = { min = 0, max = 15, sources = [\"SRC_HEADER\"] }",
+    )?;
+    fixture
+        .remove("masked-register-modifies", "set_timer0_divider")?
+        .remove(
+            "field-replace-modifies",
+            "replace_timer0_divider_from_argument",
+        )?
+        .remove("indexed-bit-set-modifies", "set_timer0_divider_bit")?
+        .remove("bounded-domains", "Divider")?
+        .append("\n[[field-domains]]\nname = \"Divider\"\nfield = \"TIMER0.CONFIG.DIV\"\n")?;
+    fixture.load()?;
+    fixture.append("\n[[bounded-domains]]\nname = \"Divider\"\ndescription = \"Duplicate.\"\nmin = 0\nmax = 15\nsources = [\"SRC_HEADER\"]\n")?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Duplicate(_)));
+    fixture.remove("bounded-domains", "Divider")?.edit(
+        "policy.toml",
+        "[[field-domains]]",
+        "[[field-domains]]\nleft-shift = 1",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Domain(_)));
+    fixture
+        .edit("policy.toml", "left-shift = 1", "left-shift = 0")?
+        .edit("policy.toml", "domain = \"Divider\"", "value = 16")?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::WriteConstraint(_)));
     Ok(())
 }
