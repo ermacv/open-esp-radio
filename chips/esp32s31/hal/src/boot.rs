@@ -6,11 +6,49 @@
 //! Every bound below is checked against the budget when the crate compiles.
 //! Where the vendor polls without a limit, the bound is this crate's,
 //! stated with the poll it replaces; a first-boot stand run confirms it.
+//!
+//! ```compile_fail,E0061
+//! use oer_esp32s31_hal::boot::{ClockRegisters, CpuRoot};
+//! use oer_espressif_boot::clock::CpuClockRegisters;
+//! fn raw_stage(mut clock: ClockRegisters) {
+//!     clock.stage(CpuRoot::Cpll, Default::default());
+//! }
+//! ```
 
-pub use oer_esp32s31_pac::boot::{
-    BootBlocks, BootHandoff, BusDividers, CacheMap, CacheRegisters, ClockRegisters, CpllDividers,
-    CpuRoot, FlashRegisters, FlashTimingCandidate, MemDivider, PsramRegisters, PsramSupplyLevel,
-};
+mod cache;
+mod clock;
+mod flash;
+pub mod pll_power;
+mod psram;
+#[cfg(test)]
+mod register_tests;
+
+pub use cache::{CacheMap, CacheRegisters};
+pub use clock::{BusDividers, ClockRegisters, CpllDividers, CpuRoot, MemDivider, PsramSupplyLevel};
+pub use flash::{FlashRegisters, FlashTimingCandidate, FlashTimingWords};
+pub use psram::PsramRegisters;
+
+/// The bootstrap's operational owners of its existing PAC parts.
+#[must_use = "dropping a boot owner permanently loses its register authority"]
+pub struct BootBlocks {
+    pub clock: ClockRegisters,
+    pub cache: CacheRegisters,
+    pub flash: FlashRegisters,
+    pub psram: PsramRegisters,
+}
+
+impl BootBlocks {
+    /// Consume the acquired parts without claiming any additional words.
+    pub fn new(parts: oer_esp32s31_pac::boot::BootBlocks) -> Self {
+        Self {
+            clock: ClockRegisters::new(parts.clock),
+            cache: CacheRegisters::new(parts.cache),
+            flash: FlashRegisters::new(parts.flash),
+            psram: PsramRegisters::new(parts.psram),
+        }
+    }
+}
+
 pub use oer_espressif_boot::{
     BootFailure,
     cache::{CacheGeometry, SuspendWaits},

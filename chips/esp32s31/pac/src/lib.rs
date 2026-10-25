@@ -316,3 +316,10 @@ pub(crate) mod wifi;
 
 // Generated analog-I2C identities, fields and transport routes.
 include!("analog_generated.rs");
+
+// Generated platform and boot ownership parts used by the HAL.
+pub use generated::{
+    efuse, hp_sys_clkrst_core, hp_sys_clkrst_timg1, hp_sys_clkrst_uart0, hp_sys_core_stall_status,
+    lp_aon_clkrst_core_reset, lp_aon_reset_cause, lp_periclkrst_rng, lp_wdt, lp_wdt_swd,
+    pmu_cpu_stall, pmu_radio, timg0_wdt, timg1_wdt, trng, usb_serial_jtag, usb_serial_jtag_pads,
+};

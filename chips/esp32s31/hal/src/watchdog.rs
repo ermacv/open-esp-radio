@@ -6,14 +6,14 @@
 //! else writes them and the boot sequence can take their typed operations
 //! over. Timer group 1's main watchdog serves the system deadline.
 
-pub use oer_esp32s31_pac::watchdog::{
-    Mwdt0Registers, Mwdt1Registers, RwdtRegisters, SwdRegisters, WatchdogBlocks, WatchdogHandoff,
-};
+pub use oer_esp32s31_pac::watchdog::WatchdogBlocks;
+mod registers;
 pub use oer_espressif_watchdog::{
     MainSession, MainWatchdog, MicrosecondTick, Microseconds, RtcWatchdog, StoppedMainWatchdog,
     SuperWatchdog,
     deadline::{DeadlineBudget, DeadlineError},
 };
+pub use registers::{Mwdt0Registers, Mwdt1Registers, RwdtRegisters, SwdRegisters};
 
 /// The main watchdogs' microsecond tick on the chip's 40 MHz XTAL, their
 /// clock source.
@@ -48,10 +48,14 @@ impl Watchdogs {
     pub fn new(blocks: WatchdogBlocks) -> Self {
         let WatchdogBlocks {
             mwdt0,
-            mut mwdt1,
+            mwdt1,
             rwdt,
             swd,
         } = blocks;
+        let mwdt0 = Mwdt0Registers::new(mwdt0);
+        let mut mwdt1 = Mwdt1Registers::new(mwdt1);
+        let rwdt = RwdtRegisters::new(rwdt);
+        let swd = SwdRegisters::new(swd);
         mwdt1.start_clock();
         Self {
             main0: StoppedMainWatchdog::new(mwdt0),

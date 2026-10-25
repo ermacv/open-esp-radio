@@ -22,9 +22,6 @@ use crate::generated::{
     trng::{self, Trng},
 };
 
-#[cfg(test)]
-mod tests;
-
 pub mod core_control;
 pub mod usb_serial_jtag;
 
@@ -32,10 +29,7 @@ pub use core_control::{
     CoreControlHandoff, CoreControlRegisters, Uart0ClockHandoff, Uart0ClockRegisters,
 };
 
-pub use usb_serial_jtag::{
-    UsbEndpointRegisters, UsbEvents, UsbInterruptRegisters, UsbPadRegisters, UsbSerialJtagHandoff,
-    UsbSerialJtagPlacement, UsbSerialJtagRegisters,
-};
+pub use usb_serial_jtag::{UsbSerialJtagHandoff, UsbSerialJtagPlacement, UsbSerialJtagRegisters};
 
 /// Proof that the platform transferred the eFuse read words.
 #[must_use = "the eFuse owner needs the platform's transfer"]
@@ -56,7 +50,7 @@ impl EfuseHandoff {
 
 /// The eFuse controller's read words of the factory MAC.
 #[must_use = "dropping a register owner permanently loses its register authority"]
-pub struct EfuseRegisters<P: Placement = Fixed<{ efuse::BASE }>>(Efuse<P>);
+pub struct EfuseRegisters<P: Placement = Fixed<{ efuse::BASE }>>(pub Efuse<P>);
 
 impl EfuseRegisters {
     /// Claim the eFuse block from the platform handoff.
@@ -74,20 +68,6 @@ impl EfuseRegisters {
         // beside the typed blocks checks that no other typed block lists them.
         let claims = unsafe { oer_mmio::assume_owned::<EfusePeripheralsClaims>() };
         Self(EfusePeripherals::from_claims(claims).efuse)
-    }
-}
-
-impl<P: Placement> EfuseRegisters<P> {
-    /// The factory MAC fields of block 1. The controller mirrors them after
-    /// reset; reading needs no command.
-    pub fn factory_mac(&self) -> oer_espressif_efuse::FactoryMac {
-        let low = self.0.read_rd_mac_sys0();
-        let high = self.0.read_rd_mac_sys1();
-        oer_espressif_efuse::FactoryMac {
-            mac_0: low.mac_0(),
-            mac_1: high.mac_1(),
-            mac_ext: high.mac_ext(),
-        }
     }
 }
 
@@ -118,8 +98,8 @@ pub type RngClockPlacement = Fixed<{ lp_periclkrst_rng::BASE }>;
 /// The true random number generator, its clock and reset word.
 #[must_use = "dropping a register owner permanently loses its register authority"]
 pub struct EntropyRegisters<P: Placement = TrngPlacement, Q: Placement = RngClockPlacement> {
-    trng: Trng<P>,
-    clock: LpPericlkrstRng<Q>,
+    pub trng: Trng<P>,
+    pub clock: LpPericlkrstRng<Q>,
 }
 
 impl EntropyRegisters {
@@ -151,50 +131,6 @@ impl EntropyRegisters {
     }
 }
 
-impl<P: Placement, Q: Placement> EntropyRegisters<P, Q> {
-    /// One conditioned 32-bit word of the generator's output.
-    pub fn random_word(&self) -> u32 {
-        self.trng.read_crc_sync_data().sw_crc_random_data_sync()
-    }
-
-    /// The generator's clock, sampling and health-test state.
-    ///
-    /// SOURCE: ESP-IDF 4d59230d
-    /// `components/hal/esp32s31/include/hal/rng_ll.h:163-178`
-    /// (`rng_ll_enable`: clocks, reset, sampling and health-test configuration).
-    pub fn status(&self) -> EntropyStatus {
-        let clock = self.clock.read_rng_ctrl();
-        let conf = self.trng.read_conf();
-        let debug = self.trng.read_debug_conf();
-        EntropyStatus {
-            clocked: clock.lp_rng_clk_en() && !clock.lp_rng_rst_en(),
-            sampling: conf.sample_enable() && conf.noise_crc_en() && conf.random_output_mode(),
-            health_tested: !debug.health_test_bypass() && conf.noise_source_sel().get() != 0,
-            health_error: self.trng.read_int_raw().error_int_raw(),
-        }
-    }
-}
-
-/// The generator's state as its owner reads it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct EntropyStatus {
-    /// The generator's clock runs and its reset is released.
-    pub clocked: bool,
-    /// Sampling and the output conditioner are on.
-    pub sampling: bool,
-    /// Health tests run on a selected noise source.
-    pub health_tested: bool,
-    /// A startup or continuous health test failed.
-    pub health_error: bool,
-}
-
-impl EntropyStatus {
-    /// Every condition of a working source holds.
-    pub const fn is_healthy(self) -> bool {
-        self.clocked && self.sampling && self.health_tested && !self.health_error
-    }
-}
-
 /// Proof that the platform transferred esp-hal's `LP_AON_CLK_RST` singleton.
 #[must_use = "the reset-cause owner needs the consumed platform ownership"]
 pub struct ResetCauseHandoff(());
@@ -215,17 +151,10 @@ impl ResetCauseHandoff {
     }
 }
 
-/// An HP core of the chip.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum HpCore {
-    Core0,
-    Core1,
-}
-
 /// The reset-cause words of both HP cores.
 #[must_use = "dropping a register owner permanently loses its register authority"]
 pub struct ResetCauseRegisters<P: Placement = Fixed<{ lp_aon_reset_cause::BASE }>>(
-    LpAonResetCause<P>,
+    pub LpAonResetCause<P>,
 );
 
 impl ResetCauseRegisters {
@@ -245,17 +174,6 @@ impl ResetCauseRegisters {
         // lists them.
         let claims = unsafe { oer_mmio::assume_owned::<ResetCausePeripheralsClaims>() };
         Self(ResetCausePeripherals::from_claims(claims).lp_aon_reset_cause)
-    }
-}
-
-impl<P: Placement> ResetCauseRegisters<P> {
-    /// The cause code `core` last left reset with, as its field holds it.
-    pub fn cause_code(&self, core: HpCore) -> u8 {
-        let code = match core {
-            HpCore::Core0 => self.0.read_hpcore0_reset_cause().hpcore0_reset_cause(),
-            HpCore::Core1 => self.0.read_hpcore1_reset_cause().hpcore1_reset_cause(),
-        };
-        code.get().to_le_bytes()[0]
     }
 }
 

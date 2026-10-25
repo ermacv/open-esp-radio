@@ -4,8 +4,9 @@
 
 use std::{vec, vec::Vec};
 
-use super::{UsbEvents, UsbSerialJtagRegisters};
-use crate::generated::{usb_serial_jtag, usb_serial_jtag_pads};
+use super::{UsbSerialJtagRegisters, parts};
+use oer_esp32s31_pac::{usb_serial_jtag, usb_serial_jtag_pads};
+use oer_espressif_usb_serial_jtag::{EndpointRegisters, Events as UsbEvents, InterruptRegisters};
 
 fn memory(size: usize, fill: u32) -> Vec<u32> {
     vec![fill; size / 4]
@@ -24,7 +25,7 @@ fn a_push_writes_the_byte_alone_and_a_pop_takes_one() {
     let mut words = memory(usb_serial_jtag::SIZE, u32::MAX);
     let mut reference = words.clone();
     let mut pads = memory(usb_serial_jtag_pads::SIZE, 0);
-    let (mut endpoint, _, _) = owners(&mut words, &mut pads).into_parts();
+    let (mut endpoint, _, _) = parts(owners(&mut words, &mut pads));
     endpoint.push(0x5a);
     assert_eq!(endpoint.pop(), 0x5a, "the FIFO word holds the byte");
     drop(endpoint);
@@ -38,7 +39,7 @@ fn a_push_writes_the_byte_alone_and_a_pop_takes_one() {
 fn sending_triggers_the_packet_and_writes_no_other_field() {
     let mut words = memory(usb_serial_jtag::SIZE, 0);
     let mut pads = memory(usb_serial_jtag_pads::SIZE, 0);
-    let (mut endpoint, _, _) = owners(&mut words, &mut pads).into_parts();
+    let (mut endpoint, _, _) = parts(owners(&mut words, &mut pads));
     endpoint.send();
     drop(endpoint);
     let mut reference = memory(usb_serial_jtag::SIZE, 0);
@@ -57,12 +58,12 @@ fn sending_triggers_the_packet_and_writes_no_other_field() {
 fn the_fifo_flags_read_as_the_hardware_shows_them() {
     let mut words = memory(usb_serial_jtag::SIZE, u32::MAX);
     let mut pads = memory(usb_serial_jtag_pads::SIZE, 0);
-    let (endpoint, _, _) = owners(&mut words, &mut pads).into_parts();
+    let (endpoint, _, _) = parts(owners(&mut words, &mut pads));
     assert!(endpoint.has_room());
     assert!(endpoint.has_data());
     let mut words = memory(usb_serial_jtag::SIZE, 0);
     let mut pads = memory(usb_serial_jtag_pads::SIZE, 0);
-    let (endpoint, _, _) = owners(&mut words, &mut pads).into_parts();
+    let (endpoint, _, _) = parts(owners(&mut words, &mut pads));
     assert!(!endpoint.has_room());
     assert!(!endpoint.has_data());
 }
@@ -71,7 +72,7 @@ fn the_fifo_flags_read_as_the_hardware_shows_them() {
 fn enabling_sets_both_console_interrupts_and_keeps_the_others() {
     let mut words = memory(usb_serial_jtag::SIZE, 0);
     let mut pads = memory(usb_serial_jtag_pads::SIZE, 0);
-    let (mut endpoint, _, _) = owners(&mut words, &mut pads).into_parts();
+    let (mut endpoint, _, _) = parts(owners(&mut words, &mut pads));
     endpoint.enable_events();
     drop(endpoint);
     let block = usb_serial_jtag::UsbSerialJtag::host(&mut words).expect("host block");
@@ -82,7 +83,7 @@ fn enabling_sets_both_console_interrupts_and_keeps_the_others() {
     let mut words = memory(usb_serial_jtag::SIZE, u32::MAX);
     let before = words.clone();
     let mut pads = memory(usb_serial_jtag_pads::SIZE, 0);
-    let (mut endpoint, _, _) = owners(&mut words, &mut pads).into_parts();
+    let (mut endpoint, _, _) = parts(owners(&mut words, &mut pads));
     endpoint.enable_events();
     drop(endpoint);
     assert_eq!(words, before, "every other enable keeps its value");
@@ -107,15 +108,11 @@ fn the_handler_acknowledges_exactly_the_events_it_read() {
         let mut words = memory(usb_serial_jtag::SIZE, 0);
         set_status(&mut words, status_word_for(events));
         let mut reference = words.clone();
-        usb_serial_jtag::UsbSerialJtag::host(&mut reference)
-            .expect("host block")
-            .write_int_clr(|clear| {
-                clear
-                    .set_serial_in_empty_int_clr(events.in_empty)
-                    .set_serial_out_recv_pkt_int_clr(events.out_received);
-            });
+        let mut view = usb_serial_jtag::UsbSerialJtag::host(&mut reference).expect("host block");
+        let sample = view.sample_usb_console_interrupt();
+        view.acknowledge_usb_console_interrupt(sample);
         let mut pads = memory(usb_serial_jtag_pads::SIZE, 0);
-        let (_, mut interrupt, _) = owners(&mut words, &mut pads).into_parts();
+        let (_, mut interrupt, _) = parts(owners(&mut words, &mut pads));
         assert_eq!(interrupt.take_events(), events);
         drop(interrupt);
         assert_eq!(
@@ -129,8 +126,8 @@ fn the_handler_acknowledges_exactly_the_events_it_read() {
 fn no_event_writes_no_acknowledgement() {
     let mut words = memory(usb_serial_jtag::SIZE, 0);
     let mut pads = memory(usb_serial_jtag_pads::SIZE, 0);
-    let (_, mut interrupt, _) = owners(&mut words, &mut pads).into_parts();
-    assert_eq!(interrupt.take_events(), UsbEvents::default());
+    let (_, mut interrupt, _) = parts(owners(&mut words, &mut pads));
+    assert_eq!(interrupt.take_events(), UsbEvents::NONE);
     drop(interrupt);
     assert_eq!(words, memory(usb_serial_jtag::SIZE, 0));
 }
@@ -139,7 +136,7 @@ fn no_event_writes_no_acknowledgement() {
 fn disconnecting_drops_the_pull_ups_and_the_pads_and_keeps_every_other_bit() {
     let mut words = memory(usb_serial_jtag::SIZE, 0);
     let mut pads = memory(usb_serial_jtag_pads::SIZE, u32::MAX);
-    let (_, _, owner) = owners(&mut words, &mut pads).into_parts();
+    let (_, _, owner) = parts(owners(&mut words, &mut pads));
     owner.disconnect();
     let mut expected = memory(usb_serial_jtag_pads::SIZE, u32::MAX);
     usb_serial_jtag_pads::UsbSerialJtagPads::host(&mut expected)

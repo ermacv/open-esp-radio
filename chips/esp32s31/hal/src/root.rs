@@ -7,17 +7,16 @@
 //! [`RadioHardware::reunite`] reunites them only after the shared restore
 //! obligations are complete.
 
+pub use crate::boot::pll_power::BootstrapPllPower;
 /// The read-only Wi-Fi MAC local-time capability a [`WifiPartition`]
 /// lends.
 pub use oer_esp32s31_pac::MacLocalTime;
 /// The platform's proof that it consumed every radio singleton, which
 /// [`RadioHardware::from_handoff`] takes.
 pub use oer_esp32s31_pac::RadioHandoff;
-/// The bootstrap's owner of the PMU's radio view, its handoff and the proof
-/// of its release, which [`RadioHardware::from_handoff`] takes.
-pub use oer_esp32s31_pac::pll_power::{
-    BootstrapPllPower, PllPower, PllPowerHandoff, PllPowerReleased,
-};
+/// The bootstrap PMU handoff and the affine release proof that
+/// [`RadioHardware::from_handoff`] takes.
+pub use oer_esp32s31_pac::pll_power::{PllPowerHandoff, PllPowerReleased};
 
 use crate::power::PlatformClockBackend;
 use oer_esp32s31_pac::{

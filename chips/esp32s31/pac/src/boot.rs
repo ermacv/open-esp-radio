@@ -1,35 +1,4 @@
-//! The blocks the bootstrap brings the chip up with, claimed from the soc
-//! partition, and their implementations of the `oer-espressif-boot`
-//! register traits.
-//!
-//! The bootstrap is its own ELF and its own ownership epoch: it claims the
-//! soc partition once, from [`BootHandoff`], and its owners end with it when
-//! it jumps to stage two. Each owner implements the register traits with
-//! the typed fields, one read-modify-write per call, so every other bit of a
-//! word, reserved ones included, is kept; a command the hardware clears is
-//! started only through its generated start, which refuses while one runs.
-//! The traits' calls need an `oer_espressif_boot::Access`, which only that
-//! crate's sequences make.
-//!
-//! - [`ClockRegisters`]: the CPU root and dividers, the CPU PLL, the clock
-//!   update, the flash clock, and the memory PLL with the PSRAM's supply;
-//! - [`CacheRegisters`]: fetch suspension and the sync engine;
-//! - [`FlashRegisters`]: the SPI1 command port, the flash timing words and
-//!   the flash MMU;
-//! - [`PsramRegisters`]: the PSRAM controllers, their command port and the
-//!   PSRAM MMU.
-//!
-//! The PLLs' power in the PMU's active state (`HP_ACTIVE_HP_CK_POWER`) is the
-//! radio PMU block's word; its owner implements
-//! `oer_espressif_boot::clock::ActivePllPower`.
-//!
-//! ```compile_fail,E0061
-//! # use oer_esp32s31_pac::boot::ClockRegisters;
-//! # use oer_espressif_boot::clock::CpuClockRegisters;
-//! fn raw_stage(mut clock: ClockRegisters) {
-//!     clock.stage(oer_esp32s31_pac::boot::CpuRoot::Cpll, Default::default()); // only a boot sequence stages
-//! }
-//! ```
+//! Bootstrap acquisition and ownership parts; operations live in the HAL.
 
 use crate::generated::soc::peripheral_ownership::{
     Claims, PeripheralPartitions, SocPeripherals, partition,
@@ -40,12 +9,9 @@ mod clock;
 mod flash;
 mod psram;
 
-#[cfg(test)]
-mod tests;
-
-pub use cache::{CacheMap, CacheRegisters};
-pub use clock::{BusDividers, ClockRegisters, CpllDividers, CpuRoot, MemDivider, PsramSupplyLevel};
-pub use flash::{FlashRegisters, FlashTimingCandidate, FlashTimingWords};
+pub use cache::CacheRegisters;
+pub use clock::ClockRegisters;
+pub use flash::FlashRegisters;
 pub use psram::PsramRegisters;
 
 /// Proof that the bootstrap owns the chip's soc blocks.

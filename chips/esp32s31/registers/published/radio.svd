@@ -12877,6 +12877,7 @@
           <size>0x20</size>
           <access>write-only</access>
           <resetValue>0x00000000</resetValue>
+          <modifiedWriteValues>oneToClear</modifiedWriteValues>
           <fields>
             <field>
               <name>SERIAL_OUT_RECV_PKT_INT_CLR</name>

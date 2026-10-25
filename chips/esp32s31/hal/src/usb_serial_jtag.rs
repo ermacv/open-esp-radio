@@ -21,11 +21,12 @@
 use core::marker::PhantomData;
 
 use oer_diagnostics::Note;
-use oer_esp32s31_pac::platform::{
-    UsbEndpointRegisters, UsbEvents, UsbInterruptRegisters, UsbPadRegisters,
-};
 pub use oer_esp32s31_pac::platform::{
     UsbSerialJtagHandoff, UsbSerialJtagPlacement, UsbSerialJtagRegisters,
+};
+use oer_esp32s31_pac::{
+    usb_serial_jtag::{UsbSerialJtagIrq, UsbSerialJtagTask},
+    usb_serial_jtag_pads::UsbSerialJtagPads,
 };
 use oer_espressif_usb_serial_jtag::ownership::Ownership;
 pub use oer_espressif_usb_serial_jtag::ownership::RetireError;
@@ -48,19 +49,25 @@ pub type ConsoleInterrupt = UsbInterrupt;
 type ThisHart = PhantomData<*const ()>;
 
 /// The task's registers of the console, which stay on their hart.
-pub struct UsbEndpoint<P: Placement = UsbSerialJtagPlacement>(UsbEndpointRegisters<P>, ThisHart);
+pub struct UsbEndpoint<P: Placement = UsbSerialJtagPlacement>(UsbSerialJtagTask<P>, ThisHart);
 
 /// The interrupt handler's registers of the console.
-pub struct UsbInterrupt<P: Placement = UsbSerialJtagPlacement>(UsbInterruptRegisters<P>);
+pub struct UsbInterrupt<P: Placement = UsbSerialJtagPlacement>(UsbSerialJtagIrq<P>);
 
 /// The console's pads, which stay on their hart.
-pub struct UsbPads<P: Placement = UsbSerialJtagPlacement>(UsbPadRegisters<P>, ThisHart);
+pub struct UsbPads<P: Placement = UsbSerialJtagPlacement>(UsbSerialJtagPads<P>, ThisHart);
 
 impl<P: Placement> UsbPads<P> {
     /// Takes the USB Serial/JTAG off its pads and drops its pull-ups: the
     /// host sees the device leave USB.
     pub fn disconnect(self) {
-        self.0.disconnect();
+        let mut pads = self.0;
+        pads.modify_conf0(|pads| {
+            pads.set_pad_pull_override(true)
+                .set_dp_pullup(false)
+                .set_dm_pullup(false)
+                .set_usb_pad_enable(false);
+        });
     }
 }
 
@@ -76,7 +83,8 @@ pub fn console_parts(
 fn parts<P: Placement>(
     registers: UsbSerialJtagRegisters<P>,
 ) -> (UsbEndpoint<P>, UsbInterrupt<P>, UsbPads<P>) {
-    let (endpoint, interrupt, pads) = registers.into_parts();
+    let (endpoint, interrupt) = registers.endpoint.split();
+    let pads = registers.pads;
     (
         UsbEndpoint(endpoint, PhantomData),
         UsbInterrupt(interrupt),
@@ -86,40 +94,45 @@ fn parts<P: Placement>(
 
 impl<P: Placement> EndpointRegisters for UsbEndpoint<P> {
     fn has_room(&self) -> bool {
-        self.0.has_room()
+        self.0.read_ep1_conf().serial_in_ep_data_free()
     }
 
     fn push(&mut self, byte: u8) {
-        self.0.push(byte);
+        self.0.push_ep1(byte);
     }
 
     fn send(&mut self) {
-        self.0.send();
+        self.0.trigger_ep1_conf_wr_done();
     }
 
     fn has_data(&self) -> bool {
-        self.0.has_data()
+        self.0.read_ep1_conf().serial_out_ep_data_avail()
     }
 
     fn pop(&mut self) -> u8 {
-        self.0.pop()
+        self.0.pop_ep1()
     }
 
     fn enable_events(&mut self) {
-        self.0.enable_events();
+        self.0.modify_int_ena(|enables| {
+            enables
+                .set_serial_in_empty_int_ena(true)
+                .set_serial_out_recv_pkt_int_ena(true);
+        });
     }
 }
 
 impl<P: Placement> InterruptRegisters for UsbInterrupt<P> {
     fn take_events(&mut self) -> Events {
-        let UsbEvents {
-            in_empty,
-            out_received,
-        } = self.0.take_events();
-        Events {
-            in_empty,
-            out_received,
+        let status = self.0.sample_usb_console_interrupt();
+        let events = Events {
+            in_empty: status.serial_in_empty_int_st(),
+            out_received: status.serial_out_recv_pkt_int_st(),
+        };
+        if events.in_empty || events.out_received {
+            self.0.acknowledge_usb_console_interrupt(status);
         }
+        events
     }
 }
 
@@ -201,3 +214,6 @@ pub fn fatal_note(note: &Note<'_>) -> FatalNote {
         FatalNote::Held
     }
 }
+
+#[cfg(test)]
+mod register_tests;

@@ -25,18 +25,28 @@ transactions, including sourced whole-word images and snapshot
 acknowledgements. The `soc` pass retains the vendor's field prefixes;
 API-policy blocks use the field names declared in the reviewed model.
 
-The PAC exports the handwritten domain modules `bluetooth`, `wifi`, `phy`,
-`modem`, `boot`, `platform`, `watchdog` and `pll_power`. They assemble owned
-register parts and provide the register-local operations and straight-line
-transactions described below. IEEE 802.15.4 has no domain module: its
-partition (`Ieee802154Partition`) holds the generated parts, the MAC block,
-the modem ETM's channels zero and one and the baseband's receive-information
-read, from the public `ieee802154_mac`, `modem_etm` and `bt_v3_2_baseband`
-modules, and the HAL performs every IEEE 802.15.4 operation over their field
-accessors. The analog-host operations
-are in `phy/i2c.rs`. Sequencing with phases, polling, retries, interrupt
-routing and lifecycle policy belongs to the HAL; a PAC domain operation
-keeps no in-flight state between calls.
+The handwritten radio modules `bluetooth`, `wifi`, `phy`
+and `modem` still assemble owned register parts and provide register-local
+operations. The analog-host operations are in `phy/i2c.rs`.
+
+IEEE 802.15.4 has no PAC domain module: `Ieee802154Partition` holds the
+generated MAC block, modem ETM channels zero and one and baseband
+receive-information read. The HAL performs its operations through the public
+`ieee802154_mac`, `modem_etm` and `bt_v3_2_baseband` generated parts.
+
+Platform, watchdog, PLL power and boot operations live in the
+[HAL](../hal/src/boot.rs), over the generated field accessors. Their PAC
+modules contain acquisition and public ownership parts only. Existing
+platform handoff constructors remain in the PAC; the esp-hal adapters and
+executor consume their proofs.
+The bootstrap's PLL parts retain the affine `PllPowerReleased` proof: the
+HAL consumes its bootstrap owner before the radio root claims that PMU view.
+The boot parts contain clock, cache, flash and PSRAM blocks. Boot waits are named,
+bounded and share the HAL's boot deadline below the armed RTC watchdog.
+
+The USB console's `INT_ST` to `INT_CLR` relation is a generated affine
+sample/acknowledgement protocol declared in both policies. Its task and IRQ
+parts remain disjoint; the IRQ part acknowledges only its sampled events.
 
 ## Radio partitions
 

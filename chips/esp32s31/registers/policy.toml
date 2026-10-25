@@ -7673,3 +7673,10 @@ name = "request_mac_itwt_clear"
 field = "MODEM_PWR.CLEAR_REQUEST.BITS_0_31_OPAQUE"
 domain = "MacItwtClearIndex"
 sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+
+# Status-to-clear declaration: the console acknowledges only its affine sample.
+[[interrupt-snapshots]]
+name = "usb_console_interrupt"
+status = "USB_DEVICE.INT_ST"
+clear = "USB_DEVICE.INT_CLR"
+sources = ["ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"]

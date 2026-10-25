@@ -22,9 +22,9 @@ use oer_time_virtual::VirtualClock;
 
 use super::{
     BusDividers, CacheMap, CacheRegisters, ClockRegisters, CpllDividers, CpuRoot, FlashRegisters,
-    MemDivider, PsramRegisters, PsramSupplyLevel,
+    MemDivider, PsramRegisters, PsramSupplyLevel, pll_power::BootstrapPllPower,
 };
-use crate::generated::soc::{
+use oer_esp32s31_pac::soc::{
     cache::{self, Cache},
     hp_alive_sys::{self, HpAliveSys},
     hp_sys_clkrst::{self, HpSysClkrst},
@@ -144,17 +144,17 @@ fn a_cold_cpu_clock_is_staged_with_its_pll_powered_and_waits_for_the_running_upd
     let virtual_clock = VirtualClock::new();
     let ticking = Ticking(&virtual_clock);
     let deadline = BootDeadline::start(&ticking, budget());
-    let mut active = Active::default();
+    let mut active_words = memory(oer_esp32s31_pac::pmu_radio::SIZE, 0x5a5a_a5a5);
+    let active_before = active_words.clone();
+    let mut active = BootstrapPllPower::host(&mut active_words);
     let mut owner = words.owner();
     assert_eq!(
         bring_up(&mut owner, &mut active, PROFILE, WAITS, &deadline),
         Err(BootFailure::Wait(WaitFailure::TimedOut("clock-update")))
     );
     drop(owner);
-    assert_eq!(
-        active.cpu, 1,
-        "the CPLL is kept powered in the active state"
-    );
+    drop(active);
+    assert_active_power(&mut active_words, &active_before, true);
 
     let view = HpSysClkrst::host(&mut words.clkrst).expect("host memory holds it");
     assert_eq!(view.read_soc_clk_sel().reg_soc_clk_sel().get(), 1, "CPLL");
@@ -523,7 +523,9 @@ fn a_cold_psram_is_powered_and_clocked_and_its_first_mode_register_read_never_en
     let virtual_clock = VirtualClock::new();
     let ticking = Ticking(&virtual_clock);
     let deadline = BootDeadline::start(&ticking, budget());
-    let mut active = Active::default();
+    let mut active_words = memory(oer_esp32s31_pac::pmu_radio::SIZE, 0x5a5a_a5a5);
+    let active_before = active_words.clone();
+    let mut active = BootstrapPllPower::host(&mut active_words);
     let mut clock_owner = clock.owner();
     let mut psram_owner = psram.owner();
     let mut cache_owner = CacheRegisters::host(&mut cache_words).expect("host memory holds it");
@@ -544,7 +546,8 @@ fn a_cold_psram_is_powered_and_clocked_and_its_first_mode_register_read_never_en
         Err(BootFailure::Wait(WaitFailure::TimedOut("psram-command")))
     );
     drop((clock_owner, psram_owner, cache_owner));
-    assert_eq!(active.memory, 1, "MPLL is kept powered in the active state");
+    drop(active);
+    assert_active_power(&mut active_words, &active_before, false);
 
     let view = HpSysClkrst::host(&mut clock.clkrst).expect("host memory holds it");
     let ctrl = view.read_psram_ctrl0();
@@ -709,5 +712,24 @@ fn a_thaw_that_never_reports_restores_fetch_autoload_and_freeze() {
     assert!(
         freeze.l1_dcache_freeze_en(),
         "the data cache's freeze is kept"
+    );
+}
+
+/// The boot sequence keeps its PLL powered without changing the radio's other fields.
+fn assert_active_power(words: &mut [u32], before: &[u32], cpu: bool) {
+    let mut expected = before.to_vec();
+    let mut view = oer_esp32s31_pac::pmu_radio::PmuRadio::host(&mut expected).expect("host PMU");
+    view.modify_hp_active_hp_ck_power(|w| {
+        if cpu {
+            w.set_hp_active_xpd_cpll(true)
+                .set_hp_active_xpd_cpll_i2c(true);
+        } else {
+            w.set_hp_active_xpd_mpll(true)
+                .set_hp_active_xpd_mpll_i2c(true);
+        }
+    });
+    assert_eq!(
+        words, expected,
+        "only this PLL's active-state power changes"
     );
 }

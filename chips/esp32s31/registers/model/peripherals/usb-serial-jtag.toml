@@ -106,6 +106,9 @@ access = "write-only"
 resetValue = 0x00000000
 reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"] }
 
+# SOURCE: ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG; INT_CLR acknowledges sampled events.
+modifiedWriteValues = "oneToClear"
+
 [[peripherals.registers.register.fields]]
 name = "SERIAL_OUT_RECV_PKT_INT_CLR"
 description = "Writing one clears the OUT endpoint's packet-received event."

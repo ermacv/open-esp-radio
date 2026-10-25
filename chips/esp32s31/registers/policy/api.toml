@@ -10218,3 +10218,11 @@ peripheral = "PMU_RADIO"
 register = "IMM_HP_CK_POWER_0"
 field = "TIE_HIGH_XPD_XTAL"
 sources = ["S31_PMU_HEADERS"]
+
+# Status-to-clear declaration: the console acknowledges only its affine sample.
+[[interrupt-snapshots]]
+name = "usb_console_interrupt"
+peripheral = "USB_SERIAL_JTAG"
+status-register = "INT_ST"
+clear-register = "INT_CLR"
+sources = ["ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"]

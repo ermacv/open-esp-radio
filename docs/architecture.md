@@ -187,7 +187,11 @@ moves; ownership, orchestration and wiring are rebuilt.
   addresses, memory layouts and ownership parts. The current renderer
   consumes the published SVD and API policy and also emits that policy's
   named transactions, whole-word images and snapshot acknowledgements.
-  Handwritten PAC domain modules assemble owned register parts and expose
+  Platform, watchdog, bootstrap PLL power and boot operations are in the HAL
+  over generated field accessors. Their PAC modules retain only acquisition,
+  public ownership parts and the affine PLL release proof; platform handoff
+  constructors supply those parts to the esp-hal adapters and executor.
+  Handwritten radio PAC domain modules assemble owned register parts and expose
   register-local operations, analog-host operations and straight-line
   transactions. They keep no in-flight state between calls. Phased
   sequencing, polls, retries, interrupt routing and lifecycle policy belong

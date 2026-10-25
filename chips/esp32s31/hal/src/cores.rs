@@ -42,10 +42,9 @@ use core::{
     sync::atomic::{AtomicU8, Ordering},
 };
 
-pub use oer_esp32s31_pac::platform::HpCore;
-use oer_esp32s31_pac::platform::{
-    CoreControlHandoff, CoreControlRegisters, Uart0ClockHandoff, Uart0ClockRegisters,
-};
+pub use crate::platform::HpCore;
+use crate::platform::core_control::{CoreControlRegisters, Uart0ClockRegisters};
+use oer_esp32s31_pac::platform::{CoreControlHandoff, Uart0ClockHandoff};
 use oer_mmio::Placement;
 
 #[cfg(test)]
@@ -177,7 +176,9 @@ fn capture() -> CoreControlRegisters {
     // them on the other hart found no operation running. esp-hal writes
     // them only in esp_hal::init (`registers/shared-words.toml`).
     let handoff = unsafe { CoreControlHandoff::assume_exclusive() };
-    CoreControlRegisters::from_handoff(handoff)
+    CoreControlRegisters::new(
+        oer_esp32s31_pac::platform::CoreControlRegisters::from_handoff(handoff),
+    )
 }
 
 /// The hart this code runs on.
@@ -621,7 +622,7 @@ fn capture_uart0() -> Uart0ClockRegisters {
     // word again. esp-hal writes the word only inside esp_hal::init and
     // from a UART driver no image makes (`registers/shared-words.toml`).
     let handoff = unsafe { Uart0ClockHandoff::assume_exclusive() };
-    Uart0ClockRegisters::from_handoff(handoff)
+    Uart0ClockRegisters::new(oer_esp32s31_pac::platform::Uart0ClockRegisters::from_handoff(handoff))
 }
 
 /// Restore UART0's clock for the boot ROM if `hart` holds the word; whether

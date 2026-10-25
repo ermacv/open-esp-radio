@@ -81274,12 +81274,17 @@ pub mod usb_serial_jtag {
             self.0.write::<0x10>(value.0);
         }
 
-        /// Write `INT_CLR` from zero: the fields set, zero in every other bit.
+        /// Sample `INT_ST` once, keeping the events `INT_CLR` acknowledges.
         #[inline]
-        pub fn write_int_clr(&mut self, change: impl FnOnce(&mut int_clr::W)) {
-            let mut value = int_clr::W(0);
-            change(&mut value);
-            self.0.write::<0x14>(value.0);
+        pub fn sample_usb_console_interrupt(&self) -> UsbConsoleInterruptSnapshot {
+            UsbConsoleInterruptSnapshot(self.0.read::<0xc>() & UsbConsoleInterruptSnapshot::EVENTS)
+        }
+
+        /// Acknowledge exactly the sampled events: one to each bit of `INT_CLR`
+        /// the snapshot holds and zero to every other bit.
+        #[inline]
+        pub fn acknowledge_usb_console_interrupt(&mut self, snapshot: UsbConsoleInterruptSnapshot) {
+            self.0.write::<0x14>(snapshot.0);
         }
     }
 
@@ -81352,12 +81357,17 @@ pub mod usb_serial_jtag {
             int_st::R(self.0.read::<0xc>())
         }
 
-        /// Write `INT_CLR` from zero: the fields set, zero in every other bit.
+        /// Sample `INT_ST` once, keeping the events `INT_CLR` acknowledges.
         #[inline]
-        pub fn write_int_clr(&mut self, change: impl FnOnce(&mut int_clr::W)) {
-            let mut value = int_clr::W(0);
-            change(&mut value);
-            self.0.write::<0x14>(value.0);
+        pub fn sample_usb_console_interrupt(&self) -> UsbConsoleInterruptSnapshot {
+            UsbConsoleInterruptSnapshot(self.0.read::<0xc>() & UsbConsoleInterruptSnapshot::EVENTS)
+        }
+
+        /// Acknowledge exactly the sampled events: one to each bit of `INT_CLR`
+        /// the snapshot holds and zero to every other bit.
+        #[inline]
+        pub fn acknowledge_usb_console_interrupt(&mut self, snapshot: UsbConsoleInterruptSnapshot) {
+            self.0.write::<0x14>(snapshot.0);
         }
     }
 
@@ -81390,6 +81400,55 @@ pub mod usb_serial_jtag {
         ),
         "every word of the block belongs to exactly one side"
     );
+
+    /// One sample of the `INT_ST` events `INT_CLR` acknowledges, to
+    /// acknowledge once.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG.
+    #[must_use = "a sampled event set must be acknowledged"]
+    #[derive(Debug, Eq, PartialEq)]
+    pub struct UsbConsoleInterruptSnapshot(u32);
+
+    impl UsbConsoleInterruptSnapshot {
+        /// The bits the snapshot keeps: the events the clear register
+        /// acknowledges.
+        pub const EVENTS: u32 = 0x0000000c;
+
+        /// Whether no event was sampled.
+        pub const fn is_clear(&self) -> bool {
+            self.0 == 0
+        }
+
+        /// The OUT endpoint received a packet, and its interrupt is enabled.
+        #[inline]
+        pub const fn serial_out_recv_pkt_int_st(&self) -> bool {
+            (self.0 & 0x00000004) != 0
+        }
+
+        /// The snapshot without `SERIAL_OUT_RECV_PKT_INT_ST` unless `keep`: it is then not acknowledged.
+        pub const fn retain_serial_out_recv_pkt_int_st(self, keep: bool) -> Self {
+            if keep {
+                self
+            } else {
+                Self(self.0 & !0x00000004)
+            }
+        }
+
+        /// The IN endpoint became empty, and its interrupt is enabled.
+        #[inline]
+        pub const fn serial_in_empty_int_st(&self) -> bool {
+            (self.0 & 0x00000008) != 0
+        }
+
+        /// The snapshot without `SERIAL_IN_EMPTY_INT_ST` unless `keep`: it is then not acknowledged.
+        pub const fn retain_serial_in_empty_int_st(self, keep: bool) -> Self {
+            if keep {
+                self
+            } else {
+                Self(self.0 & !0x00000008)
+            }
+        }
+    }
 
     /// The `EP1` register.
     ///
@@ -81528,25 +81587,6 @@ pub mod usb_serial_jtag {
         pub const FIELDS: u32 = 0x0000000c;
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x14;
-
-        /// The value written to the register.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Set `SERIAL_OUT_RECV_PKT_INT_CLR`.
-            #[inline]
-            pub fn set_serial_out_recv_pkt_int_clr(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
-                self
-            }
-
-            /// Set `SERIAL_IN_EMPTY_INT_CLR`.
-            #[inline]
-            pub fn set_serial_in_empty_int_clr(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
-                self
-            }
-        }
     }
 }
 

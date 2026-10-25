@@ -22,8 +22,8 @@ pub use oer_esp32s31_pac::platform::{
     interrupt_core1_status, systimer, systimer_acknowledge, systimer_counter,
 };
 pub use oer_esp32s31_pac::platform::{
-    EfuseHandoff, EfuseRegisters, EntropyHandoff, EntropyRegisters, EntropyStatus, HpCore,
-    ResetCauseHandoff, ResetCauseRegisters, RngClockPlacement, TrngPlacement,
+    EfuseHandoff, EfuseRegisters, EntropyHandoff, EntropyRegisters, ResetCauseHandoff,
+    ResetCauseRegisters, RngClockPlacement, TrngPlacement,
 };
 pub use oer_espressif_efuse::{FactoryMac, Interface, MacAddress};
 use oer_mmio::Placement;
@@ -33,9 +33,37 @@ use oer_time::settle::{Settle, SettleLimit, settle};
 
 pub use interrupt_controller::{Hart1Interrupts, InterruptBlocks, InterruptController};
 
+pub(crate) mod core_control;
 pub mod interrupt_controller;
 #[cfg(test)]
 mod tests;
+
+/// An HP core of the chip.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HpCore {
+    Core0,
+    Core1,
+}
+
+/// The generator's state as its owner reads it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EntropyStatus {
+    /// The generator's clock runs and its reset is released.
+    pub clocked: bool,
+    /// Sampling and the output conditioner are on.
+    pub sampling: bool,
+    /// Health tests run on a selected noise source.
+    pub health_tested: bool,
+    /// A startup or continuous health test failed.
+    pub health_error: bool,
+}
+
+impl EntropyStatus {
+    /// Every condition of a working source holds.
+    pub const fn is_healthy(self) -> bool {
+        self.clocked && self.sampling && self.health_tested && !self.health_error
+    }
+}
 
 /// The chip's factory identity, read once from eFuse.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -46,8 +74,14 @@ pub struct FactoryIdentity {
 impl FactoryIdentity {
     /// Read the factory MAC fields; the eFuse owner is not needed again.
     pub fn read<P: Placement>(efuse: EfuseRegisters<P>) -> Self {
+        let low = efuse.0.read_rd_mac_sys0();
+        let high = efuse.0.read_rd_mac_sys1();
         Self {
-            mac: efuse.factory_mac(),
+            mac: FactoryMac {
+                mac_0: low.mac_0(),
+                mac_1: high.mac_1(),
+                mac_ext: high.mac_ext(),
+            },
         }
     }
 
@@ -78,9 +112,11 @@ pub struct ResetCauses {
 impl ResetCauses {
     /// Read both cores' causes; the owner is not needed again.
     pub fn read<P: Placement>(registers: ResetCauseRegisters<P>) -> Self {
+        let core0 = registers.0.read_hpcore0_reset_cause().hpcore0_reset_cause();
+        let core1 = registers.0.read_hpcore1_reset_cause().hpcore1_reset_cause();
         Self {
-            core0: ResetCause::from_code(registers.cause_code(HpCore::Core0)),
-            core1: ResetCause::from_code(registers.cause_code(HpCore::Core1)),
+            core0: ResetCause::from_code(core0.get().to_le_bytes()[0]),
+            core1: ResetCause::from_code(core1.get().to_le_bytes()[0]),
         }
     }
 
@@ -143,7 +179,11 @@ impl<C: Clock, P: Placement, Q: Placement> Entropy<C, P, Q> {
             })
             .expect("a monotonic clock passes the read gap by the settle's last attempt");
         }
-        let word = self.registers.random_word();
+        let word = self
+            .registers
+            .trng
+            .read_crc_sync_data()
+            .sw_crc_random_data_sync();
         self.last = Some(self.clock.now());
         word
     }
@@ -166,7 +206,22 @@ impl<C: Clock, P: Placement, Q: Placement> Entropy<C, P, Q> {
     }
 
     /// The generator's clock, sampling and health-test state.
+    ///
+    /// SOURCE: ESP-IDF 4d59230d
+    /// `components/hal/esp32s31/include/hal/rng_ll.h:163-178`
+    /// (`rng_ll_enable`: clocks, reset, sampling and health-test configuration).
     pub fn status(&self) -> EntropyStatus {
-        self.registers.status()
+        let clock = self.registers.clock.read_rng_ctrl();
+        let conf = self.registers.trng.read_conf();
+        let debug = self.registers.trng.read_debug_conf();
+        EntropyStatus {
+            clocked: clock.lp_rng_clk_en() && !clock.lp_rng_rst_en(),
+            sampling: conf.sample_enable() && conf.noise_crc_en() && conf.random_output_mode(),
+            health_tested: !debug.health_test_bypass() && conf.noise_source_sel().get() != 0,
+            health_error: self.registers.trng.read_int_raw().error_int_raw(),
+        }
     }
 }
+
+#[cfg(test)]
+mod register_tests;

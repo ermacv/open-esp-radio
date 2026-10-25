@@ -3,9 +3,8 @@
 
 use std::{cell::Cell, vec, vec::Vec};
 
-use oer_esp32s31_pac::platform::{
-    CoreControlRegisters, Uart0ClockRegisters,
-    core_control::{HOST_SIZES, UART0_HOST_SIZE},
+use crate::platform::core_control::{
+    CoreControlRegisters, HOST_SIZES, UART0_HOST_SIZE, Uart0ClockRegisters,
 };
 use oer_mmio::Host;
 

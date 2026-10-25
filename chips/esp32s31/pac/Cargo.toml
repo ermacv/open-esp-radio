@@ -15,9 +15,6 @@ test-support = []
 oer-espressif-analog = { path = "../../espressif/analog" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
 oer-mmio = { path = "../../../portable/mmio" }
-oer-espressif-efuse = { path = "../../espressif/efuse" }
-oer-espressif-watchdog = { path = "../../espressif/watchdog" }
-oer-espressif-boot = { path = "../../espressif/boot" }
 oer-memory = { path = "../../../portable/memory" }
 oer-espressif-ieee80211-pac = { path = "../../espressif/ieee80211-pac" }
 oer-esp32s31-pac-raw = { path = "../pac-raw", features = ["critical-section"] }

@@ -4,7 +4,7 @@ use esp_hal::{
     peripherals::{LP_AON_CLK_RST, LP_PERI, LP_WDT, PSRAM, RNG, SYSTIMER, TIMG0, TIMG1, USB_DEVICE},
 };
 use oer_espressif_watchdog::{
-    MainWatchdog, MainWatchdogRegisters, StoppedMainWatchdog,
+    MainWatchdog, MainWatchdogRegisters,
     deadline::{DeadlineBudget, DeadlineWatchdog},
 };
 use oer_espressif_esp_hal_soc::handoff::{
@@ -37,10 +37,11 @@ pub fn timer(timer: SYSTIMER<'static>) {
     #[cfg(ui_reject)]
     let _second = ComparatorWriter::adopt(timer); // ui-error: E0382
 }
-pub fn entropy(rng: RNG<'static>, lp_peri: LP_PERI<'static>) {
+pub fn entropy(rng: RNG<'static>, lp_peri: LP_PERI<'static>, clock: impl oer_time::Clock) {
     let owner = take_entropy(rng, lp_peri);
-    let _health = owner.status();
-    let _word = owner.random_word();
+    let mut entropy = oer_esp32s31_hal::platform::Entropy::new(owner, clock);
+    let _health = entropy.status();
+    let _word = entropy.random();
     #[cfg(ui_reject)]
     let _second = take_entropy(
         rng,     // ui-error: E0382
@@ -53,9 +54,8 @@ pub fn reset_causes(lp_aon: LP_AON_CLK_RST<'static>) {
     let _second = take_reset_causes(lp_aon); // ui-error: E0382
 }
 pub fn usb(usb: USB_DEVICE<'static>) {
-    let (_endpoint, _interrupt, pads) = take_usb_serial_jtag(usb)
-        .expect("no early record holds the block")
-        .into_parts();
+    let blocks = take_usb_serial_jtag(usb).expect("no early record holds the block");
+    let (_endpoint, _interrupt, pads) = oer_esp32s31_hal::usb_serial_jtag::console_parts(blocks);
     pads.disconnect();
     #[cfg(ui_reject)]
     pads.disconnect(); // ui-error: E0382
@@ -90,8 +90,8 @@ pub fn watchdogs(
     lp_wdt: LP_WDT<'static>,
 ) {
     let blocks = take_watchdogs(timg0, timg1, lp_wdt);
-    let mut main0 = StoppedMainWatchdog::new(blocks.mwdt0);
-    main0.disable();
+    let mut watchdogs = oer_esp32s31_hal::watchdog::Watchdogs::new(blocks);
+    watchdogs.main0.disable();
     #[cfg(ui_reject)]
     let _second = take_watchdogs(
         timg0,  // ui-error: E0382

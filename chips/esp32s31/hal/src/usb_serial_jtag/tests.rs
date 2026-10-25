@@ -1,4 +1,4 @@
-//! The HAL's console parts over host memory forward to the PAC's owners.
+//! The HAL's console parts operate on generated blocks over host memory.
 
 use std::{vec, vec::Vec};
 

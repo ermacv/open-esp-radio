@@ -1,7 +1,7 @@
 //! The bootstrap's PLL power fields over host memory.
 
 use super::{BootstrapPllPower, PllPower};
-use crate::generated::pmu_radio;
+use oer_esp32s31_pac::pmu_radio;
 use std::{vec, vec::Vec};
 
 fn changed(before: &[u32], after: &[u32]) -> Vec<u32> {

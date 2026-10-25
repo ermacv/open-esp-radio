@@ -12,7 +12,7 @@ use oer_espressif_watchdog::{
 };
 
 use super::{Mwdt0Registers, Mwdt1Registers, RwdtRegisters, SwdRegisters};
-use crate::generated::{hp_sys_clkrst_timg1, lp_wdt, lp_wdt_swd, timg0_wdt, timg1_wdt};
+use oer_esp32s31_pac::{hp_sys_clkrst_timg1, lp_wdt, lp_wdt_swd, timg0_wdt, timg1_wdt};
 
 fn memory(size: usize, fill: u32) -> Vec<u32> {
     vec![fill; size / 4]
