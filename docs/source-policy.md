@@ -17,10 +17,16 @@ Excluded:
 - vendor ELF files and static archives;
 - disassembly dumps and unreviewed extraction artifacts;
 - generated proprietary headers;
-- ROM or vendor ABI bindings, `esp-wifi-sys` and hidden runtime dependencies;
+- radio ROM or vendor ABI bindings, `esp-wifi-sys` and hidden runtime dependencies;
 - credentials.
 
 Production builds link no vendor radio binary and no radio ROM ABI.
+
+Platform ROM functions called by our code are chip facts: each entry point
+has its address and a `SOURCE:` citation of a pinned ESP-IDF ROM linker
+script or ROM ELF. The ROM linker script is generated from those facts and
+exports only the declared entry points. libc and compiler intrinsics come
+from `compiler_builtins`, not ROM.
 
 ## Recovered tables and coefficients
 

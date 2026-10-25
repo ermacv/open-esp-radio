@@ -30,6 +30,7 @@ pub mod generate;
 mod irq_stack;
 mod layers;
 mod model;
+mod rom;
 pub mod tracked;
 
 pub use layers::{Layers, Source, chain, resolve};
@@ -428,6 +429,9 @@ impl Facts {
         }
         if let Some(memory) = &self.memory {
             memory.validate(self.boot_chain.as_ref(), self.rom.as_ref())?;
+        }
+        if let Some(rom) = &self.rom {
+            rom.validate_functions()?;
         }
         if let Some(rom) = &self.rom
             && !self.revisions.contains(&rom.revision)
