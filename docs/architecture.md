@@ -37,8 +37,10 @@ application          credentials, network stack (embassy-net), sockets
   chip drivers       ESP32-S31 Wi-Fi, BLE and IEEE 802.15.4 drivers
   radio system       one owner of the shared RF front-end
   PHY                calibration, tracking, channel, TX power (Rust port of libphy)
-  HAL                typed register ownership: root, partitions, phased sequences
-  PAC                generated from the register model
+  HAL                register logic over the PAC: root, sequences, polls,
+                     routing, clocks, power, resets, DMA engines
+  PAC                the exact hardware model, generated: blocks, field
+                     accessors, value domains, DMA pointers, ownership parts
 platform (firmware/) staged boot, interrupt table, panic record, linker layout
 ```
 
@@ -180,6 +182,19 @@ moves; ownership, orchestration and wiring are rebuilt.
   decide (access classes, reserved lanes and words, offsets, names); what
   no header states is read-only, and the chip's sourced overlay
   (`model/strictness.toml`) adds and corrects what they lack.
+- **PAC and HAL.** The PAC's generated boundary provides typed blocks
+  taken once, field accessors by class, typed value domains and DMA
+  addresses, memory layouts and ownership parts. The current renderer
+  consumes the published SVD and API policy and also emits that policy's
+  named transactions, whole-word images and snapshot acknowledgements.
+  Handwritten PAC domain modules assemble owned register parts and expose
+  register-local operations, analog-host operations and straight-line
+  transactions. They keep no in-flight state between calls. Phased
+  sequencing, polls, retries, interrupt routing and lifecycle policy belong
+  to the HAL, each vendor step with its `SOURCE:`. API-policy blocks use the
+  reviewed model's field names; `soc` blocks retain the vendor's prefixes
+  ([PAC](../chips/esp32s31/pac/README.md),
+  [field accessors](../tools/registers/model/README.md#field-accessors)).
 - **Radio access.** The S31 Wi-Fi handoff returns one `RadioAccess` by value;
   the driver owns it through the runtime epoch and lends it with `&mut`. No
   shared register arena or dynamic borrow guard.

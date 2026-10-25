@@ -194,3 +194,37 @@ fn the_runtime_timer_start_command_is_its_one_variant_from_zero() {
     assert_eq!(difference.len(), 1, "one word changed");
     assert_eq!(after[difference[0].0], start.bits());
 }
+
+#[test]
+fn an_interrupt_clear_trigger_acknowledges_only_its_own_source() {
+    let before = memory(btmac::SIZE, 0);
+    let mut after = before.clone();
+    let mut block = BtmacBlePhyInit::host(&mut after).expect("memory holds the block");
+    block.trigger_interrupt_clear_scheduler_run();
+    drop(block);
+    let scheduler_run = changed(&before, &after);
+    assert_eq!(scheduler_run.len(), 1, "one word changed");
+    assert_eq!(
+        scheduler_run[0].1.count_ones(),
+        1,
+        "one source acknowledged"
+    );
+
+    let mut after = before.clone();
+    let mut block = BtmacBlePhyInit::host(&mut after).expect("memory holds the block");
+    block.trigger_interrupt_clear_bits_0_13_opaque(oer_mmio::Bits::truncate(0b101));
+    drop(block);
+    let opaque = changed(&before, &after);
+    assert_eq!(opaque.len(), 1, "one word changed");
+    assert_eq!(opaque[0].0, scheduler_run[0].0, "the same clear word");
+    assert_eq!(
+        opaque[0].1.count_ones(),
+        2,
+        "the two sources the value names"
+    );
+    assert_eq!(
+        opaque[0].1 & scheduler_run[0].1,
+        0,
+        "the scheduler-run source is not acknowledged"
+    );
+}

@@ -2155,6 +2155,34 @@ impl BluetoothSchedulerLockModifyHardwareListIndex {
     }
 }
 
+/// Low 24 bits of the complemented analog-I2C read selection. The sourced word publication fixes its high status byte to ones.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PhyI2cReadMask(u32);
+
+impl PhyI2cReadMask {
+    pub const MIN: u32 = 0x00000000;
+    pub const MAX: u32 = 0x00ffffff;
+
+    /// Construct a value only when it lies in the reviewed inclusive range.
+    pub const fn new(value: u32) -> Option<Self> {
+        if value <= 0x00ffffff {
+            Some(Self(value))
+        } else {
+            None
+        }
+    }
+
+    /// The value of a 24-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<24>) -> Self {
+        Self(bits.get())
+    }
+
+    /// Return the checked numeric value.
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
 /// Complete sixteen-bit caller control accepted by the rev0 ROM IQ-estimator enable path.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct IqEstimatorControlWord(u32);
@@ -28542,12 +28570,25 @@ pub mod btmac_ble_phy_init {
             self.0.write::<0xb4>(value.0);
         }
 
-        /// Write `INTERRUPT_CLEAR` from zero: the fields set, zero in every other bit.
+        /// Write one to the write-trigger field `SCHEDULER_RUN` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero.
         #[inline]
-        pub fn write_interrupt_clear(&mut self, change: impl FnOnce(&mut interrupt_clear::W)) {
-            let mut value = interrupt_clear::W(0);
-            change(&mut value);
-            self.0.write::<0xb8>(value.0);
+        pub fn trigger_interrupt_clear_scheduler_run(&mut self) {
+            self.0.write::<0xb8>(0x00004000);
+        }
+
+        /// Write `value` to the write-trigger field `BITS_0_13_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero.
+        #[inline]
+        pub fn trigger_interrupt_clear_bits_0_13_opaque(&mut self, value: oer_mmio::Bits<14>) {
+            self.0.write::<0xb8>(value.get());
+        }
+
+        /// Write `value` to the write-trigger field `BITS_15_31_OPAQUE` of `INTERRUPT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero.
+        #[inline]
+        pub fn trigger_interrupt_clear_bits_15_31_opaque(&mut self, value: oer_mmio::Bits<17>) {
+            self.0.write::<0xb8>(value.get() << 15);
         }
 
         /// Read `WORD_0138_OPAQUE`.
@@ -29372,31 +29413,9 @@ pub mod btmac_ble_phy_init {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0xb8;
 
-        /// The value written to the register.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Set `SCHEDULER_RUN`.
-            #[inline]
-            pub fn set_scheduler_run(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x00004000) | (u32::from(value) << 14);
-                self
-            }
-
-            /// Set `BITS_0_13_OPAQUE`.
-            #[inline]
-            pub fn set_bits_0_13_opaque(&mut self, value: oer_mmio::Bits<14>) -> &mut Self {
-                self.0 = (self.0 & !0x00003fff) | value.get();
-                self
-            }
-
-            /// Set `BITS_15_31_OPAQUE`.
-            #[inline]
-            pub fn set_bits_15_31_opaque(&mut self, value: oer_mmio::Bits<17>) -> &mut Self {
-                self.0 = (self.0 & !0xffff8000) | (value.get() << 15);
-                self
-            }
-        }
+        /// The bits of the write-trigger fields: zero in every
+        /// read-modify-write, one only in a field's explicit trigger.
+        pub const TRIGGERS: u32 = 0xffffffff;
     }
 
     /// The `WORD_0138_OPAQUE` register.
@@ -40200,28 +40219,10 @@ pub mod i2c_ana_mst {
             i2c0_ctrl::R(self.0.read::<0x0>())
         }
 
-        /// Read `I2C0_CTRL`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_i2c0_ctrl(&mut self, change: impl FnOnce(&mut i2c0_ctrl::W)) {
-            let mut value = i2c0_ctrl::W(self.0.read::<0x0>());
-            change(&mut value);
-            self.0.write::<0x0>(value.0);
-        }
-
         /// Read `I2C1_CTRL`.
         #[inline]
         pub fn read_i2c1_ctrl(&self) -> i2c1_ctrl::R {
             i2c1_ctrl::R(self.0.read::<0x4>())
-        }
-
-        /// Read `I2C1_CTRL`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_i2c1_ctrl(&mut self, change: impl FnOnce(&mut i2c1_ctrl::W)) {
-            let mut value = i2c1_ctrl::W(self.0.read::<0x4>());
-            change(&mut value);
-            self.0.write::<0x4>(value.0);
         }
 
         /// Read `ANA_CONF0`.
@@ -40330,6 +40331,15 @@ pub mod i2c_ana_mst {
             self.0.write::<0x4>(0x04000000);
         }
 
+        /// Keep `0x00000000`, take the value into `0x00ffffff` and set `0xff000000` (`ANA_CONF1`).
+        ///
+        /// SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
+        #[inline]
+        pub fn publish_phy_i2c_read_mask(&mut self, value: super::PhyI2cReadMask) {
+            self.0
+                .write::<0x1c>((value.get() & 0x00ffffff) | 0xff000000);
+        }
+
         /// Replace the listed fields from one reviewed image, keeping every other bit (`ANA_CONF2`).
         ///
         /// SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
@@ -40431,21 +40441,6 @@ pub mod i2c_ana_mst {
                 .write::<0x18>((bits & !0x0000000c) | ((input & 0x00000003) << 2));
         }
 
-        /// Write the listed fields and zero to every other bit (`ANA_CONF1`).
-        ///
-        /// SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
-        #[inline]
-        pub fn publish_phy_i2c_read_mask(
-            &mut self,
-            read_mask_complement_low_value: oer_mmio::Bits<24>,
-            read_mask_complement_high_value: u8,
-        ) {
-            self.0.write::<0x1c>(
-                read_mask_complement_low_value.get()
-                    | (u32::from(read_mask_complement_high_value) << 24),
-            );
-        }
-
         /// Write the listed fields and zero to every other bit (`I2C0_CTRL`).
         ///
         /// SOURCE: ROM_REV0_PHY_I2C, BLOB_LIBPHY_PHY_I2C, S31_ESP_PACS_SVD.
@@ -40532,95 +40527,6 @@ pub mod i2c_ana_mst {
             pub const fn busy(self) -> bool {
                 (self.0 & 0x02000000) != 0
             }
-
-            /// The `START_OR_RESET` field.
-            #[inline]
-            pub const fn start_or_reset(self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// The `SLAVE_ADDR` field.
-            #[inline]
-            pub const fn slave_addr(&self) -> u8 {
-                (self.0) as u8
-            }
-
-            /// The `SLAVE_REG_ADDR` field.
-            #[inline]
-            pub const fn slave_reg_addr(&self) -> u8 {
-                (self.0 >> 8) as u8
-            }
-
-            /// The `DATA` field.
-            #[inline]
-            pub const fn data(&self) -> u8 {
-                (self.0 >> 16) as u8
-            }
-
-            /// The `READ_WRITE` field.
-            #[inline]
-            pub const fn read_write(&self) -> bool {
-                (self.0 & 0x01000000) != 0
-            }
-
-            /// The `BUSY` field.
-            #[inline]
-            pub const fn busy(&self) -> bool {
-                (self.0 & 0x02000000) != 0
-            }
-
-            /// The `START_OR_RESET` field.
-            #[inline]
-            pub const fn start_or_reset(&self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-
-            /// Set `SLAVE_ADDR`.
-            #[inline]
-            pub fn set_slave_addr(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0x000000ff) | u32::from(value);
-                self
-            }
-
-            /// Set `SLAVE_REG_ADDR`.
-            #[inline]
-            pub fn set_slave_reg_addr(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
-                self
-            }
-
-            /// Set `DATA`.
-            #[inline]
-            pub fn set_data(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
-                self
-            }
-
-            /// Set `READ_WRITE`.
-            #[inline]
-            pub fn set_read_write(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
-                self
-            }
-
-            /// Set `BUSY`.
-            #[inline]
-            pub fn set_busy(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
-                self
-            }
-
-            /// Set `START_OR_RESET`.
-            #[inline]
-            pub fn set_start_or_reset(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x04000000) | (u32::from(value) << 26);
-                self
-            }
         }
     }
 
@@ -40668,112 +40574,10 @@ pub mod i2c_ana_mst {
                 (self.0 & 0x02000000) != 0
             }
 
-            /// The `START_OR_RESET` field.
-            #[inline]
-            pub const fn start_or_reset(self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-
             /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_27_31_opaque(self) -> oer_mmio::Bits<5> {
                 oer_mmio::Bits::truncate(self.0 >> 27)
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// The `SLAVE_ADDR` field.
-            #[inline]
-            pub const fn slave_addr(&self) -> u8 {
-                (self.0) as u8
-            }
-
-            /// The `SLAVE_REG_ADDR` field.
-            #[inline]
-            pub const fn slave_reg_addr(&self) -> u8 {
-                (self.0 >> 8) as u8
-            }
-
-            /// The `DATA` field.
-            #[inline]
-            pub const fn data(&self) -> u8 {
-                (self.0 >> 16) as u8
-            }
-
-            /// The `READ_WRITE` field.
-            #[inline]
-            pub const fn read_write(&self) -> bool {
-                (self.0 & 0x01000000) != 0
-            }
-
-            /// The `BUSY` field.
-            #[inline]
-            pub const fn busy(&self) -> bool {
-                (self.0 & 0x02000000) != 0
-            }
-
-            /// The `START_OR_RESET` field.
-            #[inline]
-            pub const fn start_or_reset(&self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-
-            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
-            #[inline]
-            pub const fn bits_27_31_opaque(&self) -> oer_mmio::Bits<5> {
-                oer_mmio::Bits::truncate(self.0 >> 27)
-            }
-
-            /// Set `SLAVE_ADDR`.
-            #[inline]
-            pub fn set_slave_addr(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0x000000ff) | u32::from(value);
-                self
-            }
-
-            /// Set `SLAVE_REG_ADDR`.
-            #[inline]
-            pub fn set_slave_reg_addr(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
-                self
-            }
-
-            /// Set `DATA`.
-            #[inline]
-            pub fn set_data(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
-                self
-            }
-
-            /// Set `READ_WRITE`.
-            #[inline]
-            pub fn set_read_write(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
-                self
-            }
-
-            /// Set `BUSY`.
-            #[inline]
-            pub fn set_busy(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
-                self
-            }
-
-            /// Set `START_OR_RESET`.
-            #[inline]
-            pub fn set_start_or_reset(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x04000000) | (u32::from(value) << 26);
-                self
-            }
-
-            /// Set `BITS_27_31_OPAQUE`.
-            #[inline]
-            pub fn set_bits_27_31_opaque(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
-                self.0 = (self.0 & !0xf8000000) | (value.get() << 27);
-                self
             }
         }
     }
@@ -40945,13 +40749,6 @@ pub mod i2c_ana_mst {
                 self.0 = (self.0 & !0x00000600) | (value.bits() << 9);
                 self
             }
-
-            /// Set `ANA_STATUS0`.
-            #[inline]
-            pub fn set_ana_status0(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0xff000000) | (u32::from(value) << 24);
-                self
-            }
         }
     }
 
@@ -41002,13 +40799,6 @@ pub mod i2c_ana_mst {
             #[inline]
             pub fn set_read_mask_complement_low(&mut self, value: oer_mmio::Bits<24>) -> &mut Self {
                 self.0 = (self.0 & !0x00ffffff) | value.get();
-                self
-            }
-
-            /// Set `READ_MASK_COMPLEMENT_HIGH`.
-            #[inline]
-            pub fn set_read_mask_complement_high(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0xff000000) | (u32::from(value) << 24);
                 self
             }
         }
@@ -41075,8 +40865,14 @@ pub mod i2c_ana_mst {
 
             /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_18_31_opaque(self) -> oer_mmio::Bits<14> {
+            pub const fn bits_18_23_opaque(self) -> oer_mmio::Bits<6> {
                 oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+
+            /// The `ANA_STATUS2` field.
+            #[inline]
+            pub const fn ana_status2(self) -> u8 {
+                (self.0 >> 24) as u8
             }
         }
 
@@ -41104,8 +40900,14 @@ pub mod i2c_ana_mst {
 
             /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_18_31_opaque(&self) -> oer_mmio::Bits<14> {
+            pub const fn bits_18_23_opaque(&self) -> oer_mmio::Bits<6> {
                 oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+
+            /// The `ANA_STATUS2` field.
+            #[inline]
+            pub const fn ana_status2(&self) -> u8 {
+                (self.0 >> 24) as u8
             }
 
             /// Set `PHY_HOST_MAP`.
@@ -41122,10 +40924,10 @@ pub mod i2c_ana_mst {
                 self
             }
 
-            /// Set `BITS_18_31_OPAQUE`.
+            /// Set `BITS_18_23_OPAQUE`.
             #[inline]
-            pub fn set_bits_18_31_opaque(&mut self, value: oer_mmio::Bits<14>) -> &mut Self {
-                self.0 = (self.0 & !0xfffc0000) | (value.get() << 18);
+            pub fn set_bits_18_23_opaque(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                self.0 = (self.0 & !0x00fc0000) | (value.get() << 18);
                 self
             }
         }
@@ -41353,6 +41155,10 @@ pub mod i2c_ana_mst {
     const _: () = assert!(
         oer_mmio::check::within(0x04000000, i2c1_ctrl::FIELDS),
         "pulse_phy_i2c_host1_reset writes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::partition(0x00000000, 0x00ffffff, 0xff000000, ana_conf1::FIELDS),
+        "publish_phy_i2c_read_mask partitions the word and changes declared fields only"
     );
     const _: () = assert!(
         oer_mmio::check::within(0x0003fa00, 0x0003fff0)
@@ -41804,15 +41610,6 @@ pub mod ieee802154_mac {
             dtm_cfg::R(self.0.read::<0x98>())
         }
 
-        /// Read `DTM_CFG`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_dtm_cfg(&mut self, change: impl FnOnce(&mut dtm_cfg::W)) {
-            let mut value = dtm_cfg::W(self.0.read::<0x98>());
-            change(&mut value);
-            self.0.write::<0x98>(value.0);
-        }
-
         /// Write `TIMER0_THRESHOLD` from zero: the fields set, zero in every other bit.
         #[inline]
         pub fn write_timer0_threshold(&mut self, change: impl FnOnce(&mut timer0_threshold::W)) {
@@ -41847,19 +41644,22 @@ pub mod ieee802154_mac {
             sfd_wait::R(self.0.read::<0xc4>())
         }
 
-        /// Read `SFD_WAIT`, change fields and write it back; every other bit keeps
-        /// the value read.
+        /// Write `TX_DMA_ADDRESS` from a typed DMA address.
         #[inline]
-        pub fn modify_sfd_wait(&mut self, change: impl FnOnce(&mut sfd_wait::W)) {
-            let mut value = sfd_wait::W(self.0.read::<0xc4>());
-            change(&mut value);
-            self.0.write::<0xc4>(value.0);
+        pub fn write_tx_dma_address(&mut self, value: super::layouts::DmaWindowAddress) {
+            self.0.write::<0xd0>(value.get());
         }
 
         /// Read `TXDMA_ERR`.
         #[inline]
         pub fn read_txdma_err(&self) -> txdma_err::R {
             txdma_err::R(self.0.read::<0xd8>())
+        }
+
+        /// Write `RX_DMA_ADDRESS` from a typed DMA address.
+        #[inline]
+        pub fn write_rx_dma_address(&mut self, value: super::layouts::DmaWindowAddress) {
+            self.0.write::<0xe0>(value.get());
         }
 
         /// Read `RXDMA_ERR`.
@@ -42765,15 +42565,6 @@ pub mod ieee802154_mac {
             dtm_cfg::R(self.0.read::<0x98>())
         }
 
-        /// Read `DTM_CFG`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_dtm_cfg(&mut self, change: impl FnOnce(&mut dtm_cfg::W)) {
-            let mut value = dtm_cfg::W(self.0.read::<0x98>());
-            change(&mut value);
-            self.0.write::<0x98>(value.0);
-        }
-
         /// Write `TIMER0_THRESHOLD` from zero: the fields set, zero in every other bit.
         #[inline]
         pub fn write_timer0_threshold(&mut self, change: impl FnOnce(&mut timer0_threshold::W)) {
@@ -42808,19 +42599,22 @@ pub mod ieee802154_mac {
             sfd_wait::R(self.0.read::<0xc4>())
         }
 
-        /// Read `SFD_WAIT`, change fields and write it back; every other bit keeps
-        /// the value read.
+        /// Write `TX_DMA_ADDRESS` from a typed DMA address.
         #[inline]
-        pub fn modify_sfd_wait(&mut self, change: impl FnOnce(&mut sfd_wait::W)) {
-            let mut value = sfd_wait::W(self.0.read::<0xc4>());
-            change(&mut value);
-            self.0.write::<0xc4>(value.0);
+        pub fn write_tx_dma_address(&mut self, value: super::layouts::DmaWindowAddress) {
+            self.0.write::<0xd0>(value.get());
         }
 
         /// Read `TXDMA_ERR`.
         #[inline]
         pub fn read_txdma_err(&self) -> txdma_err::R {
             txdma_err::R(self.0.read::<0xd8>())
+        }
+
+        /// Write `RX_DMA_ADDRESS` from a typed DMA address.
+        #[inline]
+        pub fn write_rx_dma_address(&mut self, value: super::layouts::DmaWindowAddress) {
+            self.0.write::<0xe0>(value.get());
         }
 
         /// Read `RXDMA_ERR`.
@@ -46618,89 +46412,6 @@ pub mod ieee802154_mac {
                 oer_mmio::Bits::truncate(self.0 >> 26)
             }
         }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name.
-            #[inline]
-            pub const fn dtm_tx_length(&self) -> u8 {
-                (self.0) as u8
-            }
-
-            /// Project-assigned name.
-            #[inline]
-            pub const fn dtm_tx_payload_type(&self) -> oer_mmio::Bits<4> {
-                oer_mmio::Bits::truncate(self.0 >> 8)
-            }
-
-            /// Project-assigned name.
-            #[inline]
-            pub const fn dtm_hop_freq(&self) -> u8 {
-                (self.0 >> 16) as u8
-            }
-
-            /// Project-assigned name.
-            #[inline]
-            pub const fn dtm_cont_rx_en(&self) -> bool {
-                (self.0 & 0x01000000) != 0
-            }
-
-            /// Project-assigned name.
-            #[inline]
-            pub const fn dtm_on(&self) -> bool {
-                (self.0 & 0x02000000) != 0
-            }
-
-            /// Project-assigned name.
-            #[inline]
-            pub const fn extend_preamble_byte_num(&self) -> oer_mmio::Bits<4> {
-                oer_mmio::Bits::truncate(self.0 >> 26)
-            }
-
-            /// Set `DTM_TX_LENGTH`.
-            #[inline]
-            pub fn set_dtm_tx_length(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0x000000ff) | u32::from(value);
-                self
-            }
-
-            /// Set `DTM_TX_PAYLOAD_TYPE`.
-            #[inline]
-            pub fn set_dtm_tx_payload_type(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & !0x00000f00) | (value.get() << 8);
-                self
-            }
-
-            /// Set `DTM_HOP_FREQ`.
-            #[inline]
-            pub fn set_dtm_hop_freq(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
-                self
-            }
-
-            /// Set `DTM_CONT_RX_EN`.
-            #[inline]
-            pub fn set_dtm_cont_rx_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
-                self
-            }
-
-            /// Set `DTM_ON`.
-            #[inline]
-            pub fn set_dtm_on(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
-                self
-            }
-
-            /// Set `EXTEND_PREAMBLE_BYTE_NUM`.
-            #[inline]
-            pub fn set_extend_preamble_byte_num(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & !0x3c000000) | (value.get() << 26);
-                self
-            }
-        }
     }
 
     /// The `TIMER0_THRESHOLD` register.
@@ -46809,24 +46520,6 @@ pub mod ieee802154_mac {
             #[inline]
             pub const fn sfd_wait_symbol_num(self) -> oer_mmio::Bits<4> {
                 oer_mmio::Bits::truncate(self.0)
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name.
-            #[inline]
-            pub const fn sfd_wait_symbol_num(&self) -> oer_mmio::Bits<4> {
-                oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// Set `SFD_WAIT_SYMBOL_NUM`.
-            #[inline]
-            pub fn set_sfd_wait_symbol_num(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & !0x0000000f) | value.get();
-                self
             }
         }
     }
@@ -58830,28 +58523,10 @@ pub mod phy_agc_recovered_gaps {
             word_0050_opaque::R(self.0.read::<0x50>())
         }
 
-        /// Read `WORD_0050_OPAQUE`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_word_0050_opaque(&mut self, change: impl FnOnce(&mut word_0050_opaque::W)) {
-            let mut value = word_0050_opaque::W(self.0.read::<0x50>());
-            change(&mut value);
-            self.0.write::<0x50>(value.0);
-        }
-
         /// Read `WORD_006C_OPAQUE`.
         #[inline]
         pub fn read_word_006c_opaque(&self) -> word_006c_opaque::R {
             word_006c_opaque::R(self.0.read::<0x6c>())
-        }
-
-        /// Read `WORD_006C_OPAQUE`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_word_006c_opaque(&mut self, change: impl FnOnce(&mut word_006c_opaque::W)) {
-            let mut value = word_006c_opaque::W(self.0.read::<0x6c>());
-            change(&mut value);
-            self.0.write::<0x6c>(value.0);
         }
 
         /// Read `WORD_0074_OPAQUE`.
@@ -59157,24 +58832,6 @@ pub mod phy_agc_recovered_gaps {
                 oer_mmio::Bits::truncate(self.0)
             }
         }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name. Ten-bit noise floor that complete phy_get_noise_floor returns sign-extended as a negative value.
-            #[inline]
-            pub const fn noise_floor(&self) -> oer_mmio::Bits<10> {
-                oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// Set `NOISE_FLOOR`.
-            #[inline]
-            pub fn set_noise_floor(&mut self, value: oer_mmio::Bits<10>) -> &mut Self {
-                self.0 = (self.0 & !0x000003ff) | value.get();
-                self
-            }
-        }
     }
 
     /// The `WORD_006C_OPAQUE` register.
@@ -59195,24 +58852,6 @@ pub mod phy_agc_recovered_gaps {
             #[inline]
             pub const fn rssi_above_noise_floor(self) -> u8 {
                 (self.0 >> 8) as u8
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name. Received signal strength above the noise floor: complete phy_get_rssi adds it to the noise floor shifted right by two.
-            #[inline]
-            pub const fn rssi_above_noise_floor(&self) -> u8 {
-                (self.0 >> 8) as u8
-            }
-
-            /// Set `RSSI_ABOVE_NOISE_FLOOR`.
-            #[inline]
-            pub fn set_rssi_above_noise_floor(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
-                self
             }
         }
     }
@@ -67022,34 +66661,10 @@ pub mod phy_bb_recovered_gaps {
             cca_counter_result_0::R(self.0.read::<0x5c>())
         }
 
-        /// Read `CCA_COUNTER_RESULT_0`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_cca_counter_result_0(
-            &mut self,
-            change: impl FnOnce(&mut cca_counter_result_0::W),
-        ) {
-            let mut value = cca_counter_result_0::W(self.0.read::<0x5c>());
-            change(&mut value);
-            self.0.write::<0x5c>(value.0);
-        }
-
         /// Read `CCA_COUNTER_RESULT_1`.
         #[inline]
         pub fn read_cca_counter_result_1(&self) -> cca_counter_result_1::R {
             cca_counter_result_1::R(self.0.read::<0x60>())
-        }
-
-        /// Read `CCA_COUNTER_RESULT_1`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_cca_counter_result_1(
-            &mut self,
-            change: impl FnOnce(&mut cca_counter_result_1::W),
-        ) {
-            let mut value = cca_counter_result_1::W(self.0.read::<0x60>());
-            change(&mut value);
-            self.0.write::<0x60>(value.0);
         }
 
         /// Read `WORD_00E8_OPAQUE`.
@@ -67246,37 +66861,6 @@ pub mod phy_bb_recovered_gaps {
                 (self.0 & 0x08000000) != 0
             }
         }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name. First window measurement result. SOURCE: complete rev0 ROM phy_get_cca_cnt out[0].
-            #[inline]
-            pub const fn result(&self) -> oer_mmio::Bits<27> {
-                oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// Project-assigned name. Counter flag returned as 0/1; physical meaning unknown. SOURCE: complete rev0 ROM phy_get_cca_cnt return value.
-            #[inline]
-            pub const fn flag(&self) -> bool {
-                (self.0 & 0x08000000) != 0
-            }
-
-            /// Set `RESULT`.
-            #[inline]
-            pub fn set_result(&mut self, value: oer_mmio::Bits<27>) -> &mut Self {
-                self.0 = (self.0 & !0x07ffffff) | value.get();
-                self
-            }
-
-            /// Set `FLAG`.
-            #[inline]
-            pub fn set_flag(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
-                self
-            }
-        }
     }
 
     /// The `CCA_COUNTER_RESULT_1` register.
@@ -67297,24 +66881,6 @@ pub mod phy_bb_recovered_gaps {
             #[inline]
             pub const fn result(self) -> oer_mmio::Bits<27> {
                 oer_mmio::Bits::truncate(self.0)
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name. Second window measurement result. SOURCE: complete rev0 ROM phy_get_cca_cnt out[1].
-            #[inline]
-            pub const fn result(&self) -> oer_mmio::Bits<27> {
-                oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// Set `RESULT`.
-            #[inline]
-            pub fn set_result(&mut self, value: oer_mmio::Bits<27>) -> &mut Self {
-                self.0 = (self.0 & !0x07ffffff) | value.get();
-                self
             }
         }
     }
@@ -79215,13 +78781,100 @@ pub mod pmu_radio {
             imm_hp_ck_power_0::R(self.0.read::<0xf0>())
         }
 
-        /// Read `IMM_HP_CK_POWER_0`, change fields and write it back; every other bit keeps
-        /// the value read.
+        /// Write one to the write-trigger field `TIE_LOW_GLOBAL_XTALX2_ICG` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
         #[inline]
-        pub fn modify_imm_hp_ck_power_0(&mut self, change: impl FnOnce(&mut imm_hp_ck_power_0::W)) {
-            let mut value = imm_hp_ck_power_0::W(self.0.read::<0xf0>());
-            change(&mut value);
-            self.0.write::<0xf0>(value.0);
+        pub fn trigger_imm_hp_ck_power_0_tie_low_global_xtalx2_icg(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x00000001);
+        }
+
+        /// Write one to the write-trigger field `TIE_LOW_GLOBAL_XTAL_ICG` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_low_global_xtal_icg(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x00000002);
+        }
+
+        /// Write one to the write-trigger field `TIE_LOW_I2C_RETENTION` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_low_i2c_retention(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x00000004);
+        }
+
+        /// Write one to the write-trigger field `TIE_LOW_XPD_BB_I2C` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_low_xpd_bb_i2c(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x00000008);
+        }
+
+        /// Write one to the write-trigger field `TIE_LOW_XPD_XTALX2` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_low_xpd_xtalx2(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x00000020);
+        }
+
+        /// Write one to the write-trigger field `TIE_LOW_XPD_XTAL` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_low_xpd_xtal(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x00000040);
+        }
+
+        /// Write one to the write-trigger field `TIE_HIGH_GLOBAL_XTALX2_ICG` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_high_global_xtalx2_icg(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x02000000);
+        }
+
+        /// Write one to the write-trigger field `TIE_HIGH_GLOBAL_XTAL_ICG` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_high_global_xtal_icg(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x04000000);
+        }
+
+        /// Write one to the write-trigger field `TIE_HIGH_I2C_RETENTION` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_high_i2c_retention(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x08000000);
+        }
+
+        /// Write one to the write-trigger field `TIE_HIGH_XPD_BB_I2C` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_high_xpd_bb_i2c(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x10000000);
+        }
+
+        /// Write one to the write-trigger field `TIE_HIGH_XPD_XTALX2` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_high_xpd_xtalx2(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x40000000);
+        }
+
+        /// Write one to the write-trigger field `TIE_HIGH_XPD_XTAL` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_high_xpd_xtal(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x80000000);
         }
 
         /// Write `IMM_SLEEP_SYSCLK` from zero: the fields set, zero in every other bit.
@@ -79317,7 +78970,7 @@ pub mod pmu_radio {
         /// SOURCE: BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW, S31_PMU_HEADERS.
         #[inline]
         pub fn enable_baseband_i2c_power_tie(&mut self) {
-            let bits = self.0.read::<0xf0>();
+            let bits = self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS;
             self.0.write::<0xf0>((bits & !0x10000000) | 0x10000000);
         }
 
@@ -79326,7 +78979,7 @@ pub mod pmu_radio {
         /// SOURCE: BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW, S31_PMU_HEADERS.
         #[inline]
         pub fn disable_baseband_i2c_power_tie(&mut self) {
-            let bits = self.0.read::<0xf0>();
+            let bits = self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS;
             self.0.write::<0xf0>(bits & !0x10000000);
         }
 
@@ -79335,7 +78988,7 @@ pub mod pmu_radio {
         /// SOURCE: BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907, S31_PMU_HEADERS.
         #[inline]
         pub fn clear_phy_rf_immediate_clock_power(&mut self) {
-            let bits = self.0.read::<0xf0>();
+            let bits = self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS;
             self.0.write::<0xf0>(bits & !0x10000000);
         }
 
@@ -79649,80 +79302,22 @@ pub mod pmu_radio {
 
     /// The `IMM_HP_CK_POWER_0` register.
     ///
-    /// Immediate high-power clock ties. The reviewed complete PHY body reads this word before its preserving update, overriding the write-only access class in the uncorrected public SVD.
+    /// Immediate high-power clock ties. SOURCE: S31_PMU_HEADERS classes all twelve physical lanes WT; their readback is not established. Writes preserve reserved lanes and clear every sibling trigger from the read image.
     pub mod imm_hp_ck_power_0 {
         /// The bits of the register's declared fields.
-        pub const FIELDS: u32 = 0xd0000000;
+        pub const FIELDS: u32 = 0xde00006f;
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0xf0;
+
+        /// The bits of the write-trigger fields: zero in every
+        /// read-modify-write, one only in a field's explicit trigger.
+        pub const TRIGGERS: u32 = 0xde00006f;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
-        impl R {
-            /// Force the baseband analog-I2C power control high.
-            #[inline]
-            pub const fn tie_high_xpd_bb_i2c(self) -> bool {
-                (self.0 & 0x10000000) != 0
-            }
-
-            /// Force the doubled-crystal power control high.
-            #[inline]
-            pub const fn tie_high_xpd_xtalx2(self) -> bool {
-                (self.0 & 0x40000000) != 0
-            }
-
-            /// Force the crystal power control high.
-            #[inline]
-            pub const fn tie_high_xpd_xtal(self) -> bool {
-                (self.0 & 0x80000000) != 0
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Force the baseband analog-I2C power control high.
-            #[inline]
-            pub const fn tie_high_xpd_bb_i2c(&self) -> bool {
-                (self.0 & 0x10000000) != 0
-            }
-
-            /// Force the doubled-crystal power control high.
-            #[inline]
-            pub const fn tie_high_xpd_xtalx2(&self) -> bool {
-                (self.0 & 0x40000000) != 0
-            }
-
-            /// Force the crystal power control high.
-            #[inline]
-            pub const fn tie_high_xpd_xtal(&self) -> bool {
-                (self.0 & 0x80000000) != 0
-            }
-
-            /// Set `TIE_HIGH_XPD_BB_I2C`.
-            #[inline]
-            pub fn set_tie_high_xpd_bb_i2c(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
-                self
-            }
-
-            /// Set `TIE_HIGH_XPD_XTALX2`.
-            #[inline]
-            pub fn set_tie_high_xpd_xtalx2(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
-                self
-            }
-
-            /// Set `TIE_HIGH_XPD_XTAL`.
-            #[inline]
-            pub fn set_tie_high_xpd_xtal(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
-                self
-            }
-        }
+        impl R {}
     }
 
     /// The `IMM_SLEEP_SYSCLK` register.
@@ -129105,24 +128700,6 @@ pub mod soc {
                 l2_cache_acs_cnt_int_raw::R(self.0.read::<0x2e0>())
             }
 
-            /// Sample `L2_CACHE_ACS_CNT_INT_RAW` once, keeping its declared fields, to acknowledge.
-            #[inline]
-            pub fn sample_l2_cache_acs_cnt_int_raw(&self) -> l2_cache_acs_cnt_int_raw::Snapshot {
-                l2_cache_acs_cnt_int_raw::Snapshot(
-                    self.0.read::<0x2e0>() & l2_cache_acs_cnt_int_raw::FIELDS,
-                )
-            }
-
-            /// Acknowledge exactly the sampled set: write one to each bit the
-            /// snapshot holds and zero to every other bit.
-            #[inline]
-            pub fn acknowledge_l2_cache_acs_cnt_int_raw(
-                &mut self,
-                snapshot: l2_cache_acs_cnt_int_raw::Snapshot,
-            ) {
-                self.0.write::<0x2e0>(snapshot.0);
-            }
-
             /// Read `L2_CACHE_ACS_CNT_INT_ST`.
             #[inline]
             pub fn read_l2_cache_acs_cnt_int_st(&self) -> l2_cache_acs_cnt_int_st::R {
@@ -129151,24 +128728,6 @@ pub mod soc {
             #[inline]
             pub fn read_l2_cache_acs_fail_int_raw(&self) -> l2_cache_acs_fail_int_raw::R {
                 l2_cache_acs_fail_int_raw::R(self.0.read::<0x2f4>())
-            }
-
-            /// Sample `L2_CACHE_ACS_FAIL_INT_RAW` once, keeping its declared fields, to acknowledge.
-            #[inline]
-            pub fn sample_l2_cache_acs_fail_int_raw(&self) -> l2_cache_acs_fail_int_raw::Snapshot {
-                l2_cache_acs_fail_int_raw::Snapshot(
-                    self.0.read::<0x2f4>() & l2_cache_acs_fail_int_raw::FIELDS,
-                )
-            }
-
-            /// Acknowledge exactly the sampled set: write one to each bit the
-            /// snapshot holds and zero to every other bit.
-            #[inline]
-            pub fn acknowledge_l2_cache_acs_fail_int_raw(
-                &mut self,
-                snapshot: l2_cache_acs_fail_int_raw::Snapshot,
-            ) {
-                self.0.write::<0x2f4>(snapshot.0);
             }
 
             /// Read `L2_CACHE_ACS_FAIL_INT_ST`.
@@ -129427,26 +128986,6 @@ pub mod soc {
             #[inline]
             pub fn read_l2_cache_sync_preload_int_raw(&self) -> l2_cache_sync_preload_int_raw::R {
                 l2_cache_sync_preload_int_raw::R(self.0.read::<0x3a0>())
-            }
-
-            /// Sample `L2_CACHE_SYNC_PRELOAD_INT_RAW` once, keeping its declared fields, to acknowledge.
-            #[inline]
-            pub fn sample_l2_cache_sync_preload_int_raw(
-                &self,
-            ) -> l2_cache_sync_preload_int_raw::Snapshot {
-                l2_cache_sync_preload_int_raw::Snapshot(
-                    self.0.read::<0x3a0>() & l2_cache_sync_preload_int_raw::FIELDS,
-                )
-            }
-
-            /// Acknowledge exactly the sampled set: write one to each bit the
-            /// snapshot holds and zero to every other bit.
-            #[inline]
-            pub fn acknowledge_l2_cache_sync_preload_int_raw(
-                &mut self,
-                snapshot: l2_cache_sync_preload_int_raw::Snapshot,
-            ) {
-                self.0.write::<0x3a0>(snapshot.0);
             }
 
             /// Read `L2_CACHE_SYNC_PRELOAD_INT_ST`.
@@ -137975,138 +137514,6 @@ pub mod soc {
                     (self.0 & 0x00008000) != 0
                 }
             }
-
-            /// One sample of the register's asserted fields, to acknowledge once.
-            #[must_use = "a sampled write-one-to-clear set must be acknowledged"]
-            #[derive(Debug, Eq, PartialEq)]
-            pub struct Snapshot(pub(super) u32);
-
-            impl Snapshot {
-                /// Whether no declared field was asserted.
-                pub const fn is_clear(&self) -> bool {
-                    self.0 == 0
-                }
-
-                /// The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus0 accesses L2-ICache0.
-                #[inline]
-                pub const fn l2_ibus0_ovf_int_raw(&self) -> bool {
-                    (self.0 & 0x00000100) != 0
-                }
-
-                /// The snapshot without `L2_IBUS0_OVF_INT_RAW` unless `keep`: it is then not acknowledged.
-                pub const fn retain_l2_ibus0_ovf_int_raw(self, keep: bool) -> Self {
-                    if keep {
-                        self
-                    } else {
-                        Self(self.0 & !0x00000100)
-                    }
-                }
-
-                /// The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus1 accesses L2-ICache1.
-                #[inline]
-                pub const fn l2_ibus1_ovf_int_raw(&self) -> bool {
-                    (self.0 & 0x00000200) != 0
-                }
-
-                /// The snapshot without `L2_IBUS1_OVF_INT_RAW` unless `keep`: it is then not acknowledged.
-                pub const fn retain_l2_ibus1_ovf_int_raw(self, keep: bool) -> Self {
-                    if keep {
-                        self
-                    } else {
-                        Self(self.0 & !0x00000200)
-                    }
-                }
-
-                /// The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus2 accesses L2-ICache2.
-                #[inline]
-                pub const fn l2_ibus2_ovf_int_raw(&self) -> bool {
-                    (self.0 & 0x00000400) != 0
-                }
-
-                /// The snapshot without `L2_IBUS2_OVF_INT_RAW` unless `keep`: it is then not acknowledged.
-                pub const fn retain_l2_ibus2_ovf_int_raw(self, keep: bool) -> Self {
-                    if keep {
-                        self
-                    } else {
-                        Self(self.0 & !0x00000400)
-                    }
-                }
-
-                /// The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus3 accesses L2-ICache3.
-                #[inline]
-                pub const fn l2_ibus3_ovf_int_raw(&self) -> bool {
-                    (self.0 & 0x00000800) != 0
-                }
-
-                /// The snapshot without `L2_IBUS3_OVF_INT_RAW` unless `keep`: it is then not acknowledged.
-                pub const fn retain_l2_ibus3_ovf_int_raw(self, keep: bool) -> Self {
-                    if keep {
-                        self
-                    } else {
-                        Self(self.0 & !0x00000800)
-                    }
-                }
-
-                /// The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus0 accesses L2-DCache.
-                #[inline]
-                pub const fn l2_dbus0_ovf_int_raw(&self) -> bool {
-                    (self.0 & 0x00001000) != 0
-                }
-
-                /// The snapshot without `L2_DBUS0_OVF_INT_RAW` unless `keep`: it is then not acknowledged.
-                pub const fn retain_l2_dbus0_ovf_int_raw(self, keep: bool) -> Self {
-                    if keep {
-                        self
-                    } else {
-                        Self(self.0 & !0x00001000)
-                    }
-                }
-
-                /// The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus1 accesses L2-DCache.
-                #[inline]
-                pub const fn l2_dbus1_ovf_int_raw(&self) -> bool {
-                    (self.0 & 0x00002000) != 0
-                }
-
-                /// The snapshot without `L2_DBUS1_OVF_INT_RAW` unless `keep`: it is then not acknowledged.
-                pub const fn retain_l2_dbus1_ovf_int_raw(self, keep: bool) -> Self {
-                    if keep {
-                        self
-                    } else {
-                        Self(self.0 & !0x00002000)
-                    }
-                }
-
-                /// The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus2 accesses L2-DCache.
-                #[inline]
-                pub const fn l2_dbus2_ovf_int_raw(&self) -> bool {
-                    (self.0 & 0x00004000) != 0
-                }
-
-                /// The snapshot without `L2_DBUS2_OVF_INT_RAW` unless `keep`: it is then not acknowledged.
-                pub const fn retain_l2_dbus2_ovf_int_raw(self, keep: bool) -> Self {
-                    if keep {
-                        self
-                    } else {
-                        Self(self.0 & !0x00004000)
-                    }
-                }
-
-                /// The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus3 accesses L2-DCache.
-                #[inline]
-                pub const fn l2_dbus3_ovf_int_raw(&self) -> bool {
-                    (self.0 & 0x00008000) != 0
-                }
-
-                /// The snapshot without `L2_DBUS3_OVF_INT_RAW` unless `keep`: it is then not acknowledged.
-                pub const fn retain_l2_dbus3_ovf_int_raw(self, keep: bool) -> Self {
-                    if keep {
-                        self
-                    } else {
-                        Self(self.0 & !0x00008000)
-                    }
-                }
-            }
         }
 
         /// The `L2_CACHE_ACS_CNT_INT_ST` register.
@@ -138231,33 +137638,6 @@ pub mod soc {
                 #[inline]
                 pub const fn l2_cache_fail_int_raw(self) -> bool {
                     (self.0 & 0x00000020) != 0
-                }
-            }
-
-            /// One sample of the register's asserted fields, to acknowledge once.
-            #[must_use = "a sampled write-one-to-clear set must be acknowledged"]
-            #[derive(Debug, Eq, PartialEq)]
-            pub struct Snapshot(pub(super) u32);
-
-            impl Snapshot {
-                /// Whether no declared field was asserted.
-                pub const fn is_clear(&self) -> bool {
-                    self.0 == 0
-                }
-
-                /// The raw bit of the interrupt of access fail that occurs in L2-Cache.
-                #[inline]
-                pub const fn l2_cache_fail_int_raw(&self) -> bool {
-                    (self.0 & 0x00000020) != 0
-                }
-
-                /// The snapshot without `L2_CACHE_FAIL_INT_RAW` unless `keep`: it is then not acknowledged.
-                pub const fn retain_l2_cache_fail_int_raw(self, keep: bool) -> Self {
-                    if keep {
-                        self
-                    } else {
-                        Self(self.0 & !0x00000020)
-                    }
                 }
             }
         }
@@ -139242,48 +138622,6 @@ pub mod soc {
                 #[inline]
                 pub const fn l2_cache_pld_err_int_raw(self) -> bool {
                     (self.0 & 0x00001000) != 0
-                }
-            }
-
-            /// One sample of the register's asserted fields, to acknowledge once.
-            #[must_use = "a sampled write-one-to-clear set must be acknowledged"]
-            #[derive(Debug, Eq, PartialEq)]
-            pub struct Snapshot(pub(super) u32);
-
-            impl Snapshot {
-                /// Whether no declared field was asserted.
-                pub const fn is_clear(&self) -> bool {
-                    self.0 == 0
-                }
-
-                /// The raw bit of the interrupt that occurs only when L2-Cache preload-operation is done.
-                #[inline]
-                pub const fn l2_cache_pld_done_int_raw(&self) -> bool {
-                    (self.0 & 0x00000020) != 0
-                }
-
-                /// The snapshot without `L2_CACHE_PLD_DONE_INT_RAW` unless `keep`: it is then not acknowledged.
-                pub const fn retain_l2_cache_pld_done_int_raw(self, keep: bool) -> Self {
-                    if keep {
-                        self
-                    } else {
-                        Self(self.0 & !0x00000020)
-                    }
-                }
-
-                /// The raw bit of the interrupt that occurs only when L2-Cache preload-operation error occurs.
-                #[inline]
-                pub const fn l2_cache_pld_err_int_raw(&self) -> bool {
-                    (self.0 & 0x00001000) != 0
-                }
-
-                /// The snapshot without `L2_CACHE_PLD_ERR_INT_RAW` unless `keep`: it is then not acknowledged.
-                pub const fn retain_l2_cache_pld_err_int_raw(self, keep: bool) -> Self {
-                    if keep {
-                        self
-                    } else {
-                        Self(self.0 & !0x00001000)
-                    }
                 }
             }
         }

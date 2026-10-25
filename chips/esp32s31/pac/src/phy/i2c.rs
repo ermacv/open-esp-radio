@@ -679,9 +679,8 @@ impl RadioPhyRegisters {
     /// Publish the complete complemented read mask used by the vendor leaf.
     fn publish_phy_i2c_read_mask(&mut self, block: Route) {
         self.peripherals.i2c_ana_mst.publish_phy_i2c_read_mask(
-            oer_mmio::Bits::new(block.complemented_read_select())
+            crate::generated::PhyI2cReadMask::new(block.complemented_read_select())
                 .expect("a complemented read select fits the low 24 bits"),
-            0xff,
         );
     }
 
