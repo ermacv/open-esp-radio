@@ -40,7 +40,7 @@ impl<P: Placement> BootstrapPllPower<P> {
 
     /// The PLL power fields read now.
     fn pll_power(&self) -> PllPower {
-        let word = self.0.0.read_hp_active_hp_ck_power();
+        let word = self.0.read_hp_active_hp_ck_power();
         PllPower {
             cpll: word.hp_active_xpd_cpll(),
             cpll_i2c: word.hp_active_xpd_cpll_i2c(),
@@ -52,7 +52,7 @@ impl<P: Placement> BootstrapPllPower<P> {
     /// Write the four PLL power fields in one read-modify-write; every other
     /// bit of the word keeps the value read.
     fn set_pll_power(&mut self, power: PllPower) {
-        self.0.0.modify_hp_active_hp_ck_power(|w| {
+        self.0.modify_hp_active_hp_ck_power(|w| {
             w.set_hp_active_xpd_cpll(power.cpll)
                 .set_hp_active_xpd_cpll_i2c(power.cpll_i2c)
                 .set_hp_active_xpd_mpll(power.mpll)
@@ -88,9 +88,7 @@ impl<P: Placement> ActivePllPower for BootstrapPllPower<P> {
 #[cfg(test)]
 impl<'a> BootstrapPllPower<oer_mmio::Host<'a>> {
     pub(crate) fn host(words: &'a mut [u32]) -> Self {
-        Self(parts::BootstrapPllPower(
-            pmu_radio::PmuRadio::host(words).expect("memory holds the PMU's radio view"),
-        ))
+        Self(parts::BootstrapPllPower::host(words).expect("memory holds the PMU's radio view"))
     }
 }
 #[cfg(test)]

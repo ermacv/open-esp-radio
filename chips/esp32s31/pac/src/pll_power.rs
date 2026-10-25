@@ -5,7 +5,7 @@
 //! sets before it programs the CPU clock and the PSRAM clock, and the
 //! front-end clock image and baseband analog-I2C power, which the radio
 //! sets when it opens the PHY. The word belongs to the radio's PMU view.
-//! Acquisition yields public generated parts. The HAL owns the PLL operations.
+//! The HAL owns the PLL operations through the generated power-word accessors.
 //! Consuming [`BootstrapPllPower::release`] yields [`PllPowerReleased`], which
 //! [`crate::RadioPartitions::from_handoff`] consumes before claiming the radio PMU.
 //!
@@ -14,12 +14,22 @@
 //! let released = PllPowerReleased(());
 //! ```
 //!
+//! A PMU part alone cannot create a bootstrap owner and release proof:
+//!
+//! ```compile_fail,E0423
+//! use oer_esp32s31_pac::{
+//!     pll_power::{BootstrapPllPower, PllPowerReleased}, pmu_radio::PmuRadio,
+//! };
+//! fn bypass_handoff(pmu: PmuRadio) -> PllPowerReleased {
+//!     BootstrapPllPower(pmu).release()
+//! }
+//! ```
+//!
 //! Host-backed parts cannot manufacture the chip's release proof:
 //!
 //! ```compile_fail,E0599
-//! use oer_esp32s31_pac::{pll_power::BootstrapPllPower, pmu_radio::PmuRadio};
-//! fn host_release(words: &mut [u32]) {
-//!     let host = BootstrapPllPower(PmuRadio::host(words).expect("host PMU"));
+//! use oer_esp32s31_pac::pll_power::BootstrapPllPower;
+//! fn host_release(host: BootstrapPllPower<oer_mmio::Host<'_>>) {
 //!     let released = host.release();
 //! }
 //! ```
@@ -61,7 +71,7 @@ pub struct PllPowerReleased(());
 
 /// The bootstrap's owner of the PLL power fields.
 #[must_use = "the radio root needs the owner's release"]
-pub struct BootstrapPllPower<P: Placement = Fixed<{ pmu_radio::BASE }>>(pub PmuRadio<P>);
+pub struct BootstrapPllPower<P: Placement = Fixed<{ pmu_radio::BASE }>>(PmuRadio<P>);
 
 impl BootstrapPllPower {
     /// Claim the PMU's radio view for the bootstrap's epoch.
@@ -92,5 +102,28 @@ impl BootstrapPllPower {
     /// consumed, and the proof hands the view to the radio root.
     pub fn release(self) -> PllPowerReleased {
         PllPowerReleased(())
+    }
+}
+
+impl<P: Placement> BootstrapPllPower<P> {
+    /// Read the active-state clock-power word through its generated fields.
+    pub fn read_hp_active_hp_ck_power(&self) -> pmu_radio::hp_active_hp_ck_power::R {
+        self.0.read_hp_active_hp_ck_power()
+    }
+
+    /// Change active-state clock-power fields, preserving every other bit.
+    pub fn modify_hp_active_hp_ck_power(
+        &mut self,
+        change: impl FnOnce(&mut pmu_radio::hp_active_hp_ck_power::W),
+    ) {
+        self.0.modify_hp_active_hp_ck_power(change);
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl<'a> BootstrapPllPower<oer_mmio::Host<'a>> {
+    /// The PLL power fields over host memory; this owner cannot release a chip proof.
+    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+        PmuRadio::host(words).map(Self)
     }
 }

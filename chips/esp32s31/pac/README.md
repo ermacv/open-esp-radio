@@ -41,6 +41,9 @@ platform handoff constructors remain in the PAC; the esp-hal adapters and
 executor consume their proofs.
 The bootstrap's PLL parts retain the affine `PllPowerReleased` proof: the
 HAL consumes its bootstrap owner before the radio root claims that PMU view.
+The PLL owner keeps its PMU part private and exposes power-word field
+accessors. Only the PLL handoff creates the chip owner; the host-memory
+constructor cannot yield a chip release proof. Compile-fail tests enforce both.
 The boot parts contain clock, cache, flash and PSRAM blocks. Boot waits are named,
 bounded and share the HAL's boot deadline below the armed RTC watchdog.
 
