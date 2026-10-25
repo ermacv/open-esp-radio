@@ -115,9 +115,12 @@ impl Report {
     }
     /// The report block as typed notes: the host renders the console text
     /// `cargo fw w2 check` reads. A channel visit is two notes of one line.
-    pub fn notes<E>(&self, mut emit: impl FnMut(&Note<'static>) -> Result<(), E>) -> Result<(), E> {
+    pub async fn notes<E>(
+        &self,
+        mut emit: impl AsyncFnMut(&Note<'static>) -> Result<(), E>,
+    ) -> Result<(), E> {
         let gates = self.gates();
-        emit(&Note::w2_begin())?;
+        emit(&Note::w2_begin()).await?;
         emit(&Note::w2_config(
             u32::from(self.lab_channel),
             self.country,
@@ -126,7 +129,8 @@ impl Report {
             self.chip_mbm,
             self.target,
             self.stand,
-        ))?;
+        ))
+        .await?;
         for v in self.visits.iter().take(self.count) {
             emit(&Note::w2_channel_first(
                 u32::from(v.channel),
@@ -135,18 +139,21 @@ impl Report {
                 u32::from(v.sent),
                 v.success,
                 v.responses,
-            ))?;
+            ))
+            .await?;
             emit(&Note::w2_channel_last(
                 v.rate_kbps,
                 v.retune_us,
                 v.power,
                 i32::from(v.ceiling),
-            ))?;
+            ))
+            .await?;
         }
         emit(&Note::w2_basic(
             self.supported.get(..self.supported_len).unwrap_or(&[]),
             self.extended.get(..self.extended_len).unwrap_or(&[]),
-        ))?;
+        ))
+        .await?;
         emit(&Note::w2_unicast(
             self.unicast_rate,
             u32::from(self.unicast_sequence),
@@ -156,7 +163,8 @@ impl Report {
             u32::from(self.unicast_raw),
             self.unicast_power,
             i32::from(self.unicast_ceiling),
-        ))?;
+        ))
+        .await?;
         emit(&Note::w2_stats(
             self.timeouts,
             self.collisions,
@@ -164,15 +172,17 @@ impl Report {
             self.errors,
             self.irq_free as u32,
             self.error.unwrap_or("-"),
-        ))?;
+        ))
+        .await?;
         for (name, pass) in ["a", "b", "c", "d", "e"].into_iter().zip(gates) {
-            emit(&Note::w2_gate(name, pass))?;
+            emit(&Note::w2_gate(name, pass)).await?;
         }
-        emit(&Note::w2_end(self.count as u32 + 9))?;
+        emit(&Note::w2_end(self.count as u32 + 9)).await?;
         emit(&if gates.into_iter().all(|g| g) && self.error.is_none() {
             Note::w2_pass()
         } else {
             Note::w2_fail()
         })
+        .await
     }
 }

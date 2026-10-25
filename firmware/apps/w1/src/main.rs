@@ -30,13 +30,12 @@ mod irq;
 mod measure;
 mod own;
 mod report;
+mod usb;
 
 use core::convert::Infallible;
 
 use embassy_futures::select::{Either, select};
-use esp_hal::{
-    Blocking, interrupt::software::SoftwareInterrupt, usb::usb_serial_jtag::UsbSerialJtag,
-};
+use esp_hal::interrupt::software::SoftwareInterrupt;
 use oer_diagnostics::{DiagPath, DiagnosticPath, Note};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
@@ -115,6 +114,8 @@ oer_espressif_staged_runtime::interrupt_table! {
     radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority3, ProCpu, Hardware;
     /// The application executor's timer alarm.
     app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu, Hardware;
+    /// The console's USB Serial/JTAG interrupt; it raises the endpoint's signal.
+    console_usb: ConsoleUsb = USB_DEVICE => crate::usb::interrupt, Priority1, ProCpu, Hardware;
 }
 
 /// The radio executor between the radio interrupts and the application.
@@ -147,7 +148,7 @@ const RELEASE_STEP: Duration = Duration::from_millis(10);
 /// How long frames are counted after the release.
 const AFTER_RELEASE: Duration = Duration::from_millis(2_000);
 
-type Console = UsbSerialJtag<'static, Blocking>;
+use usb::Console;
 type Held = HeldRxFrame<'static, 'static, SLOTS, BUFFER, crate::irq::RadioExecutor>;
 type Leases = heapless::Vec<(Held, Fingerprint), SLOTS>;
 type ReleaseSlots = [Option<(Held, Fingerprint)>; SLOTS];
@@ -204,6 +205,8 @@ type Actor = RadioSystem<
 /// What the application task needs from the boot.
 struct Boot {
     console: Console,
+    /// The console's pads, held so that nothing switches them off.
+    _pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
     cell: oer_esp32s31_radio_client::MembershipCell<oer_esp32s31_radio_client::wifi::Wifi>,
     wifi: oer_esp32s31_hal::root::WifiPartition,
     rng: Rng,
@@ -229,15 +232,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let previous = panic::take_previous();
     let peripherals = esp_hal::init(esp_hal::Config::default());
     let (psram, adopted) = handoff.adopt(INTERRUPT_TABLE, board::BootstrapPsram(peripherals.PSRAM));
-    let mut console = UsbSerialJtag::new(peripherals.USB_DEVICE);
     if let Some(record) = previous {
-        let _ = oer_espressif_staged_runtime::diagnostics::emit_previous_panic(
-            |bytes| console.write(bytes),
-            &record,
-        );
+        usb::early_previous_panic(&record);
     }
     let Some(interrupts) = Interrupts::take() else {
-        note(&mut console, &Note::w1_fail("interrupt-table"));
+        usb::early(&Note::w1_fail("interrupt-table"));
         park()
     };
 
@@ -267,7 +266,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let (hardware, _esp_hal_clocks) = take_radio(singletons, &psram);
     let (domain, partitions) = hardware.split::<TimedEspHal, _>(ConcurrentPhy::new());
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
-        note(&mut console, &Note::w1_fail("claim"));
+        usb::early(&Note::w1_fail("claim"));
         park()
     };
     let ProtocolPartitions {
@@ -316,10 +315,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
                         ("NotRouted", source as u32, 0, 0)
                     }
                 };
-                note(
-                    &mut console,
-                    &Note::w1_doorbell_fail(name, source, first, second),
-                );
+                usb::early(&Note::w1_doorbell_fail(name, source, first, second));
             }
             park()
         }
@@ -331,26 +327,34 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     RadioTasks::p2_timers(&radio, timer_sender).expect("the P2 timers' first start");
     let executor = Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0));
     adopted.enable_interrupts();
-    let boot = Boot {
-        console,
-        cell: cells.wifi,
-        wifi,
-        rng: Rng::new(
-            oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
-            EmbassyClock,
-        ),
-        station,
-        access_point,
-        radio,
-        routes: ImageRoutes {
-            mac: interrupts.wifi_mac,
-            power: interrupts.wifi_pwr,
-        },
-        doorbell,
-        bound: BOUND.take().split(),
-        timer_lines,
+    let rng = Rng::new(
+        oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
+        EmbassyClock,
+    );
+    let routes = ImageRoutes {
+        mac: interrupts.wifi_mac,
+        power: interrupts.wifi_pwr,
     };
     executor.run(interrupts.wake, move |spawner| {
+        let (console, pads) = usb::open(
+            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
+                .expect("no early record holds the USB Serial/JTAG at the console handoff"),
+            interrupts.console_usb,
+        );
+        let boot = Boot {
+            console,
+            _pads: pads,
+            cell: cells.wifi,
+            wifi,
+            rng,
+            station,
+            access_point,
+            radio,
+            routes,
+            doorbell,
+            bound: BOUND.take().split(),
+            timer_lines,
+        };
         AppTasks::w1(spawner, boot).expect("the run's first start");
     })
 }
@@ -364,12 +368,12 @@ async fn radio_actor(actor: &'static mut Actor) {
 async fn w1(boot: Boot) {
     let mut console = boot.console;
     let Some(config) = CONFIG else {
-        let _ = console.write(b"OER-RESULT: fail w1 unconfigured\r\n");
+        usb::text(&mut console, b"OER-RESULT: fail w1 unconfigured\r\n").await;
         return;
     };
     // The build accepts only a unicast, nonzero BSSID.
     let Some(stand) = IndividualAddress::new(config.stand).and_then(Bssid::new) else {
-        let _ = console.write(b"OER-RESULT: fail w1 stand\r\n");
+        usb::text(&mut console, b"OER-RESULT: fail w1 stand\r\n").await;
         return;
     };
     let parts = Parts {
@@ -385,7 +389,7 @@ async fn w1(boot: Boot) {
         timer_lines: boot.timer_lines,
     };
     if let Err(reason) = run(&mut console, config, stand, parts).await {
-        note(&mut console, &Note::w1_fail(reason));
+        note(&mut console, &Note::w1_fail(reason)).await;
     }
 }
 
@@ -682,11 +686,11 @@ async fn run(
     let stopped = match started {
         Ok(stopped) => stopped,
         Err(RadioStartFailure::Join { failed, .. }) => {
-            note(console, &Note::w1_join_failed(failure_name(failed.cause)));
+            note(console, &Note::w1_join_failed(failure_name(failed.cause))).await;
             return Err("join");
         }
         Err(RadioStartFailure::Track { failed, .. }) => {
-            note(console, &Note::w1_track_failed(failure_name(failed.cause)));
+            note(console, &Note::w1_track_failed(failure_name(failed.cause))).await;
             return Err("track");
         }
     };
@@ -739,11 +743,11 @@ async fn run(
                     oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorageError::AddressWidth => "AddressWidth",
                     oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorageError::Count => "Count",
                 }),
-            );
+            ).await;
             return Err("bind");
         }
         Bound::Claimed => {
-            note(console, &Note::w1_bind_claimed());
+            note(console, &Note::w1_bind_claimed()).await;
             return Err("bind");
         }
     };
@@ -883,7 +887,8 @@ async fn run(
                     path.names().first().copied().unwrap_or(""),
                     micros,
                 ),
-            );
+            )
+            .await;
         }
         other => {
             let name = match other {
@@ -891,7 +896,7 @@ async fn run(
                 PhyPreparation::Woke { .. } => "Woke",
                 PhyPreparation::Registered { .. } => "Registered",
             };
-            note(console, &Note::w1_start_phy(start_report.epoch.get(), name));
+            note(console, &Note::w1_start_phy(start_report.epoch.get(), name)).await;
         }
     }
     note(
@@ -908,7 +913,8 @@ async fn run(
             },
             MAC_STATION_INTERRUPT_MASK.bits(),
         ),
-    );
+    )
+    .await;
     note(
         console,
         &Note::w1_irq(
@@ -918,9 +924,10 @@ async fn run(
             rx.spurious_power_irqs,
             irq::ROUTE_ERRORS.load(core::sync::atomic::Ordering::Relaxed),
         ),
-    );
+    )
+    .await;
     if !heard {
-        note(console, &Note::w1_no_frame());
+        note(console, &Note::w1_no_frame()).await;
     }
     if exit.cause != oer_esp32s31_ieee80211_driver::rx::control::WifiRxCause::StopRequested
         || exit.end != oer_esp32s31_ieee80211_driver::rx::control::WifiRxEnd::Halted
@@ -928,7 +935,8 @@ async fn run(
         note(
             console,
             &Note::w1_exit_unexpected(report::cause(exit.cause), report::end_name(exit.end)),
-        );
+        )
+        .await;
     }
     let run = report::Run {
         channel: config.channel,
@@ -953,9 +961,10 @@ async fn run(
         irq_free,
     };
     let _ = report::print(
-        |note| oer_diagnostics::emit_note(note, |bytes| console.write(bytes)),
+        async |note| oer_espressif_usb_serial_jtag::write_note(console, note).await,
         &run,
-    );
+    )
+    .await;
     // The owners stay held: nothing is released or reset.
     let _owner = owner;
     core::future::pending::<()>().await;
@@ -989,8 +998,8 @@ impl WifiMacPlatform for Platform {
 }
 
 /// Writes `note` to the console as a typed diagnostic line.
-fn note(console: &mut Console, note: &Note<'_>) {
-    let _ = oer_diagnostics::emit_note(note, |bytes| console.write(bytes));
+async fn note(console: &mut Console, note: &Note<'_>) {
+    let _ = oer_espressif_usb_serial_jtag::write_note(console, note).await;
 }
 
 fn failure_name(cause: Failure) -> &'static str {

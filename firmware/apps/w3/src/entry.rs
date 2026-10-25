@@ -3,9 +3,10 @@ mod irq;
 mod network;
 mod radio;
 mod station;
+mod usb;
 use oer_firmware_apps_w3::report;
 
-use esp_hal::{interrupt::software::SoftwareInterrupt, usb::usb_serial_jtag::UsbSerialJtag};
+use esp_hal::interrupt::software::SoftwareInterrupt;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::platform::{FactoryIdentity, Interface};
 use oer_esp32s31_board as board;
@@ -38,10 +39,10 @@ oer_espressif_staged_runtime::interrupt_table! {
     wifi_pwr: WifiPwrToken = MODEM_WIFI_PWR => crate::irq::wifi_pwr, Priority3, ProCpu, Hardware;
     radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority3, ProCpu, Hardware;
     app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu, Hardware;
+    console_usb: ConsoleUsb = USB_DEVICE => crate::usb::interrupt, Priority1, ProCpu, Hardware;
 }
 
-/// The application's console.
-type Console = UsbSerialJtag<'static, esp_hal::Blocking>;
+use usb::Console;
 
 oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2).
@@ -54,7 +55,7 @@ oer_espressif_executor::tasks! {
 oer_espressif_executor::tasks! {
     /// The application executor's tasks.
     AppTasks: Executor<0> {
-        reporting(console: Console) = reporting;
+        reporting(console: Console, pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads) = reporting;
         station_task(
             channel: radio::FrontendChannel,
             config: W3Config,
@@ -82,15 +83,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let previous = oer_espressif_staged_runtime::panic::take_previous();
     let peripherals = esp_hal::init(esp_hal::Config::default());
     let (psram, adopted) = handoff.adopt(INTERRUPT_TABLE, board::BootstrapPsram(peripherals.PSRAM));
-    let mut console = UsbSerialJtag::new(peripherals.USB_DEVICE);
     if let Some(record) = previous {
-        let _ = oer_espressif_staged_runtime::diagnostics::emit_previous_panic(
-            |bytes| console.write(bytes),
-            &record,
-        );
+        usb::early_previous_panic(&record);
     }
     let Some(config) = CONFIG else {
-        let _ = console.write(b"OER-RESULT: fail w3 unconfigured\r\n");
+        usb::early_text(b"OER-RESULT: fail w3 unconfigured\r\n");
         park()
     };
     let Some(interrupts) = Interrupts::take() else {
@@ -167,7 +164,12 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let executor = Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0));
     adopted.enable_interrupts();
     executor.run(interrupts.wake, move |spawner| {
-        AppTasks::reporting(spawner, console).expect("the report's first start");
+        let (console, pads) = usb::open(
+            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
+                .expect("no early record holds the USB Serial/JTAG at the console handoff"),
+            interrupts.console_usb,
+        );
+        AppTasks::reporting(spawner, console, pads).expect("the report's first start");
         AppTasks::station_task(spawner, frontend_channel, config, station, seed)
             .expect("station P1 task");
     })
@@ -176,7 +178,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
 async fn radio_actor(actor: &'static mut Actor) {
     match actor.run().await {}
 }
-async fn reporting(mut console: Console) {
+async fn reporting(mut console: Console, _pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads) {
     let result = loop {
         if let Some(report) = REPORT.get() {
             break report;
@@ -186,7 +188,9 @@ async fn reporting(mut console: Console) {
             .wait_for(oer_time::Duration::from_millis(10))
             .await;
     };
-    let _ = result.notes(|note| oer_diagnostics::emit_note(note, |bytes| console.write(bytes)));
+    let _ = result
+        .notes(async |note| oer_espressif_usb_serial_jtag::write_note(&mut console, note).await)
+        .await;
 }
 fn park() -> ! {
     oer_espressif_staged_runtime::idle()

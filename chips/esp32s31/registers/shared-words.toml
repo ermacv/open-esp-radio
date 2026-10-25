@@ -340,21 +340,21 @@ address = 0x20391010
 radio = "USB_SERIAL_JTAG.INT_ENA (typed block)"
 esp_hal = "USB_DEVICE.int_ena in the driver's listen, unlisten and future constructors (usb/usb_serial_jtag.rs)"
 coordination = "disjoint-lifecycle"
-reason = "esp-hal 1f646c5 stores it only in its USB Serial/JTAG driver (usb/usb_serial_jtag.rs), whose every constructor takes the USB_DEVICE singleton. In the HIL images take_usb_serial_jtag consumes USB_DEVICE before the console's typed owner exists, so no esp-hal driver of the block is ever made; the applications that still run esp-hal's blocking console make no typed owner, as none calls the HAL's early writer, and the bootstrap's early writer runs in an image without esp-hal's driver."
+reason = "esp-hal 1f646c5 stores it only in its USB Serial/JTAG driver (usb/usb_serial_jtag.rs), whose every constructor takes the USB_DEVICE singleton. In every image that opens the console's driver, take_usb_serial_jtag consumes USB_DEVICE before the console's typed owner exists; boot-smoke and radio-root write through the early writer alone and never make an esp-hal driver of the block. So no esp-hal driver of the block is ever made, and the bootstrap's early writer runs in an image without esp-hal's driver."
 
 [[word]]
 address = 0x20391014
 radio = "USB_SERIAL_JTAG.INT_CLR (typed block)"
 esp_hal = "USB_DEVICE.int_clr in the driver's interrupt service and disable_*_interrupts (usb/usb_serial_jtag.rs)"
 coordination = "disjoint-lifecycle"
-reason = "esp-hal 1f646c5 stores it only in its USB Serial/JTAG driver (usb/usb_serial_jtag.rs), whose every constructor takes the USB_DEVICE singleton. In the HIL images take_usb_serial_jtag consumes USB_DEVICE before the console's typed owner exists, so no esp-hal driver of the block is ever made; the applications that still run esp-hal's blocking console make no typed owner, as none calls the HAL's early writer, and the bootstrap's early writer runs in an image without esp-hal's driver."
+reason = "esp-hal 1f646c5 stores it only in its USB Serial/JTAG driver (usb/usb_serial_jtag.rs), whose every constructor takes the USB_DEVICE singleton. In every image that opens the console's driver, take_usb_serial_jtag consumes USB_DEVICE before the console's typed owner exists; boot-smoke and radio-root write through the early writer alone and never make an esp-hal driver of the block. So no esp-hal driver of the block is ever made, and the bootstrap's early writer runs in an image without esp-hal's driver."
 
 [[word]]
 address = 0x20391018
 radio = "USB_SERIAL_JTAG_PADS.CONF0 (typed block)"
 esp_hal = "USB_DEVICE.conf0 in UsbPadControl::disconnect (usb/usb_serial_jtag.rs) and AnyPin::disable_usb_pads (gpio/mod.rs)"
 coordination = "disjoint-lifecycle"
-reason = "esp-hal 1f646c5 stores it only in its USB Serial/JTAG driver (usb/usb_serial_jtag.rs), whose every constructor takes the USB_DEVICE singleton. In the HIL images take_usb_serial_jtag consumes USB_DEVICE before the console's typed owner exists, so no esp-hal driver of the block is ever made; the applications that still run esp-hal's blocking console make no typed owner, as none calls the HAL's early writer, and the bootstrap's early writer runs in an image without esp-hal's driver. esp-hal's GPIO layer also clears the pad enable and pulls in AnyPin::disable_usb_pads, but only for the USB D- and D+ pins when one is set up as a GPIO or routed to a signal; no image sets those pins up, as they carry the console."
+reason = "esp-hal 1f646c5 stores it only in its USB Serial/JTAG driver (usb/usb_serial_jtag.rs), whose every constructor takes the USB_DEVICE singleton. In every image that opens the console's driver, take_usb_serial_jtag consumes USB_DEVICE before the console's typed owner exists; boot-smoke and radio-root write through the early writer alone and never make an esp-hal driver of the block. So no esp-hal driver of the block is ever made, and the bootstrap's early writer runs in an image without esp-hal's driver. esp-hal's GPIO layer also clears the pad enable and pulls in AnyPin::disable_usb_pads, but only for the USB D- and D+ pins when one is set up as a GPIO or routed to a signal; no image sets those pins up, as they carry the console."
 
 [[word]]
 address = 0x10800000

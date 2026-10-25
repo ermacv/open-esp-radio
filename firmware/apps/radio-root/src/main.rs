@@ -6,9 +6,9 @@
 //! clock once through the radio's provider. The host renders its typed
 //! verdict as `OER-RESULT: pass radio-root`. It powers no RF, PHY or MAC.
 
-use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::power::{PlatformClock, PlatformClockProvider as _};
+use oer_esp32s31_hal::usb_serial_jtag;
 use oer_espressif_esp_hal_radio::{RadioSingletons, diagnostics::RadioRoot, take_radio};
 use oer_espressif_staged_runtime::diagnostics::{self, Console};
 use oer_espressif_staged_runtime::panic;
@@ -23,8 +23,15 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let peripherals = esp_hal::init(esp_hal::Config::default());
     let (psram, _adopted) =
         handoff.adopt(INTERRUPT_TABLE, board::BootstrapPsram(peripherals.PSRAM));
-    let mut console = UsbSerialJtag::new(peripherals.USB_DEVICE);
-    let mut diagnostics = Console::new(|bytes| console.write(bytes));
+    // No executor exists: the early writer waits for room within its budget
+    // and counts what it drops.
+    let mut diagnostics = Console::new(|bytes| {
+        if usb_serial_jtag::early_text(bytes) {
+            Ok(())
+        } else {
+            Err(())
+        }
+    });
     if let Some(record) = previous {
         let _ = diagnostics::previous_panic(&mut diagnostics, &record);
     }

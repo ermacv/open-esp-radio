@@ -2,7 +2,6 @@
 use super::*;
 use core::future::{pending, poll_fn};
 use embassy_futures::select::{Either, select};
-use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
 use oer_bluetooth_le_port::TxPower;
 use oer_bluetooth_le_radio::LeBand;
 use oer_esp32s31_bluetooth_driver::{
@@ -67,6 +66,7 @@ oer_espressif_executor::tasks! {
     pub(crate) AppTasks: Executor<0> {
         serve(
             console: host::Console,
+            pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
             rng: host::Rng,
             channel: bridge::FrontendChannel,
             power: TxPower,
@@ -150,12 +150,11 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let previous = oer_espressif_staged_runtime::panic::take_previous();
     let p = esp_hal::init(esp_hal::Config::default());
     let (psram, adopted) = handoff.adopt(INTERRUPT_TABLE, board::BootstrapPsram(p.PSRAM));
-    let mut console = UsbSerialJtag::new(p.USB_DEVICE);
     if previous.is_some() {
-        let _ = console.write(b"OER-B0-BRINGUP: previous panic\r\n");
+        usb::early_text(b"OER-B0-BRINGUP: previous panic\r\n");
     }
     let Some(profile) = PROFILE else {
-        let _ = console.write(b"OER-B0-BRINGUP: unconfigured\r\n");
+        usb::early_text(b"OER-B0-BRINGUP: unconfigured\r\n");
         oer_espressif_staged_runtime::idle();
     };
     let tokens = Interrupts::take().expect("one image interrupt table");
@@ -234,7 +233,13 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             oer_espressif_esp_hal_soc::handoff::take_entropy(p.RNG, p.LP_PERI),
             EmbassyClock,
         );
-        AppTasks::serve(spawner, console, rng, bridge::frontend(), power).expect("one HCI task");
+        let (console, pads) = usb::open(
+            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(p.USB_DEVICE)
+                .expect("no early record holds the USB Serial/JTAG at the console handoff"),
+            tokens.console_usb,
+        );
+        AppTasks::serve(spawner, console, pads, rng, bridge::frontend(), power)
+            .expect("one HCI task");
     })
 }
 async fn hold<T>(owner: &mut T) -> ! {

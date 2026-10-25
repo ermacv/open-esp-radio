@@ -25,10 +25,12 @@ extern crate std;
 
 mod endpoint;
 mod interrupt;
+mod lines;
 pub mod ownership;
 
 pub use endpoint::{Endpoint, Error};
 pub use interrupt::{AlreadyInstalled, Interrupt};
+pub use lines::{NoteError, write_note};
 
 /// The bytes of one full-speed bulk packet: the size of the IN FIFO.
 pub const PACKET: usize = 64;

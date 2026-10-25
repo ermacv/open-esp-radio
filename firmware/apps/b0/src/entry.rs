@@ -14,6 +14,7 @@ mod bridge;
 mod host;
 mod irq;
 mod radio;
+mod usb;
 
 oer_espressif_staged_runtime::interrupt_table! {
     wake: WakeToken = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu, Hardware;
@@ -24,6 +25,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     primary: PrimaryToken = MODEM_BT_MAC => irq::primary, Priority3, ProCpu, Hardware;
     nrt: NrtToken = MODEM_BT_MAC_INT1 => irq::nrt, Priority3, ProCpu, Hardware;
     timer: TimerToken = MODEM_LP_TIMER => irq::timer, Priority3, ProCpu, Hardware;
+    console_usb: ConsoleUsb = USB_DEVICE => usb::interrupt, Priority1, ProCpu, Hardware;
 }
 type X = InterruptExecutor<2>;
 const LEVELS: LevelOrder<PrimaryToken, RadioToken, WakeToken> = LevelOrder::new();

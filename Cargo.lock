@@ -3091,8 +3091,8 @@ name = "oer-firmware-apps-b0"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
+ "embedded-io-async 0.7.0",
  "esp-hal",
- "nb 1.1.0",
  "oer-bluetooth-hci",
  "oer-bluetooth-le-controller",
  "oer-bluetooth-le-port",
@@ -3109,6 +3109,7 @@ dependencies = [
  "oer-espressif-esp-hal-soc",
  "oer-espressif-executor",
  "oer-espressif-staged-runtime",
+ "oer-espressif-usb-serial-jtag",
  "oer-interrupt-table",
  "oer-memory",
  "oer-radio-port",
@@ -3124,6 +3125,7 @@ version = "0.1.0"
 dependencies = [
  "esp-hal",
  "oer-esp32s31-board",
+ "oer-esp32s31-hal",
  "oer-esp32s31-layout",
  "oer-espressif-staged-runtime",
 ]
@@ -3159,6 +3161,7 @@ dependencies = [
  "oer-espressif-esp-hal-soc",
  "oer-espressif-executor",
  "oer-espressif-staged-runtime",
+ "oer-espressif-usb-serial-jtag",
  "oer-ieee80211-port",
  "oer-ieee80211-softmac",
  "oer-ieee80211-wire",
@@ -3173,6 +3176,7 @@ version = "0.1.0"
 dependencies = [
  "crc",
  "embassy-futures",
+ "embedded-io-async 0.7.0",
  "esp-hal",
  "heapless 0.9.3",
  "oer-diagnostics",
@@ -3189,6 +3193,7 @@ dependencies = [
  "oer-espressif-esp-hal-soc",
  "oer-espressif-executor",
  "oer-espressif-staged-runtime",
+ "oer-espressif-usb-serial-jtag",
  "oer-ieee80211-port",
  "oer-ieee80211-runtime",
  "oer-ieee80211-softmac",
@@ -3225,6 +3230,7 @@ dependencies = [
  "oer-espressif-executor",
  "oer-espressif-ieee80211-policy",
  "oer-espressif-staged-runtime",
+ "oer-espressif-usb-serial-jtag",
  "oer-ieee80211-port",
  "oer-ieee80211-runtime",
  "oer-ieee80211-softmac",
@@ -3264,6 +3270,7 @@ dependencies = [
  "oer-espressif-executor",
  "oer-espressif-ieee80211-policy",
  "oer-espressif-staged-runtime",
+ "oer-espressif-usb-serial-jtag",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-port",
  "oer-ieee80211-runtime",

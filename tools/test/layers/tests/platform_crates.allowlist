@@ -28,12 +28,11 @@ chips/espressif/staged-runtime/Cargo.toml 1
 chips/espressif/staged-runtime/src/panic.rs 1
 firmware/apps/b0/Cargo.toml 1
 firmware/apps/b0/src/entry.rs 1
-firmware/apps/b0/src/host.rs 2
-firmware/apps/b0/src/radio.rs 3
+firmware/apps/b0/src/radio.rs 2
 firmware/apps/boot-smoke/Cargo.toml 1
-firmware/apps/boot-smoke/src/main.rs 3
+firmware/apps/boot-smoke/src/main.rs 2
 firmware/apps/radio-root/Cargo.toml 1
-firmware/apps/radio-root/src/main.rs 3
+firmware/apps/radio-root/src/main.rs 2
 firmware/apps/w0/Cargo.toml 1
 firmware/apps/w0/src/main.rs 3
 firmware/apps/w1/Cargo.toml 1
@@ -41,9 +40,9 @@ firmware/apps/w1/src/irq.rs 1
 firmware/apps/w1/src/main.rs 4
 firmware/apps/w2/Cargo.toml 1
 firmware/apps/w2/src/irq.rs 1
-firmware/apps/w2/src/main.rs 4
+firmware/apps/w2/src/main.rs 3
 firmware/apps/w3/Cargo.toml 1
-firmware/apps/w3/src/entry.rs 4
+firmware/apps/w3/src/entry.rs 3
 firmware/apps/w3/src/irq.rs 1
 firmware/bootstrap/esp32c5/Cargo.toml 2
 firmware/bootstrap/esp32c5/src/main.rs 4
