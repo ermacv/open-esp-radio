@@ -12,7 +12,6 @@ description = "Stage-two entry, relocation, traps, per-hart interrupt stacks, cr
 # from its facts (its harts and CLIC lines); the chip's HAL holds the fatal
 # path's proof, the stop of the other hart and the software reset.
 esp32s31 = ["dep:oer-esp32s31-hal"]
-esp32c5 = ["dep:oer-esp32c5-hal"]
 ## Hart 1 runs code. No image enables it, and the crate refuses it: the
 ## runtime's critical-section masks only the current hart, so a second
 ## running hart needs a cross-hart lock without spinning first.
@@ -29,7 +28,6 @@ oer-riscv = { path = "../../../portable/riscv" }
 oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 
 oer-esp32s31-hal = { path = "../../esp32s31/hal", optional = true }
-oer-esp32c5-hal = { path = "../../esp32c5/hal", optional = true }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 critical-section = { workspace = true, features = ["restore-state-u32"] }

@@ -1324,20 +1324,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "esp-backtrace"
-version = "0.20.0"
-source = "git+https://github.com/ermacv/esp-hal?rev=1f646c5af4f4ca2774f493783581237fea2379dc#1f646c5af4f4ca2774f493783581237fea2379dc"
-dependencies = [
- "document-features",
- "esp-config",
- "esp-metadata-generated",
- "esp-println",
- "heapless 0.9.3",
- "riscv",
- "xtensa-lx",
-]
-
-[[package]]
 name = "esp-bootloader-esp-idf"
 version = "0.6.0"
 source = "git+https://github.com/ermacv/esp-hal?rev=1f646c5af4f4ca2774f493783581237fea2379dc#1f646c5af4f4ca2774f493783581237fea2379dc"
@@ -1433,7 +1419,6 @@ version = "0.23.0"
 source = "git+https://github.com/ermacv/esp-hal?rev=1f646c5af4f4ca2774f493783581237fea2379dc#1f646c5af4f4ca2774f493783581237fea2379dc"
 dependencies = [
  "document-features",
- "object 0.37.3",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
@@ -1465,18 +1450,6 @@ version = "0.6.0"
 source = "git+https://github.com/ermacv/esp-hal?rev=1f646c5af4f4ca2774f493783581237fea2379dc#1f646c5af4f4ca2774f493783581237fea2379dc"
 
 [[package]]
-name = "esp-println"
-version = "0.18.0"
-source = "git+https://github.com/ermacv/esp-hal?rev=1f646c5af4f4ca2774f493783581237fea2379dc#1f646c5af4f4ca2774f493783581237fea2379dc"
-dependencies = [
- "document-features",
- "esp-metadata-generated",
- "esp-sync",
- "log",
- "portable-atomic",
-]
-
-[[package]]
 name = "esp-riscv-rt"
 version = "0.15.0"
 source = "git+https://github.com/ermacv/esp-hal?rev=1f646c5af4f4ca2774f493783581237fea2379dc#1f646c5af4f4ca2774f493783581237fea2379dc"
@@ -1493,7 +1466,6 @@ source = "git+https://github.com/ermacv/esp-hal?rev=1f646c5af4f4ca2774f493783581
 dependencies = [
  "document-features",
  "esp-metadata-generated",
- "esp32c5",
  "esp32s31",
 ]
 
@@ -1508,7 +1480,6 @@ dependencies = [
  "esp-metadata-generated",
  "esp-rom-sys",
  "esp-sync",
- "esp32c5",
  "esp32s31",
 ]
 
@@ -1641,7 +1612,7 @@ dependencies = [
  "md-5 0.11.0",
  "miette",
  "nix 0.31.3",
- "object 0.39.1",
+ "object",
  "reed-solomon",
  "regex",
  "serde",
@@ -2375,15 +2346,6 @@ dependencies = [
 
 [[package]]
 name = "object"
-version = "0.37.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "object"
 version = "0.39.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e5a6c098c7a3b6547378093f5cc30bc54fd361ce711e05293a5cc589562739b"
@@ -2410,7 +2372,7 @@ dependencies = [
 name = "oer-analysis-blobray-application"
 version = "0.1.0"
 dependencies = [
- "object 0.39.1",
+ "object",
  "oer-analysis-blobray-analysis",
  "oer-analysis-blobray-artifacts",
  "oer-analysis-blobray-domain",
@@ -2431,7 +2393,7 @@ dependencies = [
 name = "oer-analysis-blobray-artifacts"
 version = "0.1.0"
 dependencies = [
- "object 0.39.1",
+ "object",
  "oer-analysis-blobray-domain",
  "oer-analysis-elf",
  "oer-analysis-riscv-model",
@@ -2451,7 +2413,7 @@ dependencies = [
 name = "oer-analysis-blobray-linker"
 version = "0.1.0"
 dependencies = [
- "object 0.39.1",
+ "object",
  "oer-analysis-blobray-application",
  "oer-analysis-blobray-domain",
  "oer-analysis-riscv-model",
@@ -2485,7 +2447,7 @@ version = "0.1.0"
 dependencies = [
  "addr2line",
  "gimli 0.34.0",
- "object 0.39.1",
+ "object",
 ]
 
 [[package]]
@@ -2528,7 +2490,7 @@ dependencies = [
 name = "oer-analysis-riscv-program"
 version = "0.1.0"
 dependencies = [
- "object 0.39.1",
+ "object",
  "oer-analysis-elf",
  "oer-analysis-riscv-model",
 ]
@@ -2538,7 +2500,7 @@ name = "oer-analysis-riscv-stack"
 version = "0.1.0"
 dependencies = [
  "clap",
- "object 0.39.1",
+ "object",
  "oer-analysis-elf",
  "oer-analysis-riscv-analysis",
  "oer-analysis-riscv-decode",
@@ -2623,7 +2585,6 @@ dependencies = [
 name = "oer-chip-profile"
 version = "0.1.0"
 dependencies = [
- "oer-esp32c5-layout",
  "oer-esp32s31-knowledge",
  "oer-esp32s31-layout",
  "oer-espressif-facts",
@@ -2668,64 +2629,6 @@ dependencies = [
  "critical-section",
  "embassy-time",
  "oer-time",
-]
-
-[[package]]
-name = "oer-esp32c5-board"
-version = "0.1.0"
-dependencies = [
- "esp-hal",
- "oer-esp32c5-layout",
- "oer-espressif-staged-layout",
-]
-
-[[package]]
-name = "oer-esp32c5-esp-hal-soc"
-version = "0.1.0"
-dependencies = [
- "esp-hal",
- "oer-esp32c5-hal",
-]
-
-[[package]]
-name = "oer-esp32c5-hal"
-version = "0.1.0"
-dependencies = [
- "oer-diagnostics",
- "oer-esp32c5-pac",
- "oer-espressif-analog",
- "oer-espressif-coex",
- "oer-espressif-ieee802154-engine",
- "oer-espressif-modem-clock",
- "oer-espressif-usb-serial-jtag",
- "oer-espressif-watchdog",
- "oer-interrupt-table",
- "oer-memory",
- "oer-mmio",
- "oer-radio-regulatory",
- "oer-test-ui-cases",
- "oer-time",
-]
-
-[[package]]
-name = "oer-esp32c5-layout"
-version = "0.1.0"
-dependencies = [
- "oer-espressif-facts",
- "oer-espressif-staged-layout",
-]
-
-[[package]]
-name = "oer-esp32c5-pac"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "oer-espressif-analog",
- "oer-espressif-ieee80211-pac",
- "oer-espressif-ieee802154-mac-values",
- "oer-espressif-watchdog",
- "oer-interrupt-table",
- "oer-mmio",
 ]
 
 [[package]]
@@ -2991,7 +2894,6 @@ dependencies = [
  "embassy-time-driver",
  "esp-hal",
  "oer-cooperate",
- "oer-esp32c5-hal",
  "oer-esp32s31-hal",
  "oer-interrupt-table",
  "oer-memory",
@@ -3058,7 +2960,6 @@ name = "oer-espressif-staged-bootstrap"
 version = "0.1.0"
 dependencies = [
  "esp-hal",
- "oer-esp32c5-hal",
  "oer-esp32s31-hal",
  "oer-espressif-staged-layout",
  "oer-riscv",
@@ -3074,7 +2975,6 @@ version = "0.1.0"
 dependencies = [
  "critical-section",
  "oer-diagnostics",
- "oer-esp32c5-hal",
  "oer-esp32s31-hal",
  "oer-espressif-facts",
  "oer-espressif-staged-layout",
@@ -3306,17 +3206,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-firmware-bootstrap-esp32c5"
-version = "0.1.0"
-dependencies = [
- "esp-bootloader-esp-idf",
- "esp-hal",
- "oer-esp32c5-board",
- "oer-esp32c5-layout",
- "oer-espressif-staged-bootstrap",
-]
-
-[[package]]
 name = "oer-firmware-bootstrap-esp32s31"
 version = "0.1.0"
 dependencies = [
@@ -3326,31 +3215,6 @@ dependencies = [
  "oer-esp32s31-layout",
  "oer-espressif-esp-hal-soc",
  "oer-espressif-staged-bootstrap",
- "static_cell",
-]
-
-[[package]]
-name = "oer-firmware-hil-esp32c5"
-version = "0.1.0"
-dependencies = [
- "critical-section",
- "embassy-futures",
- "embassy-sync 0.8.0",
- "embassy-time",
- "embedded-io-async 0.7.0",
- "esp-hal",
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32c5-board",
- "oer-esp32c5-esp-hal-soc",
- "oer-esp32c5-hal",
- "oer-esp32c5-layout",
- "oer-espressif-executor",
- "oer-espressif-staged-runtime",
- "oer-espressif-usb-serial-jtag",
- "oer-hil-agent",
- "oer-hil-protocol",
- "oer-interrupt-table",
  "static_cell",
 ]
 
@@ -3478,36 +3342,6 @@ dependencies = [
  "oer-registers-model",
  "oer-time",
  "static_cell",
-]
-
-[[package]]
-name = "oer-firmware-probes-esp32c5-radio"
-version = "0.1.0"
-dependencies = [
- "esp-hal",
- "oer-esp32c5-hal",
- "oer-esp32c5-layout",
- "oer-esp32c5-pac",
- "oer-espressif-analog",
- "oer-espressif-staged-runtime",
- "oer-probe-codegen",
- "oer-probe-macros",
-]
-
-[[package]]
-name = "oer-firmware-probes-esp32c5-register"
-version = "0.1.0"
-dependencies = [
- "esp-backtrace",
- "esp-bootloader-esp-idf",
- "esp-hal",
- "esp-println",
- "esp32c5",
- "oer-esp32c5-esp-hal-soc",
- "oer-esp32c5-hal",
- "oer-esp32c5-pac",
- "oer-espressif-analog",
- "oer-mmio",
 ]
 
 [[package]]
@@ -4042,7 +3876,7 @@ version = "0.1.0"
 dependencies = [
  "espflash",
  "md-5 0.11.0",
- "object 0.39.1",
+ "object",
  "oer-analysis-elf",
  "oer-chip-profile",
  "oer-espressif-facts",
@@ -4063,7 +3897,7 @@ dependencies = [
 name = "oer-image-checks"
 version = "0.1.0"
 dependencies = [
- "object 0.39.1",
+ "object",
  "oer-analysis-elf",
  "oer-analysis-riscv-decode",
  "oer-analysis-riscv-lift",
@@ -4252,7 +4086,7 @@ dependencies = [
 name = "oer-probe-codegen"
 version = "0.1.0"
 dependencies = [
- "object 0.39.1",
+ "object",
  "oer-analysis-elf",
  "oer-os-toolchain",
  "proc-macro2",
@@ -4434,7 +4268,7 @@ name = "oer-tool-analysis-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
- "object 0.39.1",
+ "object",
  "oer-analysis-blobray-application",
  "oer-analysis-blobray-domain",
  "oer-analysis-blobray-riscv",
@@ -4647,7 +4481,7 @@ name = "oer-tool-vendor-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
- "object 0.39.1",
+ "object",
  "oer-analysis-blobray-application",
  "oer-analysis-blobray-domain",
  "oer-analysis-elf",
@@ -4678,14 +4512,6 @@ dependencies = [
  "clap",
  "oer-os-process",
  "oer-vendor-ieee802154-esp32s31",
-]
-
-[[package]]
-name = "oer-tool-vendor-scenarios-esp32c5-cli"
-version = "0.1.0"
-dependencies = [
- "oer-vendor-scenario-report",
- "oer-vendor-scenarios-esp32c5",
 ]
 
 [[package]]
@@ -4722,7 +4548,7 @@ name = "oer-vendor-lineage"
 version = "0.1.0"
 dependencies = [
  "hex",
- "object 0.39.1",
+ "object",
  "oer-analysis-elf",
  "oer-vendor-provenance",
  "serde",
@@ -4820,7 +4646,7 @@ name = "oer-vendor-scenario-report"
 version = "0.1.0"
 dependencies = [
  "clap",
- "object 0.39.1",
+ "object",
  "oer-analysis-blobray-application",
  "oer-analysis-blobray-domain",
  "oer-analysis-elf",
@@ -4829,16 +4655,6 @@ dependencies = [
  "oer-os-process",
  "oer-vendor-scenario",
  "serde_json",
-]
-
-[[package]]
-name = "oer-vendor-scenarios-esp32c5"
-version = "0.1.0"
-dependencies = [
- "clap",
- "oer-analysis-blobray-domain",
- "oer-os-process",
- "oer-vendor-scenario",
 ]
 
 [[package]]

@@ -1147,10 +1147,9 @@ fn a_summary_the_image_does_not_reach_is_unused() {
 
 #[test]
 fn the_platform_rom_summaries_parse() {
-    let sources = [
-        include_str!("../../../../chips/esp32c5/platform/rom-functions.toml"),
-        include_str!("../../../../chips/esp32s31/platform/rom-functions.toml"),
-    ];
+    let sources = [include_str!(
+        "../../../../chips/esp32s31/platform/rom-functions.toml"
+    )];
     assert!(!sources.is_empty());
     for text in sources {
         assert!(

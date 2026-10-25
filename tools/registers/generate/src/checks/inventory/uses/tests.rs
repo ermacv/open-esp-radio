@@ -432,9 +432,7 @@ fn diagnostics_require_evidence_from_the_selected_chip() {
     let declared = declaration(None, 0);
     for (chip, name, expected_use) in [
         ("esp32s31", "phy_log", false),
-        ("esp32c5", "phy_log", true),
         ("esp32s31", "wifi_log", false),
-        ("esp32c5", "wifi_log", false),
     ] {
         let records = [read(
             vec![call(1, Some(name), ReadPrecision::Exact)],

@@ -595,20 +595,12 @@ pub(crate) mod tests {
 
     #[test]
     fn the_tracked_chips_resolve_from_their_boards() {
-        for (id, board, module, revision) in [
-            (
-                "esp32s31",
-                "ESP32-S31-Function-CoreBoard-1",
-                "ESP32-S31-WROOM-3-N16R16",
-                "rev0",
-            ),
-            (
-                "esp32c5",
-                "ESP32-C5 devkit",
-                "ESP32-C5-WROOM-1-N16R8",
-                "rev100",
-            ),
-        ] {
+        for (id, board, module, revision) in [(
+            "esp32s31",
+            "ESP32-S31-Function-CoreBoard-1",
+            "ESP32-S31-WROOM-3-N16R16",
+            "rev0",
+        )] {
             let layers = load(&mut tracked::Tracked, id).expect("the layers resolve");
             assert_eq!(
                 layers.files.len(),
@@ -642,24 +634,14 @@ pub(crate) mod tests {
     /// internal SRAM and the boot chain's reserve, clear of the ROM's data.
     #[test]
     fn the_application_sram_is_the_internal_sram_below_the_reserves() {
-        for (id, sram, data) in [
-            (
-                "esp32s31",
-                Region {
-                    origin: 0x2f00_0000,
-                    length: 0x0007_afc0,
-                },
-                0x2f07_e600,
-            ),
-            (
-                "esp32c5",
-                Region {
-                    origin: 0x4080_0000,
-                    length: 0x0004_e5a0,
-                },
-                0x4085_e5a0,
-            ),
-        ] {
+        for (id, sram, data) in [(
+            "esp32s31",
+            Region {
+                origin: 0x2f00_0000,
+                length: 0x0007_afc0,
+            },
+            0x2f07_e600,
+        )] {
             let facts = tracked(id);
             let memory = facts.memory.as_ref().expect("memory");
             assert_eq!(memory.sram, sram, "{id}");
@@ -681,10 +663,10 @@ pub(crate) mod tests {
 
     #[test]
     fn a_rom_range_kept_while_an_image_runs_is_refused_in_the_application_sram() {
-        let c5 = tracked("esp32c5");
-        let memory = c5.memory.clone().expect("memory");
-        let chain = c5.boot_chain.clone().expect("boot chain");
-        let rom = c5.rom.clone().expect("rom");
+        let s31 = tracked("esp32s31");
+        let memory = s31.memory.clone().expect("memory");
+        let chain = s31.boot_chain.clone().expect("boot chain");
+        let rom = s31.rom.clone().expect("rom");
         assert!(memory.validate(Some(&chain), Some(&rom)).is_ok());
 
         let mut overlapping = rom.clone();
@@ -779,8 +761,8 @@ pub(crate) mod tests {
 
     #[test]
     fn the_checks_read_a_region_s_attributes() {
-        let c5 = tracked("esp32c5");
-        let memory = c5.memory.as_ref().expect("memory");
+        let s31 = tracked("esp32s31");
+        let memory = s31.memory.as_ref().expect("memory");
         let cached: Vec<_> = memory
             .regions()
             .into_iter()
@@ -833,21 +815,12 @@ pub(crate) mod tests {
                 .map(|flash| flash.application_encoding.size_mib),
             Some(16)
         );
-        let c5 = tracked("esp32c5");
-        assert_eq!(
-            c5.memory.and_then(|memory| memory.psram),
-            Some(Region {
-                origin: 0x4300_0000,
-                length: 8 << 20
-            })
-        );
     }
 
     #[test]
     fn a_per_hart_rule_stands_for_each_hart_of_the_chip() {
         let placement = |id: &str| tracked(id).placement.expect("placement");
         let s31 = placement("esp32s31");
-        let c5 = placement("esp32c5");
         let names = |placement: &Placement| -> Vec<String> {
             placement
                 .symbol
@@ -867,15 +840,12 @@ pub(crate) mod tests {
                 "oer_platform_panic_hook",
             ]
         );
-        assert!(!names(&c5).iter().any(|name| name.contains("_h1_")));
-        let mtvt = |placement: &Placement| {
-            placement
-                .symbol
-                .iter()
-                .find(|rule| rule.name == "_runtime_mtvt")
-                .map(|rule| rule.bytes)
-        };
-        assert_eq!((mtvt(&s31), mtvt(&c5)), (Some(512), Some(256)));
+        let mtvt = s31
+            .symbol
+            .iter()
+            .find(|rule| rule.name == "_runtime_mtvt")
+            .map(|rule| rule.bytes);
+        assert_eq!(mtvt, Some(512));
         let stacks = |placement: &Placement| -> Vec<String> {
             placement
                 .range
@@ -891,9 +861,7 @@ pub(crate) mod tests {
                 "__runtime_cpu1_irq_stack_top"
             ]
         );
-        assert_eq!(stacks(&c5), ["__runtime_cpu0_irq_stack_top"]);
         assert_eq!(s31.stack_swap.len(), 3);
-        assert_eq!(c5.stack_swap.len(), 2);
 
         let error = facts(&format!(
             "{CHIP}[placement]\nname = 'p'\n\
@@ -908,7 +876,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_per_line_rule_numbers_every_vector_entry_line() {
-        for id in ["esp32s31", "esp32c5"] {
+        for id in ["esp32s31"] {
             let placement = tracked(id).placement.expect("placement");
             let entries = placement
                 .symbol
@@ -946,9 +914,9 @@ pub(crate) mod tests {
 
     #[test]
     fn flash_and_psram_lie_in_the_shared_cache_window_and_the_loader_in_sram() {
-        let c5 = tracked("esp32c5");
-        let memory = c5.memory.clone().expect("memory");
-        assert!(memory.validate(c5.boot_chain.as_ref(), None).is_ok());
+        let s31 = tracked("esp32s31");
+        let memory = s31.memory.clone().expect("memory");
+        assert!(memory.validate(s31.boot_chain.as_ref(), None).is_ok());
         let mut narrow = memory.clone();
         narrow.cache_window = Some(Region {
             origin: 0x4200_0000,
@@ -958,10 +926,10 @@ pub(crate) mod tests {
             narrow.validate(None, None).is_err(),
             "PSRAM outside the window"
         );
-        let mut chain = c5.boot_chain.clone().expect("boot chain");
+        let mut chain = s31.boot_chain.clone().expect("boot chain");
         chain.second_stage_loader_start = memory.sram.end() + 4;
         assert!(memory.validate(Some(&chain), None).is_err());
-        let mut chain = c5.boot_chain.clone().expect("boot chain");
+        let mut chain = s31.boot_chain.clone().expect("boot chain");
         chain.retained_reserved_tail = 0x1_0000;
         assert!(memory.validate(Some(&chain), None).is_err());
     }

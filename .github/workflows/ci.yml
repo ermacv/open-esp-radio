@@ -106,7 +106,7 @@ jobs:
         run: |
           packages=$(cargo metadata --format-version 1 --no-deps --locked \
             | jq -r '.packages[] | select(.manifest_path | test("/(protocols|portable|chips)/"))
-              | select(.manifest_path | test("/chips/(esp32c5/board|esp32s31/board|espressif/staged-(runtime|bootstrap))/") | not) | "-p " + .name')
+              | select(.manifest_path | test("/chips/(esp32s31/board|espressif/staged-(runtime|bootstrap))/") | not) | "-p " + .name')
           cargo check --locked --target riscv32imafc-unknown-none-elf $packages
       - name: Clippy for the chip target
         # The esp-hal halves of the adapters exist only for the chip, so the
@@ -121,9 +121,8 @@ jobs:
           # A package that declares instrumentation classes is checked apart,
           # with their cfgs, as `cargo fw` builds it.
           firmware() {
-            jq -r --arg c5 "$1" '.packages[]
-              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32c5/board|esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
-              | select((.manifest_path | test("esp32c5")) == ($c5 == "true"))
+            jq -r '.packages[]
+              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }
@@ -135,16 +134,14 @@ jobs:
               | select(.metadata."open-radio".instrumentation != null)
               | select(.manifest_path | contains("/firmware/hil/") | not)
               | [.name,
-                 (if (.manifest_path | test("esp32c5")) then "riscv32imac-unknown-none-elf"
-                  else "riscv32imafc-unknown-none-elf" end),
+                 "riscv32imafc-unknown-none-elf",
                  (.metadata."open-radio".instrumentation
                   | map("--cfg oer_" + gsub("-"; "_")) | join(" "))]
               | join(" ")' <<<"$meta"
           }
           # The image crates that declare tasks take `type_alias_impl_trait`
           # through RUSTC_BOOTSTRAP in .cargo/config.toml.
-          cargo clippy --locked --target riscv32imafc-unknown-none-elf $(firmware false)
-          cargo clippy --locked --target riscv32imac-unknown-none-elf $(firmware true)
+          cargo clippy --locked --target riscv32imafc-unknown-none-elf $(firmware)
           # Each in a target directory of its own, as `cargo fw` keeps the
           # plain cache free of the cfgs.
           while read -r package target cfgs; do
@@ -160,14 +157,12 @@ jobs:
           meta=$(cargo metadata --format-version 1 --no-deps --locked)
           # The clippy step checks the instrumented images, with their cfgs.
           firmware() {
-            jq -r --arg c5 "$1" '.packages[]
-              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32c5/board|esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
-              | select((.manifest_path | test("esp32c5")) == ($c5 == "true"))
+            jq -r '.packages[]
+              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }
-          cargo check --locked --target riscv32imafc-unknown-none-elf $(firmware false)
-          cargo check --locked --target riscv32imac-unknown-none-elf $(firmware true)
+          cargo check --locked --target riscv32imafc-unknown-none-elf $(firmware)
       - name: Shared words with esp-hal
         # Every MMIO word the radio PAC and the pinned esp-hal both write has a
         # reviewed entry (chips/<chip>/registers/shared-words.toml). Cargo resolves
@@ -183,10 +178,6 @@ jobs:
             --esp-hal-src "$(source_of esp-hal)/src" \
             --esp-metadata-generated-src "$(source_of esp-metadata-generated)/src" \
             --pac-src "$(source_of esp32s31)/src"
-          cargo registers check shared-words --chip esp32c5 \
-            --esp-hal-src "$(source_of esp-hal)/src" \
-            --esp-metadata-generated-src "$(source_of esp-metadata-generated)/src" \
-            --pac-src "$(source_of esp32c5)/src"
       - name: Image build
         # Build unconfigured and fixed configured images for analysis without a board.
         run: |
@@ -203,7 +194,7 @@ jobs:
           cargo fw build w2 --analysis
           cargo fw build w3 --analysis
       - name: HIL image builds
-        # Every class on both chips, with the linked image's checks.
+        # Every class, with the linked image's checks.
         run: cargo hil images check --all
       - name: Probe images
         # Compile every probe, including board self-checks, without vendor pins.

@@ -75,18 +75,14 @@ fn compiler_imports_stay_in_the_reporter_and_its_private_bridge() {
 /// unsafe code.
 const BELOW_THE_BOUNDARY: &[&str] = &[
     "chips/esp32s31/pac-raw",
-    "chips/esp32c5/pac",
     "chips/esp32s31/pac",
-    "chips/esp32c5/hal",
     "chips/esp32s31/hal",
-    "chips/esp32c5/board",
     "chips/esp32s31/board",
     "chips/espressif/staged-bootstrap",
     "chips/espressif/staged-layout",
     "chips/espressif/staged-runtime",
     "chips/espressif/executor",
     "chips/espressif/esp-hal/",
-    "chips/esp32c5/esp-hal-soc",
     "portable/embassy/",
     "portable/memory",
     "portable/mmio",
@@ -110,7 +106,6 @@ fn below_the_boundary(package: &str) -> bool {
 #[test]
 fn the_boundary_is_named_by_package_or_domain() {
     for package in [
-        "chips/esp32c5/hal",
         "chips/esp32s31/hal",
         "chips/espressif/staged-runtime",
         "portable/embassy/net",

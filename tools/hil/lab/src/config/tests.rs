@@ -257,14 +257,6 @@ fn the_device_under_test_and_the_peer_come_from_the_pool() {
             "/dev/tty-c5-a".into()
         )
     );
-    // The device under test never is: an esp32c5 run has no esp32c5 peer.
-    let lab = with_c5_peer(load(file.path(), "esp32c5").unwrap());
-    assert_eq!(lab.dut.id, "c5-a");
-    let error = lab.peer_resolving(&attached).unwrap_err().to_string();
-    assert!(
-        error.contains("no esp32c5 board for peer besides `c5-a`"),
-        "{error}"
-    );
     assert!(load(file.path(), "esp32h2").is_err());
 }
 

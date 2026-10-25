@@ -114,11 +114,10 @@ Constructing an executor or the doorbell consumes esp-hal's software
 interrupt of its line and claims the line's typed block (`FROM_CPU_<N>`, a
 shared block: every context raises it through `&self`). Wakers raise the
 published line; only the line's handler lowers it, and it lowers it before it
-takes the work, so a raise during the work runs another round. On the
-ESP32-S31 a raise reads the line back; on the ESP32-C5 it is one store, with
-no critical section and no wait. The time driver consumes esp-hal's SYSTIMER
-and claims the system timer's typed blocks: our comparator writer, three
-alarm acknowledgers that each strobe their own bit of the shared
+takes the work, so a raise during the work runs another round. A raise
+reads the line back. The time driver consumes esp-hal's SYSTIMER and claims
+the system timer's typed blocks: our comparator writer, three alarm
+acknowledgers that each strobe their own bit of the shared
 acknowledgement block, and the shared counter latch, which every context
 reads for the time (`counter.rs`: strobe, a bounded settle until valid, then
 LO/HI/LO until the two LO reads agree; 16 ticks per microsecond). Alarm

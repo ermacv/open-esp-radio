@@ -9,7 +9,6 @@
     //   {fs}               mstatus.FS
     //   {mie}              mstatus.MIE
     //   {mintthresh}       the CLIC threshold CSR
-    //   {raise_threshold}  1 when clearing MIE alone does not mask the CLIC
     //   {tcontrol}         the trigger control CSR
     //   {mte}              tcontrol.MTE
     //   {mpte_shift}       the bits from tcontrol.MPTE down to tcontrol.MTE
@@ -183,12 +182,6 @@ _runtime_irq_h\hart\()_l\line:
     .global _runtime_irq_exit
     .type _runtime_irq_exit, @function
 _runtime_irq_exit:
-    .if {raise_threshold}
-    // Mask the CLIC by its threshold before clearing MIE, which alone does
-    // not mask every interrupt on this core.
-    li t0, 0xff
-    csrw {mintthresh}, t0
-    .endif
     csrci mstatus, {mie}
     lw t0, 80(sp)
     csrw mcause, t0

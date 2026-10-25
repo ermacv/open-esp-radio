@@ -36,7 +36,7 @@ pub(in crate::interrupts) fn fixture(
         Location::Sram => memory.sram.origin + offset,
         Location::Psram => memory.psram.unwrap().origin + offset,
         Location::Flash => memory.flash_xip.origin + offset,
-        Location::Rom => 0x4000_0000 + offset,
+        Location::Rom => 0x6000_0000 + offset,
         Location::Other => 0x1000 + offset,
     };
     let shared = address(strict, 0x2000);

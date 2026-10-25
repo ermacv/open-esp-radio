@@ -514,18 +514,18 @@ fn bootstrap_exports_a_rom_summary_the_runtime_does_not_apply_and_its_coverage_r
         &[("stack_bottom", 0, 0), ("stack_top", 0x100, 0)],
     );
     let chip = tempfile::tempdir().unwrap();
-    let layer = chip.path().join("chips/esp32c5/platform/chip.toml");
+    let layer = chip.path().join("chips/esp32s31/platform/chip.toml");
     std::fs::create_dir_all(layer.parent().unwrap()).unwrap();
     std::fs::write(
         &layer,
         r#"
 schema = 2
-id = "esp32c5"
+id = "esp32s31"
 family = "espressif"
 isa = "rv32imac"
 rust-target = "riscv32imac-unknown-none-elf"
 boot = "staged"
-espflash-chip = "esp32c5"
+espflash-chip = "esp32s31"
 revisions = ["test"]
 [properties]
 wifi-bands = []
@@ -544,7 +544,7 @@ flash-xip = { executable = true, cached = true, dma = false, retained = false, w
 "#,
     )
     .unwrap();
-    let profile = oer_chip_profile::Profile::load(chip.path(), "esp32c5")
+    let profile = oer_chip_profile::Profile::load(chip.path(), "esp32s31")
         .expect("the synthetic chip profile is valid");
     let (directory, policy) = policy_with(BASE, ASM_REVIEW);
     let input = CheckInput {
@@ -1103,10 +1103,6 @@ fn the_repository_policies_load() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
     for (path, text) in oer_espressif_facts::tracked::FILES.iter().copied().chain([
-        (
-            "chips/esp32c5/platform/stack.toml",
-            include_str!("../../../../../chips/esp32c5/platform/stack.toml"),
-        ),
         (
             "chips/esp32s31/platform/stack.toml",
             include_str!("../../../../../chips/esp32s31/platform/stack.toml"),

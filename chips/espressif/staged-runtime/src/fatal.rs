@@ -9,8 +9,6 @@
 //! block), and the chip resets through the HAL (`cores::software_reset`),
 //! not esp-hal.
 
-#[cfg(feature = "esp32c5")]
-use oer_esp32c5_hal::cores;
 #[cfg(feature = "esp32s31")]
 use oer_esp32s31_hal::cores;
 

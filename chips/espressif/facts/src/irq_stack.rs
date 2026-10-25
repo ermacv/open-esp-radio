@@ -67,9 +67,6 @@ mod tests {
         // Hart 0's top is hart 1's bottom, aligned to 1024.
         assert_eq!(s31.irq_stack_size(0, Some(1001)).unwrap(), 6144);
         assert_eq!(s31.irq_stack_size(0, Some(16192)).unwrap(), 22528);
-        let c5 = contract("esp32c5");
-        assert_eq!(c5.irq_stack_size(0, Some(1001)).unwrap(), 1104 + 4096);
-        assert_eq!(c5.irq_stack_size(0, Some(0)).unwrap(), 4096);
     }
 
     #[test]

@@ -1336,7 +1336,7 @@ mod tests {
         assert_eq!(diagnostic.bytes, stacks.contract.interrupts.irq_stack_bytes);
         let product = select(&stacks, false);
         assert!(product.from_bound);
-        assert_eq!(product.bytes, 5200);
+        assert_eq!(product.bytes, 6144);
         stacks.allocations.insert(
             0,
             LinkedStack {
@@ -1345,14 +1345,14 @@ mod tests {
                 from_bound: true,
             },
         );
-        assert_eq!(stacks.usable_bytes(0), 1104);
+        assert_eq!(stacks.usable_bytes(0), 2048);
         assert!(stacks.check(Required::Product).is_ok());
         assert!(
             stacks
                 .render()
-                .contains("0\t1000\t100 (10%)\t4096\t5200\tproven bound")
+                .contains("0\t1000\t100 (10%)\t4096\t6144\tproven bound")
         );
-        stacks.harts[0].bytes = Some(1010);
+        stacks.harts[0].bytes = Some(1900);
         assert!(stacks.check(Required::Product).is_err());
     }
 

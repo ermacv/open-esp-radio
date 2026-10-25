@@ -12,8 +12,6 @@ pub(crate) use esp_hal::{
     peripherals::{Interrupt, SYSTIMER},
     system::Cpu,
 };
-#[cfg(feature = "esp32c5")]
-pub(crate) use oer_esp32c5_hal::platform;
 #[cfg(feature = "esp32s31")]
 pub(crate) use oer_esp32s31_hal::platform;
 use oer_memory::zeroed::ZeroedOnce;
@@ -26,12 +24,10 @@ use crate::{
 /// The software interrupts an executor can own.
 pub(crate) const SOFTWARE_INTERRUPT_COUNT: usize = crate::task::EXECUTORS as usize;
 
-/// The system timer's ticks per microsecond: it counts at 16 MHz on both
-/// chips.
+/// The system timer's ticks per microsecond: it counts at 16 MHz.
 ///
-/// SOURCE: ESP-IDF 4d59230d `esp_hw_support/port/esp32s31/systimer.c` and
-/// `esp_hw_support/port/esp32c5/systimer.c` (`systimer_ticks_to_us`:
-/// `ticks / 16`).
+/// SOURCE: ESP-IDF 4d59230d `esp_hw_support/port/esp32s31/systimer.c`
+/// (`systimer_ticks_to_us`: `ticks / 16`).
 pub(crate) const TICKS_PER_MICROSECOND: u64 = 16;
 
 /// The core running the caller.
@@ -42,8 +38,8 @@ pub(crate) fn current_core() -> usize {
 
 /// The interrupt level the caller runs at: the CLIC's `mintstatus.mil`,
 /// which the hart raises on a trap's entry to the taken interrupt's level
-/// and restores on its return; 0 in thread mode. Both chips' cores take
-/// interrupts through a CLIC.
+/// and restores on its return; 0 in thread mode. The core takes interrupts
+/// through a CLIC.
 #[inline(always)]
 pub(crate) fn interrupt_level() -> u8 {
     let status: usize;
@@ -139,19 +135,15 @@ pub(crate) enum Line {
     Three(&'static platform::FromCpu3),
 }
 
-/// Store `$value` into the line block `$line`; a raise on the ESP32-S31
-/// reads the line back, so the raise has reached the interrupt matrix when
-/// it returns.
+/// Store `$value` into the line block `$line`; a raise reads the line back,
+/// so the raise has reached the interrupt matrix when it returns.
 ///
-/// SOURCE: esp-hal 1f646c5 `interrupt/software.rs` (`raise`: the S31 store
-/// and its read back; the C5 store needs neither a critical section nor a
-/// wait, as ESP-IDF 4d59230d `hal/esp32c5/include/hal/crosscore_int_ll.h`
-/// stores alone).
+/// SOURCE: esp-hal 1f646c5 `interrupt/software.rs` (`raise`: the store and
+/// its read back).
 macro_rules! store_line {
     ($line:expr, $value:expr) => {{
         let line = $line;
         line.store_line($value);
-        #[cfg(feature = "esp32s31")]
         if $value {
             let _ = line.read_line();
         }

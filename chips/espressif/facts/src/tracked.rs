@@ -11,6 +11,10 @@ use alloc::{
 
 use crate::{Result, Source};
 
+/// Chips whose directory lies in the tree outside the workspace and CI: they
+/// have no tracked layer files and no tool supports them.
+pub const UNTRACKED: &[&str] = &["esp32c5"];
+
 /// Every tracked layer file (the ROM's of each revision included) and each
 /// chip's stack policy
 /// (`chips/<id>/platform/stack.toml`, whose default task stack the layout
@@ -27,26 +31,6 @@ pub const FILES: &[(&str, &str)] = &[
     (
         "chips/espressif/platform/isa/rv32imafc.toml",
         include_str!("../../platform/isa/rv32imafc.toml"),
-    ),
-    (
-        "chips/esp32c5/platform/chip.toml",
-        include_str!("../../../esp32c5/platform/chip.toml"),
-    ),
-    (
-        "chips/esp32c5/platform/rom-rev100.toml",
-        include_str!("../../../esp32c5/platform/rom-rev100.toml"),
-    ),
-    (
-        "chips/esp32c5/platform/stack.toml",
-        include_str!("../../../esp32c5/platform/stack.toml"),
-    ),
-    (
-        "chips/esp32c5/platform/modules/esp32-c5-wroom-1-n16r8.toml",
-        include_str!("../../../esp32c5/platform/modules/esp32-c5-wroom-1-n16r8.toml"),
-    ),
-    (
-        "chips/esp32c5/platform/boards/esp32-c5-devkit.toml",
-        include_str!("../../../esp32c5/platform/boards/esp32-c5-devkit.toml"),
     ),
     (
         "chips/esp32s31/platform/chip.toml",
@@ -135,8 +119,8 @@ mod tests {
     }
 
     /// The layer files of the tree this crate is built from: the family's
-    /// and, for every chip, its chip layer, the ROM layer of each of its
-    /// revisions that has one, stack policy, modules and boards.
+    /// and, for every tracked chip, its chip layer, the ROM layer of each of
+    /// its revisions that has one, stack policy, modules and boards.
     #[test]
     fn the_tracked_files_are_every_layer_of_the_tree() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
@@ -144,8 +128,12 @@ mod tests {
         let mut found = Vec::new();
         toml_files(&chips.join("espressif/platform"), &mut found);
         for entry in std::fs::read_dir(&chips).expect("chips/ is readable") {
-            let platform = entry.expect("a readable entry").path().join("platform");
-            if platform.join("chip.toml").is_file() {
+            let entry = entry.expect("a readable entry").path();
+            let untracked = entry
+                .file_name()
+                .is_some_and(|name| UNTRACKED.iter().any(|chip| name == *chip));
+            let platform = entry.join("platform");
+            if !untracked && platform.join("chip.toml").is_file() {
                 let chip = std::fs::read_to_string(platform.join("chip.toml"))
                     .expect("a readable chip layer");
                 let chip: toml::Table = toml::from_str(&chip).expect("a TOML chip layer");
@@ -184,6 +172,6 @@ mod tests {
                 "{path}"
             );
         }
-        assert_eq!(ids(), ["esp32c5", "esp32s31"]);
+        assert_eq!(ids(), ["esp32s31"]);
     }
 }

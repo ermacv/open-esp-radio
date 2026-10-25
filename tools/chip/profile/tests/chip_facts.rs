@@ -19,10 +19,7 @@ use oer_espressif_staged_layout::{
     zeroed::RUNTIME_ZEROED_REGIONS,
 };
 
-const CHIPS: [(&str, Layout); 2] = [
-    ("esp32s31", oer_esp32s31_layout::LAYOUT),
-    ("esp32c5", oer_esp32c5_layout::LAYOUT),
-];
+const CHIPS: [(&str, Layout); 1] = [("esp32s31", oer_esp32s31_layout::LAYOUT)];
 
 fn profile(id: &str) -> Facts {
     Profile::tracked(id).unwrap().facts
