@@ -1,0 +1,88 @@
+# The bootstrap filter-control word, transcribed from the pinned ESP-IDF
+# register and struct headers. Other APM registers are outside this partial model.
+schema = 3
+
+[type]
+name = "HP_APM"
+description = "The HP_APM access-path filter controls; region permissions, locks and exception registers are not modeled."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1950", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_STRUCT_H_L161"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1950", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_STRUCT_H_L161"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."FUNC_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1950", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_STRUCT_H_L161", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1951", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1958", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1965", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1972", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1979", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1986", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1993"]
+
+[review.entity."FUNC_CTRL.M0_FUNC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1951"]
+
+[review.entity."FUNC_CTRL.M1_FUNC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1958"]
+
+[review.entity."FUNC_CTRL.M2_FUNC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1965"]
+
+[review.entity."FUNC_CTRL.M3_FUNC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1972"]
+
+[review.entity."FUNC_CTRL.M4_FUNC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1979"]
+
+[review.entity."FUNC_CTRL.M5_FUNC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1986"]
+
+[review.entity."FUNC_CTRL.M6_FUNC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1993"]
+
+[[registers]]
+name = "FUNC_CTRL"
+offset = 0xc4
+description = "APM function control. Clearing each path enable bypasses its filter."
+reset = { value = 0x7f, mask = 0x7f }
+reserved = { mask = 0xffffff80, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_STRUCT_H_L161"] }
+
+[[registers.fields]]
+name = "M0_FUNC_EN"
+bits = "0"
+class = "plain"
+description = "Enable the M0 access-path filter."
+
+[[registers.fields]]
+name = "M1_FUNC_EN"
+bits = "1"
+class = "plain"
+description = "Enable the M1 access-path filter."
+
+[[registers.fields]]
+name = "M2_FUNC_EN"
+bits = "2"
+class = "plain"
+description = "Enable the M2 access-path filter."
+
+[[registers.fields]]
+name = "M3_FUNC_EN"
+bits = "3"
+class = "plain"
+description = "Enable the M3 access-path filter."
+
+[[registers.fields]]
+name = "M4_FUNC_EN"
+bits = "4"
+class = "plain"
+description = "Enable the M4 access-path filter."
+
+[[registers.fields]]
+name = "M5_FUNC_EN"
+bits = "5"
+class = "plain"
+description = "Enable the M5 access-path filter."
+
+[[registers.fields]]
+name = "M6_FUNC_EN"
+bits = "6"
+class = "plain"
+description = "Enable the M6 access-path filter."

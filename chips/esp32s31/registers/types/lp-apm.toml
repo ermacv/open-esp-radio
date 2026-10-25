@@ -1,0 +1,61 @@
+# The bootstrap filter-control word, transcribed from the pinned ESP-IDF
+# register and struct headers. Other APM registers are outside this partial model.
+schema = 3
+
+[type]
+name = "LP_APM"
+description = "The LP_APM access-path filter controls; region permissions, locks and exception registers are not modeled."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L990", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_STRUCT_H_L149"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L990", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_STRUCT_H_L149"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."FUNC_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L990", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_STRUCT_H_L149", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L991", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L998", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L1005", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L1012"]
+
+[review.entity."FUNC_CTRL.M0_FUNC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L991"]
+
+[review.entity."FUNC_CTRL.M1_FUNC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L998"]
+
+[review.entity."FUNC_CTRL.M2_FUNC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L1005"]
+
+[review.entity."FUNC_CTRL.M3_FUNC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L1012"]
+
+[[registers]]
+name = "FUNC_CTRL"
+offset = 0xbc
+description = "APM function control. Clearing each path enable bypasses its filter."
+reset = { value = 0xf, mask = 0xf }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_STRUCT_H_L149"] }
+
+[[registers.fields]]
+name = "M0_FUNC_EN"
+bits = "0"
+class = "plain"
+description = "Enable the M0 access-path filter."
+
+[[registers.fields]]
+name = "M1_FUNC_EN"
+bits = "1"
+class = "plain"
+description = "Enable the M1 access-path filter."
+
+[[registers.fields]]
+name = "M2_FUNC_EN"
+bits = "2"
+class = "plain"
+description = "Enable the M2 access-path filter."
+
+[[registers.fields]]
+name = "M3_FUNC_EN"
+bits = "3"
+class = "plain"
+description = "Enable the M3 access-path filter."

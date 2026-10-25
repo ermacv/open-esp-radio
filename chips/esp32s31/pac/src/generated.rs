@@ -539,6 +539,36 @@ impl Interrupt {
 
 /// The MMIO instances of the root: their bases and interrupt sources.
 pub mod instances {
+    /// The `LP_APM` instance of [`LP_APM`](super::lp_apm).
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L91.
+    pub mod lp_apm {
+        /// The instance's base address.
+        pub const BASE: usize = 0x20706c00;
+        /// The bytes of the instance's window.
+        pub const SIZE: usize = 0xc0;
+    }
+
+    /// The `HP_APM` instance of [`HP_APM`](super::hp_apm).
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L55.
+    pub mod hp_apm {
+        /// The instance's base address.
+        pub const BASE: usize = 0x20504400;
+        /// The bytes of the instance's window.
+        pub const SIZE: usize = 0xc8;
+    }
+
+    /// The `HP_MEM_APM` instance of [`HP_MEM_APM`](super::hp_mem_apm).
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L56.
+    pub mod hp_mem_apm {
+        /// The instance's base address.
+        pub const BASE: usize = 0x20504800;
+        /// The bytes of the instance's window.
+        pub const SIZE: usize = 0xc8;
+    }
+
     /// The `CLIC` instance of [`CLIC`](super::clic).
     ///
     /// SOURCE: ESP_IDF_4D59230D_S31_CLIC.
@@ -58778,6 +58808,430 @@ pub mod hp_alive_sys {
     }
 }
 
+/// The `HP_APM` block type.
+///
+/// The HP_APM access-path filter controls; region permissions, locks and exception registers are not modeled.
+pub mod hp_apm {
+    /// The `FUNC_CTRL` register.
+    ///
+    /// APM function control. Clearing each path enable bypasses its filter.
+    pub mod func_ctrl {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000007f;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xc4;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xffffff80;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Enable the M0 access-path filter.
+            #[inline]
+            pub const fn m0_func_en(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Enable the M1 access-path filter.
+            #[inline]
+            pub const fn m1_func_en(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Enable the M2 access-path filter.
+            #[inline]
+            pub const fn m2_func_en(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Enable the M3 access-path filter.
+            #[inline]
+            pub const fn m3_func_en(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Enable the M4 access-path filter.
+            #[inline]
+            pub const fn m4_func_en(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Enable the M5 access-path filter.
+            #[inline]
+            pub const fn m5_func_en(self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// Enable the M6 access-path filter.
+            #[inline]
+            pub const fn m6_func_en(self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Enable the M0 access-path filter.
+            #[inline]
+            pub const fn m0_func_en(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Enable the M1 access-path filter.
+            #[inline]
+            pub const fn m1_func_en(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Enable the M2 access-path filter.
+            #[inline]
+            pub const fn m2_func_en(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Enable the M3 access-path filter.
+            #[inline]
+            pub const fn m3_func_en(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Enable the M4 access-path filter.
+            #[inline]
+            pub const fn m4_func_en(&self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Enable the M5 access-path filter.
+            #[inline]
+            pub const fn m5_func_en(&self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// Enable the M6 access-path filter.
+            #[inline]
+            pub const fn m6_func_en(&self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// Set `M0_FUNC_EN`.
+            #[inline]
+            pub fn set_m0_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+
+            /// Set `M1_FUNC_EN`.
+            #[inline]
+            pub fn set_m1_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `M2_FUNC_EN`.
+            #[inline]
+            pub fn set_m2_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffb) | (u32::from(value) << 2);
+                self
+            }
+
+            /// Set `M3_FUNC_EN`.
+            #[inline]
+            pub fn set_m3_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffff7) | (u32::from(value) << 3);
+                self
+            }
+
+            /// Set `M4_FUNC_EN`.
+            #[inline]
+            pub fn set_m4_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffffef) | (u32::from(value) << 4);
+                self
+            }
+
+            /// Set `M5_FUNC_EN`.
+            #[inline]
+            pub fn set_m5_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffffdf) | (u32::from(value) << 5);
+                self
+            }
+
+            /// Set `M6_FUNC_EN`.
+            #[inline]
+            pub fn set_m6_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffffbf) | (u32::from(value) << 6);
+                self
+            }
+        }
+    }
+
+    /// The `HpApmFilter` part of `HP_APM`.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1950.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct HpApmFilter<P: oer_mmio::Placement = oer_mmio::Fixed<0x20504400>>(
+        oer_mmio::Block<P, HpApmFilterWords>,
+    );
+
+    /// The words [`HpApmFilter`] holds, as byte offsets from its instance's base.
+    pub struct HpApmFilterWords;
+
+    impl oer_mmio::Registers for HpApmFilterWords {
+        const WORDS: &'static [usize] = &[0xc4];
+    }
+
+    impl oer_mmio::Words for HpApmFilterWords {
+        const OWNED: &'static [usize] = &[0xc4];
+        const OBSERVED: &'static [usize] = &[];
+    }
+
+    /// The part's device registers, as the PAC root claims them.
+    pub type HpApmFilterClaim = oer_mmio::Block<oer_mmio::Fixed<0x20504400>, HpApmFilterWords>;
+
+    impl HpApmFilter {
+        /// The owner of the part's device registers.
+        #[inline]
+        pub fn new(block: HpApmFilterClaim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> HpApmFilter<oer_mmio::Host<'a>> {
+        /// The part over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> HpApmFilter<P> {
+        /// Read `FUNC_CTRL`.
+        #[inline]
+        pub fn read_func_ctrl(&self) -> func_ctrl::R {
+            func_ctrl::R(self.0.read::<0xc4>())
+        }
+
+        /// Read `FUNC_CTRL`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_func_ctrl(&mut self, change: impl FnOnce(&mut func_ctrl::W)) {
+            let mut value = func_ctrl::W(self.0.read::<0xc4>());
+            change(&mut value);
+            self.0.write::<0xc4>(value.0);
+        }
+    }
+}
+
+/// The `HP_MEM_APM` block type.
+///
+/// The HP_MEM_APM access-path filter controls; region permissions, locks and exception registers are not modeled.
+pub mod hp_mem_apm {
+    /// The `FUNC_CTRL` register.
+    ///
+    /// APM function control. Clearing each path enable bypasses its filter.
+    pub mod func_ctrl {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000003f;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xc4;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xffffffc0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Enable the M0 access-path filter.
+            #[inline]
+            pub const fn m0_func_en(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Enable the M1 access-path filter.
+            #[inline]
+            pub const fn m1_func_en(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Enable the M2 access-path filter.
+            #[inline]
+            pub const fn m2_func_en(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Enable the M3 access-path filter.
+            #[inline]
+            pub const fn m3_func_en(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Enable the M4 access-path filter.
+            #[inline]
+            pub const fn m4_func_en(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Enable the M5 access-path filter.
+            #[inline]
+            pub const fn m5_func_en(self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Enable the M0 access-path filter.
+            #[inline]
+            pub const fn m0_func_en(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Enable the M1 access-path filter.
+            #[inline]
+            pub const fn m1_func_en(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Enable the M2 access-path filter.
+            #[inline]
+            pub const fn m2_func_en(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Enable the M3 access-path filter.
+            #[inline]
+            pub const fn m3_func_en(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Enable the M4 access-path filter.
+            #[inline]
+            pub const fn m4_func_en(&self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Enable the M5 access-path filter.
+            #[inline]
+            pub const fn m5_func_en(&self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// Set `M0_FUNC_EN`.
+            #[inline]
+            pub fn set_m0_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+
+            /// Set `M1_FUNC_EN`.
+            #[inline]
+            pub fn set_m1_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `M2_FUNC_EN`.
+            #[inline]
+            pub fn set_m2_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffb) | (u32::from(value) << 2);
+                self
+            }
+
+            /// Set `M3_FUNC_EN`.
+            #[inline]
+            pub fn set_m3_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffff7) | (u32::from(value) << 3);
+                self
+            }
+
+            /// Set `M4_FUNC_EN`.
+            #[inline]
+            pub fn set_m4_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffffef) | (u32::from(value) << 4);
+                self
+            }
+
+            /// Set `M5_FUNC_EN`.
+            #[inline]
+            pub fn set_m5_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffffdf) | (u32::from(value) << 5);
+                self
+            }
+        }
+    }
+
+    /// The `HpMemApmFilter` part of `HP_MEM_APM`.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_MEM_APM_REG_H_L1214.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct HpMemApmFilter<P: oer_mmio::Placement = oer_mmio::Fixed<0x20504800>>(
+        oer_mmio::Block<P, HpMemApmFilterWords>,
+    );
+
+    /// The words [`HpMemApmFilter`] holds, as byte offsets from its instance's base.
+    pub struct HpMemApmFilterWords;
+
+    impl oer_mmio::Registers for HpMemApmFilterWords {
+        const WORDS: &'static [usize] = &[0xc4];
+    }
+
+    impl oer_mmio::Words for HpMemApmFilterWords {
+        const OWNED: &'static [usize] = &[0xc4];
+        const OBSERVED: &'static [usize] = &[];
+    }
+
+    /// The part's device registers, as the PAC root claims them.
+    pub type HpMemApmFilterClaim =
+        oer_mmio::Block<oer_mmio::Fixed<0x20504800>, HpMemApmFilterWords>;
+
+    impl HpMemApmFilter {
+        /// The owner of the part's device registers.
+        #[inline]
+        pub fn new(block: HpMemApmFilterClaim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> HpMemApmFilter<oer_mmio::Host<'a>> {
+        /// The part over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> HpMemApmFilter<P> {
+        /// Read `FUNC_CTRL`.
+        #[inline]
+        pub fn read_func_ctrl(&self) -> func_ctrl::R {
+            func_ctrl::R(self.0.read::<0xc4>())
+        }
+
+        /// Read `FUNC_CTRL`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_func_ctrl(&mut self, change: impl FnOnce(&mut func_ctrl::W)) {
+            let mut value = func_ctrl::W(self.0.read::<0xc4>());
+            change(&mut value);
+            self.0.write::<0xc4>(value.0);
+        }
+    }
+}
+
 /// The `HP_SYSTEM` block type.
 ///
 /// The HP system registers: software interrupts between the cores, core stall status, pad and memory controls.
@@ -79190,6 +79644,60 @@ pub mod hp_sys_clkrst {
         }
     }
 
+    /// The `HpSysClkrstSystimer` part of `HP_SYS_CLKRST`.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct HpSysClkrstSystimer<P: oer_mmio::Placement = oer_mmio::Fixed<0x20587000>>(
+        oer_mmio::Block<P, HpSysClkrstSystimerWords>,
+    );
+
+    /// The words [`HpSysClkrstSystimer`] holds, as byte offsets from its instance's base.
+    pub struct HpSysClkrstSystimerWords;
+
+    impl oer_mmio::Registers for HpSysClkrstSystimerWords {
+        const WORDS: &'static [usize] = &[0x120];
+    }
+
+    impl oer_mmio::Words for HpSysClkrstSystimerWords {
+        const OWNED: &'static [usize] = &[0x120];
+        const OBSERVED: &'static [usize] = &[];
+    }
+
+    /// The part's device registers, as the PAC root claims them.
+    pub type HpSysClkrstSystimerClaim =
+        oer_mmio::Block<oer_mmio::Fixed<0x20587000>, HpSysClkrstSystimerWords>;
+
+    impl HpSysClkrstSystimer {
+        /// The owner of the part's device registers.
+        #[inline]
+        pub fn new(block: HpSysClkrstSystimerClaim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> HpSysClkrstSystimer<oer_mmio::Host<'a>> {
+        /// The part over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> HpSysClkrstSystimer<P> {
+        /// Read `SYSTIMER_CTRL0`.
+        #[inline]
+        pub fn read_systimer_ctrl0(&self) -> systimer_ctrl0::R {
+            systimer_ctrl0::R(self.0.read::<0x120>())
+        }
+
+        /// Read `SYSTIMER_CTRL0`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_systimer_ctrl0(&mut self, change: impl FnOnce(&mut systimer_ctrl0::W)) {
+            let mut value = systimer_ctrl0::W(self.0.read::<0x120>());
+            change(&mut value);
+            self.0.write::<0x120>(value.0);
+        }
+    }
+
     /// The `HpSysClkrstCore` part of `HP_SYS_CLKRST`.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct HpSysClkrstCore<P: oer_mmio::Placement = oer_mmio::Fixed<0x20587000>>(
@@ -93130,6 +93638,170 @@ pub mod lp_aonclkrst {
     }
 }
 
+/// The `LP_APM` block type.
+///
+/// The LP_APM access-path filter controls; region permissions, locks and exception registers are not modeled.
+pub mod lp_apm {
+    /// The `FUNC_CTRL` register.
+    ///
+    /// APM function control. Clearing each path enable bypasses its filter.
+    pub mod func_ctrl {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000000f;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xbc;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffff0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Enable the M0 access-path filter.
+            #[inline]
+            pub const fn m0_func_en(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Enable the M1 access-path filter.
+            #[inline]
+            pub const fn m1_func_en(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Enable the M2 access-path filter.
+            #[inline]
+            pub const fn m2_func_en(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Enable the M3 access-path filter.
+            #[inline]
+            pub const fn m3_func_en(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Enable the M0 access-path filter.
+            #[inline]
+            pub const fn m0_func_en(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Enable the M1 access-path filter.
+            #[inline]
+            pub const fn m1_func_en(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Enable the M2 access-path filter.
+            #[inline]
+            pub const fn m2_func_en(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Enable the M3 access-path filter.
+            #[inline]
+            pub const fn m3_func_en(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Set `M0_FUNC_EN`.
+            #[inline]
+            pub fn set_m0_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+
+            /// Set `M1_FUNC_EN`.
+            #[inline]
+            pub fn set_m1_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `M2_FUNC_EN`.
+            #[inline]
+            pub fn set_m2_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffb) | (u32::from(value) << 2);
+                self
+            }
+
+            /// Set `M3_FUNC_EN`.
+            #[inline]
+            pub fn set_m3_func_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffff7) | (u32::from(value) << 3);
+                self
+            }
+        }
+    }
+
+    /// The `LpApmFilter` part of `LP_APM`.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L990.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct LpApmFilter<P: oer_mmio::Placement = oer_mmio::Fixed<0x20706c00>>(
+        oer_mmio::Block<P, LpApmFilterWords>,
+    );
+
+    /// The words [`LpApmFilter`] holds, as byte offsets from its instance's base.
+    pub struct LpApmFilterWords;
+
+    impl oer_mmio::Registers for LpApmFilterWords {
+        const WORDS: &'static [usize] = &[0xbc];
+    }
+
+    impl oer_mmio::Words for LpApmFilterWords {
+        const OWNED: &'static [usize] = &[0xbc];
+        const OBSERVED: &'static [usize] = &[];
+    }
+
+    /// The part's device registers, as the PAC root claims them.
+    pub type LpApmFilterClaim = oer_mmio::Block<oer_mmio::Fixed<0x20706c00>, LpApmFilterWords>;
+
+    impl LpApmFilter {
+        /// The owner of the part's device registers.
+        #[inline]
+        pub fn new(block: LpApmFilterClaim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> LpApmFilter<oer_mmio::Host<'a>> {
+        /// The part over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> LpApmFilter<P> {
+        /// Read `FUNC_CTRL`.
+        #[inline]
+        pub fn read_func_ctrl(&self) -> func_ctrl::R {
+            func_ctrl::R(self.0.read::<0xbc>())
+        }
+
+        /// Read `FUNC_CTRL`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_func_ctrl(&mut self, change: impl FnOnce(&mut func_ctrl::W)) {
+            let mut value = func_ctrl::W(self.0.read::<0xbc>());
+            change(&mut value);
+            self.0.write::<0xbc>(value.0);
+        }
+    }
+}
+
 /// The `LP_PERI_CLKRST` block type.
 ///
 /// The LP peripheral clock and reset controller.
@@ -94643,44 +95315,46 @@ pub mod lp_peri_clkrst {
         }
     }
 
-    /// The `LpPericlkrstRng` part of `LP_PERICLKRST`.
+    /// The `LpPericlkrstRngInit` part of `LP_PERICLKRST`.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_HAL_ESP32S31_INCLUDE_HAL_RNG_LL_H_L163.
     #[must_use = "dropping a register owner permanently loses its register authority"]
-    pub struct LpPericlkrstRng<P: oer_mmio::Placement = oer_mmio::Fixed<0x20710000>>(
-        oer_mmio::Block<P, LpPericlkrstRngWords>,
+    pub struct LpPericlkrstRngInit<P: oer_mmio::Placement = oer_mmio::Fixed<0x20710000>>(
+        oer_mmio::Block<P, LpPericlkrstRngInitWords>,
     );
 
-    /// The words [`LpPericlkrstRng`] holds, as byte offsets from its instance's base.
-    pub struct LpPericlkrstRngWords;
+    /// The words [`LpPericlkrstRngInit`] holds, as byte offsets from its instance's base.
+    pub struct LpPericlkrstRngInitWords;
 
-    impl oer_mmio::Registers for LpPericlkrstRngWords {
+    impl oer_mmio::Registers for LpPericlkrstRngInitWords {
         const WORDS: &'static [usize] = &[0x3c];
     }
 
-    impl oer_mmio::Words for LpPericlkrstRngWords {
+    impl oer_mmio::Words for LpPericlkrstRngInitWords {
         const OWNED: &'static [usize] = &[0x3c];
         const OBSERVED: &'static [usize] = &[];
     }
 
     /// The part's device registers, as the PAC root claims them.
-    pub type LpPericlkrstRngClaim =
-        oer_mmio::Block<oer_mmio::Fixed<0x20710000>, LpPericlkrstRngWords>;
+    pub type LpPericlkrstRngInitClaim =
+        oer_mmio::Block<oer_mmio::Fixed<0x20710000>, LpPericlkrstRngInitWords>;
 
-    impl LpPericlkrstRng {
+    impl LpPericlkrstRngInit {
         /// The owner of the part's device registers.
         #[inline]
-        pub fn new(block: LpPericlkrstRngClaim) -> Self {
+        pub fn new(block: LpPericlkrstRngInitClaim) -> Self {
             Self(block)
         }
     }
 
-    impl<'a> LpPericlkrstRng<oer_mmio::Host<'a>> {
+    impl<'a> LpPericlkrstRngInit<oer_mmio::Host<'a>> {
         /// The part over host memory, for tests of its accessors.
         pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
             oer_mmio::Block::host(words).map(Self)
         }
     }
 
-    impl<P: oer_mmio::Placement> LpPericlkrstRng<P> {
+    impl<P: oer_mmio::Placement> LpPericlkrstRngInit<P> {
         /// Read `RNG_CTRL`.
         #[inline]
         pub fn read_rng_ctrl(&self) -> rng_ctrl::R {
@@ -172961,43 +173635,23 @@ pub mod trng {
         }
     }
 
-    /// The `Trng` part of `TRNG`.
+    /// The `TrngInit` part of `TRNG`.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_HAL_ESP32S31_INCLUDE_HAL_RNG_LL_H_L163.
     #[must_use = "dropping a register owner permanently loses its register authority"]
-    pub struct Trng<P: oer_mmio::Placement = oer_mmio::Fixed<0x20814000>>(
-        oer_mmio::Block<P, TrngWords>,
+    pub struct TrngInit<P: oer_mmio::Placement = oer_mmio::Fixed<0x20814000>>(
+        oer_mmio::Part<P, TrngDivision, TrngInitWords>,
     );
 
-    /// The words [`Trng`] holds, as byte offsets from its instance's base.
-    pub struct TrngWords;
+    /// The words [`TrngInit`] holds, observes and shares by field.
+    pub struct TrngInitWords;
 
-    impl oer_mmio::Registers for TrngWords {
-        const WORDS: &'static [usize] = &[0x0, 0x4, 0x2c, 0x48, 0xfc];
-    }
-
-    impl oer_mmio::Words for TrngWords {
-        const OWNED: &'static [usize] = &[0x0, 0x4, 0x2c, 0x48, 0xfc];
+    impl oer_mmio::Words for TrngInitWords {
+        const OWNED: &'static [usize] = &[0x0, 0x4, 0xfc];
         const OBSERVED: &'static [usize] = &[];
     }
 
-    /// The part's device registers, as the PAC root claims them.
-    pub type TrngClaim = oer_mmio::Block<oer_mmio::Fixed<0x20814000>, TrngWords>;
-
-    impl Trng {
-        /// The owner of the part's device registers.
-        #[inline]
-        pub fn new(block: TrngClaim) -> Self {
-            Self(block)
-        }
-    }
-
-    impl<'a> Trng<oer_mmio::Host<'a>> {
-        /// The part over host memory, for tests of its accessors.
-        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
-            oer_mmio::Block::host(words).map(Self)
-        }
-    }
-
-    impl<P: oer_mmio::Placement> Trng<P> {
+    impl<P: oer_mmio::Placement> TrngInit<P> {
         /// Read `CONF`.
         #[inline]
         pub fn read_conf(&self) -> conf::R {
@@ -173052,6 +173706,53 @@ pub mod trng {
             self.0.write::<0x4>(value.0);
         }
 
+        /// Read `DATE`.
+        #[inline]
+        pub fn read_date(&self) -> date::R {
+            date::R(self.0.read::<0xfc>())
+        }
+
+        /// Read `DATE`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_date(&mut self, change: impl FnOnce(&mut date::W)) {
+            let mut value = date::W(self.0.read::<0xfc>());
+            change(&mut value);
+            self.0.write::<0xfc>(value.0);
+        }
+    }
+
+    /// The `Trng` part of `TRNG`.
+    ///
+    /// The entropy owner reads the conditioned output and health status; only the bootstrap initializer configures sampling and health tests.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_TRNG.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct Trng<P: oer_mmio::Placement = oer_mmio::Fixed<0x20814000>>(
+        oer_mmio::Part<P, TrngDivision, TrngWords>,
+    );
+
+    /// The words [`Trng`] holds, observes and shares by field.
+    pub struct TrngWords;
+
+    impl oer_mmio::Words for TrngWords {
+        const OWNED: &'static [usize] = &[0x2c, 0x48];
+        const OBSERVED: &'static [usize] = &[0x0, 0x4];
+    }
+
+    impl<P: oer_mmio::Placement> Trng<P> {
+        /// Read `CONF`.
+        #[inline]
+        pub fn read_conf(&self) -> conf::R {
+            conf::R(self.0.read::<0x0>())
+        }
+
+        /// Read `DEBUG_CONF`.
+        #[inline]
+        pub fn read_debug_conf(&self) -> debug_conf::R {
+            debug_conf::R(self.0.read::<0x4>())
+        }
+
         /// Read `INT_RAW`.
         #[inline]
         pub fn read_int_raw(&self) -> int_raw::R {
@@ -173078,21 +173779,35 @@ pub mod trng {
         pub fn read_crc_sync_data(&self) -> crc_sync_data::R {
             crc_sync_data::R(self.0.read::<0x48>())
         }
+    }
 
-        /// Read `DATE`.
-        #[inline]
-        pub fn read_date(&self) -> date::R {
-            date::R(self.0.read::<0xfc>())
-        }
+    /// The words of `TRNG` its parts [`TrngInit`], [`Trng`] hold, which one block divides:
+    /// the parts observe or split each other's words.
+    pub struct TrngDivision;
 
-        /// Read `DATE`, change fields and write it back; every other bit keeps
-        /// the value read, every write-trigger field is zero.
-        #[inline]
-        pub fn modify_date(&mut self, change: impl FnOnce(&mut date::W)) {
-            let mut value = date::W(self.0.read::<0xfc>());
-            change(&mut value);
-            self.0.write::<0xfc>(value.0);
-        }
+    impl oer_mmio::Registers for TrngDivision {
+        const WORDS: &'static [usize] = &[0x0, 0x4, 0x2c, 0x48, 0xfc];
+    }
+
+    /// The divided words' device registers, as the PAC root claims them.
+    pub type TrngDivisionClaim = oer_mmio::Block<oer_mmio::Fixed<0x20814000>, TrngDivision>;
+
+    /// Divide the block into its parts.
+    #[inline]
+    pub fn trng_divide<P: oer_mmio::Placement>(
+        block: oer_mmio::Block<P, TrngDivision>,
+    ) -> (TrngInit<P>, Trng<P>) {
+        let (trng_init, trng) = block.divide::<(TrngInitWords, TrngWords)>();
+        (TrngInit(trng_init), Trng(trng))
+    }
+
+    /// The parts over host memory, for tests of their accessors.
+    #[allow(clippy::type_complexity, reason = "one owner per part")]
+    pub fn trng_host(
+        words: &mut [u32],
+    ) -> Result<(TrngInit<oer_mmio::Host<'_>>, Trng<oer_mmio::Host<'_>>), oer_mmio::HostTooSmall>
+    {
+        oer_mmio::Block::host(words).map(trng_divide)
     }
 }
 
@@ -217879,6 +218594,22 @@ pub mod wifi_mac {
 /// The ownership partitions of the typed register blocks and the one
 /// claim the PAC root takes.
 pub mod ownership {
+    /// The bootstrap SoC initializer: access-path filters, the LP TRNG clock, reset, sampling, conditioning and health tests, and the system timer's bus and function clocks the boot's monotonic clock needs. Core containment is owned by CoreControlPeripherals.
+    pub struct SocPeripherals {
+        /// The `LpApmFilter` part.
+        pub lp_apm_filter: super::lp_apm::LpApmFilter,
+        /// The `HpApmFilter` part.
+        pub hp_apm_filter: super::hp_apm::HpApmFilter,
+        /// The `HpMemApmFilter` part.
+        pub hp_mem_apm_filter: super::hp_mem_apm::HpMemApmFilter,
+        /// The `TrngInit` part.
+        pub trng_init: super::trng::TrngInit,
+        /// The `LpPericlkrstRngInit` part.
+        pub lp_periclkrst_rng_init: super::lp_peri_clkrst::LpPericlkrstRngInit,
+        /// The `HpSysClkrstSystimer` part.
+        pub hp_sys_clkrst_systimer: super::hp_sys_clkrst::HpSysClkrstSystimer,
+    }
+
     /// The USB Serial/JTAG console: its data FIFO, interrupts and pads, written by the early writer before the console's driver exists and by the driver after.
     pub struct UsbSerialJtagPeripherals {
         /// The `UsbSerialJtagTask` part.
@@ -217913,12 +218644,10 @@ pub mod ownership {
         pub efuse: super::efuse::Efuse,
     }
 
-    /// The true random number generator and its clock and reset word: the bootstrap enables it, the entropy owner reads it.
+    /// The conditioned TRNG output and error word, with read-only views of the configuration held by the bootstrap SoC initializer.
     pub struct EntropyPeripherals {
         /// The `Trng` part.
         pub trng: super::trng::Trng,
-        /// The `LpPericlkrstRng` part.
-        pub lp_periclkrst_rng: super::lp_peri_clkrst::LpPericlkrstRng,
     }
 
     /// The reset-cause words of both HP cores, read by the reset-cause owner.
@@ -218342,6 +219071,8 @@ pub mod ownership {
 
     /// Every partition.
     pub struct Partitions {
+        /// [`SocPeripherals`].
+        pub soc: SocPeripherals,
         /// [`UsbSerialJtagPeripherals`].
         pub usb_serial_jtag: UsbSerialJtagPeripherals,
         /// [`CoreControlPeripherals`].
@@ -218407,19 +219138,24 @@ pub mod ownership {
     pub type Claims = (
         (
             (
+                super::lp_apm::LpApmFilterClaim,
+                super::hp_apm::HpApmFilterClaim,
+                super::hp_mem_apm::HpMemApmFilterClaim,
+            ),
+            (
+                super::lp_peri_clkrst::LpPericlkrstRngInitClaim,
+                super::hp_sys_clkrst::HpSysClkrstSystimerClaim,
                 super::usb_serial_jtag::UsbSerialJtagPadsClaim,
+            ),
+            (
                 super::pmu::PmuCpuStallClaim,
                 super::hp_system::HpSysCoreStallStatusClaim,
+                super::hp_sys_clkrst::HpSysClkrstCoreClaim,
             ),
             (
-                super::hp_sys_clkrst::HpSysClkrstCoreClaim,
                 super::lp_aonclkrst::LpAonClkrstCoreResetClaim,
                 super::hp_sys_clkrst::HpSysClkrstUart0Claim,
-            ),
-            (
                 super::efuse::EfuseClaim,
-                super::trng::TrngClaim,
-                super::lp_peri_clkrst::LpPericlkrstRngClaim,
             ),
             (
                 super::lp_aonclkrst::LpAonResetCauseClaim,
@@ -218436,85 +219172,83 @@ pub mod ownership {
                 super::systimer::SystimerCounterClaim,
                 super::hp_system::FromCpu0Claim,
             ),
+            (super::hp_system::FromCpu1Claim,),
+        ),
+        (
             (
-                super::hp_system::FromCpu1Claim,
                 super::hp_system::FromCpu2Claim,
                 super::hp_system::FromCpu3Claim,
-            ),
-        ),
-        (
-            (
                 super::clic::ClicClaim,
+            ),
+            (
                 super::interrupt_core::InterruptCore0Claim,
                 super::interrupt_core::InterruptCore0StatusClaim,
+                super::interrupt_core::InterruptCore1Claim,
             ),
             (
-                super::interrupt_core::InterruptCore1Claim,
                 super::interrupt_core::InterruptCore1StatusClaim,
                 super::wifi_bb::WifiPhyRateOracleWifiBbClaim,
+                super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrxClaim,
             ),
             (
-                super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrxClaim,
                 super::wifi_mac::WifiMacAntennaInitClaim,
                 super::modem_pwr::WifiMacAuxTsfControlClaim,
+                super::wifi_mac::WifiMacBeaconIeCrcClaim,
             ),
             (
-                super::wifi_mac::WifiMacBeaconIeCrcClaim,
                 super::wifi_mac::WifiMacBeamformingFeedbackTestClaim,
                 super::wifi_mac::WifiMacBeamformingReportClaim,
+                super::wifi_mac::WifiMacBlockAckClaim,
             ),
             (
-                super::wifi_mac::WifiMacBlockAckClaim,
                 super::wifi_mac::WifiMacBssidPolicyClaim,
                 super::wifi_mac::WifiMacCoexInitClaim,
+                super::modem_pwr::WifiMacCoexRuntimeClaim,
             ),
             (
-                super::modem_pwr::WifiMacCoexRuntimeClaim,
                 super::wifi_mac::WifiMacColdHandshakeClaim,
                 super::wifi_mac::WifiMacControlClaim,
-            ),
-            (
                 super::wifi_mac::WifiMacCoreEnableClaim,
-                super::wifi_mac::WifiMacCryptoControlClaim,
-                super::wifi_mac::WifiMacCsiDumpClaim,
             ),
+            (super::wifi_mac::WifiMacCryptoControlClaim,),
         ),
         (
             (
+                super::wifi_mac::WifiMacCsiDumpClaim,
                 super::wifi_mac::WifiMacDiagnosticStatisticsClaim,
                 super::wifi_mac::WifiMacHeBufferStatusClaim,
-                super::wifi_mac::WifiMacHeColorCollisionClaim,
             ),
             (
+                super::wifi_mac::WifiMacHeColorCollisionClaim,
                 super::wifi_mac::WifiMacHeInitPrefixClaim,
                 super::wifi_mac::WifiMacHeInitSuffixClaim,
-                super::wifi_mac::WifiMacHeMuEdcaTimerClaim,
             ),
             (
+                super::wifi_mac::WifiMacHeMuEdcaTimerClaim,
                 super::wifi_mac::WifiMacHeObssNarrowBandRuClaim,
                 super::wifi_mac::WifiMacHeTbDiagnosticsClaim,
-                super::wifi_mac::WifiMacHeTbStatisticsClaim,
             ),
             (
+                super::wifi_mac::WifiMacHeTbStatisticsClaim,
                 super::wifi_mac::WifiMacHeTriggerRxDiagnosticsClaim,
                 super::wifi_mac::WifiMacInternalTxBlockAckClaim,
-                super::wifi_mac::WifiMacKeyTableClaim,
             ),
             (
+                super::wifi_mac::WifiMacKeyTableClaim,
                 super::wifi_mac::WifiMacLastRxBufferClaim,
                 super::modem_pwr::WifiMacRegdmaControlClaim,
-                super::modem_pwr::WifiMacRtcTimerUpdateClaim,
             ),
             (
+                super::modem_pwr::WifiMacRtcTimerUpdateClaim,
                 super::wifi_mac::WifiMacRxBssidListClaim,
                 super::wifi_mac::WifiMacRxCsiControlClaim,
-                super::wifi_mac::WifiMacRxCustomTypeClaim,
             ),
             (
+                super::wifi_mac::WifiMacRxCustomTypeClaim,
                 super::wifi_mac::WifiMacRxEndStateClaim,
                 super::wifi_mac::WifiMacRxFilterClaim,
-                super::wifi_mac::WifiMacRxHangStatisticsClaim,
             ),
+            (super::wifi_mac::WifiMacRxHangStatisticsClaim,),
         ),
         (
             (
@@ -218552,87 +219286,85 @@ pub mod ownership {
                 super::wifi_mac::WifiMacInterruptClaim,
                 super::modem_pwr::WifiMacPowerInterruptClaim,
             ),
+            (super::modem_pwr::WifiMacLocalTimeClaim,),
         ),
         (
             (
-                super::modem_pwr::WifiMacLocalTimeClaim,
                 super::hp_sys_clkrst::HpSysClkrstRadioClaim,
                 super::pmu::PmuRadioClaim,
+                super::modem_syscon::ModemSysconRadioClaim,
             ),
             (
-                super::modem_syscon::ModemSysconRadioClaim,
                 super::fe::PhyAgcOracleFeClaim,
                 super::wifi_bb::PhyAgcOracleWifiBbClaim,
+                super::wifi_bb_brx::PhyAgcOracleWifiBbBrxClaim,
             ),
             (
-                super::wifi_bb_brx::PhyAgcOracleWifiBbBrxClaim,
                 super::wifi_bb::PhyAgcRecoveredGapsClaim,
                 super::fe::PhyBasebandConfigOracleFeClaim,
+                super::wifi_mac::PhyBasebandConfigOracleWifiMacClaim,
             ),
             (
-                super::wifi_mac::PhyBasebandConfigOracleWifiMacClaim,
                 super::wifi_bb::PhyBasebandConfigOracleWifiBbClaim,
                 super::wifi_bb::PhyBbRecoveredGapsClaim,
+                super::wifi_bb_brx::PhyBrxRecoveredGapsClaim,
             ),
             (
-                super::wifi_bb_brx::PhyBrxRecoveredGapsClaim,
                 super::bt_bb::PhyBtagcRecoveredClaim,
                 super::fe::PhyClockOracleFeClaim,
+                super::wifi_bb::PhyClockOracleWifiBbClaim,
             ),
             (
-                super::wifi_bb::PhyClockOracleWifiBbClaim,
                 super::fe::PhyFectrlRecoveredClaim,
                 super::fe::PhyAdcDumpRecoveredFeClaim,
+                super::bt_bb::PhyAdcDumpRecoveredBtBbClaim,
             ),
             (
-                super::bt_bb::PhyAdcDumpRecoveredBtBbClaim,
                 super::wifi_bb::PhyAdcDumpRecoveredWifiBbClaim,
                 super::modem_datadump::PhyAdcDumpRecoveredModemDatadumpClaim,
+                super::fe::PhyFedataRecoveredClaim,
             ),
+            (super::fe::PhyFedataWifiRecoveredClaim,),
         ),
         (
             (
-                super::fe::PhyFedataRecoveredClaim,
-                super::fe::PhyFedataWifiRecoveredClaim,
                 super::fe::PhyFrequencyChannelOracleFeClaim,
-            ),
-            (
                 super::wifi_mac::PhyFrequencyChannelOracleWifiMacClaim,
                 super::wifi_bb::PhyFrequencyChannelOracleWifiBbClaim,
-                super::fe::PhyIqEstimatorOracleClaim,
             ),
             (
+                super::fe::PhyIqEstimatorOracleClaim,
                 super::modem_lpcon::ModemLpconSharedClockClaim,
                 super::modem_lpcon::ModemLpconPhyTickClaim,
-                super::lp_aonclkrst::LpAonClkrstClaim,
             ),
             (
+                super::lp_aonclkrst::LpAonClkrstClaim,
                 super::lp_peri_clkrst::LpPericlkrstClaim,
                 super::tsens::LpTsensClaim,
-                super::fe::PhyMemoryClaim,
             ),
             (
+                super::fe::PhyMemoryClaim,
                 super::wifi_bb::PhyNrxRecoveredGapsClaim,
                 super::fe::PhyPbusClaim,
-                super::fe::PhyRxDcoOracleClaim,
             ),
             (
+                super::fe::PhyRxDcoOracleClaim,
                 super::coex::CoexHwTimerClaim,
                 super::coex::CoexExternalClaim,
-                super::fe::PhyFecoexRecoveredClaim,
             ),
             (
+                super::fe::PhyFecoexRecoveredClaim,
                 super::bt_mac::BleControllerAddressSlotsClaim,
                 super::ble_accelerator::BleHwAcceleratorClaim,
-                super::bt_mac::BleHwCteRingControlClaim,
             ),
-        ),
-        (
             (
+                super::bt_mac::BleHwCteRingControlClaim,
                 super::bt_mac::BleHwResolvingListClaim,
                 super::bt_mac::BleHwRuntimeControlClaim,
-                super::bt_mac::BleIsoSchedulerNotifyClaim,
             ),
+            (super::bt_mac::BleIsoSchedulerNotifyClaim,),
+        ),
+        (
             (
                 super::bt_mac::BleHwPositionalWord1ff0Claim,
                 super::modem_etm::BleHwPositionalWord891cClaim,
@@ -218663,38 +219395,43 @@ pub mod ownership {
                 super::bt_bb::SharedBasebandTxTimingClaim,
                 super::bt_bb::ZbbbRadioControlClaim,
             ),
-        ),
-        (
             (
                 super::hp_sys_clkrst::HpSysClkrstBootClockClaim,
                 super::lp_aonclkrst::LpAonClkrstCpllClaim,
                 super::pmu::PmuBootClockClaim,
             ),
+            (super::hp_alive_sys::HpAliveSysPllClockClaim,),
+        ),
+        (
             (
-                super::hp_alive_sys::HpAliveSysPllClockClaim,
                 super::cache::CacheBootClaim,
                 super::spi_mem_c::Spi0FlashClaim,
             ),
             (
                 super::spi1_mem_c::Spi1FlashClaim,
                 super::spi_mem_s::Memspi2PsramClaim,
-                super::spi1_mem_s::Memspi3PsramClaim,
             ),
             (
+                super::spi1_mem_s::Memspi3PsramClaim,
                 super::iomux_mspi_pin::IomuxMspiPsramPinsClaim,
+            ),
+            (
                 super::lp_ana::LpAnaBrownoutClaim,
                 super::i2c_ana_mst::I2cAnaMstClaim,
             ),
             (
                 super::i2c_ana_mst_mem::PhyI2cCommandRamClaim,
                 super::bus_monitor::DebugModeStatusClaim,
+            ),
+            (
+                super::trng::TrngDivisionClaim,
                 super::usb_serial_jtag::UsbDeviceDivisionClaim,
             ),
             (
                 super::systimer::SystimerDivisionClaim,
                 super::modem_etm::ModemEtmDivisionClaim,
-                super::ieee802154::Ieee802154DivisionClaim,
             ),
+            (super::ieee802154::Ieee802154DivisionClaim,),
         ),
     );
 
@@ -218703,475 +219440,493 @@ pub mod ownership {
     pub fn partition(claims: Claims) -> Partitions {
         let (
             (
-                (claim_2, claim_3, claim_4),
-                (claim_5, claim_6, claim_7),
-                (claim_8, claim_9, claim_10),
-                (claim_11, claim_12, claim_13),
-                (claim_14, claim_15, claim_16),
-                (claim_17, claim_18, claim_22),
-                (claim_23, claim_24, claim_25),
+                (claim_0, claim_1, claim_2),
+                (claim_4, claim_5, claim_8),
+                (claim_9, claim_10, claim_11),
+                (claim_12, claim_13, claim_14),
+                (claim_16, claim_17, claim_18),
+                (claim_19, claim_20, claim_21),
+                (claim_22, claim_23, claim_27),
+                (claim_28,),
             ),
             (
-                (claim_26, claim_27, claim_28),
                 (claim_29, claim_30, claim_31),
                 (claim_32, claim_33, claim_34),
                 (claim_35, claim_36, claim_37),
                 (claim_38, claim_39, claim_40),
                 (claim_41, claim_42, claim_43),
                 (claim_44, claim_45, claim_46),
-            ),
-            (
                 (claim_47, claim_48, claim_49),
-                (claim_50, claim_51, claim_52),
-                (claim_53, claim_54, claim_55),
-                (claim_56, claim_57, claim_58),
-                (claim_59, claim_60, claim_61),
-                (claim_62, claim_63, claim_64),
-                (claim_65, claim_66, claim_67),
+                (claim_50,),
             ),
             (
-                (claim_68, claim_69, claim_70),
-                (claim_71, claim_72, claim_73),
-                (claim_74, claim_75, claim_76),
-                (claim_77, claim_78, claim_79),
-                (claim_80, claim_81, claim_82),
-                (claim_83, claim_84, claim_85),
-                (claim_86, claim_87, claim_88),
+                (claim_51, claim_52, claim_53),
+                (claim_54, claim_55, claim_56),
+                (claim_57, claim_58, claim_59),
+                (claim_60, claim_61, claim_62),
+                (claim_63, claim_64, claim_65),
+                (claim_66, claim_67, claim_68),
+                (claim_69, claim_70, claim_71),
+                (claim_72,),
             ),
             (
-                (claim_89, claim_90, claim_91),
-                (claim_92, claim_93, claim_94),
+                (claim_73, claim_74, claim_75),
+                (claim_76, claim_77, claim_78),
+                (claim_79, claim_80, claim_81),
+                (claim_82, claim_83, claim_84),
+                (claim_85, claim_86, claim_87),
+                (claim_88, claim_89, claim_90),
+                (claim_91, claim_92, claim_93),
+                (claim_94,),
+            ),
+            (
                 (claim_95, claim_96, claim_97),
                 (claim_98, claim_99, claim_100),
                 (claim_101, claim_102, claim_103),
                 (claim_104, claim_105, claim_106),
                 (claim_107, claim_108, claim_109),
-            ),
-            (
                 (claim_110, claim_111, claim_112),
                 (claim_113, claim_114, claim_115),
-                (claim_116, claim_117, claim_118),
-                (claim_119, claim_120, claim_121),
-                (claim_122, claim_123, claim_124),
-                (claim_125, claim_126, claim_127),
-                (claim_128, claim_129, claim_130),
+                (claim_116,),
             ),
             (
-                (claim_131, claim_132, claim_133),
-                (claim_134, claim_135, claim_136),
-                (claim_137, claim_138, claim_139),
-                (claim_140, claim_141, claim_142),
-                (claim_143, claim_144, claim_145),
-                (claim_146, claim_147, claim_148),
-                (claim_149, claim_150, claim_151),
+                (claim_117, claim_118, claim_119),
+                (claim_120, claim_121, claim_122),
+                (claim_123, claim_124, claim_125),
+                (claim_126, claim_127, claim_128),
+                (claim_129, claim_130, claim_131),
+                (claim_132, claim_133, claim_134),
+                (claim_135, claim_136, claim_137),
+                (claim_138,),
             ),
             (
-                (claim_157, claim_158, claim_159),
-                (claim_160, claim_161, claim_162),
-                (claim_163, claim_164, claim_165),
-                (claim_166, claim_167, claim_168),
-                (claim_169, claim_170, division_0),
-                (division_1, division_2, division_3),
+                (claim_139, claim_140, claim_141),
+                (claim_142, claim_143, claim_144),
+                (claim_145, claim_146, claim_147),
+                (claim_148, claim_149, claim_150),
+                (claim_151, claim_152, claim_153),
+                (claim_154, claim_155, claim_156),
+                (claim_162, claim_163, claim_164),
+                (claim_165,),
+            ),
+            (
+                (claim_166, claim_167),
+                (claim_168, claim_169),
+                (claim_170, claim_171),
+                (claim_172, claim_173),
+                (claim_174, claim_175),
+                (division_0, division_1),
+                (division_2, division_3),
+                (division_4,),
             ),
         ) = claims;
-        let owner_2 = super::usb_serial_jtag::UsbSerialJtagPads::new(claim_2);
-        let owner_3 = super::pmu::PmuCpuStall::new(claim_3);
-        let owner_4 = super::hp_system::HpSysCoreStallStatus::new(claim_4);
-        let owner_5 = super::hp_sys_clkrst::HpSysClkrstCore::new(claim_5);
-        let owner_6 = super::lp_aonclkrst::LpAonClkrstCoreReset::new(claim_6);
-        let owner_7 = super::hp_sys_clkrst::HpSysClkrstUart0::new(claim_7);
-        let owner_8 = super::efuse::Efuse::new(claim_8);
-        let owner_9 = super::trng::Trng::new(claim_9);
-        let owner_10 = super::lp_peri_clkrst::LpPericlkrstRng::new(claim_10);
-        let owner_11 = super::lp_aonclkrst::LpAonResetCause::new(claim_11);
-        let owner_12 = super::timg::Timg0Wdt::new(claim_12);
-        let owner_13 = super::timg::Timg1Wdt::new(claim_13);
-        let owner_14 = super::hp_sys_clkrst::HpSysClkrstTimg1::new(claim_14);
-        let owner_15 = super::rtc_wdt::LpWdt::new(claim_15);
-        let owner_16 = super::rtc_wdt::LpWdtSwd::new(claim_16);
-        let owner_17 = super::systimer::Systimer::new(claim_17);
-        let owner_18 = super::systimer::SystimerCounter::new(claim_18);
-        let owner_22 = super::hp_system::FromCpu0::new(claim_22);
-        let owner_23 = super::hp_system::FromCpu1::new(claim_23);
-        let owner_24 = super::hp_system::FromCpu2::new(claim_24);
-        let owner_25 = super::hp_system::FromCpu3::new(claim_25);
-        let owner_26 = super::clic::Clic::new(claim_26);
-        let owner_27 = super::interrupt_core::InterruptCore0::new(claim_27);
-        let owner_28 = super::interrupt_core::InterruptCore0Status::new(claim_28);
-        let owner_29 = super::interrupt_core::InterruptCore1::new(claim_29);
-        let owner_30 = super::interrupt_core::InterruptCore1Status::new(claim_30);
-        let owner_31 = super::wifi_bb::WifiPhyRateOracleWifiBb::new(claim_31);
-        let owner_32 = super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrx::new(claim_32);
-        let owner_33 = super::wifi_mac::WifiMacAntennaInit::new(claim_33);
-        let owner_34 = super::modem_pwr::WifiMacAuxTsfControl::new(claim_34);
-        let owner_35 = super::wifi_mac::WifiMacBeaconIeCrc::new(claim_35);
-        let owner_36 = super::wifi_mac::WifiMacBeamformingFeedbackTest::new(claim_36);
-        let owner_37 = super::wifi_mac::WifiMacBeamformingReport::new(claim_37);
-        let owner_38 = super::wifi_mac::WifiMacBlockAck::new(claim_38);
-        let owner_39 = super::wifi_mac::WifiMacBssidPolicy::new(claim_39);
-        let owner_40 = super::wifi_mac::WifiMacCoexInit::new(claim_40);
-        let owner_41 = super::modem_pwr::WifiMacCoexRuntime::new(claim_41);
-        let owner_42 = super::wifi_mac::WifiMacColdHandshake::new(claim_42);
-        let owner_43 = super::wifi_mac::WifiMacControl::new(claim_43);
-        let owner_44 = super::wifi_mac::WifiMacCoreEnable::new(claim_44);
-        let owner_45 = super::wifi_mac::WifiMacCryptoControl::new(claim_45);
-        let owner_46 = super::wifi_mac::WifiMacCsiDump::new(claim_46);
-        let owner_47 = super::wifi_mac::WifiMacDiagnosticStatistics::new(claim_47);
-        let owner_48 = super::wifi_mac::WifiMacHeBufferStatus::new(claim_48);
-        let owner_49 = super::wifi_mac::WifiMacHeColorCollision::new(claim_49);
-        let owner_50 = super::wifi_mac::WifiMacHeInitPrefix::new(claim_50);
-        let owner_51 = super::wifi_mac::WifiMacHeInitSuffix::new(claim_51);
-        let owner_52 = super::wifi_mac::WifiMacHeMuEdcaTimer::new(claim_52);
-        let owner_53 = super::wifi_mac::WifiMacHeObssNarrowBandRu::new(claim_53);
-        let owner_54 = super::wifi_mac::WifiMacHeTbDiagnostics::new(claim_54);
-        let owner_55 = super::wifi_mac::WifiMacHeTbStatistics::new(claim_55);
-        let owner_56 = super::wifi_mac::WifiMacHeTriggerRxDiagnostics::new(claim_56);
-        let owner_57 = super::wifi_mac::WifiMacInternalTxBlockAck::new(claim_57);
-        let owner_58 = super::wifi_mac::WifiMacKeyTable::new(claim_58);
-        let owner_59 = super::wifi_mac::WifiMacLastRxBuffer::new(claim_59);
-        let owner_60 = super::modem_pwr::WifiMacRegdmaControl::new(claim_60);
-        let owner_61 = super::modem_pwr::WifiMacRtcTimerUpdate::new(claim_61);
-        let owner_62 = super::wifi_mac::WifiMacRxBssidList::new(claim_62);
-        let owner_63 = super::wifi_mac::WifiMacRxCsiControl::new(claim_63);
-        let owner_64 = super::wifi_mac::WifiMacRxCustomType::new(claim_64);
-        let owner_65 = super::wifi_mac::WifiMacRxEndState::new(claim_65);
-        let owner_66 = super::wifi_mac::WifiMacRxFilter::new(claim_66);
-        let owner_67 = super::wifi_mac::WifiMacRxHangStatistics::new(claim_67);
-        let owner_68 = super::wifi_mac::WifiMacRxPowerSave::new(claim_68);
-        let owner_69 = super::wifi_mac::WifiMacRxRuntimeResults::new(claim_69);
-        let owner_70 = super::wifi_mac::WifiMacRxStatistics::new(claim_70);
-        let owner_71 = super::wifi_mac::WifiMacStaBeaconFilter::new(claim_71);
-        let owner_72 = super::modem_pwr::WifiMacStaTbttTarget::new(claim_72);
-        let owner_73 = super::modem_pwr::WifiMacTsfLoad::new(claim_73);
-        let owner_74 = super::modem_pwr::WifiMacTsfStatus::new(claim_74);
-        let owner_75 = super::modem_pwr::WifiMacTsfTimer::new(claim_75);
-        let owner_76 = super::wifi_mac::WifiMacTxrxCallbacks::new(claim_76);
-        let owner_77 = super::wifi_mac::WifiMacTxrxPrefix::new(claim_77);
-        let owner_78 = super::wifi_mac::WifiMacTxrxSuffix::new(claim_78);
-        let owner_79 = super::wifi_mac::WifiMacTxCommon::new(claim_79);
-        let owner_80 = super::wifi_mac::WifiMacTxCompletion::new(claim_80);
-        let owner_81 = super::wifi_mac::WifiMacTxPowerInit::new(claim_81);
-        let owner_82 = super::wifi_mac::WifiMacTxQueueControl::new(claim_82);
-        let owner_83 = super::wifi_mac::WifiMacTxQueueVector::new(claim_83);
-        let owner_84 = super::wifi_mac::WifiMacTxStatistics::new(claim_84);
-        let owner_85 = super::wifi_mac::WifiMacInterfaceAddress::new(claim_85);
-        let owner_86 = super::wifi_mac::WifiMacRxDma::new(claim_86);
-        let owner_87 = super::wifi_mac::WifiMacInterrupt::new(claim_87);
-        let owner_88 = super::modem_pwr::WifiMacPowerInterrupt::new(claim_88);
-        let owner_89 = super::modem_pwr::WifiMacLocalTime::new(claim_89);
-        let owner_90 = super::hp_sys_clkrst::HpSysClkrstRadio::new(claim_90);
-        let owner_91 = super::pmu::PmuRadio::new(claim_91);
-        let owner_92 = super::modem_syscon::ModemSysconRadio::new(claim_92);
-        let owner_93 = super::fe::PhyAgcOracleFe::new(claim_93);
-        let owner_94 = super::wifi_bb::PhyAgcOracleWifiBb::new(claim_94);
-        let owner_95 = super::wifi_bb_brx::PhyAgcOracleWifiBbBrx::new(claim_95);
-        let owner_96 = super::wifi_bb::PhyAgcRecoveredGaps::new(claim_96);
-        let owner_97 = super::fe::PhyBasebandConfigOracleFe::new(claim_97);
-        let owner_98 = super::wifi_mac::PhyBasebandConfigOracleWifiMac::new(claim_98);
-        let owner_99 = super::wifi_bb::PhyBasebandConfigOracleWifiBb::new(claim_99);
-        let owner_100 = super::wifi_bb::PhyBbRecoveredGaps::new(claim_100);
-        let owner_101 = super::wifi_bb_brx::PhyBrxRecoveredGaps::new(claim_101);
-        let owner_102 = super::bt_bb::PhyBtagcRecovered::new(claim_102);
-        let owner_103 = super::fe::PhyClockOracleFe::new(claim_103);
-        let owner_104 = super::wifi_bb::PhyClockOracleWifiBb::new(claim_104);
-        let owner_105 = super::fe::PhyFectrlRecovered::new(claim_105);
-        let owner_106 = super::fe::PhyAdcDumpRecoveredFe::new(claim_106);
-        let owner_107 = super::bt_bb::PhyAdcDumpRecoveredBtBb::new(claim_107);
-        let owner_108 = super::wifi_bb::PhyAdcDumpRecoveredWifiBb::new(claim_108);
-        let owner_109 = super::modem_datadump::PhyAdcDumpRecoveredModemDatadump::new(claim_109);
-        let owner_110 = super::fe::PhyFedataRecovered::new(claim_110);
-        let owner_111 = super::fe::PhyFedataWifiRecovered::new(claim_111);
-        let owner_112 = super::fe::PhyFrequencyChannelOracleFe::new(claim_112);
-        let owner_113 = super::wifi_mac::PhyFrequencyChannelOracleWifiMac::new(claim_113);
-        let owner_114 = super::wifi_bb::PhyFrequencyChannelOracleWifiBb::new(claim_114);
-        let owner_115 = super::fe::PhyIqEstimatorOracle::new(claim_115);
-        let owner_116 = super::modem_lpcon::ModemLpconSharedClock::new(claim_116);
-        let owner_117 = super::modem_lpcon::ModemLpconPhyTick::new(claim_117);
-        let owner_118 = super::lp_aonclkrst::LpAonClkrst::new(claim_118);
-        let owner_119 = super::lp_peri_clkrst::LpPericlkrst::new(claim_119);
-        let owner_120 = super::tsens::LpTsens::new(claim_120);
-        let owner_121 = super::fe::PhyMemory::new(claim_121);
-        let owner_122 = super::wifi_bb::PhyNrxRecoveredGaps::new(claim_122);
-        let owner_123 = super::fe::PhyPbus::new(claim_123);
-        let owner_124 = super::fe::PhyRxDcoOracle::new(claim_124);
-        let owner_125 = super::coex::CoexHwTimer::new(claim_125);
-        let owner_126 = super::coex::CoexExternal::new(claim_126);
-        let owner_127 = super::fe::PhyFecoexRecovered::new(claim_127);
-        let owner_128 = super::bt_mac::BleControllerAddressSlots::new(claim_128);
-        let owner_129 = super::ble_accelerator::BleHwAccelerator::new(claim_129);
-        let owner_130 = super::bt_mac::BleHwCteRingControl::new(claim_130);
-        let owner_131 = super::bt_mac::BleHwResolvingList::new(claim_131);
-        let owner_132 = super::bt_mac::BleHwRuntimeControl::new(claim_132);
-        let owner_133 = super::bt_mac::BleIsoSchedulerNotify::new(claim_133);
-        let owner_134 = super::bt_mac::BleHwPositionalWord1ff0::new(claim_134);
-        let owner_135 = super::modem_etm::BleHwPositionalWord891c::new(claim_135);
-        let owner_136 = super::bt_mac::BleScanBackoff::new(claim_136);
-        let owner_137 = super::bt_mac::BleSyncPublication::new(claim_137);
-        let owner_138 = super::bt_mac::BluetoothControllerCore::new(claim_138);
-        let owner_139 = super::bt_mac::BluetoothResetIdleStatus0::new(claim_139);
-        let owner_140 = super::btdm::BtdmSchedulerTable::new(claim_140);
-        let owner_141 = super::bt_mac::BtmacBlePhyInit::new(claim_141);
-        let owner_142 = super::bt_bb::BtV32Cte::new(claim_142);
-        let owner_143 = super::modem_pwr::BtdmRuntimeControl::new(claim_143);
-        let owner_144 = super::bt_mac::BluetoothInterruptBank::new(claim_144);
-        let owner_145 = super::bt_mac::BluetoothSchedulerInterruptRuntime::new(claim_145);
-        let owner_146 = super::bt_bb::BtV32Baseband::new(claim_146);
-        let owner_147 = super::bt_bb::BtV32BasebandRxInfo::new(claim_147);
-        let owner_148 = super::wifi_mac::SharedRadioInitControl::new(claim_148);
-        let owner_149 = super::ieee802154::SharedBasebandResetIdleStatus::new(claim_149);
-        let owner_150 = super::bt_bb::SharedBasebandTxTiming::new(claim_150);
-        let owner_151 = super::bt_bb::ZbbbRadioControl::new(claim_151);
-        let owner_157 = super::hp_sys_clkrst::HpSysClkrstBootClock::new(claim_157);
-        let owner_158 = super::lp_aonclkrst::LpAonClkrstCpll::new(claim_158);
-        let owner_159 = super::pmu::PmuBootClock::new(claim_159);
-        let owner_160 = super::hp_alive_sys::HpAliveSysPllClock::new(claim_160);
-        let owner_161 = super::cache::CacheBoot::new(claim_161);
-        let owner_162 = super::spi_mem_c::Spi0Flash::new(claim_162);
-        let owner_163 = super::spi1_mem_c::Spi1Flash::new(claim_163);
-        let owner_164 = super::spi_mem_s::Memspi2Psram::new(claim_164);
-        let owner_165 = super::spi1_mem_s::Memspi3Psram::new(claim_165);
-        let owner_166 = super::iomux_mspi_pin::IomuxMspiPsramPins::new(claim_166);
-        let owner_167 = super::lp_ana::LpAnaBrownout::new(claim_167);
-        let owner_168 = super::i2c_ana_mst::I2cAnaMst::new(claim_168);
-        let owner_169 = super::i2c_ana_mst_mem::PhyI2cCommandRam::new(claim_169);
-        let owner_170 = super::bus_monitor::DebugModeStatus::new(claim_170);
-        let (owner_0, owner_1) = super::usb_serial_jtag::usb_device_divide(division_0);
-        let (owner_19, owner_20, owner_21) = super::systimer::systimer_divide(division_1);
-        let (owner_152, owner_153, owner_154) = super::modem_etm::modem_etm_divide(division_2);
-        let (owner_155, owner_156) = super::ieee802154::ieee802154_divide(division_3);
+        let owner_0 = super::lp_apm::LpApmFilter::new(claim_0);
+        let owner_1 = super::hp_apm::HpApmFilter::new(claim_1);
+        let owner_2 = super::hp_mem_apm::HpMemApmFilter::new(claim_2);
+        let owner_4 = super::lp_peri_clkrst::LpPericlkrstRngInit::new(claim_4);
+        let owner_5 = super::hp_sys_clkrst::HpSysClkrstSystimer::new(claim_5);
+        let owner_8 = super::usb_serial_jtag::UsbSerialJtagPads::new(claim_8);
+        let owner_9 = super::pmu::PmuCpuStall::new(claim_9);
+        let owner_10 = super::hp_system::HpSysCoreStallStatus::new(claim_10);
+        let owner_11 = super::hp_sys_clkrst::HpSysClkrstCore::new(claim_11);
+        let owner_12 = super::lp_aonclkrst::LpAonClkrstCoreReset::new(claim_12);
+        let owner_13 = super::hp_sys_clkrst::HpSysClkrstUart0::new(claim_13);
+        let owner_14 = super::efuse::Efuse::new(claim_14);
+        let owner_16 = super::lp_aonclkrst::LpAonResetCause::new(claim_16);
+        let owner_17 = super::timg::Timg0Wdt::new(claim_17);
+        let owner_18 = super::timg::Timg1Wdt::new(claim_18);
+        let owner_19 = super::hp_sys_clkrst::HpSysClkrstTimg1::new(claim_19);
+        let owner_20 = super::rtc_wdt::LpWdt::new(claim_20);
+        let owner_21 = super::rtc_wdt::LpWdtSwd::new(claim_21);
+        let owner_22 = super::systimer::Systimer::new(claim_22);
+        let owner_23 = super::systimer::SystimerCounter::new(claim_23);
+        let owner_27 = super::hp_system::FromCpu0::new(claim_27);
+        let owner_28 = super::hp_system::FromCpu1::new(claim_28);
+        let owner_29 = super::hp_system::FromCpu2::new(claim_29);
+        let owner_30 = super::hp_system::FromCpu3::new(claim_30);
+        let owner_31 = super::clic::Clic::new(claim_31);
+        let owner_32 = super::interrupt_core::InterruptCore0::new(claim_32);
+        let owner_33 = super::interrupt_core::InterruptCore0Status::new(claim_33);
+        let owner_34 = super::interrupt_core::InterruptCore1::new(claim_34);
+        let owner_35 = super::interrupt_core::InterruptCore1Status::new(claim_35);
+        let owner_36 = super::wifi_bb::WifiPhyRateOracleWifiBb::new(claim_36);
+        let owner_37 = super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrx::new(claim_37);
+        let owner_38 = super::wifi_mac::WifiMacAntennaInit::new(claim_38);
+        let owner_39 = super::modem_pwr::WifiMacAuxTsfControl::new(claim_39);
+        let owner_40 = super::wifi_mac::WifiMacBeaconIeCrc::new(claim_40);
+        let owner_41 = super::wifi_mac::WifiMacBeamformingFeedbackTest::new(claim_41);
+        let owner_42 = super::wifi_mac::WifiMacBeamformingReport::new(claim_42);
+        let owner_43 = super::wifi_mac::WifiMacBlockAck::new(claim_43);
+        let owner_44 = super::wifi_mac::WifiMacBssidPolicy::new(claim_44);
+        let owner_45 = super::wifi_mac::WifiMacCoexInit::new(claim_45);
+        let owner_46 = super::modem_pwr::WifiMacCoexRuntime::new(claim_46);
+        let owner_47 = super::wifi_mac::WifiMacColdHandshake::new(claim_47);
+        let owner_48 = super::wifi_mac::WifiMacControl::new(claim_48);
+        let owner_49 = super::wifi_mac::WifiMacCoreEnable::new(claim_49);
+        let owner_50 = super::wifi_mac::WifiMacCryptoControl::new(claim_50);
+        let owner_51 = super::wifi_mac::WifiMacCsiDump::new(claim_51);
+        let owner_52 = super::wifi_mac::WifiMacDiagnosticStatistics::new(claim_52);
+        let owner_53 = super::wifi_mac::WifiMacHeBufferStatus::new(claim_53);
+        let owner_54 = super::wifi_mac::WifiMacHeColorCollision::new(claim_54);
+        let owner_55 = super::wifi_mac::WifiMacHeInitPrefix::new(claim_55);
+        let owner_56 = super::wifi_mac::WifiMacHeInitSuffix::new(claim_56);
+        let owner_57 = super::wifi_mac::WifiMacHeMuEdcaTimer::new(claim_57);
+        let owner_58 = super::wifi_mac::WifiMacHeObssNarrowBandRu::new(claim_58);
+        let owner_59 = super::wifi_mac::WifiMacHeTbDiagnostics::new(claim_59);
+        let owner_60 = super::wifi_mac::WifiMacHeTbStatistics::new(claim_60);
+        let owner_61 = super::wifi_mac::WifiMacHeTriggerRxDiagnostics::new(claim_61);
+        let owner_62 = super::wifi_mac::WifiMacInternalTxBlockAck::new(claim_62);
+        let owner_63 = super::wifi_mac::WifiMacKeyTable::new(claim_63);
+        let owner_64 = super::wifi_mac::WifiMacLastRxBuffer::new(claim_64);
+        let owner_65 = super::modem_pwr::WifiMacRegdmaControl::new(claim_65);
+        let owner_66 = super::modem_pwr::WifiMacRtcTimerUpdate::new(claim_66);
+        let owner_67 = super::wifi_mac::WifiMacRxBssidList::new(claim_67);
+        let owner_68 = super::wifi_mac::WifiMacRxCsiControl::new(claim_68);
+        let owner_69 = super::wifi_mac::WifiMacRxCustomType::new(claim_69);
+        let owner_70 = super::wifi_mac::WifiMacRxEndState::new(claim_70);
+        let owner_71 = super::wifi_mac::WifiMacRxFilter::new(claim_71);
+        let owner_72 = super::wifi_mac::WifiMacRxHangStatistics::new(claim_72);
+        let owner_73 = super::wifi_mac::WifiMacRxPowerSave::new(claim_73);
+        let owner_74 = super::wifi_mac::WifiMacRxRuntimeResults::new(claim_74);
+        let owner_75 = super::wifi_mac::WifiMacRxStatistics::new(claim_75);
+        let owner_76 = super::wifi_mac::WifiMacStaBeaconFilter::new(claim_76);
+        let owner_77 = super::modem_pwr::WifiMacStaTbttTarget::new(claim_77);
+        let owner_78 = super::modem_pwr::WifiMacTsfLoad::new(claim_78);
+        let owner_79 = super::modem_pwr::WifiMacTsfStatus::new(claim_79);
+        let owner_80 = super::modem_pwr::WifiMacTsfTimer::new(claim_80);
+        let owner_81 = super::wifi_mac::WifiMacTxrxCallbacks::new(claim_81);
+        let owner_82 = super::wifi_mac::WifiMacTxrxPrefix::new(claim_82);
+        let owner_83 = super::wifi_mac::WifiMacTxrxSuffix::new(claim_83);
+        let owner_84 = super::wifi_mac::WifiMacTxCommon::new(claim_84);
+        let owner_85 = super::wifi_mac::WifiMacTxCompletion::new(claim_85);
+        let owner_86 = super::wifi_mac::WifiMacTxPowerInit::new(claim_86);
+        let owner_87 = super::wifi_mac::WifiMacTxQueueControl::new(claim_87);
+        let owner_88 = super::wifi_mac::WifiMacTxQueueVector::new(claim_88);
+        let owner_89 = super::wifi_mac::WifiMacTxStatistics::new(claim_89);
+        let owner_90 = super::wifi_mac::WifiMacInterfaceAddress::new(claim_90);
+        let owner_91 = super::wifi_mac::WifiMacRxDma::new(claim_91);
+        let owner_92 = super::wifi_mac::WifiMacInterrupt::new(claim_92);
+        let owner_93 = super::modem_pwr::WifiMacPowerInterrupt::new(claim_93);
+        let owner_94 = super::modem_pwr::WifiMacLocalTime::new(claim_94);
+        let owner_95 = super::hp_sys_clkrst::HpSysClkrstRadio::new(claim_95);
+        let owner_96 = super::pmu::PmuRadio::new(claim_96);
+        let owner_97 = super::modem_syscon::ModemSysconRadio::new(claim_97);
+        let owner_98 = super::fe::PhyAgcOracleFe::new(claim_98);
+        let owner_99 = super::wifi_bb::PhyAgcOracleWifiBb::new(claim_99);
+        let owner_100 = super::wifi_bb_brx::PhyAgcOracleWifiBbBrx::new(claim_100);
+        let owner_101 = super::wifi_bb::PhyAgcRecoveredGaps::new(claim_101);
+        let owner_102 = super::fe::PhyBasebandConfigOracleFe::new(claim_102);
+        let owner_103 = super::wifi_mac::PhyBasebandConfigOracleWifiMac::new(claim_103);
+        let owner_104 = super::wifi_bb::PhyBasebandConfigOracleWifiBb::new(claim_104);
+        let owner_105 = super::wifi_bb::PhyBbRecoveredGaps::new(claim_105);
+        let owner_106 = super::wifi_bb_brx::PhyBrxRecoveredGaps::new(claim_106);
+        let owner_107 = super::bt_bb::PhyBtagcRecovered::new(claim_107);
+        let owner_108 = super::fe::PhyClockOracleFe::new(claim_108);
+        let owner_109 = super::wifi_bb::PhyClockOracleWifiBb::new(claim_109);
+        let owner_110 = super::fe::PhyFectrlRecovered::new(claim_110);
+        let owner_111 = super::fe::PhyAdcDumpRecoveredFe::new(claim_111);
+        let owner_112 = super::bt_bb::PhyAdcDumpRecoveredBtBb::new(claim_112);
+        let owner_113 = super::wifi_bb::PhyAdcDumpRecoveredWifiBb::new(claim_113);
+        let owner_114 = super::modem_datadump::PhyAdcDumpRecoveredModemDatadump::new(claim_114);
+        let owner_115 = super::fe::PhyFedataRecovered::new(claim_115);
+        let owner_116 = super::fe::PhyFedataWifiRecovered::new(claim_116);
+        let owner_117 = super::fe::PhyFrequencyChannelOracleFe::new(claim_117);
+        let owner_118 = super::wifi_mac::PhyFrequencyChannelOracleWifiMac::new(claim_118);
+        let owner_119 = super::wifi_bb::PhyFrequencyChannelOracleWifiBb::new(claim_119);
+        let owner_120 = super::fe::PhyIqEstimatorOracle::new(claim_120);
+        let owner_121 = super::modem_lpcon::ModemLpconSharedClock::new(claim_121);
+        let owner_122 = super::modem_lpcon::ModemLpconPhyTick::new(claim_122);
+        let owner_123 = super::lp_aonclkrst::LpAonClkrst::new(claim_123);
+        let owner_124 = super::lp_peri_clkrst::LpPericlkrst::new(claim_124);
+        let owner_125 = super::tsens::LpTsens::new(claim_125);
+        let owner_126 = super::fe::PhyMemory::new(claim_126);
+        let owner_127 = super::wifi_bb::PhyNrxRecoveredGaps::new(claim_127);
+        let owner_128 = super::fe::PhyPbus::new(claim_128);
+        let owner_129 = super::fe::PhyRxDcoOracle::new(claim_129);
+        let owner_130 = super::coex::CoexHwTimer::new(claim_130);
+        let owner_131 = super::coex::CoexExternal::new(claim_131);
+        let owner_132 = super::fe::PhyFecoexRecovered::new(claim_132);
+        let owner_133 = super::bt_mac::BleControllerAddressSlots::new(claim_133);
+        let owner_134 = super::ble_accelerator::BleHwAccelerator::new(claim_134);
+        let owner_135 = super::bt_mac::BleHwCteRingControl::new(claim_135);
+        let owner_136 = super::bt_mac::BleHwResolvingList::new(claim_136);
+        let owner_137 = super::bt_mac::BleHwRuntimeControl::new(claim_137);
+        let owner_138 = super::bt_mac::BleIsoSchedulerNotify::new(claim_138);
+        let owner_139 = super::bt_mac::BleHwPositionalWord1ff0::new(claim_139);
+        let owner_140 = super::modem_etm::BleHwPositionalWord891c::new(claim_140);
+        let owner_141 = super::bt_mac::BleScanBackoff::new(claim_141);
+        let owner_142 = super::bt_mac::BleSyncPublication::new(claim_142);
+        let owner_143 = super::bt_mac::BluetoothControllerCore::new(claim_143);
+        let owner_144 = super::bt_mac::BluetoothResetIdleStatus0::new(claim_144);
+        let owner_145 = super::btdm::BtdmSchedulerTable::new(claim_145);
+        let owner_146 = super::bt_mac::BtmacBlePhyInit::new(claim_146);
+        let owner_147 = super::bt_bb::BtV32Cte::new(claim_147);
+        let owner_148 = super::modem_pwr::BtdmRuntimeControl::new(claim_148);
+        let owner_149 = super::bt_mac::BluetoothInterruptBank::new(claim_149);
+        let owner_150 = super::bt_mac::BluetoothSchedulerInterruptRuntime::new(claim_150);
+        let owner_151 = super::bt_bb::BtV32Baseband::new(claim_151);
+        let owner_152 = super::bt_bb::BtV32BasebandRxInfo::new(claim_152);
+        let owner_153 = super::wifi_mac::SharedRadioInitControl::new(claim_153);
+        let owner_154 = super::ieee802154::SharedBasebandResetIdleStatus::new(claim_154);
+        let owner_155 = super::bt_bb::SharedBasebandTxTiming::new(claim_155);
+        let owner_156 = super::bt_bb::ZbbbRadioControl::new(claim_156);
+        let owner_162 = super::hp_sys_clkrst::HpSysClkrstBootClock::new(claim_162);
+        let owner_163 = super::lp_aonclkrst::LpAonClkrstCpll::new(claim_163);
+        let owner_164 = super::pmu::PmuBootClock::new(claim_164);
+        let owner_165 = super::hp_alive_sys::HpAliveSysPllClock::new(claim_165);
+        let owner_166 = super::cache::CacheBoot::new(claim_166);
+        let owner_167 = super::spi_mem_c::Spi0Flash::new(claim_167);
+        let owner_168 = super::spi1_mem_c::Spi1Flash::new(claim_168);
+        let owner_169 = super::spi_mem_s::Memspi2Psram::new(claim_169);
+        let owner_170 = super::spi1_mem_s::Memspi3Psram::new(claim_170);
+        let owner_171 = super::iomux_mspi_pin::IomuxMspiPsramPins::new(claim_171);
+        let owner_172 = super::lp_ana::LpAnaBrownout::new(claim_172);
+        let owner_173 = super::i2c_ana_mst::I2cAnaMst::new(claim_173);
+        let owner_174 = super::i2c_ana_mst_mem::PhyI2cCommandRam::new(claim_174);
+        let owner_175 = super::bus_monitor::DebugModeStatus::new(claim_175);
+        let (owner_3, owner_15) = super::trng::trng_divide(division_0);
+        let (owner_6, owner_7) = super::usb_serial_jtag::usb_device_divide(division_1);
+        let (owner_24, owner_25, owner_26) = super::systimer::systimer_divide(division_2);
+        let (owner_157, owner_158, owner_159) = super::modem_etm::modem_etm_divide(division_3);
+        let (owner_160, owner_161) = super::ieee802154::ieee802154_divide(division_4);
         Partitions {
+            soc: SocPeripherals {
+                lp_apm_filter: owner_0,
+                hp_apm_filter: owner_1,
+                hp_mem_apm_filter: owner_2,
+                trng_init: owner_3,
+                lp_periclkrst_rng_init: owner_4,
+                hp_sys_clkrst_systimer: owner_5,
+            },
             usb_serial_jtag: UsbSerialJtagPeripherals {
-                usb_serial_jtag_task: owner_0,
-                usb_serial_jtag_irq: owner_1,
-                usb_serial_jtag_pads: owner_2,
+                usb_serial_jtag_task: owner_6,
+                usb_serial_jtag_irq: owner_7,
+                usb_serial_jtag_pads: owner_8,
             },
             core_control: CoreControlPeripherals {
-                pmu_cpu_stall: owner_3,
-                hp_sys_core_stall_status: owner_4,
-                hp_sys_clkrst_core: owner_5,
-                lp_aon_clkrst_core_reset: owner_6,
+                pmu_cpu_stall: owner_9,
+                hp_sys_core_stall_status: owner_10,
+                hp_sys_clkrst_core: owner_11,
+                lp_aon_clkrst_core_reset: owner_12,
             },
             uart0_clock: Uart0ClockPeripherals {
-                hp_sys_clkrst_uart0: owner_7,
+                hp_sys_clkrst_uart0: owner_13,
             },
-            efuse: EfusePeripherals { efuse: owner_8 },
-            entropy: EntropyPeripherals {
-                trng: owner_9,
-                lp_periclkrst_rng: owner_10,
-            },
+            efuse: EfusePeripherals { efuse: owner_14 },
+            entropy: EntropyPeripherals { trng: owner_15 },
             reset_cause: ResetCausePeripherals {
-                lp_aon_reset_cause: owner_11,
+                lp_aon_reset_cause: owner_16,
             },
             watchdog: WatchdogPeripherals {
-                timg0_wdt: owner_12,
-                timg1_wdt: owner_13,
-                hp_sys_clkrst_timg1: owner_14,
-                lp_wdt: owner_15,
-                lp_wdt_swd: owner_16,
+                timg0_wdt: owner_17,
+                timg1_wdt: owner_18,
+                hp_sys_clkrst_timg1: owner_19,
+                lp_wdt: owner_20,
+                lp_wdt_swd: owner_21,
             },
             system_timer: SystemTimerPeripherals {
-                systimer: owner_17,
-                systimer_counter: owner_18,
-                systimer_alarm0: owner_19,
-                systimer_alarm1: owner_20,
-                systimer_alarm2: owner_21,
+                systimer: owner_22,
+                systimer_counter: owner_23,
+                systimer_alarm0: owner_24,
+                systimer_alarm1: owner_25,
+                systimer_alarm2: owner_26,
             },
             software_interrupt_0: SoftwareInterrupt0Peripherals {
-                from_cpu0: owner_22,
+                from_cpu0: owner_27,
             },
             software_interrupt_1: SoftwareInterrupt1Peripherals {
-                from_cpu1: owner_23,
+                from_cpu1: owner_28,
             },
             software_interrupt_2: SoftwareInterrupt2Peripherals {
-                from_cpu2: owner_24,
+                from_cpu2: owner_29,
             },
             software_interrupt_3: SoftwareInterrupt3Peripherals {
-                from_cpu3: owner_25,
+                from_cpu3: owner_30,
             },
             interrupt_matrix: InterruptMatrixPeripherals {
-                clic: owner_26,
-                interrupt_core0: owner_27,
-                interrupt_core0_status: owner_28,
-                interrupt_core1: owner_29,
-                interrupt_core1_status: owner_30,
+                clic: owner_31,
+                interrupt_core0: owner_32,
+                interrupt_core0_status: owner_33,
+                interrupt_core1: owner_34,
+                interrupt_core1_status: owner_35,
             },
             wifi_mac: WifiMacPeripherals {
-                wifi_phy_rate_oracle_wifi_bb: owner_31,
-                wifi_phy_rate_oracle_wifi_bb_brx: owner_32,
-                wifi_mac_antenna_init: owner_33,
-                wifi_mac_aux_tsf_control: owner_34,
-                wifi_mac_beacon_ie_crc: owner_35,
-                wifi_mac_beamforming_feedback_test: owner_36,
-                wifi_mac_beamforming_report: owner_37,
-                wifi_mac_block_ack: owner_38,
-                wifi_mac_bssid_policy: owner_39,
-                wifi_mac_coex_init: owner_40,
-                wifi_mac_coex_runtime: owner_41,
-                wifi_mac_cold_handshake: owner_42,
-                wifi_mac_control: owner_43,
-                wifi_mac_core_enable: owner_44,
-                wifi_mac_crypto_control: owner_45,
-                wifi_mac_csi_dump: owner_46,
-                wifi_mac_diagnostic_statistics: owner_47,
-                wifi_mac_he_buffer_status: owner_48,
-                wifi_mac_he_color_collision: owner_49,
-                wifi_mac_he_init_prefix: owner_50,
-                wifi_mac_he_init_suffix: owner_51,
-                wifi_mac_he_mu_edca_timer: owner_52,
-                wifi_mac_he_obss_narrow_band_ru: owner_53,
-                wifi_mac_he_tb_diagnostics: owner_54,
-                wifi_mac_he_tb_statistics: owner_55,
-                wifi_mac_he_trigger_rx_diagnostics: owner_56,
-                wifi_mac_internal_tx_block_ack: owner_57,
-                wifi_mac_key_table: owner_58,
-                wifi_mac_last_rx_buffer: owner_59,
-                wifi_mac_regdma_control: owner_60,
-                wifi_mac_rtc_timer_update: owner_61,
-                wifi_mac_rx_bssid_list: owner_62,
-                wifi_mac_rx_csi_control: owner_63,
-                wifi_mac_rx_custom_type: owner_64,
-                wifi_mac_rx_end_state: owner_65,
-                wifi_mac_rx_filter: owner_66,
-                wifi_mac_rx_hang_statistics: owner_67,
-                wifi_mac_rx_power_save: owner_68,
-                wifi_mac_rx_runtime_results: owner_69,
-                wifi_mac_rx_statistics: owner_70,
-                wifi_mac_sta_beacon_filter: owner_71,
-                wifi_mac_sta_tbtt_target: owner_72,
-                wifi_mac_tsf_load: owner_73,
-                wifi_mac_tsf_status: owner_74,
-                wifi_mac_tsf_timer: owner_75,
-                wifi_mac_txrx_callbacks: owner_76,
-                wifi_mac_txrx_prefix: owner_77,
-                wifi_mac_txrx_suffix: owner_78,
-                wifi_mac_tx_common: owner_79,
-                wifi_mac_tx_completion: owner_80,
-                wifi_mac_tx_power_init: owner_81,
-                wifi_mac_tx_queue_control: owner_82,
-                wifi_mac_tx_queue_vector: owner_83,
-                wifi_mac_tx_statistics: owner_84,
+                wifi_phy_rate_oracle_wifi_bb: owner_36,
+                wifi_phy_rate_oracle_wifi_bb_brx: owner_37,
+                wifi_mac_antenna_init: owner_38,
+                wifi_mac_aux_tsf_control: owner_39,
+                wifi_mac_beacon_ie_crc: owner_40,
+                wifi_mac_beamforming_feedback_test: owner_41,
+                wifi_mac_beamforming_report: owner_42,
+                wifi_mac_block_ack: owner_43,
+                wifi_mac_bssid_policy: owner_44,
+                wifi_mac_coex_init: owner_45,
+                wifi_mac_coex_runtime: owner_46,
+                wifi_mac_cold_handshake: owner_47,
+                wifi_mac_control: owner_48,
+                wifi_mac_core_enable: owner_49,
+                wifi_mac_crypto_control: owner_50,
+                wifi_mac_csi_dump: owner_51,
+                wifi_mac_diagnostic_statistics: owner_52,
+                wifi_mac_he_buffer_status: owner_53,
+                wifi_mac_he_color_collision: owner_54,
+                wifi_mac_he_init_prefix: owner_55,
+                wifi_mac_he_init_suffix: owner_56,
+                wifi_mac_he_mu_edca_timer: owner_57,
+                wifi_mac_he_obss_narrow_band_ru: owner_58,
+                wifi_mac_he_tb_diagnostics: owner_59,
+                wifi_mac_he_tb_statistics: owner_60,
+                wifi_mac_he_trigger_rx_diagnostics: owner_61,
+                wifi_mac_internal_tx_block_ack: owner_62,
+                wifi_mac_key_table: owner_63,
+                wifi_mac_last_rx_buffer: owner_64,
+                wifi_mac_regdma_control: owner_65,
+                wifi_mac_rtc_timer_update: owner_66,
+                wifi_mac_rx_bssid_list: owner_67,
+                wifi_mac_rx_csi_control: owner_68,
+                wifi_mac_rx_custom_type: owner_69,
+                wifi_mac_rx_end_state: owner_70,
+                wifi_mac_rx_filter: owner_71,
+                wifi_mac_rx_hang_statistics: owner_72,
+                wifi_mac_rx_power_save: owner_73,
+                wifi_mac_rx_runtime_results: owner_74,
+                wifi_mac_rx_statistics: owner_75,
+                wifi_mac_sta_beacon_filter: owner_76,
+                wifi_mac_sta_tbtt_target: owner_77,
+                wifi_mac_tsf_load: owner_78,
+                wifi_mac_tsf_status: owner_79,
+                wifi_mac_tsf_timer: owner_80,
+                wifi_mac_txrx_callbacks: owner_81,
+                wifi_mac_txrx_prefix: owner_82,
+                wifi_mac_txrx_suffix: owner_83,
+                wifi_mac_tx_common: owner_84,
+                wifi_mac_tx_completion: owner_85,
+                wifi_mac_tx_power_init: owner_86,
+                wifi_mac_tx_queue_control: owner_87,
+                wifi_mac_tx_queue_vector: owner_88,
+                wifi_mac_tx_statistics: owner_89,
             },
             wifi_mac_interface: WifiMacInterfacePeripherals {
-                wifi_mac_interface_address: owner_85,
+                wifi_mac_interface_address: owner_90,
             },
             wifi_rx_dma: WifiRxDmaPeripherals {
-                wifi_mac_rx_dma: owner_86,
+                wifi_mac_rx_dma: owner_91,
             },
             wifi_interrupts: WifiInterruptPeripherals {
-                wifi_mac_interrupt: owner_87,
-                wifi_mac_power_interrupt: owner_88,
+                wifi_mac_interrupt: owner_92,
+                wifi_mac_power_interrupt: owner_93,
             },
             mac_local_time: MacLocalTimePeripherals {
-                wifi_mac_local_time: owner_89,
+                wifi_mac_local_time: owner_94,
             },
             radio_phy: RadioPhyPeripherals {
-                hp_sys_clkrst_radio: owner_90,
-                pmu_radio: owner_91,
-                modem_syscon_radio: owner_92,
-                phy_agc_oracle_fe: owner_93,
-                phy_agc_oracle_wifi_bb: owner_94,
-                phy_agc_oracle_wifi_bb_brx: owner_95,
-                phy_agc_recovered_gaps: owner_96,
-                phy_baseband_config_oracle_fe: owner_97,
-                phy_baseband_config_oracle_wifi_mac: owner_98,
-                phy_baseband_config_oracle_wifi_bb: owner_99,
-                phy_bb_recovered_gaps: owner_100,
-                phy_brx_recovered_gaps: owner_101,
-                phy_btagc_recovered: owner_102,
-                phy_clock_oracle_fe: owner_103,
-                phy_clock_oracle_wifi_bb: owner_104,
-                phy_fectrl_recovered: owner_105,
-                phy_adc_dump_recovered_fe: owner_106,
-                phy_adc_dump_recovered_bt_bb: owner_107,
-                phy_adc_dump_recovered_wifi_bb: owner_108,
-                phy_adc_dump_recovered_modem_datadump: owner_109,
-                phy_fedata_recovered: owner_110,
-                phy_fedata_wifi_recovered: owner_111,
-                phy_frequency_channel_oracle_fe: owner_112,
-                phy_frequency_channel_oracle_wifi_mac: owner_113,
-                phy_frequency_channel_oracle_wifi_bb: owner_114,
-                phy_iq_estimator_oracle: owner_115,
-                modem_lpcon_shared_clock: owner_116,
-                modem_lpcon_phy_tick: owner_117,
-                lp_aon_clkrst: owner_118,
-                lp_periclkrst: owner_119,
-                lp_tsens: owner_120,
-                phy_memory: owner_121,
-                phy_nrx_recovered_gaps: owner_122,
-                phy_pbus: owner_123,
-                phy_rx_dco_oracle: owner_124,
+                hp_sys_clkrst_radio: owner_95,
+                pmu_radio: owner_96,
+                modem_syscon_radio: owner_97,
+                phy_agc_oracle_fe: owner_98,
+                phy_agc_oracle_wifi_bb: owner_99,
+                phy_agc_oracle_wifi_bb_brx: owner_100,
+                phy_agc_recovered_gaps: owner_101,
+                phy_baseband_config_oracle_fe: owner_102,
+                phy_baseband_config_oracle_wifi_mac: owner_103,
+                phy_baseband_config_oracle_wifi_bb: owner_104,
+                phy_bb_recovered_gaps: owner_105,
+                phy_brx_recovered_gaps: owner_106,
+                phy_btagc_recovered: owner_107,
+                phy_clock_oracle_fe: owner_108,
+                phy_clock_oracle_wifi_bb: owner_109,
+                phy_fectrl_recovered: owner_110,
+                phy_adc_dump_recovered_fe: owner_111,
+                phy_adc_dump_recovered_bt_bb: owner_112,
+                phy_adc_dump_recovered_wifi_bb: owner_113,
+                phy_adc_dump_recovered_modem_datadump: owner_114,
+                phy_fedata_recovered: owner_115,
+                phy_fedata_wifi_recovered: owner_116,
+                phy_frequency_channel_oracle_fe: owner_117,
+                phy_frequency_channel_oracle_wifi_mac: owner_118,
+                phy_frequency_channel_oracle_wifi_bb: owner_119,
+                phy_iq_estimator_oracle: owner_120,
+                modem_lpcon_shared_clock: owner_121,
+                modem_lpcon_phy_tick: owner_122,
+                lp_aon_clkrst: owner_123,
+                lp_periclkrst: owner_124,
+                lp_tsens: owner_125,
+                phy_memory: owner_126,
+                phy_nrx_recovered_gaps: owner_127,
+                phy_pbus: owner_128,
+                phy_rx_dco_oracle: owner_129,
             },
             coexistence: CoexistencePeripherals {
-                coex_hw_timer: owner_125,
-                coex_external: owner_126,
-                phy_fecoex_recovered: owner_127,
+                coex_hw_timer: owner_130,
+                coex_external: owner_131,
+                phy_fecoex_recovered: owner_132,
             },
             bluetooth: BluetoothControllerPeripherals {
-                ble_controller_address_slots: owner_128,
-                ble_hw_accelerator: owner_129,
-                ble_hw_cte_ring_control: owner_130,
-                ble_hw_resolving_list: owner_131,
-                ble_hw_runtime_control: owner_132,
-                ble_iso_scheduler_notify: owner_133,
-                ble_hw_positional_word1ff0: owner_134,
-                ble_hw_positional_word891c: owner_135,
-                ble_scan_backoff: owner_136,
-                ble_sync_publication: owner_137,
-                bluetooth_controller_core: owner_138,
-                bluetooth_reset_idle_status0: owner_139,
-                btdm_scheduler_table: owner_140,
-                btmac_ble_phy_init: owner_141,
-                bt_v32_cte: owner_142,
+                ble_controller_address_slots: owner_133,
+                ble_hw_accelerator: owner_134,
+                ble_hw_cte_ring_control: owner_135,
+                ble_hw_resolving_list: owner_136,
+                ble_hw_runtime_control: owner_137,
+                ble_iso_scheduler_notify: owner_138,
+                ble_hw_positional_word1ff0: owner_139,
+                ble_hw_positional_word891c: owner_140,
+                ble_scan_backoff: owner_141,
+                ble_sync_publication: owner_142,
+                bluetooth_controller_core: owner_143,
+                bluetooth_reset_idle_status0: owner_144,
+                btdm_scheduler_table: owner_145,
+                btmac_ble_phy_init: owner_146,
+                bt_v32_cte: owner_147,
             },
             bluetooth_modem_lp_timer: BluetoothModemLpTimerPeripherals {
-                btdm_runtime_control: owner_143,
+                btdm_runtime_control: owner_148,
             },
             bluetooth_interrupts: BluetoothInterruptPeripherals {
-                bluetooth_interrupt_bank: owner_144,
-                bluetooth_scheduler_interrupt_runtime: owner_145,
+                bluetooth_interrupt_bank: owner_149,
+                bluetooth_scheduler_interrupt_runtime: owner_150,
             },
             shared_radio: SharedRadioPeripherals {
-                bt_v32_baseband: owner_146,
-                bt_v32_baseband_rx_info: owner_147,
-                shared_radio_init_control: owner_148,
-                shared_baseband_reset_idle_status: owner_149,
-                shared_baseband_tx_timing: owner_150,
-                zbbb_radio_control: owner_151,
+                bt_v32_baseband: owner_151,
+                bt_v32_baseband_rx_info: owner_152,
+                shared_radio_init_control: owner_153,
+                shared_baseband_reset_idle_status: owner_154,
+                shared_baseband_tx_timing: owner_155,
+                zbbb_radio_control: owner_156,
             },
             modem_etm: ModemEtmPeripherals {
-                modem_etm_ieee802154: owner_152,
-                modem_etm_bluetooth_phy: owner_153,
-                modem_etm_bluetooth: owner_154,
+                modem_etm_ieee802154: owner_157,
+                modem_etm_bluetooth_phy: owner_158,
+                modem_etm_bluetooth: owner_159,
             },
             ieee802154: Ieee802154Peripherals {
-                ieee802154_mac_task: owner_155,
-                ieee802154_mac_irq: owner_156,
+                ieee802154_mac_task: owner_160,
+                ieee802154_mac_irq: owner_161,
             },
             boot: BootPeripherals {
-                hp_sys_clkrst_boot_clock: owner_157,
-                lp_aon_clkrst_cpll: owner_158,
-                pmu_boot_clock: owner_159,
-                hp_alive_sys_pll_clock: owner_160,
-                cache_boot: owner_161,
-                spi0_flash: owner_162,
-                spi1_flash: owner_163,
-                memspi2_psram: owner_164,
-                memspi3_psram: owner_165,
-                iomux_mspi_psram_pins: owner_166,
-                lp_ana_brownout: owner_167,
+                hp_sys_clkrst_boot_clock: owner_162,
+                lp_aon_clkrst_cpll: owner_163,
+                pmu_boot_clock: owner_164,
+                hp_alive_sys_pll_clock: owner_165,
+                cache_boot: owner_166,
+                spi0_flash: owner_167,
+                spi1_flash: owner_168,
+                memspi2_psram: owner_169,
+                memspi3_psram: owner_170,
+                iomux_mspi_psram_pins: owner_171,
+                lp_ana_brownout: owner_172,
             },
             analog_bus: AnalogBusPeripherals {
-                i2c_ana_mst: owner_168,
-                phy_i2c_command_ram: owner_169,
+                i2c_ana_mst: owner_173,
+                phy_i2c_command_ram: owner_174,
             },
             debug: DebugPeripherals {
-                debug_mode_status: owner_170,
+                debug_mode_status: owner_175,
             },
         }
     }
 
     const _: () = assert!(
-oer_mmio::check::disjoint_blocks(&[(0x20391000, <super::usb_serial_jtag::UsbSerialJtagPadsWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuCpuStallWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::HpSysCoreStallStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstCoreWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCoreResetWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstUart0Words as oer_mmio::Registers>::WORDS), (0x20715000, <super::efuse::EfuseWords as oer_mmio::Registers>::WORDS), (0x20814000, <super::trng::TrngWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstRngWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonResetCauseWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0WdtWords as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1WdtWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg1Words as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtWords as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtSwdWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerCounterWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu0Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu1Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu2Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu3Words as oer_mmio::Registers>::WORDS), (0x10800000, <super::clic::ClicWords as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0Words as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0StatusWords as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1Words as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1StatusWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::WifiPhyRateOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacAntennaInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacAuxTsfControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeaconIeCrcWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingFeedbackTestWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingReportWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBssidPolicyWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoexInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacCoexRuntimeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacColdHandshakeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoreEnableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCryptoControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCsiDumpWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacDiagnosticStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeBufferStatusWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeColorCollisionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeMuEdcaTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeObssNarrowBandRuWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTriggerRxDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInternalTxBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacKeyTableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacLastRxBufferWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRegdmaControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRtcTimerUpdateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxBssidListWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCsiControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCustomTypeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxEndStateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxFilterWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxHangStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxPowerSaveWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxRuntimeResultsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacStaBeaconFilterWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacStaTbttTargetWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfLoadWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfStatusWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxCallbacksWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCommonWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCompletionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxPowerInitWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueVectorWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterfaceAddressWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxDmaWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacPowerInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacLocalTimeWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstRadioWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuRadioWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconRadioWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAgcOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyAgcOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyBasebandConfigOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyBasebandConfigOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBasebandConfigOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBbRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyBrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyBtagcRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyClockOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyClockOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFectrlRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAdcDumpRecoveredFeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyAdcDumpRecoveredBtBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAdcDumpRecoveredWifiBbWords as oer_mmio::Registers>::WORDS), (0x20109000, <super::modem_datadump::PhyAdcDumpRecoveredModemDatadumpWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataWifiRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFrequencyChannelOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyFrequencyChannelOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyFrequencyChannelOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyIqEstimatorOracleWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconSharedClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPhyTickWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstWords as oer_mmio::Registers>::WORDS), (0x20818000, <super::tsens::LpTsensWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyMemoryWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyNrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyPbusWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyRxDcoOracleWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexHwTimerWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexExternalWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFecoexRecoveredWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleControllerAddressSlotsWords as oer_mmio::Registers>::WORDS), (0x20109800, <super::ble_accelerator::BleHwAcceleratorWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwCteRingControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwResolvingListWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleIsoSchedulerNotifyWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwPositionalWord1ff0Words as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::BleHwPositionalWord891cWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleScanBackoffWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleSyncPublicationWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothControllerCoreWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothResetIdleStatus0Words as oer_mmio::Registers>::WORDS), (0x2010a000, <super::btdm::BtdmSchedulerTableWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BtmacBlePhyInitWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32CteWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothInterruptBankWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothSchedulerInterruptRuntimeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandRxInfoWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::SharedRadioInitControlWords as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::SharedBasebandResetIdleStatusWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::SharedBasebandTxTimingWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::ZbbbRadioControlWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstBootClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCpllWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuBootClockWords as oer_mmio::Registers>::WORDS), (0x20589000, <super::hp_alive_sys::HpAliveSysPllClockWords as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheBootWords as oer_mmio::Registers>::WORDS), (0x20500000, <super::spi_mem_c::Spi0FlashWords as oer_mmio::Registers>::WORDS), (0x20501000, <super::spi1_mem_c::Spi1FlashWords as oer_mmio::Registers>::WORDS), (0x20502000, <super::spi_mem_s::Memspi2PsramWords as oer_mmio::Registers>::WORDS), (0x20503000, <super::spi1_mem_s::Memspi3PsramWords as oer_mmio::Registers>::WORDS), (0x20584000, <super::iomux_mspi_pin::IomuxMspiPsramPinsWords as oer_mmio::Registers>::WORDS), (0x20702000, <super::lp_ana::LpAnaBrownoutWords as oer_mmio::Registers>::WORDS), (0x2010f800, <super::i2c_ana_mst::I2cAnaMstWords as oer_mmio::Registers>::WORDS), (0x2010fc00, <super::i2c_ana_mst_mem::PhyI2cCommandRamWords as oer_mmio::Registers>::WORDS), (0x2d002000, <super::bus_monitor::DebugModeStatusWords as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbDeviceDivision as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerDivision as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::ModemEtmDivision as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::Ieee802154Division as oer_mmio::Registers>::WORDS)]),
+oer_mmio::check::disjoint_blocks(&[(0x20706c00, <super::lp_apm::LpApmFilterWords as oer_mmio::Registers>::WORDS), (0x20504400, <super::hp_apm::HpApmFilterWords as oer_mmio::Registers>::WORDS), (0x20504800, <super::hp_mem_apm::HpMemApmFilterWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstRngInitWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstSystimerWords as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbSerialJtagPadsWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuCpuStallWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::HpSysCoreStallStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstCoreWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCoreResetWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstUart0Words as oer_mmio::Registers>::WORDS), (0x20715000, <super::efuse::EfuseWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonResetCauseWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0WdtWords as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1WdtWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg1Words as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtWords as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtSwdWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerCounterWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu0Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu1Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu2Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu3Words as oer_mmio::Registers>::WORDS), (0x10800000, <super::clic::ClicWords as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0Words as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0StatusWords as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1Words as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1StatusWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::WifiPhyRateOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacAntennaInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacAuxTsfControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeaconIeCrcWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingFeedbackTestWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingReportWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBssidPolicyWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoexInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacCoexRuntimeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacColdHandshakeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoreEnableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCryptoControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCsiDumpWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacDiagnosticStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeBufferStatusWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeColorCollisionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeMuEdcaTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeObssNarrowBandRuWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTriggerRxDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInternalTxBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacKeyTableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacLastRxBufferWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRegdmaControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRtcTimerUpdateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxBssidListWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCsiControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCustomTypeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxEndStateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxFilterWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxHangStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxPowerSaveWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxRuntimeResultsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacStaBeaconFilterWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacStaTbttTargetWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfLoadWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfStatusWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxCallbacksWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCommonWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCompletionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxPowerInitWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueVectorWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterfaceAddressWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxDmaWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacPowerInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacLocalTimeWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstRadioWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuRadioWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconRadioWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAgcOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyAgcOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyBasebandConfigOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyBasebandConfigOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBasebandConfigOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBbRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyBrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyBtagcRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyClockOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyClockOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFectrlRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAdcDumpRecoveredFeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyAdcDumpRecoveredBtBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAdcDumpRecoveredWifiBbWords as oer_mmio::Registers>::WORDS), (0x20109000, <super::modem_datadump::PhyAdcDumpRecoveredModemDatadumpWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataWifiRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFrequencyChannelOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyFrequencyChannelOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyFrequencyChannelOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyIqEstimatorOracleWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconSharedClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPhyTickWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstWords as oer_mmio::Registers>::WORDS), (0x20818000, <super::tsens::LpTsensWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyMemoryWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyNrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyPbusWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyRxDcoOracleWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexHwTimerWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexExternalWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFecoexRecoveredWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleControllerAddressSlotsWords as oer_mmio::Registers>::WORDS), (0x20109800, <super::ble_accelerator::BleHwAcceleratorWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwCteRingControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwResolvingListWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleIsoSchedulerNotifyWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwPositionalWord1ff0Words as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::BleHwPositionalWord891cWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleScanBackoffWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleSyncPublicationWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothControllerCoreWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothResetIdleStatus0Words as oer_mmio::Registers>::WORDS), (0x2010a000, <super::btdm::BtdmSchedulerTableWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BtmacBlePhyInitWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32CteWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothInterruptBankWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothSchedulerInterruptRuntimeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandRxInfoWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::SharedRadioInitControlWords as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::SharedBasebandResetIdleStatusWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::SharedBasebandTxTimingWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::ZbbbRadioControlWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstBootClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCpllWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuBootClockWords as oer_mmio::Registers>::WORDS), (0x20589000, <super::hp_alive_sys::HpAliveSysPllClockWords as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheBootWords as oer_mmio::Registers>::WORDS), (0x20500000, <super::spi_mem_c::Spi0FlashWords as oer_mmio::Registers>::WORDS), (0x20501000, <super::spi1_mem_c::Spi1FlashWords as oer_mmio::Registers>::WORDS), (0x20502000, <super::spi_mem_s::Memspi2PsramWords as oer_mmio::Registers>::WORDS), (0x20503000, <super::spi1_mem_s::Memspi3PsramWords as oer_mmio::Registers>::WORDS), (0x20584000, <super::iomux_mspi_pin::IomuxMspiPsramPinsWords as oer_mmio::Registers>::WORDS), (0x20702000, <super::lp_ana::LpAnaBrownoutWords as oer_mmio::Registers>::WORDS), (0x2010f800, <super::i2c_ana_mst::I2cAnaMstWords as oer_mmio::Registers>::WORDS), (0x2010fc00, <super::i2c_ana_mst_mem::PhyI2cCommandRamWords as oer_mmio::Registers>::WORDS), (0x2d002000, <super::bus_monitor::DebugModeStatusWords as oer_mmio::Registers>::WORDS), (0x20814000, <super::trng::TrngDivision as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbDeviceDivision as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerDivision as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::ModemEtmDivision as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::Ieee802154Division as oer_mmio::Registers>::WORDS)]),
 "no two claimed blocks list the same word"
 );
 }

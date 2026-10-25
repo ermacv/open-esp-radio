@@ -31,6 +31,60 @@ fn model() -> ChipModel {
 }
 
 #[test]
+fn the_bootstrap_soc_owner_holds_filters_and_trng_configuration() {
+    let evidence = evidence();
+    let model = model();
+    let policy = ChipPolicy::load(&registers().join("policy.toml"), &model, &evidence)
+        .expect("the SoC initialization policy loads");
+    let owner = |word: &str| {
+        let Some(Claim::Whole(Holder::Part(id))) = policy.claim(word) else {
+            panic!("{word} has one whole-word owner");
+        };
+        policy.partitions()[id.partition].member.as_str()
+    };
+    for instance in ["LP_APM", "HP_APM", "HP_MEM_APM"] {
+        let block = model
+            .instances()
+            .iter()
+            .find(|block| block.name == instance)
+            .expect("the root places the APM filter");
+        assert!(block.extent.partial);
+        assert!(!block.extent.sources.is_empty());
+        assert_eq!(owner(&format!("{instance}.FUNC_CTRL")), "soc");
+    }
+    for word in [
+        "TRNG.CONF",
+        "TRNG.DEBUG_CONF",
+        "TRNG.DATE",
+        "LP_PERICLKRST.RNG_CTRL",
+    ] {
+        assert_eq!(owner(word), "soc", "{word}");
+    }
+    for word in ["TRNG.INT_RAW", "TRNG.CRC_SYNC_DATA"] {
+        assert_eq!(owner(word), "entropy", "{word}");
+    }
+    let entropy = policy
+        .partitions()
+        .iter()
+        .find(|partition| partition.member == "entropy")
+        .expect("the entropy reader exists");
+    let trng = entropy
+        .parts
+        .iter()
+        .find(|part| part.name == "Trng")
+        .expect("the entropy reader has its status view");
+    assert_eq!(trng.observes, ["CONF", "DEBUG_CONF"]);
+    for word in [
+        "PMU.CPU_STALL_SW",
+        "HP_SYS.HP_CPU_CORESTALLED_ST",
+        "HP_SYS_CLKRST.HPCORE1_CTRL0",
+        "LP_AON_CLKRST.LP_AONCLKRST_HPCORE1_RESET_CTRL",
+    ] {
+        assert_eq!(owner(word), "core_control", "{word}");
+    }
+}
+
+#[test]
 fn the_esp32s31_root_binds_every_interrupt_source() {
     let model = model();
     let mut covered = model
