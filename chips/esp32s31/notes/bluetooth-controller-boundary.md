@@ -62,10 +62,10 @@ complete 182-byte archive body. It calls three software environment helpers
 HCI state, initializes a vendor mempool with 272-byte elements, registers
 numeric broker source four and initializes a software list head. These are
 open-Controller storage, address and dispatch policy rather than silicon
-transactions. The ESP-HAL platform lease reads the factory base identity
-through its safe eFuse accessor and applies the pinned S31 two-universal-address
-policy: Bluetooth is the next final-octet value after Wi-Fi STA. It retains the
-result in canonical EUI-48 order; the generic HCI bootstrap performs the
+transactions. The factory base identity comes from the reset root's eFuse
+owner (`EfuseRegisters`); the pinned S31 two-universal-address policy applies:
+Bluetooth is the next final-octet value after Wi-Fi STA. The result is kept
+in canonical EUI-48 order; the generic HCI bootstrap performs the
 observed single six-byte reversal only when encoding `BD_ADDR`. The Rust
 replacement therefore binds the already initialized scheduler epoch to one
 bounded `LeControllerHciResources` owner instead of copying the private
@@ -101,12 +101,12 @@ but those two effects must have typed open replacements. The distilled
 contract and RTOS-free replacement boundary are recorded in
 [`bluetooth-interrupt-runtime.md`](bluetooth-interrupt-runtime.md). The
 pinned `esp-pacs` revision names source 124 as `BT_MAC` and source 133 as
-`BT_MAC_INT1`. The ESP-HAL adapter compile-checks both identities against the
-chip policy, requires level-three handlers, binds the complete pair on one
-core and disables both through the same retained core identity. Those
-primitives stay crate-private until the staged ISR owner, feature-specific NRT
+`BT_MAC_INT1`. One interrupt-table entry binds both, with the runtime timer's
+(127) and the doorbell's sources, as one composite part (`BluetoothInterrupts`) on
+one line; its handler holds the bank and the timer through gates for the
+image's life. A lossless live epoch still needs the feature-specific NRT
 policy, typed selector-4/6 actions, open completion queue and lost-wake-safe
-waker can make a lossless live epoch. The
+waker. The
 baseline groups are classified by the complete
 source-124 prefix proves four fault/assert lanes, and the HAL
 performs their conditional diagnostic reads at the reviewed temporal points

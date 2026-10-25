@@ -1,10 +1,11 @@
 # SAR2 state across retained RF wake
 
-The HAL owns TSENS and peripheral SAR-I2C after `take_radio`. Last release
+The HAL owns TSENS and peripheral SAR-I2C through the radio partition of the
+reset root (`RadioHardware`). Last release
 after RF close disables TSENS, its clock, then peripheral power. First acquire
 asserts `RSTB_PERIF_I2C` low, completes the named1µs settle, enables
 `XPD_PERIF_I2C`, releases reset, then clocks/resets/enables TSENS. It assigns
-no literal zero to analog69.04. Initial esp-hal setup precedes the handoff.
+no literal zero to analog69.04.
 
 The existing restore enum carries resource ownership: idle, poisoned, or acquired
 with an empty/pending calibration restore. Pending restore prevents release;
