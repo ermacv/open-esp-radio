@@ -169,7 +169,7 @@ impl Harness {
     fn new() -> Self {
         let model = Shared::default();
         let rings = Arc::new(AtomicUsize::new(0));
-        let storage = Box::leak(Box::new(BluetoothInterruptStorage::<Fake, Line>::new()));
+        let storage = Box::leak(Box::new(BluetoothInterruptStorage::<Fake>::new()));
         let cells = Box::leak(Box::new(ControllerEventCells::new(
             host::deferred_signal(),
             host::deferred_signal(),
@@ -177,15 +177,14 @@ impl Harness {
         let fault = Box::leak(Box::new(AtomicBool::new(false)));
         let (ends, part) = storage.split(
             (),
+            Line(model.clone()),
             BluetoothInterruptSignals {
                 reply: host::deferred_signal(),
                 cells,
                 fault,
             },
         );
-        let Ok((gate, port)) = ends.attach_line(Line(model.clone()), Ring(rings.clone())) else {
-            panic!("a fresh line slot");
-        };
+        let (gate, port) = ends.with_ring(Ring(rings.clone()));
         Self {
             model,
             rings,
@@ -224,19 +223,16 @@ impl Harness {
     /// one entry, the task takes the reply.
     fn exchange(&mut self, request: Request<Fake>) -> Result<Reply<Fake>, GateError> {
         let mut cx = Context::from_waker(Waker::noop());
-        let reply = {
-            let mut exchange = pin!(self.gate.exchange(request));
-            assert!(
-                exchange.as_mut().poll(&mut cx).is_pending(),
-                "the reply waits for the handler"
-            );
-            self.part.service(&self.clock);
-            match exchange.as_mut().poll(&mut cx) {
-                Poll::Ready(reply) => reply,
-                Poll::Pending => panic!("the handler replied"),
-            }
-        };
-        reply
+        let mut exchange = pin!(self.gate.exchange(request));
+        assert!(
+            exchange.as_mut().poll(&mut cx).is_pending(),
+            "the reply waits for the handler"
+        );
+        self.part.service(&self.clock);
+        match exchange.as_mut().poll(&mut cx) {
+            Poll::Ready(reply) => reply,
+            Poll::Pending => panic!("the handler replied"),
+        }
     }
 
     fn open(&mut self) {
@@ -271,36 +267,6 @@ fn the_composite_serves_the_bank_timer_and_doorbell_sources() {
     assert_eq!(
         <BluetoothInterrupts<Deferred, Line> as InterruptSources>::SOURCES,
         [124, 133, 127, 68]
-    );
-}
-
-#[test]
-fn the_doorbell_line_is_lowered_only_once_attached() {
-    let model = Shared::default();
-    let storage = Box::leak(Box::new(BluetoothInterruptStorage::<Fake, Line>::new()));
-    let cells = Box::leak(Box::new(ControllerEventCells::new(
-        host::deferred_signal(),
-        host::deferred_signal(),
-    )));
-    let (ends, mut part) = storage.split(
-        (),
-        BluetoothInterruptSignals {
-            reply: host::deferred_signal(),
-            cells,
-            fault: Box::leak(Box::new(AtomicBool::new(false))),
-        },
-    );
-    let clock: VirtualClock = VirtualClock::new();
-    part.service(&clock);
-    assert!(model.lock().expect("one test thread").ops.is_empty());
-    let Ok(_ends) = ends.attach_line(Line(model.clone()), Ring(Arc::new(AtomicUsize::new(0))))
-    else {
-        panic!("a fresh line slot");
-    };
-    part.service(&clock);
-    assert_eq!(
-        model.lock().expect("one test thread").ops,
-        [Op::Acknowledge]
     );
 }
 
@@ -529,23 +495,21 @@ fn an_abandoned_request_closes_the_gate_to_the_task() {
 #[test]
 fn a_foreign_executor_cannot_await_a_reply() {
     let model = Shared::default();
-    let storage = Box::leak(Box::new(BluetoothInterruptStorage::<Fake, Line>::new()));
+    let storage = Box::leak(Box::new(BluetoothInterruptStorage::<Fake>::new()));
     let cells = Box::leak(Box::new(ControllerEventCells::new(
         host::foreign_signal(),
         host::foreign_signal(),
     )));
     let (ends, _part) = storage.split(
         (),
+        Line(model),
         BluetoothInterruptSignals {
             reply: host::foreign_signal(),
             cells,
             fault: Box::leak(Box::new(AtomicBool::new(false))),
         },
     );
-    let Ok((mut gate, _port)) = ends.attach_line(Line(model), Ring(Arc::new(AtomicUsize::new(0))))
-    else {
-        panic!("a fresh line slot");
-    };
+    let (mut gate, _port) = ends.with_ring(Ring(Arc::new(AtomicUsize::new(0))));
     let mut cx = Context::from_waker(Waker::noop());
     let mut exchange = pin!(gate.exchange(Request::StopTimer));
     assert!(matches!(

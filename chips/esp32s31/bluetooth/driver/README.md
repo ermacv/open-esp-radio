@@ -86,9 +86,11 @@ then steps the timer; a clear status writes nothing. The part holds a gate
 for the bank and one for the timer, and touches a register owner only while
 its gate holds it.
 
-`interrupt::BluetoothInterruptGate` is the task's end. Opening an epoch takes
-the router's `Bound` proof and hands the handler the unprepared bank, the
-HAL's channel endpoint and the initialized timer: the handler prepares the
+`interrupt::BluetoothInterruptGate` is the task's end. The part holds the
+doorbell line's lowering half from the start; the task's end exists only
+once the router's `Bound` proof of the part made the doorbell's ringing half
+(`BluetoothInterruptEnds::attach`). Opening an epoch hands the handler the
+unprepared bank, the HAL's channel endpoint and the initialized timer: the handler prepares the
 controller output, then starts the runtime timer, so no source is armed while
 the task holds its owner. The timer's software work crosses through
 `interrupt::ModemLpTimerPort`. The route is never removed and nothing is

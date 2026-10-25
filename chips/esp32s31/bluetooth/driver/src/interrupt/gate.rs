@@ -207,15 +207,14 @@ enum Timer<H: GateHardware> {
 }
 
 /// The static queues of the gate, one per image.
-pub struct BluetoothInterruptStorage<H: GateHardware, B: 'static> {
+pub struct BluetoothInterruptStorage<H: GateHardware> {
     requests: Queue<Request<H>>,
     replies: Queue<Reply<H>>,
     ready: Queue<H::Timer>,
     pending: Queue<H::TimerPending>,
-    line: Queue<B>,
 }
 
-impl<H: GateHardware, B: 'static> Default for BluetoothInterruptStorage<H, B> {
+impl<H: GateHardware> Default for BluetoothInterruptStorage<H> {
     fn default() -> Self {
         Self::new()
     }
@@ -233,47 +232,42 @@ pub struct BluetoothInterruptSignals<X: SignalExecutor + 'static> {
     pub fault: &'static AtomicBool,
 }
 
-impl<H: GateHardware, B: 'static> BluetoothInterruptStorage<H, B> {
+impl<H: GateHardware> BluetoothInterruptStorage<H> {
     pub const fn new() -> Self {
         Self {
             requests: Queue::new(),
             replies: Queue::new(),
             ready: Queue::new(),
             pending: Queue::new(),
-            line: Queue::new(),
         }
     }
 
     /// Split the storage into the handler's part, which the interrupt
     /// table's entry binds once, and the task's ends, which
-    /// [`BluetoothInterruptEnds::attach`] completes with the doorbell once
-    /// the part is bound. `irq` is the doorbell's interrupt part.
-    pub fn split<X: SignalExecutor + 'static>(
+    /// [`BluetoothInterruptEnds::attach`] completes with the doorbell's
+    /// ringing half once the part is bound. `irq` is the doorbell's
+    /// interrupt part and `line` its lowering half.
+    pub fn split<X: SignalExecutor + 'static, B>(
         &'static mut self,
         irq: H::Doorbell,
+        line: B,
         signals: BluetoothInterruptSignals<X>,
-    ) -> (
-        BluetoothInterruptEnds<H, X, B>,
-        BluetoothInterruptsOf<H, X, B>,
-    ) {
+    ) -> (BluetoothInterruptEnds<H, X>, BluetoothInterruptsOf<H, X, B>) {
         let (requests, requested) = self.requests.split();
         let (replying, replies) = self.replies.split();
         let (ready, readied) = self.ready.split();
         let (pending_out, pending) = self.pending.split();
-        let (line, lines) = self.line.split();
         (
             BluetoothInterruptEnds {
                 requests,
                 replies,
                 ready,
                 pending,
-                line,
                 reply: signals.reply,
             },
             BluetoothInterruptsOf {
                 _irq: irq,
-                line: None,
-                lines,
+                line,
                 bank: Bank::Closed,
                 timer: Timer::Vacant,
                 requests: requested,
@@ -291,27 +285,21 @@ impl<H: GateHardware, B: 'static> BluetoothInterruptStorage<H, B> {
     }
 }
 
-/// The task's ends of the gate before the doorbell exists.
-pub struct BluetoothInterruptEnds<H: GateHardware, X: SignalExecutor + 'static, B: 'static> {
+/// The task's ends of the gate before the doorbell rings.
+pub struct BluetoothInterruptEnds<H: GateHardware, X: SignalExecutor + 'static> {
     requests: Sender<Request<H>>,
     replies: Receiver<Reply<H>>,
     ready: Sender<H::Timer>,
     pending: Receiver<H::TimerPending>,
-    line: Sender<B>,
     reply: &'static IrqSignal<X>,
 }
 
-impl<H: GateHardware, X: SignalExecutor + 'static, B: 'static> BluetoothInterruptEnds<H, X, B> {
-    #[allow(clippy::type_complexity, reason = "the refusal returns each owner")]
-    fn attach_line<R: RadioDoorbell + Clone>(
+impl<H: GateHardware, X: SignalExecutor + 'static> BluetoothInterruptEnds<H, X> {
+    fn with_ring<R: RadioDoorbell + Clone>(
         self,
-        line: B,
         ring: R,
-    ) -> Result<(BluetoothInterruptGate<H, X, R>, ModemLpTimerPort<H, R>), (Self, B)> {
-        if let Err(rejected) = self.line.try_send(line) {
-            return Err((self, rejected.0));
-        }
-        Ok((
+    ) -> (BluetoothInterruptGate<H, X, R>, ModemLpTimerPort<H, R>) {
+        (
             BluetoothInterruptGate {
                 requests: self.requests,
                 replies: self.replies,
@@ -324,7 +312,7 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: 'static> BluetoothInterrup
                 pending: self.pending,
                 ring,
             },
-        ))
+        )
     }
 }
 
@@ -336,13 +324,11 @@ struct Retained<H: GateHardware> {
     pending: Option<H::TimerPending>,
 }
 
-/// The handler's part: the doorbell's interrupt part, the bank's and the
-/// timer's gates and the handler's ends of the gate's queues.
-pub struct BluetoothInterruptsOf<H: GateHardware, X: SignalExecutor + 'static, B: 'static> {
+/// The handler's part: the doorbell's interrupt part and lowering half, the
+/// bank's and the timer's gates and the handler's ends of the gate's queues.
+pub struct BluetoothInterruptsOf<H: GateHardware, X: SignalExecutor + 'static, B> {
     _irq: H::Doorbell,
-    /// The doorbell line's lowering half, once the task attached it.
-    line: Option<B>,
-    lines: Receiver<B>,
+    line: B,
     bank: Bank<H>,
     timer: Timer<H>,
     requests: Receiver<Request<H>>,
@@ -353,20 +339,12 @@ pub struct BluetoothInterruptsOf<H: GateHardware, X: SignalExecutor + 'static, B
     retained: Retained<H>,
 }
 
-impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine + 'static>
-    BluetoothInterruptsOf<H, X, B>
-{
+impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInterruptsOf<H, X, B> {
     /// Serve one entry of the line: see the module documentation for the
     /// order. Finite: one request of each kind, one sample of each status,
     /// one timer step; diagnostic settles are bounded on `clock`.
     pub fn service<C: oer_time::Clock>(&mut self, clock: &C) {
-        // Before the task attached the line no ring exists to lower.
-        if self.line.is_none() {
-            self.line = self.lines.try_receive().ok();
-        }
-        if let Some(line) = &mut self.line {
-            line.acknowledge();
-        }
+        self.line.acknowledge();
         self.take_rearmed_timer();
         self.serve_gate_request();
         if let Bank::Open {
@@ -687,7 +665,7 @@ pub enum ChipGate {}
 /// once; its handler calls [`BluetoothInterruptsOf::service`].
 pub type BluetoothInterrupts<X, B> = BluetoothInterruptsOf<ChipGate, X, B>;
 
-impl<X: SignalExecutor + 'static, B: 'static> oer_interrupt_table::InterruptSources
+impl<X: SignalExecutor + 'static, B> oer_interrupt_table::InterruptSources
     for BluetoothInterrupts<X, B>
 {
     const SOURCES: &'static [u16] = oer_interrupt_table::interrupt_sources![
@@ -764,28 +742,20 @@ impl GateHardware for ChipGate {
     }
 }
 
-impl<X: SignalExecutor + 'static, B: 'static> BluetoothInterruptEnds<ChipGate, X, B> {
-    /// Complete the task's ends once the part is bound (`_bound`): hand the
-    /// handler the doorbell line's lowering half `line`, before any ring
-    /// can reach it, and keep the raising half `ring`.
-    ///
-    /// # Errors
-    ///
-    /// A line was handed over already; the ends and the line come back.
-    #[allow(clippy::type_complexity, reason = "the refusal returns each owner")]
-    pub fn attach<R: RadioDoorbell + Clone>(
+impl<X: SignalExecutor + 'static> BluetoothInterruptEnds<ChipGate, X> {
+    /// Complete the task's ends once `_bound` proves the interrupt table
+    /// binds the handler's part, with the doorbell's ringing half `ring`,
+    /// which the same binding makes
+    /// (`Doorbell::new::<FromCpu3Irq, BluetoothInterrupts<X, B>>(line, &bound)`).
+    pub fn attach<B, R: RadioDoorbell + Clone>(
         self,
         _bound: &Bound<BluetoothInterrupts<X, B>>,
-        line: B,
         ring: R,
-    ) -> Result<
-        (
-            BluetoothInterruptGate<ChipGate, X, R>,
-            ModemLpTimerPort<ChipGate, R>,
-        ),
-        (Self, B),
-    > {
-        self.attach_line(line, ring)
+    ) -> (
+        BluetoothInterruptGate<ChipGate, X, R>,
+        ModemLpTimerPort<ChipGate, R>,
+    ) {
+        self.with_ring(ring)
     }
 }
 
