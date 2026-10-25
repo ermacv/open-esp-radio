@@ -139,3 +139,8 @@ name = "set_slow_mode"
 register = "RADIO0.RAD_ENABLE"
 value = 0x00000001
 sources = ["SRC_DRIVER"]
+
+[[fixed-register-sequences]]
+name = "initialize_vendor_words"
+steps = [{ register = "RADIO0.RAD_SLOT2", value = 0x00001234 }, { register = "RADIO0.WORD_0060_OPAQUE", value = 0x0badf00d, whole-word = true }]
+sources = ["SRC_VENDOR"]

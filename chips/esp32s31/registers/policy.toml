@@ -551,11 +551,19 @@ description = "Wi-Fi interrupt banks transferred from cold setup to the hard int
 name = "WifiMacInterrupt"
 instance = "WIFI_MAC"
 registers = ["ENABLE", "RAW", "STATUS", "CLEAR"]
+irq-side = true
+interrupt = "MODEM_WIFI_MAC"
+description = "The MAC interrupt bank: cold setup publishes its mask, then the MAC handler samples, acknowledges and masks its events."
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT"]
 
 [[partitions.parts]]
 name = "WifiMacPowerInterrupt"
 instance = "MODEM_PWR"
 registers = ["ENABLE", "RAW", "POWER_INTERRUPT_STATUS", "CLEAR"]
+irq-side = true
+interrupt = "MODEM_WIFI_PWR"
+description = "The WDEVPWR interrupt bank: cold setup masks it, then the power handler samples, acknowledges and masks its events."
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT"]
 
 [[partitions]]
 name = "MacLocalTimePeripherals"

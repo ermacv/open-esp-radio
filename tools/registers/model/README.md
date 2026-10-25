@@ -907,10 +907,12 @@ What a write does with the lanes it does not set:
   part that reaches an 8- or 16-bit word is refused: owners reach 32-bit
   words only.
 - **Policy items.** Only the items field accessors cannot express render:
-  `whole-word` fixed images, fixed images with a `masks` (masked first,
-  whole-word or not) or `consumed-event` proof, interrupt snapshots (with
-  the consumed field as an `Option` argument) and zero-based writes with
-  `whole-word-bits`. Each becomes a method of the part that owns it; every
+  `whole-word` fixed images, each `whole-word` step of a fixed sequence
+  (one method per image, `<sequence>_<element>`; the HAL orders the
+  steps), fixed images with a `masks` (masked first, whole-word or not) or
+  `consumed-event` proof, interrupt snapshots (with the consumed field as
+  an `Option` argument; the token reads back its sampled `bits()` and has
+  no constructor) and zero-based writes with `whole-word-bits`. Each becomes a method of the part that owns it; every
   other transaction is HAL code over the accessors.
 
 ### Linker fragment
