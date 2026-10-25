@@ -1424,6 +1424,87 @@ rejects!(
     )],
     ErrorKind::Interrupt(_)
 );
+/// A second source of `TIMER0` beside `TIMER0_INTR`, as a part whose one
+/// bank acknowledges two sources needs.
+fn two_timer_sources() -> TestResult<Fixture> {
+    let fixture = Fixture::new()?;
+    fixture
+        .edit(
+            "root.toml",
+            "interrupt-sources = { count = 2,",
+            "interrupt-sources = { count = 3,",
+        )?
+        .edit(
+            "root.toml",
+            "[[interrupts]]\nname = \"TIMER1_INTR\"",
+            "[[interrupts]]\nname = \"TIMER0_NRT_INTR\"\nsource = 2\ninstance = \"TIMER0\"\nsources = [\"SRC_HEADER\"]\n\n[[interrupts]]\nname = \"TIMER1_INTR\"",
+        )?;
+    Ok(fixture)
+}
+
+#[test]
+fn part_serves_every_source_its_bank_acknowledges() -> TestResult {
+    let fixture = two_timer_sources()?;
+    fixture.edit(
+        "policy.toml",
+        "interrupt = \"TIMER0_INTR\"",
+        "interrupt = [\"TIMER0_INTR\", \"TIMER0_NRT_INTR\"]",
+    )?;
+    let policy = fixture.load()?;
+    let irq = policy
+        .file()
+        .partitions
+        .iter()
+        .flat_map(|partition| &partition.parts)
+        .find(|part| part.name == "Irq")
+        .ok_or("the fixture has its Irq part")?;
+    assert_eq!(irq.interrupt, ["TIMER0_INTR", "TIMER0_NRT_INTR"]);
+    Ok(())
+}
+
+#[test]
+fn every_listed_interrupt_is_bound_to_the_part_instance() -> TestResult {
+    let fixture = two_timer_sources()?;
+    fixture.edit(
+        "policy.toml",
+        "interrupt = \"TIMER0_INTR\"",
+        "interrupt = [\"TIMER0_INTR\", \"TIMER1_INTR\"]",
+    )?;
+    assert!(matches!(fixture.rejection()?.kind, ErrorKind::Interrupt(_)));
+    Ok(())
+}
+
+#[test]
+fn a_listed_interrupt_is_served_once() -> TestResult {
+    let fixture = two_timer_sources()?;
+    fixture
+        .edit(
+            "policy.toml",
+            "interrupt = \"TIMER0_INTR\"",
+            "interrupt = [\"TIMER0_INTR\", \"TIMER0_NRT_INTR\"]",
+        )?
+        .edit(
+            "policy.toml",
+            "name = \"Task\"\ninstance = \"TIMER0\"\n",
+            "name = \"Task\"\ninstance = \"TIMER0\"\ninterrupt = \"TIMER0_NRT_INTR\"\n",
+        )?;
+    assert!(matches!(fixture.rejection()?.kind, ErrorKind::Interrupt(_)));
+    Ok(())
+}
+
+rejects!(
+    a_list_names_each_interrupt_once,
+    [(
+        "interrupt = \"TIMER0_INTR\"",
+        "interrupt = [\"TIMER0_INTR\", \"TIMER0_INTR\"]"
+    )],
+    ErrorKind::Interrupt(_)
+);
+rejects!(
+    handler_part_names_an_interrupt_in_its_list,
+    [("interrupt = \"TIMER0_INTR\"", "interrupt = []")],
+    ErrorKind::Interrupt(_)
+);
 rejects!(
     part_interrupt_is_a_source_of_the_root,
     [("interrupt = \"TIMER0_INTR\"", "interrupt = \"MISSING\"")],

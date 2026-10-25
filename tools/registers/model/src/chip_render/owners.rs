@@ -37,8 +37,8 @@ pub(super) struct Owner<'p> {
     /// The division the part is a member of, if its instance's parts
     /// observe or split each other's words.
     pub(super) division: Option<usize>,
-    /// The interrupt source the policy names for the part.
-    pub(super) source: Option<u16>,
+    /// The interrupt sources the policy names for the part.
+    pub(super) sources: Vec<u16>,
 }
 
 impl Owner<'_> {
@@ -148,15 +148,19 @@ pub(super) fn plan<'p>(model: &ChipModel, policy: &'p ChipPolicy) -> Result<Owne
                     format!("instance {} is no MMIO instance", part.instance),
                 )
             })?;
-            // The policy names each part's interrupt; its loader checked the
-            // source is bound to the part's instance.
-            let source = part.interrupt.as_ref().and_then(|name| {
-                model
-                    .interrupts()
-                    .iter()
-                    .find(|interrupt| interrupt.name == *name)
-                    .map(|interrupt| interrupt.source)
-            });
+            // The policy names each part's interrupts; its loader checked
+            // each source is bound to the part's instance.
+            let sources = part
+                .interrupt
+                .iter()
+                .filter_map(|name| {
+                    model
+                        .interrupts()
+                        .iter()
+                        .find(|interrupt| interrupt.name == *name)
+                        .map(|interrupt| interrupt.source)
+                })
+                .collect();
             index.insert(id, owners.len());
             owners.push(Owner {
                 id,
@@ -170,7 +174,7 @@ pub(super) fn plan<'p>(model: &ChipModel, policy: &'p ChipPolicy) -> Result<Owne
                     triggers: BTreeMap::new(),
                 },
                 division: None,
-                source,
+                sources,
             });
         }
     }
@@ -540,11 +544,27 @@ fn render_owner(
             );
         }
     }
-    if let Some(source) = owner.source {
-        let _ = writeln!(
-            output,
-            "impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for {name}<P> {{\nconst SOURCE: u16 = {source};\n}}\n"
-        );
+    // One source names the part's `InterruptSource`; several, only its
+    // `InterruptSources`, so the part never stands where one is expected.
+    match owner.sources.as_slice() {
+        [] => {}
+        [source] => {
+            let _ = writeln!(
+                output,
+                "impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for {name}<P> {{\nconst SOURCE: u16 = {source};\n}}\n"
+            );
+        }
+        sources => {
+            let _ = writeln!(
+                output,
+                "impl<P: oer_mmio::Placement> oer_mmio::InterruptSources for {name}<P> {{\nconst SOURCES: &'static [u16] = &[{}];\n}}\n",
+                sources
+                    .iter()
+                    .map(u16::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
+        }
     }
     // The accessors.
     let mut body = String::new();

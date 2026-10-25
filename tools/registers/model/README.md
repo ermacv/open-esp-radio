@@ -682,7 +682,7 @@ A part's flags:
 | --- | --- | --- |
 | `observes` | registers of the instance it reads | each reads without a side effect and is held by another part |
 | `irq-side` | an interrupt handler owns it | not `shared`; names its `interrupt` |
-| `interrupt` | the root's interrupt source the part serves (its name) | bound to the part's instance; one part per source; the part's owner names the source (`InterruptSource`) |
+| `interrupt` | the root's interrupt sources the part serves: a name, or a list of names when one bank of the part acknowledges several sources | each bound to the part's instance, listed once; one part per source; the part's owner names one source (`InterruptSource`) or several (`InterruptSources` alone) |
 | `shared` | every context reaches it through `&self` | each word is a side-effect-free read, write-trigger strobes or one `plain` or `write-only` field stored whole; a strobe writes from zero, never a read-modify-write, so a `write-one-to-clear` field beside the strobes takes zero and is only read; no FIFO, data port, command, `read-clears`, and no `write-one-to-clear` field in a word without a strobe; no `observes`, `triggers`, `read-only`, `irq-side`; no transaction |
 | `read-only` | the owner only reads its words | each word reads without a side effect; no `triggers`; no writing transaction |
 | `copy` | the read-only owner is `Copy` | only with `read-only` |
@@ -905,7 +905,9 @@ What a write does with the lanes it does not set:
   words (two to four parts). `shared` parts reach their words through
   `&self`, and a `read-only` part only reads; with `copy` it is `Copy`. A
   snapshot's clear word is written only by its acknowledgement. A part
-  naming its `interrupt` implements `InterruptSource` with that source. A
+  naming one `interrupt` implements `InterruptSource` with that source; a
+  part naming several implements only `InterruptSources` with them, so it
+  never stands where one source is expected. A
   part that reaches an 8- or 16-bit word is refused: owners reach 32-bit
   words only.
 - **Policy items.** Only the items field accessors cannot express render:

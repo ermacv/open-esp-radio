@@ -212,6 +212,44 @@ fn a_template_beside_its_single_register_keeps_its_index_place() {
     );
 }
 
+/// The fixture with a second source of `RADIO0`, both served by its
+/// handler's part through one bank.
+const TWO_SOURCES: &[(&str, &str, &str)] = &[
+    (
+        "chip.toml",
+        "interrupt-sources = { count = 3,",
+        "interrupt-sources = { count = 4,",
+    ),
+    (
+        "chip.toml",
+        "[[interrupts]]\nname = \"RADIO1_INTR\"",
+        "[[interrupts]]\nname = \"RADIO0_NRT_INTR\"\nsource = 3\ninstance = \"RADIO0\"\nsources = [\"SRC_HEADER\"]\n\n[[interrupts]]\nname = \"RADIO1_INTR\"",
+    ),
+    (
+        "policy.toml",
+        "interrupt = \"RADIO0_INTR\"",
+        "interrupt = [\"RADIO0_INTR\", \"RADIO0_NRT_INTR\"]",
+    ),
+];
+
+#[test]
+fn a_part_of_several_sources_names_them_all_and_no_single_one() {
+    let rendered = rendered_with(TWO_SOURCES);
+    let output = run(
+        &rendered,
+        "fn main() { println!(\"{:?}\", <radio::Irq as oer_mmio::InterruptSources>::SOURCES); }",
+    );
+    assert_eq!(output.trim(), "[0, 3]");
+    let errors = refused(
+        &rendered,
+        "fn main() { let _ = <radio::Irq as oer_mmio::InterruptSource>::SOURCE; }",
+    );
+    assert!(
+        errors.contains("InterruptSource` is not implemented"),
+        "{errors}"
+    );
+}
+
 #[test]
 fn a_part_reaching_a_narrow_word_is_refused() {
     let error = rejection(&[

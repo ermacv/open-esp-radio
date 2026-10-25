@@ -28159,6 +28159,10 @@ pub mod bt_mac {
     }
 
     /// The `BluetoothInterruptBank` part of `BT_MAC`.
+    ///
+    /// The controller's interrupt bank: the primary source and the NRT source are each sampled and acknowledged through this one write-one-to-clear bank, so one handler serves both.
+    ///
+    /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct BluetoothInterruptBank<P: oer_mmio::Placement = oer_mmio::Fixed<0x20101000>>(
         oer_mmio::Block<P, BluetoothInterruptBankWords>,
@@ -28199,8 +28203,8 @@ pub mod bt_mac {
         }
     }
 
-    impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for BluetoothInterruptBank<P> {
-        const SOURCE: u16 = 124;
+    impl<P: oer_mmio::Placement> oer_mmio::InterruptSources for BluetoothInterruptBank<P> {
+        const SOURCES: &'static [u16] = &[124, 133];
     }
 
     /// One sample of the `BT_MAC.IRQ_STATUS_SNAPSHOT_0` events `BT_MAC.IRQ_CLEAR_0` acknowledges, to acknowledge once.

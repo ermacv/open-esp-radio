@@ -219,6 +219,20 @@ pub trait InterruptSource {
     const SOURCE: u16;
 }
 
+/// Every interrupt-matrix source a register owner's handler serves: the one
+/// source of an [`InterruptSource`], or the several sources of a part one
+/// handler acknowledges through one bank. The generator implements it alone
+/// for a part of several sources, so such a part never stands where one
+/// source is expected; it grants no register access.
+pub trait InterruptSources {
+    /// The source numbers of the chip's interrupt matrix, each once.
+    const SOURCES: &'static [u16];
+}
+
+impl<T: InterruptSource + ?Sized> InterruptSources for T {
+    const SOURCES: &'static [u16] = &[T::SOURCE];
+}
+
 /// Blocks of device registers one promise of [`assume_owned`] makes: a
 /// [`Block`] at a [`Fixed`] address, or a tuple of up to eight claims.
 pub trait Claim: sealed::Claimed {}

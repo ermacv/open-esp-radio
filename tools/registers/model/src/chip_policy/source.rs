@@ -101,11 +101,12 @@ pub struct Part {
     /// Owned by an interrupt handler, not a task.
     #[serde(default)]
     pub irq_side: bool,
-    /// The interrupt source of the root (its name) whose handler the part
-    /// serves: one bound to the part's instance, named by no other part.
-    /// An interrupt handler's part names one.
-    #[serde(default)]
-    pub interrupt: Option<String>,
+    /// The interrupt sources of the root (their names) whose handler the
+    /// part serves: one name, or a list when one bank of the part
+    /// acknowledges several sources. Each is bound to the part's instance
+    /// and named by no other part. An interrupt handler's part names one.
+    #[serde(default, deserialize_with = "one_or_many")]
+    pub interrupt: Vec<String>,
     /// Reached by every execution context at once through `&self`.
     #[serde(default)]
     pub shared: bool,
@@ -119,6 +120,20 @@ pub struct Part {
     pub description: Option<String>,
     #[serde(default)]
     pub sources: Vec<String>,
+}
+
+/// A string, or a list of strings.
+fn one_or_many<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(String),
+        Many(Vec<String>),
+    }
+    Ok(match OneOrMany::deserialize(deserializer)? {
+        OneOrMany::One(name) => vec![name],
+        OneOrMany::Many(names) => names,
+    })
 }
 
 /// `count` elements of template `register` from index `first`.
