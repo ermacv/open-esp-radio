@@ -8,7 +8,8 @@
 //! times, each pass waiting for the sync engine, and then, on a chip with
 //! separate instruction caches, those are invalidated. The caller executes
 //! `fence.i` before it fetches the range. The sync engine's commands are
-//! mutually exclusive: each starts alone.
+//! mutually exclusive: each starts alone, once none runs. A range just
+//! mapped is dropped from the data cache ([`invalidate_data`]).
 //!
 //! SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/cache.rs:3-61,88-95`
 //! (64-byte lines, data map 0x10 written back twice, both instruction
@@ -52,7 +53,7 @@
 use oer_time::Clock;
 
 use crate::{
-    Access, BootFailure,
+    Access, BootFailure, Busy,
     wait::{BootDeadline, BootWait},
 };
 
@@ -71,8 +72,9 @@ pub trait CacheSyncRegisters {
     type Map: Copy;
     /// Select the caches and the line-aligned range of the next command.
     fn set_range(&mut self, access: Access<'_>, map: Self::Map, range: LineRange);
-    /// Start `command` alone: every other command bit zero.
-    fn start(&mut self, access: Access<'_>, command: SyncCommand);
+    /// Start `command` alone, every other command bit zero, or [`Busy`]
+    /// while a command runs.
+    fn start(&mut self, access: Access<'_>, command: SyncCommand) -> Result<(), Busy>;
     /// Whether the last command has finished.
     fn done(&self, access: Access<'_>) -> bool;
 }
@@ -215,9 +217,35 @@ where
     R: CacheSyncRegisters,
     C: Clock + ?Sized,
 {
-    registers.start(Access::new(), command);
+    deadline.poll(wait, || registers.start(Access::new(), command).ok())?;
     deadline.poll(wait, || registers.done(Access::new()).then_some(()))?;
     Ok(())
+}
+
+/// Drop the data cache's lines of `start..start + len`, widened to whole
+/// lines: memory the cache served stale (a range just mapped) is read
+/// again from its device.
+///
+/// SOURCE: esp-hal 1f646c5 `esp-hal/src/psram/oct_hex.rs:48-59` (the PSRAM
+/// window invalidated after its mapping) and
+/// `esp-hal/src/soc/esp32s31/cache.rs:52-61,76-83` (the data cache's map,
+/// one invalidate, `SYNC_DONE`).
+pub fn invalidate_data<R, C>(
+    registers: &mut R,
+    geometry: CacheGeometry<R::Map>,
+    start: u32,
+    len: u32,
+    wait: BootWait,
+    deadline: &BootDeadline<'_, C>,
+) -> Result<LineRange, BootFailure>
+where
+    R: CacheSyncRegisters,
+    C: Clock + ?Sized,
+{
+    let range = LineRange::cover(start, len, geometry.line_bytes, geometry.max_range_bytes)?;
+    registers.set_range(Access::new(), geometry.data, range);
+    run(registers, SyncCommand::Invalidate, wait, deadline)?;
+    Ok(range)
 }
 
 /// The words that suspend core 0's instruction fetch from the cache.
@@ -268,10 +296,37 @@ where
     R: FetchSuspendRegisters,
     C: Clock + ?Sized,
 {
-    let autoload = suspend(registers, waits, deadline)?;
+    let suspended = suspend_fetch(registers, waits, deadline)?;
     let result = operation();
-    resume(registers, autoload, false);
+    resume_fetch(registers, suspended);
     Ok(result)
+}
+
+/// Instruction fetch suspended by [`suspend_fetch`]: whether autoload ran,
+/// which [`resume_fetch`] restarts.
+#[derive(Debug, Eq, PartialEq)]
+#[must_use = "instruction fetch stays suspended until `resume_fetch`"]
+pub struct SuspendedFetch {
+    autoload: bool,
+}
+
+/// Suspend core 0's instruction fetch from the cache; on a failed wait,
+/// what the suspension changed is undone before it returns.
+pub fn suspend_fetch<R, C>(
+    registers: &mut R,
+    waits: SuspendWaits,
+    deadline: &BootDeadline<'_, C>,
+) -> Result<SuspendedFetch, BootFailure>
+where
+    R: FetchSuspendRegisters,
+    C: Clock + ?Sized,
+{
+    suspend(registers, waits, deadline).map(|autoload| SuspendedFetch { autoload })
+}
+
+/// Resume the instruction fetch `suspended` stopped.
+pub fn resume_fetch<R: FetchSuspendRegisters>(registers: &mut R, suspended: SuspendedFetch) {
+    resume(registers, suspended.autoload, false);
 }
 
 fn suspend<R, C>(

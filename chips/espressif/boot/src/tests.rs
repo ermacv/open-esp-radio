@@ -7,7 +7,9 @@ use oer_time_virtual::VirtualClock;
 
 mod cache;
 mod clock;
+mod flash;
 mod mmu;
+mod psram;
 mod wait;
 mod watchdog;
 

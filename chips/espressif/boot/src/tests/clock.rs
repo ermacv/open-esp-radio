@@ -1,15 +1,15 @@
 use core::cell::RefCell;
-use std::vec::Vec;
+use std::{rc::Rc, vec::Vec};
 
 use oer_time::{Clock, Duration, Instant};
 use oer_time_virtual::VirtualClock;
 
 use super::Ticking;
 use crate::{
-    Access, BootFailure, ClockFailure, WaitFailure,
+    Access, BootFailure, Busy, ClockFailure, WaitFailure,
     clock::{
-        ClockRates, ClockUpdate, ClockWaits, CpuClockProfile, CpuClockRegisters, PllPower,
-        PllRegisters, bring_up,
+        ActivePllPower, ClockRates, ClockUpdate, ClockWaits, CpuClockProfile, CpuClockRegisters,
+        PllPower, PllRegisters, bring_up,
     },
     wait::{BootBudget, BootDeadline, BootWait},
 };
@@ -24,6 +24,8 @@ enum Root {
 enum Op {
     SetTarget(u8),
     PowerUp,
+    KeepCpuPll,
+    KeepMemoryPll,
     StartCalibration,
     StopCalibration { after_done: Duration },
     Stage(Root, u8),
@@ -55,7 +57,7 @@ const PROFILE: CpuClockProfile<Root, u8, u8> = CpuClockProfile {
 /// never.
 struct Tree<'a> {
     clock: &'a VirtualClock,
-    log: RefCell<Vec<Op>>,
+    log: Rc<RefCell<Vec<Op>>>,
     root: Option<Root>,
     staged: (Root, u8),
     applied_divider: u8,
@@ -64,6 +66,8 @@ struct Tree<'a> {
     calibration_done_at: Option<Instant>,
     update_takes: Option<Duration>,
     update_done_at: Option<Instant>,
+    /// An update the bootloader left running until this instant.
+    running_until: Option<Instant>,
     ignores_update: bool,
 }
 
@@ -71,7 +75,7 @@ impl<'a> Tree<'a> {
     fn new(clock: &'a VirtualClock, root: Root, divider: u8, target: u8) -> Self {
         Self {
             clock,
-            log: RefCell::new(Vec::new()),
+            log: Rc::new(RefCell::new(Vec::new())),
             root: Some(root),
             staged: (root, divider),
             applied_divider: divider,
@@ -80,6 +84,7 @@ impl<'a> Tree<'a> {
             calibration_done_at: None,
             update_takes: Some(Duration::from_micros(2)),
             update_done_at: None,
+            running_until: None,
             ignores_update: false,
         }
     }
@@ -122,11 +127,18 @@ impl CpuClockRegisters for Tree<'_> {
 }
 
 impl ClockUpdate for Tree<'_> {
-    fn start_update(&mut self, _: Access<'_>) {
+    fn start_update(&mut self, _: Access<'_>) -> Result<(), Busy> {
+        let now = self.clock.now();
+        let running = self.running_until.is_some_and(|until| now < until)
+            || self.update_done_at.is_some_and(|at| now < at);
+        if running {
+            return Err(Busy);
+        }
         self.record(Op::StartUpdate);
         self.update_done_at = self
             .update_takes
             .map(|takes| self.clock.now().saturating_add(takes));
+        Ok(())
     }
     fn update_pending(&self, _: Access<'_>) -> bool {
         !self.update_done_at.is_some_and(|at| self.clock.now() >= at)
@@ -166,12 +178,25 @@ impl PllPower for Tree<'_> {
     }
 }
 
+/// The PMU's active-state power, logged with the clock tree's operations.
+struct Active(Rc<RefCell<Vec<Op>>>);
+
+impl ActivePllPower for Active {
+    fn keep_cpu_pll(&mut self, _: Access<'_>) {
+        self.0.borrow_mut().push(Op::KeepCpuPll);
+    }
+    fn keep_memory_pll(&mut self, _: Access<'_>) {
+        self.0.borrow_mut().push(Op::KeepMemoryPll);
+    }
+}
+
 fn bring_up_on(tree: &mut Tree<'_>, clock: &VirtualClock) -> Result<ClockRates, BootFailure> {
     let ticking = Ticking::new(clock);
     let budget = BootBudget::below(Duration::from_millis(10), Duration::from_secs(9))
         .expect("below the watchdog");
     let deadline = BootDeadline::start(&ticking, budget);
-    bring_up(tree, PROFILE, WAITS, &deadline)
+    let mut active = Active(Rc::clone(&tree.log));
+    bring_up(tree, &mut active, PROFILE, WAITS, &deadline)
 }
 
 #[test]
@@ -181,17 +206,22 @@ fn a_cold_pll_is_configured_powered_calibrated_settled_and_stopped_before_one_up
     assert_eq!(bring_up_on(&mut tree, &clock), Ok(RATES));
     let ops = tree.ops();
     assert_eq!(
-        &ops[..3],
-        &[Op::SetTarget(8), Op::PowerUp, Op::StartCalibration]
+        &ops[..4],
+        &[
+            Op::SetTarget(8),
+            Op::PowerUp,
+            Op::KeepCpuPll,
+            Op::StartCalibration
+        ]
     );
-    let Some(Op::StopCalibration { after_done }) = ops.get(3).copied() else {
-        panic!("the calibration stops fourth: {ops:?}");
+    let Some(Op::StopCalibration { after_done }) = ops.get(4).copied() else {
+        panic!("the calibration stops fifth: {ops:?}");
     };
     assert!(
         after_done >= WAITS.calibration_settle.bound(),
         "{after_done:?}"
     );
-    assert_eq!(&ops[4..], &[Op::Stage(Root::Pll, 1), Op::StartUpdate]);
+    assert_eq!(&ops[5..], &[Op::Stage(Root::Pll, 1), Op::StartUpdate]);
 }
 
 #[test]
@@ -245,7 +275,12 @@ fn a_calibration_that_never_ends_is_a_named_timeout_before_any_divider() {
     );
     assert_eq!(
         tree.ops(),
-        [Op::SetTarget(8), Op::PowerUp, Op::StartCalibration]
+        [
+            Op::SetTarget(8),
+            Op::PowerUp,
+            Op::KeepCpuPll,
+            Op::StartCalibration
+        ]
     );
 }
 
@@ -269,4 +304,25 @@ fn a_configuration_that_does_not_read_back_stops_the_boot() {
         bring_up_on(&mut tree, &clock),
         Err(BootFailure::Clock(ClockFailure::Readback))
     );
+}
+
+#[test]
+fn an_update_starts_once_the_running_one_completes_and_never_over_it() {
+    let clock = VirtualClock::new();
+    let mut tree = Tree::new(&clock, Root::Pll, 3, 8);
+    tree.running_until = Some(clock.now().saturating_add(Duration::from_micros(20)));
+    assert_eq!(bring_up_on(&mut tree, &clock), Ok(RATES));
+    assert_eq!(tree.ops(), [Op::Stage(Root::Pll, 1), Op::StartUpdate]);
+}
+
+#[test]
+fn an_update_that_never_lets_the_next_start_is_a_named_timeout() {
+    let clock = VirtualClock::new();
+    let mut tree = Tree::new(&clock, Root::Pll, 3, 8);
+    tree.running_until = Some(Instant::from_micros(u64::MAX));
+    assert_eq!(
+        bring_up_on(&mut tree, &clock),
+        Err(BootFailure::Wait(WaitFailure::TimedOut("clock-update")))
+    );
+    assert_eq!(tree.ops(), [Op::Stage(Root::Pll, 1)]);
 }

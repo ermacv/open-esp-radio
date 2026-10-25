@@ -6,7 +6,7 @@ use oer_time_virtual::VirtualClock;
 
 use super::Ticking;
 use crate::{
-    Access, BootFailure, CacheFailure, WaitFailure,
+    Access, BootFailure, Busy, CacheFailure, WaitFailure,
     cache::{
         CacheGeometry, CacheSyncRegisters, FetchSuspendRegisters, LineRange, SuspendWaits,
         SyncCommand, publish_code, with_fetch_suspended,
@@ -108,12 +108,19 @@ impl CacheSyncRegisters for Engine<'_> {
             .borrow_mut()
             .push(SyncOp::Range(map, range.start(), range.size()));
     }
-    fn start(&mut self, _: Access<'_>, command: SyncCommand) {
-        assert!(self.running.is_none(), "a command starts alone");
+    fn start(&mut self, _: Access<'_>, command: SyncCommand) -> Result<(), Busy> {
+        // A command that has not finished refuses the next: commands start
+        // alone.
+        if let Some((_, at)) = self.running
+            && self.clock.now() < at
+        {
+            return Err(Busy);
+        }
         self.log.borrow_mut().push(SyncOp::Start(command));
         self.running = self
             .takes
             .map(|takes| (command, self.clock.now().saturating_add(takes)));
+        Ok(())
     }
     fn done(&self, _: Access<'_>) -> bool {
         match self.running {
@@ -146,9 +153,9 @@ impl CacheSyncRegisters for Retiring<'_> {
         self.0.retire();
         self.0.set_range(access, map, range);
     }
-    fn start(&mut self, access: Access<'_>, command: SyncCommand) {
+    fn start(&mut self, access: Access<'_>, command: SyncCommand) -> Result<(), Busy> {
         self.0.retire();
-        self.0.start(access, command);
+        self.0.start(access, command)
     }
     fn done(&self, access: Access<'_>) -> bool {
         self.0.done(access)
