@@ -119603,10 +119603,21 @@ pub mod modem_pwr {
     }
 
     /// The `WifiMacLocalTime` part of `MODEM_PWR`.
-    #[must_use = "dropping a register owner permanently loses its register authority"]
+    ///
+    /// The read of the free-running MAC local-time counter: side-effect free and written by no part, so one `Copy` reader serves the radio PHY's SDM-stability deadline and the Wi-Fi MAC's receive timestamps.
+    ///
+    /// SOURCE: ROM_REV0_PHY_WAIT_I2C_SDM_STABLE, BLOB_LIBPP_MAC_LOCAL_TIME.
     pub struct WifiMacLocalTime<P: oer_mmio::Placement = oer_mmio::Fixed<0x2010d000>>(
-        oer_mmio::Block<P, WifiMacLocalTimeWords>,
+        oer_mmio::Reader<P, WifiMacLocalTimeWords, WifiMacLocalTimeWords>,
     );
+
+    impl<P: oer_mmio::Placement> Clone for WifiMacLocalTime<P> {
+        fn clone(&self) -> Self {
+            *self
+        }
+    }
+
+    impl<P: oer_mmio::Placement> Copy for WifiMacLocalTime<P> {}
 
     /// The words [`WifiMacLocalTime`] holds, as byte offsets from its instance's base.
     pub struct WifiMacLocalTimeWords;
@@ -119628,14 +119639,14 @@ pub mod modem_pwr {
         /// The owner of the part's device registers.
         #[inline]
         pub fn new(block: WifiMacLocalTimeClaim) -> Self {
-            Self(block)
+            Self(block.into_reader())
         }
     }
 
     impl<'a> WifiMacLocalTime<oer_mmio::Host<'a>> {
         /// The part over host memory, for tests of its accessors.
         pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
-            oer_mmio::Block::host(words).map(Self)
+            oer_mmio::Block::host(words).map(|block| Self(block.into_reader()))
         }
     }
 

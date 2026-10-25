@@ -566,6 +566,10 @@ description = "The free-running Wi-Fi MAC local-time counter. Reading it has no 
 name = "WifiMacLocalTime"
 instance = "MODEM_PWR"
 registers = ["COUNTER"]
+read-only = true
+copy = true
+description = "The read of the free-running MAC local-time counter: side-effect free and written by no part, so one `Copy` reader serves the radio PHY's SDM-stability deadline and the Wi-Fi MAC's receive timestamps."
+sources = ["ROM_REV0_PHY_WAIT_I2C_SDM_STABLE", "BLOB_LIBPP_MAC_LOCAL_TIME"]
 
 [[partitions]]
 name = "RadioPhyPeripherals"
