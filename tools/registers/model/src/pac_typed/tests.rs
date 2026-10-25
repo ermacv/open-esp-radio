@@ -133,6 +133,8 @@ fn a_fixed_image_becomes_a_method_with_its_mask_asserted() {
     let mut pack = typed_pack();
     pack.fixed_register_images.push(FixedRegisterImage {
         whole_word: false,
+        masks: None,
+        consumed_event: None,
         name: "issue_start".to_owned(),
         peripheral: "RADIO".to_owned(),
         register: "COMMAND".to_owned(),
@@ -196,6 +198,8 @@ fn the_svd2rust_policy_loses_everything_bound_to_a_typed_peripheral() {
     ];
     pack.fixed_register_images.push(FixedRegisterImage {
         whole_word: false,
+        masks: None,
+        consumed_event: None,
         name: "issue_start".to_owned(),
         peripheral: "RADIO".to_owned(),
         register: "COMMAND".to_owned(),
@@ -247,6 +251,8 @@ fn only_a_whole_word_vendor_image_skips_the_declared_field_assertion() {
     for (name, whole_word) in [("set_declared", false), ("set_vendor_word", true)] {
         pack.fixed_register_images.push(FixedRegisterImage {
             whole_word,
+            masks: None,
+            consumed_event: None,
             name: name.to_owned(),
             peripheral: "RADIO".to_owned(),
             register: "CONTROL".to_owned(),
@@ -754,6 +760,8 @@ fn a_fifo_port_is_never_observed_or_named_by_a_transaction() {
     pack.fifo_ports.push(fifo("DATA"));
     pack.fixed_register_images.push(FixedRegisterImage {
         whole_word: false,
+        masks: None,
+        consumed_event: None,
         name: "push_fixed".to_owned(),
         peripheral: "RADIO".to_owned(),
         register: "DATA".to_owned(),
@@ -805,6 +813,8 @@ fn library_pack() -> PacApiPack {
     let mut pack = empty_pack();
     pack.fixed_register_images.push(FixedRegisterImage {
         whole_word: false,
+        masks: None,
+        consumed_event: None,
         name: "enable_level_two".to_owned(),
         peripheral: "RADIO".to_owned(),
         register: "CONTROL".to_owned(),
@@ -1023,6 +1033,8 @@ fn only_a_typed_reference_changes_a_pointer_field() {
     let mut pack = pointer_pack(Some(crate::RegisterPointerEncoding::LowBits));
     pack.fixed_register_images.push(FixedRegisterImage {
         whole_word: false,
+        masks: None,
+        consumed_event: None,
         name: "head_image".to_owned(),
         peripheral: "RADIO".to_owned(),
         register: "HEAD".to_owned(),
@@ -1046,6 +1058,66 @@ fn only_a_typed_reference_changes_a_pointer_field() {
         sources: vec!["SOURCE".to_owned()],
     });
     refused(&pack, &pointed(), "only a typed DMA reference or zero sets");
+}
+
+fn pointer_projection(name: &str, value: Option<u32>) -> crate::FieldOrModify {
+    crate::FieldOrModify {
+        name: name.to_owned(),
+        peripheral: "RADIO".to_owned(),
+        register: "HEAD".to_owned(),
+        fields: vec![crate::pac_api::FieldOrProjection {
+            field: "ADDRESS_LOW".to_owned(),
+            source_bit_offset: 0,
+        }],
+        domain: None,
+        value,
+        exposure: crate::PacApiExposure::Facade,
+        sources: vec!["SOURCE".to_owned()],
+    }
+}
+
+#[test]
+fn a_pointer_field_transaction_takes_the_image_or_zero() {
+    let mut pack = pointer_pack(Some(crate::RegisterPointerEncoding::BleCompressed));
+    pack.field_or_modifies
+        .push(pointer_projection("or_head", None));
+    pack.field_clear_modifies
+        .push(pointer_projection("clear_head", Some(0xf_ffff)));
+    pack.field_replace_modifies
+        .push(crate::pac_api::FieldReplaceModify {
+            name: "replace_head".to_owned(),
+            peripheral: "RADIO".to_owned(),
+            register: "HEAD".to_owned(),
+            fields: vec![crate::pac_api::FieldOrProjection {
+                field: "ADDRESS_LOW".to_owned(),
+                source_bit_offset: 0,
+            }],
+            domain: None,
+            value: None,
+            input_transform: None,
+            exposure: crate::PacApiExposure::Facade,
+            sources: vec!["SOURCE".to_owned()],
+        });
+    // A clear by AND-NOT of the field's bits is no zero the image grants.
+    refused(&pack, &pointed(), "only a typed DMA reference or zero sets");
+
+    pack.field_clear_modifies.clear();
+    let mut zero = pack.field_replace_modifies[0].clone();
+    zero.name = "zero_head".to_owned();
+    zero.value = Some(0);
+    pack.field_replace_modifies.push(zero);
+    let rust = pack
+        .render_typed_rust(&svd(&pointed()), &Default::default())
+        .expect("the image and zero transactions render");
+    assert!(
+        rust.contains("pub fn or_head(&mut self, value: head::AddressLowImage)"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("pub fn replace_head(&mut self, value: head::AddressLowImage)"),
+        "{rust}"
+    );
+    assert!(rust.contains("pub fn zero_head(&mut self"), "{rust}");
 }
 
 /// `STATUS` (read-only) and its write-only, write-one-to-clear `CLEAR`.
@@ -1090,19 +1162,139 @@ fn a_snapshot_acknowledges_through_its_clear_register_alone() {
     assert!(!rust.contains("pub fn write_clear("), "{rust}");
 
     let mut pack = snapshot_pack();
-    pack.fixed_register_images.push(FixedRegisterImage {
-        whole_word: false,
-        name: "clear_everything".to_owned(),
-        peripheral: "RADIO".to_owned(),
-        register: "CLEAR".to_owned(),
-        value: 0x3,
-        sources: vec!["SOURCE".to_owned()],
-    });
+    pack.zero_based_field_writes
+        .push(crate::ZeroBasedFieldWrite {
+            name: "clear_done".to_owned(),
+            peripheral: "RADIO".to_owned(),
+            register: "CLEAR".to_owned(),
+            fields: vec!["DONE".to_owned()],
+            sources: vec!["SOURCE".to_owned()],
+        });
     refused(
         &pack,
         &events(&field("DONE", 0, 1, "")),
         "only its snapshot's acknowledgement writes",
     );
+}
+
+fn stale_clear_pack(masks: Option<&str>, consumed_event: Option<&str>) -> PacApiPack {
+    let mut pack = snapshot_pack();
+    pack.fixed_register_images.push(FixedRegisterImage {
+        whole_word: false,
+        masks: masks.map(str::to_owned),
+        consumed_event: consumed_event.map(str::to_owned),
+        name: "clear_stale_done".to_owned(),
+        peripheral: "RADIO".to_owned(),
+        register: "CLEAR".to_owned(),
+        value: 0x1,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    pack
+}
+
+/// The events block with the enable register of its sources.
+fn enabled_events() -> String {
+    events(&field("DONE", 0, 1, ""))
+        + &register(
+            "ENABLE",
+            8,
+            "read-write",
+            "",
+            &(field("DONE", 0, 1, "") + &field("ERROR", 1, 1, "")),
+        )
+}
+
+#[test]
+fn a_stale_source_clear_masks_its_sources_before_it_acknowledges_them() {
+    let rust = stale_clear_pack(Some("ENABLE"), None)
+        .render_typed_rust(&svd(&enabled_events()), &Default::default())
+        .expect("the masking fixed image on the clear register renders");
+    assert!(
+        rust.contains(
+            "pub fn clear_stale_done(&mut self, ) {\nlet bits = self.0.read::<0x8>();\nself.0.write::<0x8>(bits & !0x00000001);\nself.0.write::<0x4>(0x00000001);\n}"
+        ),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("within(0x00000001, enable::FIELDS)"),
+        "{rust}"
+    );
+    assert!(rust.contains("pub fn acknowledge_events("), "{rust}");
+    assert!(!rust.contains("pub fn write_clear("), "{rust}");
+}
+
+#[test]
+fn a_consumed_event_acknowledgement_stores_its_image_alone() {
+    let rust = stale_clear_pack(None, Some("the one consumer of DONE."))
+        .render_typed_rust(&svd(&enabled_events()), &Default::default())
+        .expect("the consumed acknowledgement renders");
+    assert!(
+        rust.contains(
+            "pub fn clear_stale_done(&mut self, ) {\nself.0.write::<0x4>(0x00000001);\n}"
+        ),
+        "{rust}"
+    );
+    assert!(rust.contains("the one consumer of DONE."), "{rust}");
+}
+
+#[test]
+fn a_clear_register_image_without_its_proof_is_refused() {
+    refused(
+        &stale_clear_pack(None, None),
+        &enabled_events(),
+        "that no sample captured",
+    );
+    refused(
+        &stale_clear_pack(Some("ENABLE"), Some("both.")),
+        &enabled_events(),
+        "names one proof",
+    );
+    refused(
+        &stale_clear_pack(Some("CLEAR"), None),
+        &enabled_events(),
+        "no plain enable register",
+    );
+    refused(
+        &stale_clear_pack(Some("MISSING"), None),
+        &enabled_events(),
+        "no plain enable register",
+    );
+    let mut pack = stale_clear_pack(Some("ENABLE"), None);
+    pack.data_ports.push(crate::DataPort {
+        peripheral: "RADIO".to_owned(),
+        register: "ENABLE".to_owned(),
+        sources: vec!["SOURCE".to_owned()],
+    });
+    refused(
+        &pack,
+        &(events(&field("DONE", 0, 1, ""))
+            + &register("ENABLE", 8, "read-write", "", &field("DONE", 0, 1, ""))),
+        "no plain enable register",
+    );
+    let mut pack = stale_clear_pack(Some("ENABLE"), None);
+    pack.fixed_register_images[0].register = "ENABLE".to_owned();
+    refused(&pack, &enabled_events(), "is no snapshot's clear register");
+}
+
+#[test]
+fn a_whole_word_event_field_is_dropped_from_a_snapshot_without_an_and() {
+    let rust = snapshot_pack()
+        .render_typed_rust(
+            &svd(
+                &(register("STATUS", 0, "read-only", "", &field("PENDING", 0, 32, ""))
+                    + &register(
+                        "CLEAR",
+                        4,
+                        "write-only",
+                        "<modifiedWriteValues>oneToClear</modifiedWriteValues>",
+                        &field("PENDING", 0, 32, ""),
+                    )),
+            ),
+            &Default::default(),
+        )
+        .expect("the whole-word snapshot renders");
+    assert!(rust.contains("if keep { self } else { Self(0) }"), "{rust}");
+    assert!(!rust.contains("& !0xffffffff"), "{rust}");
 }
 
 #[test]

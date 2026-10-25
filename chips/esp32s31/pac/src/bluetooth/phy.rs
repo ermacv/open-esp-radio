@@ -235,37 +235,37 @@ impl BluetoothTaskRegisters {
         inputs: BluetoothPhyRegisterInitInputs,
     ) {
         let timing_byte = inputs.private_timing_source_byte.wrapping_sub(1);
-        let environment_member = crate::generated::bluetooth_phy_environment_member_pointer_image(
-            Some(inputs.environment),
-        )
-        .expect("the placed PHY environment contains its published member");
-        let environment_tail = crate::generated::bluetooth_phy_environment_tail_pointer_image(
-            Some(inputs.environment),
-        )
-        .expect("the placed PHY environment contains its published tail");
-        let resolving_list = crate::generated::bluetooth_phy_resolving_list_pointer_image(Some(
-            inputs.resolving_list,
-        ))
-        .expect("a placed resolving list is encodable");
+        let environment_member =
+            crate::generated::btmac_ble_phy_init::phy_environment_member_pointer::AddressImage::new(
+                inputs.environment,
+            );
+        let environment_tail =
+            crate::generated::bluetooth_controller_core::phy_environment_tail_pointer::AddressImage::new(
+                inputs.environment,
+            );
+        let resolving_list =
+            crate::generated::ble_hw_resolving_list::base_pointer::CompressedSramPointerImage::new(
+                inputs.resolving_list,
+            )
+            .expect("a placed resolving list is encodable");
 
-        let bluetooth = &self.bluetooth;
-        let btmac = &bluetooth.btmac_ble_phy_init;
+        let bluetooth = &mut self.bluetooth;
+        let btmac = &mut bluetooth.btmac_ble_phy_init;
 
         // Ordered positional images and BTMAC prefix.
-        crate::svd::zero_register_write::publish_ble_positional_word_1ff0_image_0(
-            &bluetooth.ble_hw_positional_word_1ff0,
-        );
-        crate::svd::fixed_register_image::publish_ble_positional_word_1ff0_image_1(
-            &bluetooth.ble_hw_positional_word_1ff0,
-        );
-        crate::svd::sampled_bit_zero_write::preserve_ble_phy_interrupt_source_17(btmac);
-        crate::svd::fixed_register_image::clear_all_ble_base_stack_interrupt_sources(btmac);
+        bluetooth
+            .ble_hw_positional_word_1ff0
+            .publish_ble_positional_word_1ff0_image_0();
+        bluetooth
+            .ble_hw_positional_word_1ff0
+            .publish_ble_positional_word_1ff0_image_1();
+        btmac.preserve_ble_phy_interrupt_source_17();
+        btmac.clear_all_ble_base_stack_interrupt_sources();
 
         // `r_ble_phy_ramup_time_set`: the TX-on delay fields, then the
         // external-baseband LE TX-on delay it tail-calls.
-        crate::generated::clear_ble_phy_lc_tx_on_delay_fields(btmac);
-        crate::generated::or_ble_phy_init_tx_on_delay(
-            btmac,
+        btmac.clear_ble_phy_lc_tx_on_delay_fields();
+        btmac.or_ble_phy_init_tx_on_delay(
             crate::generated::BluetoothPhyInitTimingByte::new(u32::from(timing_byte))
                 .expect("one byte always fits the reviewed BLE PHY timing domain"),
         );
@@ -277,96 +277,87 @@ impl BluetoothTaskRegisters {
             .expect("one byte always fits the reviewed BLE PHY timing domain"),
         );
 
-        crate::svd::fixed_register_image::publish_ble_phy_init_value_0138(btmac);
-        crate::svd::fixed_register_image::publish_ble_phy_init_bytes_04a4(btmac);
-        crate::svd::fixed_register_image::publish_ble_phy_init_bytes_04a8(btmac);
-        crate::svd::register_image_write::publish_ble_phy_init_environment_member(
-            btmac,
-            environment_member,
-        );
-        crate::svd::fixed_register_image::publish_ble_phy_init_value_04ac(btmac);
-        crate::svd::fixed_register_image::publish_ble_phy_init_value_045c(btmac);
+        btmac.publish_ble_phy_init_value_0138();
+        btmac.publish_ble_phy_init_bytes_04a4();
+        btmac.publish_ble_phy_init_bytes_04a8();
+        btmac.publish_ble_phy_init_environment_member(environment_member);
+        btmac.publish_ble_phy_init_value_04ac();
+        btmac.publish_ble_phy_init_value_045c();
 
         // Four independent fresh-read updates at 0x20101654; the last two
         // are `r_ble_phy_monitor_bb_sync`, which then clears 0x20101474 and
         // publishes image 0x20 at 0x2010891c.
-        crate::generated::clear_ble_phy_init_low_byte_pair(btmac);
-        crate::generated::or_ble_phy_init_low_byte_pair(btmac);
-        crate::generated::clear_ble_phy_init_byte_2_low_7(btmac);
-        crate::generated::or_ble_phy_init_byte_2(btmac);
+        btmac.clear_ble_phy_init_low_byte_pair();
+        btmac.or_ble_phy_init_low_byte_pair();
+        btmac.clear_ble_phy_init_byte_2_low_7();
+        btmac.or_ble_phy_init_byte_2();
 
-        crate::svd::zero_register_write::clear_ble_phy_init_zero_0074(btmac);
-        crate::svd::fixed_register_image::publish_ble_positional_word_891c_image_20(
-            &bluetooth.ble_hw_positional_word_891c,
-        );
-        crate::svd::fixed_register_image::publish_ble_phy_accelerator_config(
-            &bluetooth.ble_hw_accelerator,
-        );
-        crate::svd::fixed_register_image::publish_ble_phy_accelerator_sram_region_0(
-            &bluetooth.ble_hw_accelerator,
-        );
-        crate::svd::fixed_register_image::publish_ble_phy_accelerator_sram_region_1(
-            &bluetooth.ble_hw_accelerator,
-        );
-        crate::svd::zero_based_field_write::publish_ble_phy_resolving_list_base_pointer(
-            &bluetooth.ble_hw_resolving_list,
-            resolving_list,
-        );
+        btmac.clear_ble_phy_init_zero_0074();
+        bluetooth
+            .ble_hw_positional_word_891c
+            .publish_ble_positional_word_891c_image_20();
+        bluetooth
+            .ble_hw_accelerator
+            .publish_ble_phy_accelerator_config();
+        bluetooth
+            .ble_hw_accelerator
+            .publish_ble_phy_accelerator_sram_region_0();
+        bluetooth
+            .ble_hw_accelerator
+            .publish_ble_phy_accelerator_sram_region_1();
+        bluetooth
+            .ble_hw_resolving_list
+            .publish_ble_phy_resolving_list_base_pointer(resolving_list);
 
-        crate::svd::fixed_register_image::publish_ble_phy_init_control_0400(btmac);
-        crate::generated::enable_ble_phy_init_control_0400(btmac);
-        crate::svd::fixed_register_image::publish_ble_phy_init_configuration_word(btmac);
+        btmac.publish_ble_phy_init_control_0400();
+        btmac.enable_ble_phy_init_control_0400();
+        btmac.publish_ble_phy_init_configuration_word();
 
         // Each byte replacement is a distinct fresh-read RMW in vendor order.
-        crate::generated::publish_ble_phy_init_0550_byte_0(btmac);
-        crate::generated::publish_ble_phy_init_0550_byte_1(btmac);
-        crate::generated::publish_ble_phy_init_0550_byte_2(btmac);
+        btmac.publish_ble_phy_init_0550_byte_0();
+        btmac.publish_ble_phy_init_0550_byte_1();
+        btmac.publish_ble_phy_init_0550_byte_2();
 
-        crate::generated::publish_ble_phy_init_0554_byte_0(btmac);
-        crate::generated::publish_ble_phy_init_0554_byte_1(btmac);
-        crate::generated::publish_ble_phy_init_0554_byte_2(btmac);
-        crate::generated::publish_ble_phy_init_0554_byte_3(btmac);
+        btmac.publish_ble_phy_init_0554_byte_0();
+        btmac.publish_ble_phy_init_0554_byte_1();
+        btmac.publish_ble_phy_init_0554_byte_2();
+        btmac.publish_ble_phy_init_0554_byte_3();
 
-        crate::generated::publish_ble_phy_init_055c_byte_0(btmac);
-        crate::generated::publish_ble_phy_init_055c_byte_1(btmac);
-        crate::generated::publish_ble_phy_init_055c_byte_2(btmac);
-        crate::generated::publish_ble_phy_init_055c_byte_3(btmac);
+        btmac.publish_ble_phy_init_055c_byte_0();
+        btmac.publish_ble_phy_init_055c_byte_1();
+        btmac.publish_ble_phy_init_055c_byte_2();
+        btmac.publish_ble_phy_init_055c_byte_3();
 
-        crate::generated::publish_ble_phy_init_0558_byte_0(btmac);
-        crate::generated::publish_ble_phy_init_0558_byte_1(btmac);
-        crate::generated::publish_ble_phy_init_0558_byte_2(btmac);
-        crate::generated::publish_ble_phy_init_0558_byte_3(btmac);
+        btmac.publish_ble_phy_init_0558_byte_0();
+        btmac.publish_ble_phy_init_0558_byte_1();
+        btmac.publish_ble_phy_init_0558_byte_2();
+        btmac.publish_ble_phy_init_0558_byte_3();
 
-        crate::generated::publish_ble_phy_init_high_half_0458(btmac);
-        crate::generated::publish_ble_phy_init_low_5_054c(btmac);
+        btmac.publish_ble_phy_init_high_half_0458();
+        btmac.publish_ble_phy_init_low_5_054c();
 
         if inputs.set_branch_control_0470_bit_18 {
-            crate::generated::set_ble_phy_device_table_control_bit_18(btmac);
+            btmac.set_ble_phy_device_table_control_bit_18();
         }
-        crate::svd::fixed_register_image::publish_ble_positional_word_891c_image_40(
-            &bluetooth.ble_hw_positional_word_891c,
-        );
+        bluetooth
+            .ble_hw_positional_word_891c
+            .publish_ble_positional_word_891c_image_40();
 
-        crate::svd::zero_based_field_write::publish_ble_phy_runtime_configuration(
-            &bluetooth.ble_hw_runtime_control,
-            RUNTIME_CONFIGURATION_LOW_BYTE,
-            true,
-        );
-        crate::svd::fixed_register_image::publish_ble_phy_init_followup_image_1(
-            &bluetooth.ble_hw_runtime_control,
-        );
+        bluetooth
+            .ble_hw_runtime_control
+            .publish_ble_phy_runtime_configuration(RUNTIME_CONFIGURATION_LOW_BYTE, true);
+        bluetooth
+            .ble_hw_runtime_control
+            .publish_ble_phy_init_followup_image_1();
 
-        let controller = &bluetooth.bluetooth_controller_core;
-        crate::svd::zero_register_write::clear_ble_phy_controller_value_0244(controller);
-        crate::svd::fixed_register_image::publish_ble_phy_controller_value_01f0(controller);
-        crate::svd::fixed_register_image::publish_ble_phy_controller_value_0248(controller);
+        let controller = &mut bluetooth.bluetooth_controller_core;
+        controller.clear_ble_phy_controller_value_0244();
+        controller.publish_ble_phy_controller_value_01f0();
+        controller.publish_ble_phy_controller_value_0248();
         // The vendor routes and enables channel zero; this owner's channel
         // two carries the same route (see `BluetoothPhyEtmChannel`).
         self.etm.route_and_enable();
-        crate::svd::register_image_write::publish_ble_phy_controller_environment_tail(
-            controller,
-            environment_tail,
-        );
+        controller.publish_ble_phy_controller_environment_tail(environment_tail);
 
         // One ordering boundary is a reviewed Rust-side addition. It does not
         // replace, merge, or reorder any vendor MMIO edge above.

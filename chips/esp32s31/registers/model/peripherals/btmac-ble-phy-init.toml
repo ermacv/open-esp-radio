@@ -280,6 +280,9 @@ name = "ADDRESS"
 description = "CPU address published for the BLE PHY environment member at +0x2c."
 bitOffset = 0
 bitWidth = 32
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFFFFF
 [[peripherals.registers]]
 
 [peripherals.registers.register]

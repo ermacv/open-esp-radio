@@ -79,16 +79,13 @@ impl BluetoothSchedulerHardwareListHeadControl for BluetoothTaskRegisters {
         index: BluetoothSchedulerHardwareListIndex,
         head: Option<DmaRef<BleSchedulerItem>>,
     ) {
-        let head_bits = crate::generated::BluetoothSchedulerListHeadBits::new(
-            crate::generated::bluetooth_scheduler_head_pointer_image(head)
-                .expect("a placed scheduler head is encodable"),
-        )
-        .expect("validated scheduler head fits its generated PAC domain");
-        crate::generated::publish_bluetooth_scheduler_hardware_list_head(
-            &self.bluetooth.btdm_scheduler_table,
-            index.get() as usize,
-            head_bits,
-        );
+        use crate::generated::btdm_scheduler_table::entry::HeadPointerImage;
+        let head = head
+            .map_or(Some(HeadPointerImage::NULL), HeadPointerImage::new)
+            .expect("a placed scheduler head is encodable");
+        self.bluetooth
+            .btdm_scheduler_table
+            .publish_bluetooth_scheduler_hardware_list_head(index.register_index(), head);
     }
 
     fn order_after_publication(&mut self) {
@@ -119,13 +116,15 @@ trait BluetoothSchedulerRunEventControl {
 
 impl BluetoothSchedulerRunEventControl for BluetoothTaskRegisters {
     fn clear_scheduler_run_event_source(&mut self) {
-        crate::svd::fixed_register_image::clear_ble_scheduler_run_event_source(
-            &self.bluetooth.btmac_ble_phy_init,
-        );
+        self.bluetooth
+            .btmac_ble_phy_init
+            .clear_ble_scheduler_run_event_source();
     }
 
     fn enable_scheduler_run_event_source(&mut self) {
-        crate::generated::enable_ble_scheduler_run_event_source(&self.bluetooth.btmac_ble_phy_init);
+        self.bluetooth
+            .btmac_ble_phy_init
+            .enable_ble_scheduler_run_event_source();
     }
 
     fn order_after_scheduler_run_event(&mut self) {
@@ -376,10 +375,12 @@ impl BluetoothTaskRegisters {
         &mut self,
     ) -> BluetoothSchedulerHardwareListsCleared {
         for index in 0..16 {
-            crate::generated::clear_bluetooth_scheduler_hardware_list_head(
-                &self.bluetooth.btdm_scheduler_table,
-                index,
-            );
+            let index = BluetoothSchedulerHardwareListIndex::new(index)
+                .expect("the walk stays below sixteen lists")
+                .register_index();
+            self.bluetooth
+                .btdm_scheduler_table
+                .clear_bluetooth_scheduler_hardware_list_head(index);
         }
         device_fence();
         BluetoothSchedulerHardwareListsCleared { _private: () }
@@ -396,11 +397,12 @@ impl BluetoothTaskRegisters {
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
     ) -> BluetoothSchedulerHardwareListHead {
-        let image = crate::svd::field_read::observe_bluetooth_scheduler_hardware_list_head(
-            &self.bluetooth.btdm_scheduler_table,
-            index.get() as usize,
-        );
-        BluetoothSchedulerHardwareListHead::from_compressed_image(image)
+        let image = self
+            .bluetooth
+            .btdm_scheduler_table
+            .read_entry(index.register_index())
+            .head_pointer();
+        BluetoothSchedulerHardwareListHead::from_compressed_image(image.get())
     }
 
     /// Read the current head of one hardware list once, then fence.
@@ -520,14 +522,14 @@ impl BluetoothTaskRegisters {
     ) -> BluetoothSchedulerInsertionCommandStartCleared {
         match command {
             BluetoothSchedulerInsertionCommand::Zero => {
-                crate::generated::clear_bluetooth_scheduler_insertion_command_0_start(
-                    &self.bluetooth.bluetooth_controller_core,
-                );
+                self.bluetooth
+                    .bluetooth_controller_core
+                    .clear_bluetooth_scheduler_insertion_command_0_start();
             }
             BluetoothSchedulerInsertionCommand::One => {
-                crate::generated::clear_bluetooth_scheduler_insertion_command_1_start(
-                    &self.bluetooth.bluetooth_controller_core,
-                );
+                self.bluetooth
+                    .bluetooth_controller_core
+                    .clear_bluetooth_scheduler_insertion_command_1_start();
             }
         }
         device_fence();
@@ -566,9 +568,13 @@ impl BluetoothTaskRegisters {
         &mut self,
         event: BluetoothSchedulerRunEventPublished,
     ) -> BluetoothSchedulerHardwareRunCommandPublished {
-        crate::svd::fixed_register_write::publish_bluetooth_scheduler_hardware_run_command(
-            &self.bluetooth.bluetooth_controller_core,
-        );
+        self.bluetooth
+            .bluetooth_controller_core
+            .write_scheduler_control(|writer| {
+                writer.set_command(
+                    crate::generated::bluetooth_controller_core::scheduler_control::Command::Run,
+                );
+            });
         device_fence();
         BluetoothSchedulerHardwareRunCommandPublished { event }
     }

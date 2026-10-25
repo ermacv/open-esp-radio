@@ -1234,9 +1234,72 @@ impl<'a> TypedBlock<'a> {
                 "typed peripheral {name} has no register"
             )));
         }
-        if let Some((operation, register)) = policy
-            .typed_register_operations(name)
-            .find(|(_, register)| cleared.contains(register))
+        // A reviewed fixed image is the one other store of a clear register:
+        // the vendor's acknowledgement of named sources, never a writer of
+        // arbitrary bits. No sample captured those events, so the image
+        // names its proof: the enable register it masks them in first, or
+        // why its caller consumes the event itself.
+        let mut fixed_images = BTreeSet::new();
+        for image in policy
+            .fixed_register_images
+            .iter()
+            .filter(|image| image.peripheral == name)
+        {
+            let on_clear = cleared.contains(image.register.as_str());
+            match (on_clear, &image.masks, &image.consumed_event) {
+                (true, Some(_), None) | (true, None, Some(_)) => {}
+                (true, None, None) => {
+                    return Err(Error::message(format!(
+                        "fixed-register-image {:?} acknowledges events of {name}.{} that no sample captured: it masks them first or names the caller that consumes them",
+                        image.name, image.register
+                    )));
+                }
+                (true, Some(_), Some(_)) => {
+                    return Err(Error::message(format!(
+                        "fixed-register-image {:?} names one proof: masks or consumed-event",
+                        image.name
+                    )));
+                }
+                (false, None, None) => {}
+                (false, _, _) => {
+                    return Err(Error::message(format!(
+                        "fixed-register-image {:?} names an acknowledgement proof but {name}.{} is no snapshot's clear register",
+                        image.name, image.register
+                    )));
+                }
+            }
+            if let Some(masks) = &image.masks {
+                let enable = registers
+                    .iter()
+                    .find(|register| register.info.name == *masks);
+                // A plain enable register is read back and stored: never a
+                // data port or a command register, which only their own
+                // stores and starts write.
+                if cleared.contains(masks.as_str())
+                    || fifos.contains(&masks.as_str())
+                    || ports.contains(masks.as_str())
+                    || commands.keys().any(|(command, _)| command == masks)
+                    || !enable.is_some_and(|enable| {
+                        enable.array.is_none()
+                            && enable.readable
+                            && enable.writable
+                            && !enable.clears_on_read
+                    })
+                {
+                    return Err(Error::message(format!(
+                        "fixed-register-image {:?} masks {name}.{masks}, which is no plain enable register of the block",
+                        image.name
+                    )));
+                }
+            }
+            fixed_images.insert(image.name.as_str());
+        }
+        if let Some((operation, register)) =
+            policy
+                .typed_register_operations(name)
+                .find(|(operation, register)| {
+                    cleared.contains(register) && !fixed_images.contains(operation)
+                })
         {
             return Err(Error::message(format!(
                 "PAC API {operation:?} writes {name}.{register}, which only its snapshot's acknowledgement writes"
@@ -2154,10 +2217,10 @@ impl<'a> TypedBlock<'a> {
                     output,
                     "/// The snapshot without `{0}` unless `keep`: it is then not acknowledged.\n\
                      pub const fn retain_{1}(self, keep: bool) -> Self {{\n\
-                     if keep {{ self }} else {{ Self(self.0 & !0x{2:08x}) }}\n}}\n",
+                     if keep {{ self }} else {{ Self({2}) }}\n}}\n",
                     field.info.name,
                     field.method.trim_start_matches("r#"),
-                    field.mask()
+                    without_field(field.mask())
                 );
             }
             output.push_str("}\n\n");
@@ -2320,6 +2383,11 @@ impl<'a> TypedBlock<'a> {
                         "Write the vendor's whole-word image `0x{:08x}`, undeclared bits included",
                         operation.value
                     )
+                } else if let Some(masks) = &operation.masks {
+                    format!(
+                        "Mask the sources of `0x{:08x}` in `{masks}`, keeping every other bit, then acknowledge them",
+                        operation.value
+                    )
                 } else {
                     format!("Write the fixed image `0x{:08x}`", operation.value)
                 },
@@ -2335,9 +2403,40 @@ impl<'a> TypedBlock<'a> {
                     register.offset, operation.value
                 )
             };
+            // An acknowledgement of events no sample captured: their enable
+            // bits are cleared first, so no enabled event is lost to it.
+            let masking = match &operation.masks {
+                None => String::new(),
+                Some(masks) => {
+                    if !view.owns(masks) {
+                        return Err(Error::message(format!(
+                            "typed fixed-register-image {:?} masks {name}.{masks}, which its owner does not own",
+                            operation.name
+                        )));
+                    }
+                    let enable = reached(masks)?;
+                    if first_view {
+                        let _ = writeln!(
+                            asserts,
+                            "const _: () = assert!(oer_mmio::check::within(0x{:08x}, {}), \"{} masks declared enable fields only\");",
+                            operation.value,
+                            enable.settable_fields(),
+                            operation.name
+                        );
+                    }
+                    format!(
+                        "let bits = self.0.{};\nself.0.{};\n",
+                        enable.modify_read_call(),
+                        enable.write_call(&format!("bits & !0x{:08x}", operation.value))
+                    )
+                }
+            };
+            if let Some(reason) = &operation.consumed_event {
+                let _ = writeln!(body, "///\n/// The caller consumes these events: {reason}");
+            }
             let _ = writeln!(
                 body,
-                "#[inline]\npub fn {}(&mut self, {}) {{\nself.0.{write};\n}}\n",
+                "#[inline]\npub fn {}(&mut self, {}) {{\n{masking}self.0.{write};\n}}\n",
                 operation.name,
                 register.index_parameter(),
             );
@@ -2528,7 +2627,8 @@ impl<'a> TypedBlock<'a> {
             .filter(|(_, operation)| operation.peripheral == name && view.owns(&operation.register))
         {
             let register = reached(&operation.register)?;
-            let (parameter, input, image) = projected_image(&register, operation, &flag_or_enum)?;
+            let (parameter, input, image) =
+                projected_image(&register, operation, &flag_or_enum, !clear)?;
             let update = if clear {
                 format!("bits & !({image})")
             } else {
@@ -2574,7 +2674,8 @@ impl<'a> TypedBlock<'a> {
                 exposure: operation.exposure,
                 sources: operation.sources.clone(),
             };
-            let (parameter, input, image) = projected_image(&register, &projection, &flag_or_enum)?;
+            let (parameter, input, image) =
+                projected_image(&register, &projection, &flag_or_enum, true)?;
             let mask = operation
                 .fields
                 .iter()
@@ -2659,6 +2760,9 @@ impl<'a> TypedBlock<'a> {
                 let _ = write!(parameters, "{argument}: {parameter}, ");
                 image.push(if selected.offset == 0 {
                     bits
+                } else if operation.fields.len() == 1 {
+                    // The one term is the whole argument: no parentheses.
+                    format!("{bits} << {}", selected.offset)
                 } else {
                     format!("({bits} << {})", selected.offset)
                 });
@@ -2722,6 +2826,16 @@ impl<'a> TypedBlock<'a> {
     }
 }
 
+/// A snapshot's bits without the field of `mask`: no AND at all when the
+/// field is the whole word.
+fn without_field(mask: u32) -> String {
+    if mask == u32::MAX {
+        "0".to_owned()
+    } else {
+        format!("self.0 & !0x{mask:08x}")
+    }
+}
+
 /// The logical input of a field-local transaction, projected into its
 /// fields: the parameter it takes, the statement binding its `u32` input
 /// and the register image expression over that input.
@@ -2729,10 +2843,33 @@ fn projected_image(
     register: &TypedRegister<'_>,
     operation: &FieldOrModify,
     flag_or_enum: &BTreeSet<&str>,
+    takes_image: bool,
 ) -> Result<(String, String, String)> {
+    // A policy pointer field is set only from its image of a typed DMA
+    // reference, which the transaction then takes, or to zero.
+    if let ([projection], None, None) = (
+        operation.fields.as_slice(),
+        &operation.domain,
+        operation.value,
+    ) {
+        let selected = field(register, &projection.field)?;
+        if takes_image && selected.image.is_some() && projection.source_bit_offset == 0 {
+            let bits = if selected.offset == 0 {
+                "value.0".to_owned()
+            } else {
+                format!("(value.0 << {})", selected.offset)
+            };
+            return Ok((
+                format!("value: {}::{}", register.method, selected.image_type()),
+                String::new(),
+                bits,
+            ));
+        }
+    }
     for projection in &operation.fields {
         let selected = field(register, &projection.field)?;
-        if selected.pointer || selected.image.is_some() || selected.zero {
+        let cleared = selected.image.is_some() && operation.value == Some(0);
+        if !cleared && (selected.pointer || selected.image.is_some() || selected.zero) {
             return Err(Error::message(format!(
                 "typed field transaction {:?} changes {}, which only a typed DMA reference or zero sets",
                 operation.name, projection.field
@@ -3511,10 +3648,10 @@ impl<'a> TypedRegister<'a> {
                     output,
                     "/// The snapshot without `{0}` unless `keep`: it is then not acknowledged.\n\
                      pub const fn retain_{1}(self, keep: bool) -> Self {{\n\
-                     if keep {{ self }} else {{ Self(self.0 & !0x{2:08x}) }}\n}}\n",
+                     if keep {{ self }} else {{ Self({2}) }}\n}}\n",
                     field.info.name,
                     field.method.trim_start_matches("r#"),
-                    field.mask()
+                    without_field(field.mask())
                 );
             }
             output.push_str("}\n\n");

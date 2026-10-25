@@ -1434,9 +1434,10 @@ impl PacApiPack {
                     "",
                     format!(
                         "let input = 0x{:08x}_u32;\n                         ",
-                        binding
-                            .value
-                            .expect("pack validation requires a fixed field-OR value")
+                        binding.value.ok_or_else(|| Error::message(format!(
+                            "PAC API {:?} takes a typed DMA reference's image, which only the typed backend renders",
+                            binding.name
+                        )))?
                     ),
                 )
             };
@@ -1552,9 +1553,10 @@ impl PacApiPack {
                     "",
                     format!(
                         "let input = 0x{:08x}_u32;\n                         ",
-                        binding
-                            .value
-                            .expect("pack validation requires a fixed field-replace value")
+                        binding.value.ok_or_else(|| Error::message(format!(
+                            "PAC API {:?} takes a typed DMA reference's image, which only the typed backend renders",
+                            binding.name
+                        )))?
                     ),
                 )
             };

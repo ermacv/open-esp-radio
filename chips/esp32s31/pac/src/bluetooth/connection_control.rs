@@ -11,9 +11,9 @@ impl BluetoothTaskRegisters {
     /// publication so the authenticated software decoder decides the opcode.
     /// The caller must hold an idle, powered task epoch with no active RUN.
     pub fn prepare_software_connection_packet_control(&mut self) {
-        crate::generated::clear_ble_connection_link_state_control(
-            &self.bluetooth.btmac_ble_phy_init,
-        );
+        self.bluetooth
+            .btmac_ble_phy_init
+            .clear_ble_connection_link_state_control();
         device_fence();
     }
 
@@ -21,7 +21,9 @@ impl BluetoothTaskRegisters {
     ///
     /// The caller must hold an idle, powered task epoch with no active RUN.
     pub fn restore_default_connection_packet_control(&mut self) {
-        crate::generated::set_ble_connection_link_state_control(&self.bluetooth.btmac_ble_phy_init);
+        self.bluetooth
+            .btmac_ble_phy_init
+            .set_ble_connection_link_state_control();
         device_fence();
     }
 }

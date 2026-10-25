@@ -171,9 +171,12 @@ takes that image, never an integer. The image holds the whole address (a
 a `const` assertion checks that every address of the DMA window shares the
 high bits the hardware supplies) or the BLE word index (`ble-compressed`, a
 20-bit field; `new` returns `None` for an address without one). A
-zero-based field write takes the image as its argument; no other
-transaction, fixed image or masked modify sets a bit of a DMA address
-field.
+zero-based field write takes the image as its argument, and so does a
+field-or or field-replace modify of the one pointer field (from bit zero)
+with neither `domain` nor `value`: the OR keeps every bit the hardware
+holds in the word it reads. A field-replace modify with `value = 0` clears
+the field. No other transaction, fixed image or masked modify sets a bit of
+a DMA address field.
 
 `[[interrupt-snapshots]]` on a typed peripheral pairs a status register
 read without a side effect with the write-one-to-clear register that
@@ -182,8 +185,10 @@ status fields the clear register declares (`EVENTS`; a status field
 acknowledged only in part is refused), `retain_<field>` narrows it, and
 `acknowledge_<name>` writes exactly the snapshot to the clear register.
 Both methods belong to every owner that owns the clear register and reads
-the status register; the clear register has no other writer, and no
-transaction names it.
+the status register. The clear register's one other store is a reviewed
+`[[fixed-register-images]]` entry: the vendor's acknowledgement of named
+sources, such as stale ones before their enable is set. No other
+transaction names the clear register, and it has no `write_` or `modify_`.
 
 `[[write-trigger-fields]]` (`peripheral`, `register`, `field`, `sources`)
 declares a field whose written one starts a hardware action (an update, a

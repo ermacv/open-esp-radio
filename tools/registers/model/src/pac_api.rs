@@ -590,6 +590,11 @@ common_operation!(FixedRegisterWrite {
 /// Its value sets declared field bits only, unless `whole-word` names it the
 /// vendor's store of the whole word: then the image, with its evidence
 /// sources, also writes the bits the model leaves undeclared.
+///
+/// On the clear register of a status-to-clear snapshot an image
+/// acknowledges events no sample captured, so it names its proof: `masks`,
+/// the enable register whose image bits the same transaction clears first,
+/// or `consumed-event`, why the reviewed caller consumes that event itself.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct FixedRegisterImage {
@@ -599,6 +604,10 @@ pub struct FixedRegisterImage {
     pub value: u32,
     #[serde(default, skip_serializing_if = "core::ops::Not::not")]
     pub whole_word: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub masks: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumed_event: Option<String>,
     pub sources: Vec<String>,
 }
 /// One reviewed ordered transaction composed only of fixed complete-register images.
@@ -974,9 +983,11 @@ impl PacApiPack {
                     )));
                 }
             }
-            if operation.domain.is_some() == operation.value.is_some() {
+            if operation.domain.is_some() == operation.value.is_some()
+                && !(kind == "field-or-modify" && self.takes_pointer_image(operation))
+            {
                 return Err(Error::message(format!(
-                    "PAC API {kind} {:?} requires exactly one of domain or value",
+                    "PAC API {kind} {:?} requires exactly one of domain or value, or (a field-or-modify of one policy pointer field) neither",
                     operation.name
                 )));
             }
@@ -1004,9 +1015,17 @@ impl PacApiPack {
                     )));
                 }
             }
-            if operation.domain.is_some() == operation.value.is_some() {
+            if operation.domain.is_some() == operation.value.is_some()
+                && !(operation.domain.is_none()
+                    && operation.input_transform.is_none()
+                    && self.pointer_image_field(
+                        &operation.peripheral,
+                        &operation.register,
+                        &operation.fields,
+                    ))
+            {
                 return Err(Error::message(format!(
-                    "PAC API field-replace-modify {:?} requires exactly one of domain or value",
+                    "PAC API field-replace-modify {:?} requires exactly one of domain or value, or (one policy pointer field) neither",
                     operation.name
                 )));
             }
@@ -1699,6 +1718,33 @@ impl PacApiPack {
         peripherals
     }
 
+    /// Whether a field transaction with neither domain nor value takes the
+    /// image of a typed DMA reference: its one projection, from bit zero,
+    /// is a policy pointer field.
+    pub(crate) fn pointer_image_field(
+        &self,
+        peripheral: &str,
+        register: &str,
+        fields: &[FieldOrProjection],
+    ) -> bool {
+        matches!(fields, [projection] if projection.source_bit_offset == 0
+        && self.pointer_fields.iter().any(|pointer| {
+            pointer.peripheral == peripheral
+                && pointer.register == register
+                && pointer.field == projection.field
+        }))
+    }
+
+    fn takes_pointer_image(&self, operation: &FieldOrModify) -> bool {
+        operation.domain.is_none()
+            && operation.value.is_none()
+            && self.pointer_image_field(
+                &operation.peripheral,
+                &operation.register,
+                &operation.fields,
+            )
+    }
+
     /// The OR and AND-NOT field transactions, which share one shape.
     pub(crate) fn field_bit_modifies(
         &self,
@@ -2316,6 +2362,42 @@ pub(crate) mod tests {
 
         assert!(pack.validate().is_ok());
         pack.bounded_domains[0].min = 1;
+        assert!(pack.validate().is_err());
+    }
+
+    #[test]
+    fn only_a_pointer_field_transaction_takes_neither_domain_nor_value() {
+        let projection = || FieldOrModify {
+            name: "or_pointer".to_owned(),
+            peripheral: "RADIO".to_owned(),
+            register: "POINTER".to_owned(),
+            fields: vec![FieldOrProjection {
+                field: "COMPRESSED_POINTER".to_owned(),
+                source_bit_offset: 0,
+            }],
+            domain: None,
+            value: None,
+            exposure: PacApiExposure::Facade,
+            sources: vec!["REVIEW".to_owned()],
+        };
+        let mut pack = empty_pack();
+        pack.field_or_modifies.push(projection());
+        assert!(pack.validate().is_err(), "no pointer field yet");
+
+        pack.pointer_fields.push(PointerField {
+            name: "pointer_image".to_owned(),
+            peripheral: "RADIO".to_owned(),
+            register: "POINTER".to_owned(),
+            field: "COMPRESSED_POINTER".to_owned(),
+            points_to: "DESCRIPTOR".to_owned(),
+            member_offset: 0,
+            encoding: None,
+            sources: vec!["REVIEW".to_owned()],
+        });
+        assert!(pack.validate().is_ok());
+
+        // An AND-NOT clear never takes an image.
+        pack.field_clear_modifies.push(projection());
         assert!(pack.validate().is_err());
     }
 

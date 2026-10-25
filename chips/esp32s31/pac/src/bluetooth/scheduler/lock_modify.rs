@@ -179,12 +179,13 @@ trait BluetoothSchedulerLockModifyControl {
 }
 
 struct HardwareBluetoothSchedulerLockModifyControl<'registers> {
-    registers: &'registers crate::svd::BluetoothControllerCore,
+    registers: &'registers mut crate::generated::bluetooth_controller_core::BluetoothControllerCore,
 }
 
 impl BluetoothSchedulerLockModifyControl for HardwareBluetoothSchedulerLockModifyControl<'_> {
     fn clear_hardware_list_index(&mut self) {
-        crate::generated::clear_bluetooth_scheduler_lock_modify_hardware_list_index(self.registers);
+        self.registers
+            .clear_bluetooth_scheduler_lock_modify_hardware_list_index();
     }
 
     fn publish_hardware_list_index(&mut self, index: BluetoothSchedulerHardwareListIndex) {
@@ -192,19 +193,13 @@ impl BluetoothSchedulerLockModifyControl for HardwareBluetoothSchedulerLockModif
             u32::from(index.get()),
         )
         .expect("typed scheduler hardware-list index fits its generated PAC domain");
-        crate::generated::publish_bluetooth_scheduler_lock_modify_hardware_list_index(
-            self.registers,
-            index,
-        );
+        self.registers
+            .publish_bluetooth_scheduler_lock_modify_hardware_list_index(index);
     }
 
     fn publish_request(&mut self, address: DmaRef<BleSchedulerItem>) {
-        crate::svd::zero_based_field_write::publish_bluetooth_scheduler_lock_modify_request(
-            self.registers,
-            crate::generated::bluetooth_scheduler_lock_modify_pointer_image(Some(address))
-                .expect("the placed layout has a nonzero BLE encoding"),
-            true,
-        );
+        self.registers.publish_bluetooth_scheduler_lock_modify_request(crate::generated::bluetooth_controller_core::scheduler_lock_modify_request::CompressedSramPointerImage::new(address)
+                .expect("the placed layout has a nonzero BLE encoding"), true);
     }
 
     fn order_after_publication(&mut self) {
@@ -249,7 +244,7 @@ impl BluetoothTaskRegisters {
         request: BluetoothSchedulerLockModifyRequest,
     ) -> BluetoothSchedulerLockModifyPublished {
         let mut control = HardwareBluetoothSchedulerLockModifyControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         };
         execute_scheduler_lock_modify_publication(&mut control, request)
     }
@@ -259,10 +254,11 @@ impl BluetoothTaskRegisters {
     pub fn capture_scheduler_lock_modify_task(
         &mut self,
     ) -> BluetoothSchedulerLockModifyTaskObservation {
-        let (start, result) =
-            crate::svd::field_snapshot_read::observe_bluetooth_scheduler_lock_modify_request(
-                &self.bluetooth.bluetooth_controller_core,
-            );
+        let request = self
+            .bluetooth
+            .bluetooth_controller_core
+            .read_scheduler_lock_modify_request();
+        let (start, result) = (request.start(), crate::field_byte(request.result()));
         BluetoothSchedulerLockModifyTaskObservation { start, result }
     }
 }
@@ -275,7 +271,7 @@ impl BluetoothInterruptRegisters {
         &mut self,
     ) -> Option<BluetoothSchedulerLockModifyInterruptObservation> {
         super::runtime::sample_scheduler_busy(
-            &self.peripherals.bluetooth_scheduler_interrupt_runtime,
+            &mut self.peripherals.bluetooth_scheduler_interrupt_runtime,
         )
         .map(|busy| BluetoothSchedulerLockModifyInterruptObservation { busy })
     }

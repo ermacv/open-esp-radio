@@ -351,16 +351,14 @@ fn execute_hal_init(
 }
 
 struct MmioHalInit<'a> {
-    registers: &'a crate::svd::BluetoothControllerCore,
+    registers: &'a mut crate::generated::bluetooth_controller_core::BluetoothControllerCore,
 }
 
 impl HalInitTransaction for MmioHalInit<'_> {
     fn apply(&mut self, operation: HalInitOperation) {
         match operation {
             HalInitOperation::PublishSchedulerSramPrefix => {
-                crate::svd::fixed_register_image::publish_bluetooth_hal_scheduler_sram_prefix(
-                    self.registers,
-                );
+                self.registers.publish_bluetooth_hal_scheduler_sram_prefix();
             }
             HalInitOperation::PublishSleepTimerShift(shift) => {
                 let shift = match shift {
@@ -370,115 +368,90 @@ impl HalInitTransaction for MmioHalInit<'_> {
                     5 => crate::generated::BluetoothHalSleepTimerShift::Five,
                     _ => unreachable!("HAL input domains produce only reviewed timer shifts"),
                 };
-                crate::generated::publish_bluetooth_hal_sleep_timer_shift(self.registers, shift);
+                self.registers
+                    .publish_bluetooth_hal_sleep_timer_shift(shift);
             }
             HalInitOperation::PublishValue0(value) => {
                 let value = crate::generated::BluetoothHalInitByte::new(u32::from(value))
                     .expect("one byte always fits the generated HAL-init domain");
-                crate::generated::publish_bluetooth_hal_value_0(self.registers, value);
+                self.registers.publish_bluetooth_hal_value_0(value);
             }
             HalInitOperation::PublishValue1(value) => {
                 let value = crate::generated::BluetoothHalInitByte::new(u32::from(value))
                     .expect("one byte always fits the generated HAL-init domain");
-                crate::generated::publish_bluetooth_hal_value_1(self.registers, value);
+                self.registers.publish_bluetooth_hal_value_1(value);
             }
             HalInitOperation::InitializeLatch => {
-                crate::svd::zero_based_field_write::initialize_bluetooth_hal_latch(
-                    self.registers,
-                    true,
-                );
+                self.registers.initialize_bluetooth_hal_latch(true);
             }
             HalInitOperation::InitializeLow20 => {
-                crate::svd::zero_based_field_write::initialize_bluetooth_hal_low_20(
-                    self.registers,
-                    0x000f_ffff,
-                );
+                self.registers
+                    .initialize_bluetooth_hal_low_20(oer_mmio::Bits::constant::<0x000f_ffff>());
             }
             HalInitOperation::EnableLatch => {
-                crate::svd::field_replace_modify::enable_bluetooth_hal_latch(self.registers);
+                self.registers.enable_bluetooth_hal_latch();
             }
             HalInitOperation::ConfigureControl1High => {
-                crate::svd::field_replace_modify::configure_bluetooth_hal_control_1_high(
-                    self.registers,
-                );
+                self.registers.configure_bluetooth_hal_control_1_high();
             }
             HalInitOperation::ConfigureControl1Low => {
-                crate::svd::field_replace_modify::configure_bluetooth_hal_control_1_low(
-                    self.registers,
-                );
+                self.registers.configure_bluetooth_hal_control_1_low();
             }
             HalInitOperation::EnableControl0 => {
-                crate::svd::field_replace_modify::enable_bluetooth_hal_control_0(self.registers);
+                self.registers.enable_bluetooth_hal_control_0();
             }
             HalInitOperation::ClearSchedulerConfig16To20 => {
-                crate::svd::field_replace_modify::clear_bluetooth_hal_scheduler_config_16_20(
-                    self.registers,
-                );
+                self.registers.clear_bluetooth_hal_scheduler_config_16_20();
             }
             HalInitOperation::PublishSchedulerConfig16To20 => {
-                crate::svd::field_replace_modify::publish_bluetooth_hal_scheduler_config_16_20(
-                    self.registers,
-                );
+                self.registers
+                    .publish_bluetooth_hal_scheduler_config_16_20();
             }
             HalInitOperation::EnableSchedulerControl => {
-                crate::svd::field_replace_modify::enable_bluetooth_hal_scheduler_control(
-                    self.registers,
-                );
+                self.registers.enable_bluetooth_hal_scheduler_control();
             }
             HalInitOperation::ClearLowHalf => {
-                crate::svd::field_replace_modify::clear_bluetooth_hal_low_half(self.registers);
+                self.registers.clear_bluetooth_hal_low_half();
             }
             HalInitOperation::FillLowHalf => {
-                crate::svd::field_replace_modify::fill_bluetooth_hal_low_half(self.registers);
+                self.registers.fill_bluetooth_hal_low_half();
             }
             HalInitOperation::ClearSchedulerByte1 => {
-                crate::svd::field_replace_modify::clear_bluetooth_hal_scheduler_byte_1(
-                    self.registers,
-                );
+                self.registers.clear_bluetooth_hal_scheduler_byte_1();
             }
             HalInitOperation::PublishSchedulerByte1 => {
-                crate::svd::field_replace_modify::publish_bluetooth_hal_scheduler_byte_1(
-                    self.registers,
-                );
+                self.registers.publish_bluetooth_hal_scheduler_byte_1();
             }
             HalInitOperation::ClearSlotLaneUpper { register, lane } => {
                 let register_index = match register {
-                    HalInitRegister::SlotMap0 => 0,
-                    HalInitRegister::SlotMap1 => 1,
+                    HalInitRegister::SlotMap0 => oer_mmio::Index::constant::<0>(),
+                    HalInitRegister::SlotMap1 => oer_mmio::Index::constant::<1>(),
                 };
                 match lane {
-                    0 => crate::svd::field_replace_modify::clear_bluetooth_hal_slot_lane_0_upper(
-                        self.registers,
-                        register_index,
-                    ),
-                    1 => crate::svd::field_replace_modify::clear_bluetooth_hal_slot_lane_1_upper(
-                        self.registers,
-                        register_index,
-                    ),
-                    2 => crate::svd::field_replace_modify::clear_bluetooth_hal_slot_lane_2_upper(
-                        self.registers,
-                        register_index,
-                    ),
-                    3 => crate::svd::field_replace_modify::clear_bluetooth_hal_slot_lane_3_upper(
-                        self.registers,
-                        register_index,
-                    ),
-                    4 => crate::svd::field_replace_modify::clear_bluetooth_hal_slot_lane_4_upper(
-                        self.registers,
-                        register_index,
-                    ),
-                    5 => crate::svd::field_replace_modify::clear_bluetooth_hal_slot_lane_5_upper(
-                        self.registers,
-                        register_index,
-                    ),
-                    6 => crate::svd::field_replace_modify::clear_bluetooth_hal_slot_lane_6_upper(
-                        self.registers,
-                        register_index,
-                    ),
-                    7 => crate::svd::field_replace_modify::clear_bluetooth_hal_slot_lane_7_upper(
-                        self.registers,
-                        register_index,
-                    ),
+                    0 => self
+                        .registers
+                        .clear_bluetooth_hal_slot_lane_0_upper(register_index),
+                    1 => self
+                        .registers
+                        .clear_bluetooth_hal_slot_lane_1_upper(register_index),
+                    2 => self
+                        .registers
+                        .clear_bluetooth_hal_slot_lane_2_upper(register_index),
+                    3 => self
+                        .registers
+                        .clear_bluetooth_hal_slot_lane_3_upper(register_index),
+                    4 => self
+                        .registers
+                        .clear_bluetooth_hal_slot_lane_4_upper(register_index),
+                    5 => self
+                        .registers
+                        .clear_bluetooth_hal_slot_lane_5_upper(register_index),
+                    6 => self
+                        .registers
+                        .clear_bluetooth_hal_slot_lane_6_upper(register_index),
+                    7 => self
+                        .registers
+                        .clear_bluetooth_hal_slot_lane_7_upper(register_index),
                     _ => unreachable!("HAL-init slot lane is bounded to eight entries"),
                 };
             }
@@ -489,58 +462,34 @@ impl HalInitTransaction for MmioHalInit<'_> {
                 index_high,
             } => {
                 let register_index = match register {
-                    HalInitRegister::SlotMap0 => 0,
-                    HalInitRegister::SlotMap1 => 1,
+                    HalInitRegister::SlotMap0 => oer_mmio::Index::constant::<0>(),
+                    HalInitRegister::SlotMap1 => oer_mmio::Index::constant::<1>(),
                 };
                 match (lane, set_retained_index_low, index_high) {
-                    (0, false, 0) => {
-                        crate::svd::field_replace_modify::publish_bluetooth_hal_slot_lane_0(
-                            self.registers,
-                            register_index,
-                        )
-                    }
-                    (1, true, 0) => {
-                        crate::svd::field_replace_modify::publish_bluetooth_hal_slot_lane_1(
-                            self.registers,
-                            register_index,
-                        )
-                    }
-                    (2, false, 1) => {
-                        crate::svd::field_replace_modify::publish_bluetooth_hal_slot_lane_2(
-                            self.registers,
-                            register_index,
-                        )
-                    }
-                    (3, true, 1) => {
-                        crate::svd::field_replace_modify::publish_bluetooth_hal_slot_lane_3(
-                            self.registers,
-                            register_index,
-                        )
-                    }
-                    (4, false, 0) => {
-                        crate::svd::field_replace_modify::publish_bluetooth_hal_slot_lane_4(
-                            self.registers,
-                            register_index,
-                        )
-                    }
-                    (5, true, 0) => {
-                        crate::svd::field_replace_modify::publish_bluetooth_hal_slot_lane_5(
-                            self.registers,
-                            register_index,
-                        )
-                    }
-                    (6, false, 1) => {
-                        crate::svd::field_replace_modify::publish_bluetooth_hal_slot_lane_6(
-                            self.registers,
-                            register_index,
-                        )
-                    }
-                    (7, true, 1) => {
-                        crate::svd::field_replace_modify::publish_bluetooth_hal_slot_lane_7(
-                            self.registers,
-                            register_index,
-                        )
-                    }
+                    (0, false, 0) => self
+                        .registers
+                        .publish_bluetooth_hal_slot_lane_0(register_index),
+                    (1, true, 0) => self
+                        .registers
+                        .publish_bluetooth_hal_slot_lane_1(register_index),
+                    (2, false, 1) => self
+                        .registers
+                        .publish_bluetooth_hal_slot_lane_2(register_index),
+                    (3, true, 1) => self
+                        .registers
+                        .publish_bluetooth_hal_slot_lane_3(register_index),
+                    (4, false, 0) => self
+                        .registers
+                        .publish_bluetooth_hal_slot_lane_4(register_index),
+                    (5, true, 0) => self
+                        .registers
+                        .publish_bluetooth_hal_slot_lane_5(register_index),
+                    (6, false, 1) => self
+                        .registers
+                        .publish_bluetooth_hal_slot_lane_6(register_index),
+                    (7, true, 1) => self
+                        .registers
+                        .publish_bluetooth_hal_slot_lane_7(register_index),
                     _ => unreachable!("HAL-init slot lane is bounded to eight entries"),
                 };
             }
@@ -568,7 +517,7 @@ impl BluetoothTaskRegisters {
     #[doc(hidden)]
     pub fn initialize_controller_hal(&mut self, config: BluetoothControllerHalInitConfig) {
         let mut transaction = MmioHalInit {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         };
         execute_hal_init(&mut transaction, config);
         device_fence();

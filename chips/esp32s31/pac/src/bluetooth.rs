@@ -21,3 +21,6 @@ pub(crate) mod phy;
 pub(crate) mod scan;
 
 pub(crate) mod scheduler;
+
+#[cfg(test)]
+mod typed_register_tests;

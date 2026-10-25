@@ -34,18 +34,19 @@ impl crate::BluetoothTaskRegisters {
     /// does not wait for hardware.
     #[doc(hidden)]
     pub fn publish_controller_time_latch_request(&mut self) {
-        crate::generated::request_bluetooth_controller_time_latch(
-            &self.bluetooth.bluetooth_controller_core,
-        );
+        self.bluetooth
+            .bluetooth_controller_core
+            .request_bluetooth_controller_time_latch();
         crate::device_fence();
     }
 
     /// Observe the latch request bit with exactly one control-register read.
     #[doc(hidden)]
     pub fn controller_time_latch_request_pending(&mut self) -> bool {
-        crate::svd::field_read::observe_bluetooth_controller_time_latch_request(
-            &self.bluetooth.bluetooth_controller_core,
-        )
+        self.bluetooth
+            .bluetooth_controller_core
+            .read_btlc_timer_control()
+            .latch_request()
     }
 
     /// Fence after the observed self-clear edge and read the first latched
@@ -54,9 +55,10 @@ impl crate::BluetoothTaskRegisters {
     pub fn read_controller_latched_time(&mut self) -> BluetoothControllerLatchedTime {
         crate::device_fence();
         BluetoothControllerLatchedTime::from_bits(
-            crate::svd::field_read::observe_bluetooth_controller_latched_time(
-                &self.bluetooth.bluetooth_controller_core,
-            ),
+            self.bluetooth
+                .bluetooth_controller_core
+                .read_btlc_timer_capture_0()
+                .value(),
         )
     }
 }

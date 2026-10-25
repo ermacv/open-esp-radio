@@ -11,6 +11,24 @@ allow-clippy-empty-docs = true
 # interrupt matrix and CLIC).
 typed-peripherals = [
     "IEEE802154_MAC",
+    "BLE_CONTROLLER_ADDRESS_SLOTS",
+    "BLE_HW_ACCELERATOR",
+    "BLE_HW_CTE_RING_CONTROL",
+    "BLE_HW_RESOLVING_LIST",
+    "BLE_HW_RUNTIME_CONTROL",
+    "BLE_ISO_SCHEDULER_NOTIFY",
+    "BLE_HW_POSITIONAL_WORD_1FF0",
+    "BLE_HW_POSITIONAL_WORD_891C",
+    "BLE_SCAN_BACKOFF",
+    "BLE_SYNC_PUBLICATION",
+    "BLUETOOTH_CONTROLLER_CORE",
+    "BLUETOOTH_RESET_IDLE_STATUS_0",
+    "BTDM_SCHEDULER_TABLE",
+    "BTMAC_BLE_PHY_INIT",
+    "BT_V3_2_CTE",
+    "BTDM_RUNTIME_CONTROL",
+    "BLUETOOTH_INTERRUPT_BANK",
+    "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME",
     "WIFI_MAC_INTERFACE_ADDRESS",
     "EFUSE",
     "TRNG",
@@ -119,7 +137,7 @@ peripherals = ["CLIC", "INTERRUPT_CORE0", "INTERRUPT_CORE0_STATUS", "INTERRUPT_C
 name = "UnexposedPeripherals"
 member = "unexposed"
 description = "Source-qualified MMIO views retained for bit-use coverage. No production transaction or read-safe snapshot exposes these tokens."
-peripherals = ["COEX_EXTERNAL_OBSERVED", "MODEM_RADIO_CORE_LOW_OBSERVED", "MODEM_RADIO_CORE_MID_OBSERVED"]
+peripherals = ["BT_V3_2_CTE_ANTENNA_MAP", "COEX_EXTERNAL_OBSERVED", "MODEM_RADIO_CORE_LOW_OBSERVED", "MODEM_RADIO_CORE_MID_OBSERVED"]
 
 [[ownership-partitions]]
 name = "WifiMacPeripherals"
@@ -354,6 +372,18 @@ peripheral = "USB_SERIAL_JTAG"
 source = 2
 sources = ["ESP_IDF_S31_INTERRUPT_SOURCES"]
 
+# The primary BT MAC source. Source 133 (MODEM_BT_MAC_INT1) samples and
+# acknowledges the same bank, so the bank's one interrupt owner serves both.
+[[interrupt-sources]]
+peripheral = "BLUETOOTH_INTERRUPT_BANK"
+source = 124
+sources = ["ESP_IDF_S31_INTERRUPT_SOURCES"]
+
+[[interrupt-sources]]
+peripheral = "BTDM_RUNTIME_CONTROL"
+source = 127
+sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ"]
+
 [[enum-domains]]
 name = "ModemPowerTickTarget"
 description = "The sole fixed-crystal modem-power tick target accepted by the ESP32-S31 common-PHY prelude."
@@ -586,27 +616,6 @@ description = "Five-bit nominal packet-padding duration accepted by the reviewed
 min = 0
 max = 31
 sources = ["PROMOTED_HE20_PEER"]
-
-[[bounded-domains]]
-name = "BluetoothMemoryListPointerBits"
-description = "Zero-based low-twenty-bit compressed SRAM pointer image ORed into one Bluetooth memory-list field after its separate clear transaction."
-min = 0
-max = 0x000f_ffff
-sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
-
-[[bounded-domains]]
-name = "BluetoothSchedulerListHeadBits"
-description = "Low-twenty-bit compressed SRAM head accepted by one reviewed Bluetooth scheduler hardware-list entry."
-min = 0
-max = 0x000f_ffff
-sources = ["BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
-
-[[bounded-domains]]
-name = "BluetoothCteSampleDescriptorPointerBits"
-description = "Low-twenty-bit compressed controller-SRAM pointer accepted by one CTE sample-ring descriptor slot."
-min = 0
-max = 0x000f_ffff
-sources = ["BLOB_LIBBLE_HW_CTE_RING_CONTROL"]
 
 [[enum-domains]]
 name = "BluetoothHalSleepTimerShift"
@@ -1139,21 +1148,6 @@ peripheral = "BTDM_RUNTIME_CONTROL"
 register = "WORD_006C_OPAQUE"
 sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
 
-[[opaque-domains]]
-name = "BluetoothPhyInitEnvironmentMemberImage"
-description = "Register-specific complete image produced from the validated BLE PHY environment member address."
-peripheral = "BTMAC_BLE_PHY_INIT"
-register = "PHY_ENVIRONMENT_MEMBER_POINTER"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-
-
-[[opaque-domains]]
-name = "BluetoothPhyControllerEnvironmentTailImage"
-description = "Register-specific complete image produced from the validated BLE PHY environment tail address."
-peripheral = "BLUETOOTH_CONTROLLER_CORE"
-register = "PHY_ENVIRONMENT_TAIL_POINTER"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-
 [[zero-based-field-writes]]
 name = "coex_timer_configuration"
 peripheral = "COEX_HW_TIMER"
@@ -1253,49 +1247,56 @@ peripheral = "WIFI_MAC_INTERRUPT"
 register = "RAW"
 sources = ["BLOB_LIBPP_HAL_DISABLE_MAC"]
 
-[[zero-register-writes]]
+[[fixed-register-images]]
 name = "clear_bluetooth_scheduler_reference"
 peripheral = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME"
 register = "SCHEDULER_REFERENCE"
+value = 0
 sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
 
-[[zero-register-writes]]
+[[fixed-register-images]]
 name = "prepare_bluetooth_modem_lp_timer_command_004c"
 peripheral = "BTDM_RUNTIME_CONTROL"
 register = "WORD_004C_OPAQUE"
+value = 0
 sources = [
     "BLOB_LIBBTDM_RUNTIME_CONTROL",
     "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE",
 ]
 
-[[zero-register-writes]]
+[[fixed-register-images]]
 name = "clear_bluetooth_modem_lp_timer_state_0024"
 peripheral = "BTDM_RUNTIME_CONTROL"
 register = "WORD_0024_OPAQUE"
+value = 0
 sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
 
-[[zero-register-writes]]
+[[fixed-register-images]]
 name = "clear_bluetooth_modem_lp_timer_state_002c"
 peripheral = "BTDM_RUNTIME_CONTROL"
 register = "WORD_002C_OPAQUE"
+value = 0
 sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
 
-[[zero-register-writes]]
+[[fixed-register-images]]
 name = "publish_ble_positional_word_1ff0_image_0"
 peripheral = "BLE_HW_POSITIONAL_WORD_1FF0"
 register = "VALUE"
+value = 0
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
-[[zero-register-writes]]
+[[fixed-register-images]]
 name = "clear_ble_phy_init_zero_0074"
 peripheral = "BTMAC_BLE_PHY_INIT"
 register = "WORD_0074_OPAQUE"
+value = 0
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
-[[zero-register-writes]]
+[[fixed-register-images]]
 name = "clear_ble_phy_controller_value_0244"
 peripheral = "BLUETOOTH_CONTROLLER_CORE"
 register = "WORD_0244_OPAQUE"
+value = 0
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
 [[zero-register-writes]]
@@ -1325,18 +1326,24 @@ register = "CLEAR"
 value = 0xFFFFFFFF
 sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT"]
 
+# A store on the primary snapshot clear register: it masks baseline source 15,
+# then acknowledges its stale event; the controller output is enabled after it.
 [[fixed-register-images]]
 name = "clear_bluetooth_primary_baseline_bank_0"
 peripheral = "BLUETOOTH_INTERRUPT_BANK"
 register = "IRQ_CLEAR_0"
 value = 0x00008000
+masks = "IRQ_ENABLE_0"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
+# A store on the primary snapshot clear register: it masks baseline sources 8,
+# 9 and 12, then acknowledges their stale events.
 [[fixed-register-images]]
 name = "clear_bluetooth_primary_baseline_bank_1"
 peripheral = "BLUETOOTH_INTERRUPT_BANK"
 register = "IRQ_CLEAR_1"
 value = 0x00001300
+masks = "IRQ_ENABLE_1"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[full-register-writes]]
@@ -1502,18 +1509,6 @@ field = "STATE"
 variant = "CLOSED"
 sources = ["BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK"]
 
-[[fixed-register-writes]]
-name = "publish_bluetooth_scheduler_hardware_run_command"
-peripheral = "BLUETOOTH_CONTROLLER_CORE"
-register = "SCHEDULER_CONTROL"
-field = "COMMAND"
-variant = "RUN"
-sources = [
-    "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION",
-    "BLOB_LIBBTDM_SCHEDULER_INSERTION_END_BRANCH",
-    "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES",
-]
-
 [[fixed-register-images]]
 name = "initialize_bluetooth_scan_backoff_state_1"
 peripheral = "BLE_SCAN_BACKOFF"
@@ -1549,7 +1544,6 @@ name = "publish_bluetooth_cte_sample_descriptor_pointer"
 peripheral = "BLE_HW_CTE_RING_CONTROL"
 register = "BUFFER_POINTER%s"
 fields = [{ field = "COMPRESSED_DESCRIPTOR_POINTER", source-bit-offset = 0 }]
-domain = "BluetoothCteSampleDescriptorPointerBits"
 exposure = "facade"
 sources = ["BLOB_LIBBLE_HW_CTE_RING_CONTROL"]
 
@@ -1561,13 +1555,6 @@ fields = [{ field = "SOFTWARE_OWNED", source-bit-offset = 0 }]
 value = 0
 exposure = "facade"
 sources = ["BLOB_LIBBLE_HW_CTE_RING_CONTROL"]
-
-[[field-reads]]
-name = "observe_bluetooth_scheduler_hardware_list_head"
-peripheral = "BTDM_SCHEDULER_TABLE"
-register = "ENTRY%s"
-field = "HEAD_POINTER"
-sources = ["BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
 
 [[field-replace-modifies]]
 name = "clear_bluetooth_scheduler_hardware_list_head"
@@ -1583,7 +1570,6 @@ name = "publish_bluetooth_scheduler_hardware_list_head"
 peripheral = "BTDM_SCHEDULER_TABLE"
 register = "ENTRY%s"
 fields = [{ field = "HEAD_POINTER", source-bit-offset = 0 }]
-domain = "BluetoothSchedulerListHeadBits"
 exposure = "facade"
 sources = ["BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "BLOB_LIBBTDM_SCHEDULER_INSERTION_END_BRANCH", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
 
@@ -1605,22 +1591,12 @@ value = 0
 exposure = "facade"
 sources = ["BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "BLOB_LIBBTDM_SCHEDULER_INSERTION_END_BRANCH", "BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
 
-[[fixed-register-writes]]
-name = "start_bluetooth_runtime_timer"
-peripheral = "BTDM_RUNTIME_CONTROL"
-register = "RUNTIME_TIMER_START_COMMAND"
-field = "COMMAND"
-variant = "START"
-sources = [
-    "BLOB_LIBBTDM_RUNTIME_CONTROL",
-    "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE",
-]
-
 [[fixed-register-images]]
 name = "prepare_bluetooth_modem_lp_timer_command_0004"
 peripheral = "BTDM_RUNTIME_CONTROL"
 register = "WORD_0004_OPAQUE"
 value = 0x00000001
+whole-word = true
 sources = [
     "BLOB_LIBBTDM_RUNTIME_CONTROL",
     "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE",
@@ -1631,6 +1607,7 @@ name = "prepare_bluetooth_modem_lp_timer_command_0008"
 peripheral = "BTDM_RUNTIME_CONTROL"
 register = "WORD_0008_OPAQUE"
 value = 0x00000001
+whole-word = true
 sources = [
     "BLOB_LIBBTDM_RUNTIME_CONTROL",
     "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE",
@@ -1641,6 +1618,7 @@ name = "prepare_bluetooth_modem_lp_timer_command_0014"
 peripheral = "BTDM_RUNTIME_CONTROL"
 register = "WORD_0014_OPAQUE"
 value = 0xffffffff
+whole-word = true
 sources = [
     "BLOB_LIBBTDM_RUNTIME_CONTROL",
     "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE",
@@ -1651,6 +1629,7 @@ name = "prepare_bluetooth_modem_lp_timer_command_0034"
 peripheral = "BTDM_RUNTIME_CONTROL"
 register = "WORD_0034_OPAQUE"
 value = 0xffffffff
+whole-word = true
 sources = [
     "BLOB_LIBBTDM_RUNTIME_CONTROL",
     "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE",
@@ -1678,6 +1657,7 @@ name = "disable_bluetooth_modem_lp_timer_compare"
 peripheral = "BTDM_RUNTIME_CONTROL"
 register = "WORD_0014_OPAQUE"
 value = 0x00040000
+whole-word = true
 sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
 
 [[fixed-register-images]]
@@ -1858,6 +1838,7 @@ name = "publish_ble_phy_init_value_04ac"
 peripheral = "BTMAC_BLE_PHY_INIT"
 register = "CONNECTION_ABORT_CONTROL"
 value = 0x00ff0002
+whole-word = true
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
 [[field-replace-modifies]]
@@ -1957,21 +1938,28 @@ domain = "BluetoothModemLpTimerCompareImage"
 exposure = "facade"
 sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
 
+# A store on the snapshot clear register: it masks scheduler-run sources 21,
+# 27 and 28, then acknowledges their stale events before their enable is set
+# again.
 [[fixed-register-images]]
 name = "clear_bluetooth_scheduler_run_interrupts_bank_0"
 peripheral = "BLUETOOTH_INTERRUPT_BANK"
 register = "IRQ_CLEAR_0"
 value = 0x18200000
+masks = "IRQ_ENABLE_0"
 sources = [
     "BLOB_LIBBTDM_CONTROLLER_IRQ",
     "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES",
 ]
 
+# A store on the snapshot clear register: it masks scheduler-run source 3,
+# then acknowledges its stale event before its enable is set again.
 [[fixed-register-images]]
 name = "clear_bluetooth_scheduler_run_interrupts_bank_1"
 peripheral = "BLUETOOTH_INTERRUPT_BANK"
 register = "IRQ_CLEAR_1"
 value = 0x00000008
+masks = "IRQ_ENABLE_1"
 sources = [
     "BLOB_LIBBTDM_CONTROLLER_IRQ",
     "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES",
@@ -3171,7 +3159,6 @@ name = "or_bluetooth_memory_list_1_pointer_a"
 peripheral = "BLUETOOTH_CONTROLLER_CORE"
 register = "GLOBAL_RXLINK_1_CURRENT"
 fields = [{ field = "COMPRESSED_SRAM_POINTER", source-bit-offset = 0 }]
-domain = "BluetoothMemoryListPointerBits"
 exposure = "facade"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
@@ -3296,7 +3283,6 @@ name = "or_bluetooth_memory_list_1_pointer_b"
 peripheral = "BLUETOOTH_CONTROLLER_CORE"
 register = "GLOBAL_RXLINK_1_NEXT"
 fields = [{ field = "COMPRESSED_SRAM_POINTER", source-bit-offset = 0 }]
-domain = "BluetoothMemoryListPointerBits"
 exposure = "facade"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
@@ -3314,7 +3300,6 @@ name = "or_bluetooth_memory_list_2_pointer_a"
 peripheral = "BLUETOOTH_CONTROLLER_CORE"
 register = "GLOBAL_RXLINK_2_CURRENT"
 fields = [{ field = "COMPRESSED_SRAM_POINTER", source-bit-offset = 0 }]
-domain = "BluetoothMemoryListPointerBits"
 exposure = "facade"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
@@ -3332,7 +3317,6 @@ name = "or_bluetooth_memory_list_2_pointer_b"
 peripheral = "BLUETOOTH_CONTROLLER_CORE"
 register = "GLOBAL_RXLINK_2_NEXT"
 fields = [{ field = "COMPRESSED_SRAM_POINTER", source-bit-offset = 0 }]
-domain = "BluetoothMemoryListPointerBits"
 exposure = "facade"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
@@ -3350,7 +3334,6 @@ name = "or_bluetooth_memory_list_3_pointer_a"
 peripheral = "BLUETOOTH_CONTROLLER_CORE"
 register = "GLOBAL_RXLINK_3_CURRENT"
 fields = [{ field = "COMPRESSED_SRAM_POINTER", source-bit-offset = 0 }]
-domain = "BluetoothMemoryListPointerBits"
 exposure = "facade"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
@@ -3368,7 +3351,6 @@ name = "or_bluetooth_memory_list_3_pointer_b"
 peripheral = "BLUETOOTH_CONTROLLER_CORE"
 register = "GLOBAL_RXLINK_3_NEXT"
 fields = [{ field = "COMPRESSED_SRAM_POINTER", source-bit-offset = 0 }]
-domain = "BluetoothMemoryListPointerBits"
 exposure = "facade"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
@@ -3658,12 +3640,11 @@ register = "INTERRUPT_ENABLE"
 field = "SOURCE_17"
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
-[[register-image-writes]]
+[[zero-based-field-writes]]
 name = "publish_ble_phy_init_environment_member"
 peripheral = "BTMAC_BLE_PHY_INIT"
 register = "PHY_ENVIRONMENT_MEMBER_POINTER"
-domain = "BluetoothPhyInitEnvironmentMemberImage"
-exposure = "raw-only"
+fields = ["ADDRESS"]
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
 [[zero-based-field-writes]]
@@ -3699,14 +3680,14 @@ name = "publish_ble_phy_init_configuration_word"
 peripheral = "BTMAC_BLE_PHY_INIT"
 register = "WORD_0540_OPAQUE"
 value = 0x7d0
+whole-word = true
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
-[[register-image-writes]]
+[[zero-based-field-writes]]
 name = "publish_ble_phy_controller_environment_tail"
 peripheral = "BLUETOOTH_CONTROLLER_CORE"
 register = "PHY_ENVIRONMENT_TAIL_POINTER"
-domain = "BluetoothPhyControllerEnvironmentTailImage"
-exposure = "raw-only"
+fields = ["ADDRESS"]
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
 [[field-or-modifies]]
@@ -3718,77 +3699,11 @@ value = 1
 exposure = "facade"
 sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES"]
 
-[[field-reads]]
-name = "observe_bluetooth_controller_time_latch_request"
-peripheral = "BLUETOOTH_CONTROLLER_CORE"
-register = "BTLC_TIMER_CONTROL"
-field = "LATCH_REQUEST"
-sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES"]
-
-[[field-reads]]
-name = "observe_bluetooth_controller_latched_time"
-peripheral = "BLUETOOTH_CONTROLLER_CORE"
-register = "BTLC_TIMER_CAPTURE_0"
-field = "VALUE"
-sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "PUBLIC_ESP32S31_BT_TIME_ROLES"]
-
-[[fixed-register-writes]]
-name = "select_bluetooth_scheduler_status_diagnostic"
-peripheral = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME"
-register = "DIAGNOSTIC_SELECT"
-field = "SELECTION"
-variant = "SCHEDULER_STATUS"
-sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC"]
-
-[[fixed-register-writes]]
-name = "select_bluetooth_scheduler_execution_modify_progress_diagnostic"
-peripheral = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME"
-register = "DIAGNOSTIC_SELECT"
-field = "SELECTION"
-variant = "EXECUTION_MODIFY_PROGRESS"
-sources = ["BLOB_LIBBTDM_SCHEDULER_EXECUTION_MODIFY"]
-
-[[fixed-register-writes]]
-name = "select_bluetooth_scheduler_execution_modify_settle_diagnostic"
-peripheral = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME"
-register = "DIAGNOSTIC_SELECT"
-field = "SELECTION"
-variant = "EXECUTION_MODIFY_SETTLE"
-sources = ["BLOB_LIBBTDM_SCHEDULER_EXECUTION_MODIFY"]
-
-[[field-snapshot-reads]]
-name = "observe_bluetooth_diagnostic_value"
-peripheral = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME"
-register = "DIAGNOSTIC_VALUE"
-fields = ["VALUE_0_LOW_7", "VALUE_0_BIT_7", "VALUE_1", "VALUE_2", "VALUE_3"]
-sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
-
-[[field-snapshot-reads]]
-name = "observe_bluetooth_scheduler_interrupt_state"
-peripheral = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME"
-register = "SCHEDULER_STATE"
-fields = ["BUSY", "STATE_29", "CURRENT_LINK_INDEX"]
-sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
-
 [[zero-based-field-writes]]
 name = "publish_bluetooth_scheduler_execution_lock_request"
 peripheral = "BLUETOOTH_CONTROLLER_CORE"
 register = "SCHEDULER_COMMAND_0"
 fields = ["COMPRESSED_SRAM_POINTER", "HARDWARE_LIST_INDEX", "START"]
-sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
-
-[[field-reads]]
-name = "observe_bluetooth_scheduler_execution_lock_ready"
-peripheral = "BLUETOOTH_CONTROLLER_CORE"
-register = "SCHEDULER_COMMAND_0"
-field = "STATUS_24"
-sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
-
-[[field-reads]]
-name = "observe_bluetooth_scheduler_execution_lock_result"
-peripheral = "BLUETOOTH_CONTROLLER_CORE"
-register = "SCHEDULER_COMMAND_0"
-field = "EXECUTION_LOCK_RESULT"
 sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
 
 [[zero-based-field-writes]]
@@ -3797,107 +3712,6 @@ peripheral = "BLUETOOTH_CONTROLLER_CORE"
 register = "SCHEDULER_COMMAND_1"
 fields = ["HARDWARE_LIST_MASK", "START"]
 sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
-
-[[field-reads]]
-name = "observe_bluetooth_scheduler_execution_modify_ready"
-peripheral = "BLUETOOTH_CONTROLLER_CORE"
-register = "SCHEDULER_COMMAND_1"
-field = "STATUS_17"
-sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
-
-[[field-reads]]
-name = "observe_bluetooth_scheduler_execution_modify_rejected"
-peripheral = "BLUETOOTH_CONTROLLER_CORE"
-register = "SCHEDULER_COMMAND_1"
-field = "STATUS_19"
-sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
-
-[[field-reads]]
-name = "observe_bluetooth_scheduler_software_list_command_0_status_26"
-peripheral = "BLUETOOTH_CONTROLLER_CORE"
-register = "SCHEDULER_COMMAND_0"
-field = "STATUS_26"
-sources = ["BLOB_LIBBTDM_SCHEDULER_SOFTWARE_LIST_REMOVAL"]
-
-[[field-reads]]
-name = "observe_bluetooth_scheduler_software_list_command_1_status_18"
-peripheral = "BLUETOOTH_CONTROLLER_CORE"
-register = "SCHEDULER_COMMAND_1"
-field = "STATUS_18"
-sources = ["BLOB_LIBBTDM_SCHEDULER_SOFTWARE_LIST_REMOVAL"]
-
-[[field-reads]]
-name = "observe_bluetooth_scheduler_finished_lists"
-peripheral = "BLUETOOTH_CONTROLLER_CORE"
-register = "SCHEDULER_FINISHED_LIST_STATUS"
-field = "FINISHED_LIST_MASK"
-sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS", "PUBLIC_ESP32S31_BLE_COMPLETION_ROLES"]
-
-[[field-reads]]
-name = "capture_bluetooth_irq_diagnostic_detail_0"
-peripheral = "BLUETOOTH_INTERRUPT_BANK"
-register = "IRQ_DIAGNOSTIC_DETAIL_0"
-field = "VALUE"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-
-[[field-reads]]
-name = "capture_bluetooth_irq_diagnostic_detail_1"
-peripheral = "BLUETOOTH_INTERRUPT_BANK"
-register = "IRQ_DIAGNOSTIC_DETAIL_1"
-field = "VALUE"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-
-[[field-reads]]
-name = "capture_bluetooth_irq_diagnostic_state"
-peripheral = "BLUETOOTH_INTERRUPT_BANK"
-register = "IRQ_DIAGNOSTIC_STATE"
-field = "VALUE"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-
-[[field-reads]]
-name = "observe_bluetooth_modem_lp_timer_status_0038"
-peripheral = "BTDM_RUNTIME_CONTROL"
-register = "WORD_0038_OPAQUE"
-field = "BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ"]
-
-[[field-reads]]
-name = "observe_bluetooth_modem_lp_timer_value_006c"
-peripheral = "BTDM_RUNTIME_CONTROL"
-register = "WORD_006C_OPAQUE"
-field = "BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ", "BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
-
-[[field-reads]]
-name = "observe_bluetooth_modem_lp_timer_control_2"
-peripheral = "BTDM_RUNTIME_CONTROL"
-register = "WORD_0058_OPAQUE"
-field = "CONTROL_2"
-sources = [
-    "BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ",
-    "BLOB_LIBBTDM_RUNTIME_CONTROL",
-]
-
-[[field-reads]]
-name = "observe_bluetooth_modem_lp_timer_state_0024"
-peripheral = "BTDM_RUNTIME_CONTROL"
-register = "WORD_0024_OPAQUE"
-field = "LOW_BYTE"
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ", "BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
-
-[[field-reads]]
-name = "observe_bluetooth_modem_lp_timer_state_002c"
-peripheral = "BTDM_RUNTIME_CONTROL"
-register = "WORD_002C_OPAQUE"
-field = "LOW_BYTE"
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ", "BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
-
-[[field-reads]]
-name = "observe_bluetooth_modem_lp_timer_counter"
-peripheral = "BTDM_RUNTIME_CONTROL"
-register = "WORD_0048_OPAQUE"
-field = "BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
 
 [[fixed-register-images]]
 name = "publish_bluetooth_hal_scheduler_sram_prefix"
@@ -6175,13 +5989,6 @@ fields = [{ field = "LOCK_MODIFY_HARDWARE_LIST_INDEX", source-bit-offset = 0 }]
 domain = "BluetoothSchedulerLockModifyHardwareListIndex"
 exposure = "facade"
 sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "PUBLIC_ESP32S31_BT_SCHEDULER_LIST_INDEX"]
-
-[[field-snapshot-reads]]
-name = "observe_bluetooth_scheduler_lock_modify_request"
-peripheral = "BLUETOOTH_CONTROLLER_CORE"
-register = "SCHEDULER_LOCK_MODIFY_REQUEST"
-fields = ["START", "RESULT"]
-sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_SCHEDULER_INSERTION_BRANCH", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
 
 [[indexed-bit-set-modifies]]
 name = "request_rx_block_ack_entry_update"
@@ -10660,17 +10467,11 @@ register = "SCHEDULER_SKIP_REQUEST"
 fields = ["COMPRESSED_SRAM_POINTER", "HARDWARE_LIST_INDEX", "START"]
 sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
 
-[[field-snapshot-reads]]
-name = "observe_bluetooth_scheduler_skip_request"
-peripheral = "BLUETOOTH_CONTROLLER_CORE"
-register = "SCHEDULER_SKIP_REQUEST"
-fields = ["START", "RESULT"]
-sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
-
-[[zero-register-writes]]
+[[fixed-register-images]]
 name = "clear_bluetooth_scheduler_skip_request"
 peripheral = "BLUETOOTH_CONTROLLER_CORE"
 register = "SCHEDULER_SKIP_REQUEST"
+value = 0
 sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
 
 [[bounded-domains]]
@@ -10716,25 +10517,14 @@ value = 0
 exposure = "facade"
 sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
 
-[[field-reads]]
-name = "observe_bluetooth_scheduler_cancellation_status_0324"
-peripheral = "BLUETOOTH_CONTROLLER_CORE"
-register = "WORD_0324_OPAQUE"
-field = "STATUS_0"
-sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
-
-[[field-reads]]
-name = "observe_bluetooth_scheduler_cancellation_status_0208"
-peripheral = "BLUETOOTH_CONTROLLER_CORE"
-register = "WORD_0208_OPAQUE"
-field = "STATUS_0"
-sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
-
+# A store on the snapshot clear register: the reviewed acknowledgement of
+# exactly source 7, which the cancellation path consumes itself.
 [[fixed-register-images]]
 name = "acknowledge_bluetooth_scheduler_cancellation_source"
 peripheral = "BLUETOOTH_INTERRUPT_BANK"
 register = "IRQ_CLEAR_0"
 value = 0x00000080
+consumed-event = "the indexed cancellation path is the one consumer of source 7 and acknowledges it once per cancellation."
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
 
 [[zero-based-field-writes]]

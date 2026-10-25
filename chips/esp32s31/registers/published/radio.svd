@@ -25668,6 +25668,12 @@ the exact operation without promoting the cross-chip hint to hardware truth.</de
               <description>Project-assigned name. CPU address published for the BLE PHY environment member at +0x2c.</description>
               <bitOffset>0</bitOffset>
               <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
             </field>
           </fields>
         </register>
@@ -26667,6 +26673,12 @@ belong exclusively to BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.
               <description>Project-assigned name. CPU address published for the BLE PHY environment member at +0x4d.</description>
               <bitOffset>0</bitOffset>
               <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
             </field>
           </fields>
         </register>
@@ -30732,30 +30744,6 @@ by those accessors are described; untouched bits remain unassigned.</description
           </fields>
         </register>
         <register>
-          <dim>16</dim>
-          <dimIncrement>0x2</dimIncrement>
-          <dimIndex>0-15</dimIndex>
-          <name>ANTENNA_MAP_ENTRY%s</name>
-          <description>Project-assigned name. First sixteen halfword slots of the indexed antenna-map window. The complete setter copies caller-provided halfwords from index zero up to its input count; sixteen slots are the exact finite effects recovered under the current analysis bound, not a claim that the hardware window ends here.</description>
-          <addressOffset>0x130</addressOffset>
-          <size>0x10</size>
-          <access>write-only</access>
-          <fields>
-            <field>
-              <name>VALUE</name>
-              <description>Project-assigned name. Complete 16-bit antenna-map element; the encoding remains unknown.</description>
-              <bitOffset>0</bitOffset>
-              <bitWidth>16</bitWidth>
-              <writeConstraint>
-                <range>
-                  <minimum>0</minimum>
-                  <maximum>65535</maximum>
-                </range>
-              </writeConstraint>
-            </field>
-          </fields>
-        </register>
-        <register>
           <name>SAMPLE_LIMIT</name>
           <description>Project-assigned name. Three independently readable and writable CTE sampling-limit fields.</description>
           <addressOffset>0x150</addressOffset>
@@ -31104,6 +31092,39 @@ by those accessors are described; untouched bits remain unassigned.</description
               <description>Project-assigned name.</description>
               <bitOffset>29</bitOffset>
               <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>BT_V3_2_CTE_ANTENNA_MAP</name>
+      <description>The halfword antenna-map window of the Bluetooth direction-finding block, which
+the vendor CTE setter stores halfword by halfword. Kept for bit-use coverage:
+its registers are not 32 bits wide, so no typed owner exists.</description>
+      <baseAddress>0x20102130</baseAddress>
+      <registers>
+        <register>
+          <dim>16</dim>
+          <dimIncrement>0x2</dimIncrement>
+          <dimIndex>0-15</dimIndex>
+          <name>ANTENNA_MAP_ENTRY%s</name>
+          <description>Project-assigned name. First sixteen halfword slots of the indexed antenna-map window. The complete setter copies caller-provided halfwords from index zero up to its input count; sixteen slots are the exact finite effects recovered under the current analysis bound, not a claim that the hardware window ends here.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x10</size>
+          <access>write-only</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name. Complete 16-bit antenna-map element; the encoding remains unknown.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>65535</maximum>
+                </range>
+              </writeConstraint>
             </field>
           </fields>
         </register>

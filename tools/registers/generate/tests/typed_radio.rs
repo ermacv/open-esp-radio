@@ -121,6 +121,31 @@ register = "LIST"
 fields = ["INDEX", "VALID"]
 sources = ["FIXTURE"]
 
+[[field-replace-modifies]]
+name = "clear_tx_head"
+peripheral = "RADIO"
+register = "TX_HEAD"
+fields = [{ field = "ADDRESS_LOW", source-bit-offset = 0 }]
+value = 0
+exposure = "facade"
+sources = ["FIXTURE"]
+
+[[field-or-modifies]]
+name = "or_tx_head"
+peripheral = "RADIO"
+register = "TX_HEAD"
+fields = [{ field = "ADDRESS_LOW", source-bit-offset = 0 }]
+exposure = "facade"
+sources = ["FIXTURE"]
+
+[[fixed-register-images]]
+name = "clear_stale_error"
+peripheral = "RADIO"
+register = "CLEAR"
+value = 0x00000002
+masks = "INTERRUPT_ENABLE"
+sources = ["FIXTURE"]
+
 [[interrupt-snapshots]]
 name = "events"
 peripheral = "RADIO"
@@ -278,6 +303,40 @@ fn a_pointer_field_takes_only_the_image_of_a_reference() {
     assert_eq!(radio::list::IndexImage::new(descriptor(0x2f00_0000)), None);
     assert_eq!(radio::list::IndexImage::new(descriptor(0x2f00_0102)), None);
     assert_eq!(radio::list::IndexImage::NULL.bits(), 0);
+}
+
+#[test]
+fn a_pointer_field_is_cleared_and_then_ored_with_an_image() {
+    let mut memory = memory();
+    memory[TX_HEAD] = 0x0050_0001;
+    let mut block = radio::Radio::host(&mut memory).expect("memory holds the block");
+    block.clear_tx_head();
+    drop(block);
+    assert_eq!(memory[TX_HEAD], 0x0050_0000, "the field cleared, the other one kept");
+    // A bit the hardware published between the two transactions stays.
+    memory[TX_HEAD] |= 0x0000_0008;
+    let mut block = radio::Radio::host(&mut memory).expect("memory holds the block");
+    block.or_tx_head(radio::tx_head::AddressLowImage::new(descriptor(0x2f01_2340)));
+    drop(block);
+    assert_eq!(memory[TX_HEAD], 0x0051_2348, "the image ORed into the word read");
+}
+
+#[test]
+fn a_fixed_image_acknowledges_its_named_source_beside_the_snapshot() {
+    let mut memory = memory();
+    // ERROR is enabled and pending: the clear masks it before acknowledging.
+    memory[STATUS] = 0b11;
+    memory[INTERRUPT_ENABLE] = 0xffff_ffff;
+    let block = radio::Radio::host(&mut memory).expect("memory holds the block");
+    let (mut rest, _time) = block.split_time();
+    rest.clear_stale_error();
+    drop(rest);
+    assert_eq!(memory[CLEAR], 0b10, "exactly the reviewed image");
+    assert_eq!(
+        memory[INTERRUPT_ENABLE],
+        0xffff_fffd,
+        "its source masked, every other bit kept"
+    );
 }
 
 #[test]
