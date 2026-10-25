@@ -261,7 +261,7 @@ name = "ID"
 bits = "31:0"
 class = "plain"
 description = "Event identifier written as a complete word."
-values = [{ name = "IEEE802154_TIMER1_OVERFLOW", value = 79 }, { name = "IEEE802154_TIMER0_OVERFLOW", value = 80 }]
+values = [{ name = "IEEE802154_TIMER1_OVERFLOW", value = 79 }, { name = "IEEE802154_TIMER0_OVERFLOW", value = 80 }, { name = "BTDM_LOW_POWER_EVENT_43", value = 67 }, { name = "BTDM_LOW_POWER_EVENT_45", value = 69 }, { name = "BTDM_LOW_POWER_EVENT_46", value = 70 }, { name = "BLE_PHY_EVENT_08", value = 8 }]
 
 [[registers]]
 name = "CH%s_TASK"
@@ -274,7 +274,7 @@ name = "ID"
 bits = "31:0"
 class = "plain"
 description = "Task identifier written as a complete word."
-values = [{ name = "IEEE802154_ED_TRIG_TX", value = 84 }, { name = "IEEE802154_RX_START", value = 85 }, { name = "IEEE802154_TX_START", value = 88 }]
+values = [{ name = "IEEE802154_ED_TRIG_TX", value = 84 }, { name = "IEEE802154_RX_START", value = 85 }, { name = "IEEE802154_TX_START", value = 88 }, { name = "BTDM_LOW_POWER_TASK_12", value = 18 }, { name = "BTDM_LOW_POWER_TASK_11", value = 17 }, { name = "BTDM_LOW_POWER_TASK_0F", value = 15 }, { name = "BLE_PHY_TASK_14", value = 20 }]
 
 [[registers]]
 name = "VALUE"

@@ -75,6 +75,9 @@ moves; ownership, orchestration and wiring are rebuilt.
 - Drivers never block or spin. A named settle of a known length up to 20 µs
   may busy-wait and counts against its context's step bound; a wait of
   unknown length is a timer-woken step with a deadline.
+  PHY short settles count `mcycle` through `oer-riscv`, at the stable CPU
+  frequency the clock owner adopts from its register state during runtime
+  handover. They require neither a ROM delay nor ROM clock calibration.
 - A lower-priority task wakes a higher-priority one only through
   `oer_sync::PriorityWaker` ([notifications](execution-wakes.md)).
 - Each interrupt table entry binds one interrupt part, whose type names its
@@ -173,6 +176,10 @@ moves; ownership, orchestration and wiring are rebuilt.
   opaque bits are fields, each of one access class. Pointer fields state
   their target and encoding and take typed references; placement is proved
   by the linker; each block's handover protocol is its HAL engine.
+  Hardware codes and opcodes are sourced named field values in this model;
+  sequence settings and images with unproved code meaning remain cited HAL
+  configuration. HAL derives bounds, array lengths and wrapping moduli from
+  generated geometry, including sourced block quantities outside registers.
 - **PAC and HAL.** The PAC is the exact model, generated whole by `cargo
   registers generate`: typed blocks taken once by its root, field accessors
   by class, typed value domains and DMA pointers, interrupt sources,

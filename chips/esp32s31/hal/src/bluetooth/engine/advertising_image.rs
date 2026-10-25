@@ -113,9 +113,9 @@ impl LegacyAdvertisingLinkStateWords {
             .word_04
             .with_header(None)
             .expect("empty link fits")
-            .with_phy_code_28_29(0)
+            .with_phy_code_28_29(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_28_29_LE_1M)
             .expect("zero fits")
-            .with_phy_code_30_31(0)
+            .with_phy_code_30_31(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_30_31_LE_1M)
             .expect("zero fits");
         self.word_08 = ADVERTISING_RESET.word_08;
         self.word_0c = self
@@ -215,9 +215,9 @@ impl LegacyAdvertisingSchedulerItemWords {
         self.word_04 = self.word_04.with_event_ready(true);
         self.word_14 = self
             .word_14
-            .with_phy_code_28_29(0)
+            .with_phy_code_28_29(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_28_29_LE_1M)
             .expect("zero fits")
-            .with_phy_code_30_31(0)
+            .with_phy_code_30_31(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_30_31_LE_1M)
             .expect("zero fits")
             .with_power_index(link_state.power_index());
         self.word_18 = self

@@ -64,6 +64,7 @@ description = "Selects hardware vectoring for the line."
 
 [[registers.fields]]
 name = "ATTR_TRIG"
+values = [{ name = "POSITIVE_LEVEL", value = 0 }, { name = "POSITIVE_EDGE", value = 1 }, { name = "NEGATIVE_LEVEL", value = 2 }, { name = "NEGATIVE_EDGE", value = 3 }]
 bits = "18:17"
 class = "plain"
 description = "Trigger: bit 0 clear is level, set is edge; bit 1 selects the negative polarity."

@@ -106,6 +106,7 @@ class = "plain"
 
 [[registers.fields]]
 name = "ADC_RATE_CONFIGURATION"
+values = [{ name = "HIGH", value = 0 }, { name = "LOW", value = 2 }]
 bits = "3:2"
 class = "plain"
 description = "Two-bit ADC-rate analog configuration field."

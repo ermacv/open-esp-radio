@@ -256,13 +256,7 @@ impl BluetoothDiagnosticControl for DiagnosticRecorder {
 }
 
 const fn diagnostic(busy: bool, value_1: u8) -> DiagnosticValue {
-    DiagnosticValue {
-        value_0_low_7: 0x15,
-        value_0_bit_7: busy,
-        value_1,
-        value_2: 0,
-        value_3: 0,
-    }
+    raw(0x15 | ((busy as u8) << 7), value_1)
 }
 
 #[test]
@@ -325,9 +319,12 @@ fn preselected_diagnostic_sample_reads_twice_without_selecting() {
 
 const fn raw(lane_0: u8, lane_1: u8) -> DiagnosticValue {
     DiagnosticValue {
-        value_0_low_7: lane_0 & 0x7f,
+        progress_state: lane_0 & 7,
+        value_0_high_4: (lane_0 >> 3) & 0xf,
         value_0_bit_7: lane_0 & 0x80 != 0,
-        value_1: lane_1,
+        stage: (lane_1 >> 4) & 3,
+        value_1_low_4: lane_1 & 0xf,
+        value_1_high_2: lane_1 >> 6,
         value_2: 0,
         value_3: 0,
     }

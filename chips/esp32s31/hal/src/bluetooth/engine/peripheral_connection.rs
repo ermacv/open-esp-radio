@@ -158,7 +158,11 @@ impl LinkStateStorage {
         self.layout
             .word_001c_opaque()
             .write(BleLinkStateWord001cOpaque::ZERO);
-        self.layout.rx_list().write(BleLinkStateRxList::ZERO);
+        self.layout.rx_list().write(
+            BleLinkStateRxList::ZERO
+                .with_class(BleLinkStateRxList::CLASS_PRIVATE_CONNECTION)
+                .expect("private RX class fits"),
+        );
         self.layout
             .crc_initialization()
             .write(self.layout.crc_initialization().read().with_ready(true));
@@ -287,7 +291,7 @@ impl ItemStorage {
             BleSchedulerItemLinkState::ZERO
                 .with_address(Some(binding.link_state.reference()))
                 .expect("a bound link is encodable")
-                .with_kind(2)
+                .with_kind(crate::layouts::BleSchedulerItemLinkState::KIND_CONNECTION)
                 .expect("connection prefix fits"),
         );
         self.layout.control().write(CONNECTION_ITEM_CONTROL);
@@ -352,9 +356,13 @@ impl ItemStorage {
                 .rate_and_power()
                 .read()
                 .with_power_index(power_index)
-                .with_phy_code_28_29(0)
+                .with_phy_code_28_29(
+                    crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_28_29_LE_1M,
+                )
                 .expect("zero fits")
-                .with_phy_code_30_31(0)
+                .with_phy_code_30_31(
+                    crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_30_31_LE_1M,
+                )
                 .expect("zero fits"),
         );
         self.layout
@@ -884,5 +892,5 @@ const CONNECTION_ALLOCATION_FLAGS: BleSchedulerItemWord001cOpaque =
     BleSchedulerItemWord001cOpaque::from_bits(0xe7df7fff);
 
 /// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
-const CONNECTION_ITEM_CONTROL: BleSchedulerItemControl =
-    BleSchedulerItemControl::ZERO.with_kind(0x3);
+const CONNECTION_ITEM_CONTROL: BleSchedulerItemControl = BleSchedulerItemControl::ZERO
+    .with_kind(crate::layouts::BleSchedulerItemControl::KIND_CONNECTION);

@@ -196,7 +196,7 @@ impl ItemStorage {
             BleSchedulerItemLinkState::ZERO
                 .with_address(Some(link_state.reference()))
                 .expect("a bound link is encodable")
-                .with_kind(6)
+                .with_kind(crate::layouts::BleSchedulerItemLinkState::KIND_LEGACY_ADVERTISING)
                 .expect("reviewed role prefix fits"),
         );
         self.layout

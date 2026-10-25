@@ -193,6 +193,27 @@ otherwise the field's resolved review supplies them. `write-values-only`
 restricts writes to those encodings. Existing `write-range` constraints and
 named values must lie inside a declared `value-range`.
 
+Names are unique within a field. Several context-specific names may denote
+the same numeric encoding: the first is its read variant, and subsequent
+names are associated constants of the same value type. They do not create
+ambiguous read variants. `bits()` returns the field image; `register_bits()`
+positions that image in its register.
+
+Each register module exposes `<FIELD>_WIDTH`, `<FIELD>_MAX` and
+`<FIELD>_MASK`, as well as `COUNT` for repeated registers. Block geometry
+outside register fields is sourced explicitly in the type file:
+
+```toml
+[[geometry]]
+name = "LINE_BYTES"
+value = 64
+sources = ["CACHE_HEADER"]
+description = "Bytes per cache line."
+```
+
+These positive quantities generate constants in the block type's module.
+HAL derives bounds and wrapping moduli from this geometry.
+
 Type-local `[[interrupt-pairs]]` state `status`, `clear` and `sources`.
 Both register keys exist and have matching widths and repetition; every
 status lane is a lane of the clear word, which may hold more (an event the

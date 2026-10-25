@@ -148,22 +148,21 @@ impl<M: Placement, C: Placement> InterruptController<M, C> {
 ///
 /// SOURCE: RISC-V CLIC specification (`clicintattr.trig`); ESP-IDF 4d59230d
 /// `components/soc/esp32s31/include/soc/clic_reg.h` (`CLIC_INT_ATTR_TRIG`).
-const fn trigger_bits(trigger: Trigger) -> Bits<2> {
+const fn trigger_bits(trigger: Trigger) -> clic::ctrl::AttrTrig {
     match trigger {
-        Trigger::PositiveLevel => Bits::constant::<0b00>(),
-        Trigger::PositiveEdge => Bits::constant::<0b01>(),
-        Trigger::NegativeLevel => Bits::constant::<0b10>(),
-        Trigger::NegativeEdge => Bits::constant::<0b11>(),
+        Trigger::PositiveLevel => clic::ctrl::AttrTrig::PositiveLevel,
+        Trigger::PositiveEdge => clic::ctrl::AttrTrig::PositiveEdge,
+        Trigger::NegativeLevel => clic::ctrl::AttrTrig::NegativeLevel,
+        Trigger::NegativeEdge => clic::ctrl::AttrTrig::NegativeEdge,
     }
 }
 
-/// The trigger a line's `ATTR_TRIG` field holds.
 const fn trigger_of(bits: Bits<2>) -> Trigger {
-    match bits.get() {
-        0b00 => Trigger::PositiveLevel,
-        0b01 => Trigger::PositiveEdge,
-        0b10 => Trigger::NegativeLevel,
-        _ => Trigger::NegativeEdge,
+    match clic::ctrl::AttrTrig::from_field(bits.get()) {
+        clic::ctrl::AttrTrig::PositiveLevel => Trigger::PositiveLevel,
+        clic::ctrl::AttrTrig::PositiveEdge => Trigger::PositiveEdge,
+        clic::ctrl::AttrTrig::NegativeLevel => Trigger::NegativeLevel,
+        clic::ctrl::AttrTrig::NegativeEdge => Trigger::NegativeEdge,
     }
 }
 
@@ -193,7 +192,9 @@ impl<M: Placement, C: Placement> Controller for InterruptController<M, C> {
     fn silence(&mut self, source: u16) -> Result<(), Error> {
         let index = Index::new(usize::from(source)).map_err(|_| Error::NoSuchSource { source })?;
         self.matrix.modify_route(index, |route| {
-            route.set_map(Bits::constant::<0>());
+            route.set_map(Bits::truncate(
+                interrupt_core::route::Map::Disconnected.bits(),
+            ));
         });
         Ok(())
     }

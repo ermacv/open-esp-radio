@@ -60,6 +60,13 @@ system these rules serve.
   domains and hand-written roots), probe images, the placement constructor and
   the HAL's protocol core, narrow and with `// SAFETY:`
   ([docs/unsafe.md](docs/unsafe.md)); crates above the HAL forbid it.
+- **Hardware dictionaries and geometry.** Field codes and opcodes are named
+  values in the register model, including analog-I2C and hardware-consumed
+  memory layouts; HAL selects the generated names. Field widths, maxima,
+  register-array counts and block geometry come from generated constants.
+  Sequence settings remain HAL constants with `SOURCE:`. An observed image
+  without an established code meaning stays cited configuration, not a model
+  dictionary entry.
 - **Air formats** use the `oer-wire` field macro and its bounded cursor; each
   field names its clause of the standard. No hand-written masks or shifts.
 - **Tests.** Every behavioral change gets a focused regression test beside its

@@ -1264,6 +1264,7 @@ description = "Write-only enhanced-ack generation-done notification word. The pu
 
 [[registers.fields]]
 name = "NOTIFY_IMAGE"
+values = [{ name = "GENERATE_DONE", value = 1 }]
 bits = "31:0"
 class = "write-only"
 

@@ -34,11 +34,6 @@ pub enum PhyGrantProtectError {
     NotProtected,
 }
 
-/// The coexistence request kind of `phy_acquire_grant_protect` (`2`), as
-/// the timer client field value: `coex_core_request` maps request kinds
-/// 0 through 4 through its five-byte table `02 01 00 03 04`.
-const PHY_GRANT_PROTECT_CLIENT: u32 = 0;
-
 /// The vendor PHY grant-protect event.
 pub(crate) const PHY_GRANT_PROTECT_EVENT: CoexEventId = match CoexEventId::new(48) {
     Some(event) => event,
@@ -87,7 +82,9 @@ impl<'owner> PhyGrantProtect<'owner> {
             return Err(PhyGrantProtectError::AlreadyProtected);
         }
         let (Some(client), Some(pti)) = (
-            CoexTimerClientValue::new(PHY_GRANT_PROTECT_CLIENT),
+            CoexTimerClientValue::new(
+                oer_esp32s31_pac::coex::configuration::Parameter1::PhyGrantProtect.bits(),
+            ),
             CoexTimerPtiValue::new(u32::from(self.pti.value())),
         ) else {
             unreachable!("the client and four-bit priority are in their domains");

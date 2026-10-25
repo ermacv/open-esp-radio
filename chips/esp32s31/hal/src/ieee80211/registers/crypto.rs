@@ -5,13 +5,9 @@ use oer_mmio::{Index, Placement};
 
 use super::{MacInterface, MacKeyEntryIndex, MacPlacement, WifiRadioRegisters, bits, element};
 
-const KEY_ENTRY_COUNT: usize = 25;
-const CCMP_ALGORITHM: u32 = 3;
-const PAIRWISE_DIRECTION: u32 = 3;
-const GROUP_DIRECTION: u32 = 6;
-const PAIRWISE_LOGICAL_KEY_INDEX: u8 = 0;
-const LOGICAL_INDEX_WITHOUT_FLAG: u8 = 3;
-const MAX_GROUP_KEY_ID: u8 = 3;
+const KEY_ENTRY_COUNT: usize = oer_esp32s31_pac::wifi_mac::entry_peer_control::COUNT;
+const MAX_GROUP_KEY_ID: u8 =
+    oer_esp32s31_pac::wifi_mac::entry_peer_control::LOGICAL_KEY_INDEX_MAX as u8;
 
 /// Hardware authentication of the QoS A-MSDU-present bit for one interface.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -194,7 +190,11 @@ fn store_peer_control<P: Placement>(
             .set_algorithm(bits(value.algorithm))
             .set_bit_20_opaque(false)
             .set_direction(bits(value.direction))
-            .set_interface(value.interface.field())
+            .set_interface(
+                oer_esp32s31_pac::wifi_mac::entry_peer_control::Interface::from_field(
+                    value.interface.bits(),
+                ),
+            )
             .set_bit_26_opaque(false)
             .set_logical_index_not_three(value.logical_index_not_three)
             .set_logical_key_index(bits(u32::from(value.logical_key_index)));
@@ -362,12 +362,17 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         temporal_key: &[u8; 16],
     ) -> MacKeyInstallOutcome {
         let (peer, direction, logical_key_index) = match identity {
-            MacCcmpKeyIdentity::Pairwise { peer } => {
-                (peer, PAIRWISE_DIRECTION, PAIRWISE_LOGICAL_KEY_INDEX)
-            }
-            MacCcmpKeyIdentity::Group { key_id } if key_id <= MAX_GROUP_KEY_ID => {
-                ([u8::MAX; 6], GROUP_DIRECTION, key_id)
-            }
+            MacCcmpKeyIdentity::Pairwise { peer } => (
+                peer,
+                oer_esp32s31_pac::wifi_mac::entry_peer_control::Direction::Pairwise.bits(),
+                oer_esp32s31_pac::wifi_mac::entry_peer_control::LogicalKeyIndex::Pairwise.bits()
+                    as u8,
+            ),
+            MacCcmpKeyIdentity::Group { key_id } if key_id <= MAX_GROUP_KEY_ID => (
+                [u8::MAX; 6],
+                oer_esp32s31_pac::wifi_mac::entry_peer_control::Direction::Group.bits(),
+                key_id,
+            ),
             MacCcmpKeyIdentity::Group { .. } => return MacKeyInstallOutcome::Rejected,
         };
         let position = index.get() as usize;
@@ -393,10 +398,12 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             entry,
             PeerControl {
                 peer_high: u16::from_le_bytes([e, f]),
-                algorithm: CCMP_ALGORITHM,
+                algorithm: oer_esp32s31_pac::wifi_mac::entry_peer_control::Algorithm::Ccmp.bits(),
                 direction,
                 interface,
-                logical_index_not_three: logical_key_index != LOGICAL_INDEX_WITHOUT_FLAG,
+                logical_index_not_three: logical_key_index
+                    != oer_esp32s31_pac::wifi_mac::entry_peer_control::LogicalKeyIndex::WithoutFlag
+                        .bits() as u8,
                 logical_key_index,
             },
         );

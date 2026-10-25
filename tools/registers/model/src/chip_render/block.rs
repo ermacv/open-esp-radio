@@ -783,7 +783,8 @@ fn field_plan<'m>(
             if variant.starts_with(|character: char| character.is_ascii_digit()) {
                 variant.insert(0, 'V');
             }
-            if value.value > ones || !seen.insert(value.value) || !names::valid(&variant) {
+            seen.insert(value.value);
+            if value.value > ones || !names::valid(&variant) {
                 return Err(Error::new(
                     &entity,
                     format!(
@@ -803,7 +804,7 @@ fn field_plan<'m>(
         {
             return Err(Error::new(&entity, "two values have one variant name"));
         }
-        let complete = width < 32 && variants.len() as u64 == 1_u64 << width;
+        let complete = width < 32 && seen.len() as u64 == 1_u64 << width;
         Some(Values {
             name: names::camel(&stem),
             variants,
@@ -940,6 +941,19 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
         }
     }
     for field in &template.fields {
+        let constant = field.stem.to_ascii_uppercase();
+        let _ = writeln!(
+            output,
+            "/// Width of `{}` in bits.\npub const {constant}_WIDTH: u32 = {};\n\
+             /// Greatest unsigned image of `{}`.\npub const {constant}_MAX: u32 = 0x{:x};\n\
+             /// Positioned bits of `{}`.\npub const {constant}_MASK: u32 = 0x{:x};\n",
+            field.field.name,
+            field.width,
+            field.field.name,
+            field.ones(),
+            field.field.name,
+            field.mask()
+        );
         if let Some(values) = &field.values {
             render_values(output, field, values);
         }
@@ -1151,7 +1165,11 @@ fn render_values(output: &mut String, field: &FieldPlan<'_>, values: &Values) {
          {repr}pub enum {name} {{",
         field.field.name
     );
+    let mut unique = BTreeMap::new();
     for (variant, value, description) in &values.variants {
+        if unique.insert(*value, variant).is_some() {
+            continue;
+        }
         if let Some(description) = description {
             push_doc(output, &clean(description), "");
         }
@@ -1161,8 +1179,29 @@ fn render_values(output: &mut String, field: &FieldPlan<'_>, values: &Values) {
         output,
         "}}\n\nimpl {name} {{\n/// The value's field bits.\n#[inline]\npub const fn bits(self) -> u32 {{\nself as u32\n}}\n"
     );
+    let _ = writeln!(
+        output,
+        "/// The value positioned in its register.\n#[inline]\npub const fn register_bits(self) -> u32 {{ self.bits() << {} }}\n",
+        field.low
+    );
+    let mut canonical = BTreeMap::new();
+    let mut variants = Vec::new();
+    for (variant, value, description) in &values.variants {
+        if let Some(first) = canonical.get(value) {
+            if let Some(description) = description {
+                push_doc(output, &clean(description), "");
+            }
+            let _ = writeln!(
+                output,
+                "/// Context-specific name for the same field image.\n#[allow(non_upper_case_globals)]\npub const {variant}: Self = Self::{first};"
+            );
+        } else {
+            canonical.insert(*value, variant);
+            variants.push((variant, value, description));
+        }
+    }
     if values.complete
-        && let Some((last, rest)) = values.variants.split_last()
+        && let Some((last, rest)) = variants.split_last()
     {
         let arms = rest
             .iter()
@@ -1178,8 +1217,7 @@ fn render_values(output: &mut String, field: &FieldPlan<'_>, values: &Values) {
             last.0
         );
     } else {
-        let arms = values
-            .variants
+        let arms = variants
             .iter()
             .map(|(variant, value, _)| format!("0x{value:x} => Some(Self::{variant}),"))
             .collect::<String>();

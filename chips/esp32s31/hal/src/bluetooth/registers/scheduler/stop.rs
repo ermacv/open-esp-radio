@@ -129,7 +129,9 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
         self.bluetooth
             .bluetooth_controller_core
             .write_scheduler_lifecycle_request(|w| {
-                w.set_value(0x1);
+                w.set_value(
+                    oer_esp32s31_pac::bt_mac::scheduler_lifecycle_request::Value::Request.bits(),
+                );
             });
         device_fence();
     }

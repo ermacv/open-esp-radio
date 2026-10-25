@@ -461,7 +461,7 @@ impl MacInterruptSetup {
 
 /// The four ordinary EDCA transmit queues: logical queue `q` lives in the
 /// physical bank `3 - q` of the queue-control and queue-vector arrays.
-pub(crate) const ORDINARY_QUEUE_COUNT: u8 = 4;
+pub(crate) const ORDINARY_QUEUE_COUNT: u8 = oer_esp32s31_pac::wifi_mac::control_n::COUNT as u8;
 
 /// The physical bank of ordinary logical queue `queue`, if it is one.
 pub(crate) const fn ordinary_bank(queue: u8) -> Option<Index<4>> {

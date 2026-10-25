@@ -45,7 +45,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_he_bssid_enable(true);
         });
         control.modify_multi_bssid_control(|w| {
-            w.set_bssid_select(Bits::constant::<0>());
+            w.set_bssid_select(Bits::truncate(
+                oer_esp32s31_pac::wifi_mac::multi_bssid_control::BssidSelect::Interface0.bits(),
+            ));
         });
 
         let power_save = &mut self.mac.wifi_mac_rx_power_save;
@@ -132,10 +134,14 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             // ACK-rate bytes to 0x80 in one store; the four bytes are every
             // bit of the word.
             init.modify_ersu_ack_rate(|w| {
-                w.set_rate_0(0x80)
-                    .set_rate_1(0x80)
-                    .set_rate_2(0x80)
-                    .set_rate_3(0x80);
+                w.set_rate_0(
+                    oer_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate0::Ordinary.bits() as u8,
+                )
+                .set_rate_1(oer_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate1::Ordinary.bits() as u8)
+                .set_rate_2(oer_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate2::Ordinary.bits() as u8)
+                .set_rate_3(
+                    oer_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate3::Ordinary.bits() as u8,
+                );
             });
         }
         Ok(())

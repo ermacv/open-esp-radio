@@ -57,10 +57,6 @@ const ADDRESS_BITLEN: Bits<6> = Bits::constant::<31>();
 /// length − 1.
 /// SOURCE: ESP-IDF 4d59230d `psram_ctrlr_ll.h:70-362`.
 const COMMAND_BITLEN: Bits<4> = Bits::constant::<15>();
-/// SOURCE: ESP-IDF 4d59230d `psram_ctrlr_ll.h:70-362`: synchronous read/write commands.
-const SYNC_READ: u16 = 0x0000;
-/// SOURCE: ESP-IDF 4d59230d `psram_ctrlr_ll.h:70-362`: synchronous write command.
-const SYNC_WRITE: u16 = 0x8080;
 
 /// The controllers' bus clock, DLL, pads, chip select and the cache's octal
 /// DDR access.
@@ -182,11 +178,17 @@ impl<P: Placement, Q: Placement, R: Placement> PsramControllerRegisters
         });
         spi.modify_sram_drd_cmd(|w| {
             w.set_cache_sram_usr_rd_cmd_bitlen(COMMAND_BITLEN)
-                .set_cache_sram_usr_rd_cmd_value(SYNC_READ);
+                .set_cache_sram_usr_rd_cmd_value(
+                    oer_esp32s31_pac::spi_mem_s::sram_drd_cmd::CacheSramUsrRdCmdValue::SyncRead
+                        .bits() as u16,
+                );
         });
         spi.modify_sram_dwr_cmd(|w| {
             w.set_cache_sram_usr_wr_cmd_bitlen(COMMAND_BITLEN)
-                .set_cache_sram_usr_wr_cmd_value(SYNC_WRITE);
+                .set_cache_sram_usr_wr_cmd_value(
+                    oer_esp32s31_pac::spi_mem_s::sram_dwr_cmd::CacheSramUsrWrCmdValue::SyncWrite
+                        .bits() as u16,
+                );
         });
         spi.modify_ctrl1(|w| {
             w.set_ar_splice_en(true).set_aw_splice_en(true);

@@ -65,6 +65,12 @@ A new kind of model entry, a **memory layout**, beside peripherals:
 `chips/<chip>/registers/layouts/<name>.toml`, included by the chip root
 `chip.toml`, whose `[[layout-placements]]` place it in RAM regions.
 
+A field may declare `values = [{ name = "COMMON_TX", value = 2 }]` for
+established hardware encodings. Its resolved field review supplies the
+sources. The generated word/range image exposes `<FIELD>_<VALUE>` in the
+field's native type, plus `<FIELD>_WIDTH` and `<FIELD>_MAX`; these are the
+dictionary and geometry HAL uses. Sequence-specific images remain in HAL.
+
 ```toml
 [layout]
 name = "WIFI_DMA_DESCRIPTOR"

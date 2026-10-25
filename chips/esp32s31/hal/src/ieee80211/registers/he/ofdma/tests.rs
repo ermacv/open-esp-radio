@@ -56,7 +56,7 @@ fn default_trigger_link_ranges_partition_all_120_entries() {
             assert_eq!(
                 reservation.next(position).unwrap(),
                 if position + 1 == capacity {
-                    MPDU_LENGTH_LINK_END
+                    oer_esp32s31_pac::wifi_mac::he_scratch::NextLink::End.bits() as u8
                 } else {
                     index + 1
                 }
@@ -125,7 +125,10 @@ fn a_trigger_queue_links_its_lengths_and_publishes_validity_last() {
     let last = registers.he_tx_mpdu_length_link(66).expect("an entry");
     assert_eq!(
         (last.mpdu_length, last.next_link),
-        (300, MPDU_LENGTH_LINK_END)
+        (
+            300,
+            oer_esp32s31_pac::wifi_mac::he_scratch::NextLink::End.bits() as u8
+        )
     );
     // Logical queue one is CONF1 element six.
     let conf1 = registers

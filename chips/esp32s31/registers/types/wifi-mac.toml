@@ -6400,6 +6400,7 @@ class = "plain"
 
 [[registers.fields]]
 name = "BSSID_SELECT"
+values = [{ name = "INTERFACE_0", value = 0 }]
 bits = "30:29"
 class = "plain"
 description = "Complete hal_he_bssid_init clears both selector bits for interface zero after enabling HE BSSID matching; dbg_read_rx_misc names the two-bit field HE_BSSID_IDX."
@@ -6761,6 +6762,7 @@ description = "Final set edge of mac_last_rxbuf_init; its narrower interaction w
 
 [[registers.fields]]
 name = "CSI_APPEND_ENABLE"
+values = [{ name = "ENABLED", value = 1 }]
 bits = "23"
 class = "plain"
 description = "hal_mac_set_csi sets or clears bit 23 of the RX/CSI control word."
@@ -7364,6 +7366,7 @@ write-range = { min = 0x0, max = 0xffff }
 
 [[registers.fields]]
 name = "INTERFACE"
+values = [{ name = "STATION", value = 0 }, { name = "ACCESS_POINT", value = 1 }, { name = "CONTEXT_2", value = 2 }, { name = "CONTEXT_3", value = 3 }]
 bits = "17:16"
 class = "plain"
 write-range = { min = 0x0, max = 0x3 }
@@ -8124,6 +8127,7 @@ description = "Complete libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate writes th
 
 [[registers.fields]]
 name = "RATE_0"
+values = [{ name = "ORDINARY", value = 128 }, { name = "EXTENDED_RANGE", value = 160 }]
 bits = "7:0"
 class = "plain"
 description = "First byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate."
@@ -8131,6 +8135,7 @@ write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "RATE_1"
+values = [{ name = "ORDINARY", value = 128 }, { name = "EXTENDED_RANGE", value = 160 }]
 bits = "15:8"
 class = "plain"
 description = "Second byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate."
@@ -8138,6 +8143,7 @@ write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "RATE_2"
+values = [{ name = "ORDINARY", value = 128 }, { name = "EXTENDED_RANGE", value = 160 }]
 bits = "23:16"
 class = "plain"
 description = "Third byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate."
@@ -8145,6 +8151,7 @@ write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "RATE_3"
+values = [{ name = "ORDINARY", value = 128 }, { name = "EXTENDED_RANGE", value = 160 }]
 bits = "31:24"
 class = "plain"
 description = "Fourth byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate."
@@ -8165,12 +8172,14 @@ write-range = { min = 0x0, max = 0x3f }
 
 [[registers.fields]]
 name = "RATE_INDEX"
+values = [{ name = "RATE_00", value = 0 }, { name = "RATE_01", value = 1 }, { name = "RATE_05", value = 5 }, { name = "RATE_0B", value = 11 }, { name = "RATE_0A", value = 10 }, { name = "RATE_09", value = 9 }, { name = "RATE_10", value = 16 }, { name = "RATE_11", value = 17 }, { name = "RATE_12", value = 18 }]
 bits = "21:16"
 class = "plain"
 write-range = { min = 0x0, max = 0x3f }
 
 [[registers.fields]]
 name = "BITS_22_23_OPAQUE"
+values = [{ name = "FORMAT_0", value = 0 }, { name = "FORMAT_2", value = 2 }]
 bits = "23:22"
 class = "plain"
 description = "Zero for the six legacy response words and two for the four HE response words."
@@ -8296,18 +8305,21 @@ description = "ACK_TAB0. hal_he_set_ack_rate(0) publishes 0x00090a0b; complete d
 
 [[registers.fields]]
 name = "BPSK_RATE"
+values = [{ name = "OFDM_6M", value = 11 }]
 bits = "7:0"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "QPSK_RATE"
+values = [{ name = "OFDM_12M", value = 10 }]
 bits = "15:8"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "QAM16_RATE"
+values = [{ name = "OFDM_24M", value = 9 }]
 bits = "23:16"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
@@ -8325,18 +8337,21 @@ description = "ACK_TAB1. hal_he_set_ack_rate(0) publishes 0x00050100; complete d
 
 [[registers.fields]]
 name = "RATE_1M"
+values = [{ name = "DSSS_1M", value = 0 }]
 bits = "7:0"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "RATE_2M"
+values = [{ name = "DSSS_2M", value = 1 }]
 bits = "15:8"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "RATE_2M_SHORT_PREAMBLE"
+values = [{ name = "DSSS_2M_SHORT", value = 5 }]
 bits = "23:16"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
@@ -8385,18 +8400,21 @@ description = "CTS_TAB0. hal_he_set_ack_rate(0) publishes 0x00090a0b; complete d
 
 [[registers.fields]]
 name = "BPSK_RATE"
+values = [{ name = "OFDM_6M", value = 11 }]
 bits = "7:0"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "QPSK_RATE"
+values = [{ name = "OFDM_12M", value = 10 }]
 bits = "15:8"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "QAM16_RATE"
+values = [{ name = "OFDM_24M", value = 9 }]
 bits = "23:16"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
@@ -8414,18 +8432,21 @@ description = "CTS_TAB1. hal_he_set_ack_rate(0) publishes 0x00050100; complete d
 
 [[registers.fields]]
 name = "RATE_1M"
+values = [{ name = "DSSS_1M", value = 0 }]
 bits = "7:0"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "RATE_2M"
+values = [{ name = "DSSS_2M", value = 1 }]
 bits = "15:8"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "RATE_2M_SHORT_PREAMBLE"
+values = [{ name = "DSSS_2M_SHORT", value = 5 }]
 bits = "23:16"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
@@ -8462,12 +8483,14 @@ description = "Three independently published beamforming-report profiles selecte
 
 [[registers.fields]]
 name = "BPSK_RATE"
+values = [{ name = "NORMALIZED_RATE_0", value = 0 }]
 bits = "4:0"
 class = "plain"
 write-range = { min = 0x0, max = 0x1f }
 
 [[registers.fields]]
 name = "BPSK_SIGNAL_MODE"
+values = [{ name = "MODE_1", value = 1 }]
 bits = "6:5"
 class = "plain"
 write-range = { min = 0x0, max = 0x3 }
@@ -8484,12 +8507,14 @@ class = "plain"
 
 [[registers.fields]]
 name = "QPSK_RATE"
+values = [{ name = "NORMALIZED_RATE_0", value = 0 }]
 bits = "13:9"
 class = "plain"
 write-range = { min = 0x0, max = 0x1f }
 
 [[registers.fields]]
 name = "QPSK_SIGNAL_MODE"
+values = [{ name = "MODE_1", value = 1 }]
 bits = "15:14"
 class = "plain"
 write-range = { min = 0x0, max = 0x3 }
@@ -8506,12 +8531,14 @@ class = "plain"
 
 [[registers.fields]]
 name = "QAM16_RATE"
+values = [{ name = "NORMALIZED_RATE_0", value = 0 }]
 bits = "22:18"
 class = "plain"
 write-range = { min = 0x0, max = 0x1f }
 
 [[registers.fields]]
 name = "QAM16_SIGNAL_MODE"
+values = [{ name = "MODE_1", value = 1 }]
 bits = "24:23"
 class = "plain"
 write-range = { min = 0x0, max = 0x3 }
@@ -10034,6 +10061,7 @@ description = "Complete dbg_read_bsr_info names bits 8:2 and the comparison meth
 
 [[registers.fields]]
 name = "BSR_ACI_HIGH_COMPARISON_METHOD"
+values = [{ name = "METHOD_1", value = 1 }]
 bits = "1:0"
 class = "plain"
 description = "Complete init replaces the field with one; complete get/set leaves prove its width; complete dbg_read_bsr_info names the field CMP_BSR_METHOD."
@@ -10488,6 +10516,7 @@ write-values-only = true
 
 [[registers.fields]]
 name = "TX_BLOCK_STOP_REQUEST_HIGH"
+values = [{ name = "RUN", value = 0 }, { name = "STOP_ALL", value = 15 }]
 bits = "23:20"
 class = "plain"
 description = "Bits 23:20 of the eight stop-request bits libpp[hal_mac.o]::hal_mac_deinit sets and hal_mac_init clears with the WIFI_PS_NONE retention mask."
@@ -10891,6 +10920,7 @@ write-range = { min = 0x0, max = 0x3ff }
 
 [[registers.fields]]
 name = "INTERFACE"
+values = [{ name = "STATION", value = 0 }, { name = "ACCESS_POINT", value = 1 }, { name = "CONTEXT_2", value = 2 }, { name = "CONTEXT_3", value = 3 }]
 bits = "23:22"
 class = "plain"
 write-range = { min = 0x0, max = 0x3 }
@@ -10942,6 +10972,7 @@ description = "Recovered PLCP0 control image; libpp[hal_mac_tx.o]::mac_tx_set_pl
 
 [[registers.fields]]
 name = "PLCP_FORMAT"
+values = [{ name = "NO_RESPONSE", value = 0 }, { name = "ACK_RESPONSE", value = 1 }, { name = "BLOCK_ACK_RESPONSE", value = 2 }, { name = "HT_SINGLE_MPDU", value = 1 }, { name = "HT_AMPDU", value = 2 }, { name = "HE_SMPDU", value = 1 }, { name = "HE_AMPDU", value = 5 }]
 bits = "26:24"
 class = "plain"
 description = "Three-bit format selector derived by complete libpp[hal_mac_tx.o]::mac_tx_set_plcp0 from vendor descriptor flags. For the bounded plain legacy roots, libpp[pp.o]::ppTxProtoProc maps the address-one I/G bit to descriptor flag 0x2: group traffic retains format zero, while an ordinary individual-address descriptor with zero flags selects format one. Exact vendor callback images select format one for both non-A-MPDU HT20 MCS0 and HE20 MCS0 DCM S-MPDU frames; the owned open paths receive ACK at the same format. Independently captured HT and HE A-MPDU images select aggregate format two or five respectively. Format three has an instruction-exact descriptor branch but its higher-level meaning remains open. A legacy-only single-variable A/B temporarily correlated format one with status five and format zero with one authentication response, but format-zero repetitions failed; that experiment is retained as evidence that completion status alone is not a protocol-success oracle, not as an override of the complete blob mapping."
@@ -11690,6 +11721,7 @@ class = "plain"
 
 [[registers.fields]]
 name = "CLASS_DISABLE"
+values = [{ name = "ALL_ENABLED", value = 0 }, { name = "ALL_DISABLED", value = 31 }]
 bits = "8:4"
 class = "plain"
 description = "Approximate functional name for the five bits toggled together by hal_he_disable_obss_narrow_bw_ru."
@@ -11758,6 +11790,7 @@ write-range = { min = 0x0, max = 0xffff }
 
 [[registers.fields]]
 name = "INTERFACE"
+values = [{ name = "STATION", value = 0 }, { name = "ACCESS_POINT", value = 1 }, { name = "CONTEXT_2", value = 2 }, { name = "CONTEXT_3", value = 3 }]
 bits = "17:16"
 class = "plain"
 write-range = { min = 0x0, max = 0x3 }
@@ -13090,6 +13123,7 @@ write-range = { min = 0x0, max = 0xfff }
 
 [[registers.fields]]
 name = "RATE"
+values = [{ name = "DSSS_1M_LONG", value = 0 }, { name = "DSSS_2M_LONG", value = 1 }, { name = "CCK_5M5_LONG", value = 2 }, { name = "CCK_11M_LONG", value = 3 }, { name = "DSSS_2M_SHORT", value = 5 }, { name = "CCK_5M5_SHORT", value = 6 }, { name = "CCK_11M_SHORT", value = 7 }, { name = "OFDM_48M", value = 8 }, { name = "OFDM_24M", value = 9 }, { name = "OFDM_12M", value = 10 }, { name = "OFDM_6M", value = 11 }, { name = "OFDM_54M", value = 12 }, { name = "OFDM_36M", value = 13 }, { name = "OFDM_18M", value = 14 }, { name = "OFDM_9M", value = 15 }, { name = "HT_LONG_MCS0", value = 16 }, { name = "HT_LONG_MCS1", value = 17 }, { name = "HT_LONG_MCS2", value = 18 }, { name = "HT_LONG_MCS3", value = 19 }, { name = "HT_LONG_MCS4", value = 20 }, { name = "HT_LONG_MCS5", value = 21 }, { name = "HT_LONG_MCS6", value = 22 }, { name = "HT_LONG_MCS7", value = 23 }, { name = "HT_SHORT_MCS0", value = 26 }, { name = "HT_SHORT_MCS1", value = 27 }, { name = "HT_SHORT_MCS2", value = 28 }, { name = "HT_SHORT_MCS3", value = 29 }, { name = "HT_SHORT_MCS4", value = 30 }, { name = "HT_SHORT_MCS5", value = 31 }, { name = "HT_SHORT_MCS6", value = 0 }, { name = "HT_SHORT_MCS7", value = 1 }, { name = "HE_MCS0", value = 26 }, { name = "HE_MCS1", value = 27 }, { name = "HE_MCS2", value = 28 }, { name = "HE_MCS3", value = 29 }, { name = "HE_MCS4", value = 30 }, { name = "HE_MCS5", value = 31 }, { name = "HE_MCS6", value = 0 }, { name = "HE_MCS7", value = 1 }, { name = "HE_MCS8", value = 2 }, { name = "HE_MCS9", value = 3 }]
 bits = "16:12"
 class = "plain"
 description = "Five-bit MAC rate selector published by complete libpp[hal_mac_tx.o]::mac_tx_set_plcp1."
@@ -13109,6 +13143,7 @@ write-range = { min = 0x0, max = 0x3 }
 
 [[registers.fields]]
 name = "VECTOR_FORMAT"
+values = [{ name = "LEGACY", value = 0 }, { name = "HT", value = 1 }, { name = "HE", value = 2 }]
 bits = "27:25"
 class = "plain"
 description = "Three-bit vector family: zero for legacy, one for HT and two for HE in the reviewed paths."
@@ -13219,6 +13254,7 @@ description = "Complete libpp[hal_mac_tx.o]::mac_tx_set_htsig (size 0x23c) write
 
 [[registers.fields]]
 name = "MCS"
+values = [{ name = "MCS_0", value = 0 }, { name = "MCS_1", value = 1 }, { name = "MCS_2", value = 2 }, { name = "MCS_3", value = 3 }, { name = "MCS_4", value = 4 }, { name = "MCS_5", value = 5 }, { name = "MCS_6", value = 6 }, { name = "MCS_7", value = 7 }]
 bits = "6:0"
 class = "plain"
 description = "Seven-bit standard HT-SIG1 MCS selector. The reviewed open 1T1R path uses MCS0 through MCS7."
@@ -13263,6 +13299,7 @@ description = "Standard HT-SIG2 aggregation bit: clear for a direct MPDU and set
 
 [[registers.fields]]
 name = "STBC"
+values = [{ name = "NONE", value = 0 }]
 bits = "29:28"
 class = "plain"
 write-range = { min = 0x0, max = 0x3 }
@@ -13364,6 +13401,7 @@ class = "plain"
 
 [[registers.fields]]
 name = "MCS"
+values = [{ name = "MCS_0", value = 0 }, { name = "MCS_1", value = 1 }, { name = "MCS_2", value = 2 }, { name = "MCS_3", value = 3 }, { name = "MCS_4", value = 4 }, { name = "MCS_5", value = 5 }, { name = "MCS_6", value = 6 }, { name = "MCS_7", value = 7 }, { name = "MCS_8", value = 8 }, { name = "MCS_9", value = 9 }]
 bits = "6:3"
 class = "plain"
 write-range = { min = 0x0, max = 0xf }
@@ -13394,18 +13432,21 @@ write-range = { min = 0x0, max = 0xf }
 
 [[registers.fields]]
 name = "BANDWIDTH"
+values = [{ name = "MHZ20", value = 0 }]
 bits = "20:19"
 class = "plain"
 write-range = { min = 0x0, max = 0x3 }
 
 [[registers.fields]]
 name = "GI_LTF"
+values = [{ name = "ONE_LTF_800NS", value = 0 }, { name = "TWO_LTF_800NS", value = 1 }, { name = "TWO_LTF_1600NS", value = 2 }, { name = "FOUR_LTF_3200NS", value = 3 }]
 bits = "22:21"
 class = "plain"
 write-range = { min = 0x0, max = 0x3 }
 
 [[registers.fields]]
 name = "NSTS_AND_MIDAMBLE_PERIODICITY"
+values = [{ name = "ONE_STREAM_NO_MIDAMBLE", value = 0 }]
 bits = "25:23"
 class = "plain"
 description = "Complete dbg_dump_rx_ppdu shifts HE-SIG-A1 right by 23, masks three bits and prints the value as nsts_and_midamble_periodicity. The complete vendor private header uses the same name. A live 1T1R HE-SU RX vector 0x00e0591b with STBC set in HE-SIG-A2 produced encoding one: two space-time streams created from one spatial stream. This field is therefore not an unconditional NSS-minus-one value; with Doppler enabled it also carries midamble-periodicity information."
@@ -13487,6 +13528,7 @@ description = "Complete libpp[hal_mac_tx.o]::mac_tx_set_mplen writes the final a
 
 [[registers.fields]]
 name = "LINK_INDEX"
+values = [{ name = "END", value = 127 }]
 bits = "6:0"
 class = "plain"
 write-range = { min = 0x0, max = 0x7f }
@@ -13584,6 +13626,7 @@ write-range = { min = 0x0, max = 0xf }
 
 [[registers.fields]]
 name = "HT40_MCS"
+values = [{ name = "MCS_0", value = 0 }, { name = "MCS_1", value = 1 }, { name = "MCS_2", value = 2 }, { name = "MCS_3", value = 3 }, { name = "MCS_4", value = 4 }, { name = "MCS_5", value = 5 }, { name = "MCS_6", value = 6 }, { name = "MCS_7", value = 7 }]
 bits = "31:28"
 class = "plain"
 write-range = { min = 0x0, max = 0xf }
@@ -13626,6 +13669,7 @@ class = "plain"
 
 [[registers.fields]]
 name = "RTS_RATE"
+values = [{ name = "DSSS_1M_LONG", value = 0 }, { name = "DSSS_2M_LONG", value = 1 }, { name = "CCK_5M5_LONG", value = 2 }, { name = "CCK_11M_LONG", value = 3 }, { name = "DSSS_2M_SHORT", value = 5 }, { name = "CCK_5M5_SHORT", value = 6 }, { name = "CCK_11M_SHORT", value = 7 }, { name = "OFDM_48M", value = 8 }, { name = "OFDM_24M", value = 9 }, { name = "OFDM_12M", value = 10 }, { name = "OFDM_6M", value = 11 }, { name = "OFDM_54M", value = 12 }, { name = "OFDM_36M", value = 13 }, { name = "OFDM_18M", value = 14 }, { name = "OFDM_9M", value = 15 }]
 bits = "13:6"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
@@ -14290,6 +14334,7 @@ write-range = { min = 0x0, max = 0x3fff }
 
 [[registers.fields]]
 name = "NEXT_LINK"
+values = [{ name = "END", value = 127 }]
 bits = "20:14"
 class = "plain"
 write-range = { min = 0x0, max = 0x7f }
@@ -14329,6 +14374,7 @@ write-range = { min = 0x0, max = 0x3 }
 
 [[registers.fields]]
 name = "ALGORITHM"
+values = [{ name = "CCMP", value = 3 }]
 bits = "19:18"
 class = "plain"
 description = "Cipher selector; 3 is CCMP."
@@ -14343,6 +14389,7 @@ write-range = { min = 0x0, max = 0x1 }
 
 [[registers.fields]]
 name = "DIRECTION"
+values = [{ name = "PAIRWISE", value = 3 }, { name = "GROUP", value = 6 }]
 bits = "23:21"
 class = "plain"
 description = "Key use selector: 3 for a pairwise key, 6 for a group key."
@@ -14350,6 +14397,7 @@ write-range = { min = 0x0, max = 0x7 }
 
 [[registers.fields]]
 name = "INTERFACE"
+values = [{ name = "STATION", value = 0 }, { name = "ACCESS_POINT", value = 1 }, { name = "CONTEXT_2", value = 2 }, { name = "CONTEXT_3", value = 3 }]
 bits = "25:24"
 class = "plain"
 description = "Interface the key belongs to: 0 station, 1 access point."
@@ -14371,6 +14419,7 @@ write-range = { min = 0x0, max = 0x1 }
 
 [[registers.fields]]
 name = "LOGICAL_KEY_INDEX"
+values = [{ name = "PAIRWISE", value = 0 }, { name = "WITHOUT_FLAG", value = 3 }]
 bits = "31:30"
 class = "plain"
 description = "Logical key slot: zero for a pairwise key, the key identifier for a group key."
@@ -14487,6 +14536,7 @@ description = "Beamforming-report average SNR observation used by complete esp_t
 
 [[registers.fields]]
 name = "STREAM_0_CODE"
+values = [{ name = "SATURATED_OR_INVALID", value = 127 }]
 bits = "7:0"
 class = "read-only"
 description = "Unsigned raw code. Values other than 0x7f convert to quarter-dB units after adding 88."

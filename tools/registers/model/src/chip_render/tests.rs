@@ -1070,3 +1070,39 @@ fn main() {
         ["[0] [c]", "deadbeef 80000003", "None"]
     );
 }
+
+#[test]
+fn field_geometry_and_equal_encoding_names_are_generated_without_ambiguous_reads() {
+    let rust = rendered_with(&[(
+        "types/radio.toml",
+        "{ name = \"FAST\", value = 1 }",
+        "{ name = \"FAST\", value = 1 }, { name = \"FAST_WRITE\", value = 1 }",
+    )]);
+    assert_eq!(
+        run(
+            &rust,
+            r#"
+fn main() {
+    assert_eq!(radio::config::LEVEL_WIDTH, 3);
+    assert_eq!(radio::config::LEVEL_MAX, 7);
+    assert_eq!(radio::config::Mode::FastWrite.bits(), radio::config::Mode::Fast.bits());
+    assert_eq!(radio::config::Mode::from_bits(1), Some(radio::config::Mode::Fast));
+    assert_eq!(radio::config::Mode::FastWrite.register_bits(), 1 << 8);
+}
+"#
+        ),
+        ""
+    );
+}
+#[test]
+fn sourced_block_geometry_is_rendered() {
+    let rust = rendered_with(&[(
+        "types/radio.toml",
+        "schema = 3",
+        "schema = 3\n[[geometry]]\nname = \"LINE_BYTES\"\nvalue = 64\nsources = [\"SRC_HEADER\"]\n",
+    )]);
+    assert_eq!(
+        run(&rust, "fn main() { assert_eq!(radio::LINE_BYTES, 64); }"),
+        ""
+    );
+}

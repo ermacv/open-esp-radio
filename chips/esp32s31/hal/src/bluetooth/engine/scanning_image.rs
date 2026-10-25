@@ -210,9 +210,9 @@ impl LegacyScanSchedulerItemWords {
         self.word_14 = self
             .word_14
             .with_power_index(link_state.power_index())
-            .with_phy_code_28_29(0)
+            .with_phy_code_28_29(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_28_29_LE_1M)
             .expect("zero fits")
-            .with_phy_code_30_31(0)
+            .with_phy_code_30_31(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_30_31_LE_1M)
             .expect("zero fits");
         self.word_18 = self
             .word_18
@@ -241,8 +241,10 @@ pub enum ScanItemKind {
 impl ScanItemKind {
     pub(crate) const fn item_kind(self) -> u8 {
         match self {
-            Self::Listen => 12,
-            Self::RequestResponse => 4,
+            Self::Listen => crate::layouts::BleSchedulerItemLinkState::KIND_SCAN_LISTEN,
+            Self::RequestResponse => {
+                crate::layouts::BleSchedulerItemLinkState::KIND_SCAN_REQUEST_RESPONSE
+            }
         }
     }
 }

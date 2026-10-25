@@ -7,7 +7,7 @@ use oer_mmio::{Bits, Placement};
 use crate::ieee80211::registers::{MacPlacement, WifiRadioRegisters, byte, element, halfword};
 
 /// The entries of the hardware TX MPDU-length link table.
-const MPDU_LENGTH_LINK_COUNT: usize = 120;
+const MPDU_LENGTH_LINK_COUNT: usize = oer_esp32s31_pac::wifi_mac::he_scratch::COUNT;
 
 /// One hardware TX MPDU-length link-table entry.
 ///
@@ -75,7 +75,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_ac_empty_single_bsr(false);
         });
         init.modify_ersu_and_vht_control(|w| {
-            w.set_bsr_aci_high_comparison_method(Bits::constant::<1>());
+            w.set_bsr_aci_high_comparison_method(Bits::truncate(oer_esp32s31_pac::wifi_mac::ersu_and_vht_control::BsrAciHighComparisonMethod::Method1.bits()));
         });
     }
 
@@ -117,16 +117,16 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_auto_ack_allow_ersu(true);
         });
         init.modify_ersu_ack_rate(|w| {
-            w.set_rate_0(0x80);
+            w.set_rate_0(oer_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate0::Ordinary.bits() as u8);
         });
         init.modify_ersu_ack_rate(|w| {
-            w.set_rate_1(0x80);
+            w.set_rate_1(oer_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate1::Ordinary.bits() as u8);
         });
         init.modify_ersu_ack_rate(|w| {
-            w.set_rate_2(0x80);
+            w.set_rate_2(oer_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate2::Ordinary.bits() as u8);
         });
         init.modify_ersu_ack_rate(|w| {
-            w.set_rate_3(0x80);
+            w.set_rate_3(oer_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate3::Ordinary.bits() as u8);
         });
 
         // Complete hal_set_tx_min_pwr(-11), then the parent field update.

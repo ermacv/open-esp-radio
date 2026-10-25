@@ -183,11 +183,21 @@ impl Root {
             shared_radio,
             modem_etm,
             ieee802154,
-            boot: _,
+            boot,
             soc,
             analog_bus,
             debug,
         } = self.partitions;
+        #[cfg(target_arch = "riscv32")]
+        ClockRegisters::new(
+            boot.hp_sys_clkrst_boot_clock,
+            boot.lp_aon_clkrst_cpll,
+            boot.pmu_boot_clock,
+            boot.hp_alive_sys_pll_clock,
+        )
+        .adopt_short_settle_clock();
+        #[cfg(not(target_arch = "riscv32"))]
+        let _ = boot;
         install_console(usb_serial_jtag);
         if cores::install(
             CoreControlRegisters::new(core_control),

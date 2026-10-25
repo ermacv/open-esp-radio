@@ -21,6 +21,9 @@ pub struct TypeFile {
     pub interrupt_outputs: Vec<InterruptOutput>,
     #[serde(default)]
     pub review: TypeReview,
+    /// Sourced block geometry that is not encoded by a register field.
+    #[serde(default)]
+    pub geometry: Vec<Value>,
     #[serde(default)]
     pub registers: Vec<Register>,
     #[serde(default)]

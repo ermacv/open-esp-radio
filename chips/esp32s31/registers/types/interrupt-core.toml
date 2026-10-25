@@ -61,6 +61,7 @@ reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 
 [[registers.fields]]
 name = "MAP"
+values = [{ name = "DISCONNECTED", value = 0 }]
 bits = "5:0"
 class = "plain"
 description = "Configures the interrupt source into one CPU interrupt."

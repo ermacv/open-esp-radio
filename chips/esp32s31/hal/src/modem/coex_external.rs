@@ -27,9 +27,9 @@ pub enum ExternalCoexWires {
 #[repr(u8)]
 pub enum ExternalCoexRole {
     /// The chip arbitrates: the external radio requests and the chip grants.
-    Leader = 0,
+    Leader,
     /// The external radio arbitrates: the chip requests and it grants.
-    Follower = 2,
+    Follower,
 }
 
 /// One four-bit external priority.
@@ -80,7 +80,16 @@ impl<'a, P: oer_mmio::Placement> ExternalCoexControl<'a, P> {
         });
         block.modify_pti(|w| {
             w.set_work_mode(oer_mmio::Bits::truncate(
-                (ExternalCoexWorkMode::new(role as u32).expect("a role fits the work mode")).get(),
+                (ExternalCoexWorkMode::new(match role {
+                    ExternalCoexRole::Leader => {
+                        oer_esp32s31_pac::coex::pti::WorkMode::Leader.bits()
+                    }
+                    ExternalCoexRole::Follower => {
+                        oer_esp32s31_pac::coex::pti::WorkMode::Follower.bits()
+                    }
+                })
+                .expect("a role fits the work mode"))
+                .get(),
             ));
         });
         match role {

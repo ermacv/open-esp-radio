@@ -52,9 +52,6 @@ const TXRX_SWITCH_DELAY: Bits<10> = Bits::constant::<117>();
 /// SOURCE: BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET.
 const TX_OFF_DELAY: Bits<6> = Bits::constant::<5>();
 
-/// The one image `ieee802154_ll_enhack_generate_done_notify` writes.
-const ENHANCED_ACK_NOTIFY_IMAGE: u32 = 1;
-
 /// One five-bit coexistence priority of the MAC's PTI fields.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct Ieee802154Pti(Bits<5>);
@@ -258,14 +255,6 @@ const fn context(index: Ieee802154MultipanIndex) -> Index<4> {
         _ => Index::constant::<3>(),
     }
 }
-
-/// The four transmit-security key words, in write order.
-const KEY_WORDS: [Index<4>; 4] = [
-    Index::constant::<0>(),
-    Index::constant::<1>(),
-    Index::constant::<2>(),
-    Index::constant::<3>(),
-];
 
 /// The `CCA_MODE` value of a CCA mode.
 const fn cca_mode(mode: Ieee802154CcaMode) -> CcaMode {
@@ -792,7 +781,9 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// `ieee802154_ll_enhack_generate_done_notify`: write its one image.
     pub(crate) fn notify_enhanced_ack_generated(&mut self) {
         self.mac.write_enhanced_ack_notify(|writer| {
-            writer.set_notify_image(ENHANCED_ACK_NOTIFY_IMAGE);
+            writer.set_notify_image(
+                oer_esp32s31_pac::ieee802154::enhanced_ack_notify::NotifyImage::GenerateDone.bits(),
+            );
         });
     }
 
@@ -827,7 +818,9 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// `ieee802154_ll_set_security_key`: four little-endian words in order.
     pub(crate) fn set_security_key(&mut self, key: &[u8; 16]) {
         let (words, _) = key.as_chunks::<4>();
-        for (index, word) in KEY_WORDS.into_iter().zip(words) {
+        for (index, word) in words.iter().enumerate() {
+            let index = Index::<{ oer_esp32s31_pac::ieee802154::security_key::COUNT }>::new(index)
+                .expect("the key words fit their register array");
             let word = u32::from_le_bytes(*word);
             self.mac.write_security_key(index, |writer| {
                 writer.set_key_word(word);

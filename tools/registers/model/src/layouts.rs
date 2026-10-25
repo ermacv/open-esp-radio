@@ -105,6 +105,18 @@ struct FieldSource {
     encoding: Option<PointerEncoding>,
     #[serde(default)]
     phases: Vec<LayoutPhase>,
+    #[serde(default)]
+    values: Vec<LayoutValue>,
+}
+
+/// A named hardware image of a memory-layout field. Its field review supplies the sources.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct LayoutValue {
+    pub name: String,
+    pub value: u32,
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 /// A fixed-size array of a shared-word or owned-byte layout.
@@ -207,6 +219,7 @@ pub struct LayoutUnit {
 /// little-endian value.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LayoutField {
+    pub values: Vec<LayoutValue>,
     pub name: String,
     pub low: u32,
     pub width: u32,
@@ -534,6 +547,20 @@ fn parse_field(kind: LayoutKind, unit_size: u32, source: FieldSource) -> Result<
         )));
     }
     let width = high - low + 1;
+    let mut value_names = BTreeSet::new();
+    for value in &source.values {
+        validate_name(&value.name)?;
+        if !value_names.insert(&value.name) || u64::from(value.value) >= (1u64 << width) {
+            return Err(Error::message(
+                "layout field values must have unique names and fit the field",
+            ));
+        }
+    }
+    if (!source.placement.is_empty() || source.points_to.is_some()) && !source.values.is_empty() {
+        return Err(Error::message(
+            "a pointer field has no named integer values",
+        ));
+    }
     if source.encoding.is_some() && source.points_to.is_none() && source.placement.is_empty() {
         return Err(Error::message("encoding requires placement or points-to"));
     }
@@ -579,6 +606,7 @@ fn parse_field(kind: LayoutKind, unit_size: u32, source: FieldSource) -> Result<
         return Err(Error::message("only a phased writer declares phases"));
     }
     Ok(LayoutField {
+        values: source.values,
         name: source.name,
         low,
         width,
@@ -1208,6 +1236,36 @@ fn render_field(
 ) {
     let entity = format!("{}.{}.{}", layout.name, unit.name, field.name);
     let name = snake(&field.name);
+    let constant = &field.name;
+    let field_type = if field.width == 1 {
+        "bool"
+    } else {
+        storage(field.width)
+    };
+    let maximum = (1u64 << field.width) - 1;
+    let _ = writeln!(
+        output,
+        "/// Width of `{constant}` in bits.\npub const {constant}_WIDTH: u32 = {};\n/// Greatest unsigned image of `{constant}`.\npub const {constant}_MAX: u32 = 0x{maximum:x};",
+        field.width
+    );
+    for value in &field.values {
+        if let Some(description) = &value.description {
+            push_doc(output, description, "");
+        }
+        if let Some(line) = sources_line(&layout.review, &entity) {
+            let _ = writeln!(output, "/// {line}");
+        }
+        let image = if field.width == 1 {
+            (value.value != 0).to_string()
+        } else {
+            value.value.to_string()
+        };
+        let _ = writeln!(
+            output,
+            "/// Named image of `{constant}`.\npub const {constant}_{}: {field_type} = {image};",
+            value.name
+        );
+    }
     let unit_bits = 8 * unit.size;
     let bits = if field.width == 1 {
         format!("bit {}", field.low)

@@ -99,6 +99,7 @@ reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 
 [[registers.fields]]
 name = "REG_SOC_CLK_SEL"
+values = [{ name = "XTAL", value = 0 }, { name = "CPLL", value = 1 }, { name = "RC_FAST", value = 2 }, { name = "PLL_F240M", value = 3 }]
 bits = "1:0"
 class = "plain"
 description = "Configures to select the clock source of HP_ROOT_CLK.\\\\ 0 (default): XTAL_CLK\\\\ 1: PLL_F300M_CLK\\\\ 2: RC_FAST_CLK\\\\"

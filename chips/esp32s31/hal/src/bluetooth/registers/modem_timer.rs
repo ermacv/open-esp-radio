@@ -210,8 +210,9 @@ trait ModemLpTimerRuntimeTransaction {
     fn fence(&mut self);
 }
 
-const MODEM_LP_TIMER_LOW_SPAN: u32 = 0x0100_0000;
-const MODEM_LP_TIMER_HALF_RANGE: u32 = 0x0080_0000;
+const MODEM_LP_TIMER_LOW_SPAN: u32 =
+    1 << oer_esp32s31_pac::modem_pwr::word_0048_opaque::COUNTER_LOW_WIDTH;
+const MODEM_LP_TIMER_HALF_RANGE: u32 = MODEM_LP_TIMER_LOW_SPAN / 2;
 const MODEM_LP_TIMER_IMMEDIATE_TOLERANCE: i32 = 2;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -356,26 +357,6 @@ fn execute_modem_lp_timer_start(transaction: &mut impl ModemLpTimerStartTransact
     transaction.fence();
 }
 
-/// The modem event and task identities the BTDM low-power component routes
-/// on modem ETM channels four through seven, each channel disabled first.
-///
-/// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL.
-const LOW_POWER_ETM_CH5_EVENT: u32 = 0x43;
-/// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL.
-const LOW_POWER_ETM_CH5_TASK: u32 = 0x12;
-/// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL.
-const LOW_POWER_ETM_CH4_EVENT: u32 = 0x45;
-/// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL.
-const LOW_POWER_ETM_CH4_TASK: u32 = 0x11;
-/// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL.
-const LOW_POWER_ETM_CH6_EVENT: u32 = 0x46;
-/// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL.
-const LOW_POWER_ETM_CH6_TASK: u32 = 0x11;
-/// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL.
-const LOW_POWER_ETM_CH7_EVENT: u32 = 0x46;
-/// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL.
-const LOW_POWER_ETM_CH7_TASK: u32 = 0x0f;
-
 struct HardwareModemLpTimerTransaction<'registers, B: oer_mmio::Placement> {
     registers: &'registers mut oer_esp32s31_pac::modem_pwr::BtdmRuntimeControl<B>,
 }
@@ -399,31 +380,31 @@ where
         let etm = &mut *self.config;
         etm.trigger_channel_enable_clear_ch5();
         etm.modify_ch5_event(|w| {
-            w.set_id(LOW_POWER_ETM_CH5_EVENT);
+            w.set_id(oer_esp32s31_pac::modem_etm::ch_event::Id::BtdmLowPowerEvent43.bits());
         });
         etm.modify_ch5_task(|w| {
-            w.set_id(LOW_POWER_ETM_CH5_TASK);
+            w.set_id(oer_esp32s31_pac::modem_etm::ch_task::Id::BtdmLowPowerTask12.bits());
         });
         etm.trigger_channel_enable_clear_ch4();
         etm.modify_ch4_event(|w| {
-            w.set_id(LOW_POWER_ETM_CH4_EVENT);
+            w.set_id(oer_esp32s31_pac::modem_etm::ch_event::Id::BtdmLowPowerEvent45.bits());
         });
         etm.modify_ch4_task(|w| {
-            w.set_id(LOW_POWER_ETM_CH4_TASK);
+            w.set_id(oer_esp32s31_pac::modem_etm::ch_task::Id::BtdmLowPowerTask11.bits());
         });
         etm.trigger_channel_enable_clear_ch6();
         etm.modify_ch6_event(|w| {
-            w.set_id(LOW_POWER_ETM_CH6_EVENT);
+            w.set_id(oer_esp32s31_pac::modem_etm::ch_event::Id::BtdmLowPowerEvent46.bits());
         });
         etm.modify_ch6_task(|w| {
-            w.set_id(LOW_POWER_ETM_CH6_TASK);
+            w.set_id(oer_esp32s31_pac::modem_etm::ch_task::Id::BtdmLowPowerTask11.bits());
         });
         etm.trigger_channel_enable_clear_ch7();
         etm.modify_ch7_event(|w| {
-            w.set_id(LOW_POWER_ETM_CH7_EVENT);
+            w.set_id(oer_esp32s31_pac::modem_etm::ch_event::Id::BtdmLowPowerEvent46.bits());
         });
         etm.modify_ch7_task(|w| {
-            w.set_id(LOW_POWER_ETM_CH7_TASK);
+            w.set_id(oer_esp32s31_pac::modem_etm::ch_task::Id::BtdmLowPowerTask0f.bits());
         });
     }
 
@@ -552,7 +533,7 @@ impl<B: oer_mmio::Placement> ModemLpTimerRuntimeTransaction
     for HardwareModemLpTimerTransaction<'_, B>
 {
     fn read_counter(&mut self) -> u32 {
-        self.registers.read_word_0048_opaque().bits_0_31_opaque()
+        self.registers.read_word_0048_opaque().counter_low().get()
     }
 
     fn rollover_low_byte_nonzero(&mut self) -> bool {
@@ -567,7 +548,10 @@ impl<B: oer_mmio::Placement> ModemLpTimerRuntimeTransaction
 
     fn publish_software_pending(&mut self) {
         self.registers.modify_word_0024_opaque(|w| {
-            w.set_low_byte(1);
+            w.set_low_byte(
+                oer_esp32s31_pac::modem_pwr::word_0024_opaque::LowByte::SoftwarePending.bits()
+                    as u8,
+            );
         });
     }
 

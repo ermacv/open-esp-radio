@@ -120,6 +120,18 @@ fn render_parts(model: &ChipModel, policy: &ChipPolicy) -> Result<(String, Strin
             "",
         );
         let _ = writeln!(output, "pub mod {} {{", plan.module);
+        for value in &plan.block.file.geometry {
+            if let Some(description) = &value.description {
+                push_doc(&mut output, description, "");
+            }
+            let _ = writeln!(
+                output,
+                "/// Hardware geometry. SOURCE: {}.\npub const {}: u32 = {};",
+                value.sources.join(", "),
+                value.name,
+                value.value
+            );
+        }
         for template in &plan.templates {
             render_register_module(&mut output, template);
         }

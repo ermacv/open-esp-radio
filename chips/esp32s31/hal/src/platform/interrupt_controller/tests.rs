@@ -210,7 +210,7 @@ fn a_line_another_writer_left_edge_triggered_reads_as_such() {
     memory.clic().modify_ctrl(line(20), |word| {
         word.set_ie(true)
             .set_attr_shv(true)
-            .set_attr_trig(Bits::constant::<0b01>())
+            .set_attr_trig(clic::ctrl::AttrTrig::PositiveEdge)
             .set_ctl(line_control(3, 3));
     });
     let controller = memory.controller();

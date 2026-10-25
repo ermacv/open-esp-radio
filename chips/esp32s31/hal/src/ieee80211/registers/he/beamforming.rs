@@ -20,8 +20,12 @@ pub enum MacHeErSuAckRateProfile {
 impl MacHeErSuAckRateProfile {
     pub const fn encoded_byte(self) -> u8 {
         match self {
-            Self::Ordinary => 0x80,
-            Self::ExtendedRange => 0xa0,
+            Self::Ordinary => {
+                oer_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate0::Ordinary.bits() as u8
+            }
+            Self::ExtendedRange => {
+                oer_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate0::ExtendedRange.bits() as u8
+            }
         }
     }
 }

@@ -1,16 +1,14 @@
 //! The bootstrap's SoC initialization, which `esp_hal::init` and the
 //! ESP-IDF application startup did before the bootstrap owned the chip:
 //! hart 1 contained, the three APM access-path filters opened, the LP TRNG
-//! running with its health tests, and the ROM's delay calibration at the CPU
-//! clock the bootstrap selects. The PMS words and PSRAM PMA7 are the
+//! running with its health tests. The PMS words and PSRAM PMA7 are the
 //! bundled bootloader's and stay as found.
 //!
 //! SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/mod.rs:22-141`
 //! (`riscv_preinit`: the TRNG enable), `esp-hal/src/soc/esp32s31/cpu_control.rs:6-96`
 //! (hart 1 stalled and held), `esp-hal/src/soc/mod.rs:81-565` (`init`: the
 //! APM filters), `esp-hal/src/soc/esp32s31/trng.rs` (`rng_ll_enable`) and
-//! `esp-hal/src/soc/esp32s31/clocks.rs:22-713` (`ets_update_cpu_frequency`
-//! after the clock switch); ESP-IDF 4d59230d
+//! ESP-IDF 4d59230d
 //! `components/soc/esp32s31/register/soc/{lp_apm,hp_apm,hp_mem_apm}_reg.h`
 //! (`FUNC_CTRL`: the masters' filter enables) and
 //! `components/hal/esp32s31/include/hal/rng_ll.h:163-178`. The research
@@ -21,10 +19,7 @@ use oer_esp32s31_pac::{
     hp_apm::HpApmFilter, hp_mem_apm::HpMemApmFilter, instances, lp_apm::LpApmFilter,
     lp_peri_clkrst::LpPericlkrstRngInit, trng::TrngInit,
 };
-use oer_espressif_boot::{
-    clock::ClockRates,
-    wait::{BootDeadline, WaitFailure},
-};
+use oer_espressif_boot::wait::{BootDeadline, WaitFailure};
 use oer_mmio::{Bits, Fixed, Placement};
 use oer_time::{Clock, Duration};
 
@@ -122,29 +117,6 @@ impl Soc {
         open_apm_filters(lp_apm, hp_apm, hp_mem_apm);
         start_trng(trng, rng_clock);
         Ok(())
-    }
-
-    /// Set the ROM's delay calibration to the CPU clock `rates` gives, after
-    /// the clock switch and before any ROM delay runs at it.
-    ///
-    /// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/clocks.rs:22-713`
-    /// (`ets_update_cpu_frequency(cpu_MHz)` after the divider update);
-    /// ESP-IDF 4d59230d `components/esp_rom/esp32s31/ld/esp32s31.rom.ld:32`.
-    #[cfg(target_arch = "riscv32")]
-    #[allow(unsafe_code, reason = "a ROM routine")]
-    pub fn update_rom_delay(&mut self, rates: ClockRates) {
-        // SAFETY: the ROM routine stores its argument to the ROM's
-        // reserved delay calibration word and touches no other memory; the
-        // bootstrap's one context calls it after the clock switch, with no
-        // ROM delay running.
-        unsafe { crate::phy::delay::ets_update_cpu_frequency(rates.cpu_hz / 1_000_000) };
-    }
-
-    /// The host has no ROM.
-    #[cfg(not(target_arch = "riscv32"))]
-    #[expect(clippy::panic, reason = "no host code calibrates the ROM's delay")]
-    pub fn update_rom_delay(&mut self, _rates: ClockRates) {
-        panic!("the ROM delay calibration is the chip ROM's")
     }
 }
 

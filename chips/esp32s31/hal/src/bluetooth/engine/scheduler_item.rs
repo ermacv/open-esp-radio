@@ -17,7 +17,16 @@ use crate::layouts::*;
 use crate::bluetooth::engine::sram_link::ControllerSramLink;
 
 /// Status of an item that hardware has not executed.
-pub const SCHEDULER_ITEM_UNEXECUTED: u32 = u32::MAX;
+pub const SCHEDULER_ITEM_UNEXECUTED: u32 = {
+    use crate::layouts::BleSchedulerItemStatus as Status;
+    Status::ZERO
+        .with_bits_0_10_opaque(Status::BITS_0_10_OPAQUE_UNEXECUTED_LOW)
+        .expect("named status fits")
+        .with_capture_available(Status::CAPTURE_AVAILABLE_UNEXECUTED)
+        .with_bits_12_31_opaque(Status::BITS_12_31_OPAQUE_UNEXECUTED_HIGH)
+        .expect("named status fits")
+        .bits()
+};
 
 /// Status that hardware recorded for an executed item.
 ///

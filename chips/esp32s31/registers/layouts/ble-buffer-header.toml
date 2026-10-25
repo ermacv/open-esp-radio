@@ -110,6 +110,7 @@ description = "Software rotation/terminal marker used while recycling a retained
 
 [[layout.words.fields]]
 name = "LLID"
+values = [{ name = "DATA_CONTINUATION", value = 1 }, { name = "DATA_START_OR_COMPLETE", value = 2 }, { name = "CONTROL", value = 3 }]
 bits = "2:1"
 writer = "cpu"
 description = "Software completion metadata for a connection TX packet."
