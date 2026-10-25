@@ -16,13 +16,11 @@ use core::{
     task::Poll,
 };
 
-use oer_esp32s31_hal::power::PlatformClockBackend;
-use oer_esp32s31_hal::power::{PlatformClock, PlatformClockAbandonment};
+use oer_esp32s31_hal::power::PlatformClock;
 use oer_esp32s31_radio_client::{Client, Failed, LpClock, LpSource, PhyPreparation};
 use oer_esp32s31_radio_system::{
     ClientBackend, CloseFault, Exit, Fault, LastClientLeft, PhyDomain,
 };
-use oer_espressif_esp_hal_radio::EspHal;
 use oer_espressif_executor::{
     poll_timing::{CycleHistogram, CycleSource, Mcycle},
     timer_observation::{Report, Window},
@@ -289,25 +287,6 @@ pub fn clock_stats(clock: PlatformClock, op: ClockOp, phase: Phase) -> (u32, u32
     let load =
         |table| clock_cell(table, clock, op, phase).map_or(0, |cell| cell.load(Ordering::Relaxed));
     (load(&CLOCK_COUNT), load(&CLOCK_MAX))
-}
-
-/// esp-hal's clock backend, each operation timed by clock, operation and
-/// phase. The operations stay in SRAM with the underlying backend because
-/// the radio actor calls them at interrupt level 2.
-pub struct TimedEspHal;
-
-impl PlatformClockBackend for TimedEspHal {
-    fn acquire(clock: PlatformClock) {
-        clock_op(clock, ClockOp::Acquire, || EspHal::acquire(clock));
-    }
-
-    fn release(clock: PlatformClock) {
-        clock_op(clock, ClockOp::Release, || EspHal::release(clock));
-    }
-
-    fn abandon(clock: PlatformClock, how: PlatformClockAbandonment) {
-        clock_op(clock, ClockOp::Abandon, || EspHal::abandon(clock, how));
-    }
 }
 
 /// The periodic tracking ticks the log keeps, the latest ones.

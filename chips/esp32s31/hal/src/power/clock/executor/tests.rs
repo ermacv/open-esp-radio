@@ -152,7 +152,7 @@ fn a_guard_ends_with_release_or_abandon() {
     let released = platform
         .acquire(PlatformClock::AnalogI2cMaster)
         .unwrap_or_else(|_| panic!("granted"));
-    released.release();
+    released.release().expect("released");
     assert_eq!(held(), holding(&[PlatformClock::ModemCoexistence]));
     let (abandoned, dropped) = abandoned();
     assert_eq!(abandoned, holding(&[PlatformClock::ModemCoexistence]));
@@ -188,11 +188,58 @@ fn the_planner_releases_its_platform_clocks_explicitly() {
             .acquire(clock, &platform)
             .unwrap_or_else(|_| panic!("granted"));
     }
-    held_clocks.release(PlatformClock::ModemCoexistence);
+    held_clocks
+        .release(PlatformClock::ModemCoexistence)
+        .expect("released");
     assert_eq!(held(), holding(&[PlatformClock::Pll160m]));
-    held_clocks.release(PlatformClock::ModemCoexistence);
+    held_clocks
+        .release(PlatformClock::ModemCoexistence)
+        .expect("nothing left to release");
     assert_eq!(held(), holding(&[PlatformClock::Pll160m]));
-    held_clocks.release(PlatformClock::Pll160m);
+    held_clocks
+        .release(PlatformClock::Pll160m)
+        .expect("released");
+    assert!(held().is_empty());
+}
+
+/// A refused release is the caller's error: the guard comes back still
+/// holding its reference, nothing is recorded as abandoned, and a later
+/// release gives it back.
+#[test]
+fn a_refused_release_returns_the_guard_still_holding_its_reference() {
+    let platform = CountingPlatformClocks::new();
+    let guard = platform
+        .acquire(PlatformClock::ModemCoexistence)
+        .unwrap_or_else(|_| panic!("granted"));
+    platform.set_release_refused(PlatformClock::ModemCoexistence, true);
+    let refused = guard.release().expect_err("the platform refuses");
+    assert_eq!(refused.error(), PlatformClockError);
+    assert_eq!(held(), holding(&[PlatformClock::ModemCoexistence]));
+    let (abandoned, dropped) = abandoned();
+    assert!(abandoned.is_empty() && dropped.is_empty());
+    platform.set_release_refused(PlatformClock::ModemCoexistence, false);
+    refused.into_guard().release().expect("released");
+    assert!(held().is_empty());
+}
+
+/// A refused planner release keeps the guard in its slot for a retry.
+#[test]
+fn a_refused_planner_release_keeps_its_reference() {
+    let (_, _port, platform) = setup();
+    let mut held_clocks = ModemPlatformClocks::default();
+    held_clocks
+        .acquire(PlatformClock::Pll160m, &platform)
+        .unwrap_or_else(|_| panic!("granted"));
+    platform.set_release_refused(PlatformClock::Pll160m, true);
+    assert_eq!(
+        held_clocks.release(PlatformClock::Pll160m),
+        Err(PlatformClockError)
+    );
+    assert_eq!(held(), holding(&[PlatformClock::Pll160m]));
+    platform.set_release_refused(PlatformClock::Pll160m, false);
+    held_clocks
+        .release(PlatformClock::Pll160m)
+        .expect("released");
     assert!(held().is_empty());
 }
 
@@ -201,7 +248,11 @@ fn release_calls_the_backend_once_and_drop_does_nothing() {
     let events = Rc::new(RefCell::new(Vec::new()));
     let sink = events.clone();
     let platform = CountingPlatformClocks::logging(move |event| sink.borrow_mut().push(event));
-    platform.acquire(PlatformClock::Mpll).unwrap().release();
+    platform
+        .acquire(PlatformClock::Mpll)
+        .expect("granted")
+        .release()
+        .expect("released");
     // `release` consumes the guard, so its Drop has already run here.
     assert_eq!(
         *events.borrow(),

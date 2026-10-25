@@ -25,7 +25,7 @@ use super::{
     PoisonedModemClockRelease, PreparedModemClockAcquire, PreparedModemClockRelease,
 };
 
-/// A platform clock request was refused.
+/// The platform refused a clock request: nothing changed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PlatformClockError;
 
@@ -55,17 +55,25 @@ pub enum PlatformClock {
 /// borrow of its provider.
 pub trait PlatformClockBackend: 'static {
     /// Take one reference to `clock`.
-    fn acquire(clock: PlatformClock);
+    ///
+    /// # Errors
+    ///
+    /// The platform refused the reference; nothing is held.
+    fn acquire(clock: PlatformClock) -> Result<(), PlatformClockError>;
     /// Give back one reference to `clock` that [`Self::acquire`] took.
-    fn release(clock: PlatformClock);
+    ///
+    /// # Errors
+    ///
+    /// The platform refused the release; the reference is still held.
+    fn release(clock: PlatformClock) -> Result<(), PlatformClockError>;
     /// Record that a reference to `clock` stays held until a chip reset.
     fn abandon(clock: PlatformClock, how: PlatformClockAbandonment);
 }
 
 /// Platform-owned clocks that radio modules depend on.
 ///
-/// The platform clock owner (ESP-HAL) keeps its own reference count of each,
-/// because other SoC users share them. The radio holds each reference as a
+/// The platform clock owner keeps its own reference count of each, because
+/// other SoC users share them. The radio holds each reference as a
 /// [`PlatformClockGuard`] for as long as it needs the clock and gives it back
 /// with [`PlatformClockGuard::release`].
 pub trait PlatformClockProvider {
@@ -134,15 +142,55 @@ impl<B: PlatformClockBackend> PlatformClockGuard<B> {
     }
 
     /// Give the reference back to the platform.
-    pub fn release(mut self) {
-        self.ended = true;
-        B::release(self.clock);
+    ///
+    /// # Errors
+    ///
+    /// The platform refused the release: the reference is still held and
+    /// the guard comes back with the error, for its owner to retry or
+    /// [`abandon`](Self::abandon).
+    pub fn release(mut self) -> Result<(), PlatformClockReleaseRefused<B>> {
+        match B::release(self.clock) {
+            Ok(()) => {
+                self.ended = true;
+                Ok(())
+            }
+            Err(error) => Err(PlatformClockReleaseRefused { guard: self, error }),
+        }
     }
 
     /// Keep the clock on until a chip reset, deliberately.
     pub fn abandon(mut self) {
         self.ended = true;
         B::abandon(self.clock, PlatformClockAbandonment::Abandoned);
+    }
+}
+
+/// A refused [`PlatformClockGuard::release`]: the guard, still holding its
+/// reference, and the platform's error.
+#[must_use = "the refused guard still holds its clock reference"]
+pub struct PlatformClockReleaseRefused<B: PlatformClockBackend> {
+    guard: PlatformClockGuard<B>,
+    error: PlatformClockError,
+}
+
+impl<B: PlatformClockBackend> PlatformClockReleaseRefused<B> {
+    /// The platform's error.
+    pub const fn error(&self) -> PlatformClockError {
+        self.error
+    }
+
+    /// The guard, still holding its reference.
+    pub fn into_guard(self) -> PlatformClockGuard<B> {
+        self.guard
+    }
+}
+
+impl<B: PlatformClockBackend> core::fmt::Debug for PlatformClockReleaseRefused<B> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PlatformClockReleaseRefused")
+            .field("clock", &self.guard.clock)
+            .field("error", &self.error)
+            .finish()
     }
 }
 
@@ -272,10 +320,21 @@ impl<B: PlatformClockBackend> ModemPlatformClocks<B> {
         Ok(())
     }
 
-    fn release(&mut self, clock: PlatformClock) {
-        if let Some(guard) = self.slot(clock).take() {
-            guard.release();
+    /// Give back the reference `clock`'s dependency holds.
+    ///
+    /// # Errors
+    ///
+    /// The platform refused the release: the guard stays in its slot.
+    fn release(&mut self, clock: PlatformClock) -> Result<(), PlatformClockError> {
+        let slot = self.slot(clock);
+        if let Some(guard) = slot.take()
+            && let Err(refused) = guard.release()
+        {
+            let error = refused.error();
+            *slot = Some(refused.into_guard());
+            return Err(error);
         }
+        Ok(())
     }
 
     /// Keep every reference still held on until a chip reset, and forget
@@ -363,10 +422,10 @@ fn perform_release<B: PlatformClockBackend>(
     match dependency {
         Dependency::Pll160AndModemSource => {
             port.configure_device(ModemClockDevice::PllSourceGate, false);
-            held.release(PlatformClock::Pll160m);
+            held.release(PlatformClock::Pll160m)?;
         }
-        Dependency::AnalogI2cMaster => held.release(PlatformClock::AnalogI2cMaster),
-        Dependency::Coexistence => held.release(PlatformClock::ModemCoexistence),
+        Dependency::AnalogI2cMaster => held.release(PlatformClock::AnalogI2cMaster)?,
+        Dependency::Coexistence => held.release(PlatformClock::ModemCoexistence)?,
         other => {
             if let Some(device) = modem_device(other) {
                 port.configure_device(device, false);
@@ -400,8 +459,7 @@ pub(crate) fn execute_acquire<B: PlatformClockBackend>(
 ///
 /// # Errors
 ///
-/// Releasing never fails; the planner's release contract still reports a
-/// poisoned transaction.
+/// A refused platform release poisons the transaction at that edge.
 #[allow(
     clippy::result_large_err,
     reason = "the poisoned transaction retains the planner and lease without allocation"

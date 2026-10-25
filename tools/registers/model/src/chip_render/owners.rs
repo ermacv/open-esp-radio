@@ -10,7 +10,7 @@ use std::{
 use super::{
     Error,
     block::{Call, Mode, Template, TypePlan, render_methods, render_split_triggers},
-    irreducible, names,
+    controls, irreducible, names,
 };
 use crate::{
     chip_model::{ChipModel, Location},
@@ -645,6 +645,7 @@ fn render_owner(
         }
     }
     irreducible::render(&mut body, output, plan, owner, model, policy)?;
+    controls::render(&mut body, plan, owner, mode, model, &acknowledged)?;
     if !body.is_empty() {
         let _ = writeln!(
             output,

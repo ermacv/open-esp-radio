@@ -46,7 +46,7 @@ use crate::{
         core_control::{CoreControlRegisters, Uart0ClockRegisters},
         system_timer::{Monotonic, MonotonicStuck, open_clock},
     },
-    power::PlatformClockBackend,
+    power::{ChipClocks, PlatformClockBackend, PsramMpll},
     usb_serial_jtag::{self, ConsoleRegisters},
     watchdog::{Mwdt0Registers, RwdtRegisters, SwdRegisters, WatchdogRegisters, Watchdogs},
 };
@@ -151,6 +151,10 @@ impl Root {
     /// platform, and the platform's and radio's owners are returned. The
     /// bootstrap's partitions are dropped: stage two repeats no cold boot.
     ///
+    /// The platform clock words go to the one clock owner
+    /// ([`ChipClocks`]), which opens the Wi-Fi power gate and adopts the
+    /// PSRAM mapping's MPLL reference.
+    ///
     /// Taking the watchdogs arms the RTC watchdog
     /// ([`Watchdogs::new`]): from here the image's executor must feed it
     /// ([`ArmedRtcWatchdog::feed_every`](crate::watchdog::ArmedRtcWatchdog::feed_every)),
@@ -187,8 +191,13 @@ impl Root {
             soc,
             analog_bus,
             debug,
+            chip_clocks,
         } = self.partitions;
         install_console(usb_serial_jtag);
+        // Stage two runs from the PSRAM the bootstrap mapped over MPLL.
+        let Ok(clocks) = ChipClocks::install(chip_clocks, PsramMpll::adopted()) else {
+            unreachable!("the one root installs the chip clock words once");
+        };
         if cores::install(
             CoreControlRegisters::new(core_control),
             Uart0ClockRegisters::new(uart0_clock),
@@ -211,6 +220,7 @@ impl Root {
             efuse: EfuseRegisters::new(efuse),
             entropy: EntropyRegisters::new(entropy, soc.lp_periclkrst_rng_init),
             reset_cause: ResetCauseRegisters::new(reset_cause),
+            clocks,
             radio: RadioHardware::new(RadioPartitions::compose(RadioParts {
                 wifi_mac,
                 wifi_mac_interface,
@@ -290,6 +300,9 @@ pub struct Runtime {
     pub entropy: EntropyRegisters,
     /// The HP cores' reset causes.
     pub reset_cause: ResetCauseRegisters,
+    /// The platform clock owner: the provider and backend of the radio's
+    /// clock references ([`RadioHardware::split`]`::<ChipClocks, _>`).
+    pub clocks: ChipClocks,
     /// The protocol-neutral radio root.
     pub radio: RadioHardware,
 }

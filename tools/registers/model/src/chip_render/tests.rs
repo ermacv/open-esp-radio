@@ -1070,3 +1070,112 @@ fn main() {
         ["[0] [c]", "deadbeef 80000003", "None"]
     );
 }
+
+/// The fixture with gate, reset, shared and mux links of `RADIO0` and
+/// `RADIO1` into the counter's `MODE` word, which the `Mode` part holds.
+fn linked() -> String {
+    rendered_with(&[
+        (
+            "types/counter.toml",
+            "name = \"STEP\"\nbits = \"3:0\"\nclass = \"plain\"\n",
+            "name = \"STEP\"\nbits = \"3:0\"\nclass = \"plain\"\n\n\
+             [[registers.fields]]\nname = \"RADIO_CLK_EN\"\nbits = \"4\"\nclass = \"plain\"\n\n\
+             [[registers.fields]]\nname = \"RADIO_RST\"\nbits = \"5\"\nclass = \"plain\"\n\n\
+             [[registers.fields]]\nname = \"COMMON_CLK_EN\"\nbits = \"6\"\nclass = \"plain\"\n",
+        ),
+        (
+            "chip.toml",
+            "name = \"RADIO0\"\ntype = \"RADIO\"\nbase = 0x60000000\nextent = { size = 0x1000 }\nsources = [\"SRC_HEADER\"]\n",
+            "name = \"RADIO0\"\ntype = \"RADIO\"\nbase = 0x60000000\nextent = { size = 0x1000 }\nsources = [\"SRC_HEADER\"]\n\
+             clocks = [\n  { role = \"bus\", field = \"COUNTER.MODE.RADIO_CLK_EN\", sources = [\"SRC_HEADER\"] },\n  \
+             { role = \"common\", field = \"COUNTER.MODE.COMMON_CLK_EN\", sources = [\"SRC_HEADER\"] },\n]\n\
+             resets = [\n  { role = \"block\", field = \"COUNTER.MODE.RADIO_RST\", sources = [\"SRC_HEADER\"] },\n]\n\
+             muxes = [\n  { role = \"step\", field = \"COUNTER.MODE.STEP\", inputs = { 0 = \"XTAL\" }, sources = [\"SRC_HEADER\"] },\n]\n",
+        ),
+        (
+            "chip.toml",
+            "name = \"RADIO1\"\ntype = \"RADIO\"\nbase = 0x60001000\nextent = { size = 0x1000 }\nsources = [\"SRC_HEADER\"]\n",
+            "name = \"RADIO1\"\ntype = \"RADIO\"\nbase = 0x60001000\nextent = { size = 0x1000 }\nsources = [\"SRC_HEADER\"]\n\
+             clocks = [\n  { role = \"common\", field = \"COUNTER.MODE.COMMON_CLK_EN\", sources = [\"SRC_HEADER\"] },\n]\n",
+        ),
+        (
+            "chip.toml",
+            "[[ram-regions]]",
+            "[[shared-controls]]\nname = \"RADIO_COMMON\"\nfield = \"COUNTER.MODE.COMMON_CLK_EN\"\n\
+             instances = [\"RADIO0\", \"RADIO1\"]\nsources = [\"SRC_HEADER\"]\n\n\
+             [[clock-sources]]\nname = \"XTAL\"\nsources = [\"SRC_HEADER\"]\n\n[[ram-regions]]",
+        ),
+    ])
+}
+
+#[test]
+fn a_root_link_is_a_control_on_the_part_holding_its_word() {
+    let rendered = linked();
+    for method in [
+        "pub fn set_radio0_bus_clock(&mut self, on: bool)",
+        "pub fn set_radio0_block_reset(&mut self, asserted: bool)",
+        "pub fn set_radio_common_clock(&mut self, on: bool)",
+    ] {
+        assert!(rendered.contains(method), "{method} is generated");
+    }
+    let stdout = run(
+        &rendered,
+        "fn main() {\n\
+         let mut memory = [0_u32, 0, 0x5, 0];\n\
+         {\n\
+         let mut mode = counter::Mode::host(&mut memory).expect(\"memory holds the block\");\n\
+         mode.set_radio0_bus_clock(true);\n\
+         mode.set_radio_common_clock(true);\n\
+         mode.set_radio0_block_reset(true);\n\
+         mode.set_radio0_block_reset(false);\n\
+         }\n\
+         println!(\"{:#x}\", memory[2]);\n\
+         }\n",
+    );
+    assert_eq!(
+        stdout.trim(),
+        "0x55",
+        "the gates open, the reset pulses, STEP keeps 5"
+    );
+}
+
+#[test]
+fn a_shared_field_or_a_mux_has_no_control_named_after_one_user() {
+    let rendered = linked();
+    for method in [
+        "fn set_radio0_common_clock",
+        "fn set_radio1_common_clock",
+        "fn set_radio0_step_",
+    ] {
+        assert!(!rendered.contains(method), "{method} is not generated");
+    }
+}
+
+#[test]
+fn a_link_into_an_unheld_word_has_no_control() {
+    let rendered = rendered_with(&[
+        (
+            "types/counter.toml",
+            "name = \"STEP\"\nbits = \"3:0\"\nclass = \"plain\"\n",
+            "name = \"STEP\"\nbits = \"3:0\"\nclass = \"plain\"\n\n\
+             [[registers.fields]]\nname = \"RADIO_CLK_EN\"\nbits = \"4\"\nclass = \"plain\"\n",
+        ),
+        (
+            "chip.toml",
+            "name = \"RADIO0\"\ntype = \"RADIO\"\nbase = 0x60000000\nextent = { size = 0x1000 }\nsources = [\"SRC_HEADER\"]\n",
+            "name = \"RADIO0\"\ntype = \"RADIO\"\nbase = 0x60000000\nextent = { size = 0x1000 }\nsources = [\"SRC_HEADER\"]\n\
+             clocks = [\n  { role = \"bus\", field = \"COUNTER.MODE.RADIO_CLK_EN\", sources = [\"SRC_HEADER\"] },\n]\n",
+        ),
+        (
+            "policy.toml",
+            "[[partitions.parts]]\nname = \"Mode\"\ninstance = \"COUNTER\"\nregisters = [\"MODE\"]\n\n",
+            "",
+        ),
+        (
+            "policy.toml",
+            "[[unclaimed]]\ninstance = \"RADIO0\"",
+            "[[unclaimed]]\ninstance = \"COUNTER\"\nregisters = [\"MODE\"]\nreason = \"No driver reaches it.\"\n\n[[unclaimed]]\ninstance = \"RADIO0\"",
+        ),
+    ]);
+    assert!(!rendered.contains("fn set_radio0_bus_clock"));
+}

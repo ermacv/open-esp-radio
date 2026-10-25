@@ -288,6 +288,30 @@ fn a_failed_restore_keeps_the_last_client_for_retry() {
 }
 
 #[test]
+fn a_refused_release_keeps_the_last_client_and_its_reference_for_retry() {
+    let (_, mut port, platform) = setup();
+    let mut power = CommonRadioPower::default();
+    let wifi = entered::<WifiClient>(&mut power, &mut port, &platform);
+    platform.set_release_refused(PlatformClock::Pll160m, true);
+    let Err(failure) = power.exit(&mut port, wifi) else {
+        panic!("the platform refused the release");
+    };
+    assert_eq!(
+        failure.error,
+        CommonRadioPowerError::Release(PlatformClock::Pll160m)
+    );
+    assert!(power.holds(RadioClient::Wifi));
+    assert_eq!(
+        held(),
+        holding(&[PlatformClock::Mpll, PlatformClock::Pll160m]),
+        "the analog-I2C reference went back before the refused one"
+    );
+    platform.set_release_refused(PlatformClock::Pll160m, false);
+    left(&mut power, &mut port, failure.power);
+    assert!(held().is_empty());
+}
+
+#[test]
 fn a_failed_power_sequence_is_abandoned_with_its_references_on() {
     let (_, mut port, platform) = setup();
     port.power_sequence_failure = Some(crate::power::PowerError {

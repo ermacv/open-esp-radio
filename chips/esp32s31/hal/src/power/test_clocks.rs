@@ -27,6 +27,8 @@ std::thread_local! {
     static SINK: RefCell<Option<Sink>> = const { RefCell::new(None) };
     static ABANDONED: Cell<PlatformClockHolds> = Cell::new(PlatformClockHolds::default());
     static DROPPED: Cell<PlatformClockHolds> = Cell::new(PlatformClockHolds::default());
+    static RELEASE_REFUSED: Cell<[bool; PlatformClock::COUNT]> =
+        const { Cell::new([false; PlatformClock::COUNT]) };
 }
 
 fn record(event: ClockEvent) {
@@ -41,15 +43,19 @@ fn record(event: ClockEvent) {
 pub(crate) struct CountingBackend;
 
 impl PlatformClockBackend for CountingBackend {
-    fn acquire(clock: PlatformClock) {
+    fn acquire(clock: PlatformClock) -> Result<(), PlatformClockError> {
         HELD.with(|held| {
             let mut holds = held.get();
             holds.set(clock, holds.get(clock) + 1);
             held.set(holds);
         });
         record(ClockEvent::Acquire(clock));
+        Ok(())
     }
-    fn release(clock: PlatformClock) {
+    fn release(clock: PlatformClock) -> Result<(), PlatformClockError> {
+        if RELEASE_REFUSED.with(Cell::get)[clock.index()] {
+            return Err(PlatformClockError);
+        }
         HELD.with(|held| {
             let mut holds = held.get();
             let count = holds.get(clock);
@@ -58,6 +64,7 @@ impl PlatformClockBackend for CountingBackend {
             held.set(holds);
         });
         record(ClockEvent::Release(clock));
+        Ok(())
     }
 
     fn abandon(clock: PlatformClock, how: PlatformClockAbandonment) {
@@ -98,6 +105,7 @@ impl CountingPlatformClocks {
         ABANDONED.with(|counts| counts.set(PlatformClockHolds::default()));
         DROPPED.with(|counts| counts.set(PlatformClockHolds::default()));
         SINK.with_borrow_mut(|sink| *sink = None);
+        RELEASE_REFUSED.with(|refused| refused.set([false; PlatformClock::COUNT]));
         Self {
             refused: Cell::new([false; PlatformClock::COUNT]),
         }
@@ -108,6 +116,15 @@ impl CountingPlatformClocks {
         let platform = Self::new();
         SINK.with_borrow_mut(|slot| *slot = Some(Box::new(sink)));
         platform
+    }
+
+    /// Refuse or grant later releases of `clock`.
+    pub(crate) fn set_release_refused(&self, clock: PlatformClock, refused: bool) {
+        RELEASE_REFUSED.with(|cell| {
+            let mut all = cell.get();
+            all[clock.index()] = refused;
+            cell.set(all);
+        });
     }
 
     /// Refuse or grant later requests for `clock`.
@@ -128,7 +145,7 @@ impl PlatformClockProvider for CountingPlatformClocks {
         if self.refused.get()[clock.index()] {
             return Err(PlatformClockError);
         }
-        CountingBackend::acquire(clock);
+        CountingBackend::acquire(clock)?;
         Ok(PlatformClockGuard::new(clock))
     }
 }

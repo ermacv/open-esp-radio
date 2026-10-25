@@ -461,7 +461,7 @@ impl Template<'_> {
     }
 
     /// Changed through `W` by a read-modify-write.
-    fn modified(&self) -> bool {
+    pub(super) fn modified(&self) -> bool {
         self.modifiable() && self.has_setters()
     }
 

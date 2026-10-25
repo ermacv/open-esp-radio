@@ -17,6 +17,8 @@
 //! - the interrupt sources of the root (`Interrupt`), each MMIO instance's
 //!   base and bound sources (`instances`), and `InterruptSource` on an
 //!   interrupt handler's part whose instance has exactly one bound source;
+//! - the generated controls of the root's links ([`controls`]): a setter
+//!   per clock gate or reset link on the part holding the field's word;
 //! - the irreducible policy items ([`irreducible`]): whole-word images,
 //!   proven write-one-to-clear acknowledgements, interrupt snapshots and
 //!   writes with sourced whole-word bits; every other transaction is HAL
@@ -41,6 +43,7 @@ use names::push_doc;
 
 mod analog;
 mod block;
+mod controls;
 mod irreducible;
 mod linker;
 mod names;
