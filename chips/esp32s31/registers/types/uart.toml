@@ -1,0 +1,1406 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "UART"
+description = "The UART controller: FIFO, serial configuration, interrupts and flow control."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "FIFO"
+offset = 0x0
+description = "FIFO data register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "RXFIFO_RD_BYTE"
+bits = "7:0"
+class = "read-only"
+description = "Represents the data UART 0 read from FIFO.\\\\ Measurement unit: byte."
+
+[[registers]]
+name = "INT_RAW"
+offset = 0x4
+description = "Raw interrupt status"
+reset = { value = 0x2 }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "RXFIFO_FULL_INT_RAW"
+bits = "0"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_RXFIFO_FULL_INT."
+
+[[registers.fields]]
+name = "TXFIFO_EMPTY_INT_RAW"
+bits = "1"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_TXFIFO_EMPTY_INT."
+
+[[registers.fields]]
+name = "PARITY_ERR_INT_RAW"
+bits = "2"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_PARITY_ERR_INT."
+
+[[registers.fields]]
+name = "FRM_ERR_INT_RAW"
+bits = "3"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_FRM_ERR_INT."
+
+[[registers.fields]]
+name = "RXFIFO_OVF_INT_RAW"
+bits = "4"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_RXFIFO_OVF_INT."
+
+[[registers.fields]]
+name = "DSR_CHG_INT_RAW"
+bits = "5"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_DSR_CHG_INT."
+
+[[registers.fields]]
+name = "CTS_CHG_INT_RAW"
+bits = "6"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_CTS_CHG_INT."
+
+[[registers.fields]]
+name = "BRK_DET_INT_RAW"
+bits = "7"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_BRK_DET_INT."
+
+[[registers.fields]]
+name = "RXFIFO_TOUT_INT_RAW"
+bits = "8"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_RXFIFO_TOUT_INT."
+
+[[registers.fields]]
+name = "SW_XON_INT_RAW"
+bits = "9"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_SW_XON_INT."
+
+[[registers.fields]]
+name = "SW_XOFF_INT_RAW"
+bits = "10"
+class = "write-one-to-clear"
+description = "UART_SW_XOFF_INT."
+
+[[registers.fields]]
+name = "GLITCH_DET_INT_RAW"
+bits = "11"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_GLITCH_DET_INT."
+
+[[registers.fields]]
+name = "TX_BRK_DONE_INT_RAW"
+bits = "12"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_TX_BRK_DONE_INT."
+
+[[registers.fields]]
+name = "TX_BRK_IDLE_DONE_INT_RAW"
+bits = "13"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_TX_BRK_IDLE_DONE_INT."
+
+[[registers.fields]]
+name = "TX_DONE_INT_RAW"
+bits = "14"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_TX_DONE_INT."
+
+[[registers.fields]]
+name = "RS485_PARITY_ERR_INT_RAW"
+bits = "15"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_RS485_PARITY_ERR_INT."
+
+[[registers.fields]]
+name = "RS485_FRM_ERR_INT_RAW"
+bits = "16"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_RS485_FRM_ERR_INT."
+
+[[registers.fields]]
+name = "RS485_CLASH_INT_RAW"
+bits = "17"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_RS485_CLASH_INT."
+
+[[registers.fields]]
+name = "AT_CMD_CHAR_DET_INT_RAW"
+bits = "18"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_AT_CMD_CHAR_DET_INT."
+
+[[registers.fields]]
+name = "WAKEUP_INT_RAW"
+bits = "19"
+class = "write-one-to-clear"
+description = "The raw interrupt status of UART_WAKEUP_INT."
+
+[[registers]]
+name = "INT_ST"
+offset = 0x8
+description = "Masked interrupt status"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "RXFIFO_FULL_INT_ST"
+bits = "0"
+class = "read-only"
+description = "The masked interrupt status of UART_RXFIFO_FULL_INT."
+
+[[registers.fields]]
+name = "TXFIFO_EMPTY_INT_ST"
+bits = "1"
+class = "read-only"
+description = "The masked interrupt status of UART_TXFIFO_EMPTY_INT."
+
+[[registers.fields]]
+name = "PARITY_ERR_INT_ST"
+bits = "2"
+class = "read-only"
+description = "The masked interrupt status of UART_PARITY_ERR_INT."
+
+[[registers.fields]]
+name = "FRM_ERR_INT_ST"
+bits = "3"
+class = "read-only"
+description = "The masked interrupt status of UART_FRM_ERR_INT."
+
+[[registers.fields]]
+name = "RXFIFO_OVF_INT_ST"
+bits = "4"
+class = "read-only"
+description = "The masked interrupt status of UART_RXFIFO_OVF_INT."
+
+[[registers.fields]]
+name = "DSR_CHG_INT_ST"
+bits = "5"
+class = "read-only"
+description = "The masked interrupt status of UART_DSR_CHG_INT."
+
+[[registers.fields]]
+name = "CTS_CHG_INT_ST"
+bits = "6"
+class = "read-only"
+description = "The masked interrupt status of UART_CTS_CHG_INT."
+
+[[registers.fields]]
+name = "BRK_DET_INT_ST"
+bits = "7"
+class = "read-only"
+description = "The masked interrupt status of UART_BRK_DET_INT."
+
+[[registers.fields]]
+name = "RXFIFO_TOUT_INT_ST"
+bits = "8"
+class = "read-only"
+description = "The masked interrupt status of UART_RXFIFO_TOUT_INT."
+
+[[registers.fields]]
+name = "SW_XON_INT_ST"
+bits = "9"
+class = "read-only"
+description = "The masked interrupt status of UART_SW_XON_INT."
+
+[[registers.fields]]
+name = "SW_XOFF_INT_ST"
+bits = "10"
+class = "read-only"
+description = "The masked interrupt status of UART_SW_XOFF_INT."
+
+[[registers.fields]]
+name = "GLITCH_DET_INT_ST"
+bits = "11"
+class = "read-only"
+description = "The masked interrupt status of UART_GLITCH_DET_INT."
+
+[[registers.fields]]
+name = "TX_BRK_DONE_INT_ST"
+bits = "12"
+class = "read-only"
+description = "The masked interrupt status of UART_TX_BRK_DONE_INT."
+
+[[registers.fields]]
+name = "TX_BRK_IDLE_DONE_INT_ST"
+bits = "13"
+class = "read-only"
+description = "The masked interrupt status of UART_TX_BRK_IDLE_DONE_INT."
+
+[[registers.fields]]
+name = "TX_DONE_INT_ST"
+bits = "14"
+class = "read-only"
+description = "The masked interrupt status of UART_TX_DONE_INT."
+
+[[registers.fields]]
+name = "RS485_PARITY_ERR_INT_ST"
+bits = "15"
+class = "read-only"
+description = "The masked interrupt status of UART_RS485_PARITY_ERR_INT."
+
+[[registers.fields]]
+name = "RS485_FRM_ERR_INT_ST"
+bits = "16"
+class = "read-only"
+description = "The masked interrupt status of UART_RS485_FRM_ERR_INT."
+
+[[registers.fields]]
+name = "RS485_CLASH_INT_ST"
+bits = "17"
+class = "read-only"
+description = "The masked interrupt status of UART_RS485_CLASH_INT."
+
+[[registers.fields]]
+name = "AT_CMD_CHAR_DET_INT_ST"
+bits = "18"
+class = "read-only"
+description = "The masked interrupt status of UART_AT_CMD_CHAR_DET_INT."
+
+[[registers.fields]]
+name = "WAKEUP_INT_ST"
+bits = "19"
+class = "read-only"
+description = "The masked interrupt status of UART_WAKEUP_INT."
+
+[[registers]]
+name = "INT_ENA"
+offset = 0xc
+description = "Interrupt enable bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "RXFIFO_FULL_INT_ENA"
+bits = "0"
+class = "plain"
+description = "Write 1 to enable UART_RXFIFO_FULL_INT."
+
+[[registers.fields]]
+name = "TXFIFO_EMPTY_INT_ENA"
+bits = "1"
+class = "plain"
+description = "Write 1 to enable UART_TXFIFO_EMPTY_INT."
+
+[[registers.fields]]
+name = "PARITY_ERR_INT_ENA"
+bits = "2"
+class = "plain"
+description = "Write 1 to enable UART_PARITY_ERR_INT."
+
+[[registers.fields]]
+name = "FRM_ERR_INT_ENA"
+bits = "3"
+class = "plain"
+description = "Write 1 to enable UART_FRM_ERR_INT."
+
+[[registers.fields]]
+name = "RXFIFO_OVF_INT_ENA"
+bits = "4"
+class = "plain"
+description = "Write 1 to enable UART_RXFIFO_OVF_INT."
+
+[[registers.fields]]
+name = "DSR_CHG_INT_ENA"
+bits = "5"
+class = "plain"
+description = "Write 1 to enable UART_DSR_CHG_INT."
+
+[[registers.fields]]
+name = "CTS_CHG_INT_ENA"
+bits = "6"
+class = "plain"
+description = "Write 1 to enable UART_CTS_CHG_INT."
+
+[[registers.fields]]
+name = "BRK_DET_INT_ENA"
+bits = "7"
+class = "plain"
+description = "Write 1 to enable UART_BRK_DET_INT."
+
+[[registers.fields]]
+name = "RXFIFO_TOUT_INT_ENA"
+bits = "8"
+class = "plain"
+description = "Write 1 to enable UART_RXFIFO_TOUT_INT."
+
+[[registers.fields]]
+name = "SW_XON_INT_ENA"
+bits = "9"
+class = "plain"
+description = "Write 1 to enable UART_SW_XON_INT."
+
+[[registers.fields]]
+name = "SW_XOFF_INT_ENA"
+bits = "10"
+class = "plain"
+description = "Write 1 to enable UART_SW_XOFF_INT."
+
+[[registers.fields]]
+name = "GLITCH_DET_INT_ENA"
+bits = "11"
+class = "plain"
+description = "Write 1 to enable UART_GLITCH_DET_INT."
+
+[[registers.fields]]
+name = "TX_BRK_DONE_INT_ENA"
+bits = "12"
+class = "plain"
+description = "Write 1 to enable UART_TX_BRK_DONE_INT."
+
+[[registers.fields]]
+name = "TX_BRK_IDLE_DONE_INT_ENA"
+bits = "13"
+class = "plain"
+description = "Write 1 to enable UART_TX_BRK_IDLE_DONE_INT."
+
+[[registers.fields]]
+name = "TX_DONE_INT_ENA"
+bits = "14"
+class = "plain"
+description = "Write 1 to enable UART_TX_DONE_INT."
+
+[[registers.fields]]
+name = "RS485_PARITY_ERR_INT_ENA"
+bits = "15"
+class = "plain"
+description = "Write 1 to enable UART_RS485_PARITY_ERR_INT."
+
+[[registers.fields]]
+name = "RS485_FRM_ERR_INT_ENA"
+bits = "16"
+class = "plain"
+description = "Write 1 to enable UART_RS485_FRM_ERR_INT."
+
+[[registers.fields]]
+name = "RS485_CLASH_INT_ENA"
+bits = "17"
+class = "plain"
+description = "Write 1 to enable UART_RS485_CLASH_INT."
+
+[[registers.fields]]
+name = "AT_CMD_CHAR_DET_INT_ENA"
+bits = "18"
+class = "plain"
+description = "Write 1 to enable UART_AT_CMD_CHAR_DET_INT."
+
+[[registers.fields]]
+name = "WAKEUP_INT_ENA"
+bits = "19"
+class = "plain"
+description = "Write 1 to enable UART_WAKEUP_INT."
+
+[[registers]]
+name = "INT_CLR"
+offset = 0x10
+description = "Interrupt clear bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "RXFIFO_FULL_INT_CLR"
+bits = "0"
+class = "write-trigger"
+description = "Write 1 to clear UART_RXFIFO_FULL_INT."
+
+[[registers.fields]]
+name = "TXFIFO_EMPTY_INT_CLR"
+bits = "1"
+class = "write-trigger"
+description = "Write 1 to clear UART_TXFIFO_EMPTY_INT."
+
+[[registers.fields]]
+name = "PARITY_ERR_INT_CLR"
+bits = "2"
+class = "write-trigger"
+description = "Write 1 to clear UART_PARITY_ERR_INT."
+
+[[registers.fields]]
+name = "FRM_ERR_INT_CLR"
+bits = "3"
+class = "write-trigger"
+description = "Write 1 to clear UART_FRM_ERR_INT."
+
+[[registers.fields]]
+name = "RXFIFO_OVF_INT_CLR"
+bits = "4"
+class = "write-trigger"
+description = "Write 1 to clear UART_RXFIFO_OVF_INT."
+
+[[registers.fields]]
+name = "DSR_CHG_INT_CLR"
+bits = "5"
+class = "write-trigger"
+description = "Write 1 to clear UART_DSR_CHG_INT."
+
+[[registers.fields]]
+name = "CTS_CHG_INT_CLR"
+bits = "6"
+class = "write-trigger"
+description = "Write 1 to clear UART_CTS_CHG_INT."
+
+[[registers.fields]]
+name = "BRK_DET_INT_CLR"
+bits = "7"
+class = "write-trigger"
+description = "Write 1 to clear UART_BRK_DET_INT."
+
+[[registers.fields]]
+name = "RXFIFO_TOUT_INT_CLR"
+bits = "8"
+class = "write-trigger"
+description = "Write 1 to clear UART_RXFIFO_TOUT_INT."
+
+[[registers.fields]]
+name = "SW_XON_INT_CLR"
+bits = "9"
+class = "write-trigger"
+description = "Write 1 to clear UART_SW_XON_INT."
+
+[[registers.fields]]
+name = "SW_XOFF_INT_CLR"
+bits = "10"
+class = "write-trigger"
+description = "Write 1 to clear UART_SW_XOFF_INT."
+
+[[registers.fields]]
+name = "GLITCH_DET_INT_CLR"
+bits = "11"
+class = "write-trigger"
+description = "Write 1 to clear UART_GLITCH_DET_INT."
+
+[[registers.fields]]
+name = "TX_BRK_DONE_INT_CLR"
+bits = "12"
+class = "write-trigger"
+description = "Write 1 to clear UART_TX_BRK_DONE_INT."
+
+[[registers.fields]]
+name = "TX_BRK_IDLE_DONE_INT_CLR"
+bits = "13"
+class = "write-trigger"
+description = "Write 1 to clear UART_TX_BRK_IDLE_DONE_INT."
+
+[[registers.fields]]
+name = "TX_DONE_INT_CLR"
+bits = "14"
+class = "write-trigger"
+description = "Write 1 to clear UART_TX_DONE_INT."
+
+[[registers.fields]]
+name = "RS485_PARITY_ERR_INT_CLR"
+bits = "15"
+class = "write-trigger"
+description = "Write 1 to clear UART_RS485_PARITY_ERR_INT."
+
+[[registers.fields]]
+name = "RS485_FRM_ERR_INT_CLR"
+bits = "16"
+class = "write-trigger"
+description = "Write 1 to clear UART_RS485_FRM_ERR_INT."
+
+[[registers.fields]]
+name = "RS485_CLASH_INT_CLR"
+bits = "17"
+class = "write-trigger"
+description = "Write 1 to clear UART_RS485_CLASH_INT."
+
+[[registers.fields]]
+name = "AT_CMD_CHAR_DET_INT_CLR"
+bits = "18"
+class = "write-trigger"
+description = "Write 1 to clear UART_AT_CMD_CHAR_DET_INT."
+
+[[registers.fields]]
+name = "WAKEUP_INT_CLR"
+bits = "19"
+class = "write-trigger"
+description = "Write 1 to clear UART_WAKEUP_INT."
+
+[[registers]]
+name = "CLKDIV_SYNC"
+offset = 0x14
+description = "Clock divider configuration"
+reset = { value = 0x2b6 }
+reserved = { mask = 0xff0ff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "CLKDIV"
+bits = "11:0"
+class = "plain"
+description = "Configures the integral part of the divisor for baud rate generation."
+
+[[registers.fields]]
+name = "CLKDIV_FRAG"
+bits = "23:20"
+class = "plain"
+description = "Configures the fractional part of the divisor for baud rate generation."
+
+[[registers]]
+name = "RX_FILT"
+offset = 0x18
+description = "RX filter configuration"
+reset = { value = 0x8 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "GLITCH_FILT"
+bits = "7:0"
+class = "plain"
+description = "Configures the width of a pulse to be filtered.\\\\Measurement unit: UART Core's clock cycle.\\\\Pulses whose width is lower than this value will be ignored."
+
+[[registers.fields]]
+name = "GLITCH_FILT_EN"
+bits = "8"
+class = "plain"
+description = "Configures whether or not to enable RX signal filter.\\\\ 0: Disable\\\\ 1: Enable"
+
+[[registers]]
+name = "STATUS"
+offset = 0x1c
+description = "UART status register"
+reset = { value = 0xe000c000 }
+reserved = { mask = 0x1f001f00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "RXFIFO_CNT"
+bits = "7:0"
+class = "read-only"
+description = "Represents the number of valid data bytes in RX FIFO."
+
+[[registers.fields]]
+name = "DSRN"
+bits = "13"
+class = "read-only"
+description = "Represents the level of the internal UART DSR signal."
+
+[[registers.fields]]
+name = "CTSN"
+bits = "14"
+class = "read-only"
+description = "Represents the level of the internal UART CTS signal."
+
+[[registers.fields]]
+name = "RXD"
+bits = "15"
+class = "read-only"
+description = "Represents the level of the internal UART RXD signal."
+
+[[registers.fields]]
+name = "TXFIFO_CNT"
+bits = "23:16"
+class = "read-only"
+description = "Represents the number of valid data bytes in RX FIFO."
+
+[[registers.fields]]
+name = "DTRN"
+bits = "29"
+class = "read-only"
+description = "Represents the level of the internal UART DTR signal."
+
+[[registers.fields]]
+name = "RTSN"
+bits = "30"
+class = "read-only"
+description = "Represents the level of the internal UART RTS signal."
+
+[[registers.fields]]
+name = "TXD"
+bits = "31"
+class = "read-only"
+description = "Represents the level of the internal UART TXD signal."
+
+[[registers]]
+name = "CONF0_SYNC"
+offset = 0x20
+description = "Configuration register 0"
+reset = { value = 0x1c }
+reserved = { mask = 0xff000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "PARITY"
+bits = "0"
+class = "plain"
+description = "Configures the parity check mode.\\\\ 0: Even parity\\\\ 1: Odd parity\\\\"
+
+[[registers.fields]]
+name = "PARITY_EN"
+bits = "1"
+class = "plain"
+description = "Configures whether or not to enable UART parity check.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "BIT_NUM"
+bits = "3:2"
+class = "plain"
+description = "Configures the number of data bits.\\\\ 0: 5 bits\\\\ 1: 6 bits\\\\ 2: 7 bits\\\\ 3: 8 bits\\\\"
+
+[[registers.fields]]
+name = "STOP_BIT_NUM"
+bits = "5:4"
+class = "plain"
+description = "Configures the number of stop bits.\\\\ 0: Invalid. No effect\\\\ 1: 1 bits\\\\ 2: 1.5 bits\\\\ 3: 2 bits\\\\"
+
+[[registers.fields]]
+name = "TXD_BRK"
+bits = "6"
+class = "plain"
+description = "Configures whether or not to send NULL characters when finishing data transmission.\\\\ 0: Not send\\\\ 1: Send\\\\"
+
+[[registers.fields]]
+name = "IRDA_DPLX"
+bits = "7"
+class = "plain"
+description = "Configures whether or not to enable IrDA loopback test.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "IRDA_TX_EN"
+bits = "8"
+class = "plain"
+description = "Configures whether or not to enable the IrDA transmitter.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "IRDA_WCTL"
+bits = "9"
+class = "plain"
+description = "Configures the 11th bit of the IrDA transmitter.\\\\ 0: This bit is 0.\\\\ 1: This bit is the same as the 10th bit.\\\\"
+
+[[registers.fields]]
+name = "IRDA_TX_INV"
+bits = "10"
+class = "plain"
+description = "Configures whether or not to invert the level of the IrDA transmitter.\\\\ 0: Not invert\\\\ 1: Invert\\\\"
+
+[[registers.fields]]
+name = "IRDA_RX_INV"
+bits = "11"
+class = "plain"
+description = "Configures whether or not to invert the level of the IrDA receiver.\\\\ 0: Not invert\\\\ 1: Invert\\\\"
+
+[[registers.fields]]
+name = "LOOPBACK"
+bits = "12"
+class = "plain"
+description = "Configures whether or not to enable UART loopback test.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "TX_FLOW_EN"
+bits = "13"
+class = "plain"
+description = "Configures whether or not to enable flow control for the transmitter.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "IRDA_EN"
+bits = "14"
+class = "plain"
+description = "Configures whether or not to enable IrDA protocol.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "RXD_INV"
+bits = "15"
+class = "plain"
+description = "Configures whether or not to invert the level of UART RXD signal.\\\\ 0: Not invert\\\\ 1: Invert\\\\"
+
+[[registers.fields]]
+name = "TXD_INV"
+bits = "16"
+class = "plain"
+description = "Configures whether or not to invert the level of UART TXD signal.\\\\ 0: Not invert\\\\ 1: Invert\\\\"
+
+[[registers.fields]]
+name = "DIS_RX_DAT_OVF"
+bits = "17"
+class = "plain"
+description = "Configures whether or not to disable data overflow detection for the UART receiver.\\\\ 0: Enable\\\\ 1: Disable\\\\"
+
+[[registers.fields]]
+name = "ERR_WR_MASK"
+bits = "18"
+class = "plain"
+description = "Configures whether or not to store the received data with errors into FIFO.\\\\ 0: Store\\\\ 1: Not store\\\\"
+
+[[registers.fields]]
+name = "AUTOBAUD_EN"
+bits = "19"
+class = "plain"
+description = "Configures whether or not to enable baud rate detection.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "MEM_CLK_EN"
+bits = "20"
+class = "plain"
+description = "Configures whether or not to enable clock gating for UART memory.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "SW_RTS"
+bits = "21"
+class = "plain"
+description = "Configures the RTS signal used in software flow control.\\\\ 0: The UART transmitter is allowed to send data.\\\\ 1: The UART transmitted is not allowed to send data.\\\\"
+
+[[registers.fields]]
+name = "RXFIFO_RST"
+bits = "22"
+class = "plain"
+description = "Configures whether or not to reset the UART RX FIFO.\\\\ 0: Not reset\\\\ 1: Reset\\\\"
+
+[[registers.fields]]
+name = "TXFIFO_RST"
+bits = "23"
+class = "plain"
+description = "Configures whether or not to reset the UART TX FIFO.\\\\ 0: Not reset\\\\ 1: Reset\\\\"
+
+[[registers]]
+name = "CONF1"
+offset = 0x24
+description = "Configuration register 1"
+reset = { value = 0x6060 }
+reserved = { mask = 0xffc00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "RXFIFO_FULL_THRHD"
+bits = "7:0"
+class = "plain"
+description = "Configures the threshold for RX FIFO being full.\\\\Measurement unit: byte."
+
+[[registers.fields]]
+name = "TXFIFO_EMPTY_THRHD"
+bits = "15:8"
+class = "plain"
+description = "Configures the threshold for TX FIFO being empty.\\\\Measurement unit: byte."
+
+[[registers.fields]]
+name = "CTS_INV"
+bits = "16"
+class = "plain"
+description = "Configures whether or not to invert the level of UART CTS signal.\\\\ 0: Not invert\\\\ 1: Invert\\\\"
+
+[[registers.fields]]
+name = "DSR_INV"
+bits = "17"
+class = "plain"
+description = "Configures whether or not to invert the level of UART DSR signal.\\\\ 0: Not invert\\\\ 1: Invert\\\\"
+
+[[registers.fields]]
+name = "RTS_INV"
+bits = "18"
+class = "plain"
+description = "Configures whether or not to invert the level of UART RTS signal.\\\\ 0: Not invert\\\\ 1: Invert\\\\"
+
+[[registers.fields]]
+name = "DTR_INV"
+bits = "19"
+class = "plain"
+description = "Configures whether or not to invert the level of UART DTR signal.\\\\ 0: Not invert\\\\ 1: Invert\\\\"
+
+[[registers.fields]]
+name = "SW_DTR"
+bits = "20"
+class = "plain"
+description = "Configures the DTR signal used in software flow control.\\\\ 0: Data to be transmitted is not ready.\\\\ 1: Data to be transmitted is ready.\\\\"
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "21"
+class = "plain"
+description = "Configures clock gating.\\\\ 0: Support clock only when the application writes registers.\\\\ 1: Always force the clock on for registers.\\\\"
+
+[[registers]]
+name = "HWFC_CONF_SYNC"
+offset = 0x2c
+description = "Hardware flow control configuration"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "RX_FLOW_THRHD"
+bits = "7:0"
+class = "plain"
+description = "Configures the maximum number of data bytes that can be received during hardware flow control.\\\\Measurement unit: byte."
+
+[[registers.fields]]
+name = "RX_FLOW_EN"
+bits = "8"
+class = "plain"
+description = "Configures whether or not to enable the UART receiver.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers]]
+name = "SLEEP_CONF0"
+offset = 0x30
+description = "UART sleep configuration register 0"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "WK_CHAR1"
+bits = "7:0"
+class = "plain"
+description = "Configures wakeup character 1."
+
+[[registers.fields]]
+name = "WK_CHAR2"
+bits = "15:8"
+class = "plain"
+description = "Configures wakeup character 2."
+
+[[registers.fields]]
+name = "WK_CHAR3"
+bits = "23:16"
+class = "plain"
+description = "Configures wakeup character 3."
+
+[[registers.fields]]
+name = "WK_CHAR4"
+bits = "31:24"
+class = "plain"
+description = "Configures wakeup character 4."
+
+[[registers]]
+name = "SLEEP_CONF1"
+offset = 0x34
+description = "UART sleep configuration register 1"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "WK_CHAR0"
+bits = "7:0"
+class = "plain"
+description = "Configures wakeup character 0."
+
+[[registers]]
+name = "SLEEP_CONF2"
+offset = 0x38
+description = "UART sleep configuration register 2"
+reset = { value = 0x1404f0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "ACTIVE_THRESHOLD"
+bits = "9:0"
+class = "plain"
+description = "Configures the number of RXD edge changes to wake up the chip in wakeup mode 0."
+
+[[registers.fields]]
+name = "RX_WAKE_UP_THRHD"
+bits = "17:10"
+class = "plain"
+description = "Configures the number of received data bytes to wake up the chip in wakeup mode 1."
+
+[[registers.fields]]
+name = "WK_CHAR_NUM"
+bits = "20:18"
+class = "plain"
+description = "Configures the number of wakeup characters."
+
+[[registers.fields]]
+name = "WK_CHAR_MASK"
+bits = "25:21"
+class = "plain"
+description = "Configures whether or not to mask wakeup characters.\\\\ 0: Not mask\\\\ 1: Mask\\\\"
+
+[[registers.fields]]
+name = "WK_MODE_SEL"
+bits = "27:26"
+class = "plain"
+description = "Configures which wakeup mode to select.\\\\ 0: Mode 0\\\\ 1: Mode 1\\\\ 2: Mode 2\\\\ 3: Mode 3\\\\"
+
+[[registers]]
+name = "SWFC_CONF0_SYNC"
+offset = 0x3c
+description = "Software flow control character configuration"
+reset = { value = 0x1311 }
+reserved = { mask = 0xff800000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "XON_CHAR"
+bits = "7:0"
+class = "plain"
+description = "Configures the XON character for flow control."
+
+[[registers.fields]]
+name = "XOFF_CHAR"
+bits = "15:8"
+class = "plain"
+description = "Configures the XOFF character for flow control."
+
+[[registers.fields]]
+name = "XON_XOFF_STILL_SEND"
+bits = "16"
+class = "plain"
+description = "Configures whether the UART transmitter can send XON or XOFF characters when it is disabled.\\\\ 0: Cannot send\\\\ 1: Can send\\\\"
+
+[[registers.fields]]
+name = "SW_FLOW_CON_EN"
+bits = "17"
+class = "plain"
+description = "Configures whether or not to enable software flow control.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "XONOFF_DEL"
+bits = "18"
+class = "plain"
+description = "Configures whether or not to remove flow control characters from the received data.\\\\ 0: Not move\\\\ 1: Move\\\\"
+
+[[registers.fields]]
+name = "FORCE_XON"
+bits = "19"
+class = "plain"
+description = "Configures whether the transmitter continues to sending data.\\\\ 0: Not send\\\\ 1: Send\\\\"
+
+[[registers.fields]]
+name = "FORCE_XOFF"
+bits = "20"
+class = "plain"
+description = "Configures whether or not to stop the transmitter from sending data.\\\\ 0: Not stop\\\\ 1: Stop\\\\"
+
+[[registers.fields]]
+name = "SEND_XON"
+bits = "21"
+class = "hardware-written"
+description = "Configures whether or not to send XON characters.\\\\ 0: Not send\\\\ 1: Send\\\\"
+
+[[registers.fields]]
+name = "SEND_XOFF"
+bits = "22"
+class = "hardware-written"
+description = "Configures whether or not to send XOFF characters.\\\\ 0: Not send\\\\ 1: Send\\\\"
+
+[[registers]]
+name = "SWFC_CONF1"
+offset = 0x40
+description = "Software flow control character configuration"
+reset = { value = 0xe000 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "XON_THRESHOLD"
+bits = "7:0"
+class = "plain"
+description = "Configures the threshold for data in RX FIFO to send XON characters in software flow control.\\\\Measurement unit: byte."
+
+[[registers.fields]]
+name = "XOFF_THRESHOLD"
+bits = "15:8"
+class = "plain"
+description = "Configures the threshold for data in RX FIFO to send XOFF characters in software flow control.\\\\Measurement unit: byte."
+
+[[registers]]
+name = "TXBRK_CONF_SYNC"
+offset = 0x44
+description = "TX break character configuration"
+reset = { value = 0xa }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "TX_BRK_NUM"
+bits = "7:0"
+class = "plain"
+description = "Configures the number of NULL characters to be sent after finishing data transmission.\\\\Valid only when UART_TXD_BRK is 1."
+
+[[registers]]
+name = "IDLE_CONF_SYNC"
+offset = 0x48
+description = "Frame end idle time configuration"
+reset = { value = 0x40100 }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "RX_IDLE_THRHD"
+bits = "9:0"
+class = "plain"
+description = "Configures the threshold to generate a frame end signal when the receiver takes more time to receive one data byte data.\\\\Measurement unit: bit time (the time to transmit 1 bit)."
+
+[[registers.fields]]
+name = "TX_IDLE_NUM"
+bits = "19:10"
+class = "plain"
+description = "Configures the interval between two data transfers.\\\\Measurement unit: bit time (the time to transmit 1 bit)."
+
+[[registers]]
+name = "RS485_CONF_SYNC"
+offset = 0x4c
+description = "RS485 mode configuration"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "RS485_EN"
+bits = "0"
+class = "plain"
+description = "Configures whether or not to enable RS485 mode.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "DL0_EN"
+bits = "1"
+class = "plain"
+description = "Configures whether or not to add a turnaround delay of 1 bit before the start bit.\\\\ 0: Not add\\\\ 1: Add\\\\"
+
+[[registers.fields]]
+name = "DL1_EN"
+bits = "2"
+class = "plain"
+description = "Configures whether or not to add a turnaround delay of 1 bit after the stop bit.\\\\ 0: Not add\\\\ 1: Add\\\\"
+
+[[registers.fields]]
+name = "RS485TX_RX_EN"
+bits = "3"
+class = "plain"
+description = "Configures whether or not to enable the receiver for data reception when the transmitter is transmitting data in RS485 mode.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "RS485RXBY_TX_EN"
+bits = "4"
+class = "plain"
+description = "Configures whether to enable the RS485 transmitter for data transmission when the RS485 receiver is busy.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "RS485_RX_DLY_NUM"
+bits = "5"
+class = "plain"
+description = "Configures the delay of internal data signals in the receiver.\\\\Measurement unit: bit time (the time to transmit 1 bit).."
+
+[[registers.fields]]
+name = "RS485_TX_DLY_NUM"
+bits = "9:6"
+class = "plain"
+description = "Configures the delay of internal data signals in the transmitter.\\\\Measurement unit: bit time (the time to transmit 1 bit)."
+
+[[registers]]
+name = "AT_CMD_PRECNT_SYNC"
+offset = 0x50
+description = "Pre-sequence timing configuration"
+reset = { value = 0x901 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "PRE_IDLE_NUM"
+bits = "15:0"
+class = "plain"
+description = "Configures the idle time before the receiver receives the first AT_CMD.\\\\Measurement unit: bit time (the time to transmit 1 bit)."
+
+[[registers]]
+name = "AT_CMD_POSTCNT_SYNC"
+offset = 0x54
+description = "Post-sequence timing configuration"
+reset = { value = 0x901 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "POST_IDLE_NUM"
+bits = "15:0"
+class = "plain"
+description = "Configures the interval between the last AT_CMD and subsequent data.\\\\Measurement unit: bit time (the time to transmit 1 bit)."
+
+[[registers]]
+name = "AT_CMD_GAPTOUT_SYNC"
+offset = 0x58
+description = "Timeout configuration"
+reset = { value = 0xb }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "RX_GAP_TOUT"
+bits = "15:0"
+class = "plain"
+description = "Configures the interval between two AT_CMD characters.\\\\Measurement unit: bit time (the time to transmit 1 bit)."
+
+[[registers]]
+name = "AT_CMD_CHAR_SYNC"
+offset = 0x5c
+description = "AT escape sequence detection configuration"
+reset = { value = 0x32b }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "AT_CMD_CHAR"
+bits = "7:0"
+class = "plain"
+description = "Configures the AT_CMD character."
+
+[[registers.fields]]
+name = "CHAR_NUM"
+bits = "15:8"
+class = "plain"
+description = "Configures the number of continuous AT_CMD characters a receiver can receive."
+
+[[registers]]
+name = "MEM_CONF"
+offset = 0x60
+description = "UART memory power configuration"
+reset = { value = 0x0 }
+reserved = { mask = 0xf9ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "MEM_FORCE_PD"
+bits = "25"
+class = "plain"
+description = "Set this bit to force power down UART memory."
+
+[[registers.fields]]
+name = "MEM_FORCE_PU"
+bits = "26"
+class = "plain"
+description = "Set this bit to force power up UART memory."
+
+[[registers]]
+name = "TOUT_CONF_SYNC"
+offset = 0x64
+description = "UART threshold and allocation configuration"
+reset = { value = 0x28 }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "RX_TOUT_EN"
+bits = "0"
+class = "plain"
+description = "Configures whether or not to enable UART receiver's timeout function.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "RX_TOUT_FLOW_DIS"
+bits = "1"
+class = "plain"
+description = "Set this bit to stop accumulating idle_cnt when hardware flow control works."
+
+[[registers.fields]]
+name = "RX_TOUT_THRHD"
+bits = "11:2"
+class = "plain"
+description = "Configures the amount of time that the bus can remain idle before timeout.\\\\ Measurement unit: bit time (the time to transmit 1 bit)."
+
+[[registers]]
+name = "MEM_TX_STATUS"
+offset = 0x68
+description = "TX FIFO write and read offset address"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffe0100, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "TX_SRAM_WADDR"
+bits = "7:0"
+class = "read-only"
+description = "Represents the offset address to write TX FIFO."
+
+[[registers.fields]]
+name = "TX_SRAM_RADDR"
+bits = "16:9"
+class = "read-only"
+description = "Represents the offset address to read TX FIFO."
+
+[[registers]]
+name = "MEM_RX_STATUS"
+offset = 0x6c
+description = "Rx FIFO write and read offset address"
+reset = { value = 0x10080 }
+reserved = { mask = 0xfffe0100, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "RX_SRAM_RADDR"
+bits = "7:0"
+class = "read-only"
+description = "Represents the offset address to read RX FIFO."
+
+[[registers.fields]]
+name = "RX_SRAM_WADDR"
+bits = "16:9"
+class = "read-only"
+description = "Represents the offset address to write RX FIFO."
+
+[[registers]]
+name = "FSM_STATUS"
+offset = 0x70
+description = "UART transmit and receive status"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "ST_URX_OUT"
+bits = "3:0"
+class = "read-only"
+description = "Represents the status of the receiver."
+
+[[registers.fields]]
+name = "ST_UTX_OUT"
+bits = "7:4"
+class = "read-only"
+description = "Represents the status of the transmitter."
+
+[[registers]]
+name = "POSPULSE"
+offset = 0x74
+description = "Autobaud high pulse register"
+reset = { value = 0xfff }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "POSEDGE_MIN_CNT"
+bits = "11:0"
+class = "read-only"
+description = "Represents the minimal input clock counter value between two positive edges. It is used for baud rate detection."
+
+[[registers]]
+name = "NEGPULSE"
+offset = 0x78
+description = "Autobaud low pulse register"
+reset = { value = 0xfff }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "NEGEDGE_MIN_CNT"
+bits = "11:0"
+class = "read-only"
+description = "Represents the minimal input clock counter value between two negative edges. It is used for baud rate detection."
+
+[[registers]]
+name = "LOWPULSE"
+offset = 0x7c
+description = "Autobaud minimum low pulse duration register"
+reset = { value = 0xfff }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "MIN_CNT"
+bits = "11:0"
+class = "read-only"
+description = "Represents the minimum duration time of a low-level pulse. It is used for baud rate detection.\\\\Measurement unit: APB_CLK clock cycle."
+
+[[registers]]
+name = "HIGHPULSE"
+offset = 0x80
+description = "Autobaud minimum high pulse duration register"
+reset = { value = 0xfff }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "MIN_CNT"
+bits = "11:0"
+class = "read-only"
+description = "Represents the maximum duration time for a high-level pulse. It is used for baud rate detection.\\\\Measurement unit: APB_CLK clock cycle."
+
+[[registers]]
+name = "RXD_CNT"
+offset = 0x84
+description = "Autobaud edge change count register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "RXD_EDGE_CNT"
+bits = "9:0"
+class = "read-only"
+description = "Represents the number of RXD edge changes. It is used for baud rate detection."
+
+[[registers]]
+name = "CLK_CONF"
+offset = 0x88
+description = "UART core clock configuration"
+reset = { value = 0x3000000 }
+reserved = { mask = 0xf0ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "TX_SCLK_EN"
+bits = "24"
+class = "plain"
+description = "Configures whether or not to enable UART TX clock.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "RX_SCLK_EN"
+bits = "25"
+class = "plain"
+description = "Configures whether or not to enable UART RX clock.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "TX_RST_CORE"
+bits = "26"
+class = "plain"
+description = "Write 1 and then write 0 to reset UART TX."
+
+[[registers.fields]]
+name = "RX_RST_CORE"
+bits = "27"
+class = "plain"
+description = "Write 1 and then write 0 to reset UART RX."
+
+[[registers]]
+name = "DATE"
+offset = 0x8c
+description = "UART version control register"
+reset = { value = 0x2312220 }
+
+[[registers.fields]]
+name = "DATE"
+bits = "31:0"
+class = "plain"
+description = "Version control register."
+
+[[registers]]
+name = "AFIFO_STATUS"
+offset = 0x90
+description = "UART asynchronous FIFO status"
+reset = { value = 0xa }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "TX_AFIFO_FULL"
+bits = "0"
+class = "read-only"
+description = "Represents whether or not the APB TX asynchronous FIFO is full.\\\\ 0: Not full\\\\ 1: Full\\\\"
+
+[[registers.fields]]
+name = "TX_AFIFO_EMPTY"
+bits = "1"
+class = "read-only"
+description = "Represents whether or not the APB TX asynchronous FIFO is empty.\\\\ 0: Not empty\\\\ 1: Empty\\\\"
+
+[[registers.fields]]
+name = "RX_AFIFO_FULL"
+bits = "2"
+class = "read-only"
+description = "Represents whether or not the APB RX asynchronous FIFO is full.\\\\ 0: Not full\\\\ 1: Full\\\\"
+
+[[registers.fields]]
+name = "RX_AFIFO_EMPTY"
+bits = "3"
+class = "read-only"
+description = "Represents whether or not the APB RX asynchronous FIFO is empty.\\\\ 0: Not empty\\\\ 1: Empty\\\\"
+
+[[registers]]
+name = "REG_UPDATE"
+offset = 0x98
+description = "UART register configuration update"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"] }
+
+[[registers.fields]]
+name = "REG_UPDATE"
+bits = "0"
+class = "self-clearing"
+description = "Configures whether or not to synchronize registers.\\\\ 0: Not synchronize\\\\ 1: Synchronize\\\\"
+
+[[registers]]
+name = "ID"
+offset = 0x9c
+description = "UART ID register"
+reset = { value = 0x500 }
+
+[[registers.fields]]
+name = "ID"
+bits = "31:0"
+class = "plain"
+description = "Configures the UART ID."

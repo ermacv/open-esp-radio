@@ -110,10 +110,20 @@ pub(super) fn block(device: &Device, name: &str) -> Result<SvdBlock, ImportError
             ));
         };
         let width = register.properties.size.unwrap_or(default_size);
+        if !matches!(width, 8 | 16 | 32) {
+            return Err(ImportError::new(
+                format!("{context}.{}", register.name),
+                format!("unsupported register width {width}"),
+            ));
+        }
         let value = register.properties.reset_value.or(default_value);
         let mask = register.properties.reset_mask.or(default_mask);
         let reset = value.map(|value| (value, mask.unwrap_or(u64::MAX)));
-        let fields = fields(&context, register.fields.as_deref().unwrap_or_default())?;
+        let fields = fields(
+            &context,
+            register.fields.as_deref().unwrap_or_default(),
+            width,
+        )?;
         let description = clean(register.description.as_ref());
         let offset = register.address_offset;
         match register {
@@ -186,22 +196,38 @@ pub(super) fn block(device: &Device, name: &str) -> Result<SvdBlock, ImportError
 }
 
 /// Every field element of a register.
-fn fields(context: &str, fields: &[svd_rs::Field]) -> Result<Vec<SvdField>, ImportError> {
+fn fields(
+    context: &str,
+    fields: &[svd_rs::Field],
+    width: u32,
+) -> Result<Vec<SvdField>, ImportError> {
     let mut out = Vec::new();
     for field in fields {
         let info = match field {
             MaybeArray::Single(info) | MaybeArray::Array(info, _) => info,
         };
-        let make = |name: String, low: u32| SvdField {
-            name,
-            low,
-            width: info.bit_range.width,
-            access: info.access,
-            modified: info.modified_write_values,
-            description: clean(info.description.as_ref()),
+        let make = |name: String, low: u32| -> Result<SvdField, ImportError> {
+            if info.bit_range.width == 0
+                || low
+                    .checked_add(info.bit_range.width)
+                    .is_none_or(|end| end > width)
+            {
+                return Err(ImportError::new(
+                    format!("{context}.{name}"),
+                    "SVD field lies outside the register",
+                ));
+            }
+            Ok(SvdField {
+                name,
+                low,
+                width: info.bit_range.width,
+                access: info.access,
+                modified: info.modified_write_values,
+                description: clean(info.description.as_ref()),
+            })
         };
         match field {
-            MaybeArray::Single(info) => out.push(make(info.name.clone(), info.bit_range.offset)),
+            MaybeArray::Single(info) => out.push(make(info.name.clone(), info.bit_range.offset)?),
             MaybeArray::Array(info, dimension) => {
                 for (index, name) in svd_rs::array::names(info, dimension).enumerate() {
                     let step = u32::try_from(index)
@@ -212,7 +238,7 @@ fn fields(context: &str, fields: &[svd_rs::Field]) -> Result<Vec<SvdField>, Impo
                         .ok_or_else(|| {
                             ImportError::new(context, format!("field {name} lies beyond bit 2^32"))
                         })?;
-                    out.push(make(name, low));
+                    out.push(make(name, low)?);
                 }
             }
         }

@@ -323,7 +323,7 @@ fn register_text(
         }
     }
     if register.reserved != 0 {
-        let sources = catalog.ids(&Cites::from([Cite::Header]), headers);
+        let sources = catalog.ids(&register.reserved_sources, headers);
         let _ = writeln!(
             text,
             "reserved = {{ mask = {:#x}, sources = {} }}",

@@ -27,6 +27,7 @@ types = [
     "types/timg.toml",
     "types/trng.toml",
     "types/tsens.toml",
+    "types/uart.toml",
     "types/usb-serial-jtag.toml",
 ]
 
@@ -178,6 +179,13 @@ extent = { size = 0x38 }
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L111", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 
 [[instances]]
+name = "UART0"
+type = "UART"
+base = 0x2038a000
+extent = { size = 0xa0 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L31", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
 name = "USB_DEVICE"
 type = "USB_SERIAL_JTAG"
 base = 0x20391000
@@ -224,6 +232,12 @@ name = "USB_SERIAL_JTAG"
 source = 2
 instance = "USB_DEVICE"
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L21", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "UART0"
+source = 9
+instance = "UART0"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L28", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 
 [[interrupts]]
 name = "TIMERGRP0_T0"

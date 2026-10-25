@@ -244,6 +244,10 @@ id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L21"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:21 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
 
 [[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L28"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:28 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L44"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:44 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
 
@@ -358,6 +362,10 @@ description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifa
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L138"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/reg_base.h:138 (file sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L31"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/reg_base.h:31 (file sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d), Apache-2.0: the line an imported fact cites."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L38"
@@ -590,6 +598,10 @@ description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifa
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/tsens_reg.h, sha256 848ee7ceade4e215c25bd5d7005be1451d3e554ef9e078ebbd744ae64d49af23, Apache-2.0: the register header whose definitions, field bit positions, access classes, defaults and descriptions the imported registers and fields take."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_UART_REG_H"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/uart_reg.h, sha256 01c790eccc82b0af902063139c61548b0981ac7526ca6c5f76b1e7ad3fb63ada, Apache-2.0: the register header whose definitions, field bit positions, access classes, defaults and descriptions the imported registers and fields take."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"

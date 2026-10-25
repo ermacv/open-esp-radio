@@ -1918,7 +1918,7 @@ description = "Set as Non-zero value to enable interrupt-remap feature of the in
 name = "USB_OTGHS_ENDP_MULTI_PROC_INTR_MAP"
 offset = 0x190
 description = "USB_OTGHS_ENDP_MULTI_PROC_INTR mapping register"
-reset = { value = 0x0, mask = 0x3f }
+reset = { value = 0x0, mask = 0x33f }
 reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
 
 [[registers.fields]]
@@ -1931,7 +1931,7 @@ description = "Configures the interrupt source into one CPU interrupt."
 name = "USB_OTGHS_ENDP_MULTI_PROC_INTR_PASS_LEVEL"
 bits = "9:8"
 class = "plain"
-description = "default: 0; Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
 
 [[registers]]
 name = "JPEG_INTR_MAP"

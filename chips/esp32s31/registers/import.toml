@@ -94,6 +94,8 @@ layout = "components/soc/esp32s31/register/soc/lp_analog_peri_struct.h"
 name = "LP_ANA_PERI"
 svd = "LP_ANA_PERI"
 base = "DR_REG_LP_ANA_BASE"
+# SOURCE: the target enumerators in the pinned soc/interrupts.h.
+interrupts = { LP_ANA = "LP_ANAPERI" }
 
 [[types]]
 name = "LP_AONCLKRST"
@@ -127,6 +129,8 @@ layout = "components/soc/esp32s31/register/soc/pmu_struct.h"
 name = "PMU"
 svd = "PMU"
 base = "DR_REG_PMU_BASE"
+# SOURCE: the target enumerators in the pinned soc/interrupts.h.
+interrupts = { PMU0 = "PMU_REG_0", PMU1 = "PMU_REG_1" }
 
 [[types]]
 name = "RTC_WDT"
@@ -215,11 +219,15 @@ layout = "components/soc/esp32s31/register/soc/timer_group_struct.h"
 name = "TIMG0"
 svd = "TIMG0"
 base = "DR_REG_TIMERG0_BASE"
+# SOURCE: the target enumerators in the pinned soc/interrupts.h.
+interrupts = { TG0_T0 = "TIMERGRP0_T0", TG0_T1 = "TIMERGRP0_T1", TG0_WDT = "TIMERGRP0_WDT" }
 
 [[types.instances]]
 name = "TIMG1"
 svd = "TIMG1"
 base = "DR_REG_TIMERG1_BASE"
+# SOURCE: the target enumerators in the pinned soc/interrupts.h.
+interrupts = { TG1_T0 = "TIMERGRP1_T0", TG1_T1 = "TIMERGRP1_T1", TG1_WDT = "TIMERGRP1_WDT" }
 
 [[types]]
 name = "TRNG"
@@ -244,6 +252,17 @@ svd = "LP_TSENS"
 base = "DR_REG_TSENS_BASE"
 
 [[types]]
+name = "UART"
+description = "The UART controller: FIFO, serial configuration, interrupts and flow control."
+registers = "components/soc/esp32s31/register/soc/uart_reg.h"
+layout = "components/soc/esp32s31/register/soc/uart_struct.h"
+
+[[types.instances]]
+name = "UART0"
+svd = "UART0"
+base = "DR_REG_UART0_BASE"
+
+[[types]]
 name = "USB_SERIAL_JTAG"
 description = "The USB Serial/JTAG controller: its endpoint FIFOs, interrupts, pads and memory power."
 registers = "components/soc/esp32s31/register/soc/usb_serial_jtag_reg.h"
@@ -253,6 +272,8 @@ layout = "components/soc/esp32s31/register/soc/usb_serial_jtag_struct.h"
 name = "USB_DEVICE"
 svd = "USB_DEVICE"
 base = "DR_REG_USB_SERIAL_JTAG_BASE"
+# SOURCE: the target enumerators in the pinned soc/interrupts.h.
+interrupts = { USB_DEVICE = "USB_SERIAL_JTAG" }
 
 [[types]]
 name = "INTERRUPT_CORE"

@@ -4,6 +4,8 @@
 
 use std::collections::BTreeMap;
 
+use super::ImportError;
+
 /// One field line of a register header.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct HeaderField {
@@ -161,11 +163,19 @@ pub(super) fn parse_registers(text: &str) -> Vec<HeaderRegister> {
                     && !line.trim_start().starts_with("*/")
                 {
                     let mut text = comment_text(line);
-                    // A default wrapped onto the comment's next line.
+                    // Either the value or the entire `default:` clause
+                    // can wrap onto a continuation line.
+                    let continued = if field.unread_default.as_deref() == Some("") {
+                        Some(text)
+                    } else if field.unread_default.is_none() {
+                        text.strip_prefix("default:").map(str::trim)
+                    } else {
+                        None
+                    };
                     if field.default.is_none()
-                        && field.unread_default.as_deref() == Some("")
-                        && let Some((value, rest)) = text.split_once(';')
+                        && let Some(default) = continued
                     {
+                        let (value, rest) = default.split_once(';').unwrap_or((default, ""));
                         match parse_literal(value) {
                             Some(value) => {
                                 field.default = Some(value);
@@ -334,7 +344,10 @@ pub(super) struct InterruptSource {
 
 /// The sources of `interrupts.h`'s `periph_interrupt_t`, up to
 /// `ETS_MAX_INTR_SOURCE`.
-pub(super) fn parse_interrupts(text: &str) -> Vec<InterruptSource> {
+pub(super) fn parse_interrupts(
+    path: &str,
+    text: &str,
+) -> Result<Vec<InterruptSource>, ImportError> {
     let mut out = Vec::new();
     let mut inside = false;
     let mut next = 0_u64;
@@ -350,33 +363,46 @@ pub(super) fn parse_interrupts(text: &str) -> Vec<InterruptSource> {
         let entry = trimmed.split("//").next().unwrap_or("").trim();
         let entry = entry.trim_end_matches(',').trim();
         let (name, value) = match entry.split_once('=') {
-            Some((name, value)) => (name.trim(), parse_literal(value)),
+            Some((name, value)) => (name.trim(), Some(value.trim())),
             None => (entry, None),
         };
         if identifier(name) != name || name.is_empty() {
             continue;
         }
-        if let Some(value) = value {
-            next = value;
-        }
         if name == "ETS_MAX_INTR_SOURCE" {
             break;
         }
-        let Some(short) = name
+        let context = format!("{path}:{} {name}", index + 1);
+        if let Some(value) = value {
+            next = parse_literal(value).ok_or_else(|| {
+                ImportError::new(&context, format!("invalid enumeration value {value:?}"))
+            })?;
+        }
+        if let Some(short) = name
             .strip_prefix("ETS_")
             .and_then(|rest| rest.strip_suffix("_INTR_SOURCE"))
-        else {
-            next += 1;
-            continue;
-        };
-        if let Ok(number) = u16::try_from(next) {
+        {
+            let number = u16::try_from(next).map_err(|_| {
+                ImportError::new(&context, format!("interrupt source {next} exceeds u16"))
+            })?;
+            if out
+                .iter()
+                .any(|s: &InterruptSource| s.name == short || s.number == number)
+            {
+                return Err(ImportError::new(
+                    &context,
+                    "duplicate interrupt name or number",
+                ));
+            }
             out.push(InterruptSource {
                 number,
                 name: short.to_owned(),
                 line: index + 1,
             });
         }
-        next += 1;
+        next = next
+            .checked_add(1)
+            .ok_or_else(|| ImportError::new(&context, "enumeration increment exceeds u64"))?;
     }
-    out
+    Ok(out)
 }

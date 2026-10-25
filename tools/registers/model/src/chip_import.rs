@@ -112,6 +112,10 @@ pub struct InstanceSpec {
     pub registers: Option<String>,
     #[serde(default)]
     pub layout: Option<String>,
+    /// Explicit SVD-to-`interrupts.h` spellings. The target's declaration
+    /// supplies the source number and evidence; numbers never identify it.
+    #[serde(default)]
+    pub interrupts: BTreeMap<String, String>,
 }
 
 impl ImportSpec {
@@ -372,6 +376,7 @@ pub(crate) struct OutRegister {
     /// Value and mask.
     pub(crate) reset: Option<(u32, u32)>,
     pub(crate) reserved: u32,
+    pub(crate) reserved_sources: Cites,
     pub(crate) fifo: Option<Cites>,
     pub(crate) data_port: Option<Cites>,
     pub(crate) read_side_effect: Option<Cites>,
@@ -470,7 +475,7 @@ pub fn import(
         bases.add(path, &text);
     }
     let (interrupts_text, interrupts_pin) = pinned.idf(&spec.interrupts)?;
-    let sources = header::parse_interrupts(&interrupts_text);
+    let sources = header::parse_interrupts(&spec.interrupts, &interrupts_text)?;
     if sources.is_empty() {
         return Err(ImportError::new(
             &spec.interrupts,
@@ -500,6 +505,17 @@ pub fn import(
                 None => None,
                 Some(name) => Some(svd::block(&device, name)?),
             };
+            for name in instance.interrupts.keys() {
+                if !svd_block
+                    .as_ref()
+                    .is_some_and(|block| block.interrupts.iter().any(|(svd, _)| svd == name))
+                {
+                    return Err(ImportError::new(
+                        &instance.name,
+                        format!("interrupt mapping {name} names no SVD binding"),
+                    ));
+                }
+            }
             any_svd |= svd_block.is_some();
             if let (Some(overlay), Some(name)) = (overlay, &instance.svd)
                 && let Some(rule) = overlay.headers.iter().find(|rule| &rule.peripheral == name)
@@ -554,24 +570,20 @@ pub fn import(
                 }
                 size = size.max(svd_block.size.unwrap_or(0));
                 for (svd_name, number) in &svd_block.interrupts {
-                    let number_source = sources.iter().find(|s| u32::from(s.number) == *number);
-                    let Some(source) = number_source else {
+                    let header_name = instance.interrupts.get(svd_name).unwrap_or(svd_name);
+                    let source = sources.iter().find(|s| s.name == *header_name).ok_or_else(|| {
+                        ImportError::new(
+                            &instance.name,
+                            format!("SVD interrupt {svd_name} has no interrupts.h identity {header_name}; declare its spelling in the import spec"),
+                        )
+                    })?;
+                    if source.name != *svd_name || u32::from(source.number) != *number {
                         report.add(
                             &instance.name,
                             FindingKind::Interrupt,
                             format!(
-                                "the SVD binds {svd_name} = {number}, which interrupts.h does not number; not imported"
-                            ),
-                        );
-                        continue;
-                    };
-                    if source.name != *svd_name {
-                        report.add(
-                            &instance.name,
-                            FindingKind::Interrupt,
-                            format!(
-                                "the SVD names source {number} {svd_name}, interrupts.h {}; the header's name",
-                                source.name
+                                "the SVD binds {svd_name} = {number}, interrupts.h {} = {}; the header's identity and number",
+                                source.name, source.number
                             ),
                         );
                     }

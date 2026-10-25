@@ -331,7 +331,7 @@ name = "CLOCK"
 offset = 0x14
 description = "SPI1 clock division control register."
 reset = { value = 0x30103 }
-reserved = { mask = 0x7f000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI1_MEM_S_REG_H"] }
+reserved = { mask = 0x7f000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI1_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI1_MEM_S_REG_H_L379", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI1_MEM_S_STRUCT_H_L413"] }
 
 [[registers.fields]]
 name = "CLKCNT_L"
@@ -542,7 +542,7 @@ name = "MISC"
 offset = 0x34
 description = "SPI1 misc register"
 reset = { value = 0x2 }
-reserved = { mask = 0xfffff9fc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI1_MEM_S_REG_H"] }
+reserved = { mask = 0xfffff9fc, sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L859", "ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L861", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI1_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI1_MEM_S_REG_H_L610"] }
 
 [[registers.fields]]
 name = "CS0_DIS"

@@ -215,7 +215,7 @@ enum Lookup {
 /// another offset, or the same last word at the same offset.
 fn lookup(
     header: &[HeaderRegister],
-    layout: Option<&[ReservedWords]>,
+    layout: Option<&[(std::ops::Range<u64>, usize)]>,
     prefix: &str,
     name: &str,
     offset: u32,
@@ -252,11 +252,8 @@ fn lookup(
     let reserved = layout.and_then(|words| {
         words
             .iter()
-            .find(|w| {
-                let offset = u64::from(offset);
-                offset >= w.offset && offset < w.offset + w.words * 4
-            })
-            .map(|w| w.line)
+            .find(|(range, _)| range.contains(&u64::from(offset)))
+            .map(|(_, line)| *line)
     });
     Lookup::Absent { reserved }
 }
@@ -349,7 +346,28 @@ pub(super) fn instance(
             "defines no register this import reads",
         ));
     }
-    let layout = inputs.layout.as_deref();
+    let layout = inputs
+        .layout
+        .as_ref()
+        .map(|words| {
+            words
+                .iter()
+                .map(|word| {
+                    let end = word
+                        .words
+                        .checked_mul(4)
+                        .and_then(|bytes| word.offset.checked_add(bytes))
+                        .ok_or_else(|| {
+                            ImportError::new(
+                                format!("{name} device layout line {}", word.line),
+                                "reserved word span exceeds u64",
+                            )
+                        })?;
+                    Ok((word.offset..end, word.line))
+                })
+                .collect::<Result<Vec<_>, ImportError>>()
+        })
+        .transpose()?;
     let prefix = match inputs.svd {
         Some(svd) => svd_prefix(svd, header),
         None => header_prefix(inputs.header_path, header),
@@ -368,7 +386,7 @@ pub(super) fn instance(
         let template = register.array.as_ref().map(|a| a.name.as_str());
         let found = lookup(
             header,
-            layout,
+            layout.as_deref(),
             &prefix,
             &register.name,
             register.offset,
@@ -584,7 +602,13 @@ fn svd_only(register: &SvdRegister, entity: &str) -> Result<Element, ImportError
     let mut taken = 0_u32;
     for field in &register.fields {
         let field_mask = mask(field.low, field.width);
-        if field.low + field.width > register.width || taken & field_mask != 0 {
+        if field.width == 0
+            || field
+                .low
+                .checked_add(field.width)
+                .is_none_or(|end| end > register.width)
+            || taken & field_mask != 0
+        {
             return Err(ImportError::new(
                 format!("{entity}.{}", field.name),
                 "overlaps another SVD field or the register's end, and no header decides",
@@ -619,6 +643,7 @@ fn svd_only(register: &SvdRegister, entity: &str) -> Result<Element, ImportError
             description: register.description.clone(),
             reset: svd_reset(register),
             reserved: 0,
+            reserved_sources: Cites::new(),
             fifo: None,
             data_port: None,
             read_side_effect: None,
@@ -740,7 +765,12 @@ fn from_header(inputs: &HeaderInputs<'_>, report: &mut Report) -> Result<Element
         let rule_lines = lines(&rule.sources, entity)?;
         for defined in &rule.define_fields {
             let field_entity = format!("{entity}.{}", defined.name);
-            if defined.width == 0 || defined.offset + defined.width > 32 {
+            if defined.width == 0
+                || defined
+                    .offset
+                    .checked_add(defined.width)
+                    .is_none_or(|end| end > 32)
+            {
                 return Err(ImportError::new(
                     &field_entity,
                     "the overlay defines it outside the register",
@@ -1220,7 +1250,16 @@ fn from_header(inputs: &HeaderInputs<'_>, report: &mut Report) -> Result<Element
     let taken = fields
         .iter()
         .fold(0_u32, |acc, field| acc | mask(field.low, field.width));
-    let reserved = !declared & !taken;
+    // `define-fields` replaces the whole word's field layout. Its
+    // remaining lanes are reserved by the overlay's cited layout facts.
+    let (reserved, reserved_sources) = match defined {
+        Some(rule) => {
+            let mut sources = header_cite.clone();
+            sources.extend(lines(&rule.sources, entity)?);
+            (!taken, sources)
+        }
+        None => (!declared & !taken, header_cite.clone()),
+    };
     if let Some(rule) = inputs.rule
         && let Some(stated) = rule.reserved
         && stated & !reserved != 0
@@ -1250,6 +1289,7 @@ fn from_header(inputs: &HeaderInputs<'_>, report: &mut Report) -> Result<Element
             description,
             reset,
             reserved,
+            reserved_sources,
             fifo,
             data_port,
             read_side_effect,

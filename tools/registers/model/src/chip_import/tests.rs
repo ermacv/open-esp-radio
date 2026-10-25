@@ -156,6 +156,19 @@ base = \"DR_REG_TIMG0_BASE\"
 name = \"TIMG1\"
 svd = \"TIMG1\"
 base = \"DR_REG_TIMG1_BASE\"
+interrupts = { TG1_T0 = \"TIMERGRP1_T0\" }
+";
+
+const TIMG_ONLY: &str = "
+[[types]]
+name = \"TIMG\"
+description = \"A timer group.\"
+registers = \"timg_reg.h\"
+
+[[types.instances]]
+name = \"TIMG0\"
+svd = \"TIMG0\"
+base = \"DR_REG_TIMG0_BASE\"
 ";
 
 /// Write an output to a temporary directory and load its root.
@@ -591,7 +604,8 @@ fn header_parsers_read_both_formats_and_their_literals() {
         bases.resolve("DR_REG_SYSCON_BASE"),
         Some((0x4100, "reg_base.h".to_owned(), 4))
     );
-    let sources = header::parse_interrupts(INTERRUPTS);
+    let sources = header::parse_interrupts("interrupts.h", INTERRUPTS)
+        .expect("the test interrupt enumeration parses");
     assert_eq!(sources.len(), 3);
     assert_eq!(
         (sources[2].number, sources[2].name.as_str()),
@@ -601,4 +615,308 @@ fn header_parsers_read_both_formats_and_their_literals() {
     assert_eq!(registers[0].description.as_deref(), Some("Configuration."));
     assert_eq!(registers[1].fields[0].default, Some(0));
     assert_eq!(registers[1].fields[0].description, "The count.");
+}
+
+#[test]
+fn define_fields_reserve_the_remaining_lanes_with_overlay_evidence() -> TestResult {
+    let header = "\
+#define TIMG_ITEM_REG (DR_REG_TIMG0_BASE + 0x0)
+/** TIMG_VALUE : R/W; bitpos: [31:0]; default: 0;
+ *  The complete entry.
+ */
+";
+    let svd = device(&[peripheral(
+        "TIMG0",
+        0x1000,
+        &[],
+        &[register("ITEM", 0, 0, &[field("VALUE", 0, 32)])],
+    )]);
+    let overlay = crate::StrictnessOverlay::parse(&format!(
+        r#"schema = 1
+esp-idf = "{REVISION}"
+[[registers]]
+peripheral = "TIMG0"
+register = "ITEM"
+define-fields = [
+    {{ name = "PAGE", offset = 0, width = 3, description = "The page." }},
+    {{ name = "VALID", offset = 6, width = 1, description = "The entry is valid." }},
+]
+sources = ["esp-idf:entry_layout.h:2"]
+"#
+    ))?;
+    let output = import(
+        &spec(TIMG_ONLY),
+        Some(&overlay),
+        &files(
+            svd,
+            &[
+                ("timg_reg.h", header),
+                ("entry_layout.h", "\nentry layout\n"),
+            ],
+        ),
+    )?;
+    let model = load(&output)?;
+    let item = model.register("TIMG0.ITEM").expect("the entry imports");
+    let described = item.fields.iter().fold(0, |mask, field| {
+        mask | (((1_u32 << field.width) - 1) << field.low)
+    });
+    assert_eq!(item.fields.len(), 2);
+    assert_eq!(item.reserved, !described, "no lane becomes absent");
+    let reservation = model.types()["TIMG"].templates["ITEM"]
+        .reserved
+        .as_ref()
+        .expect("the remaining lanes are reserved");
+    assert_eq!(
+        reservation.sources,
+        [
+            "ESP_IDF_01234567_ENTRY_LAYOUT_H_L2",
+            "ESP_IDF_01234567_TIMG_REG_H",
+        ]
+    );
+    assert!(output.evidence.contains("esp-idf:entry_layout.h:2"));
+    Ok(())
+}
+
+#[test]
+fn hostile_svd_field_ranges_return_errors() {
+    for name in ["CONF", "EXTRA"] {
+        for (low, width) in [(u32::MAX, 2), (0, u32::MAX), (0, 0), (32, 1)] {
+            let svd = device(&[peripheral(
+                "TIMG0",
+                0x1000,
+                &[],
+                &[register(
+                    name,
+                    if name == "CONF" { 0 } else { 8 },
+                    0,
+                    &[field("INVALID", low, width)],
+                )],
+            )]);
+            let error = import(&spec(TIMG_ONLY), None, &files(svd, &[]))
+                .expect_err("invalid SVD geometry must return an error, with or without a header");
+            assert!(error.context.contains("SVD"), "{error}");
+        }
+    }
+}
+
+#[test]
+fn hostile_device_layout_spans_return_errors() {
+    let svd = device(&[peripheral(
+        "TIMG0",
+        0x1000,
+        &[],
+        &[register("EXTRA", 8, 0, &[field("VALUE", 0, 1)])],
+    )]);
+    let mut spec = spec(TIMG_ONLY);
+    spec.types[0].layout = Some("timg_struct.h".to_owned());
+    for member in [
+        "uint32_t reserved_0[0xffffffffffffffff];",
+        "uint32_t reserved_fffffffffffffffc[1];",
+    ] {
+        let layout = format!("typedef struct {{\n{member}\n}} timg_dev_t;\n");
+        let error = import(
+            &spec,
+            None,
+            &files(svd.clone(), &[("timg_struct.h", &layout)]),
+        )
+        .expect_err("overflow in a reserved span must return an error");
+        assert!(error.context.contains("device layout line 2"), "{error}");
+        assert!(error.reason.contains("span"), "{error}");
+    }
+}
+
+#[test]
+fn hostile_interrupt_values_return_contextual_errors() {
+    let svd = device(&[peripheral("TIMG0", 0x1000, &[], &timg_registers())]);
+    for declaration in [
+        "ETS_OTHER_INTR_SOURCE = 18446744073709551615,",
+        "OTHER = 18446744073709551615,",
+        "ETS_OTHER_INTR_SOURCE = 65536,",
+        "ETS_OTHER_INTR_SOURCE = 18446744073709551616,",
+        "ETS_OTHER_INTR_SOURCE = invalid,",
+        "OTHER = invalid,",
+        "ETS_LAST_INTR_SOURCE = 65535,\nETS_OTHER_INTR_SOURCE,",
+        "ETS_OTHER_INTR_SOURCE = 1,\nETS_DUPLICATE_INTR_SOURCE = 1,",
+        "ETS_OTHER_INTR_SOURCE = 1,\nETS_OTHER_INTR_SOURCE = 2,",
+    ] {
+        let header = format!(
+            "typedef enum {{\n{declaration}\nETS_MAX_INTR_SOURCE,\n}} periph_interrupt_t;\n"
+        );
+        let error = import(
+            &spec(TIMG_ONLY),
+            None,
+            &files(svd.clone(), &[("interrupts.h", &header)]),
+        )
+        .expect_err("unrepresentable enumeration values must return an error");
+        assert!(error.context.starts_with("interrupts.h:"), "{error}");
+    }
+}
+
+#[test]
+fn interrupt_enumeration_keeps_implicit_values_and_the_last_u16_source() -> TestResult {
+    let sources = header::parse_interrupts(
+        "interrupts.h",
+        "typedef enum {\nOTHER = 65533,\nETS_FIRST_INTR_SOURCE,\nETS_LAST_INTR_SOURCE,\nETS_MAX_INTR_SOURCE,\n} periph_interrupt_t;\n",
+    )?;
+    assert_eq!(
+        sources
+            .iter()
+            .map(|source| source.number)
+            .collect::<Vec<_>>(),
+        [u16::MAX - 1, u16::MAX]
+    );
+    Ok(())
+}
+
+#[test]
+fn hostile_overlay_field_ranges_return_errors() -> TestResult {
+    let svd = device(&[peripheral("TIMG0", 0x1000, &[], &timg_registers())]);
+    let mut overlay = crate::StrictnessOverlay::parse(&format!(
+        r#"schema = 1
+esp-idf = "{REVISION}"
+[[registers]]
+peripheral = "TIMG0"
+register = "CONF"
+define-fields = [{{ name = "EN", offset = 0, width = 1, description = "Enable." }}]
+sources = ["esp-idf:timg_reg.h:5"]
+"#
+    ))?;
+    // The public API also accepts an overlay constructed or changed by a
+    // caller after parsing; it must check its geometry itself.
+    for (low, width) in [(u32::MAX, 2), (0, u32::MAX), (0, 0)] {
+        overlay.registers[0].define_fields[0].offset = low;
+        overlay.registers[0].define_fields[0].width = width;
+        let error = import(&spec(TIMG_ONLY), Some(&overlay), &files(svd.clone(), &[]))
+            .expect_err("unrepresentable overlay fields must return an error");
+        assert!(error.context.contains("CONF.EN"), "{error}");
+        assert!(error.reason.contains("outside"), "{error}");
+    }
+    Ok(())
+}
+
+#[test]
+fn header_interrupt_identity_wins_over_stale_svd_number() -> TestResult {
+    let svd = device(&[peripheral(
+        "TIMG0",
+        0x1000,
+        &[("TG0_T0", 0)],
+        &timg_registers(),
+    )]);
+    let output = import(&spec(TIMG_ONLY), None, &files(svd, &[]))?;
+    let model = load(&output)?;
+    let interrupt = &model.interrupts()[0];
+    assert_eq!(
+        (
+            interrupt.name.as_str(),
+            interrupt.source,
+            interrupt.instance.as_str()
+        ),
+        ("TG0_T0", 1, "TIMG0")
+    );
+    assert!(has(&output.report, "TIMG0", FindingKind::Interrupt));
+    Ok(())
+}
+
+#[test]
+fn explicit_interrupt_spelling_uses_the_header_number_and_evidence() -> TestResult {
+    let svd = device(&[peripheral(
+        "TIMG0",
+        0x1000,
+        &[("OLD_TIMER", 0)],
+        &timg_registers(),
+    )]);
+    let types = format!("{TIMG_ONLY}interrupts = {{ OLD_TIMER = \"TG0_T0\" }}\n");
+    let output = import(&spec(&types), None, &files(svd, &[]))?;
+    let model = load(&output)?;
+    let interrupt = &model.interrupts()[0];
+    assert_eq!((interrupt.name.as_str(), interrupt.source), ("TG0_T0", 1));
+    assert!(
+        interrupt
+            .sources
+            .iter()
+            .any(|source| source == "ESP_IDF_01234567_INTERRUPTS_H_L3")
+    );
+    assert!(
+        interrupt
+            .sources
+            .iter()
+            .any(|source| source.starts_with("VENDOR_SVD_"))
+    );
+    Ok(())
+}
+
+#[test]
+fn an_unknown_interrupt_identity_is_an_error_even_at_a_known_number() {
+    let svd = device(&[peripheral(
+        "TIMG0",
+        0x1000,
+        &[("GHOST", 0)],
+        &timg_registers(),
+    )]);
+    let error = import(&spec(TIMG_ONLY), None, &files(svd.clone(), &[]))
+        .expect_err("source zero is not an identity for GHOST");
+    assert!(error.reason.contains("GHOST"), "{error}");
+    let types = format!("{TIMG_ONLY}interrupts = {{ GHOST = \"TYPO\" }}\n");
+    let error = import(&spec(&types), None, &files(svd, &[]))
+        .expect_err("an explicit spelling must exist in the header");
+    assert!(error.reason.contains("TYPO"), "{error}");
+}
+
+#[test]
+fn an_interrupt_mapping_must_name_an_existing_svd_binding() {
+    let svd = device(&[peripheral("TIMG0", 0x1000, &[], &timg_registers())]);
+    let types = format!("{TIMG_ONLY}interrupts = {{ GHOST = \"TG0_T0\" }}\n");
+    let error = import(&spec(&types), None, &files(svd, &[]))
+        .expect_err("a stale mapping must not silently stand");
+    assert!(error.reason.contains("names no SVD binding"), "{error}");
+}
+
+#[test]
+fn an_entire_wrapped_default_clause_keeps_its_reset_knowledge() -> TestResult {
+    let svd = device(&[peripheral("TIMG0", 0x1000, &[], &timg_registers())]);
+    let types = TIMG_ONLY.replace("svd = \"TIMG0\"\n", "");
+    for value in [0, 2] {
+        for clause in [
+            format!("default: {value};"),
+            format!("default:\n * {value};"),
+        ] {
+            let header = format!(
+                "\
+#define TIMG_CONF_REG (DR_REG_TIMG0_BASE + 0x0)
+/** TIMG_EN : R/W; bitpos: [0]; default: 1;
+ *  Enables the timer.
+ */
+/** TIMG_LEVEL : R/W; bitpos: [9:8];
+ *  {clause}
+ *  The remap level.
+ */
+"
+            );
+            let output = import(
+                &spec(&types),
+                None,
+                &files(svd.clone(), &[("timg_reg.h", &header)]),
+            )?;
+            let model = load(&output)?;
+            let reset = model
+                .register("TIMG0.CONF")
+                .expect("configuration imports")
+                .reset
+                .expect("both defaults are known");
+            assert_eq!(
+                (reset.value, reset.mask),
+                ((value << 8) | 1, Some((3 << 8) | 1))
+            );
+            let parsed = header::parse_registers(&header);
+            assert_eq!(parsed[0].fields[1].description, "The remap level.");
+            assert!(
+                !output
+                    .report
+                    .findings
+                    .iter()
+                    .any(|f| f.kind == FindingKind::Default)
+            );
+        }
+    }
+    Ok(())
 }

@@ -315,7 +315,7 @@ name = "SPI_MEM_CLOCK"
 offset = 0x14
 description = "SPI1 clock division control register."
 reset = { value = 0x30103 }
-reserved = { mask = 0x7f000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI1_MEM_C_REG_H"] }
+reserved = { mask = 0x7f000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI1_MEM_C_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI1_MEM_C_REG_H_L379", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI1_MEM_C_STRUCT_H_L415"] }
 
 [[registers.fields]]
 name = "SPI_MEM_CLKCNT_L"

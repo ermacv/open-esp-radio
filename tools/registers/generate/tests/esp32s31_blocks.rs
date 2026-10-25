@@ -39,3 +39,24 @@ fn the_imported_esp32s31_root_loads_with_every_spec_block() {
     }
     assert!(!model.interrupts().is_empty());
 }
+
+#[test]
+fn the_existing_uart0_contract_consumer_has_an_imported_interrupt_owner() {
+    let registers = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/esp32s31/registers");
+    let evidence = RegisterEvidenceSet::load_all(&[registers.join("evidence/imported.toml")])
+        .expect("the imported evidence catalog loads");
+    let model = ChipModel::load(&registers.join("chip.toml"), &evidence)
+        .expect("the imported chip root loads");
+    let uart = model
+        .instances()
+        .iter()
+        .find(|instance| instance.name == "UART0")
+        .expect("the PAC soc_tests UART0 consumer is in the import boundary");
+    assert!(!model.types()[&uart.block_type].elements.is_empty());
+    assert!(
+        model
+            .interrupts()
+            .iter()
+            .any(|source| source.name == "UART0" && source.instance == uart.name)
+    );
+}
