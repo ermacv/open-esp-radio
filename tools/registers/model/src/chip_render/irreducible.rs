@@ -11,7 +11,9 @@
 //!   acknowledged, exactly as sampled, in its clear word;
 //! - a write from zero storing sourced `whole-word-bits` beside its fields;
 //! - a field-or-modify of a pointer field: the vendor's OR of a typed
-//!   reference's image into a fresh read.
+//!   reference's image into a fresh read;
+//! - a partition image read: on each part of the partition, a read-only
+//!   diagnostic image of the part's readable, side-effect-free words, raw.
 //!
 //! Every other transaction of the policy is a sequence of field accessors
 //! and belongs to the HAL.
@@ -238,6 +240,13 @@ pub(super) fn render(
     {
         render_snapshot(body, output, plan, owner, model, snapshot)?;
     }
+    for read in file
+        .partition_image_reads
+        .iter()
+        .filter(|read| read.partition == owner.partition)
+    {
+        render_partition_image(body, plan, owner, read);
+    }
     for write in file
         .zero_based_field_writes
         .iter()
@@ -296,6 +305,56 @@ pub(super) fn render(
         );
     }
     Ok(())
+}
+
+/// The part's share of a partition image read: each word the part holds
+/// whose read has a value and changes nothing, ascending by offset, read
+/// whole (undeclared and reserved lanes included) as a diagnostic of the
+/// hardware, with no field decoding. A word the part only observes is its
+/// owner's.
+fn render_partition_image(
+    body: &mut String,
+    plan: &TypePlan<'_>,
+    owner: &Owner<'_>,
+    read: &crate::chip_policy::PartitionImageRead,
+) {
+    let offsets = owner
+        .words
+        .owned
+        .iter()
+        .copied()
+        .filter(|offset| {
+            plan.element(*offset)
+                .is_some_and(|(template, _)| template.readable())
+        })
+        .collect::<Vec<_>>();
+    let constant = names::ident(&read.name).to_uppercase();
+    let list = offsets
+        .iter()
+        .map(|offset| format!("0x{offset:x}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let arms = offsets
+        .iter()
+        .enumerate()
+        .map(|(index, offset)| format!("{index} => Some(self.0.read::<0x{offset:x}>()),\n"))
+        .collect::<String>();
+    let sources = read.sources.join(", ");
+    let _ = writeln!(
+        body,
+        "/// The block offsets of the part's words in the `{name}` diagnostic\n\
+         /// image, ascending.\n\
+         pub const {constant}_OFFSETS: [u32; {len}] = [{list}];\n\n\
+         /// Read word `index` of the part's `{name}` diagnostic image: the\n\
+         /// readable words without a read side effect, at\n\
+         /// [`Self::{constant}_OFFSETS`], whole and undecoded; `None` past\n\
+         /// its end.\n///\n/// SOURCE: {sources}.\n\
+         pub fn {method}(&self, index: usize) -> Option<u32> {{\n\
+         match index {{\n{arms}_ => None,\n}}\n}}\n",
+        name = read.name,
+        len = offsets.len(),
+        method = names::ident(&read.name),
+    );
 }
 
 /// A field-or-modify of one pointer field from input bit zero, with

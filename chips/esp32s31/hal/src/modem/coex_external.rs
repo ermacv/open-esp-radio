@@ -277,7 +277,7 @@ mod tests {
                 high,
             );
             drop(part);
-            expected[0x4a0 / 4] = expected_word;
+            expected[0xa0 / 4] = expected_word;
             assert_eq!(memory, expected);
         }
     }

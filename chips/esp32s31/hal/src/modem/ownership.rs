@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 use super::values::{CoexTimerClientValue, CoexTimerPtiValue};
 use super::{CoexTimerBankRegisters, CoexTimerRegister};
-use crate::phy::registers::RadioPhyRegisters;
+use crate::phy::RadioPhyRegisters;
 use oer_esp32s31_pac::ownership::{CoexistencePeripherals, SharedRadioPeripherals};
 
 /// Shared register ownership retained by the radio-system actor.
@@ -48,6 +48,39 @@ impl SharedRadioRegisters {
     pub fn radio_phy_mut(&mut self) -> &mut RadioPhyRegisters {
         &mut self.radio_phy
     }
+    /// The shared radio init control, lent to the Wi-Fi MAC's TX/RX
+    /// initialization suffix.
+    pub(crate) fn shared_radio_init_control_mut(
+        &mut self,
+    ) -> &mut oer_esp32s31_pac::wifi_mac::SharedRadioInitControl {
+        &mut self.shared_radio.shared_radio_init_control
+    }
+
+    /// Execute the MMIO path of vendor `bt_bb_v2_init_cmplx(1)` over the
+    /// shared baseband parts and the radio PHY's Bluetooth AGC and
+    /// baseband-configuration words.
+    ///
+    /// SOURCE: BLOB_LIBBTBB_BT_BB_V2_INIT.
+    pub(crate) fn initialize_btbb_v2_arg_one(&mut self, gain_parameter: u8) {
+        use crate::bluetooth::registers::baseband::{
+            BtbbV2Registers, ChipBtbb, initialize_btbb_v2_arg_one,
+        };
+        let phy = &mut self.radio_phy.peripherals;
+        let shared = &mut self.shared_radio;
+        initialize_btbb_v2_arg_one::<ChipBtbb>(
+            BtbbV2Registers {
+                btagc: &mut phy.phy_btagc_recovered,
+                oracle_fe: &mut phy.phy_baseband_config_oracle.fe,
+                oracle_wifi_bb: &mut phy.phy_baseband_config_oracle.wifi_bb,
+                baseband: &mut shared.bt_v32_baseband,
+                init_control: &mut shared.shared_radio_init_control,
+                tx_timing: &mut shared.shared_baseband_tx_timing,
+                zbbb: &mut shared.zbbb_radio_control,
+            },
+            gain_parameter,
+        );
+    }
+
     pub fn coex_timers_mut(&mut self) -> CoexTimerBankRegisters<'_> {
         CoexTimerBankRegisters::new(&mut self.coexistence.coex_hw_timer)
     }

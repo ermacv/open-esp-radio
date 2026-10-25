@@ -7,7 +7,7 @@ use oer_mmio::Placement;
 
 use crate::{
     modem::syscon::ModemSysconPowerBaseline, modem::values::ModemSysconClockGateState,
-    phy::registers::RadioPhyRegisters,
+    phy::RadioPhyRegisters,
 };
 
 /// Semantic readback of the system-clock prerequisites shared by all radios.
@@ -285,11 +285,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
 
     #[doc(hidden)]
     pub fn set_bb_i2c_power_tie(&mut self, enabled: bool) {
-        if enabled {
-            super::ops::enable_baseband_i2c_power_tie(&mut self.peripherals.pmu_radio);
-        } else {
-            self.peripherals.pmu_radio.disable_baseband_i2c_power_tie();
-        }
+        super::ops::set_baseband_i2c_power_tie(&mut self.peripherals.pmu_radio, enabled);
     }
 
     #[doc(hidden)]

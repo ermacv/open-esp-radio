@@ -21,11 +21,8 @@
 //! The domain is not a coexistence grant: it serializes register access, not
 //! air time.
 
-use oer_esp32s31_pac::BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER;
-
 use crate::bluetooth::registers::BluetoothTaskRegisters;
 use crate::ieee80211::registers::WifiRadioRegisters;
-use crate::root::SharedRadioParts;
 
 pub use crate::clock::{
     BluetoothClient, CommonPower, CommonPowerExitFailure, CommonRadioPowerError, Ieee802154Client,
@@ -186,7 +183,7 @@ pub enum BtbbAcquired {
 /// Shared registers, the PHY, power and BTBB state that must stay with them,
 /// and the upper layer's attachment.
 struct SharedRadioState<B: PlatformClockBackend, T> {
-    registers: SharedRadioParts,
+    registers: SharedRadioRegisters,
     phy: PhyRouteState,
     power: CommonRadioPower<B>,
     wifi_power_entry: crate::ieee80211::client::WifiPowerEntry,
@@ -365,7 +362,7 @@ pub struct RadioDomain<B: PlatformClockBackend, T = ()> {
 impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// Place the shared owner, its PHY state and `attachment` in one domain.
     /// This performs no MMIO.
-    pub(crate) fn new(registers: SharedRadioParts, phy: PhyRouteState, attachment: T) -> Self {
+    pub(crate) fn new(registers: SharedRadioRegisters, phy: PhyRouteState, attachment: T) -> Self {
         Self {
             state: SharedRadioState {
                 registers,
@@ -399,7 +396,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     )]
     pub(crate) fn into_parts(
         self,
-    ) -> Result<(SharedRadioParts, PhyRouteState, T), (Self, RadioDomainReleaseError)> {
+    ) -> Result<(SharedRadioRegisters, PhyRouteState, T), (Self, RadioDomainReleaseError)> {
         let state = self.state;
         if state.power.any_client() {
             return Err((
@@ -724,10 +721,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// protocol capability that also borrows its own registers.
     pub(crate) fn phy_parts_mut(
         &mut self,
-    ) -> (
-        &mut crate::phy::registers::RadioPhyRegisters,
-        &mut PhyRouteState,
-    ) {
+    ) -> (&mut crate::phy::RadioPhyRegisters, &mut PhyRouteState) {
         let state = self.state_mut();
         (state.registers.radio_phy_mut(), &mut state.phy)
     }
@@ -737,7 +731,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     pub(crate) fn phy_parts_with_attachment(
         &mut self,
     ) -> (
-        &mut crate::phy::registers::RadioPhyRegisters,
+        &mut crate::phy::RadioPhyRegisters,
         &mut PhyRouteState,
         &mut T,
     ) {
@@ -1158,8 +1152,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// protocol registers.
     /// Registers of the radio-PHY partition image [`Self::phy_register_image`]
     /// reads.
-    pub const PHY_REGISTER_IMAGE_LEN: usize =
-        crate::phy::registers::RadioPhyRegisters::REGISTER_IMAGE_LEN;
+    pub const PHY_REGISTER_IMAGE_LEN: usize = crate::phy::RadioPhyRegisters::REGISTER_IMAGE_LEN;
 
     /// Registers of the radio-PHY partition image.
     pub const fn phy_register_image_len(&self) -> usize {
@@ -1175,13 +1168,13 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         self.registers().radio_phy().register_image(index)
     }
 
-    pub(crate) fn registers(&self) -> &SharedRadioParts {
+    pub(crate) fn registers(&self) -> &SharedRadioRegisters {
         &self.state().registers
     }
 
     /// Borrow the shared registers for a protocol transaction that also
     /// touches protocol registers.
-    pub(crate) fn registers_mut(&mut self) -> &mut SharedRadioParts {
+    pub(crate) fn registers_mut(&mut self) -> &mut SharedRadioRegisters {
         &mut self.state_mut().registers
     }
 }
@@ -1201,5 +1194,5 @@ mod tests;
 
 use crate::{
     modem::{BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, SharedRadioRegisters},
-    phy::registers::RadioPhyRegisters,
+    phy::RadioPhyRegisters,
 };

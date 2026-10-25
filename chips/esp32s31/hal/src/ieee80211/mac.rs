@@ -29,10 +29,10 @@ use crate::types::{
 use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
 use crate::{
-    domain::SharedRadioRegisters,
     ieee80211::registers::{
         MacInterruptSetup as PacMacInterruptSetup, WifiRadioRegisters, WifiRxDmaRegisters,
     },
+    modem::SharedRadioRegisters,
     types::CoexistenceLowPowerClockObservation,
 };
 

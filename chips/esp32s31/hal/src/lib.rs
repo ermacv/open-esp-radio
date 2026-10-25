@@ -71,5 +71,3 @@ pub mod usb_serial_jtag;
 #[doc(hidden)]
 pub mod validation;
 pub mod watchdog;
-
-use phy::registers::RadioPhyRegisters;

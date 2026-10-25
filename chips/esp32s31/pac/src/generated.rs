@@ -15455,6 +15455,59 @@ pub mod bt_bb {
         pub fn initialize_bluetooth_receive_saturation_gain_image_1(&mut self) {
             self.0.write::<0x85c>(0x0a1b272e);
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 33] = [
+            0x800, 0x820, 0x840, 0x844, 0x848, 0x84c, 0x850, 0x854, 0x868, 0x86c, 0x884, 0x888,
+            0x88c, 0x894, 0x898, 0x8a0, 0x8a8, 0x8b0, 0x8b4, 0x8b8, 0x8bc, 0x8c0, 0x8c4, 0x8d0,
+            0x8d4, 0x8dc, 0x8e0, 0x8e4, 0x8e8, 0x8ec, 0x8f0, 0x8f8, 0x900,
+        ];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x800>()),
+                1 => Some(self.0.read::<0x820>()),
+                2 => Some(self.0.read::<0x840>()),
+                3 => Some(self.0.read::<0x844>()),
+                4 => Some(self.0.read::<0x848>()),
+                5 => Some(self.0.read::<0x84c>()),
+                6 => Some(self.0.read::<0x850>()),
+                7 => Some(self.0.read::<0x854>()),
+                8 => Some(self.0.read::<0x868>()),
+                9 => Some(self.0.read::<0x86c>()),
+                10 => Some(self.0.read::<0x884>()),
+                11 => Some(self.0.read::<0x888>()),
+                12 => Some(self.0.read::<0x88c>()),
+                13 => Some(self.0.read::<0x894>()),
+                14 => Some(self.0.read::<0x898>()),
+                15 => Some(self.0.read::<0x8a0>()),
+                16 => Some(self.0.read::<0x8a8>()),
+                17 => Some(self.0.read::<0x8b0>()),
+                18 => Some(self.0.read::<0x8b4>()),
+                19 => Some(self.0.read::<0x8b8>()),
+                20 => Some(self.0.read::<0x8bc>()),
+                21 => Some(self.0.read::<0x8c0>()),
+                22 => Some(self.0.read::<0x8c4>()),
+                23 => Some(self.0.read::<0x8d0>()),
+                24 => Some(self.0.read::<0x8d4>()),
+                25 => Some(self.0.read::<0x8dc>()),
+                26 => Some(self.0.read::<0x8e0>()),
+                27 => Some(self.0.read::<0x8e4>()),
+                28 => Some(self.0.read::<0x8e8>()),
+                29 => Some(self.0.read::<0x8ec>()),
+                30 => Some(self.0.read::<0x8f0>()),
+                31 => Some(self.0.read::<0x8f8>()),
+                32 => Some(self.0.read::<0x900>()),
+                _ => None,
+            }
+        }
     }
 
     /// The `PhyAdcDumpRecoveredBtBb` part of `BT_BB`.
@@ -15508,6 +15561,23 @@ pub mod bt_bb {
             let mut value = word_00b4_opaque::W(self.0.read::<0xb4>());
             change(&mut value);
             self.0.write::<0xb4>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 1] = [0xb4];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0xb4>()),
+                _ => None,
+            }
         }
     }
 
@@ -55396,6 +55466,23 @@ pub mod fe {
             change(&mut value);
             self.0.write::<0x8bc>(value.0);
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 1] = [0x8bc];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x8bc>()),
+                _ => None,
+            }
+        }
     }
 
     /// The `PhyBasebandConfigOracleFe` part of `FE`.
@@ -55845,6 +55932,48 @@ pub mod fe {
         pub fn initialize_power_detector_table_1(&mut self) {
             self.0.write::<0x814>(0x00ff0f64);
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 23] = [
+            0x40c, 0x410, 0x418, 0x41c, 0x420, 0x424, 0x428, 0x438, 0x444, 0x448, 0x808, 0x80c,
+            0x814, 0x81c, 0x820, 0x824, 0x828, 0x86c, 0x870, 0xc04, 0xc08, 0xc0c, 0xc20,
+        ];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x40c>()),
+                1 => Some(self.0.read::<0x410>()),
+                2 => Some(self.0.read::<0x418>()),
+                3 => Some(self.0.read::<0x41c>()),
+                4 => Some(self.0.read::<0x420>()),
+                5 => Some(self.0.read::<0x424>()),
+                6 => Some(self.0.read::<0x428>()),
+                7 => Some(self.0.read::<0x438>()),
+                8 => Some(self.0.read::<0x444>()),
+                9 => Some(self.0.read::<0x448>()),
+                10 => Some(self.0.read::<0x808>()),
+                11 => Some(self.0.read::<0x80c>()),
+                12 => Some(self.0.read::<0x814>()),
+                13 => Some(self.0.read::<0x81c>()),
+                14 => Some(self.0.read::<0x820>()),
+                15 => Some(self.0.read::<0x824>()),
+                16 => Some(self.0.read::<0x828>()),
+                17 => Some(self.0.read::<0x86c>()),
+                18 => Some(self.0.read::<0x870>()),
+                19 => Some(self.0.read::<0xc04>()),
+                20 => Some(self.0.read::<0xc08>()),
+                21 => Some(self.0.read::<0xc0c>()),
+                22 => Some(self.0.read::<0xc20>()),
+                _ => None,
+            }
+        }
     }
 
     /// The `PhyClockOracleFe` part of `FE`.
@@ -55926,6 +56055,24 @@ pub mod fe {
             let mut value = word_0800_opaque::W(self.0.read::<0x800>());
             change(&mut value);
             self.0.write::<0x800>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 2] = [0x408, 0x800];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x408>()),
+                1 => Some(self.0.read::<0x800>()),
+                _ => None,
+            }
         }
     }
 
@@ -56026,6 +56173,26 @@ pub mod fe {
             change(&mut value);
             self.0.write::<0x840>(value.0);
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 4] = [0x834, 0x838, 0x83c, 0x840];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x834>()),
+                1 => Some(self.0.read::<0x838>()),
+                2 => Some(self.0.read::<0x83c>()),
+                3 => Some(self.0.read::<0x840>()),
+                _ => None,
+            }
+        }
     }
 
     /// The `PhyAdcDumpRecoveredFe` part of `FE`.
@@ -56079,6 +56246,23 @@ pub mod fe {
             let mut value = word_08cc_opaque::W(self.0.read::<0x8cc>());
             change(&mut value);
             self.0.write::<0x8cc>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 1] = [0x8cc];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x8cc>()),
+                _ => None,
+            }
         }
     }
 
@@ -56148,6 +56332,24 @@ pub mod fe {
             let mut value = word_0440_opaque::W(self.0.read::<0x440>());
             change(&mut value);
             self.0.write::<0x440>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 2] = [0x430, 0x440];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x430>()),
+                1 => Some(self.0.read::<0x440>()),
+                _ => None,
+            }
         }
     }
 
@@ -56232,6 +56434,25 @@ pub mod fe {
             let mut value = word_0c1c_opaque::W(self.0.read::<0xc1c>());
             change(&mut value);
             self.0.write::<0xc1c>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 3] = [0xc14, 0xc18, 0xc1c];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0xc14>()),
+                1 => Some(self.0.read::<0xc18>()),
+                2 => Some(self.0.read::<0xc1c>()),
+                _ => None,
+            }
         }
     }
 
@@ -56422,6 +56643,29 @@ pub mod fe {
         pub fn frequency_parameter_1_initialization(&mut self) {
             self.0.write::<0x28>(0x25824e58);
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 6] =
+            [0x1c, 0x20, 0x28, 0x30, 0x40, 0x874];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x1c>()),
+                1 => Some(self.0.read::<0x20>()),
+                2 => Some(self.0.read::<0x28>()),
+                3 => Some(self.0.read::<0x30>()),
+                4 => Some(self.0.read::<0x40>()),
+                5 => Some(self.0.read::<0x874>()),
+                _ => None,
+            }
+        }
     }
 
     /// The `PhyIqEstimatorOracle` part of `FE`.
@@ -56549,6 +56793,35 @@ pub mod fe {
         pub fn read_estimator_activity_status(&self) -> estimator_activity_status::R {
             estimator_activity_status::R(self.0.read::<0x8d0>())
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 11] = [
+            0x44c, 0x450, 0x454, 0x458, 0x45c, 0x460, 0x464, 0x468, 0x46c, 0x47c, 0x8d0,
+        ];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x44c>()),
+                1 => Some(self.0.read::<0x450>()),
+                2 => Some(self.0.read::<0x454>()),
+                3 => Some(self.0.read::<0x458>()),
+                4 => Some(self.0.read::<0x45c>()),
+                5 => Some(self.0.read::<0x460>()),
+                6 => Some(self.0.read::<0x464>()),
+                7 => Some(self.0.read::<0x468>()),
+                8 => Some(self.0.read::<0x46c>()),
+                9 => Some(self.0.read::<0x47c>()),
+                10 => Some(self.0.read::<0x8d0>()),
+                _ => None,
+            }
+        }
     }
 
     /// The `PhyMemory` part of `FE`.
@@ -56654,6 +56927,30 @@ pub mod fe {
             let mut value = group_boundary::W(self.0.read_indexed::<0x854, 0x4, 6>(index));
             change(&mut value);
             self.0.write_indexed::<0x854, 0x4, 6>(index, value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 7] =
+            [0x844, 0x854, 0x858, 0x85c, 0x860, 0x864, 0x868];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x844>()),
+                1 => Some(self.0.read::<0x854>()),
+                2 => Some(self.0.read::<0x858>()),
+                3 => Some(self.0.read::<0x85c>()),
+                4 => Some(self.0.read::<0x860>()),
+                5 => Some(self.0.read::<0x864>()),
+                6 => Some(self.0.read::<0x868>()),
+                _ => None,
+            }
         }
     }
 
@@ -56780,6 +57077,31 @@ pub mod fe {
         pub fn read_read_result_4(&self) -> read_result_4::R {
             read_result_4::R(self.0.read::<0x8a4>())
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 8] =
+            [0x884, 0x88c, 0x890, 0x894, 0x898, 0x89c, 0x8a0, 0x8a4];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x884>()),
+                1 => Some(self.0.read::<0x88c>()),
+                2 => Some(self.0.read::<0x890>()),
+                3 => Some(self.0.read::<0x894>()),
+                4 => Some(self.0.read::<0x898>()),
+                5 => Some(self.0.read::<0x89c>()),
+                6 => Some(self.0.read::<0x8a0>()),
+                7 => Some(self.0.read::<0x8a4>()),
+                _ => None,
+            }
+        }
     }
 
     /// The `PhyRxDcoOracle` part of `FE`.
@@ -56833,6 +57155,23 @@ pub mod fe {
             let mut value = control::W(self.0.read::<0x434>());
             change(&mut value);
             self.0.write::<0x434>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 1] = [0x434];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x434>()),
+                _ => None,
+            }
         }
     }
 
@@ -80424,6 +80763,40 @@ pub mod hp_sys_clkrst {
             change(&mut value);
             self.0.write::<0x1e0>(value.0);
         }
+
+        /// Write the vendor's whole-word image `0x0000003d`, undeclared bits included (`HP_SYS_CLKRST.MODEM_CONF`).
+        ///
+        /// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK.
+        #[inline]
+        pub fn open_modem_pll_source_gate(&mut self) {
+            self.0.write::<0x1e0>(0x0000003d);
+        }
+
+        /// Write the vendor's whole-word image `0x00000025`, undeclared bits included (`HP_SYS_CLKRST.MODEM_CONF`).
+        ///
+        /// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK.
+        #[inline]
+        pub fn close_modem_pll_source_gate(&mut self) {
+            self.0.write::<0x1e0>(0x00000025);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 2] = [0x40, 0x1e0];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x40>()),
+                1 => Some(self.0.read::<0x1e0>()),
+                _ => None,
+            }
+        }
     }
 
     /// The `HpSysClkrstBootClock` part of `HP_SYS_CLKRST`.
@@ -94158,6 +94531,24 @@ pub mod lp_aonclkrst {
             change(&mut value);
             self.0.write::<0x68>(value.0);
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 2] = [0x0, 0x68];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x0>()),
+                1 => Some(self.0.read::<0x68>()),
+                _ => None,
+            }
+        }
     }
 
     /// The `LpAonClkrstCpll` part of `LP_AON_CLKRST`.
@@ -95999,6 +96390,23 @@ pub mod lp_peri_clkrst {
             change(&mut value);
             self.0.write::<0x30>(value.0);
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 1] = [0x30];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x30>()),
+                _ => None,
+            }
+        }
     }
 }
 
@@ -96464,6 +96872,25 @@ pub mod modem_datadump {
             let mut value = lane_select::W(self.0.read::<0x18>());
             change(&mut value);
             self.0.write::<0x18>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 3] = [0x4, 0x8, 0x18];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x4>()),
+                1 => Some(self.0.read::<0x8>()),
+                2 => Some(self.0.read::<0x18>()),
+                _ => None,
+            }
         }
     }
 }
@@ -99526,6 +99953,27 @@ pub mod modem_lpcon {
             change(&mut value);
             self.0.write::<0x20>(value.0);
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 5] = [0x4, 0x8, 0xc, 0x14, 0x20];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x4>()),
+                1 => Some(self.0.read::<0x8>()),
+                2 => Some(self.0.read::<0xc>()),
+                3 => Some(self.0.read::<0x14>()),
+                4 => Some(self.0.read::<0x20>()),
+                _ => None,
+            }
+        }
     }
 
     /// The `ModemLpconPhyTick` part of `MODEM_LPCON`.
@@ -99579,6 +100027,23 @@ pub mod modem_lpcon {
             let mut value = tick_conf::W(self.0.read::<0x28>());
             change(&mut value);
             self.0.write::<0x28>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 1] = [0x28];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x28>()),
+                _ => None,
+            }
         }
     }
 }
@@ -109546,6 +110011,27 @@ pub mod modem_syscon {
             let mut value = wifi_bb_cfg::W(self.0.read::<0x18>());
             change(&mut value);
             self.0.write::<0x18>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 5] = [0x4, 0xc, 0x10, 0x14, 0x18];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x4>()),
+                1 => Some(self.0.read::<0xc>()),
+                2 => Some(self.0.read::<0x10>()),
+                3 => Some(self.0.read::<0x14>()),
+                4 => Some(self.0.read::<0x18>()),
+                _ => None,
+            }
         }
     }
 }
@@ -122104,6 +122590,34 @@ pub mod pmu {
             let mut value = ana_peri_pwr_ctrl::W(self.0.read::<0x208>());
             change(&mut value);
             self.0.write::<0x208>(value.0);
+        }
+
+        /// Write the vendor's whole-word image `0x80000000`, undeclared bits included (`PMU.HP_ACTIVE_ICG_MODEM`).
+        ///
+        /// SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP, S31_PMU_HEADERS.
+        #[inline]
+        pub fn select_hp_active_modem_icg(&mut self) {
+            self.0.write::<0x14>(0x80000000);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 4] = [0x14, 0x1c, 0x184, 0x208];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x14>()),
+                1 => Some(self.0.read::<0x1c>()),
+                2 => Some(self.0.read::<0x184>()),
+                3 => Some(self.0.read::<0x208>()),
+                _ => None,
+            }
         }
     }
 
@@ -182322,6 +182836,24 @@ pub mod tsens {
             change(&mut value);
             self.0.write::<0x18>(value.0);
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 2] = [0x0, 0x18];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x0>()),
+                1 => Some(self.0.read::<0x18>()),
+                _ => None,
+            }
+        }
     }
 }
 
@@ -195063,6 +195595,41 @@ pub mod wifi_bb {
         pub fn initialize_rf_rx_saturation_config(&mut self) {
             self.0.write::<0x68>(0x00000404);
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 16] = [
+            0x2c, 0x30, 0x3c, 0x44, 0x5c, 0x94, 0xa0, 0xa4, 0x104, 0x11c, 0x120, 0x124, 0x128,
+            0x13c, 0x8c8, 0xd4c,
+        ];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x2c>()),
+                1 => Some(self.0.read::<0x30>()),
+                2 => Some(self.0.read::<0x3c>()),
+                3 => Some(self.0.read::<0x44>()),
+                4 => Some(self.0.read::<0x5c>()),
+                5 => Some(self.0.read::<0x94>()),
+                6 => Some(self.0.read::<0xa0>()),
+                7 => Some(self.0.read::<0xa4>()),
+                8 => Some(self.0.read::<0x104>()),
+                9 => Some(self.0.read::<0x11c>()),
+                10 => Some(self.0.read::<0x120>()),
+                11 => Some(self.0.read::<0x124>()),
+                12 => Some(self.0.read::<0x128>()),
+                13 => Some(self.0.read::<0x13c>()),
+                14 => Some(self.0.read::<0x8c8>()),
+                15 => Some(self.0.read::<0xd4c>()),
+                _ => None,
+            }
+        }
     }
 
     /// The `PhyAgcRecoveredGaps` part of `WIFI_BB`.
@@ -195267,6 +195834,36 @@ pub mod wifi_bb {
             let mut value = word_0438_opaque::W(self.0.read::<0x438>());
             change(&mut value);
             self.0.write::<0x438>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 12] = [
+            0x10, 0x14, 0x1c, 0x50, 0x6c, 0x74, 0xcc, 0xf4, 0x108, 0x430, 0x434, 0x438,
+        ];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x10>()),
+                1 => Some(self.0.read::<0x14>()),
+                2 => Some(self.0.read::<0x1c>()),
+                3 => Some(self.0.read::<0x50>()),
+                4 => Some(self.0.read::<0x6c>()),
+                5 => Some(self.0.read::<0x74>()),
+                6 => Some(self.0.read::<0xcc>()),
+                7 => Some(self.0.read::<0xf4>()),
+                8 => Some(self.0.read::<0x108>()),
+                9 => Some(self.0.read::<0x430>()),
+                10 => Some(self.0.read::<0x434>()),
+                11 => Some(self.0.read::<0x438>()),
+                _ => None,
+            }
         }
     }
 
@@ -195801,6 +196398,55 @@ pub mod wifi_bb {
         pub fn initialize_tx_pa_table(&mut self) {
             self.0.write::<0xc6c>(0x0661a45f);
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 29] = [
+            0x18, 0x400, 0x428, 0x43c, 0x440, 0x454, 0x458, 0x45c, 0x460, 0x468, 0x46c, 0x478,
+            0x47c, 0x808, 0x890, 0x8dc, 0x8e4, 0x90c, 0x980, 0xa28, 0xc00, 0xc08, 0xc30, 0xc3c,
+            0xc40, 0xc44, 0xc50, 0xca8, 0xcd0,
+        ];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x18>()),
+                1 => Some(self.0.read::<0x400>()),
+                2 => Some(self.0.read::<0x428>()),
+                3 => Some(self.0.read::<0x43c>()),
+                4 => Some(self.0.read::<0x440>()),
+                5 => Some(self.0.read::<0x454>()),
+                6 => Some(self.0.read::<0x458>()),
+                7 => Some(self.0.read::<0x45c>()),
+                8 => Some(self.0.read::<0x460>()),
+                9 => Some(self.0.read::<0x468>()),
+                10 => Some(self.0.read::<0x46c>()),
+                11 => Some(self.0.read::<0x478>()),
+                12 => Some(self.0.read::<0x47c>()),
+                13 => Some(self.0.read::<0x808>()),
+                14 => Some(self.0.read::<0x890>()),
+                15 => Some(self.0.read::<0x8dc>()),
+                16 => Some(self.0.read::<0x8e4>()),
+                17 => Some(self.0.read::<0x90c>()),
+                18 => Some(self.0.read::<0x980>()),
+                19 => Some(self.0.read::<0xa28>()),
+                20 => Some(self.0.read::<0xc00>()),
+                21 => Some(self.0.read::<0xc08>()),
+                22 => Some(self.0.read::<0xc30>()),
+                23 => Some(self.0.read::<0xc3c>()),
+                24 => Some(self.0.read::<0xc40>()),
+                25 => Some(self.0.read::<0xc44>()),
+                26 => Some(self.0.read::<0xc50>()),
+                27 => Some(self.0.read::<0xca8>()),
+                28 => Some(self.0.read::<0xcd0>()),
+                _ => None,
+            }
+        }
     }
 
     /// The `PhyBbRecoveredGaps` part of `WIFI_BB`.
@@ -195915,6 +196561,29 @@ pub mod wifi_bb {
             change(&mut value);
             self.0.write::<0xcec>(value.0);
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 6] =
+            [0xc14, 0xc58, 0xc5c, 0xc60, 0xce8, 0xcec];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0xc14>()),
+                1 => Some(self.0.read::<0xc58>()),
+                2 => Some(self.0.read::<0xc5c>()),
+                3 => Some(self.0.read::<0xc60>()),
+                4 => Some(self.0.read::<0xce8>()),
+                5 => Some(self.0.read::<0xcec>()),
+                _ => None,
+            }
+        }
     }
 
     /// The `PhyClockOracleWifiBb` part of `WIFI_BB`.
@@ -195963,6 +196632,22 @@ pub mod wifi_bb {
             let mut value = word_0c80_opaque::W(0x00000000);
             change(&mut value);
             self.0.write::<0xc80>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 0] = [];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                _ => None,
+            }
         }
     }
 
@@ -196017,6 +196702,23 @@ pub mod wifi_bb {
             let mut value = word_00b8_opaque::W(self.0.read::<0xb8>());
             change(&mut value);
             self.0.write::<0xb8>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 1] = [0xb8];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0xb8>()),
+                _ => None,
+            }
         }
     }
 
@@ -196110,6 +196812,25 @@ pub mod wifi_bb {
             let mut value = channel_cbw_control_1::W(self.0.read::<0xce4>());
             change(&mut value);
             self.0.write::<0xce4>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 3] = [0x848, 0xce0, 0xce4];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x848>()),
+                1 => Some(self.0.read::<0xce0>()),
+                2 => Some(self.0.read::<0xce4>()),
+                _ => None,
+            }
         }
     }
 
@@ -196239,6 +196960,29 @@ pub mod wifi_bb {
             let mut value = word_0904_opaque::W(self.0.read::<0x904>());
             change(&mut value);
             self.0.write::<0x904>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 6] =
+            [0x800, 0x80c, 0x830, 0x898, 0x8b8, 0x904];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x800>()),
+                1 => Some(self.0.read::<0x80c>()),
+                2 => Some(self.0.read::<0x830>()),
+                3 => Some(self.0.read::<0x898>()),
+                4 => Some(self.0.read::<0x8b8>()),
+                5 => Some(self.0.read::<0x904>()),
+                _ => None,
+            }
         }
     }
 }
@@ -197157,6 +197901,24 @@ pub mod wifi_bb_brx {
         pub fn initialize_agc_update_802c(&mut self) {
             self.0.write::<0x2c>(0x01000080);
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 2] = [0x4, 0x78];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x4>()),
+                1 => Some(self.0.read::<0x78>()),
+                _ => None,
+            }
+        }
     }
 
     /// The `PhyBrxRecoveredGaps` part of `WIFI_BB_BRX`.
@@ -197210,6 +197972,23 @@ pub mod wifi_bb_brx {
             let mut value = word_0050_opaque::W(self.0.read::<0x50>());
             change(&mut value);
             self.0.write::<0x50>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 1] = [0x50];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x50>()),
+                _ => None,
+            }
         }
     }
 }
@@ -226550,6 +227329,23 @@ pub mod wifi_mac {
             change(&mut value);
             self.0.write::<0x48c>(value.0);
         }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 1] = [0x48c];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x48c>()),
+                _ => None,
+            }
+        }
     }
 
     /// The `PhyFrequencyChannelOracleWifiMac` part of `WIFI_MAC`.
@@ -226606,6 +227402,23 @@ pub mod wifi_mac {
             let mut value = channel_tx_offset_control::W(self.0.read::<0x400>());
             change(&mut value);
             self.0.write::<0x400>(value.0);
+        }
+
+        /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
+        /// image, ascending.
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 1] = [0x400];
+
+        /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
+        /// readable words without a read side effect, at
+        /// [`Self::RADIO_PHY_REGISTER_IMAGE_OFFSETS`], whole and undecoded; `None` past
+        /// its end.
+        ///
+        /// SOURCE: HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27.
+        pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
+            match index {
+                0 => Some(self.0.read::<0x400>()),
+                _ => None,
+            }
         }
     }
 

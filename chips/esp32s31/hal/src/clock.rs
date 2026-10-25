@@ -12,7 +12,7 @@ use crate::{
     modem::{
         RtcSlowClockSource, WifiLowPowerClockSource, WifiPowerBaseline, WifiPowerRestoreReadback,
     },
-    phy::registers::RadioPhyRegisters,
+    phy::RadioPhyRegisters,
 };
 
 use crate::power::{

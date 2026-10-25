@@ -1031,3 +1031,42 @@ fn a_whole_word_sequence_step_is_one_method_and_a_snapshot_reads_its_bits() {
         ["sampled 2", "vendor word 0badf00d"]
     );
 }
+
+#[test]
+fn a_partition_image_reads_each_part_s_readable_words_whole() {
+    let rust = rendered_with(&[(
+        "policy.toml",
+        "chip = \"testchip\"\n",
+        "chip = \"testchip\"\n\n[[partition-image-reads]]\nname = \"second_image\"\npartition = \"SecondPeripherals\"\nsources = [\"SRC_DRIVER\"]\n",
+    )]);
+    // Radio 0's partition reads no image.
+    assert_eq!(
+        rust.matches("pub const SECOND_IMAGE_OFFSETS").count(),
+        2,
+        "{rust}"
+    );
+    let output = run(
+        &rust,
+        r#"
+fn main() {
+    let mut config = [0_u32; 0x40];
+    config[0] = 0xdead_beef;
+    let mut events = [0_u32; 0x40];
+    events[0x0c / 4] = 0x8000_0003;
+    let second = radio::Second::host(&mut config).expect("memory holds the block");
+    let view = radio::SecondEvents::host(&mut events).expect("memory holds the block");
+    println!(
+        "{:x?} {:x?}",
+        radio::Second::<oer_mmio::Host<'_>>::SECOND_IMAGE_OFFSETS,
+        radio::SecondEvents::<oer_mmio::Host<'_>>::SECOND_IMAGE_OFFSETS,
+    );
+    println!("{:08x} {:08x}", second.second_image(0).expect("word 0"), view.second_image(0).expect("word 0"));
+    println!("{:?}", second.second_image(1));
+}
+"#,
+    );
+    assert_eq!(
+        output.lines().collect::<Vec<_>>(),
+        ["[0] [c]", "deadbeef 80000003", "None"]
+    );
+}

@@ -916,7 +916,10 @@ What a write does with the lanes it does not set:
   an `Option` argument; the token reads back its sampled `bits()` and has
   no constructor), zero-based writes with `whole-word-bits` and
   field-or-modifies of a pointer field (a typed reference's image ORed
-  into a fresh read). Each becomes a method of the part that owns it; every
+  into a fresh read) and partition image reads (on each part of the
+  partition, `<name>(index)` reads the part's readable side-effect-free
+  words whole, at `<NAME>_OFFSETS`, a diagnostic without field decoding).
+  Each becomes a method of the part that owns it; every
   other transaction is HAL code over the accessors.
 
 ### Linker fragment

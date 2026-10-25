@@ -105,7 +105,9 @@ fn edca_publishes_three_fields_of_the_reversed_bank() {
 
 #[test]
 fn queue_publication_and_detach_edges_touch_only_valid_and_enable() {
-    let before = HostWords::filled(0x0f0f_0f0f);
+    // VALID (bit 30) and ENABLE (bit 31) start set, so the final disable
+    // shows as the one changed word.
+    let before = HostWords::filled(0xcf0f_0f0f);
     let mut memory = before.clone();
     {
         let mut owners = memory.owners();
@@ -117,7 +119,7 @@ fn queue_publication_and_detach_edges_touch_only_valid_and_enable() {
         disable_queue(control, 0);
         assert!(!queue_enabled(control, 0) && !queue_valid(control, 0));
         let read = control.read_control_n(bank(0));
-        assert_eq!(read.descriptor_address_low().get(), 0x0f0f_0f0f & 0xf_ffff);
+        assert_eq!(read.descriptor_address_low().get(), 0xcf0f_0f0f & 0xf_ffff);
     }
     assert_eq!(before.changes(&memory).len(), 1);
 }

@@ -6,7 +6,7 @@
 
 #![forbid(unsafe_code)]
 
-use crate::{modem::values::ModemLowPowerClockDivider, phy::registers::RadioPhyRegisters};
+use crate::{modem::values::ModemLowPowerClockDivider, phy::RadioPhyRegisters};
 
 /// Semantic route-owned observation used by protocol clock checkpoints.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

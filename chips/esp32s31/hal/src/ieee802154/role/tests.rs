@@ -1,29 +1,14 @@
-use oer_esp32s31_pac::{RadioPartitions, SharedRadioParts, SharedRadioRegisters};
-
 use crate::{
     domain::{BtbbError, CommonRadioPowerError, ModemClockError, RadioClient, RadioDomain},
     phy::{registration::PhyRegistration, restore::PhyRouteState},
-    root::RadioHardware,
+    root::{RadioHardware, RadioPartitions},
 };
 
 use super::{Ieee802154Clocked, Ieee802154Cold};
 
 fn radio_domain() -> RadioDomain<crate::power::test_clocks::CountingBackend> {
-    let RadioPartitions {
-        radio_phy,
-        coexistence,
-        shared_radio,
-        ..
-    } = RadioPartitions::for_host_test();
-    RadioDomain::new(
-        SharedRadioRegisters::new(SharedRadioParts {
-            radio_phy,
-            coexistence,
-            shared_radio,
-        }),
-        PhyRouteState::new(PhyRegistration::new()),
-        (),
-    )
+    let RadioPartitions { shared, .. } = RadioPartitions::for_host_test();
+    RadioDomain::new(shared, PhyRouteState::new(PhyRegistration::new()), ())
 }
 
 #[test]

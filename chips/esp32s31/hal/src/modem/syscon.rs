@@ -14,7 +14,7 @@ use crate::{
         ModemSysconClockGateState, ModemSysconEnableState, ModemSysconResetState,
         WifiBaseband40MhzState, WifiBasebandAgcUpdateMode,
     },
-    phy::registers::RadioPhyRegisters,
+    phy::RadioPhyRegisters,
 };
 
 /// The eighteen PHY-calibration clock gates of `CLK_CONF1`, from one read,

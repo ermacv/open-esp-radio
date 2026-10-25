@@ -435,7 +435,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
             w.set_value(0xfff);
         });
         // The vendor routes and enables channel zero; this owner's channel
-        // two carries the same route (see `BluetoothPhyEtmChannel`).
+        // two carries the same route.
         route_and_enable(&mut self.etm);
         controller.write_phy_environment_tail_pointer(inputs.environment, |_| {});
 

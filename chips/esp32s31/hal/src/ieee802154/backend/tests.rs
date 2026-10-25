@@ -1,6 +1,6 @@
 use std::vec::Vec;
 
-use oer_esp32s31_pac::RadioPartitions;
+use crate::root::RadioPartitions;
 use oer_espressif_ieee802154_engine::types::Ieee802154MultipanEnableState;
 use oer_espressif_ieee802154_mac_values::{Ieee802154RxStateCode, Ieee802154TxStateCode};
 
@@ -266,7 +266,7 @@ fn state_predicate_samples_once_and_makes_no_idle_claim() {
 #[test]
 fn production_hal_borrows_the_ieee802154_task_partition() {
     let RadioPartitions { ieee802154, .. } = RadioPartitions::for_host_test();
-    let (mut task, interrupts) = mac::split(ieee802154);
+    let (mut task, interrupts) = mac::split(ieee802154.into_mac());
     {
         let mut hal = Ieee802154MacHal::from_owned(&mut task, &interrupts);
 

@@ -7,7 +7,7 @@
 
 #![forbid(unsafe_code)]
 
-use crate::phy::registers::RadioPhyRegisters;
+use crate::phy::RadioPhyRegisters;
 
 impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     /// Configure the modem-power tick for the fixed 40 MHz S31 crystal.

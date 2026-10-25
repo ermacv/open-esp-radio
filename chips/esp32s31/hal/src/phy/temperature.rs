@@ -7,7 +7,7 @@
 
 use super::restore::Restore;
 use crate::owner::{SharedPhyAccess, phy_parts_mut};
-use crate::phy::registers::RadioPhyRegisters;
+use crate::phy::RadioPhyRegisters;
 
 pub mod ops;
 

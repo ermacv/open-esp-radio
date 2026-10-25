@@ -56,5 +56,6 @@ mod ops_tests;
 
 /// Owned physical register sets for PHY operations.
 pub mod registers;
+pub use registers::RadioPhyRegisters;
 
 pub(crate) mod sequence;

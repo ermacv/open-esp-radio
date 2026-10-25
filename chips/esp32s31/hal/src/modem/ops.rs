@@ -946,11 +946,22 @@ pub(crate) fn power_off_rf_circuits<P: Placement>(
     });
 }
 
-// SOURCE: BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW, S31_PMU_HEADERS.
-pub(crate) fn enable_baseband_i2c_power_tie<P: Placement>(
+/// Tie the baseband analog-I2C power high, or release the tie.
+///
+/// Releasing writes nothing. The header classes `TIE_HIGH_XPD_BB_I2C`
+/// (bit 28 of `IMM_HP_CK_POWER_0`) write-trigger, so no write clears it and
+/// a write of zero starts no action; the vendor's read-modify-write
+/// clearing bit 28 has no counterpart in that access class, and what a
+/// read of the bit returns is not established.
+///
+/// SOURCE: BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW, S31_PMU_HEADERS.
+pub(crate) fn set_baseband_i2c_power_tie<P: Placement>(
     registers: &mut oer_esp32s31_pac::pmu::PmuRadio<P>,
+    enabled: bool,
 ) {
-    registers.trigger_imm_hp_ck_power_0_tie_high_xpd_bb_i2c();
+    if enabled {
+        registers.trigger_imm_hp_ck_power_0_tie_high_xpd_bb_i2c();
+    }
 }
 
 // SOURCE: BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW, S31_PMU_HEADERS.
@@ -1182,4 +1193,27 @@ pub(crate) fn set_coex_timer_clock_divider<P: Placement>(
     registers.modify_coex_lp_clk_conf(|w| {
         w.set_clk_coex_lp_div_num(Bits::truncate(value.get()));
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::set_baseband_i2c_power_tie;
+    use oer_esp32s31_pac::{instances, pmu::PmuRadio};
+    use std::vec;
+
+    /// `IMM_HP_CK_POWER_0`, the word of the immediate clock ties.
+    const IMM_HP_CK_POWER_0: usize = 0xf0;
+
+    #[test]
+    fn the_tie_triggers_high_and_its_release_writes_nothing() {
+        for fill in [0, u32::MAX] {
+            let mut memory = vec![fill; instances::pmu::SIZE.div_ceil(4)];
+            let mut expected = memory.clone();
+            set_baseband_i2c_power_tie(&mut PmuRadio::host(&mut memory).expect("PMU"), false);
+            assert_eq!(memory, expected, "the release writes nothing");
+            set_baseband_i2c_power_tie(&mut PmuRadio::host(&mut memory).expect("PMU"), true);
+            expected[IMM_HP_CK_POWER_0 / 4] = 1 << 28;
+            assert_eq!(memory, expected, "the tie stores its one trigger");
+        }
+    }
 }

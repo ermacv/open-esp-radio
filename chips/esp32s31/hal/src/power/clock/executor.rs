@@ -18,7 +18,7 @@
 
 use core::marker::PhantomData;
 
-use crate::{modem::ModemClockDevice, phy::registers::RadioPhyRegisters};
+use crate::{modem::ModemClockDevice, phy::RadioPhyRegisters};
 
 use super::{
     Dependency, ModemClockLease, ModemClockPlanner, PoisonedModemClockAcquire,

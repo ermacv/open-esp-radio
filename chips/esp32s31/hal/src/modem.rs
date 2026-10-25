@@ -3,7 +3,6 @@
 mod clock_device;
 pub mod coex;
 pub mod coex_external;
-pub mod etm;
 mod low_power_phy;
 pub(crate) mod ops;
 pub mod ownership;

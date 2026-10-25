@@ -21,16 +21,12 @@
 //! # }
 //! ```
 
-use oer_esp32s31_pac::modem_etm::{ModemEtmBluetooth, ModemEtmBluetoothPhy, ModemEtmIeee802154};
 use oer_esp32s31_pac::ownership::{
-    AnalogBusPeripherals, BluetoothControllerPeripherals, BluetoothInterruptPeripherals,
-    BluetoothModemLpTimerPeripherals, BootPeripherals, CoexistencePeripherals,
-    Ieee802154Peripherals, MacLocalTimePeripherals, ModemEtmPeripherals, Partitions,
-    RadioPhyPeripherals, SharedRadioPeripherals, SocPeripherals, WifiInterruptPeripherals,
-    WifiMacInterfacePeripherals, WifiMacPeripherals, WifiRxDmaPeripherals,
+    BootPeripherals, MacLocalTimePeripherals, ModemEtmPeripherals, Partitions, SocPeripherals,
 };
 
 use crate::{
+    bluetooth::{BluetoothControllerParts, BluetoothModemLpTimerParts, BluetoothPartition},
     boot::{
         ActivePower, Brownout, CacheRegisters, ClockRegisters, FLASH_MMU_WINDOW, FlashRegisters,
         MmuWindow, PSRAM_MMU_WINDOW, PsramRegisters, Soc,
@@ -40,7 +36,10 @@ use crate::{
         BluetoothClient, CoexAbsent, Ieee802154Client, RadioDomain, RadioDomainReleaseError,
         WifiClient,
     },
-    phy::{registration::PhyRegistration, restore::PhyRouteState},
+    ieee80211::registers::{MacInterruptSetup, MacLocalTime, WifiMacPartition, WifiRxDmaRegisters},
+    ieee802154::mac::Ieee802154Partition,
+    modem::SharedRadioRegisters,
+    phy::{RadioPhyRegisters, registration::PhyRegistration, restore::PhyRouteState},
     platform::{
         EfuseRegisters, EntropyRegisters, InterruptBlocks, ResetCauseRegisters, SoftwareInterrupts,
         SystemTimer,
@@ -207,7 +206,7 @@ impl Root {
             efuse: EfuseRegisters::new(efuse),
             entropy: EntropyRegisters::new(entropy, soc.lp_periclkrst_rng_init),
             reset_cause: ResetCauseRegisters::new(reset_cause),
-            radio: RadioHardware::new(RadioPartitions {
+            radio: RadioHardware::new(RadioPartitions::compose(RadioParts {
                 wifi_mac,
                 wifi_mac_interface,
                 wifi_rx_dma,
@@ -222,7 +221,7 @@ impl Root {
                 modem_etm,
                 ieee802154,
                 analog_bus,
-            }),
+            })),
         }
     }
 }
@@ -289,58 +288,105 @@ pub struct Runtime {
     pub radio: RadioHardware,
 }
 
-/// The radio's partitions of the root.
+/// The radio's partitions of the root, as `take()` hands them out.
+struct RadioParts {
+    wifi_mac: oer_esp32s31_pac::ownership::WifiMacPeripherals,
+    wifi_mac_interface: oer_esp32s31_pac::ownership::WifiMacInterfacePeripherals,
+    wifi_rx_dma: oer_esp32s31_pac::ownership::WifiRxDmaPeripherals,
+    wifi_interrupts: oer_esp32s31_pac::ownership::WifiInterruptPeripherals,
+    mac_local_time: MacLocalTimePeripherals,
+    radio_phy: oer_esp32s31_pac::ownership::RadioPhyPeripherals,
+    coexistence: oer_esp32s31_pac::ownership::CoexistencePeripherals,
+    bluetooth: oer_esp32s31_pac::ownership::BluetoothControllerPeripherals,
+    bluetooth_modem_lp_timer: oer_esp32s31_pac::ownership::BluetoothModemLpTimerPeripherals,
+    bluetooth_interrupts: oer_esp32s31_pac::ownership::BluetoothInterruptPeripherals,
+    shared_radio: oer_esp32s31_pac::ownership::SharedRadioPeripherals,
+    modem_etm: ModemEtmPeripherals,
+    ieee802154: oer_esp32s31_pac::ownership::Ieee802154Peripherals,
+    analog_bus: oer_esp32s31_pac::ownership::AnalogBusPeripherals,
+}
+
+/// The radio's owners: the shared radio owner and the protocol partitions.
 pub(crate) struct RadioPartitions {
-    pub(crate) wifi_mac: WifiMacPeripherals,
-    pub(crate) wifi_mac_interface: WifiMacInterfacePeripherals,
-    pub(crate) wifi_rx_dma: WifiRxDmaPeripherals,
-    pub(crate) wifi_interrupts: WifiInterruptPeripherals,
-    pub(crate) mac_local_time: MacLocalTimePeripherals,
-    pub(crate) radio_phy: RadioPhyPeripherals,
-    pub(crate) coexistence: CoexistencePeripherals,
-    pub(crate) bluetooth: BluetoothControllerPeripherals,
-    pub(crate) bluetooth_modem_lp_timer: BluetoothModemLpTimerPeripherals,
-    pub(crate) bluetooth_interrupts: BluetoothInterruptPeripherals,
-    pub(crate) shared_radio: SharedRadioPeripherals,
-    pub(crate) modem_etm: ModemEtmPeripherals,
-    pub(crate) ieee802154: Ieee802154Peripherals,
-    pub(crate) analog_bus: AnalogBusPeripherals,
+    pub(crate) shared: SharedRadioRegisters,
+    pub(crate) wifi: WifiPartition,
+    pub(crate) bluetooth: BluetoothPartition,
+    pub(crate) ieee802154: Ieee802154RadioPartition,
 }
 
-/// The register sets the radio domain shares among the protocols: the
-/// role-neutral RF and PHY views, the coexistence timers, the shared
-/// baseband words and the analog-I2C bus.
-pub struct SharedRadioParts {
-    pub(crate) radio_phy: RadioPhyPeripherals,
-    pub(crate) coexistence: CoexistencePeripherals,
-    pub(crate) shared_radio: SharedRadioPeripherals,
-    pub(crate) analog_bus: AnalogBusPeripherals,
-}
-
-impl SharedRadioParts {
-    /// The role-neutral RF and PHY views.
-    pub(crate) const fn radio_phy(&self) -> &RadioPhyPeripherals {
-        &self.radio_phy
+impl RadioPartitions {
+    /// The radio's owners of a fictitious host-test root
+    /// ([`RadioHardware::for_host_test`]): no test reaches a register
+    /// through them.
+    #[cfg(test)]
+    pub(crate) fn for_host_test() -> Self {
+        RadioHardware::for_host_test().partitions
     }
 
-    /// The role-neutral RF and PHY views, to write.
-    pub(crate) fn radio_phy_mut(&mut self) -> &mut RadioPhyPeripherals {
-        &mut self.radio_phy
+    /// The radio's owners of an isolated probe image's root
+    /// ([`RadioHardware::for_probe`]).
+    #[cfg(oer_probe)]
+    pub(crate) fn for_probe() -> Self {
+        RadioHardware::for_probe().partitions
     }
 
-    /// The coexistence timers and the external coexistence wires.
-    pub(crate) fn coexistence_mut(&mut self) -> &mut CoexistencePeripherals {
-        &mut self.coexistence
-    }
-
-    /// The shared baseband words.
-    pub(crate) fn shared_radio_mut(&mut self) -> &mut SharedRadioPeripherals {
-        &mut self.shared_radio
-    }
-
-    /// The analog-I2C master and its command memory.
-    pub(crate) fn analog_bus_mut(&mut self) -> &mut AnalogBusPeripherals {
-        &mut self.analog_bus
+    /// Compose the radio's owners from the root's partitions. This performs
+    /// no MMIO.
+    ///
+    /// The MAC local-time counter is a `Copy` reader: the radio PHY (its
+    /// SDM-stability deadline) and the Wi-Fi MAC (its receive timestamps)
+    /// each hold one. The shared baseband's RSSI word moves to the IEEE
+    /// 802.15.4 partition; the modem ETM channels go to their protocols.
+    fn compose(parts: RadioParts) -> Self {
+        let RadioParts {
+            wifi_mac,
+            wifi_mac_interface,
+            wifi_rx_dma,
+            wifi_interrupts,
+            mac_local_time,
+            radio_phy,
+            coexistence,
+            bluetooth,
+            bluetooth_modem_lp_timer,
+            bluetooth_interrupts,
+            shared_radio,
+            modem_etm,
+            ieee802154,
+            analog_bus,
+        } = parts;
+        let ModemEtmPeripherals {
+            modem_etm_ieee802154,
+            modem_etm_bluetooth_phy,
+            modem_etm_bluetooth,
+        } = modem_etm;
+        let local_time = MacLocalTime::new(mac_local_time);
+        let (shared, rx_info) = SharedRadioRegisters::new(
+            RadioPhyRegisters::new(radio_phy, analog_bus, local_time),
+            coexistence,
+            shared_radio,
+        );
+        Self {
+            shared,
+            wifi: WifiPartition {
+                mac: WifiMacPartition::new(wifi_mac, wifi_mac_interface, local_time),
+                rx_dma: WifiRxDmaRegisters::new(wifi_rx_dma),
+                interrupts: MacInterruptSetup::new(wifi_interrupts),
+            },
+            bluetooth: BluetoothPartition {
+                controller: BluetoothControllerParts {
+                    controller: bluetooth,
+                    phy_etm: modem_etm_bluetooth_phy,
+                },
+                modem_lp_timer: BluetoothModemLpTimerParts {
+                    timer: bluetooth_modem_lp_timer,
+                    etm: modem_etm_bluetooth,
+                },
+                interrupts: bluetooth_interrupts,
+            },
+            ieee802154: Ieee802154RadioPartition {
+                mac: Ieee802154Partition::new(ieee802154, modem_etm_ieee802154, rx_info),
+            },
+        }
     }
 }
 
@@ -422,7 +468,7 @@ impl RadioHardware {
             analog_bus,
             ..
         } = partitions;
-        Self::new(RadioPartitions {
+        Self::new(RadioPartitions::compose(RadioParts {
             wifi_mac,
             wifi_mac_interface,
             wifi_rx_dma,
@@ -437,7 +483,7 @@ impl RadioHardware {
             modem_etm,
             ieee802154,
             analog_bus,
-        })
+        }))
     }
 
     /// Reassemble the neutral root from a returning route.
@@ -456,30 +502,49 @@ impl RadioHardware {
 /// The Wi-Fi MAC's partitions, taken from a concurrent split.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct WifiPartition {
-    pub(crate) mac: WifiMacPeripherals,
-    pub(crate) interface: WifiMacInterfacePeripherals,
-    pub(crate) rx_dma: WifiRxDmaPeripherals,
-    pub(crate) interrupts: WifiInterruptPeripherals,
-    pub(crate) local_time: MacLocalTimePeripherals,
+    mac: WifiMacPartition,
+    rx_dma: WifiRxDmaRegisters,
+    interrupts: MacInterruptSetup,
 }
 
-/// The Bluetooth controller's, modem low-power timer's, interrupt and
-/// event-task matrix partitions, taken from a concurrent split.
-#[must_use = "dropping a radio partition permanently loses its register authority"]
-pub struct BluetoothPartition {
-    pub(crate) controller: BluetoothControllerPeripherals,
-    pub(crate) modem_lp_timer: BluetoothModemLpTimerPeripherals,
-    pub(crate) interrupts: BluetoothInterruptPeripherals,
-    pub(crate) etm: ModemEtmBluetooth,
-    pub(crate) etm_phy: ModemEtmBluetoothPhy,
+impl WifiPartition {
+    /// The Wi-Fi MAC local-time counter: the clock of receive timestamps.
+    pub const fn mac_local_time(&self) -> MacLocalTime {
+        self.mac.mac_local_time()
+    }
+
+    pub(crate) fn into_parts(self) -> (WifiMacPartition, WifiRxDmaRegisters, MacInterruptSetup) {
+        (self.mac, self.rx_dma, self.interrupts)
+    }
+
+    pub(crate) const fn from_parts(
+        mac: WifiMacPartition,
+        rx_dma: WifiRxDmaRegisters,
+        interrupts: MacInterruptSetup,
+    ) -> Self {
+        Self {
+            mac,
+            rx_dma,
+            interrupts,
+        }
+    }
 }
 
-/// The IEEE 802.15.4 MAC's partition and its event-task matrix channels,
-/// taken from a concurrent split.
+/// The IEEE 802.15.4 MAC's partition with its event-task matrix channels
+/// and the shared baseband's RSSI word, taken from a concurrent split.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct Ieee802154RadioPartition {
-    pub(crate) mac: Ieee802154Peripherals,
-    pub(crate) etm: ModemEtmIeee802154,
+    mac: Ieee802154Partition,
+}
+
+impl Ieee802154RadioPartition {
+    pub(crate) fn into_mac(self) -> Ieee802154Partition {
+        self.mac
+    }
+
+    pub(crate) const fn from_mac(mac: Ieee802154Partition) -> Self {
+        Self { mac }
+    }
 }
 
 /// Protocol partitions of a split radio root.
@@ -540,56 +605,21 @@ impl RadioHardware {
         attachment: T,
     ) -> (RadioDomain<B, T>, ProtocolPartitions) {
         let RadioPartitions {
-            wifi_mac,
-            wifi_mac_interface,
-            wifi_rx_dma,
-            wifi_interrupts,
-            mac_local_time,
-            radio_phy,
-            coexistence,
+            shared,
+            wifi,
             bluetooth,
-            bluetooth_modem_lp_timer,
-            bluetooth_interrupts,
-            shared_radio,
-            modem_etm,
             ieee802154,
-            analog_bus,
         } = self.partitions;
-        let ModemEtmPeripherals {
-            modem_etm_ieee802154,
-            modem_etm_bluetooth_phy,
-            modem_etm_bluetooth,
-        } = modem_etm;
         (
             RadioDomain::new(
-                SharedRadioParts {
-                    radio_phy,
-                    coexistence,
-                    shared_radio,
-                    analog_bus,
-                },
+                shared,
                 PhyRouteState::new(self.phy_registration),
                 attachment,
             ),
             ProtocolPartitions {
-                wifi: WifiPartition {
-                    mac: wifi_mac,
-                    interface: wifi_mac_interface,
-                    rx_dma: wifi_rx_dma,
-                    interrupts: wifi_interrupts,
-                    local_time: mac_local_time,
-                },
-                bluetooth: BluetoothPartition {
-                    controller: bluetooth,
-                    modem_lp_timer: bluetooth_modem_lp_timer,
-                    interrupts: bluetooth_interrupts,
-                    etm: modem_etm_bluetooth,
-                    etm_phy: modem_etm_bluetooth_phy,
-                },
-                ieee802154: Ieee802154RadioPartition {
-                    mac: ieee802154,
-                    etm: modem_etm_ieee802154,
-                },
+                wifi,
+                bluetooth,
+                ieee802154,
                 wifi_coex: CoexAbsent::issued(),
                 bluetooth_coex: CoexAbsent::issued(),
                 ieee802154_coex: CoexAbsent::issued(),
@@ -623,12 +653,6 @@ impl RadioHardware {
                 });
             }
         };
-        let SharedRadioParts {
-            radio_phy,
-            coexistence,
-            shared_radio,
-            analog_bus,
-        } = registers;
         let ProtocolPartitions {
             wifi,
             wifi_coex: _,
@@ -640,24 +664,10 @@ impl RadioHardware {
         Ok((
             Self::returned(
                 RadioPartitions {
-                    wifi_mac: wifi.mac,
-                    wifi_mac_interface: wifi.interface,
-                    wifi_rx_dma: wifi.rx_dma,
-                    wifi_interrupts: wifi.interrupts,
-                    mac_local_time: wifi.local_time,
-                    radio_phy,
-                    coexistence,
-                    bluetooth: bluetooth.controller,
-                    bluetooth_modem_lp_timer: bluetooth.modem_lp_timer,
-                    bluetooth_interrupts: bluetooth.interrupts,
-                    shared_radio,
-                    modem_etm: ModemEtmPeripherals {
-                        modem_etm_ieee802154: ieee802154.etm,
-                        modem_etm_bluetooth_phy: bluetooth.etm_phy,
-                        modem_etm_bluetooth: bluetooth.etm,
-                    },
-                    ieee802154: ieee802154.mac,
-                    analog_bus,
+                    shared: registers,
+                    wifi,
+                    bluetooth,
+                    ieee802154,
                 },
                 phy,
             ),

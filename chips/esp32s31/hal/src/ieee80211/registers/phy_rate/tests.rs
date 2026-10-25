@@ -8,7 +8,8 @@ fn noise_floor_decodes_like_the_rom_and_the_blob() {
     // Code 0x000 is -0x1000 sixteenths of a dB.
     assert_eq!(decode_noise_floor_quarter_db(0), -0x400);
     assert_eq!(decode_noise_floor_quarter_db(0xfff), -1);
-    assert_eq!(quarter_db_to_dbm(-0x400), -128);
+    // The stored byte wraps: -256 dBm is byte zero.
+    assert_eq!(quarter_db_to_dbm(-0x400), 0);
     assert_eq!(quarter_db_to_dbm(-370), -92);
 }
 

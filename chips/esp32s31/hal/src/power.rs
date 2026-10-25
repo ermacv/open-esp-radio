@@ -8,7 +8,7 @@ use crate::{
     modem::{
         ModemSysconPowerObservation, PlatformClockPowerObservation, SharedModemClockObservation,
     },
-    phy::registers::RadioPhyRegisters,
+    phy::RadioPhyRegisters,
 };
 
 use crate::clock::PlatformClockRefs;

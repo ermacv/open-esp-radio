@@ -2779,12 +2779,14 @@ sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 name = "open_modem_pll_source_gate"
 register = "HP_SYS_CLKRST.MODEM_CONF"
 value = 0x0000003d
+whole-word = true
 sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK"]
 
 [[fixed-register-images]]
 name = "close_modem_pll_source_gate"
 register = "HP_SYS_CLKRST.MODEM_CONF"
 value = 0x00000025
+whole-word = true
 sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK"]
 
 [[fixed-register-images]]
@@ -3254,6 +3256,7 @@ sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNT
 name = "select_hp_active_modem_icg"
 register = "PMU.HP_ACTIVE_ICG_MODEM"
 value = 0x80000000
+whole-word = true
 sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "S31_PMU_HEADERS"]
 
 [[fixed-register-images]]

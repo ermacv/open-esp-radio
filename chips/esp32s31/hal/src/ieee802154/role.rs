@@ -20,7 +20,7 @@ use crate::power::PlatformClockBackend;
 
 use core::fmt;
 
-use crate::phy::registers::RadioPhyRegisters;
+use crate::phy::RadioPhyRegisters;
 
 use crate::{
     domain::{

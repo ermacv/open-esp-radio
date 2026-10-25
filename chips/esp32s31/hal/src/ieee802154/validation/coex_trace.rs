@@ -8,14 +8,14 @@
 
 use crate::coex::CoexPti;
 use crate::ieee802154::mac::{self, Ieee802154Pti, Ieee802154TaskOwner};
-use oer_esp32s31_pac::RadioPartitions;
+use crate::root::RadioPartitions;
 
 /// The vendor status of a rejected input: no write.
 const REJECTED: u32 = u32::MAX;
 
 /// The IEEE 802.15.4 MAC owner of an isolated validation root.
 fn task_owner() -> Ieee802154TaskOwner {
-    let (task, _interrupts) = mac::split(RadioPartitions::for_probe().ieee802154);
+    let (task, _interrupts) = mac::split(RadioPartitions::for_probe().ieee802154.into_mac());
     task
 }
 

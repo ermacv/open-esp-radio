@@ -179,8 +179,12 @@ mod host {
             power.acknowledge_power_interrupts(snapshot);
         }
         // The empty acknowledgements store zero over the clear images the
-        // activation left, so the memory is as it started.
-        assert!(before.changes(&after).is_empty());
+        // activation left: the memory is as it started but for the TBTT 0
+        // enable the activation publishes.
+        let changes = before.changes(&after);
+        assert_eq!(changes.len(), 1, "{changes:x?}");
+        let (part, _, value) = changes[0];
+        assert_eq!((part, value), ("power_interrupt", 1 << 3), "{changes:x?}");
     }
 
     #[test]

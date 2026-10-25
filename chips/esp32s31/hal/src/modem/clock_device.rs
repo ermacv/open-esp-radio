@@ -14,7 +14,7 @@
 
 use crate::{
     modem::values::{ModemSysconClockGateState, ModemSysconResetState},
-    phy::registers::RadioPhyRegisters,
+    phy::RadioPhyRegisters,
 };
 
 /// One modem clock device whose gate the PAC drives.
