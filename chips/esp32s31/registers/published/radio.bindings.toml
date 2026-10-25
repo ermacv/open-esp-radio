@@ -54850,14 +54850,14 @@ svd-name = "BUSY"
 method = "busy"
 bit-offset = 25
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "START_OR_RESET"
 method = "start_or_reset"
 bit-offset = 26
 bit-width = 1
-access = "read-write"
+access = "write-only"
 
 [[registers]]
 address = 537982980
@@ -54903,14 +54903,14 @@ svd-name = "BUSY"
 method = "busy"
 bit-offset = 25
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "START_OR_RESET"
 method = "start_or_reset"
 bit-offset = 26
 bit-width = 1
-access = "read-write"
+access = "write-only"
 
 [[registers.fields]]
 svd-name = "BITS_27_31_OPAQUE"
@@ -54956,7 +54956,7 @@ svd-name = "ANA_STATUS0"
 method = "ana_status0"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 537983004
@@ -54981,7 +54981,7 @@ svd-name = "READ_MASK_COMPLEMENT_HIGH"
 method = "read_mask_complement_high"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 537983008
@@ -55009,11 +55009,18 @@ bit-width = 14
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_18_31_OPAQUE"
-method = "bits_18_31_opaque"
+svd-name = "BITS_18_23_OPAQUE"
+method = "bits_18_23_opaque"
 bit-offset = 18
-bit-width = 14
+bit-width = 6
 access = "read-write"
+
+[[registers.fields]]
+svd-name = "ANA_STATUS2"
+method = "ana_status2"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
 
 [[registers]]
 address = 537983012
@@ -67083,6 +67090,69 @@ peripheral-type = "PmuRadio"
 peripheral-module = "pmu_radio"
 scope = []
 register-method = "imm_hp_ck_power_0"
+
+[[registers.fields]]
+svd-name = "TIE_LOW_GLOBAL_XTALX2_ICG"
+method = "tie_low_global_xtalx2_icg"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIE_LOW_GLOBAL_XTAL_ICG"
+method = "tie_low_global_xtal_icg"
+bit-offset = 1
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIE_LOW_I2C_RETENTION"
+method = "tie_low_i2c_retention"
+bit-offset = 2
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIE_LOW_XPD_BB_I2C"
+method = "tie_low_xpd_bb_i2c"
+bit-offset = 3
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIE_LOW_XPD_XTALX2"
+method = "tie_low_xpd_xtalx2"
+bit-offset = 5
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIE_LOW_XPD_XTAL"
+method = "tie_low_xpd_xtal"
+bit-offset = 6
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIE_HIGH_GLOBAL_XTALX2_ICG"
+method = "tie_high_global_xtalx2_icg"
+bit-offset = 25
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIE_HIGH_GLOBAL_XTAL_ICG"
+method = "tie_high_global_xtal_icg"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIE_HIGH_I2C_RETENTION"
+method = "tie_high_i2c_retention"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
 
 [[registers.fields]]
 svd-name = "TIE_HIGH_XPD_BB_I2C"

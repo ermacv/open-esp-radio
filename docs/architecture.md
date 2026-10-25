@@ -182,22 +182,18 @@ moves; ownership, orchestration and wiring are rebuilt.
   decide (access classes, reserved lanes and words, offsets, names); what
   no header states is read-only, and the chip's sourced overlay
   (`model/strictness.toml`) adds and corrects what they lack.
-- **PAC and HAL.** The PAC is the exact model of the hardware, generated:
-  typed blocks taken once, the field accessors of each field's class in one
-  naming convention, the value domains of whole fields, DMA pointers set
-  only from typed references, and the ownership parts that split a block
-  between owners, which the HAL could not split without `unsafe`. It holds
-  no logic: sequences, polls, interrupt routing, clock, power and reset
-  control, DMA engines, the analog-bus driver and named transactions are HAL
-  code over the field accessors, each vendor step with its `SOURCE:`, and
-  the PAC's existing domain modules are moved there. A generated policy item
-  is only a `whole-word` vendor image or the acknowledgement of events no
-  sample captured, with its proof. A logical module (its register parts, DMA
-  arena, clock, power and reset leases and interrupt-binding proofs) is
-  written in the HAL from generated facts; one clock manager per domain
-  writes the control words its devices share. A new tool reads the register
-  model, not the published SVD. Generated names drop the vendor's block
-  prefix, which the `soc` blocks keep ([PAC](../chips/esp32s31/pac/README.md),
+- **PAC and HAL.** The PAC's generated boundary provides typed blocks
+  taken once, field accessors by class, typed value domains and DMA
+  addresses, memory layouts and ownership parts. The current renderer
+  consumes the published SVD and API policy and also emits that policy's
+  named transactions, whole-word images and snapshot acknowledgements.
+  Handwritten PAC domain modules assemble owned register parts and expose
+  register-local operations, analog-host operations and straight-line
+  transactions. They keep no in-flight state between calls. Phased
+  sequencing, polls, retries, interrupt routing and lifecycle policy belong
+  to the HAL, each vendor step with its `SOURCE:`. API-policy blocks use the
+  reviewed model's field names; `soc` blocks retain the vendor's prefixes
+  ([PAC](../chips/esp32s31/pac/README.md),
   [field accessors](../tools/registers/model/README.md#field-accessors)).
 - **Radio access.** The S31 Wi-Fi handoff returns one `RadioAccess` by value;
   the driver owns it through the runtime epoch and lends it with `&mut`. No

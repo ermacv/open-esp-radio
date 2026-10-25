@@ -15,8 +15,8 @@
 //! write-one-to-clear register is sampled into an affine snapshot and
 //! acknowledged with exactly that snapshot; a register a read changes has no
 //! accessor. A register array takes an `oer_mmio::Index`. A DMA address field
-//! has no integer writer: its setter takes the typed DMA reference or
-//! DMA-window address its policy write names. The policy's transactions on
+//! has no integer writer: its whole-register write requires the typed DMA
+//! reference or DMA-window address its policy write names. The policy's transactions on
 //! the block become methods of the owners that own their register, with
 //! their masks checked by `const` assertions. A write-trigger field (declared
 //! by the policy, or a write-only one-to-clear field outside a snapshot's
@@ -776,6 +776,8 @@ struct TypedField<'a> {
     offset: u32,
     width: u32,
     class: FieldClass,
+    /// The physical write effect survives a software read-only restriction.
+    one_to_clear: bool,
     readable: bool,
     writable: bool,
     /// A DMA address field: no integer writer; only its typed address
@@ -833,11 +835,10 @@ impl TypedField<'_> {
             && !self.zero
     }
 
-    /// Whether a writer changes the field: by a setter or, for a DMA
-    /// address field, by its typed address, or, for a policy
-    /// pointer field, by the image of a typed reference.
+    /// Whether a closure writer changes the field. Whole-register DMA
+    /// addresses instead require a typed argument at the commit boundary.
     fn writes(&self) -> bool {
-        self.has_setter() || self.image.is_some() || self.address.is_some()
+        self.has_setter() || self.image.is_some()
     }
 
     /// Whether a reader returns the field: a trigger reads back nothing the
@@ -916,7 +917,27 @@ impl TypedRegister<'_> {
             && !self.port
             && !self.acknowledged
             && !self.shared
+            && !self.has_unreadable_write()
             && self.fields.iter().any(TypedField::writes)
+    }
+
+    /// An ordinary write-only lane has no read image an RMW can replay.
+    fn has_unreadable_write(&self) -> bool {
+        self.readable
+            && self
+                .fields
+                .iter()
+                .any(|field| field.writable && !field.readable && !field.trigger)
+    }
+
+    fn require_rmw(&self) -> Result<()> {
+        if self.has_unreadable_write() {
+            return Err(Error::message(format!(
+                "typed register {} has a write-only field a read-modify-write would replay",
+                self.info.name
+            )));
+        }
+        Ok(())
     }
 
     /// The bits of the register's constant-zero fields.
@@ -2713,6 +2734,9 @@ impl<'a> TypedBlock<'a> {
             .filter(|operation| operation.peripheral == name && view.owns(&operation.register))
         {
             let register = reached(&operation.register)?;
+            if operation.preserve_mask != 0 {
+                register.require_rmw()?;
+            }
             if (operation.input_mask | operation.set_mask) & register.pointers() != 0 {
                 return Err(Error::message(format!(
                     "typed masked-register-modify {:?} changes a DMA address field, which only a typed reference sets",
@@ -2720,10 +2744,14 @@ impl<'a> TypedBlock<'a> {
                 )));
             }
             let value = domain_value_expression(&operation.domain, &flag_or_enum);
-            let mut image = format!(
-                "(bits & 0x{:08x}) | ({value} & 0x{:08x})",
-                operation.preserve_mask, operation.input_mask
-            );
+            let mut image = if operation.preserve_mask == 0 {
+                format!("({value} & 0x{:08x})", operation.input_mask)
+            } else {
+                format!(
+                    "(bits & 0x{:08x}) | ({value} & 0x{:08x})",
+                    operation.preserve_mask, operation.input_mask
+                )
+            };
             if operation.set_mask != 0 {
                 let _ = write!(image, " | 0x{:08x}", operation.set_mask);
             }
@@ -2736,13 +2764,17 @@ impl<'a> TypedBlock<'a> {
                 &operation.register,
                 &operation.sources,
             );
+            let read = if operation.preserve_mask == 0 {
+                String::new()
+            } else {
+                format!("let bits = self.0.{};\n", register.modify_read_call())
+            };
             let _ = writeln!(
                 body,
-                "#[inline]\npub fn {}(&mut self, {}value: super::{}) {{\nlet bits = self.0.{};\nself.0.{};\n}}\n",
+                "#[inline]\npub fn {}(&mut self, {}value: super::{}) {{\n{read}self.0.{};\n}}\n",
                 operation.name,
                 register.index_parameter(),
                 operation.domain,
-                register.modify_read_call(),
                 register.write_call(&image)
             );
             if first_view {
@@ -2773,6 +2805,7 @@ impl<'a> TypedBlock<'a> {
             .filter(|(_, operation)| operation.peripheral == name && view.owns(&operation.register))
         {
             let register = reached(&operation.register)?;
+            register.require_rmw()?;
             let (parameter, input, image) =
                 projected_image(&register, operation, &flag_or_enum, !clear)?;
             let update = if clear {
@@ -2810,6 +2843,7 @@ impl<'a> TypedBlock<'a> {
             .filter(|operation| operation.peripheral == name && view.owns(&operation.register))
         {
             let register = reached(&operation.register)?;
+            register.require_rmw()?;
             let projection = FieldOrModify {
                 name: operation.name.clone(),
                 peripheral: operation.peripheral.clone(),
@@ -3186,14 +3220,17 @@ impl<'a> TypedRegister<'a> {
                 fields.iter().any(|field| field.writable),
             ),
         };
-        let w1c_fields = fields
-            .iter()
-            .filter(|field| field.class == FieldClass::WriteOneToClear)
-            .count();
+        let w1c_fields = fields.iter().filter(|field| field.one_to_clear).count();
         // A write-only one-to-clear register needs no sample: its fields
         // are write triggers, or a snapshot's acknowledgement writes it.
-        let w1c = w1c_fields > 0 && readable;
-        if w1c && (w1c_fields != fields.len() || !writable) {
+        let w1c = w1c_fields > 0 && readable && fields.iter().any(|field| field.writable);
+        if w1c
+            && (w1c_fields != fields.len()
+                || fields
+                    .iter()
+                    .any(|field| field.class != FieldClass::WriteOneToClear)
+                || !writable)
+        {
             return Err(Error::message(format!(
                 "typed register {peripheral}.{} mixes write-one-to-clear and other fields",
                 info.name
@@ -3213,18 +3250,6 @@ impl<'a> TypedRegister<'a> {
         if clears_on_read && writable && !fifo {
             return Err(Error::message(format!(
                 "typed register {peripheral}.{} is written and changes when read",
-                info.name
-            )));
-        }
-        if readable
-            && writable
-            && !fifo
-            && fields
-                .iter()
-                .any(|field| field.writable && !field.readable && !field.trigger)
-        {
-            return Err(Error::message(format!(
-                "typed register {peripheral}.{} has a write-only field a read-modify-write would replay",
                 info.name
             )));
         }
@@ -3381,6 +3406,24 @@ impl<'a> TypedRegister<'a> {
                  #[inline]\npub fn acknowledge_{module}(&mut self, {index}snapshot: {module}::Snapshot) {{\n\
                  self.0.{};\n}}\n",
                 self.write_call("snapshot.0")
+            );
+            return;
+        }
+        // This mixed word is written only by sourced whole-word policy
+        // operations. No generic writer may copy its unreadable lanes.
+        if self.has_unreadable_write() {
+            return;
+        }
+        if let [field] = self.fields.as_slice()
+            && let Some(address) = field.address
+        {
+            let parameter = address.parameter().replace("super::super::", "super::");
+            let _ = writeln!(
+                body,
+                "/// Write `{name}` from a typed DMA address.\n\
+                 #[inline]\npub fn write_{module}(&mut self, {index}value: {parameter}) {{\n\
+                 self.0.{};\n}}\n",
+                self.write_call(address.bits())
             );
             return;
         }
@@ -4050,6 +4093,10 @@ impl<'a> TypedField<'a> {
             offset,
             width,
             class,
+            one_to_clear: info
+                .modified_write_values
+                .or(register.modified_write_values)
+                == Some(ModifiedWriteValues::OneToClear),
             readable: access.is_none_or(Access::can_read),
             // A declared trigger or command still needs the SVD's write.
             writable: class.writable() && access.is_some_and(Access::can_write),

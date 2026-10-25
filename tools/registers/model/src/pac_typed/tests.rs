@@ -379,6 +379,38 @@ fn a_read_only_one_to_clear_field_is_only_read() {
 }
 
 #[test]
+fn narrowing_a_w1c_lane_to_read_only_still_refuses_a_mixed_rmw() {
+    for inherited in [false, true] {
+        let modified = "<modifiedWriteValues>oneToClear</modifiedWriteValues>";
+        let mixed = register(
+            "CONTROL",
+            0,
+            "read-write",
+            if inherited { modified } else { "" },
+            &(field(
+                "EVENT",
+                0,
+                1,
+                &format!(
+                    "<access>read-only</access>{}",
+                    if inherited { "" } else { modified }
+                ),
+            ) + &field(
+                "ENABLE",
+                1,
+                1,
+                "<modifiedWriteValues>modify</modifiedWriteValues>",
+            )),
+        );
+        refused(
+            &typed_pack(),
+            &mixed,
+            "mixes write-one-to-clear and other fields",
+        );
+    }
+}
+
+#[test]
 fn a_field_with_another_modified_write_value_is_refused() {
     let cleared = register(
         "CONTROL",
@@ -414,14 +446,14 @@ fn addressed(points_to: Option<&str>) -> (PacApiPack, String) {
 }
 
 #[test]
-fn a_dma_address_field_is_set_only_from_its_typed_address() {
+fn a_dma_address_write_requires_its_typed_address() {
     let (pack, registers) = addressed(None);
     let rust = pack
         .render_typed_rust(&svd(&registers), &Default::default())
         .expect("the typed block renders");
     assert!(rust.contains("pub fn write_address("), "{rust}");
     assert!(
-        rust.contains("value: super::super::layouts::DmaWindowAddress) -> &mut Self"),
+        rust.contains("pub fn write_address(&mut self, value: super::layouts::DmaWindowAddress)"),
         "{rust}"
     );
     assert!(!rust.contains("value: u32) -> &mut Self"), "{rust}");
@@ -431,7 +463,7 @@ fn a_dma_address_field_is_set_only_from_its_typed_address() {
         .render_typed_rust(&svd(&registers), &Default::default())
         .expect("the typed block renders");
     assert!(
-        rust.contains("value: super::super::layouts::DmaRef<super::super::layouts::Descriptor>"),
+        rust.contains("value: super::layouts::DmaRef<super::layouts::Descriptor>"),
         "{rust}"
     );
 
@@ -476,9 +508,7 @@ fn a_dma_address_field_writes_its_typed_address_and_refuses_an_integer() {
 fn main() {
     let mut memory = [0_u32; radio::SIZE / 4];
     let mut block = radio::Radio::host(&mut memory).expect("memory holds the block");
-    block.write_address(|address| {
-        address.set_address(layouts::DmaWindowAddress(0x4080_1000));
-    });
+    block.write_address(layouts::DmaWindowAddress(0x4080_1000));
     drop(block);
     println!("{:08x}", memory[0]);
 }
@@ -494,13 +524,74 @@ fn main() {
 fn main() {
     let mut memory = [0_u32; radio::SIZE / 4];
     let mut block = radio::Radio::host(&mut memory).expect("memory holds the block");
-    block.write_address(|address| {
-        address.set_address(0x4080_1000_u32);
-    });
+    block.write_address(0x4080_1000_u32);
 }
 "#,
     );
     assert!(stderr.contains("mismatched types"), "{stderr}");
+}
+
+#[test]
+fn dma_commits_on_unsplit_and_task_owners_require_the_typed_argument() {
+    for split in [false, true] {
+        let (mut pack, registers) = addressed(None);
+        if split {
+            pack.register_sides.push(RegisterSides {
+                peripheral: "RADIO".to_owned(),
+                description: "Interrupt status and task DMA address".to_owned(),
+                irq: vec!["STATUS".to_owned()],
+                irq_observes: Vec::new(),
+                sources: vec!["SOURCE".to_owned()],
+            });
+        }
+        let registers =
+            registers + &register("STATUS", 4, "read-only", "", &field("DONE", 0, 1, ""));
+        let rendered = pack
+            .render_typed_rust(&svd(&registers), &Default::default())
+            .expect("address owners render");
+        assert!(!rendered.contains("pub struct W("), "{rendered}");
+        let owner = if split {
+            "let (mut block, _) = block.split();"
+        } else {
+            ""
+        };
+        for call in ["block.write_address(|_| {});", "block.write_address();"] {
+            let directory = tempfile::tempdir().expect("a temporary directory");
+            let stderr = compile_rendered_failure(
+                directory.path(),
+                &format!("{rendered}{LAYOUTS}"),
+                &format!(
+                    r#"
+fn main() {{
+    let mut memory = [0_u32; radio::SIZE / 4];
+    let mut block = radio::Radio::host(&mut memory).expect("memory holds the block");
+    {owner}
+    {call}
+}}
+"#
+                ),
+            );
+            assert!(stderr.contains("DmaWindowAddress"), "{stderr}");
+        }
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        let output = run_rendered(
+            directory.path(),
+            &format!("{rendered}{LAYOUTS}"),
+            &format!(
+                r#"
+fn main() {{
+    let mut memory = [0_u32; radio::SIZE / 4];
+    let mut block = radio::Radio::host(&mut memory).expect("memory holds the block");
+    {owner}
+    block.write_address(layouts::DmaWindowAddress(0x4080_1000));
+    drop(block);
+    println!("{{:08x}}", memory[0]);
+}}
+"#
+            ),
+        );
+        assert_eq!(output.trim(), "40801000");
+    }
 }
 
 #[test]
@@ -778,15 +869,288 @@ fn triggered() -> String {
 }
 
 #[test]
-fn an_undeclared_write_only_field_in_a_readable_register_is_still_refused() {
-    let error = typed_pack()
+fn a_mixed_readable_write_only_word_has_no_generic_writer() {
+    let rust = typed_pack()
         .render_typed_rust(&svd(&triggered()), &Default::default())
-        .unwrap_err();
+        .expect("a mixed word still has a reader");
+    assert!(rust.contains("pub fn read_config("), "{rust}");
+    for item in [
+        "pub fn modify_config(",
+        "pub fn write_config(",
+        "pub struct W(",
+        "pub const fn update(",
+    ] {
+        assert!(!rust.contains(item), "{item}\n{rust}");
+    }
+}
+
+#[test]
+fn mixed_word_commands_write_from_zero_and_policy_rmws_are_refused() {
+    let mut pack = typed_pack();
+    pack.zero_based_field_writes
+        .push(crate::ZeroBasedFieldWrite {
+            name: "publish_command".to_owned(),
+            peripheral: "RADIO".to_owned(),
+            register: "CONFIG".to_owned(),
+            fields: vec!["ENABLE".to_owned(), "UPDATE".to_owned()],
+            sources: vec!["SOURCE".to_owned()],
+        });
+    let rendered = pack
+        .render_typed_rust(&svd(&triggered()), &Default::default())
+        .expect("the sourced whole-word command renders");
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let output = run_rendered(
+        directory.path(),
+        &rendered,
+        r#"
+fn main() {
+    let mut memory = [u32::MAX; radio::SIZE / 4];
+    let mut block = radio::Radio::host(&mut memory).expect("memory holds the block");
+    block.publish_command(true, false);
+    drop(block);
+    println!("{}", memory[0]);
+}
+"#,
+    );
+    assert_eq!(
+        output.trim(),
+        "1",
+        "the unreadable reset image is not replayed"
+    );
+    pack.field_replace_modifies
+        .push(crate::pac_api::FieldReplaceModify {
+            name: "unsafe_rmw".to_owned(),
+            peripheral: "RADIO".to_owned(),
+            register: "CONFIG".to_owned(),
+            fields: vec![crate::pac_api::FieldOrProjection {
+                field: "ENABLE".to_owned(),
+                source_bit_offset: 0,
+            }],
+            domain: None,
+            value: Some(1),
+            input_transform: None,
+            exposure: crate::PacApiExposure::Facade,
+            sources: vec!["SOURCE".to_owned()],
+        });
+    refused(&pack, &triggered(), "a read-modify-write would replay");
+}
+
+/// Render the reviewed legacy inputs themselves, so a class correction in a
+/// synthetic fixture cannot hide a regression in the publisher's inputs.
+fn s31_legacy_block(fragment: &str) -> (PacApiPack, String) {
+    let root =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/esp32s31/registers");
+    let fragment: crate::RegisterModelFragment = toml::from_str(
+        &std::fs::read_to_string(root.join("model/peripherals").join(fragment))
+            .expect("the legacy fragment exists"),
+    )
+    .expect("the legacy fragment parses");
+    let policy: PacApiPack = toml::from_str(
+        &std::fs::read_to_string(root.join("policy/api.toml"))
+            .expect("the legacy API policy exists"),
+    )
+    .expect("the legacy API policy parses");
+    let name = &fragment.peripherals[0].name;
+    let mut pack = typed_pack();
+    pack.options.typed_peripherals = vec![name.clone()];
+    pack.write_trigger_fields = policy
+        .write_trigger_fields
+        .into_iter()
+        .filter(|f| &f.peripheral == name)
+        .collect();
+    pack.fixed_register_images = policy
+        .fixed_register_images
+        .into_iter()
+        .filter(|f| &f.peripheral == name)
+        .collect();
+    pack.zero_based_field_writes = policy
+        .zero_based_field_writes
+        .into_iter()
+        .filter(|f| &f.peripheral == name)
+        .collect();
+    pack.masked_register_modifies = policy
+        .masked_register_modifies
+        .into_iter()
+        .filter(|f| &f.peripheral == name)
+        .collect();
+    pack.field_replace_modifies = policy
+        .field_replace_modifies
+        .into_iter()
+        .filter(|f| &f.peripheral == name)
+        .collect();
+    let mut device = svd_parser::parse(&svd(&block())).expect("the fixture device parses");
+    device.peripherals = fragment.peripherals;
+    let svd = svd_encoder::encode(&device).expect("the legacy fragment encodes as SVD");
+    (pack, svd)
+}
+
+#[test]
+fn pmu_immediate_clock_power_renders_every_sourced_lane_as_a_trigger() {
+    let (pack, svd) = s31_legacy_block("pmu-radio.toml");
+    let rust = pack
+        .render_typed_rust(&svd, &Default::default())
+        .expect("the PMU renders");
+    for lane in [
+        "tie_low_global_xtalx2_icg",
+        "tie_low_global_xtal_icg",
+        "tie_low_i2c_retention",
+        "tie_low_xpd_bb_i2c",
+        "tie_low_xpd_xtalx2",
+        "tie_low_xpd_xtal",
+        "tie_high_global_xtalx2_icg",
+        "tie_high_global_xtal_icg",
+        "tie_high_i2c_retention",
+        "tie_high_xpd_bb_i2c",
+        "tie_high_xpd_xtalx2",
+        "tie_high_xpd_xtal",
+    ] {
+        assert!(
+            rust.contains(&format!("pub fn trigger_imm_hp_ck_power_0_{lane}(")),
+            "{lane}"
+        );
+        assert!(!rust.contains(&format!("pub fn set_{lane}(")), "{lane}");
+    }
+    assert!(!rust.contains("pub fn modify_imm_hp_ck_power_0("));
+    for method in [
+        "enable_baseband_i2c_power_tie",
+        "disable_baseband_i2c_power_tie",
+        "clear_phy_rf_immediate_clock_power",
+    ] {
+        let body = rust
+            .split(&format!("pub fn {method}("))
+            .nth(1)
+            .expect("the policy transaction remains")
+            .split("}\n")
+            .next()
+            .expect("the method has a body");
+        assert!(body.contains("& !imm_hp_ck_power_0::TRIGGERS"), "{body}");
+    }
+}
+
+#[test]
+fn a_trigger_and_named_pmu_style_transactions_never_replay_sibling_strobes() {
+    // Synthetic lanes: a readable stored bit, three triggers and reserved
+    // bits. Their bus images are fixture values, not chip geometry.
+    let word = register(
+        "POWER",
+        0,
+        "read-write",
+        "",
+        &(field("ENABLE", 0, 1, "")
+            + &field("BB", 1, 1, "")
+            + &field("XTAL", 2, 1, "")
+            + &field("XTALX2", 3, 1, "")),
+    );
+    let mut pack = typed_pack();
+    for lane in ["BB", "XTAL", "XTALX2"] {
+        pack.write_trigger_fields.push(trigger("POWER", lane));
+    }
+    pack.field_replace_modifies
+        .push(crate::pac_api::FieldReplaceModify {
+            name: "enable_bb".to_owned(),
+            peripheral: "RADIO".to_owned(),
+            register: "POWER".to_owned(),
+            fields: vec![crate::pac_api::FieldOrProjection {
+                field: "BB".to_owned(),
+                source_bit_offset: 0,
+            }],
+            domain: None,
+            value: Some(1),
+            input_transform: None,
+            exposure: crate::PacApiExposure::Facade,
+            sources: vec!["SOURCE".to_owned()],
+        });
+    let rendered = pack
+        .render_typed_rust(&svd(&word), &Default::default())
+        .expect("the trigger word renders");
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let output = run_rendered(
+        directory.path(),
+        &rendered,
+        r#"
+fn main() {
+    for named in [false, true] {
+        let mut memory = [u32::MAX; radio::SIZE / 4];
+        let mut block = radio::Radio::host(&mut memory).expect("memory holds the block");
+        if named { block.enable_bb(); } else { block.trigger_power_bb(); }
+        assert!(block.read_power().enable(), "the stored lane is preserved");
+        drop(block);
+        println!("{:08x}", memory[0]);
+    }
+}
+"#,
+    );
+    assert_eq!(
+        output.trim(),
+        "fffffff3\nfffffff3",
+        "reserved lanes are preserved, sibling triggers are zero"
+    );
+}
+
+#[test]
+fn analog_completion_is_read_only_and_the_reset_word_has_no_rmw() {
+    let (pack, svd) = s31_legacy_block("i2c-ana-mst.toml");
+    let rust = pack
+        .render_typed_rust(&svd, &Default::default())
+        .expect("the analog host renders");
+    for method in [
+        "read_i2c0_ctrl",
+        "read_i2c1_ctrl",
+        "read_ana_conf0",
+        "read_ana_conf1",
+        "read_ana_conf2",
+    ] {
+        assert!(rust.contains(&format!("pub fn {method}(")), "{method}");
+    }
+    for method in [
+        "modify_i2c0_ctrl",
+        "modify_i2c1_ctrl",
+        "write_i2c0_ctrl",
+        "write_i2c1_ctrl",
+        "set_busy",
+        "set_start_or_reset",
+        "set_ana_status0",
+        "set_read_mask_complement_high",
+        "set_ana_status2",
+    ] {
+        assert!(!rust.contains(&format!("pub fn {method}(")), "{method}");
+    }
+    assert!(!rust.contains("pub const fn start_or_reset("));
+    for getter in [
+        "busy",
+        "ana_status0",
+        "read_mask_complement_high",
+        "ana_status2",
+    ] {
+        assert!(
+            rust.contains(&format!("pub const fn {getter}(")),
+            "{getter}"
+        );
+    }
+}
+
+#[test]
+fn the_documented_pac_boundary_keeps_svd_names_and_named_policy_transactions() {
+    let (pack, svd) = s31_legacy_block("i2c-ana-mst.toml");
+    let rust = pack
+        .render_typed_rust(&svd, &Default::default())
+        .expect("the documented SVD/policy path renders");
+    for method in [
+        "pulse_phy_i2c_host0_reset",
+        "pulse_phy_i2c_host1_reset",
+        "publish_phy_i2c_host0_command",
+        "publish_phy_i2c_host1_command",
+        "publish_phy_i2c_read_mask",
+    ] {
+        assert!(
+            rust.contains(&format!("pub fn {method}(")),
+            "the named transaction {method} remains"
+        );
+    }
+    assert!(rust.contains("value: super::PhyI2cReadMask"));
     assert!(
-        error
-            .to_string()
-            .contains("a read-modify-write would replay"),
-        "{error}"
+        rust.contains("pub const fn read_mask_complement_high("),
+        "the reviewed SVD name remains"
     );
 }
 

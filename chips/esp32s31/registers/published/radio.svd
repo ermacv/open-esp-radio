@@ -6901,11 +6901,14 @@
               <name>BUSY</name>
               <bitOffset>25</bitOffset>
               <bitWidth>1</bitWidth>
+              <access>read-only</access>
             </field>
             <field>
               <name>START_OR_RESET</name>
+              <description>SOURCE: ROM_REV0_PHY_I2C stores this bit alone to reset the host; a start role and a read value are not established.</description>
               <bitOffset>26</bitOffset>
               <bitWidth>1</bitWidth>
+              <access>write-only</access>
             </field>
           </fields>
         </register>
@@ -6959,11 +6962,14 @@
               <name>BUSY</name>
               <bitOffset>25</bitOffset>
               <bitWidth>1</bitWidth>
+              <access>read-only</access>
             </field>
             <field>
               <name>START_OR_RESET</name>
+              <description>SOURCE: ROM_REV0_PHY_I2C stores this bit alone to reset the host; a start role and a read value are not established.</description>
               <bitOffset>26</bitOffset>
               <bitWidth>1</bitWidth>
+              <access>write-only</access>
             </field>
             <field>
               <name>BITS_27_31_OPAQUE</name>
@@ -7017,6 +7023,7 @@
               <name>ANA_STATUS0</name>
               <bitOffset>24</bitOffset>
               <bitWidth>8</bitWidth>
+              <access>read-only</access>
             </field>
           </fields>
         </register>
@@ -7045,6 +7052,7 @@
               <description>Project-assigned name. High byte of the complete complemented PHY-I2C read-mask publication.</description>
               <bitOffset>24</bitOffset>
               <bitWidth>8</bitWidth>
+              <access>read-only</access>
               <writeConstraint>
                 <range>
                   <minimum>0</minimum>
@@ -7081,10 +7089,16 @@
               <bitWidth>4</bitWidth>
             </field>
             <field>
-              <name>BITS_18_31_OPAQUE</name>
+              <name>BITS_18_23_OPAQUE</name>
               <description>Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.</description>
               <bitOffset>18</bitOffset>
-              <bitWidth>14</bitWidth>
+              <bitWidth>6</bitWidth>
+            </field>
+            <field>
+              <name>ANA_STATUS2</name>
+              <bitOffset>24</bitOffset>
+              <bitWidth>8</bitWidth>
+              <access>read-only</access>
             </field>
           </fields>
         </register>
@@ -10704,12 +10718,57 @@
         </register>
         <register>
           <name>IMM_HP_CK_POWER_0</name>
-          <description>Immediate high-power clock ties. The reviewed complete PHY body reads this word before its preserving update, overriding the write-only access class in the uncorrected public SVD.</description>
+          <description>Immediate high-power clock ties. SOURCE: S31_PMU_HEADERS classes all twelve physical lanes WT; their readback is not established. Writes preserve reserved lanes and clear every sibling trigger from the read image.</description>
           <addressOffset>0xF0</addressOffset>
           <size>0x20</size>
           <access>read-write</access>
           <resetValue>0x00000000</resetValue>
           <fields>
+            <field>
+              <name>TIE_LOW_GLOBAL_XTALX2_ICG</name>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIE_LOW_GLOBAL_XTAL_ICG</name>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIE_LOW_I2C_RETENTION</name>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIE_LOW_XPD_BB_I2C</name>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIE_LOW_XPD_XTALX2</name>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIE_LOW_XPD_XTAL</name>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIE_HIGH_GLOBAL_XTALX2_ICG</name>
+              <bitOffset>25</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIE_HIGH_GLOBAL_XTAL_ICG</name>
+              <bitOffset>26</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIE_HIGH_I2C_RETENTION</name>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
             <field>
               <name>TIE_HIGH_XPD_BB_I2C</name>
               <description>Force the baseband analog-I2C power control high.</description>

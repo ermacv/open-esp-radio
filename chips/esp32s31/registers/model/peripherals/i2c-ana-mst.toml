@@ -48,11 +48,14 @@ bitWidth = 1
 
 [[peripherals.registers.register.fields]]
 name = "BUSY"
+access = "read-only"
 bitOffset = 25
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
 name = "START_OR_RESET"
+access = "write-only"
+description = "SOURCE: ROM_REV0_PHY_I2C stores this bit alone to reset the host; a start role and a read value are not established."
 bitOffset = 26
 bitWidth = 1
 
@@ -99,11 +102,14 @@ bitWidth = 1
 
 [[peripherals.registers.register.fields]]
 name = "BUSY"
+access = "read-only"
 bitOffset = 25
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
 name = "START_OR_RESET"
+access = "write-only"
+description = "SOURCE: ROM_REV0_PHY_I2C stores this bit alone to reset the host; a start role and a read value are not established."
 bitOffset = 26
 bitWidth = 1
 
@@ -156,6 +162,7 @@ value = 2
 
 [[peripherals.registers.register.fields]]
 name = "ANA_STATUS0"
+access = "read-only"
 bitOffset = 24
 bitWidth = 8
 
@@ -180,6 +187,7 @@ maximum = 0xFFFFFF
 
 [[peripherals.registers.register.fields]]
 name = "READ_MASK_COMPLEMENT_HIGH"
+access = "read-only"
 description = "High byte of the complete complemented PHY-I2C read-mask publication."
 bitOffset = 24
 bitWidth = 8
@@ -217,10 +225,16 @@ bitOffset = 0
 bitWidth = 4
 
 [[peripherals.registers.register.fields]]
-name = "BITS_18_31_OPAQUE"
+name = "BITS_18_23_OPAQUE"
 description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 18
-bitWidth = 14
+bitWidth = 6
+
+[[peripherals.registers.register.fields]]
+name = "ANA_STATUS2"
+access = "read-only"
+bitOffset = 24
+bitWidth = 8
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "I2C0_CTRL1"
@@ -411,7 +425,7 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "I2C_ANA_MST.ANA_CONF2.BITS_18_31_OPAQUE"
+entity = "I2C_ANA_MST.ANA_CONF2.BITS_18_23_OPAQUE"
 sources = ["S31_MMIO_USE_2010F820", "S31_MMIO_DECLARED_2010F820"]
 naming = "opaque"
 provenance = "observed"
@@ -425,3 +439,11 @@ naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF2.ANA_STATUS2"
+sources = ["S31_ESP_PACS_SVD", "S31_MMIO_USE_2010F820", "S31_MMIO_DECLARED_2010F820"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

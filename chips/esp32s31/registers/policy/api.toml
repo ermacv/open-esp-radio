@@ -6834,11 +6834,22 @@ register = "I2C1_CTRL"
 value = 0x04000000
 sources = ["ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
 
-[[zero-based-field-writes]]
+[[bounded-domains]]
+name = "PhyI2cReadMask"
+description = "Low 24 bits of the complemented analog-I2C read selection. The sourced word publication fixes its high status byte to ones."
+min = 0
+max = 0xffffff
+sources = ["ROM_REV0_PHY_I2C"]
+
+[[masked-register-modifies]]
 name = "publish_phy_i2c_read_mask"
 peripheral = "I2C_ANA_MST"
 register = "ANA_CONF1"
-fields = ["READ_MASK_COMPLEMENT_LOW", "READ_MASK_COMPLEMENT_HIGH"]
+domain = "PhyI2cReadMask"
+preserve-mask = 0
+input-mask = 0x00ffffff
+set-mask = 0xff000000
+exposure = "facade"
 sources = ["ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
 
 [[zero-based-field-writes]]
@@ -10583,3 +10594,75 @@ sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "ESP_IDF_7B9CC1AC_IEEE802154_RECEN
 peripheral = "BT_V3_2_BASEBAND"
 register = "TX_CCA_FIFO_DATA"
 sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[[write-trigger-fields]]
+peripheral = "PMU_RADIO"
+register = "IMM_HP_CK_POWER_0"
+field = "TIE_LOW_GLOBAL_XTALX2_ICG"
+sources = ["S31_PMU_HEADERS"]
+
+[[write-trigger-fields]]
+peripheral = "PMU_RADIO"
+register = "IMM_HP_CK_POWER_0"
+field = "TIE_LOW_GLOBAL_XTAL_ICG"
+sources = ["S31_PMU_HEADERS"]
+
+[[write-trigger-fields]]
+peripheral = "PMU_RADIO"
+register = "IMM_HP_CK_POWER_0"
+field = "TIE_LOW_I2C_RETENTION"
+sources = ["S31_PMU_HEADERS"]
+
+[[write-trigger-fields]]
+peripheral = "PMU_RADIO"
+register = "IMM_HP_CK_POWER_0"
+field = "TIE_LOW_XPD_BB_I2C"
+sources = ["S31_PMU_HEADERS"]
+
+[[write-trigger-fields]]
+peripheral = "PMU_RADIO"
+register = "IMM_HP_CK_POWER_0"
+field = "TIE_LOW_XPD_XTALX2"
+sources = ["S31_PMU_HEADERS"]
+
+[[write-trigger-fields]]
+peripheral = "PMU_RADIO"
+register = "IMM_HP_CK_POWER_0"
+field = "TIE_LOW_XPD_XTAL"
+sources = ["S31_PMU_HEADERS"]
+
+[[write-trigger-fields]]
+peripheral = "PMU_RADIO"
+register = "IMM_HP_CK_POWER_0"
+field = "TIE_HIGH_GLOBAL_XTALX2_ICG"
+sources = ["S31_PMU_HEADERS"]
+
+[[write-trigger-fields]]
+peripheral = "PMU_RADIO"
+register = "IMM_HP_CK_POWER_0"
+field = "TIE_HIGH_GLOBAL_XTAL_ICG"
+sources = ["S31_PMU_HEADERS"]
+
+[[write-trigger-fields]]
+peripheral = "PMU_RADIO"
+register = "IMM_HP_CK_POWER_0"
+field = "TIE_HIGH_I2C_RETENTION"
+sources = ["S31_PMU_HEADERS"]
+
+[[write-trigger-fields]]
+peripheral = "PMU_RADIO"
+register = "IMM_HP_CK_POWER_0"
+field = "TIE_HIGH_XPD_BB_I2C"
+sources = ["S31_PMU_HEADERS"]
+
+[[write-trigger-fields]]
+peripheral = "PMU_RADIO"
+register = "IMM_HP_CK_POWER_0"
+field = "TIE_HIGH_XPD_XTALX2"
+sources = ["S31_PMU_HEADERS"]
+
+[[write-trigger-fields]]
+peripheral = "PMU_RADIO"
+register = "IMM_HP_CK_POWER_0"
+field = "TIE_HIGH_XPD_XTAL"
+sources = ["S31_PMU_HEADERS"]

@@ -2155,6 +2155,34 @@ impl BluetoothSchedulerLockModifyHardwareListIndex {
     }
 }
 
+/// Low 24 bits of the complemented analog-I2C read selection. The sourced word publication fixes its high status byte to ones.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PhyI2cReadMask(u32);
+
+impl PhyI2cReadMask {
+    pub const MIN: u32 = 0x00000000;
+    pub const MAX: u32 = 0x00ffffff;
+
+    /// Construct a value only when it lies in the reviewed inclusive range.
+    pub const fn new(value: u32) -> Option<Self> {
+        if value <= 0x00ffffff {
+            Some(Self(value))
+        } else {
+            None
+        }
+    }
+
+    /// The value of a 24-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<24>) -> Self {
+        Self(bits.get())
+    }
+
+    /// Return the checked numeric value.
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
 /// Complete sixteen-bit caller control accepted by the rev0 ROM IQ-estimator enable path.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct IqEstimatorControlWord(u32);
@@ -40191,28 +40219,10 @@ pub mod i2c_ana_mst {
             i2c0_ctrl::R(self.0.read::<0x0>())
         }
 
-        /// Read `I2C0_CTRL`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_i2c0_ctrl(&mut self, change: impl FnOnce(&mut i2c0_ctrl::W)) {
-            let mut value = i2c0_ctrl::W(self.0.read::<0x0>());
-            change(&mut value);
-            self.0.write::<0x0>(value.0);
-        }
-
         /// Read `I2C1_CTRL`.
         #[inline]
         pub fn read_i2c1_ctrl(&self) -> i2c1_ctrl::R {
             i2c1_ctrl::R(self.0.read::<0x4>())
-        }
-
-        /// Read `I2C1_CTRL`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_i2c1_ctrl(&mut self, change: impl FnOnce(&mut i2c1_ctrl::W)) {
-            let mut value = i2c1_ctrl::W(self.0.read::<0x4>());
-            change(&mut value);
-            self.0.write::<0x4>(value.0);
         }
 
         /// Read `ANA_CONF0`.
@@ -40321,6 +40331,15 @@ pub mod i2c_ana_mst {
             self.0.write::<0x4>(0x04000000);
         }
 
+        /// Keep `0x00000000`, take the value into `0x00ffffff` and set `0xff000000` (`ANA_CONF1`).
+        ///
+        /// SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
+        #[inline]
+        pub fn publish_phy_i2c_read_mask(&mut self, value: super::PhyI2cReadMask) {
+            self.0
+                .write::<0x1c>((value.get() & 0x00ffffff) | 0xff000000);
+        }
+
         /// Replace the listed fields from one reviewed image, keeping every other bit (`ANA_CONF2`).
         ///
         /// SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
@@ -40422,21 +40441,6 @@ pub mod i2c_ana_mst {
                 .write::<0x18>((bits & !0x0000000c) | ((input & 0x00000003) << 2));
         }
 
-        /// Write the listed fields and zero to every other bit (`ANA_CONF1`).
-        ///
-        /// SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
-        #[inline]
-        pub fn publish_phy_i2c_read_mask(
-            &mut self,
-            read_mask_complement_low_value: oer_mmio::Bits<24>,
-            read_mask_complement_high_value: u8,
-        ) {
-            self.0.write::<0x1c>(
-                read_mask_complement_low_value.get()
-                    | (u32::from(read_mask_complement_high_value) << 24),
-            );
-        }
-
         /// Write the listed fields and zero to every other bit (`I2C0_CTRL`).
         ///
         /// SOURCE: ROM_REV0_PHY_I2C, BLOB_LIBPHY_PHY_I2C, S31_ESP_PACS_SVD.
@@ -40523,95 +40527,6 @@ pub mod i2c_ana_mst {
             pub const fn busy(self) -> bool {
                 (self.0 & 0x02000000) != 0
             }
-
-            /// The `START_OR_RESET` field.
-            #[inline]
-            pub const fn start_or_reset(self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// The `SLAVE_ADDR` field.
-            #[inline]
-            pub const fn slave_addr(&self) -> u8 {
-                (self.0) as u8
-            }
-
-            /// The `SLAVE_REG_ADDR` field.
-            #[inline]
-            pub const fn slave_reg_addr(&self) -> u8 {
-                (self.0 >> 8) as u8
-            }
-
-            /// The `DATA` field.
-            #[inline]
-            pub const fn data(&self) -> u8 {
-                (self.0 >> 16) as u8
-            }
-
-            /// The `READ_WRITE` field.
-            #[inline]
-            pub const fn read_write(&self) -> bool {
-                (self.0 & 0x01000000) != 0
-            }
-
-            /// The `BUSY` field.
-            #[inline]
-            pub const fn busy(&self) -> bool {
-                (self.0 & 0x02000000) != 0
-            }
-
-            /// The `START_OR_RESET` field.
-            #[inline]
-            pub const fn start_or_reset(&self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-
-            /// Set `SLAVE_ADDR`.
-            #[inline]
-            pub fn set_slave_addr(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0x000000ff) | u32::from(value);
-                self
-            }
-
-            /// Set `SLAVE_REG_ADDR`.
-            #[inline]
-            pub fn set_slave_reg_addr(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
-                self
-            }
-
-            /// Set `DATA`.
-            #[inline]
-            pub fn set_data(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
-                self
-            }
-
-            /// Set `READ_WRITE`.
-            #[inline]
-            pub fn set_read_write(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
-                self
-            }
-
-            /// Set `BUSY`.
-            #[inline]
-            pub fn set_busy(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
-                self
-            }
-
-            /// Set `START_OR_RESET`.
-            #[inline]
-            pub fn set_start_or_reset(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x04000000) | (u32::from(value) << 26);
-                self
-            }
         }
     }
 
@@ -40659,112 +40574,10 @@ pub mod i2c_ana_mst {
                 (self.0 & 0x02000000) != 0
             }
 
-            /// The `START_OR_RESET` field.
-            #[inline]
-            pub const fn start_or_reset(self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-
             /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_27_31_opaque(self) -> oer_mmio::Bits<5> {
                 oer_mmio::Bits::truncate(self.0 >> 27)
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// The `SLAVE_ADDR` field.
-            #[inline]
-            pub const fn slave_addr(&self) -> u8 {
-                (self.0) as u8
-            }
-
-            /// The `SLAVE_REG_ADDR` field.
-            #[inline]
-            pub const fn slave_reg_addr(&self) -> u8 {
-                (self.0 >> 8) as u8
-            }
-
-            /// The `DATA` field.
-            #[inline]
-            pub const fn data(&self) -> u8 {
-                (self.0 >> 16) as u8
-            }
-
-            /// The `READ_WRITE` field.
-            #[inline]
-            pub const fn read_write(&self) -> bool {
-                (self.0 & 0x01000000) != 0
-            }
-
-            /// The `BUSY` field.
-            #[inline]
-            pub const fn busy(&self) -> bool {
-                (self.0 & 0x02000000) != 0
-            }
-
-            /// The `START_OR_RESET` field.
-            #[inline]
-            pub const fn start_or_reset(&self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-
-            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
-            #[inline]
-            pub const fn bits_27_31_opaque(&self) -> oer_mmio::Bits<5> {
-                oer_mmio::Bits::truncate(self.0 >> 27)
-            }
-
-            /// Set `SLAVE_ADDR`.
-            #[inline]
-            pub fn set_slave_addr(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0x000000ff) | u32::from(value);
-                self
-            }
-
-            /// Set `SLAVE_REG_ADDR`.
-            #[inline]
-            pub fn set_slave_reg_addr(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
-                self
-            }
-
-            /// Set `DATA`.
-            #[inline]
-            pub fn set_data(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
-                self
-            }
-
-            /// Set `READ_WRITE`.
-            #[inline]
-            pub fn set_read_write(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
-                self
-            }
-
-            /// Set `BUSY`.
-            #[inline]
-            pub fn set_busy(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
-                self
-            }
-
-            /// Set `START_OR_RESET`.
-            #[inline]
-            pub fn set_start_or_reset(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x04000000) | (u32::from(value) << 26);
-                self
-            }
-
-            /// Set `BITS_27_31_OPAQUE`.
-            #[inline]
-            pub fn set_bits_27_31_opaque(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
-                self.0 = (self.0 & !0xf8000000) | (value.get() << 27);
-                self
             }
         }
     }
@@ -40936,13 +40749,6 @@ pub mod i2c_ana_mst {
                 self.0 = (self.0 & !0x00000600) | (value.bits() << 9);
                 self
             }
-
-            /// Set `ANA_STATUS0`.
-            #[inline]
-            pub fn set_ana_status0(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0xff000000) | (u32::from(value) << 24);
-                self
-            }
         }
     }
 
@@ -40993,13 +40799,6 @@ pub mod i2c_ana_mst {
             #[inline]
             pub fn set_read_mask_complement_low(&mut self, value: oer_mmio::Bits<24>) -> &mut Self {
                 self.0 = (self.0 & !0x00ffffff) | value.get();
-                self
-            }
-
-            /// Set `READ_MASK_COMPLEMENT_HIGH`.
-            #[inline]
-            pub fn set_read_mask_complement_high(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0xff000000) | (u32::from(value) << 24);
                 self
             }
         }
@@ -41066,8 +40865,14 @@ pub mod i2c_ana_mst {
 
             /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_18_31_opaque(self) -> oer_mmio::Bits<14> {
+            pub const fn bits_18_23_opaque(self) -> oer_mmio::Bits<6> {
                 oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+
+            /// The `ANA_STATUS2` field.
+            #[inline]
+            pub const fn ana_status2(self) -> u8 {
+                (self.0 >> 24) as u8
             }
         }
 
@@ -41095,8 +40900,14 @@ pub mod i2c_ana_mst {
 
             /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_18_31_opaque(&self) -> oer_mmio::Bits<14> {
+            pub const fn bits_18_23_opaque(&self) -> oer_mmio::Bits<6> {
                 oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+
+            /// The `ANA_STATUS2` field.
+            #[inline]
+            pub const fn ana_status2(&self) -> u8 {
+                (self.0 >> 24) as u8
             }
 
             /// Set `PHY_HOST_MAP`.
@@ -41113,10 +40924,10 @@ pub mod i2c_ana_mst {
                 self
             }
 
-            /// Set `BITS_18_31_OPAQUE`.
+            /// Set `BITS_18_23_OPAQUE`.
             #[inline]
-            pub fn set_bits_18_31_opaque(&mut self, value: oer_mmio::Bits<14>) -> &mut Self {
-                self.0 = (self.0 & !0xfffc0000) | (value.get() << 18);
+            pub fn set_bits_18_23_opaque(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                self.0 = (self.0 & !0x00fc0000) | (value.get() << 18);
                 self
             }
         }
@@ -41344,6 +41155,10 @@ pub mod i2c_ana_mst {
     const _: () = assert!(
         oer_mmio::check::within(0x04000000, i2c1_ctrl::FIELDS),
         "pulse_phy_i2c_host1_reset writes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::partition(0x00000000, 0x00ffffff, 0xff000000, ana_conf1::FIELDS),
+        "publish_phy_i2c_read_mask partitions the word and changes declared fields only"
     );
     const _: () = assert!(
         oer_mmio::check::within(0x0003fa00, 0x0003fff0)
@@ -41829,12 +41644,10 @@ pub mod ieee802154_mac {
             sfd_wait::R(self.0.read::<0xc4>())
         }
 
-        /// Write `TX_DMA_ADDRESS` from zero: the fields set, zero in every other bit.
+        /// Write `TX_DMA_ADDRESS` from a typed DMA address.
         #[inline]
-        pub fn write_tx_dma_address(&mut self, change: impl FnOnce(&mut tx_dma_address::W)) {
-            let mut value = tx_dma_address::W(0);
-            change(&mut value);
-            self.0.write::<0xd0>(value.0);
+        pub fn write_tx_dma_address(&mut self, value: super::layouts::DmaWindowAddress) {
+            self.0.write::<0xd0>(value.get());
         }
 
         /// Read `TXDMA_ERR`.
@@ -41843,12 +41656,10 @@ pub mod ieee802154_mac {
             txdma_err::R(self.0.read::<0xd8>())
         }
 
-        /// Write `RX_DMA_ADDRESS` from zero: the fields set, zero in every other bit.
+        /// Write `RX_DMA_ADDRESS` from a typed DMA address.
         #[inline]
-        pub fn write_rx_dma_address(&mut self, change: impl FnOnce(&mut rx_dma_address::W)) {
-            let mut value = rx_dma_address::W(0);
-            change(&mut value);
-            self.0.write::<0xe0>(value.0);
+        pub fn write_rx_dma_address(&mut self, value: super::layouts::DmaWindowAddress) {
+            self.0.write::<0xe0>(value.get());
         }
 
         /// Read `RXDMA_ERR`.
@@ -42788,12 +42599,10 @@ pub mod ieee802154_mac {
             sfd_wait::R(self.0.read::<0xc4>())
         }
 
-        /// Write `TX_DMA_ADDRESS` from zero: the fields set, zero in every other bit.
+        /// Write `TX_DMA_ADDRESS` from a typed DMA address.
         #[inline]
-        pub fn write_tx_dma_address(&mut self, change: impl FnOnce(&mut tx_dma_address::W)) {
-            let mut value = tx_dma_address::W(0);
-            change(&mut value);
-            self.0.write::<0xd0>(value.0);
+        pub fn write_tx_dma_address(&mut self, value: super::layouts::DmaWindowAddress) {
+            self.0.write::<0xd0>(value.get());
         }
 
         /// Read `TXDMA_ERR`.
@@ -42802,12 +42611,10 @@ pub mod ieee802154_mac {
             txdma_err::R(self.0.read::<0xd8>())
         }
 
-        /// Write `RX_DMA_ADDRESS` from zero: the fields set, zero in every other bit.
+        /// Write `RX_DMA_ADDRESS` from a typed DMA address.
         #[inline]
-        pub fn write_rx_dma_address(&mut self, change: impl FnOnce(&mut rx_dma_address::W)) {
-            let mut value = rx_dma_address::W(0);
-            change(&mut value);
-            self.0.write::<0xe0>(value.0);
+        pub fn write_rx_dma_address(&mut self, value: super::layouts::DmaWindowAddress) {
+            self.0.write::<0xe0>(value.get());
         }
 
         /// Read `RXDMA_ERR`.
@@ -46725,21 +46532,6 @@ pub mod ieee802154_mac {
         pub const FIELDS: u32 = 0xffffffff;
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0xd0;
-
-        /// The value written to the register.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Set `ADDRESS` to a typed DMA address.
-            #[inline]
-            pub fn set_address(
-                &mut self,
-                value: super::super::layouts::DmaWindowAddress,
-            ) -> &mut Self {
-                self.0 = value.get();
-                self
-            }
-        }
     }
 
     /// The `TXDMA_ERR` register.
@@ -46772,21 +46564,6 @@ pub mod ieee802154_mac {
         pub const FIELDS: u32 = 0xffffffff;
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0xe0;
-
-        /// The value written to the register.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Set `ADDRESS` to a typed DMA address.
-            #[inline]
-            pub fn set_address(
-                &mut self,
-                value: super::super::layouts::DmaWindowAddress,
-            ) -> &mut Self {
-                self.0 = value.get();
-                self
-            }
-        }
     }
 
     /// The `RXDMA_ERR` register.
@@ -79004,13 +78781,100 @@ pub mod pmu_radio {
             imm_hp_ck_power_0::R(self.0.read::<0xf0>())
         }
 
-        /// Read `IMM_HP_CK_POWER_0`, change fields and write it back; every other bit keeps
-        /// the value read.
+        /// Write one to the write-trigger field `TIE_LOW_GLOBAL_XTALX2_ICG` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
         #[inline]
-        pub fn modify_imm_hp_ck_power_0(&mut self, change: impl FnOnce(&mut imm_hp_ck_power_0::W)) {
-            let mut value = imm_hp_ck_power_0::W(self.0.read::<0xf0>());
-            change(&mut value);
-            self.0.write::<0xf0>(value.0);
+        pub fn trigger_imm_hp_ck_power_0_tie_low_global_xtalx2_icg(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x00000001);
+        }
+
+        /// Write one to the write-trigger field `TIE_LOW_GLOBAL_XTAL_ICG` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_low_global_xtal_icg(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x00000002);
+        }
+
+        /// Write one to the write-trigger field `TIE_LOW_I2C_RETENTION` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_low_i2c_retention(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x00000004);
+        }
+
+        /// Write one to the write-trigger field `TIE_LOW_XPD_BB_I2C` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_low_xpd_bb_i2c(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x00000008);
+        }
+
+        /// Write one to the write-trigger field `TIE_LOW_XPD_XTALX2` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_low_xpd_xtalx2(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x00000020);
+        }
+
+        /// Write one to the write-trigger field `TIE_LOW_XPD_XTAL` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_low_xpd_xtal(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x00000040);
+        }
+
+        /// Write one to the write-trigger field `TIE_HIGH_GLOBAL_XTALX2_ICG` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_high_global_xtalx2_icg(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x02000000);
+        }
+
+        /// Write one to the write-trigger field `TIE_HIGH_GLOBAL_XTAL_ICG` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_high_global_xtal_icg(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x04000000);
+        }
+
+        /// Write one to the write-trigger field `TIE_HIGH_I2C_RETENTION` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_high_i2c_retention(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x08000000);
+        }
+
+        /// Write one to the write-trigger field `TIE_HIGH_XPD_BB_I2C` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_high_xpd_bb_i2c(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x10000000);
+        }
+
+        /// Write one to the write-trigger field `TIE_HIGH_XPD_XTALX2` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_high_xpd_xtalx2(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x40000000);
+        }
+
+        /// Write one to the write-trigger field `TIE_HIGH_XPD_XTAL` of `IMM_HP_CK_POWER_0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0_tie_high_xpd_xtal(&mut self) {
+            self.0
+                .write::<0xf0>((self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS) | 0x80000000);
         }
 
         /// Write `IMM_SLEEP_SYSCLK` from zero: the fields set, zero in every other bit.
@@ -79106,7 +78970,7 @@ pub mod pmu_radio {
         /// SOURCE: BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW, S31_PMU_HEADERS.
         #[inline]
         pub fn enable_baseband_i2c_power_tie(&mut self) {
-            let bits = self.0.read::<0xf0>();
+            let bits = self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS;
             self.0.write::<0xf0>((bits & !0x10000000) | 0x10000000);
         }
 
@@ -79115,7 +78979,7 @@ pub mod pmu_radio {
         /// SOURCE: BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW, S31_PMU_HEADERS.
         #[inline]
         pub fn disable_baseband_i2c_power_tie(&mut self) {
-            let bits = self.0.read::<0xf0>();
+            let bits = self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS;
             self.0.write::<0xf0>(bits & !0x10000000);
         }
 
@@ -79124,7 +78988,7 @@ pub mod pmu_radio {
         /// SOURCE: BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907, S31_PMU_HEADERS.
         #[inline]
         pub fn clear_phy_rf_immediate_clock_power(&mut self) {
-            let bits = self.0.read::<0xf0>();
+            let bits = self.0.read::<0xf0>() & !imm_hp_ck_power_0::TRIGGERS;
             self.0.write::<0xf0>(bits & !0x10000000);
         }
 
@@ -79438,80 +79302,22 @@ pub mod pmu_radio {
 
     /// The `IMM_HP_CK_POWER_0` register.
     ///
-    /// Immediate high-power clock ties. The reviewed complete PHY body reads this word before its preserving update, overriding the write-only access class in the uncorrected public SVD.
+    /// Immediate high-power clock ties. SOURCE: S31_PMU_HEADERS classes all twelve physical lanes WT; their readback is not established. Writes preserve reserved lanes and clear every sibling trigger from the read image.
     pub mod imm_hp_ck_power_0 {
         /// The bits of the register's declared fields.
-        pub const FIELDS: u32 = 0xd0000000;
+        pub const FIELDS: u32 = 0xde00006f;
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0xf0;
+
+        /// The bits of the write-trigger fields: zero in every
+        /// read-modify-write, one only in a field's explicit trigger.
+        pub const TRIGGERS: u32 = 0xde00006f;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
-        impl R {
-            /// Force the baseband analog-I2C power control high.
-            #[inline]
-            pub const fn tie_high_xpd_bb_i2c(self) -> bool {
-                (self.0 & 0x10000000) != 0
-            }
-
-            /// Force the doubled-crystal power control high.
-            #[inline]
-            pub const fn tie_high_xpd_xtalx2(self) -> bool {
-                (self.0 & 0x40000000) != 0
-            }
-
-            /// Force the crystal power control high.
-            #[inline]
-            pub const fn tie_high_xpd_xtal(self) -> bool {
-                (self.0 & 0x80000000) != 0
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Force the baseband analog-I2C power control high.
-            #[inline]
-            pub const fn tie_high_xpd_bb_i2c(&self) -> bool {
-                (self.0 & 0x10000000) != 0
-            }
-
-            /// Force the doubled-crystal power control high.
-            #[inline]
-            pub const fn tie_high_xpd_xtalx2(&self) -> bool {
-                (self.0 & 0x40000000) != 0
-            }
-
-            /// Force the crystal power control high.
-            #[inline]
-            pub const fn tie_high_xpd_xtal(&self) -> bool {
-                (self.0 & 0x80000000) != 0
-            }
-
-            /// Set `TIE_HIGH_XPD_BB_I2C`.
-            #[inline]
-            pub fn set_tie_high_xpd_bb_i2c(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
-                self
-            }
-
-            /// Set `TIE_HIGH_XPD_XTALX2`.
-            #[inline]
-            pub fn set_tie_high_xpd_xtalx2(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
-                self
-            }
-
-            /// Set `TIE_HIGH_XPD_XTAL`.
-            #[inline]
-            pub fn set_tie_high_xpd_xtal(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
-                self
-            }
-        }
+        impl R {}
     }
 
     /// The `IMM_SLEEP_SYSCLK` register.

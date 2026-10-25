@@ -93,11 +93,58 @@ bitWidth = 1
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "IMM_HP_CK_POWER_0"
-description = "Immediate high-power clock ties. The reviewed complete PHY body reads this word before its preserving update, overriding the write-only access class in the uncorrected public SVD."
+description = "Immediate high-power clock ties. SOURCE: S31_PMU_HEADERS classes all twelve physical lanes WT; their readback is not established. Writes preserve reserved lanes and clear every sibling trigger from the read image."
 addressOffset = 0xF0
 size = 32
 access = "read-write"
 resetValue = 0
+
+reserved = { mask = 0x21ffff90, sources = ["S31_PMU_HEADERS"] }
+
+[[peripherals.registers.register.fields]]
+name = "TIE_LOW_GLOBAL_XTALX2_ICG"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIE_LOW_GLOBAL_XTAL_ICG"
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIE_LOW_I2C_RETENTION"
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIE_LOW_XPD_BB_I2C"
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIE_LOW_XPD_XTALX2"
+bitOffset = 5
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIE_LOW_XPD_XTAL"
+bitOffset = 6
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIE_HIGH_GLOBAL_XTALX2_ICG"
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIE_HIGH_GLOBAL_XTAL_ICG"
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIE_HIGH_I2C_RETENTION"
+bitOffset = 27
+bitWidth = 1
 
 [[peripherals.registers.register.fields]]
 name = "TIE_HIGH_XPD_BB_I2C"

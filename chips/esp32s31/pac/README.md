@@ -18,21 +18,20 @@ The PAC is the exact model of the hardware, generated from the
   capabilities, shared blocks) that split one block between owners. Without
   them the HAL could split a block only with `unsafe`.
 
-The PAC holds no logic: no sequences, polls, interrupt routing, clock,
-power or reset control, DMA engines, analog-bus driver, named transactions
-or domain modules. They are HAL code over the field accessors, each vendor
-step with its `SOURCE:`. A logical module (its register parts, DMA arena,
-clock, power and reset leases and interrupt-binding proofs) is written in
-the HAL from the generated facts; one clock manager per domain writes the
-control words its devices share. The existing domain modules
-(`bluetooth`, `wifi`, `ieee802154`, `phy`, `modem`, `boot`, `platform`,
-`watchdog`, `pll_power`) and the policy transactions they call are moved to
-the HAL. The policy items that stay generated are the `whole-word` fixed
-images, a vendor's store of a whole word with its `SOURCE:`, and the
-acknowledgements of events no sample captured, each with its masking or
-consumed-event proof. A new tool reads the register model, not the
-published SVD. Generated names drop the vendor's block prefix; the `soc`
-blocks keep it.
+The generated boundary consists of register-local field accessors, typed
+values, layouts and ownership parts. The current renderer reads the
+published SVD and the API policy. It also generates the policy's named
+transactions, including sourced whole-word images and snapshot
+acknowledgements. The `soc` pass retains the vendor's field prefixes;
+API-policy blocks use the field names declared in the reviewed model.
+
+The PAC exports the handwritten domain modules `bluetooth`, `wifi`,
+`ieee802154`, `phy`, `modem`, `boot`, `platform`, `watchdog` and `pll_power`.
+They assemble owned register parts and provide the register-local operations
+and straight-line transactions described below. The analog-host operations
+are in `phy/i2c.rs`. Sequencing with phases, polling, retries, interrupt
+routing and lifecycle policy belongs to the HAL; a PAC domain operation
+keeps no in-flight state between calls.
 
 ## Radio partitions
 

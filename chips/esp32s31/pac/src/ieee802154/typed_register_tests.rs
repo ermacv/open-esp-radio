@@ -217,9 +217,7 @@ fn a_dma_address_field_takes_its_typed_address_whole() {
     let before = memory(u32::MAX);
     let mut after = before.clone();
     let mut block = Ieee802154Mac::host(&mut after).expect("memory holds the block");
-    block.write_tx_dma_address(|writer| {
-        writer.set_address(address);
-    });
+    block.write_tx_dma_address(address);
     drop(block);
     let difference = changed(&before, &after);
     assert_eq!(difference.len(), 1, "one word changed");
