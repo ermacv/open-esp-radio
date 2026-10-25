@@ -14,7 +14,7 @@
 
 use crate::{
     RadioPhyRegisters,
-    generated::{self, ModemSysconClockGateState, ModemSysconResetState},
+    generated::{ModemSysconClockGateState, ModemSysconResetState},
 };
 
 /// One modem clock device whose gate the PAC drives.
@@ -58,62 +58,62 @@ impl RadioPhyRegisters {
     /// devices perform no register access when disabled, as in the vendor.
     #[doc(hidden)]
     pub fn configure_modem_clock_device(&mut self, device: ModemClockDevice, enable: bool) {
-        let syscon = &self.peripherals.modem_syscon_radio;
+        let syscon = &mut self.peripherals.modem_syscon_radio;
         match device {
             ModemClockDevice::ModemAdcCommonFe => {
                 if enable {
-                    generated::enable_modem_frontend_apb_clock(syscon);
-                    generated::enable_modem_frontend_80m_clock(syscon);
+                    syscon.enable_modem_frontend_apb_clock();
+                    syscon.enable_modem_frontend_80m_clock();
                 }
             }
             ModemClockDevice::ModemPrivateFe => {
                 if enable {
-                    generated::enable_modem_frontend_160m_clock(syscon);
-                    generated::enable_modem_frontend_dac_clock(syscon);
-                    generated::enable_modem_frontend_pwdet_clock(syscon);
-                    generated::enable_modem_frontend_adc_clock(syscon);
+                    syscon.enable_modem_frontend_160m_clock();
+                    syscon.enable_modem_frontend_dac_clock();
+                    syscon.enable_modem_frontend_pwdet_clock();
+                    syscon.enable_modem_frontend_adc_clock();
                 }
             }
             ModemClockDevice::PllSourceGate => {
-                let clkrst = &self.peripherals.hp_sys_clkrst_radio;
+                let clkrst = &mut self.peripherals.hp_sys_clkrst_radio;
                 if enable {
-                    crate::svd::fixed_register_image::open_modem_pll_source_gate(clkrst);
+                    clkrst.open_modem_pll_source_gate();
                 } else {
-                    crate::svd::fixed_register_image::close_modem_pll_source_gate(clkrst);
+                    clkrst.close_modem_pll_source_gate();
                 }
             }
-            ModemClockDevice::WifiApb => generated::set_modem_wifi_apb_clock(syscon, gate(enable)),
+            ModemClockDevice::WifiApb => syscon.set_modem_wifi_apb_clock(gate(enable)),
             ModemClockDevice::WifiBaseband44m => {
-                generated::set_modem_wifi_baseband_44m_clock(syscon, gate(enable));
+                syscon.set_modem_wifi_baseband_44m_clock(gate(enable));
             }
-            ModemClockDevice::WifiMac => generated::set_modem_wifi_mac_clock(syscon, gate(enable)),
+            ModemClockDevice::WifiMac => syscon.set_modem_wifi_mac_clock(gate(enable)),
             ModemClockDevice::WifiBaseband => {
                 if enable {
-                    generated::set_wifi_baseband_reset(syscon, ModemSysconResetState::Asserted);
-                    generated::set_wifi_baseband_reset(syscon, ModemSysconResetState::Released);
+                    syscon.set_wifi_baseband_reset(ModemSysconResetState::Asserted);
+                    syscon.set_wifi_baseband_reset(ModemSysconResetState::Released);
                 }
-                generated::set_modem_wifi_baseband_clocks(syscon, gate(enable));
+                syscon.set_modem_wifi_baseband_clocks(gate(enable));
             }
             ModemClockDevice::WifiBaseband80x1 => {
-                generated::set_bluetooth_wifi_baseband_80x1_clock(syscon, gate(enable));
+                syscon.set_bluetooth_wifi_baseband_80x1_clock(gate(enable));
             }
-            ModemClockDevice::Etm => generated::set_bluetooth_etm_clock(syscon, gate(enable)),
+            ModemClockDevice::Etm => syscon.set_bluetooth_etm_clock(gate(enable)),
             ModemClockDevice::BluetoothMac => {
-                generated::set_bluetooth_mac_clock(syscon, gate(enable));
+                syscon.set_bluetooth_mac_clock(gate(enable));
             }
             ModemClockDevice::BluetoothPeripheral => {
-                generated::set_bluetooth_peripheral_clocks(syscon, gate(enable));
+                syscon.set_bluetooth_peripheral_clocks(gate(enable));
             }
             ModemClockDevice::BluetoothApb => {
-                generated::set_bluetooth_apb_clock(syscon, gate(enable));
-                generated::set_bluetooth_modem_security_apb_clock(syscon, gate(enable));
+                syscon.set_bluetooth_apb_clock(gate(enable));
+                syscon.set_bluetooth_modem_security_apb_clock(gate(enable));
             }
             ModemClockDevice::BluetoothIeee802154CommonBaseband => {
-                generated::set_bluetooth_baseband_clock(syscon, gate(enable));
+                syscon.set_bluetooth_baseband_clock(gate(enable));
             }
             ModemClockDevice::Ieee802154Mac => {
-                generated::set_modem_ieee802154_apb_clock(syscon, gate(enable));
-                generated::set_modem_ieee802154_mac_clock(syscon, gate(enable));
+                syscon.set_modem_ieee802154_apb_clock(gate(enable));
+                syscon.set_modem_ieee802154_mac_clock(gate(enable));
             }
         }
     }

@@ -44,7 +44,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         ieee802154: peripherals.IEEE802154,
         lp_tsens: peripherals.LP_TSENS,
     };
-    let (_hardware, clocks) = take_radio(singletons, &psram);
+    let (_hardware, clocks) = take_radio(
+        singletons,
+        &psram,
+        todo!("integration PR: bootstrap root provides PllPowerReleased"),
+    );
     let _ = diagnostics.event(&RadioRoot::Handoff);
     let mut passed = true;
     for clock in PlatformClock::ALL {

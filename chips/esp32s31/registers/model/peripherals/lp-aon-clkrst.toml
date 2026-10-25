@@ -8,10 +8,10 @@ baseAddress = 0x20701000
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "ROOT_CLK_CONF"
-description = "Low-power root clock configuration. Only the RTC slow-clock source selector is published."
+description = "Low-power root clock configuration. Only the RTC slow-clock source selector is published. The access states the radio's: the radio reads the slow-clock source, and esp-hal's clock tree alone writes the word."
 addressOffset = 0x00
 size = 32
-access = "read-write"
+access = "read-only"
 resetValue = 0
 
 [[peripherals.registers.register.fields]]

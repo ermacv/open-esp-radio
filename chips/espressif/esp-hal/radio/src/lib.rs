@@ -12,6 +12,10 @@
 //! never-released MPLL reference, so the radio's own MPLL requests never
 //! cross zero (`chips/esp32s31/registers/shared-words.toml`).
 //!
+//! [`take_radio`] takes the proof of the release of the bootstrap's owner of
+//! the PMU's radio view (`PllPowerReleased`), so the two owners of the view
+//! never exist at once; the bootstrap root provides it.
+//!
 //! Blocks where the radio owns only single words (PMU, HP_SYS_CLKRST,
 //! LP_AON_CLK_RST, LP_PERICLKRST, the interrupt matrix) stay esp-hal's; each
 //! shared word has one runtime writer, reviewed in `shared-words.toml`.

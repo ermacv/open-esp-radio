@@ -263,7 +263,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     };
     // esp-hal's clocks come back as a provider over its backend; the image
     // times the same backend instead.
-    let (hardware, _esp_hal_clocks) = take_radio(singletons, &psram);
+    let (hardware, _esp_hal_clocks) = take_radio(
+        singletons,
+        &psram,
+        todo!("integration PR: bootstrap root provides PllPowerReleased"),
+    );
     let (domain, partitions) = hardware.split::<TimedEspHal, _>(ConcurrentPhy::new());
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
         usb::early(&Note::w1_fail("claim"));

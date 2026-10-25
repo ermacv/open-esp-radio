@@ -111,7 +111,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         ieee802154: peripherals.IEEE802154,
         lp_tsens: peripherals.LP_TSENS,
     };
-    let (hardware, clocks) = take_radio(singletons, &psram);
+    let (hardware, clocks) = take_radio(singletons, &psram, todo!("integration PR: bootstrap root provides PllPowerReleased"));
     let (domain, partitions) =
         hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {

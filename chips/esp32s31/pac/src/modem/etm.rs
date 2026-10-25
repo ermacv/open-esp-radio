@@ -5,16 +5,19 @@
 //! seven. The channel-enable set and clear words are
 //! write-trigger — writing 1 acts on one channel and writing 0 has no effect,
 //! as in the ESP32-S31 SoC ETM of identical layout; this is not yet verified
-//! on the modem ETM hardware. Each capability therefore writes only its own
-//! bits and never reads a trigger word, so the two protocols need no lock,
+//! on the modem ETM hardware. The generated division gives each capability
+//! its own channels' event and task words and only its own bits of the
+//! trigger words, checked at compile time, so the two protocols need no lock,
 //! and IEEE 802.15.4 may use its channels from its interrupt handler.
 
-use crate::svd;
+#![forbid(unsafe_code)]
+
+use crate::generated::modem_etm::{ModemEtmBluetooth, ModemEtmBluetoothPhy, ModemEtmIeee802154};
 
 /// ETM channels zero and one, owned by IEEE 802.15.4.
 #[must_use = "dropping the ETM channels loses their register authority"]
 pub struct Ieee802154EtmChannels {
-    pub(crate) registers: svd::ModemEtm,
+    pub(crate) registers: ModemEtmIeee802154,
 }
 
 /// ETM channel two, owned by the Bluetooth controller.
@@ -26,56 +29,43 @@ pub struct Ieee802154EtmChannels {
 /// channel zero.
 #[must_use = "dropping the ETM channel loses its register authority"]
 pub struct BluetoothPhyEtmChannel {
-    registers: svd::ModemEtm,
+    registers: ModemEtmBluetoothPhy,
 }
 
 impl BluetoothPhyEtmChannel {
     /// Route event 8 to task 20 on channel two and enable the channel.
-    pub(crate) fn route_and_enable(&self) {
-        crate::svd::fixed_register_sequence::route_bluetooth_phy_etm_channel2(&self.registers);
-        crate::svd::fixed_register_image::enable_bluetooth_phy_etm_channel2(&self.registers);
+    pub(crate) fn route_and_enable(&mut self) {
+        self.registers.route_bluetooth_phy_etm_channel2();
+        self.registers.enable_bluetooth_phy_etm_channel2();
     }
 
     /// Disable channel two, as a Direct Test Mode event without CTE
     /// disables the vendor channel carrying this route.
-    pub(crate) fn disable(&self) {
-        crate::svd::fixed_register_image::disable_bluetooth_phy_etm_channel2(&self.registers);
+    pub(crate) fn disable(&mut self) {
+        self.registers.disable_bluetooth_phy_etm_channel2();
     }
 }
 
 /// ETM channels four through seven, owned by the Bluetooth runtime.
 #[must_use = "dropping the ETM channels loses their register authority"]
 pub struct BluetoothEtmChannels {
-    pub(crate) registers: svd::ModemEtm,
+    pub(crate) registers: ModemEtmBluetooth,
 }
 
-/// Split the unique modem ETM owner into the three channel capabilities.
-///
-/// # Safety invariant
-///
-/// The duplicated handles live in [`BluetoothPhyEtmChannel`], whose
-/// operations write channel two's event, task and enable-set and clear bits, and in
-/// [`BluetoothEtmChannels`], whose only operation is the generated channel
-/// four-to-seven sequence; [`Ieee802154EtmChannels`] writes only channel zero
-/// and one words and bits. The capabilities are never reunited, so the
-/// complete block is never recovered while they exist.
-#[allow(
-    unsafe_code,
-    reason = "consuming the singleton creates the channel-disjoint capabilities"
-)]
+/// Divide the unique modem ETM owner into the three channel capabilities,
+/// which are never reunited.
 pub(crate) fn split(
-    peripherals: svd::peripheral_ownership::ModemEtmPeripherals,
+    peripherals: crate::generated::peripheral_ownership::ModemEtmPeripherals,
 ) -> (
     Ieee802154EtmChannels,
     BluetoothPhyEtmChannel,
     BluetoothEtmChannels,
 ) {
-    let svd::peripheral_ownership::ModemEtmPeripherals { modem_etm } = peripherals;
-    // SAFETY: `modem_etm` was consumed above; see the invariant.
-    let (phy, bluetooth) = unsafe { (svd::ModemEtm::steal(), svd::ModemEtm::steal()) };
+    let crate::generated::peripheral_ownership::ModemEtmPeripherals { modem_etm } = peripherals;
+    let (ieee802154, phy, bluetooth) = modem_etm.divide();
     (
         Ieee802154EtmChannels {
-            registers: modem_etm,
+            registers: ieee802154,
         },
         BluetoothPhyEtmChannel { registers: phy },
         BluetoothEtmChannels {

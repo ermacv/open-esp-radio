@@ -384,13 +384,13 @@ struct HardwareModemLpTimerTransaction<'registers> {
 }
 
 struct HardwareModemLpTimerLowPowerInitTransaction<'registers> {
-    config: &'registers crate::svd::ModemEtm,
+    config: &'registers mut crate::generated::modem_etm::ModemEtmBluetooth,
     runtime_control: &'registers mut crate::generated::btdm_runtime_control::BtdmRuntimeControl,
 }
 
 impl ModemLpTimerLowPowerInitTransaction for HardwareModemLpTimerLowPowerInitTransaction<'_> {
     fn initialize_config(&mut self) {
-        crate::svd::fixed_register_sequence::initialize_bluetooth_low_power_config(self.config);
+        self.config.initialize_bluetooth_low_power_config();
     }
 
     fn clear_controls_0_4(&mut self) {
@@ -562,7 +562,7 @@ impl BluetoothModemLpTimerRegisters {
     /// channels four through seven of `MODEM_ETM`.
     pub fn initialize_low_power_hardware(&mut self) -> BluetoothLowPowerRuntimeControlObservation {
         let mut transaction = HardwareModemLpTimerLowPowerInitTransaction {
-            config: &self.etm.registers,
+            config: &mut self.etm.registers,
             runtime_control: &mut self.peripherals.btdm_runtime_control,
         };
         execute_modem_lp_timer_low_power_init(&mut transaction)

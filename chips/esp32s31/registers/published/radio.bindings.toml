@@ -66869,7 +66869,7 @@ access = "read-write"
 [[registers]]
 address = 544215040
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "LP_AON_CLKRST.ROOT_CLK_CONF"
 peripheral = "LP_AON_CLKRST"
 peripheral-type = "LpAonClkrst"
@@ -66882,21 +66882,21 @@ svd-name = "BITS_0_22_OPAQUE"
 method = "bits_0_22_opaque"
 bit-offset = 0
 bit-width = 23
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "SLOW_CLK_SEL"
 method = "slow_clk_sel"
 bit-offset = 23
 bit-width = 3
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "BITS_26_31_OPAQUE"
 method = "bits_26_31_opaque"
 bit-offset = 26
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 544215088
@@ -67042,6 +67042,34 @@ access = "read-write"
 svd-name = "HP_ACTIVE_XPD_BB_I2C"
 method = "hp_active_xpd_bb_i2c"
 bit-offset = 22
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "HP_ACTIVE_XPD_CPLL_I2C"
+method = "hp_active_xpd_cpll_i2c"
+bit-offset = 23
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "HP_ACTIVE_XPD_MPLL_I2C"
+method = "hp_active_xpd_mpll_i2c"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "HP_ACTIVE_XPD_CPLL"
+method = "hp_active_xpd_cpll"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "HP_ACTIVE_XPD_MPLL"
+method = "hp_active_xpd_mpll"
+bit-offset = 30
 bit-width = 1
 access = "read-write"
 

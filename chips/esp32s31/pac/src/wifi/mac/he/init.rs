@@ -93,10 +93,8 @@ impl WifiRadioRegisters {
             .radio_phy
             .peripherals
             .phy_agc_oracle
-            .agc_init_high_control()
-            .read()
-            .bits_24_31_opaque()
-            .bits();
+            .read_agc_init_high_control()
+            .bits_24_31_opaque();
 
         self.peripherals
             .wifi_mac

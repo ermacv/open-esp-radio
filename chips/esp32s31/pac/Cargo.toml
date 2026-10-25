@@ -28,10 +28,6 @@ oer-esp32s31-pac-raw = { path = "../pac-raw", features = ["critical-section"] }
 oer-time = { path = "../../../portable/time" }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 
-[target.'cfg(target_os = "linux")'.dev-dependencies]
-# Anonymous host memory lets the actual generated fixed-address MMIO operations run in tests.
-libc = "=0.2.189"
-
 [lints]
 workspace = true
 

@@ -7,7 +7,7 @@ use esp_hal::{
 };
 use oer_esp32s31_hal::{
     power::{PlatformClock, PlatformClockAbandonment},
-    root::{AnalogBusOwnership, RadioHandoff, RadioHardware},
+    root::{AnalogBusOwnership, PllPowerReleased, RadioHandoff, RadioHardware},
 };
 
 use crate::PlatformClocks;
@@ -72,8 +72,13 @@ impl PlatformClockBackend for EspHal {
 ///
 /// `singletons` are consumed: esp-hal hands each out once, so this runs at
 /// most once per program. `psram` proves that this image adopted PSRAM, whose
-/// MPLL reference esp-hal never releases.
-pub fn take_radio(singletons: RadioSingletons, psram: &Psram) -> (RadioHardware, EspHalClocks) {
+/// MPLL reference esp-hal never releases. `pll_power` proves the bootstrap's
+/// owner of the PMU's radio view was released.
+pub fn take_radio(
+    singletons: RadioSingletons,
+    psram: &Psram,
+    pll_power: PllPowerReleased,
+) -> (RadioHardware, EspHalClocks) {
     let _adopted: &Psram = psram;
     // The tokens are never handed back: no other owner of these blocks can
     // be constructed from esp-hal for the rest of the program.
@@ -95,7 +100,7 @@ pub fn take_radio(singletons: RadioSingletons, psram: &Psram) -> (RadioHardware,
         )
     };
     (
-        RadioHardware::from_handoff(handoff, analog_bus),
+        RadioHardware::from_handoff(handoff, analog_bus, pll_power),
         EspHalClocks::new(),
     )
 }

@@ -19,84 +19,76 @@ impl RadioPhyRegisters {
     /// Select encoding four used by complete power-detector initialization and
     /// enable bodies.
     pub fn select_power_detector_initialization_mode(&mut self) {
-        crate::generated::select_lp_power_detector_circuit_mode(
-            &self.peripherals.lp_aon_clkrst,
-            LpPowerDetectorCircuitMode::Initialization,
-        );
+        self.peripherals
+            .lp_aon_clkrst
+            .select_lp_power_detector_circuit_mode(LpPowerDetectorCircuitMode::Initialization);
     }
 
     /// Select encoding two used by complete TX-calibration debug mode.
     pub fn select_power_detector_calibration_mode(&mut self) {
-        crate::generated::select_lp_power_detector_circuit_mode(
-            &self.peripherals.lp_aon_clkrst,
-            LpPowerDetectorCircuitMode::Calibration,
-        );
+        self.peripherals
+            .lp_aon_clkrst
+            .select_lp_power_detector_circuit_mode(LpPowerDetectorCircuitMode::Calibration);
     }
 
     /// Enable the LP temperature-sensor register bank.
     pub fn enable_temperature_sensor_register_bank(&mut self) {
-        crate::generated::enable_lp_tsens_register_bank(
-            &self.peripherals.lp_tsens,
-            LpTsensRegisterBankEnable::Enabled,
-        );
+        self.peripherals
+            .lp_tsens
+            .enable_lp_tsens_register_bank(LpTsensRegisterBankEnable::Enabled);
     }
 
     /// Enable the LP temperature-sensor peripheral clock.
     pub fn set_temperature_sensor_clock(&mut self, enabled: bool) {
-        crate::generated::enable_lp_tsens_peripheral_clock(
-            &self.peripherals.lp_periclkrst,
-            if enabled {
+        self.peripherals
+            .lp_periclkrst
+            .enable_lp_tsens_peripheral_clock(if enabled {
                 LpTsensPeripheralClockEnable::Enabled
             } else {
                 LpTsensPeripheralClockEnable::Disabled
-            },
-        );
+            });
     }
 
     /// Assert or release the first-owner TSENS peripheral reset.
     pub fn set_temperature_sensor_reset(&mut self, asserted: bool) {
         if asserted {
-            crate::generated::assert_lp_tsens_reset(&self.peripherals.lp_periclkrst);
+            self.peripherals.lp_periclkrst.assert_lp_tsens_reset();
         } else {
-            crate::generated::release_lp_tsens_reset(&self.peripherals.lp_periclkrst);
+            self.peripherals.lp_periclkrst.release_lp_tsens_reset();
         }
     }
 
     /// Enable the blob-evidenced PHY readout path.
     pub fn enable_temperature_sensor_phy_readout(&mut self) {
-        crate::generated::enable_lp_tsens_phy_readout(
-            &self.peripherals.lp_tsens,
-            LpTsensPhyReadoutEnable::Enabled,
-        );
+        self.peripherals
+            .lp_tsens
+            .enable_lp_tsens_phy_readout(LpTsensPhyReadoutEnable::Enabled);
     }
 
     /// Enable the blob-evidenced PHY conversion path.
     pub fn enable_temperature_sensor_phy_conversion(&mut self) {
-        crate::generated::enable_lp_tsens_phy_conversion(
-            &self.peripherals.lp_tsens,
-            LpTsensPhyConversionEnable::Enabled,
-        );
+        self.peripherals
+            .lp_tsens
+            .enable_lp_tsens_phy_conversion(LpTsensPhyConversionEnable::Enabled);
     }
 
     /// Power the sensor through the complete-ROM-evidenced control bit.
     pub fn enable_temperature_sensor_power(&mut self) {
-        crate::generated::enable_lp_tsens_power(
-            &self.peripherals.lp_tsens,
-            LpTsensPowerEnable::Enabled,
-        );
+        self.peripherals
+            .lp_tsens
+            .enable_lp_tsens_power(LpTsensPowerEnable::Enabled);
     }
 
     /// Power down the temperature sensor through complete ROM
     /// `phy_set_tsens_power_(0)` semantics.
     pub fn disable_temperature_sensor_power(&mut self) {
-        crate::generated::enable_lp_tsens_power(
-            &self.peripherals.lp_tsens,
-            LpTsensPowerEnable::Disabled,
-        );
+        self.peripherals
+            .lp_tsens
+            .enable_lp_tsens_power(LpTsensPowerEnable::Disabled);
     }
 
     /// Sample and return the unsigned temperature code exactly once.
     pub fn read_temperature_sensor_code(&self) -> u8 {
-        crate::svd::field_read::read_lp_temperature_sensor_code(&self.peripherals.lp_tsens)
+        self.peripherals.lp_tsens.read_ctrl().out()
     }
 }

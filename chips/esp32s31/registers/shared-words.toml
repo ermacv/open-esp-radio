@@ -79,7 +79,7 @@ address = 0x2070401c
 radio = "PMU_RADIO.HP_ACTIVE_HP_CK_POWER"
 esp_hal = "PMU.hp_active_hp_ck_power in enable_cpll_clk_impl and the MPLL enable (soc/esp32s31/clocks.rs)"
 coordination = "disjoint-lifecycle"
-reason = "The CPLL writes happen only in the CPU clock configuration of esp_hal::init, and not at all when the CPU already runs from CPLL (ac0aef951). The MPLL writes happen only when the MPLL reference count crosses zero: once in the bootstrap (Psram::new) and once in each stage-two esp_hal instance, when Psram::from_existing_mapping takes its never-released reference (adopt_live_mpll, e6364e164) during PSRAM adoption. Images adopt PSRAM right after esp_hal::init and before they build the radio root (platform README order; no type enforces it yet), so the radio's own PlatformClock::Mpll reference never crosses zero."
+reason = "The CPLL writes happen only in the CPU clock configuration of esp_hal::init, and not at all when the CPU already runs from CPLL (ac0aef951). The MPLL writes happen only when the MPLL reference count crosses zero: once in the bootstrap (Psram::new) and once in each stage-two esp_hal instance, when Psram::from_existing_mapping takes its never-released reference (adopt_live_mpll, e6364e164) during PSRAM adoption. Images adopt PSRAM right after esp_hal::init and before they build the radio root (platform README order; no type enforces it yet), so the radio's own PlatformClock::Mpll reference never crosses zero. The PAC's BootstrapPllPower writes the CPLL and MPLL power fields of the same word only in the bootstrap's epoch, before the radio root exists and before esp-hal's clock tree runs in that image."
 
 [[word]]
 address = 0x207040f8
@@ -366,3 +366,10 @@ radio = "PMU_CPU_STALL.CPU_STALL_SW (typed block)"
 esp_hal = "PMU.cpu_stall_sw in internal_park_core (soc/esp32s31/cpu_control.rs)"
 coordination = "disjoint-lifecycle"
 reason = "esp-hal 1f646c5 stores it in internal_park_core, which pre_init calls on hart 0 inside esp_hal::init, before the image's code runs; its other callers are CpuControl's park and unpark (the CPU_CTRL singleton no image takes; clippy.toml refuses unpark_core) and pre_system_reset, which only esp-hal's software_reset reaches, which nothing calls any more. Our writers are the cores' owner, which the image takes after esp_hal::init, and the fatal path, which never returns to an esp_hal::init it preempted."
+
+[[word]]
+address = 0x20701000
+radio = "LP_AON_CLKRST.ROOT_CLK_CONF"
+esp_hal = "LP_AON_CLK_RST.root_clk_conf in configure_lp_fast_clk_impl and configure_lp_slow_clk_impl (soc/esp32s31/clocks.rs)"
+coordination = "radio-reads-only"
+reason = "The radio reads the RTC slow-clock source (clk_ll_rtc_slow_get_src) and never stores the word; esp-hal's clock tree alone writes it."

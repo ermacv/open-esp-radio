@@ -114,6 +114,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             lp_tsens: peripherals.LP_TSENS,
         },
         &psram,
+        todo!("integration PR: bootstrap root provides PllPowerReleased"),
     );
     let (domain, partitions) = hardware.split(ConcurrentPhy::new());
     let (end, cells) = claim().expect("diagnostic radio actor");

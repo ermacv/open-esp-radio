@@ -29,6 +29,42 @@ typed-peripherals = [
     "BTDM_RUNTIME_CONTROL",
     "BLUETOOTH_INTERRUPT_BANK",
     "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME",
+    "HP_SYS_CLKRST_RADIO",
+    "PMU_RADIO",
+    "MODEM_SYSCON_RADIO",
+    "PHY_AGC_ORACLE",
+    "PHY_AGC_RECOVERED_GAPS",
+    "PHY_BASEBAND_CONFIG_ORACLE",
+    "PHY_BB_RECOVERED_GAPS",
+    "PHY_BRX_RECOVERED_GAPS",
+    "PHY_BTAGC_RECOVERED",
+    "PHY_CLOCK_ORACLE",
+    "PHY_FECTRL_RECOVERED",
+    "PHY_ADC_DUMP_RECOVERED",
+    "PHY_FEDATA_RECOVERED",
+    "PHY_FEDATA_WIFI_RECOVERED",
+    "PHY_FREQUENCY_CHANNEL_ORACLE",
+    "PHY_I2C_COMMAND_RAM",
+    "PHY_IQ_ESTIMATOR_ORACLE",
+    "MODEM_LPCON_SHARED_CLOCK",
+    "MODEM_LPCON_PHY_TICK",
+    "LP_AON_CLKRST",
+    "LP_PERICLKRST",
+    "LP_TSENS",
+    "I2C_ANA_MST",
+    "PHY_MEMORY",
+    "PHY_NRX_RECOVERED_GAPS",
+    "PHY_PBUS",
+    "PHY_RX_DCO_ORACLE",
+    "COEX_HW_TIMER",
+    "COEX_EXTERNAL",
+    "PHY_FECOEX_RECOVERED",
+    "BT_V3_2_BASEBAND",
+    "SHARED_RADIO_INIT_CONTROL",
+    "SHARED_BASEBAND_RESET_IDLE_STATUS",
+    "SHARED_BASEBAND_TX_TIMING",
+    "ZBBB_RADIO_CONTROL",
+    "MODEM_ETM",
     "WIFI_MAC_INTERFACE_ADDRESS",
     "EFUSE",
     "TRNG",
@@ -59,7 +95,6 @@ typed-peripherals = [
     "HP_SYS_CLKRST_UART0",
     "LP_AON_CLKRST_CORE_RESET",
 ]
-
 
 [[ownership-partitions]]
 name = "UsbSerialJtagPeripherals"
@@ -341,7 +376,7 @@ peripherals = [
 [[ownership-partitions]]
 name = "ModemEtmPeripherals"
 member = "modem_etm"
-description = "Modem event-task matrix. The restricted PAC splits its channels into disjoint capabilities: channels zero and one for IEEE 802.15.4 and channels four through seven for Bluetooth, each writing only its own bits of the write-trigger set and clear words."
+description = "Modem event-task matrix, divided for good into channel-disjoint owners: channels zero and one for IEEE 802.15.4, channel two for the Bluetooth PHY initialization and channels four through seven for the Bluetooth runtime, each writing only its own bits of the write-trigger set and clear words."
 peripherals = [
     "MODEM_ETM",
 ]
@@ -1125,7 +1160,6 @@ peripheral = "PHY_MEMORY"
 register = "DATA_2"
 sources = ["ROM_REV0_PHY_WRITE_GAIN_MEM"]
 
-
 [[opaque-domains]]
 name = "AgcSaturationGainLow"
 description = "Register-specific low AGC saturation-gain image."
@@ -1424,6 +1458,7 @@ name = "frequency_parameter_0"
 peripheral = "PHY_FREQUENCY_CHANNEL_ORACLE"
 register = "WORD_0024_OPAQUE"
 value = 0x19800249
+whole-word = true
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 
 [[full-register-writes]]
@@ -1512,20 +1547,18 @@ register = "WORD_0400_OPAQUE"
 value = 0x0
 sources = ["BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK"]
 
-[[fixed-register-writes]]
+[[fixed-register-images]]
 name = "open_baseband_clock_gates"
 peripheral = "PHY_CLOCK_ORACLE"
 register = "WORD_7C80_OPAQUE"
-field = "STATE"
-variant = "OPEN"
+value = 0xffffffff
 sources = ["ROM_REV0_PHY_OPEN_FE_BB_CLK"]
 
-[[fixed-register-writes]]
+[[fixed-register-images]]
 name = "close_baseband_clock_gates"
 peripheral = "PHY_CLOCK_ORACLE"
 register = "WORD_7C80_OPAQUE"
-field = "STATE"
-variant = "CLOSED"
+value = 0x00000000
 sources = ["BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK"]
 
 [[fixed-register-images]]
@@ -2101,6 +2134,7 @@ name = "initialize_agc_update_8070"
 peripheral = "PHY_AGC_ORACLE"
 register = "WORD_8070_OPAQUE"
 value = 0x000008c7
+whole-word = true
 sources = ["ROM_REV0_PHY_AGC"]
 
 [[fixed-register-images]]
@@ -2108,6 +2142,7 @@ name = "initialize_agc_update_78a4"
 peripheral = "PHY_AGC_ORACLE"
 register = "WORD_78A4_OPAQUE"
 value = 0x0001721f
+whole-word = true
 sources = ["ROM_REV0_PHY_AGC"]
 
 [[field-replace-modifies]]
@@ -2124,6 +2159,7 @@ name = "initialize_agc_update_8010"
 peripheral = "PHY_AGC_ORACLE"
 register = "WORD_8010_OPAQUE"
 value = 0x000852a1
+whole-word = true
 sources = ["ROM_REV0_PHY_AGC"]
 
 [[fixed-register-images]]
@@ -2131,6 +2167,7 @@ name = "initialize_agc_update_8018"
 peripheral = "PHY_AGC_ORACLE"
 register = "WORD_8018_OPAQUE"
 value = 0x00600030
+whole-word = true
 sources = ["ROM_REV0_PHY_AGC"]
 
 [[fixed-register-images]]
@@ -2138,6 +2175,7 @@ name = "initialize_agc_update_801c"
 peripheral = "PHY_AGC_ORACLE"
 register = "WORD_801C_OPAQUE"
 value = 0x010000a0
+whole-word = true
 sources = ["ROM_REV0_PHY_AGC"]
 
 [[fixed-register-images]]
@@ -2145,6 +2183,7 @@ name = "initialize_agc_update_8020"
 peripheral = "PHY_AGC_ORACLE"
 register = "WORD_8020_OPAQUE"
 value = 0x00000180
+whole-word = true
 sources = ["ROM_REV0_PHY_AGC"]
 
 [[fixed-register-images]]
@@ -2152,6 +2191,7 @@ name = "initialize_agc_update_8028"
 peripheral = "PHY_AGC_ORACLE"
 register = "WORD_8028_OPAQUE"
 value = 0xc0403020
+whole-word = true
 sources = ["ROM_REV0_PHY_AGC"]
 
 [[fixed-register-images]]
@@ -2159,6 +2199,7 @@ name = "initialize_agc_update_802c"
 peripheral = "PHY_AGC_ORACLE"
 register = "WORD_802C_OPAQUE"
 value = 0x01000080
+whole-word = true
 sources = ["ROM_REV0_PHY_AGC"]
 
 [[field-replace-modifies]]
@@ -2182,6 +2223,7 @@ name = "initialize_agc_update_7048"
 peripheral = "PHY_AGC_ORACLE"
 register = "WORD_7048_OPAQUE"
 value = 0xff7da4f3
+whole-word = true
 sources = ["ROM_REV0_PHY_AGC"]
 
 [[fixed-register-images]]
@@ -2189,6 +2231,7 @@ name = "initialize_rx_11b_window_control"
 peripheral = "PHY_AGC_ORACLE"
 register = "RX_11B_WINDOW_CONTROL"
 value = 0x06acc7c8
+whole-word = true
 sources = ["ROM_REV0_PHY_AGC"]
 
 [[fixed-register-images]]
@@ -2302,6 +2345,7 @@ name = "initialize_rf_rx_saturation_config"
 peripheral = "PHY_AGC_ORACLE"
 register = "RF_RX_SATURATION_CONFIG"
 value = 0x00000404
+whole-word = true
 sources = ["ROM_REV0_PHY_AGC"]
 
 [[fixed-register-images]]
@@ -2309,6 +2353,7 @@ name = "initialize_tx_pa_table"
 peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
 register = "WORD_7C6C_OPAQUE"
 value = 0x0661a45f
+whole-word = true
 sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
 
 [[fixed-register-images]]
@@ -2316,6 +2361,7 @@ name = "initialize_power_detector_table_0"
 peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
 register = "WORD_0810_OPAQUE"
 value = 0x0f0f0fff
+whole-word = true
 sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
 
 [[fixed-register-images]]
@@ -2323,6 +2369,7 @@ name = "initialize_power_detector_table_1"
 peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
 register = "POWER_DETECTOR_TABLE_1"
 value = 0x00ff0f64
+whole-word = true
 sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
 
 [[zero-based-field-writes]]
@@ -2507,9 +2554,6 @@ register = "BSSID_LOW%s"
 fields = ["BYTES_0_3"]
 sources = ["BLOB_LIBPP_HAL_MAC_SET_BSSID"]
 
-
-
-
 [[zero-based-field-writes]]
 name = "mac_crypto_interface_control"
 peripheral = "WIFI_MAC_CRYPTO_CONTROL"
@@ -2688,6 +2732,7 @@ name = "frequency_parameter_1_initialization"
 peripheral = "PHY_FREQUENCY_CHANNEL_ORACLE"
 register = "FREQUENCY_PARAMETER_1_STATUS"
 value = 0x25824e58
+whole-word = true
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 
 [[zero-based-field-writes]]
@@ -2772,16 +2817,18 @@ peripheral = "WIFI_MAC_HE_INIT_SUFFIX"
 register = "HE_SCRATCH%s"
 sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX"]
 
-[[zero-register-writes]]
+[[fixed-register-images]]
 name = "clear_tx_gain_compensation"
 peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
 register = "TX_GAIN_COMPENSATION"
+value = 0x00000000
 sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
 
-[[zero-register-writes]]
+[[fixed-register-images]]
 name = "clear_tx_gain_compensation_aux"
 peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
 register = "TX_GAIN_COMPENSATION_AUX"
+value = 0x00000000
 sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW"]
 
 [[masked-register-modifies]]
@@ -2805,20 +2852,6 @@ input-mask = 0x00000001
 set-mask = 0x00000000
 exposure = "facade"
 sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
-
-[[field-reads]]
-name = "observe_ieee802154_recent_rssi"
-peripheral = "BT_V3_2_BASEBAND"
-register = "CURRENT_RX_INFO"
-field = "RSSI"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "ESP_IDF_7B9CC1AC_IEEE802154_RECENT_RSSI"]
-
-[[field-reads]]
-name = "observe_phy_ftm_enabled"
-peripheral = "PHY_AGC_ORACLE"
-register = "FTM_CONTROL"
-field = "ENABLE"
-sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "S31_ESP_PACS_SVD"]
 
 [[masked-register-modifies]]
 name = "publish_station_tbtt_target"
@@ -5517,6 +5550,7 @@ name = "initialize_bluetooth_receive_saturation_gain_config"
 peripheral = "PHY_BTAGC_RECOVERED"
 register = "AGC_SAT_GAIN_CONFIG"
 value = 0x00000404
+whole-word = true
 sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
 
 [[field-replace-modifies]]
@@ -5533,6 +5567,7 @@ name = "initialize_bluetooth_receive_saturation_gain_image_0"
 peripheral = "PHY_BTAGC_RECOVERED"
 register = "AGC_SAT_GAIN_IMAGE_0"
 value = 0x0A1B272E
+whole-word = true
 sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
 
 [[fixed-register-images]]
@@ -5540,6 +5575,7 @@ name = "initialize_bluetooth_receive_saturation_gain_image_1"
 peripheral = "PHY_BTAGC_RECOVERED"
 register = "AGC_SAT_GAIN_IMAGE_1"
 value = 0x0A1B272E
+whole-word = true
 sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
 
 [[field-or-modifies]]
@@ -5681,13 +5717,6 @@ value = 0x0019f
 exposure = "facade"
 sources = ["BLOB_LIBBTBB_BT_BB_V2_INIT"]
 
-[[field-reads]]
-name = "read_lp_temperature_sensor_code"
-peripheral = "LP_TSENS"
-register = "CTRL"
-field = "OUT"
-sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS"]
-
 [[field-replace-modifies]]
 name = "enable_wifi_mac_core"
 peripheral = "WIFI_MAC_CORE_ENABLE"
@@ -5714,54 +5743,6 @@ fields = [
 value = 0xff
 exposure = "facade"
 sources = ["S31_MODEM_LPCON_STRUCT", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
-
-[[field-snapshot-reads]]
-name = "observe_shared_modem_power_state_map"
-peripheral = "MODEM_LPCON_SHARED_CLOCK"
-register = "CLK_CONF_POWER_ST"
-fields = [
-    "CLK_WIFIPWR_ST_MAP_BIT_ONE",
-    "CLK_WIFIPWR_ST_MAP_BIT_TWO",
-    "CLK_COEX_ST_MAP_BIT_ONE",
-    "CLK_COEX_ST_MAP_BIT_TWO",
-    "CLK_I2C_MST_ST_MAP_BIT_ONE",
-    "CLK_I2C_MST_ST_MAP_BIT_TWO",
-    "CLK_LP_APB_ST_MAP_BIT_ONE",
-    "CLK_LP_APB_ST_MAP_BIT_TWO",
-]
-sources = ["S31_MODEM_LPCON_STRUCT", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
-
-[[field-snapshot-reads]]
-name = "observe_coexistence_low_power_clock_source"
-peripheral = "MODEM_LPCON_SHARED_CLOCK"
-register = "COEX_LP_CLK_CONF"
-fields = [
-    "CLK_COEX_LP_SEL_OSC_SLOW",
-    "CLK_COEX_LP_SEL_OSC_FAST",
-    "CLK_COEX_LP_SEL_XTAL",
-    "CLK_COEX_LP_SEL_XTAL32K",
-]
-sources = ["S31_MODEM_LPCON_STRUCT"]
-
-[[field-reads]]
-name = "observe_coexistence_low_power_clock_divider"
-peripheral = "MODEM_LPCON_SHARED_CLOCK"
-register = "COEX_LP_CLK_CONF"
-field = "CLK_COEX_LP_DIV_NUM"
-sources = ["S31_MODEM_LPCON_STRUCT"]
-
-[[field-snapshot-reads]]
-name = "observe_bluetooth_low_power_timer_configuration"
-peripheral = "MODEM_LPCON_SHARED_CLOCK"
-register = "LP_TIMER_CONF"
-fields = [
-    "CLK_LP_TIMER_SEL_OSC_SLOW",
-    "CLK_LP_TIMER_SEL_OSC_FAST",
-    "CLK_LP_TIMER_SEL_XTAL",
-    "CLK_LP_TIMER_SEL_XTAL32K",
-    "CLK_LP_TIMER_DIV_NUM",
-]
-sources = ["S31_MODEM_LPCON_STRUCT"]
 
 [[field-replace-modifies]]
 name = "deselect_bluetooth_low_power_timer_slow_oscillator"
@@ -5889,38 +5870,11 @@ domain = "ModemLowPowerClockDivider"
 exposure = "facade"
 sources = ["S31_MODEM_LPCON_STRUCT", "ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK"]
 
-[[field-snapshot-reads]]
-name = "observe_wifi_low_power_clock_configuration"
-peripheral = "MODEM_LPCON_SHARED_CLOCK"
-register = "WIFI_LP_CLK_CONF"
-fields = [
-    "CLK_WIFIPWR_LP_SEL_OSC_SLOW",
-    "CLK_WIFIPWR_LP_SEL_OSC_FAST",
-    "CLK_WIFIPWR_LP_SEL_XTAL",
-    "CLK_WIFIPWR_LP_SEL_XTAL32K",
-    "CLK_WIFIPWR_LP_DIV_NUM",
-]
-sources = ["S31_MODEM_LPCON_STRUCT", "ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK"]
-
-[[field-reads]]
-name = "read_rtc_slow_clock_source"
-peripheral = "LP_AON_CLKRST"
-register = "ROOT_CLK_CONF"
-field = "SLOW_CLK_SEL"
-sources = ["ESP_IDF_4D59230D_S31_RTC_SLOW_CLOCK_SOURCE"]
-
 [[bounded-domains]]
 name = "PhyRxDcoCalibrationControl"
 description = "Two-bit RX-DCO calibration control field retained and restored by complete calibration bodies."
 min = 0
 max = 3
-sources = ["BLOB_LIBPHY_PHY_XTAL_DUTY_CAL", "ROM_REV0_PHY_RX_DCO_CAL"]
-
-[[field-reads]]
-name = "capture_phy_rx_dco_calibration_control"
-peripheral = "PHY_RX_DCO_ORACLE"
-register = "CONTROL"
-field = "BITS_22_23_OPAQUE"
 sources = ["BLOB_LIBPHY_PHY_XTAL_DUTY_CAL", "ROM_REV0_PHY_RX_DCO_CAL"]
 
 [[field-replace-modifies]]
@@ -6091,48 +6045,6 @@ value = 0x3d
 exposure = "facade"
 sources = ["S31_ESP_PACS_SVD"]
 
-[[field-reads]]
-name = "observe_hp_active_modem_icg_code"
-peripheral = "PMU_RADIO"
-register = "HP_ACTIVE_ICG_MODEM"
-field = "HP_ACTIVE_DIG_ICG_MODEM_CODE"
-sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "S31_PMU_HEADERS"]
-
-[[field-reads]]
-name = "observe_modem_register_bus_clock"
-peripheral = "HP_SYS_CLKRST_RADIO"
-register = "MODEM_CTRL0"
-field = "MODEM_CLK_EN"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[field-snapshot-reads]]
-name = "observe_modem_source_clocks"
-peripheral = "HP_SYS_CLKRST_RADIO"
-register = "MODEM_CONF"
-fields = [
-    "MODEM_APB_CLK_EN",
-    "MODEM_RST_EN",
-    "MODEM_CLK_EN",
-    "MODEM_CLK_SOURCE_SEL",
-    "MODEM_PLL_CLK_EN",
-    "MODEM_XTAL_CLK_EN",
-]
-sources = ["S31_ESP_PACS_SVD"]
-
-[[field-argument-modifies]]
-name = "restore_modem_source_clocks"
-peripheral = "HP_SYS_CLKRST_RADIO"
-register = "MODEM_CONF"
-arguments = [
-    { name = "apb_clock_enabled", field = "MODEM_APB_CLK_EN" },
-    { name = "source_clock_enabled", field = "MODEM_CLK_EN" },
-    { name = "pll_selected", field = "MODEM_CLK_SOURCE_SEL" },
-    { name = "pll_clock_enabled", field = "MODEM_PLL_CLK_EN" },
-    { name = "xtal_clock_enabled", field = "MODEM_XTAL_CLK_EN" },
-]
-exposure = "facade"
-sources = ["S31_ESP_PACS_SVD"]
-
 [[field-replace-modifies]]
 name = "power_on_rf_circuits"
 peripheral = "PMU_RADIO"
@@ -6178,13 +6090,6 @@ value = 0
 exposure = "facade"
 sources = ["BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907", "S31_PMU_HEADERS"]
 
-[[field-reads]]
-name = "observe_analog_i2c_power"
-peripheral = "PMU_RADIO"
-register = "ANA_PERI_PWR_CTRL"
-field = "XPD_PERIF_I2C"
-sources = ["BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW", "S31_PMU_HEADERS"]
-
 [[field-replace-modifies]]
 name = "power_on_analog_i2c"
 peripheral = "PMU_RADIO"
@@ -6201,13 +6106,6 @@ register = "ANA_PERI_PWR_CTRL"
 fields = [{ field = "XPD_PERIF_I2C", source-bit-offset = 0 }]
 value = 0
 exposure = "facade"
-sources = ["BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW", "S31_PMU_HEADERS"]
-
-[[field-reads]]
-name = "observe_analog_i2c_reset_release"
-peripheral = "PMU_RADIO"
-register = "ANA_PERI_PWR_CTRL"
-field = "RSTB_PERIF_I2C"
 sources = ["BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW", "S31_PMU_HEADERS"]
 
 [[field-replace-modifies]]
@@ -6369,37 +6267,6 @@ value = 1
 exposure = "facade"
 sources = ["ROM_REV0_PHY_OPEN_FE_BB_CLK", "S31_MODEM_SYSCON_STRUCT"]
 
-[[field-argument-modifies]]
-name = "restore_phy_calibration_clocks"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "CLK_CONF1"
-arguments = [
-    { name = "wifi_bb_22m", field = "CLK_WIFIBB_22M_EN" },
-    { name = "wifi_bb_40m", field = "CLK_WIFIBB_40M_EN" },
-    { name = "wifi_bb_44m", field = "CLK_WIFIBB_44M_EN" },
-    { name = "wifi_bb_80m", field = "CLK_WIFIBB_80M_EN" },
-    { name = "wifi_bb_40x", field = "CLK_WIFIBB_40X_EN" },
-    { name = "wifi_bb_80x", field = "CLK_WIFIBB_80X_EN" },
-    { name = "wifi_bb_40x1", field = "CLK_WIFIBB_40X1_EN" },
-    { name = "wifi_bb_80x1", field = "CLK_WIFIBB_80X1_EN" },
-    { name = "wifi_bb_160x1", field = "CLK_WIFIBB_160X1_EN" },
-    { name = "wifi_apb", field = "CLK_WIFI_APB_EN" },
-    { name = "frontend_80m", field = "CLK_FE_80M_EN" },
-    { name = "frontend_160m", field = "CLK_FE_160M_EN" },
-    { name = "frontend_apb", field = "CLK_FE_APB_EN" },
-    { name = "bluetooth_apb", field = "CLK_BT_APB_EN" },
-    { name = "bluetooth_baseband", field = "CLK_BTBB_EN" },
-    { name = "frontend_power_detector_adc", field = "CLK_FE_PWDET_ADC_EN" },
-    { name = "frontend_adc", field = "CLK_FE_ADC_EN" },
-    { name = "frontend_dac", field = "CLK_FE_DAC_EN" },
-]
-exposure = "facade"
-sources = [
-    "ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK",
-    "ROM_REV0_PHY_OPEN_FE_BB_CLK",
-    "S31_MODEM_SYSCON_STRUCT",
-]
-
 [[field-replace-modifies]]
 name = "select_phy_i2c_160mhz_source"
 peripheral = "MODEM_SYSCON_RADIO"
@@ -6417,46 +6284,6 @@ fields = [{ field = "CLK_I2C_MST_SEL_160M", source-bit-offset = 0 }]
 domain = "ModemSysconClockGateState"
 exposure = "facade"
 sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "ROM_REV0_PHY_I2C", "S31_MODEM_SYSCON_STRUCT"]
-
-[[field-snapshot-reads]]
-name = "observe_wifi_modem_resets"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "MODEM_RST_CONF"
-fields = ["RST_WIFIBB", "RST_WIFIMAC"]
-sources = ["ESP_RADIO_7F914782_S31_WIFI_CLOCKS", "S31_MODEM_SYSCON_STRUCT"]
-
-[[field-snapshot-reads]]
-name = "observe_phy_calibration_clocks"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "CLK_CONF1"
-fields = [
-    "CLK_WIFIBB_22M_EN",
-    "CLK_WIFIBB_40M_EN",
-    "CLK_WIFIBB_44M_EN",
-    "CLK_WIFIBB_80M_EN",
-    "CLK_WIFIBB_40X_EN",
-    "CLK_WIFIBB_80X_EN",
-    "CLK_WIFIBB_40X1_EN",
-    "CLK_WIFIBB_80X1_EN",
-    "CLK_WIFIBB_160X1_EN",
-    "CLK_WIFI_APB_EN",
-    "CLK_FE_80M_EN",
-    "CLK_FE_160M_EN",
-    "CLK_FE_APB_EN",
-    "CLK_BT_APB_EN",
-    "CLK_BTBB_EN",
-    "CLK_FE_PWDET_ADC_EN",
-    "CLK_FE_ADC_EN",
-    "CLK_FE_DAC_EN",
-]
-sources = ["ROM_REV0_PHY_OPEN_FE_BB_CLK", "S31_MODEM_SYSCON_STRUCT"]
-
-[[field-reads]]
-name = "observe_phy_i2c_160mhz_source"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "CLK_CONF"
-field = "CLK_I2C_MST_SEL_160M"
-sources = ["ROM_REV0_PHY_I2C", "S31_MODEM_SYSCON_STRUCT"]
 
 [[field-replace-modifies]]
 name = "enable_wifi_mac_clocks"
@@ -6508,13 +6335,6 @@ fields = [{ field = "WIFI_ENABLE", source-bit-offset = 0 }]
 value = 0
 exposure = "facade"
 sources = ["BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907"]
-
-[[field-reads]]
-name = "observe_wifi_baseband_enable"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "WIFI_BB_CFG"
-field = "WIFI_ENABLE"
-sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
 name = "set_wifi_baseband_enable"
@@ -6681,20 +6501,6 @@ value = 1
 exposure = "facade"
 sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
 
-[[field-snapshot-reads]]
-name = "observe_ieee802154_modem_clock_conf"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "CLK_CONF"
-fields = ["CLK_ETM_EN", "CLK_MODEM_SEC_APB_EN", "CLK_ZB_APB_EN", "CLK_ZBMAC_EN"]
-sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
-
-[[field-snapshot-reads]]
-name = "observe_ieee802154_modem_clock_conf1"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "CLK_CONF1"
-fields = ["CLK_WIFIBB_80X1_EN", "CLK_BT_APB_EN", "CLK_BTBB_EN"]
-sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
-
 [[field-replace-modifies]]
 name = "set_ieee802154_mac_reset"
 peripheral = "MODEM_SYSCON_RADIO"
@@ -6711,13 +6517,6 @@ register = "MODEM_RST_CONF"
 fields = [{ field = "RST_ZBMAC_APB", source-bit-offset = 0 }]
 domain = "ModemSysconResetState"
 exposure = "facade"
-sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
-
-[[field-snapshot-reads]]
-name = "observe_ieee802154_modem_resets"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "MODEM_RST_CONF"
-fields = ["RST_ZBMAC", "RST_ZBMAC_APB"]
 sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
 
 [[field-replace-modifies]]
@@ -6737,50 +6536,6 @@ fields = [
 ]
 value = 0x1ff
 exposure = "facade"
-sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
-
-[[field-snapshot-reads]]
-name = "observe_modem_syscon_clock_map"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "CLK_CONF_POWER_ST"
-fields = [
-    "CLK_ZB_ST_MAP_BIT_TWO",
-    "CLK_FE_ST_MAP_BIT_ONE",
-    "CLK_FE_ST_MAP_BIT_TWO",
-    "CLK_BT_ST_MAP_BIT_TWO",
-    "CLK_WIFI_ST_MAP_BIT_ONE",
-    "CLK_WIFI_ST_MAP_BIT_TWO",
-    "CLK_MODEM_PERI_ST_MAP_BIT_TWO",
-    "CLK_MODEM_APB_ST_MAP_BIT_ONE",
-    "CLK_MODEM_APB_ST_MAP_BIT_TWO",
-]
-sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
-
-[[field-snapshot-reads]]
-name = "observe_bluetooth_modem_clock_conf"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "CLK_CONF"
-fields = [
-    "CLK_ETM_EN",
-    "CLK_MODEM_SEC_EN",
-    "CLK_MODEM_SEC_ECB_EN",
-    "CLK_MODEM_SEC_CCM_EN",
-    "CLK_MODEM_SEC_BAH_EN",
-    "CLK_BLE_TIMER_EN",
-    "CLK_MODEM_SEC_APB_EN",
-]
-sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
-
-[[field-snapshot-reads]]
-name = "observe_bluetooth_modem_clock_conf1"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "CLK_CONF1"
-fields = [
-    "CLK_WIFIBB_80X1_EN",
-    "CLK_BTMAC_EN",
-    "CLK_BT_APB_EN",
-    "CLK_BTBB_EN",
-]
 sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
 
 [[field-replace-modifies]]
@@ -6941,20 +6696,6 @@ domain = "ModemSysconClockGateState"
 exposure = "facade"
 sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
 
-[[field-argument-modifies]]
-name = "restore_bluetooth_peripheral_clocks"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "CLK_CONF"
-arguments = [
-    { name = "modem_security_enabled", field = "CLK_MODEM_SEC_EN" },
-    { name = "ecb_enabled", field = "CLK_MODEM_SEC_ECB_EN" },
-    { name = "ccm_enabled", field = "CLK_MODEM_SEC_CCM_EN" },
-    { name = "bah_enabled", field = "CLK_MODEM_SEC_BAH_EN" },
-    { name = "ble_timer_enabled", field = "CLK_BLE_TIMER_EN" },
-]
-exposure = "facade"
-sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
-
 [[field-replace-modifies]]
 name = "set_bluetooth_apb_clock"
 peripheral = "MODEM_SYSCON_RADIO"
@@ -7045,21 +6786,6 @@ domain = "ModemSysconResetState"
 exposure = "facade"
 sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
 
-[[field-snapshot-reads]]
-name = "observe_bluetooth_controller_resets"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "MODEM_RST_CONF"
-fields = [
-    "RST_BTMAC",
-    "RST_BTMAC_APB",
-    "RST_BLE_TIMER",
-    "RST_MODEM_ECB",
-    "RST_MODEM_CCM",
-    "RST_MODEM_BAH",
-    "RST_MODEM_SEC",
-]
-sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
-
 [[enum-domains]]
 name = "PhyI2cBbpllCalibrationState"
 description = "Reviewed BBPLL calibration modes selected through the shared analog-I2C master."
@@ -7108,20 +6834,6 @@ register = "I2C1_CTRL"
 value = 0x04000000
 sources = ["ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
 
-[[field-reads]]
-name = "observe_phy_i2c_host0_busy"
-peripheral = "I2C_ANA_MST"
-register = "I2C0_CTRL"
-field = "BUSY"
-sources = ["ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_phy_i2c_host1_busy"
-peripheral = "I2C_ANA_MST"
-register = "I2C1_CTRL"
-field = "BUSY"
-sources = ["ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
-
 [[zero-based-field-writes]]
 name = "publish_phy_i2c_read_mask"
 peripheral = "I2C_ANA_MST"
@@ -7142,20 +6854,6 @@ peripheral = "I2C_ANA_MST"
 register = "I2C1_CTRL"
 fields = ["SLAVE_ADDR", "SLAVE_REG_ADDR", "DATA", "READ_WRITE", "START_OR_RESET"]
 sources = ["ROM_REV0_PHY_I2C", "BLOB_LIBPHY_PHY_I2C", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_phy_i2c_host0_data"
-peripheral = "I2C_ANA_MST"
-register = "I2C0_CTRL"
-field = "DATA"
-sources = ["ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_phy_i2c_host1_data"
-peripheral = "I2C_ANA_MST"
-register = "I2C1_CTRL"
-field = "DATA"
-sources = ["ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
 name = "configure_phy_i2c_host0_sda_guard"
@@ -7325,13 +7023,6 @@ domain = "PbusEnableState"
 exposure = "facade"
 sources = ["ROM_REV0_PHY_PBUS", "S31_ESP_PACS_SVD"]
 
-[[field-reads]]
-name = "observe_pbus_busy"
-peripheral = "PHY_PBUS"
-register = "STATUS_CLOCK_FORCE"
-field = "BUSY"
-sources = ["ROM_REV0_PHY_PBUS", "S31_ESP_PACS_SVD"]
-
 [[field-replace-modifies]]
 name = "clear_pbus_transaction"
 peripheral = "PHY_PBUS"
@@ -7339,90 +7030,6 @@ register = "COMMAND"
 fields = [{ field = "TRANSACTION_START", source-bit-offset = 0 }]
 value = 0
 exposure = "facade"
-sources = ["ROM_REV0_PHY_PBUS", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_pbus_selector0_path1_result"
-peripheral = "PHY_PBUS"
-register = "READ_RESULT_3"
-field = "BITS_18_26_OPAQUE"
-sources = ["ROM_REV0_PHY_PBUS", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_pbus_selector0_other_path_result"
-peripheral = "PHY_PBUS"
-register = "READ_RESULT_3"
-field = "BITS_9_17_OPAQUE"
-sources = ["ROM_REV0_PHY_PBUS", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_pbus_selector1_path1_result"
-peripheral = "PHY_PBUS"
-register = "READ_RESULT_0"
-field = "BITS_9_17_OPAQUE"
-sources = ["ROM_REV0_PHY_PBUS", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_pbus_selector1_other_path_result"
-peripheral = "PHY_PBUS"
-register = "READ_RESULT_0"
-field = "RESULT_WINDOW_0_RX_DCO"
-sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_RX_DCO", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_pbus_selector2_path1_result"
-peripheral = "PHY_PBUS"
-register = "READ_RESULT_1"
-field = "BITS_0_8_OPAQUE"
-sources = ["ROM_REV0_PHY_PBUS", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_pbus_selector2_other_path_result"
-peripheral = "PHY_PBUS"
-register = "READ_RESULT_2"
-field = "BITS_18_26_OPAQUE"
-sources = ["ROM_REV0_PHY_PBUS", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_pbus_selector3_path1_result"
-peripheral = "PHY_PBUS"
-register = "READ_RESULT_2"
-field = "BITS_9_17_OPAQUE"
-sources = ["ROM_REV0_PHY_PBUS", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_pbus_selector3_other_path_result"
-peripheral = "PHY_PBUS"
-register = "READ_RESULT_2"
-field = "BITS_0_8_OPAQUE"
-sources = ["ROM_REV0_PHY_PBUS", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_pbus_selector4_path1_result"
-peripheral = "PHY_PBUS"
-register = "READ_RESULT_3"
-field = "BITS_0_8_OPAQUE"
-sources = ["ROM_REV0_PHY_PBUS", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_pbus_selector4_other_path_result"
-peripheral = "PHY_PBUS"
-register = "READ_RESULT_4"
-field = "BITS_18_26_OPAQUE"
-sources = ["ROM_REV0_PHY_PBUS", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_pbus_selector5_result"
-peripheral = "PHY_PBUS"
-register = "READ_RESULT_4"
-field = "BITS_9_17_OPAQUE"
-sources = ["ROM_REV0_PHY_PBUS", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_pbus_fallback_result"
-peripheral = "PHY_PBUS"
-register = "READ_RESULT_4"
-field = "BITS_0_8_OPAQUE"
 sources = ["ROM_REV0_PHY_PBUS", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
@@ -7513,76 +7120,6 @@ register = "ESTIMATOR_CONTROL"
 fields = [{ field = "MEASUREMENT_ENABLE", source-bit-offset = 0 }]
 domain = "IqEstimatorEnableState"
 exposure = "facade"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_iq_estimator_ready"
-peripheral = "PHY_IQ_ESTIMATOR_ORACLE"
-register = "ESTIMATOR_READY_STATUS"
-field = "READY"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_iq_estimator_activity"
-peripheral = "PHY_IQ_ESTIMATOR_ORACLE"
-register = "ESTIMATOR_ACTIVITY_STATUS"
-field = "BITS_20_21_OPAQUE"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_iq_estimator_dc_i_accumulator"
-peripheral = "PHY_IQ_ESTIMATOR_ORACLE"
-register = "DC_I_ACCUMULATOR"
-field = "VALUE"
-signed = true
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_iq_estimator_dc_q_accumulator"
-peripheral = "PHY_IQ_ESTIMATOR_ORACLE"
-register = "DC_Q_ACCUMULATOR"
-field = "VALUE"
-signed = true
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_iq_estimator_power_accumulator"
-peripheral = "PHY_IQ_ESTIMATOR_ORACLE"
-register = "POWER_ACCUMULATOR"
-field = "VALUE"
-signed = true
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_iq_estimator_signal_power_sum_i"
-peripheral = "PHY_IQ_ESTIMATOR_ORACLE"
-register = "SIGNAL_POWER_SUM_I"
-field = "VALUE"
-signed = true
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_iq_estimator_signal_power_sum_q"
-peripheral = "PHY_IQ_ESTIMATOR_ORACLE"
-register = "SIGNAL_POWER_SUM_Q"
-field = "VALUE"
-signed = true
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_iq_estimator_signal_power_difference_i"
-peripheral = "PHY_IQ_ESTIMATOR_ORACLE"
-register = "SIGNAL_POWER_DIFFERENCE_I"
-field = "VALUE"
-signed = true
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_iq_estimator_signal_power_difference_q"
-peripheral = "PHY_IQ_ESTIMATOR_ORACLE"
-register = "SIGNAL_POWER_DIFFERENCE_Q"
-field = "VALUE"
-signed = true
 sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"]
 
 [[bounded-domains]]
@@ -7779,13 +7316,6 @@ fields = [
 domain = "PhyPbusMemoryCommand"
 exposure = "facade"
 sources = ["ROM_REV0_PHY_WRITE_PBUS_MEM", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_table_memory_base_index"
-peripheral = "PHY_CLOCK_ORACLE"
-register = "TABLE_MEMORY_INDEX_SOURCE"
-field = "BASE_INDEX"
-sources = ["BLOB_LIBPHY_PHY_SET_TX_CFR_MEM", "ROM_REV0_PHY_WRITE_GAIN_MEM", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
 name = "configure_table_memory_base_index"
@@ -9362,46 +8892,11 @@ exposure = "facade"
 sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG", "S31_ESP_PACS_SVD"]
 
 [[field-reads]]
-name = "observe_phy_baseband_watchdog_status"
-peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
-register = "BASEBAND_WATCHDOG_STATUS"
-field = "STATUS"
-sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
 name = "observe_phy_noise_floor_sixteenth_db_code"
 peripheral = "WIFI_PHY_RATE_ORACLE"
 register = "NOISE_FLOOR_MEASUREMENT"
 field = "SIGNED_SIXTEENTH_DB_CODE"
 sources = ["ROM_REV0_PHY_READ_NOISE_FLOOR", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_phy_power_detector_ready"
-peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
-register = "POWER_DETECTOR_SAR_CONTROL_STATUS"
-field = "SAR_READY"
-sources = ["ROM_REV0_PHY_POWER_DETECTOR", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_phy_power_detector_sar_sample"
-peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
-register = "POWER_DETECTOR_SAR_RESULT"
-field = "SAR_SAMPLE"
-sources = ["ROM_REV0_PHY_POWER_DETECTOR", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "capture_phy_txdc_power_detector_table_low"
-peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
-register = "POWER_DETECTOR_TABLE_1"
-field = "BITS_0_7_OPAQUE"
-sources = ["ROM_REV0_PHY_POWER_DETECTOR", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "capture_phy_txdc_power_detector_calibration"
-peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
-register = "POWER_DETECTOR_CONTROL"
-field = "BITS_4_11_OPAQUE"
-sources = ["ROM_REV0_PHY_POWER_DETECTOR", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
 name = "prepare_phy_txdc_power_detector_table_low"
@@ -9610,27 +9105,6 @@ register = "TX_DC_MEASUREMENT_CONTROL_STATUS"
 fields = [{ field = "MEASUREMENT_START", source-bit-offset = 0 }]
 value = 1
 exposure = "facade"
-sources = ["ROM_REV0_PHY_TXDC_CAL", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_phy_tx_dc_measurement_ready"
-peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
-register = "TX_DC_MEASUREMENT_CONTROL_STATUS"
-field = "MEASUREMENT_READY"
-sources = ["ROM_REV0_PHY_TXDC_CAL", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_phy_tx_dc_i_comparator_high"
-peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
-register = "TX_DC_MEASUREMENT_CONTROL_STATUS"
-field = "I_COMPARATOR_HIGH"
-sources = ["ROM_REV0_PHY_TXDC_CAL", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_phy_tx_dc_q_comparator_high"
-peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
-register = "TX_DC_MEASUREMENT_CONTROL_STATUS"
-field = "Q_COMPARATOR_HIGH"
 sources = ["ROM_REV0_PHY_TXDC_CAL", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
@@ -9962,22 +9436,6 @@ input-transform = { wrapping-subtract = 0, retain-mask = 0x7f }
 exposure = "facade"
 sources = ["ROM_REV0_PHY_IQ_COEFFICIENTS", "S31_ESP_PACS_SVD"]
 
-[[field-argument-modifies]]
-name = "configure_phy_tone_path_0"
-peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
-register = "TONE_PATH_0_CONTROL"
-arguments = [
-    { name = "selector_high", field = "SELECTOR_HIGH", domain = "PhyToneByteImage" },
-    { name = "low_reserved", field = "BITS_8_9_OPAQUE", domain = "PhyToneTwoBitImage" },
-    { name = "negated_step", field = "NEGATED_STEP_OR_ATTENUATION", domain = "PhyToneByteImage" },
-    { name = "enabled", field = "TONE_ENABLE_OR_ARM" },
-    { name = "mismatch_mode", field = "BITS_19_21_OPAQUE", domain = "PhyToneThreeBitImage" },
-    { name = "middle_reserved", field = "BITS_22_23_OPAQUE", domain = "PhyToneTwoBitImage" },
-    { name = "polarity", field = "TXIQ_POLARITY_IMAGE", domain = "PhyToneFourBitImage" },
-]
-exposure = "facade"
-sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR", "S31_ESP_PACS_SVD"]
-
 [[field-replace-modifies]]
 name = "clear_phy_tone_path_1_low_image"
 peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
@@ -10000,22 +9458,6 @@ register = "TONE_PATH_0_CONTROL"
 fields = [{ field = "TXIQ_POLARITY_IMAGE", source-bit-offset = 0 }]
 domain = "PhyToneFourBitImage"
 exposure = "facade"
-sources = ["ROM_REV0_PHY_TXIQ_GET_MIS_PWR", "S31_ESP_PACS_SVD"]
-
-[[field-snapshot-reads]]
-name = "capture_phy_txiq_tone_control"
-peripheral = "PHY_BASEBAND_CONFIG_ORACLE"
-register = "TONE_PATH_0_CONTROL"
-fields = [
-    "SELECTOR_HIGH",
-    "BITS_8_9_OPAQUE",
-    "NEGATED_STEP_OR_ATTENUATION",
-    "TONE_ENABLE_OR_ARM",
-    "BITS_19_21_OPAQUE",
-    "BITS_22_23_OPAQUE",
-    "TXIQ_POLARITY_IMAGE",
-    "BITS_28_31_OPAQUE",
-]
 sources = ["ROM_REV0_PHY_TXIQ_GET_MIS_PWR", "S31_ESP_PACS_SVD"]
 
 [[zero-based-field-writes]]
@@ -10121,20 +9563,6 @@ domain = "PhyFrequencyRegisterMode"
 exposure = "facade"
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD"]
 
-[[field-reads]]
-name = "observe_phy_frequency_memory_result"
-peripheral = "PHY_FREQUENCY_CHANNEL_ORACLE"
-register = "FREQUENCY_MEMORY_READ_RESULT"
-field = "VALUE"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD"]
-
-[[field-reads]]
-name = "observe_phy_frequency_ready"
-peripheral = "PHY_FREQUENCY_CHANNEL_ORACLE"
-register = "FREQUENCY_PARAMETER_1_STATUS"
-field = "FREQUENCY_READY"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD"]
-
 [[field-replace-modifies]]
 name = "clear_phy_frontend_txrx_reset_state"
 peripheral = "PHY_FEDATA_RECOVERED"
@@ -10158,13 +9586,6 @@ fields = [
 value = 3
 exposure = "facade"
 sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[field-snapshot-reads]]
-name = "capture_phy_nrx_frequency_shift"
-peripheral = "PHY_FREQUENCY_CHANNEL_ORACLE"
-register = "NRX_FREQUENCY_CONTROL"
-fields = ["BITS_24_28_OPAQUE", "BITS_29_31_OPAQUE"]
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
 name = "initialize_phy_nrx_frequency_quotient"
@@ -10274,17 +9695,6 @@ peripheral = "PHY_FREQUENCY_CHANNEL_ORACLE"
 register = "FREQUENCY_CONTROL"
 fields = [{ field = "CHANNEL_INDEX", source-bit-offset = 0 }]
 domain = "PhyFrequencyChannelIndex"
-exposure = "facade"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD"]
-
-[[field-argument-modifies]]
-name = "configure_phy_frequency_i2c_number_prefix"
-peripheral = "PHY_FREQUENCY_CHANNEL_ORACLE"
-register = "I2C_NUMBER_CONTROL"
-arguments = [
-    { name = "address_0", field = "BITS_8_12_OPAQUE", domain = "PhyFrequencyI2cNumberAddress" },
-    { name = "address_1", field = "BITS_13_17_OPAQUE", domain = "PhyFrequencyI2cNumberAddress" },
-]
 exposure = "facade"
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD"]
 
@@ -10841,7 +10251,6 @@ points-to = "BLE_PHY_ENVIRONMENT"
 member-offset = 0x4d
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
-
 [[field-replace-modifies]]
 name = "assert_lp_tsens_reset"
 peripheral = "LP_PERICLKRST"
@@ -11032,3 +10441,145 @@ peripheral = "LP_AON_CLKRST_CORE_RESET"
 register = "HPCORE1_RESET_CTRL"
 field = "HPCORE1_SW_RESET"
 sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+# The modem ETM channel-enable set and clear words: writing one acts on that
+# channel and zero has no effect, as in the S31 SoC ETM of identical layout.
+
+[[write-trigger-fields]]
+peripheral = "MODEM_ETM"
+register = "CHANNEL_ENABLE_SET"
+field = "CH0"
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
+
+[[write-trigger-fields]]
+peripheral = "MODEM_ETM"
+register = "CHANNEL_ENABLE_SET"
+field = "CH1"
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
+
+[[write-trigger-fields]]
+peripheral = "MODEM_ETM"
+register = "CHANNEL_ENABLE_SET"
+field = "CH2"
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
+
+[[write-trigger-fields]]
+peripheral = "MODEM_ETM"
+register = "CHANNEL_ENABLE_SET"
+field = "CH4"
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
+
+[[write-trigger-fields]]
+peripheral = "MODEM_ETM"
+register = "CHANNEL_ENABLE_SET"
+field = "CH5"
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
+
+[[write-trigger-fields]]
+peripheral = "MODEM_ETM"
+register = "CHANNEL_ENABLE_SET"
+field = "CH6"
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
+
+[[write-trigger-fields]]
+peripheral = "MODEM_ETM"
+register = "CHANNEL_ENABLE_SET"
+field = "CH7"
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
+
+[[write-trigger-fields]]
+peripheral = "MODEM_ETM"
+register = "CHANNEL_ENABLE_CLEAR"
+field = "CH0"
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
+
+[[write-trigger-fields]]
+peripheral = "MODEM_ETM"
+register = "CHANNEL_ENABLE_CLEAR"
+field = "CH1"
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
+
+[[write-trigger-fields]]
+peripheral = "MODEM_ETM"
+register = "CHANNEL_ENABLE_CLEAR"
+field = "CH2"
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
+
+[[write-trigger-fields]]
+peripheral = "MODEM_ETM"
+register = "CHANNEL_ENABLE_CLEAR"
+field = "CH4"
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
+
+[[write-trigger-fields]]
+peripheral = "MODEM_ETM"
+register = "CHANNEL_ENABLE_CLEAR"
+field = "CH5"
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
+
+[[write-trigger-fields]]
+peripheral = "MODEM_ETM"
+register = "CHANNEL_ENABLE_CLEAR"
+field = "CH6"
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
+
+[[write-trigger-fields]]
+peripheral = "MODEM_ETM"
+register = "CHANNEL_ENABLE_CLEAR"
+field = "CH7"
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
+
+[[register-divisions]]
+peripheral = "MODEM_ETM"
+description = "IEEE 802.15.4 owns channels zero and one and reads the channel-enable word; the Bluetooth PHY initialization owns channel two; the Bluetooth runtime owns channels four through seven. Each part writes its own channels' event and task words and only its own bits of the write-trigger set and clear words, so no part reads or locks a word another part writes."
+sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_RUNTIME_CONTROL"]
+
+[[register-divisions.parts]]
+name = "Ieee802154"
+elements = [
+    { register = "CH%s_EVENT", first = 0, count = 2 },
+    { register = "CH%s_TASK", first = 0, count = 2 },
+]
+observes = ["CHANNEL_ENABLE"]
+triggers = [
+    { register = "CHANNEL_ENABLE_SET", fields = ["CH0", "CH1"] },
+    { register = "CHANNEL_ENABLE_CLEAR", fields = ["CH0", "CH1"] },
+]
+
+[[register-divisions.parts]]
+name = "BluetoothPhy"
+elements = [
+    { register = "CH%s_EVENT", first = 2, count = 1 },
+    { register = "CH%s_TASK", first = 2, count = 1 },
+]
+triggers = [
+    { register = "CHANNEL_ENABLE_SET", fields = ["CH2"] },
+    { register = "CHANNEL_ENABLE_CLEAR", fields = ["CH2"] },
+]
+
+[[register-divisions.parts]]
+name = "Bluetooth"
+elements = [
+    { register = "CH%s_EVENT", first = 4, count = 4 },
+    { register = "CH%s_TASK", first = 4, count = 4 },
+]
+triggers = [
+    { register = "CHANNEL_ENABLE_SET", fields = ["CH4", "CH5", "CH6", "CH7"] },
+    { register = "CHANNEL_ENABLE_CLEAR", fields = ["CH4", "CH5", "CH6", "CH7"] },
+]
+
+# IEEE 802.15.4 reads the recent RSSI from the shared baseband's current
+# receive information; no shared-radio operation reads or writes that word.
+[[read-capabilities]]
+peripheral = "BT_V3_2_BASEBAND"
+name = "RxInfo"
+registers = ["CURRENT_RX_INFO"]
+description = "The read of the current receive information whose low byte IEEE 802.15.4 reports as its recent RSSI, from any of its contexts and without the shared radio owner. Not `Copy`: the read side effects of the word are unproven, so one owner holds the read."
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "ESP_IDF_7B9CC1AC_IEEE802154_RECENT_RSSI"]
+
+# The transmit-CCA FIFO data word: bt_bb_tx_cca_fifo_read takes the next
+# element out, so the word is never read as an observation.
+[[fifo-ports]]
+peripheral = "BT_V3_2_BASEBAND"
+register = "TX_CCA_FIFO_DATA"
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]

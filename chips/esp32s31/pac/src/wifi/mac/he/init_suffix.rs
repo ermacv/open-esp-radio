@@ -109,8 +109,10 @@ impl WifiRadioRegisters {
             .radio_phy
             .peripherals
             .phy_frequency_channel_oracle
-            .channel_tx_offset_control()
-            .modify(|_, w| w.minimum_power_low().set(5).minimum_power_high().set(3));
+            .modify_channel_tx_offset_control(|w| {
+                w.set_minimum_power_low(oer_mmio::Bits::constant::<5>())
+                    .set_minimum_power_high(oer_mmio::Bits::constant::<3>());
+            });
         init.he_default_control()
             .modify(|_, w| w.mpdu_length_offset().set(0x17c));
 
@@ -152,8 +154,9 @@ impl WifiRadioRegisters {
             .radio_phy
             .peripherals
             .phy_frequency_channel_oracle
-            .channel_tx_offset_control()
-            .modify(|_, w| w.bit_17_opaque().set_bit());
+            .modify_channel_tx_offset_control(|w| {
+                w.set_bit_17_opaque(true);
+            });
         init.dump_complete_hesigb()
             .modify(|_, w| w.enable().clear_bit());
         init.ersu_and_vht_control()

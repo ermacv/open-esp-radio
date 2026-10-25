@@ -2108,6 +2108,10 @@ impl<'a> TypedBlock<'a> {
                 let _ = writeln!(arms, "0x{word:x} => self.0.read::<0x{word:x}>(),");
             }
         }
+        // A block without a readable register adds no word to the image.
+        if arms.is_empty() {
+            return Ok(());
+        }
         let _ = writeln!(
             body,
             "/// One read of the readable word at byte `offset`, for its partition's\n\
@@ -3523,14 +3527,18 @@ impl<'a> TypedRegister<'a> {
             return;
         }
         if field.readable {
+            // A whole-word element is the word read; a narrower one is
+            // extracted from it.
+            let read = format!("self.0.{}", self.read_call());
+            let element = match field.read_expression("value") {
+                whole if whole == "value" => read,
+                extracted => format!("let value = {read};\n{extracted}"),
+            };
             let _ = writeln!(
                 body,
                 "/// Take the next element out of the FIFO port `{name}`.\n\
-                 #[inline]\npub fn pop_{module}(&mut self) -> {} {{\n\
-                 let value = self.0.{};\n{}\n}}\n",
+                 #[inline]\npub fn pop_{module}(&mut self) -> {} {{\n{element}\n}}\n",
                 field.read_type().rust(),
-                self.read_call(),
-                field.read_expression("value")
             );
         }
         if field.writable {
@@ -3767,12 +3775,23 @@ fn render_getter(output: &mut String, field: &TypedField<'_>, receiver: &str) {
 
 fn render_enumeration(output: &mut String, field: &TypedField<'_>, enumeration: &Enumeration) {
     let name = &enumeration.name;
+    // A value above `i32::MAX` is not a portable default discriminant: such
+    // an enumeration takes the register's width.
+    let repr = if enumeration
+        .variants
+        .iter()
+        .any(|(_, value, _)| *value > u64::from(i32::MAX.unsigned_abs()))
+    {
+        "#[repr(u32)]\n"
+    } else {
+        ""
+    };
     let _ = writeln!(
         output,
         "/// The declared values of the `{}` field.\n\
          #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\n\
          #[allow(clippy::enum_variant_names, reason = \"the variants are the model's value names\")]\n\
-         pub enum {name} {{",
+         {repr}pub enum {name} {{",
         field.info.name
     );
     for (variant, value, description) in &enumeration.variants {

@@ -44,9 +44,10 @@ impl BleBaseStackOnTaskEnableHardwareTransaction
     for HardwareBleBaseStackOnTaskEnableTransaction<'_>
 {
     fn enable_access_address_low_correlation(&mut self) {
-        crate::generated::enable_ble_phy_access_address_low_correlation(
-            &self.shared.shared_radio.bt_v3_2_baseband,
-        );
+        self.shared
+            .shared_radio
+            .bt_v3_2_baseband
+            .enable_ble_phy_access_address_low_correlation();
     }
 
     #[allow(
@@ -269,13 +270,15 @@ impl BluetoothTaskRegisters {
             crate::generated::BluetoothPhyInitTimingByte::new(u32::from(timing_byte))
                 .expect("one byte always fits the reviewed BLE PHY timing domain"),
         );
-        crate::generated::publish_ble_phy_le_tx_on_delay(
-            &shared.shared_radio.bt_v3_2_baseband,
-            crate::generated::BluetoothPhyInitTimingByte::new(u32::from(
-                timing_byte.wrapping_sub(10),
-            ))
-            .expect("one byte always fits the reviewed BLE PHY timing domain"),
-        );
+        shared
+            .shared_radio
+            .bt_v3_2_baseband
+            .publish_ble_phy_le_tx_on_delay(
+                crate::generated::BluetoothPhyInitTimingByte::new(u32::from(
+                    timing_byte.wrapping_sub(10),
+                ))
+                .expect("one byte always fits the reviewed BLE PHY timing domain"),
+            );
 
         btmac.publish_ble_phy_init_value_0138();
         btmac.publish_ble_phy_init_bytes_04a4();
