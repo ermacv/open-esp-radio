@@ -37,8 +37,10 @@ application          credentials, network stack (embassy-net), sockets
   chip drivers       ESP32-S31 Wi-Fi, BLE and IEEE 802.15.4 drivers
   radio system       one owner of the shared RF front-end
   PHY                calibration, tracking, channel, TX power (Rust port of libphy)
-  HAL                typed register ownership: root, partitions, phased sequences
-  PAC                generated from the register model
+  HAL                register logic over the PAC: root, sequences, polls,
+                     routing, clocks, power, resets, DMA engines
+  PAC                the exact hardware model, generated: blocks, field
+                     accessors, value domains, DMA pointers, ownership parts
 platform (firmware/) staged boot, interrupt table, panic record, linker layout
 ```
 
@@ -180,6 +182,23 @@ moves; ownership, orchestration and wiring are rebuilt.
   decide (access classes, reserved lanes and words, offsets, names); what
   no header states is read-only, and the chip's sourced overlay
   (`model/strictness.toml`) adds and corrects what they lack.
+- **PAC and HAL.** The PAC is the exact model of the hardware, generated:
+  typed blocks taken once, the field accessors of each field's class in one
+  naming convention, the value domains of whole fields, DMA pointers set
+  only from typed references, and the ownership parts that split a block
+  between owners, which the HAL could not split without `unsafe`. It holds
+  no logic: sequences, polls, interrupt routing, clock, power and reset
+  control, DMA engines, the analog-bus driver and named transactions are HAL
+  code over the field accessors, each vendor step with its `SOURCE:`, and
+  the PAC's existing domain modules are moved there. A generated policy item
+  is only a `whole-word` vendor image or the acknowledgement of events no
+  sample captured, with its proof. A logical module (its register parts, DMA
+  arena, clock, power and reset leases and interrupt-binding proofs) is
+  written in the HAL from generated facts; one clock manager per domain
+  writes the control words its devices share. A new tool reads the register
+  model, not the published SVD. Generated names drop the vendor's block
+  prefix, which the `soc` blocks keep ([PAC](../chips/esp32s31/pac/README.md),
+  [field accessors](../tools/registers/model/README.md#field-accessors)).
 - **Radio access.** The S31 Wi-Fi handoff returns one `RadioAccess` by value;
   the driver owns it through the runtime epoch and lends it with `&mut`. No
   shared register arena or dynamic borrow guard.

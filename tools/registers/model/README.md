@@ -756,6 +756,48 @@ holding a control field's word writes it, whichever instances use it.
 Every check runs on load and fails with a typed `chip_policy::Error` that
 names the file and the entity.
 
+## Field accessors
+
+One convention names the accessors of every typed block in the PAC: the
+vendor blocks of the `soc` module, the typed blocks of the API policy and
+every renderer of the block-type model. A field's class (the table under
+[Block type file](#block-type-file-schema--3)) fixes which accessors it has;
+nothing else adds one.
+
+| Accessor | Given to |
+| --- | --- |
+| `read_<register>(&self) -> <register>::R`, a getter `<field>()` per readable field | a register read without a side effect |
+| `modify_<register>(&mut self, change)`; `change` takes `&mut <register>::W`, whose `set_<field>(value)` sets one field | a readable register with a writable field: every other bit keeps the value read, every write-trigger and command bit is zero |
+| `write_<register>(&mut self, change)`, the same `W` | a register with writable fields and no readable one: written from zero |
+| `trigger_<register>_<field>(&mut self)`, or with `value` for a wider field | each `write-trigger` field: one write sets it, every other field keeps the value read or, in a register not read, is zero |
+| `start_<register>_<command>(&mut self, <qualifier>: bool, ...) -> Result<(), CommandBusy>` and `<register>_<command>_busy(&self) -> bool` | each command of a `[[commands]]` register |
+| `sample_<register>(&self) -> <register>::Snapshot` and `acknowledge_<register>(&mut self, snapshot)` | a register of only `write-one-to-clear` fields; a status register paired with its clear register takes the pair's name (`sample_<pair>`, `<Pair>Snapshot`) |
+| `pop_<register>(&mut self)`, `push_<register>(&mut self, value)` | a FIFO port |
+| `write_<register>(&mut self, value)` | a command port's data word, stored whole |
+| `trigger_<register>_<field>(&self)`, `store_<register>(&self, value)` | the strobes and whole-word stores of a block several contexts share |
+
+Names are the model's in snake case (`r#` before a keyword). A repeated
+register takes `index: oer_mmio::Index<COUNT>` first. A field value is
+`bool` for one bit, the native integer for 8, 16 and 32 bits,
+`oer_mmio::Bits<WIDTH>` otherwise, and the field's enum where it has
+`values`. A field the hardware reads as an address has no integer setter:
+its `set_<field>` takes the layout's `DmaRef`, a `DmaWindowAddress` or the
+encoded image of a reference. A register a read changes has no accessor,
+and a field whose class gives no write is never written: a write keeps it
+as read, or zero in a write from zero. An owner part has the accessors of
+the registers it owns and the reads of those it observes. Generated names
+drop the vendor's block prefix (`LP_AONCLKRST_ROOT_CLK_CONF` of the
+`LP_AONCLKRST` type is `root_clk_conf`); the `soc` pass keeps it.
+
+The typed blocks of the API policy (`typed-peripherals`) take each field's
+class from the published SVD and the policy: `read-write` is `plain`,
+`read-only` is `read-only` and `write-only` is `write-only`; `oneToClear`
+makes a field `write-one-to-clear`, or `write-trigger` when it is
+`write-only` outside a snapshot's clear register; a `write-trigger-fields`
+entry is `write-trigger` and a command register's bit `self-clearing`; a
+register with a `readAction` that is no FIFO port is `read-clears`, and a
+field whose access no level of the SVD states is `read-only`. Any other modified-write value is refused.
+
 ## Analog-I2C space
 
 The chip manifest's `indirect-spaces = ["analog/phy.toml"]` selects one

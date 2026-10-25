@@ -209,3 +209,19 @@ fn a_dma_address_is_published_whole() {
         .collect();
     assert_eq!(written, [frame.bits()], "one word, the whole address");
 }
+
+#[test]
+fn a_dma_address_field_takes_its_typed_address_whole() {
+    let address =
+        crate::test_memory::reference::<crate::layouts::WifiRxDmaDescriptor>(0x4080_1000).address();
+    let before = memory(u32::MAX);
+    let mut after = before.clone();
+    let mut block = Ieee802154Mac::host(&mut after).expect("memory holds the block");
+    block.write_tx_dma_address(|writer| {
+        writer.set_address(address);
+    });
+    drop(block);
+    let difference = changed(&before, &after);
+    assert_eq!(difference.len(), 1, "one word changed");
+    assert_eq!(difference[0], !address.get(), "the word holds the address");
+}

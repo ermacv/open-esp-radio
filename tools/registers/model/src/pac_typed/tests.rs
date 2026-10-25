@@ -230,19 +230,277 @@ fn a_field_reads_back_as_the_type_its_writer_takes() {
 }
 
 #[test]
-fn a_write_only_clear_register_is_written_from_zero() {
+fn a_write_only_one_to_clear_field_outside_a_snapshot_is_a_write_trigger() {
     let clear = register(
         "CLEAR",
         0,
         "write-only",
         "<modifiedWriteValues>oneToClear</modifiedWriteValues>",
-        &(field("DONE", 0, 1, "") + &field("ERROR", 1, 1, "")),
+        &(field("DONE", 0, 1, "") + &field("ERRORS", 1, 4, "")),
     );
     let rust = typed_pack()
         .render_typed_rust(&svd(&clear), &Default::default())
         .expect("the typed block renders");
-    assert!(rust.contains("pub fn write_clear("), "{rust}");
-    assert!(!rust.contains("pub fn sample_clear("), "{rust}");
+    for item in [
+        "pub fn trigger_clear_done(",
+        "pub fn trigger_clear_errors(&mut self, value: oer_mmio::Bits<4>)",
+    ] {
+        assert!(rust.contains(item), "{item}\n{rust}");
+    }
+    for item in [
+        "pub fn write_clear(",
+        "pub fn sample_clear(",
+        "pub fn set_done(",
+    ] {
+        assert!(!rust.contains(item), "{item}\n{rust}");
+    }
+}
+
+/// `registers` in a device that states no default access.
+fn bare_svd(registers: &str) -> String {
+    svd(registers).replacen(
+        "<access>read-write</access><peripherals>",
+        "<peripherals>",
+        1,
+    )
+}
+
+/// One register of each field class the typed backend derives from the
+/// SVD alone, and the accessors each class gives.
+#[test]
+fn every_field_class_renders_exactly_its_accessors() {
+    let unstated = format!(
+        "<register><name>UNSTATED</name><addressOffset>0x18</addressOffset><size>32</size>\
+         <fields>{}</fields></register>",
+        field("VALUE", 0, 8, "")
+    );
+    let block = [
+        register("PLAIN", 0, "read-write", "", &field("VALUE", 0, 8, "")),
+        register("OBSERVED", 4, "read-only", "", &field("VALUE", 0, 8, "")),
+        register("STORED", 8, "write-only", "", &field("VALUE", 0, 8, "")),
+        register(
+            "STROBE",
+            0xc,
+            "write-only",
+            "<modifiedWriteValues>oneToClear</modifiedWriteValues>",
+            &field("VALUE", 0, 1, ""),
+        ),
+        register(
+            "EVENTS",
+            0x10,
+            "read-write",
+            "<modifiedWriteValues>oneToClear</modifiedWriteValues>",
+            &field("VALUE", 0, 1, ""),
+        ),
+        register(
+            "LATCH",
+            0x14,
+            "read-only",
+            "<readAction>clear</readAction>",
+            &field("VALUE", 0, 8, ""),
+        ),
+        unstated,
+    ]
+    .concat();
+    let rust = typed_pack()
+        .render_typed_rust(&bare_svd(&block), &Default::default())
+        .expect("the typed block renders");
+    let present = [
+        // plain: read, read-modify-write.
+        "pub fn read_plain(",
+        "pub fn modify_plain(",
+        // read-only: read.
+        "pub fn read_observed(",
+        // write-only: written from zero.
+        "pub fn write_stored(",
+        // write-trigger: its trigger.
+        "pub fn trigger_strobe_value(",
+        // write-one-to-clear: sampled and acknowledged.
+        "pub fn sample_events(",
+        "pub fn acknowledge_events(",
+        // no stated access: read.
+        "pub fn read_unstated(",
+    ];
+    let absent = [
+        "pub fn modify_observed(",
+        "pub fn write_observed(",
+        "pub fn read_stored(",
+        "pub fn modify_stored(",
+        "pub fn write_strobe(",
+        "pub fn read_strobe(",
+        "pub fn modify_events(",
+        "pub fn write_events(",
+        // read-clears: nothing.
+        "pub fn read_latch(",
+        "pub fn modify_latch(",
+        "pub fn write_latch(",
+        "pub fn modify_unstated(",
+        "pub fn write_unstated(",
+    ];
+    for item in present {
+        assert!(rust.contains(item), "{item}\n{rust}");
+    }
+    for item in absent {
+        assert!(!rust.contains(item), "{item}\n{rust}");
+    }
+    assert!(
+        rust.contains("0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18"),
+        "every register stays a word of the block: {rust}"
+    );
+}
+
+#[test]
+fn a_read_only_one_to_clear_field_is_only_read() {
+    // A field a write would acknowledge, read only by its access (the `soc`
+    // pass's debug-only field): no sample and no acknowledgement.
+    let status = register(
+        "STATUS",
+        0,
+        "read-write",
+        "",
+        &field(
+            "DONE",
+            0,
+            1,
+            "<access>read-only</access><modifiedWriteValues>oneToClear</modifiedWriteValues>",
+        ),
+    );
+    let rust = typed_pack()
+        .render_typed_rust(&svd(&status), &Default::default())
+        .expect("the typed block renders");
+    assert!(rust.contains("pub fn read_status("), "{rust}");
+    for item in [
+        "pub fn sample_status(",
+        "pub fn acknowledge_status(",
+        "pub fn modify_status(",
+    ] {
+        assert!(!rust.contains(item), "{item}\n{rust}");
+    }
+}
+
+#[test]
+fn a_field_with_another_modified_write_value_is_refused() {
+    let cleared = register(
+        "CONTROL",
+        0,
+        "read-write",
+        "",
+        &field(
+            "RELOAD",
+            0,
+            1,
+            "<modifiedWriteValues>clear</modifiedWriteValues>",
+        ),
+    );
+    refused(&typed_pack(), &cleared, "unsupported modified write values");
+}
+
+/// `ADDRESS`, one 32-bit DMA address word, and its policy write.
+fn addressed(points_to: Option<&str>) -> (PacApiPack, String) {
+    let mut pack = typed_pack();
+    pack.full_register_writes.push(crate::FullRegisterWrite {
+        name: "publish_address".to_owned(),
+        peripheral: "RADIO".to_owned(),
+        register: "ADDRESS".to_owned(),
+        field: "ADDRESS".to_owned(),
+        domain: None,
+        points_to: points_to.map(str::to_owned),
+        placement: points_to.is_none().then(|| "dma-window".to_owned()),
+        exposure: crate::PacApiExposure::Facade,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    let registers = register("ADDRESS", 0, "write-only", "", &field("ADDRESS", 0, 32, ""));
+    (pack, registers)
+}
+
+#[test]
+fn a_dma_address_field_is_set_only_from_its_typed_address() {
+    let (pack, registers) = addressed(None);
+    let rust = pack
+        .render_typed_rust(&svd(&registers), &Default::default())
+        .expect("the typed block renders");
+    assert!(rust.contains("pub fn write_address("), "{rust}");
+    assert!(
+        rust.contains("value: super::super::layouts::DmaWindowAddress) -> &mut Self"),
+        "{rust}"
+    );
+    assert!(!rust.contains("value: u32) -> &mut Self"), "{rust}");
+
+    let (pack, registers) = addressed(Some("DESCRIPTOR"));
+    let rust = pack
+        .render_typed_rust(&svd(&registers), &Default::default())
+        .expect("the typed block renders");
+    assert!(
+        rust.contains("value: super::super::layouts::DmaRef<super::super::layouts::Descriptor>"),
+        "{rust}"
+    );
+
+    // A transaction naming the field takes no integer either.
+    let (mut pack, registers) = addressed(None);
+    pack.zero_based_field_writes
+        .push(crate::ZeroBasedFieldWrite {
+            name: "publish_raw_address".to_owned(),
+            peripheral: "RADIO".to_owned(),
+            register: "ADDRESS".to_owned(),
+            fields: vec!["ADDRESS".to_owned()],
+            sources: vec!["SOURCE".to_owned()],
+        });
+    refused(&pack, &registers, "which has no writer");
+}
+
+/// A host stand-in for the PAC root's `layouts` module: a DMA-window
+/// address the program makes from an integer.
+const LAYOUTS: &str = r#"
+mod layouts {
+    #[derive(Clone, Copy)]
+    pub struct DmaWindowAddress(pub u32);
+    impl DmaWindowAddress {
+        pub const fn get(self) -> u32 {
+            self.0
+        }
+    }
+}
+"#;
+
+#[test]
+fn a_dma_address_field_writes_its_typed_address_and_refuses_an_integer() {
+    let (pack, registers) = addressed(None);
+    let rendered = pack
+        .render_typed_rust(&svd(&registers), &Default::default())
+        .expect("the typed block renders");
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let output = run_rendered(
+        directory.path(),
+        &format!("{rendered}{LAYOUTS}"),
+        r#"
+fn main() {
+    let mut memory = [0_u32; radio::SIZE / 4];
+    let mut block = radio::Radio::host(&mut memory).expect("memory holds the block");
+    block.write_address(|address| {
+        address.set_address(layouts::DmaWindowAddress(0x4080_1000));
+    });
+    drop(block);
+    println!("{:08x}", memory[0]);
+}
+"#,
+    );
+    assert_eq!(output.trim(), "40801000");
+
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let stderr = compile_rendered_failure(
+        directory.path(),
+        &format!("{rendered}{LAYOUTS}"),
+        r#"
+fn main() {
+    let mut memory = [0_u32; radio::SIZE / 4];
+    let mut block = radio::Radio::host(&mut memory).expect("memory holds the block");
+    block.write_address(|address| {
+        address.set_address(0x4080_1000_u32);
+    });
+}
+"#,
+    );
+    assert!(stderr.contains("mismatched types"), "{stderr}");
 }
 
 #[test]
@@ -275,6 +533,30 @@ fn only_a_whole_word_vendor_image_skips_the_declared_field_assertion() {
 /// program in `directory` (the pinned cargo, offline, its own target
 /// directory), runs it and returns its standard output.
 fn run_rendered(directory: &std::path::Path, rendered: &str, main: &str) -> String {
+    let output = cargo_rendered(directory, rendered, main, "run");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).expect("the program prints text")
+}
+
+/// The compiler's errors on a program over `rendered` that must not build.
+fn compile_rendered_failure(directory: &std::path::Path, rendered: &str, main: &str) -> String {
+    let output = cargo_rendered(directory, rendered, main, "build");
+    assert!(!output.status.success(), "the program builds");
+    String::from_utf8(output.stderr).expect("the compiler prints text")
+}
+
+/// `cargo <command>` on a program of `rendered` and `main` over `oer-mmio`,
+/// in `directory`.
+fn cargo_rendered(
+    directory: &std::path::Path,
+    rendered: &str,
+    main: &str,
+    command: &str,
+) -> std::process::Output {
     let mmio = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../portable/mmio");
     std::fs::write(
         directory.join("Cargo.toml"),
@@ -291,19 +573,13 @@ fn run_rendered(directory: &std::path::Path, rendered: &str, main: &str) -> Stri
         format!("#![allow(dead_code, unused)]\n{rendered}\n{main}"),
     )
     .expect("the fixture program is written");
-    let output = std::process::Command::new(env!("CARGO"))
-        .args(["run", "--quiet", "--offline", "--manifest-path"])
+    std::process::Command::new(env!("CARGO"))
+        .args([command, "--quiet", "--offline", "--manifest-path"])
         .arg(directory.join("Cargo.toml"))
         .env("CARGO_TARGET_DIR", directory.join("target"))
         .current_dir(directory)
         .output()
-        .expect("the pinned cargo runs");
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).expect("the program prints text")
+        .expect("the pinned cargo runs")
 }
 
 #[test]
