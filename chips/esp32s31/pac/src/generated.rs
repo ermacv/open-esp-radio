@@ -1116,6 +1116,16 @@ pub mod instances {
         pub const LP_TSENS: super::super::Interrupt = super::super::Interrupt::LP_TSENS;
     }
 
+    /// The `BUS_MONITOR` instance of [`BUS_MONITOR`](super::bus_monitor).
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L117.
+    pub mod bus_monitor {
+        /// The instance's base address.
+        pub const BASE: usize = 0x2d002000;
+        /// The bytes of the instance's window.
+        pub const SIZE: usize = 0x400;
+    }
+
     /// The `CACHE` instance of [`CACHE`](super::cache).
     ///
     /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L114, ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD.
@@ -28528,6 +28538,129 @@ pub mod bt_mac {
         #[inline]
         pub fn read_diagnostic_value(&self) -> diagnostic_value::R {
             diagnostic_value::R(self.0.read::<0x1ec>())
+        }
+    }
+}
+
+/// The `BUS_MONITOR` block type.
+///
+/// The HP CPUs' bus monitor and assist-debug block (ESP-IDF's ASSIST_DEBUG): each core's debug-mode status. Only the debug-mode words are modeled.
+pub mod bus_monitor {
+    /// The `CORE_0_DEBUG_MODE` register.
+    ///
+    /// HP core 0's debug status.
+    pub mod core_0_debug_mode {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000003;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x64;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Whether HP core 0 is in debugging mode.
+            #[inline]
+            pub const fn core_0_debug_mode(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Whether HP core 0's debug module is active: a debugger is attached.
+            #[inline]
+            pub const fn core_0_debug_module_active(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+        }
+    }
+
+    /// The `CORE_1_DEBUG_MODE` register.
+    ///
+    /// HP core 1's debug status.
+    pub mod core_1_debug_mode {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000003;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xec;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Whether HP core 1 is in debugging mode.
+            #[inline]
+            pub const fn core_1_debug_mode(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Whether HP core 1's debug module is active: a debugger is attached.
+            #[inline]
+            pub const fn core_1_debug_module_active(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+        }
+    }
+
+    /// The `DebugModeStatus` part of `BUS_MONITOR`.
+    ///
+    /// Every context reads whether a debugger is attached to HP core 0; the word has no writable field.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_BUS_MONITOR_DEBUG_MODE.
+    pub struct DebugModeStatus<P: oer_mmio::Placement = oer_mmio::Fixed<0x2d002000>>(
+        oer_mmio::Reader<P, DebugModeStatusWords, DebugModeStatusWords>,
+    );
+
+    impl<P: oer_mmio::Placement> Clone for DebugModeStatus<P> {
+        fn clone(&self) -> Self {
+            *self
+        }
+    }
+
+    impl<P: oer_mmio::Placement> Copy for DebugModeStatus<P> {}
+
+    /// The words [`DebugModeStatus`] holds, as byte offsets from its instance's base.
+    pub struct DebugModeStatusWords;
+
+    impl oer_mmio::Registers for DebugModeStatusWords {
+        const WORDS: &'static [usize] = &[0x64];
+    }
+
+    impl oer_mmio::Words for DebugModeStatusWords {
+        const OWNED: &'static [usize] = &[0x64];
+        const OBSERVED: &'static [usize] = &[];
+    }
+
+    /// The part's device registers, as the PAC root claims them.
+    pub type DebugModeStatusClaim =
+        oer_mmio::Block<oer_mmio::Fixed<0x2d002000>, DebugModeStatusWords>;
+
+    impl DebugModeStatus {
+        /// The owner of the part's device registers.
+        #[inline]
+        pub fn new(block: DebugModeStatusClaim) -> Self {
+            Self(block.into_reader())
+        }
+    }
+
+    impl<'a> DebugModeStatus<oer_mmio::Host<'a>> {
+        /// The part over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(|block| Self(block.into_reader()))
+        }
+    }
+
+    impl<P: oer_mmio::Placement> DebugModeStatus<P> {
+        /// Read `CORE_0_DEBUG_MODE`.
+        #[inline]
+        pub fn read_core_0_debug_mode(&self) -> core_0_debug_mode::R {
+            core_0_debug_mode::R(self.0.read::<0x64>())
         }
     }
 }
@@ -218144,6 +218277,12 @@ pub mod ownership {
         pub phy_i2c_command_ram: super::i2c_ana_mst_mem::PhyI2cCommandRam,
     }
 
+    /// HP core 0's debug status, which the executor reads before it waits for an interrupt.
+    pub struct DebugPeripherals {
+        /// The `DebugModeStatus` part.
+        pub debug_mode_status: super::bus_monitor::DebugModeStatus,
+    }
+
     /// Every partition.
     pub struct Partitions {
         /// [`UsbSerialJtagPeripherals`].
@@ -218202,6 +218341,8 @@ pub mod ownership {
         pub boot: BootPeripherals,
         /// [`AnalogBusPeripherals`].
         pub analog_bus: AnalogBusPeripherals,
+        /// [`DebugPeripherals`].
+        pub debug: DebugPeripherals,
     }
 
     /// The device registers of every part, which the PAC root takes with
@@ -218489,10 +218630,11 @@ pub mod ownership {
             ),
             (
                 super::i2c_ana_mst_mem::PhyI2cCommandRamClaim,
+                super::bus_monitor::DebugModeStatusClaim,
                 super::usb_serial_jtag::UsbDeviceDivisionClaim,
-                super::systimer::SystimerDivisionClaim,
             ),
             (
+                super::systimer::SystimerDivisionClaim,
                 super::modem_etm::ModemEtmDivisionClaim,
                 super::ieee802154::Ieee802154DivisionClaim,
             ),
@@ -218571,8 +218713,8 @@ pub mod ownership {
                 (claim_160, claim_161, claim_162),
                 (claim_163, claim_164, claim_165),
                 (claim_166, claim_167, claim_168),
-                (claim_169, division_0, division_1),
-                (division_2, division_3),
+                (claim_169, claim_170, division_0),
+                (division_1, division_2, division_3),
             ),
         ) = claims;
         let owner_2 = super::usb_serial_jtag::UsbSerialJtagPads::new(claim_2);
@@ -218735,6 +218877,7 @@ pub mod ownership {
         let owner_167 = super::lp_ana::LpAnaBrownout::new(claim_167);
         let owner_168 = super::i2c_ana_mst::I2cAnaMst::new(claim_168);
         let owner_169 = super::i2c_ana_mst_mem::PhyI2cCommandRam::new(claim_169);
+        let owner_170 = super::bus_monitor::DebugModeStatus::new(claim_170);
         let (owner_0, owner_1) = super::usb_serial_jtag::usb_device_divide(division_0);
         let (owner_19, owner_20, owner_21) = super::systimer::systimer_divide(division_1);
         let (owner_152, owner_153, owner_154) = super::modem_etm::modem_etm_divide(division_2);
@@ -218964,11 +219107,14 @@ pub mod ownership {
                 i2c_ana_mst: owner_168,
                 phy_i2c_command_ram: owner_169,
             },
+            debug: DebugPeripherals {
+                debug_mode_status: owner_170,
+            },
         }
     }
 
     const _: () = assert!(
-oer_mmio::check::disjoint_blocks(&[(0x20391000, <super::usb_serial_jtag::UsbSerialJtagPadsWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuCpuStallWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::HpSysCoreStallStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstCoreWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCoreResetWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstUart0Words as oer_mmio::Registers>::WORDS), (0x20715000, <super::efuse::EfuseWords as oer_mmio::Registers>::WORDS), (0x20814000, <super::trng::TrngWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstRngWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonResetCauseWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0WdtWords as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1WdtWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg1Words as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtWords as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtSwdWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerCounterWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu0Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu1Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu2Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu3Words as oer_mmio::Registers>::WORDS), (0x10800000, <super::clic::ClicWords as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0Words as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0StatusWords as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1Words as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1StatusWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::WifiPhyRateOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacAntennaInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacAuxTsfControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeaconIeCrcWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingFeedbackTestWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingReportWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBssidPolicyWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoexInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacCoexRuntimeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacColdHandshakeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoreEnableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCryptoControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCsiDumpWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacDiagnosticStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeBufferStatusWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeColorCollisionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeMuEdcaTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeObssNarrowBandRuWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTriggerRxDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInternalTxBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacKeyTableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacLastRxBufferWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRegdmaControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRtcTimerUpdateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxBssidListWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCsiControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCustomTypeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxEndStateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxFilterWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxHangStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxPowerSaveWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxRuntimeResultsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacStaBeaconFilterWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacStaTbttTargetWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfLoadWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfStatusWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxCallbacksWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCommonWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCompletionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxPowerInitWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueVectorWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterfaceAddressWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxDmaWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacPowerInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacLocalTimeWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstRadioWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuRadioWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconRadioWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAgcOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyAgcOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyBasebandConfigOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyBasebandConfigOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBasebandConfigOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBbRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyBrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyBtagcRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyClockOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyClockOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFectrlRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAdcDumpRecoveredFeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyAdcDumpRecoveredBtBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAdcDumpRecoveredWifiBbWords as oer_mmio::Registers>::WORDS), (0x20109000, <super::modem_datadump::PhyAdcDumpRecoveredModemDatadumpWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataWifiRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFrequencyChannelOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyFrequencyChannelOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyFrequencyChannelOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyIqEstimatorOracleWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconSharedClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPhyTickWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstWords as oer_mmio::Registers>::WORDS), (0x20818000, <super::tsens::LpTsensWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyMemoryWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyNrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyPbusWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyRxDcoOracleWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexHwTimerWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexExternalWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFecoexRecoveredWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleControllerAddressSlotsWords as oer_mmio::Registers>::WORDS), (0x20109800, <super::ble_accelerator::BleHwAcceleratorWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwCteRingControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwResolvingListWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleIsoSchedulerNotifyWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwPositionalWord1ff0Words as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::BleHwPositionalWord891cWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleScanBackoffWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleSyncPublicationWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothControllerCoreWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothResetIdleStatus0Words as oer_mmio::Registers>::WORDS), (0x2010a000, <super::btdm::BtdmSchedulerTableWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BtmacBlePhyInitWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32CteWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothInterruptBankWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothSchedulerInterruptRuntimeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandRxInfoWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::SharedRadioInitControlWords as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::SharedBasebandResetIdleStatusWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::SharedBasebandTxTimingWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::ZbbbRadioControlWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstBootClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCpllWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuBootClockWords as oer_mmio::Registers>::WORDS), (0x20589000, <super::hp_alive_sys::HpAliveSysPllClockWords as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheBootWords as oer_mmio::Registers>::WORDS), (0x20500000, <super::spi_mem_c::Spi0FlashWords as oer_mmio::Registers>::WORDS), (0x20501000, <super::spi1_mem_c::Spi1FlashWords as oer_mmio::Registers>::WORDS), (0x20502000, <super::spi_mem_s::Memspi2PsramWords as oer_mmio::Registers>::WORDS), (0x20503000, <super::spi1_mem_s::Memspi3PsramWords as oer_mmio::Registers>::WORDS), (0x20584000, <super::iomux_mspi_pin::IomuxMspiPsramPinsWords as oer_mmio::Registers>::WORDS), (0x20702000, <super::lp_ana::LpAnaBrownoutWords as oer_mmio::Registers>::WORDS), (0x2010f800, <super::i2c_ana_mst::I2cAnaMstWords as oer_mmio::Registers>::WORDS), (0x2010fc00, <super::i2c_ana_mst_mem::PhyI2cCommandRamWords as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbDeviceDivision as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerDivision as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::ModemEtmDivision as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::Ieee802154Division as oer_mmio::Registers>::WORDS)]),
+oer_mmio::check::disjoint_blocks(&[(0x20391000, <super::usb_serial_jtag::UsbSerialJtagPadsWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuCpuStallWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::HpSysCoreStallStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstCoreWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCoreResetWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstUart0Words as oer_mmio::Registers>::WORDS), (0x20715000, <super::efuse::EfuseWords as oer_mmio::Registers>::WORDS), (0x20814000, <super::trng::TrngWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstRngWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonResetCauseWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0WdtWords as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1WdtWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg1Words as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtWords as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtSwdWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerCounterWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu0Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu1Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu2Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu3Words as oer_mmio::Registers>::WORDS), (0x10800000, <super::clic::ClicWords as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0Words as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0StatusWords as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1Words as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1StatusWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::WifiPhyRateOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacAntennaInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacAuxTsfControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeaconIeCrcWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingFeedbackTestWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingReportWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBssidPolicyWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoexInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacCoexRuntimeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacColdHandshakeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoreEnableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCryptoControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCsiDumpWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacDiagnosticStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeBufferStatusWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeColorCollisionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeMuEdcaTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeObssNarrowBandRuWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTriggerRxDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInternalTxBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacKeyTableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacLastRxBufferWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRegdmaControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRtcTimerUpdateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxBssidListWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCsiControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCustomTypeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxEndStateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxFilterWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxHangStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxPowerSaveWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxRuntimeResultsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacStaBeaconFilterWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacStaTbttTargetWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfLoadWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfStatusWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxCallbacksWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCommonWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCompletionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxPowerInitWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueVectorWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterfaceAddressWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxDmaWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacPowerInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacLocalTimeWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstRadioWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuRadioWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconRadioWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAgcOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyAgcOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyBasebandConfigOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyBasebandConfigOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBasebandConfigOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBbRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyBrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyBtagcRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyClockOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyClockOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFectrlRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAdcDumpRecoveredFeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyAdcDumpRecoveredBtBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAdcDumpRecoveredWifiBbWords as oer_mmio::Registers>::WORDS), (0x20109000, <super::modem_datadump::PhyAdcDumpRecoveredModemDatadumpWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataWifiRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFrequencyChannelOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyFrequencyChannelOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyFrequencyChannelOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyIqEstimatorOracleWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconSharedClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPhyTickWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstWords as oer_mmio::Registers>::WORDS), (0x20818000, <super::tsens::LpTsensWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyMemoryWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyNrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyPbusWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyRxDcoOracleWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexHwTimerWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexExternalWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFecoexRecoveredWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleControllerAddressSlotsWords as oer_mmio::Registers>::WORDS), (0x20109800, <super::ble_accelerator::BleHwAcceleratorWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwCteRingControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwResolvingListWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleIsoSchedulerNotifyWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwPositionalWord1ff0Words as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::BleHwPositionalWord891cWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleScanBackoffWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleSyncPublicationWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothControllerCoreWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothResetIdleStatus0Words as oer_mmio::Registers>::WORDS), (0x2010a000, <super::btdm::BtdmSchedulerTableWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BtmacBlePhyInitWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32CteWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothInterruptBankWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothSchedulerInterruptRuntimeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandRxInfoWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::SharedRadioInitControlWords as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::SharedBasebandResetIdleStatusWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::SharedBasebandTxTimingWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::ZbbbRadioControlWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstBootClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCpllWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuBootClockWords as oer_mmio::Registers>::WORDS), (0x20589000, <super::hp_alive_sys::HpAliveSysPllClockWords as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheBootWords as oer_mmio::Registers>::WORDS), (0x20500000, <super::spi_mem_c::Spi0FlashWords as oer_mmio::Registers>::WORDS), (0x20501000, <super::spi1_mem_c::Spi1FlashWords as oer_mmio::Registers>::WORDS), (0x20502000, <super::spi_mem_s::Memspi2PsramWords as oer_mmio::Registers>::WORDS), (0x20503000, <super::spi1_mem_s::Memspi3PsramWords as oer_mmio::Registers>::WORDS), (0x20584000, <super::iomux_mspi_pin::IomuxMspiPsramPinsWords as oer_mmio::Registers>::WORDS), (0x20702000, <super::lp_ana::LpAnaBrownoutWords as oer_mmio::Registers>::WORDS), (0x2010f800, <super::i2c_ana_mst::I2cAnaMstWords as oer_mmio::Registers>::WORDS), (0x2010fc00, <super::i2c_ana_mst_mem::PhyI2cCommandRamWords as oer_mmio::Registers>::WORDS), (0x2d002000, <super::bus_monitor::DebugModeStatusWords as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbDeviceDivision as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerDivision as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::ModemEtmDivision as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::Ieee802154Division as oer_mmio::Registers>::WORDS)]),
 "no two claimed blocks list the same word"
 );
 }

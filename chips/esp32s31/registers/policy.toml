@@ -1056,6 +1056,20 @@ name = "PhyI2cCommandRam"
 instance = "I2C_ANA_MST_MEM"
 registers = ["COMMAND_MEMORY%s"]
 
+[[partitions]]
+name = "DebugPeripherals"
+member = "debug"
+description = "HP core 0's debug status, which the executor reads before it waits for an interrupt."
+
+[[partitions.parts]]
+name = "DebugModeStatus"
+instance = "BUS_MONITOR"
+registers = ["CORE_0_DEBUG_MODE"]
+read-only = true
+copy = true
+description = "Every context reads whether a debugger is attached to HP core 0; the word has no writable field."
+sources = ["ESP_IDF_4D59230D_S31_BUS_MONITOR_DEBUG_MODE"]
+
 [[unclaimed]]
 instances = ["UART0", "SOC_ETM"]
 reason = "No owner yet."
@@ -7429,3 +7443,8 @@ reason = "No owner yet: the bootstrap reaches only its boot part's words."
 instance = "LP_ANA_PERI"
 registers = ["LP_ANA_VDD_SOURCE_CNTL", "LP_ANA_PG_GLITCH_CNTL", "LP_ANA_INT_RAW", "LP_ANA_INT_ST", "LP_ANA_INT_ENA", "LP_ANA_INT_CLR", "LP_ANA_LP_INT_RAW", "LP_ANA_LP_INT_ST", "LP_ANA_LP_INT_ENA", "LP_ANA_LP_INT_CLR", "LP_ANA_DATE"]
 reason = "No owner yet: the bootstrap reaches only its boot part's words."
+
+[[unclaimed]]
+instance = "BUS_MONITOR"
+registers = ["CORE_1_DEBUG_MODE"]
+reason = "No owner yet: hart 1 runs no code, so nothing reads its debug status."

@@ -16,6 +16,7 @@ types = [
     "types/block-68.toml",
     "types/block-6c.toml",
     "types/bt-bb.toml",
+    "types/bus-monitor.toml",
     "types/bt-mac.toml",
     "types/btdm.toml",
     "types/cache.toml",
@@ -649,6 +650,13 @@ type = "TSENS"
 base = 0x20818000
 extent = { size = 0x38 }
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L111", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "BUS_MONITOR"
+type = "BUS_MONITOR"
+base = 0x2d002000
+extent = { size = 0x400, partial = true, sources = ["ESP_IDF_4D59230D_S31_BUS_MONITOR_DEBUG_MODE"] }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L117"]
 
 [[instances]]
 name = "CACHE"
