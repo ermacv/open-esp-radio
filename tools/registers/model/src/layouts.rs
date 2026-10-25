@@ -265,6 +265,19 @@ pub(crate) fn load_layouts(
     loaded_inputs: &mut BTreeMap<PathBuf, String>,
     naming: NamingRequirement,
 ) -> Result<Vec<MemoryLayout>> {
+    let layouts = parse_layouts(base, relative, loaded_inputs, naming)?;
+    validate_layout_set(&layouts)?;
+    Ok(layouts)
+}
+
+/// Parse files and check local geometry. The caller assigns placement before
+/// validating relationships between layouts with `validate_layout_set`.
+pub(crate) fn parse_layouts(
+    base: &Path,
+    relative: &[String],
+    loaded_inputs: &mut BTreeMap<PathBuf, String>,
+    naming: NamingRequirement,
+) -> Result<Vec<MemoryLayout>> {
     let mut seen = BTreeSet::new();
     let mut layouts = Vec::with_capacity(relative.len());
     for path in relative {
@@ -292,7 +305,6 @@ pub(crate) fn load_layouts(
             layout.kind = LayoutKind::ByteArray;
         }
     }
-    validate_layout_set(&layouts)?;
     Ok(layouts)
 }
 
@@ -653,7 +665,7 @@ fn validate_name(name: &str) -> Result<()> {
 
 /// Every layout a field links to exists and is a word layout, and no name
 /// is declared twice.
-fn validate_layout_set(layouts: &[MemoryLayout]) -> Result<()> {
+pub(crate) fn validate_layout_set(layouts: &[MemoryLayout]) -> Result<()> {
     let mut names = BTreeMap::new();
     for layout in layouts {
         if names.insert(layout.name.as_str(), layout.kind).is_some() {

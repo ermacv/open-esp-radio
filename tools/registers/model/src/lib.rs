@@ -20,6 +20,7 @@ use svd_rs::{
 pub mod analog;
 mod analog_render;
 mod bits;
+pub mod chip_model;
 mod descriptions;
 pub use bits::BitStates;
 mod draft;
