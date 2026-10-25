@@ -1,11 +1,12 @@
 # Imported by `cargo registers import` from the pinned vendor SVD and
-# ESP-IDF headers (registers/import.toml).
+# ESP-IDF headers (registers/import.toml), with the curated refinements
+# merged into it; this file, not the import, is the source of truth.
 schema = 3
 
 [type]
 name = "TRNG"
 description = "The true random number generator."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
@@ -14,108 +15,171 @@ accuracy = "exact"
 completeness = "complete"
 naming = "vendor"
 
+[review.entity."CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."CONF.NOISE_SOURCE_SEL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."CONF.NOISE_POS_SEL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."CONF.REPETITION_VALUE_C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."CONF.ADPATIVE_VALUE_C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."CONF.FIFO_RESET"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."CONF.RANDOM_OUTPUT_MODE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."CONF.NOISE_CRC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."CONF.SAMPLE_ENABLE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."DEBUG_CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."DEBUG_CONF.STARTUP_TEST_START"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."DEBUG_CONF.STARTUP_TEST_LIMIT"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."DEBUG_CONF.DEBUG_DATA"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."DEBUG_CONF.DEBUG_MODE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."DEBUG_CONF.HEALTH_TEST_ERROR_CODE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."DEBUG_CONF.HEALTH_TEST_END"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."DEBUG_CONF.HEALTH_TEST_BYPASS"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."INT_RAW"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."INT_RAW.ERROR_INT_RAW"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."CRC_SYNC_DATA"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
+[review.entity."CRC_SYNC_DATA.SW_CRC_RANDOM_DATA_SYNC"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TRNG"]
+
 [[registers]]
 name = "CONF"
 offset = 0x0
-description = "CFG reg"
+description = "CFG reg Noise source, health-test cutoffs and output configuration."
 reset = { value = 0x40000000 }
 
 [[registers.fields]]
 name = "NOISE_SOURCE_SEL"
 bits = "4:0"
 class = "plain"
-description = "sel noise source"
+description = "sel noise source Noise source selection, one-hot; zero selects none."
 
 [[registers.fields]]
 name = "NOISE_POS_SEL"
 bits = "9:5"
 class = "plain"
-description = "sel noise pos"
+description = "sel noise pos Sampling-enable selection of the noise source."
 
 [[registers.fields]]
 name = "REPETITION_VALUE_C"
 bits = "18:10"
 class = "plain"
-description = "parameter"
+description = "parameter Cutoff of the repetition-count health test."
 
 [[registers.fields]]
 name = "ADPATIVE_VALUE_C"
 bits = "27:19"
 class = "plain"
-description = "parameter"
+description = "parameter Cutoff of the adaptive-proportion health test."
 
 [[registers.fields]]
 name = "FIFO_RESET"
 bits = "28"
 class = "write-trigger"
-description = "fifo_reset"
+description = "fifo_reset Writing one resets the output FIFO; reads zero."
 
 [[registers.fields]]
 name = "RANDOM_OUTPUT_MODE"
 bits = "29"
 class = "plain"
-description = "standart and nonstandart output"
+description = "standart and nonstandart output Output mode of the random data."
 
 [[registers.fields]]
 name = "NOISE_CRC_EN"
 bits = "30"
 class = "plain"
-description = "standart and nonstandart output"
+description = "standart and nonstandart output Enables the CRC conditioner of the noise samples."
 
 [[registers.fields]]
 name = "SAMPLE_ENABLE"
 bits = "31"
 class = "plain"
-description = "1: enable rng sample loop"
+description = "1: enable rng sample loop Enables noise sampling."
 
 [[registers]]
 name = "DEBUG_CONF"
 offset = 0x4
-description = "reserved"
+description = "Startup and continuous health-test control and result."
 reset = { value = 0x800 }
-reserved = { mask = 0x80000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H"] }
+reserved = { mask = 0x80000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_IDF_4D59230D_S31_TRNG"] }
 
 [[registers.fields]]
 name = "STARTUP_TEST_START"
 bits = "0"
 class = "write-trigger"
-description = "startup start"
+description = "startup start Writing one starts the startup health test; reads zero."
 
 [[registers.fields]]
 name = "STARTUP_TEST_LIMIT"
 bits = "16:1"
 class = "plain"
-description = "startup limit"
+description = "startup limit Number of samples the startup health test takes."
 
 [[registers.fields]]
 name = "DEBUG_DATA"
 bits = "24:17"
 class = "read-only"
-description = "debug data"
+description = "debug data Debug output data."
 
 [[registers.fields]]
 name = "DEBUG_MODE"
 bits = "25"
 class = "plain"
-description = "1 for debug mode 0 for nomarl mode"
+description = "1 for debug mode 0 for nomarl mode Debug mode enable."
 
 [[registers.fields]]
 name = "HEALTH_TEST_ERROR_CODE"
 bits = "28:26"
 class = "read-only"
-description = "error code"
+description = "error code Error code of the last failed health test."
 
 [[registers.fields]]
 name = "HEALTH_TEST_END"
 bits = "29"
 class = "write-trigger"
-description = "health test end"
+description = "health test end Writing one ends the health test; reads zero."
 
 [[registers.fields]]
 name = "HEALTH_TEST_BYPASS"
 bits = "30"
 class = "plain"
-description = "health test bypass"
+description = "health test bypass Bypasses the health tests."
 
 [[registers]]
 name = "CONDITION_KEY0"
@@ -229,15 +293,15 @@ description = "error flag"
 [[registers]]
 name = "INT_RAW"
 offset = 0x2c
-description = "Read only register for error and done"
+description = "Read only register for error and done Raw health-error interrupt status."
 reset = { value = 0x0 }
-reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H"] }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_IDF_4D59230D_S31_TRNG"] }
 
 [[registers.fields]]
 name = "ERROR_INT_RAW"
 bits = "0"
 class = "write-one-to-clear"
-description = "error flag"
+description = "error flag Set by hardware when a startup or continuous health test fails; writing one clears it."
 
 [[registers]]
 name = "INT_CLR"
@@ -348,14 +412,14 @@ description = "sw read crc random data"
 [[registers]]
 name = "CRC_SYNC_DATA"
 offset = 0x48
-description = "sw read data sync"
+description = "sw read data sync Conditioned random output, synchronized to the bus clock."
 reset = { value = 0x0 }
 
 [[registers.fields]]
 name = "SW_CRC_RANDOM_DATA_SYNC"
 bits = "31:0"
 class = "read-only"
-description = "sw read crc random sync data"
+description = "sw read crc random sync data One 32-bit random word."
 
 [[registers]]
 name = "DATE"

@@ -1,11 +1,12 @@
 # Imported by `cargo registers import` from the pinned vendor SVD and
-# ESP-IDF headers (registers/import.toml).
+# ESP-IDF headers (registers/import.toml), with the curated refinements
+# merged into it; this file, not the import, is the source of truth.
 schema = 3
 
 [type]
 name = "LP_PERI_CLKRST"
 description = "The LP peripheral clock and reset controller."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "ESP_IDF_4D59230D_S31_LP_PERICLKRST_RNG"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
@@ -13,6 +14,24 @@ provenance = "imported"
 accuracy = "exact"
 completeness = "complete"
 naming = "vendor"
+
+[review.entity."TSENS_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+
+[review.entity."TSENS_CTRL.LP_TSENS_CLK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+
+[review.entity."TSENS_CTRL.LP_TSENS_RST_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."RNG_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_LP_PERICLKRST_RNG"]
+
+[review.entity."RNG_CTRL.LP_RNG_CLK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_LP_PERICLKRST_RNG"]
+
+[review.entity."RNG_CTRL.LP_RNG_RST_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_LP_PERICLKRST_RNG"]
 
 [[registers]]
 name = "CPU_CTRL"
@@ -262,7 +281,7 @@ description = "need_des"
 [[registers]]
 name = "TSENS_CTRL"
 offset = 0x30
-description = "need_des"
+description = "Low-power temperature-sensor clock and reset control."
 reset = { value = 0x0 }
 reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
 
@@ -270,13 +289,13 @@ reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "LP_TSENS_CLK_EN"
 bits = "30"
 class = "plain"
-description = "need_des"
+description = "Temperature-sensor peripheral clock enable."
 
 [[registers.fields]]
 name = "LP_TSENS_RST_EN"
 bits = "31"
 class = "plain"
-description = "need_des"
+description = "Temperature-sensor peripheral reset enable, pulsed by its first resource owner."
 
 [[registers]]
 name = "IOMUX_CTRL"
@@ -319,21 +338,21 @@ description = "need_des"
 [[registers]]
 name = "RNG_CTRL"
 offset = 0x3c
-description = "need_des"
+description = "Random number generator clock and reset control."
 reset = { value = 0x40000000 }
-reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H", "ESP_IDF_4D59230D_S31_LP_PERICLKRST_RNG"] }
 
 [[registers.fields]]
 name = "LP_RNG_CLK_EN"
 bits = "30"
 class = "plain"
-description = "need_des"
+description = "Random number generator clock enable; set after reset."
 
 [[registers.fields]]
 name = "LP_RNG_RST_EN"
 bits = "31"
 class = "plain"
-description = "need_des"
+description = "Random number generator reset; the generator runs only while it is clear."
 
 [[registers]]
 name = "UART_MISC_CTRL"

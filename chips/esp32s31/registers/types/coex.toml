@@ -1,0 +1,311 @@
+# A block type of the curated ESP32-S31 register model: no vendor header
+# or SVD describes this block.
+schema = 3
+
+[type]
+name = "COEX"
+description = "The coexistence block: its timer bank and external coexistence control. Known only from vendor binaries.\n\nWords 0x0-0xc: Six-entry coexistence timer bank. Complete libcoexist leaves address entry index as 0x2010f400 + index*0x10. The 48-event libcoexist[coexist_core.o]::coex_core_timer_idx_get table of the pinned archive returns timer indices zero through five or 0xff; index five is used only by the PHY grant-protect event 48.\n\nWords 0x9c-0xd8: External coexistence control beside the coexistence timer bank. The complete hal_external_coexist.o leaves of the pinned libcoexist address these words at 0x2010f49c, 0x2010f4a0, 0x2010f4a4, 0x2010f4d0 and 0x2010f4d8 through fresh-read RMW operations; the GPIO matrix routing of the request, priority, grant and TX-line signals belongs to the platform, not to this block.\n\nWords 0xb4-0xb8: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown."
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT", "BLOB_LIBCOEX_EXTERNAL", "S31_MMIO_COEX_EXTERNAL"]
+
+[review]
+sources = ["BLOB_LIBCOEX_EXTERNAL"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+naming = "descriptive"
+
+[review.opaque]
+sources = ["S31_MMIO_DECLARED_2010F49C"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."CONFIGURATION%s"]
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."CONFIGURATION%s.PRIMARY_TICK_IMAGE"]
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+
+[review.entity."CONFIGURATION%s.PARAMETER_2"]
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+
+[review.entity."CONFIGURATION%s.PARAMETER_1"]
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+
+[review.entity."CONFIGURATION%s.BITS_30_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010F400"]
+
+[review.entity."SECONDARY_TARGET%s"]
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+accuracy = "exact"
+
+[review.entity."SECONDARY_TARGET%s.SECONDARY_TICK_IMAGE"]
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+
+[review.entity."SECONDARY_TARGET%s.BITS_24_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010F404"]
+
+[review.entity."ENABLE_CONTROL%s"]
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."ENABLE_CONTROL%s.ENABLE"]
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+
+[review.entity."DISABLE_CONTROL%s"]
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."DISABLE_CONTROL%s.DISABLE"]
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+
+[review.entity."CONTROL.BITS_20_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010F4A0"]
+
+[review.entity."WORD_00B4_OPAQUE"]
+sources = ["S31_MMIO_USE_2010F4B4"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_00B4_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010F4B4", "S31_MMIO_DECLARED_2010F4B4"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_00B8_OPAQUE"]
+sources = ["S31_MMIO_USE_2010F4B8"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_00B8_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010F4B8", "S31_MMIO_DECLARED_2010F4B8"]
+accuracy = "exact"
+completeness = "partial"
+
+[[registers]]
+name = "CONFIGURATION%s"
+offset = 0x0
+dim = { count = 6, stride = 0x10 }
+description = "Primary timer word. libcoexist[coexist_hw.o]::coex_hw_timer_set replaces both high nibbles and the low 24-bit tick image through separate fresh-read RMW operations. coex_hw_timer_force clears the low 24 bits; coex_hw_timer_unforce replaces them with 1000."
+
+[[registers.fields]]
+name = "PRIMARY_TICK_IMAGE"
+bits = "23:0"
+class = "plain"
+description = "Low 24 bits returned by coex_hw_timer_tick_get for the first timer value. The exact counter epoch and units remain part of the reviewed timer conversion rather than the register geometry."
+write-range = { min = 0x0, max = 0xffffff }
+
+[[registers.fields]]
+name = "PARAMETER_2"
+bits = "27:24"
+class = "plain"
+description = "Low nibble of the third libcoexist[coexist_hw.o]::coex_hw_timer_set argument."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "PARAMETER_1"
+bits = "29:28"
+class = "plain"
+description = "Low two bits of the second libcoexist[coexist_hw.o]::coex_hw_timer_set argument. Bits 31:30 are preserved by the complete vendor RMW."
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers.fields]]
+name = "BITS_30_31_OPAQUE"
+bits = "31:30"
+class = "plain"
+description = "Bits preserved by libcoexist[coexist_hw.o]::coex_hw_timer_set while PARAMETER_1 is replaced."
+
+[[registers]]
+name = "SECONDARY_TARGET%s"
+offset = 0x4
+dim = { count = 6, stride = 0x10 }
+description = "Secondary timer word. libcoexist[coexist_hw.o]::coex_hw_timer_set preserves the high byte and replaces the low 24 bits with the converted fourth timer-value argument."
+
+[[registers.fields]]
+name = "SECONDARY_TICK_IMAGE"
+bits = "23:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xffffff }
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+
+[[registers]]
+name = "ENABLE_CONTROL%s"
+offset = 0x8
+dim = { count = 6, stride = 0x10 }
+description = "libcoexist[coexist_hw.o]::coex_hw_timer_enable sets bit zero here after clearing bit zero in the paired disable-control word. libcoexist[coexist_hw.o]::coex_hw_timer_disable performs the inverse transaction."
+
+[[registers.fields]]
+name = "ENABLE"
+bits = "0"
+class = "plain"
+
+[[registers]]
+name = "DISABLE_CONTROL%s"
+offset = 0xc
+dim = { count = 6, stride = 0x10 }
+description = "libcoexist[coexist_hw.o]::coex_hw_timer_disable sets bit zero here after clearing bit zero in the paired enable-control word. libcoexist[coexist_hw.o]::coex_hw_timer_enable performs the inverse transaction."
+
+[[registers.fields]]
+name = "DISABLE"
+bits = "0"
+class = "plain"
+
+[[registers]]
+name = "PTI"
+offset = 0x9c
+description = "External priority word. hal_set_extern_pti publishes three priorities in bits 11:0 in the basic modes, or a fixed advanced image in the follower mode; hal_clr_extern_pti clears them. hal_set_extern_coex_mode replaces bits 29:28 with the work mode, and hal_set_extern_pti_mode sets bits 31:30 in the one-wire leader mode and the advanced grant fields in the follower mode."
+
+[[registers.fields]]
+name = "PRIORITY_0"
+bits = "3:0"
+class = "plain"
+description = "Low nibble of the third hal_set_extern_pti argument in the basic modes; zero in the advanced mode."
+
+[[registers.fields]]
+name = "PRIORITY_1"
+bits = "7:4"
+class = "plain"
+description = "Low nibble of the second hal_set_extern_pti argument in the basic modes; 0xf in the advanced mode."
+
+[[registers.fields]]
+name = "PRIORITY_2"
+bits = "11:8"
+class = "plain"
+description = "Low nibble of the first hal_set_extern_pti argument in the basic modes; zero in the advanced mode."
+
+[[registers.fields]]
+name = "ADVANCED_PRIORITY"
+bits = "15:12"
+class = "plain"
+description = "0xf in the advanced mode with two or three wires, zero otherwise."
+
+[[registers.fields]]
+name = "BITS_16_19_OPAQUE"
+bits = "19:16"
+class = "plain"
+description = "Advanced follower field: 1 with one wire, 0xc otherwise; hal_clr_extern_pti sets 0xf in the advanced mode."
+
+[[registers.fields]]
+name = "BITS_20_23_OPAQUE"
+bits = "23:20"
+class = "plain"
+description = "Advanced follower field: 1 with one wire, 8 otherwise; hal_clr_extern_pti sets 0xf in the advanced mode."
+
+[[registers.fields]]
+name = "BITS_24_27_OPAQUE"
+bits = "27:24"
+class = "plain"
+description = "Advanced follower field: 1; hal_clr_extern_pti sets 0xf in the advanced mode."
+
+[[registers.fields]]
+name = "WORK_MODE"
+bits = "29:28"
+class = "plain"
+description = "Low two bits of the hal_set_extern_coex_mode argument: the external work mode (0 leader, 1 one-wire leader variant, 2 follower)."
+
+[[registers.fields]]
+name = "BITS_30_31_OPAQUE"
+bits = "31:30"
+class = "plain"
+description = "Set to 0b11 by hal_set_extern_pti_mode in mode 1 and in the follower mode; the leader mode leaves them unchanged."
+
+[[registers]]
+name = "CONTROL"
+offset = 0xa0
+description = "External control word written by hal_set_extern_coex_validity, hal_set_extern_coex_delay, hal_set_extern_coex_sync and the enable pair."
+
+[[registers.fields]]
+name = "VALIDATE_HIGH"
+bits = "0"
+class = "plain"
+description = "hal_set_extern_coex_validity: set when the external grant is valid high."
+
+[[registers.fields]]
+name = "GRANT_DELAY_LOW"
+bits = "4:1"
+class = "plain"
+description = "Low nibble of the hal_set_extern_coex_delay byte. ic_set_extern_coex_params supplies only the upper nibble, so this complete field is written zero. SOURCE: BLOB_LIBCOEX_EXTERNAL, hal_external_coexist.o::hal_set_extern_coex_delay and ic_set_extern_coex_params."
+
+[[registers.fields]]
+name = "GRANT_DELAY"
+bits = "8:5"
+class = "plain"
+description = "Grant delay in microseconds. hal_set_extern_coex_delay replaces bits 8:1 with its argument and ic_set_extern_coex_params passes the delay shifted left by four and masked to 0xf0, so the delay is the upper nibble of that byte and bits 4:1 are written zero."
+
+[[registers.fields]]
+name = "ENABLE"
+bits = "9"
+class = "plain"
+description = "Set by hal_enable_extern_coex and cleared by hal_disable_extern_coex, after the other enable fields."
+
+[[registers.fields]]
+name = "SYNC"
+bits = "19:10"
+class = "plain"
+description = "hal_set_extern_coex_sync replaces bits 19:10 with the low ten bits of its argument; hal_set_extern_pti_mode writes zero and then 0x14 in the leader mode."
+
+[[registers.fields]]
+name = "BITS_20_31_OPAQUE"
+bits = "31:20"
+class = "plain"
+description = "Bits no external-coexistence leaf writes."
+
+[[registers]]
+name = "ENABLE_1"
+offset = 0xa4
+description = "hal_enable_extern_coex sets bit 14 and hal_disable_extern_coex clears it."
+
+[[registers.fields]]
+name = "ENABLE"
+bits = "14"
+class = "plain"
+
+[[registers]]
+name = "WORD_00B4_OPAQUE"
+offset = 0xb4
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_00B8_OPAQUE"
+offset = 0xb8
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "ENABLE_MASK_0"
+offset = 0xd0
+description = "hal_enable_extern_coex sets bits 3:0 and hal_disable_extern_coex clears them."
+
+[[registers.fields]]
+name = "MASK"
+bits = "3:0"
+class = "plain"
+
+[[registers]]
+name = "ENABLE_MASK_1"
+offset = 0xd8
+description = "hal_enable_extern_coex sets bits 3:0 and hal_disable_extern_coex clears them. The same field is the IEEE 802.15.4 PTI offset that hal_set_IEEE802154_pti_offset replaces and hal_get_IEEE802154_pti_offset reads."
+
+[[registers.fields]]
+name = "MASK"
+bits = "3:0"
+class = "plain"

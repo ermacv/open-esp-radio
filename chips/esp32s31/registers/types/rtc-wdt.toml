@@ -1,11 +1,12 @@
 # Imported by `cargo registers import` from the pinned vendor SVD and
-# ESP-IDF headers (registers/import.toml).
+# ESP-IDF headers (registers/import.toml), with the curated refinements
+# merged into it; this file, not the import, is the source of truth.
 schema = 3
 
 [type]
 name = "RTC_WDT"
 description = "The RTC watchdog and the super watchdog."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
@@ -14,78 +15,147 @@ accuracy = "exact"
 completeness = "complete"
 naming = "vendor"
 
+[review.entity."CONFIG0"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."CONFIG0.WDT_PAUSE_IN_SLP"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."CONFIG0.WDT_APPCPU_RESET_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."CONFIG0.WDT_PROCPU_RESET_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."CONFIG0.WDT_FLASHBOOT_MOD_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."CONFIG0.WDT_SYS_RESET_LENGTH"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."CONFIG0.WDT_CPU_RESET_LENGTH"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."CONFIG0.WDT_STG3"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."CONFIG0.WDT_STG2"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."CONFIG0.WDT_STG1"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."CONFIG0.WDT_STG0"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."CONFIG0.WDT_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."WPROTECT"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."WPROTECT.WDT_WKEY"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."SWD_CONFIG"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."SWD_CONFIG.SWD_RESET_FLAG"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."SWD_CONFIG.SWD_AUTO_FEED_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."SWD_CONFIG.SWD_RST_FLAG_CLR"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."SWD_CONFIG.SWD_SIGNAL_WIDTH"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."SWD_CONFIG.SWD_DISABLE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."SWD_CONFIG.SWD_FEED"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."SWD_WPROTECT"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[review.entity."SWD_WPROTECT.SWD_WKEY"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_WDT"]
+
 [[registers]]
 name = "CONFIG0"
 offset = 0x0
-description = "need_des"
+description = "RTC watchdog enable, stage actions and reset lengths; written only while unlocked."
 reset = { value = 0x13214 }
-reserved = { mask = 0x1ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H"] }
+reserved = { mask = 0x1ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_IDF_4D59230D_S31_RTC_WDT"] }
 
 [[registers.fields]]
 name = "WDT_PAUSE_IN_SLP"
 bits = "9"
 class = "plain"
-description = "need_des"
+description = "Pauses the watchdog while the chip sleeps."
 
 [[registers.fields]]
 name = "WDT_APPCPU_RESET_EN"
 bits = "10"
 class = "plain"
-description = "need_des"
+description = "Unmasks the CPU reset of the application core."
 
 [[registers.fields]]
 name = "WDT_PROCPU_RESET_EN"
 bits = "11"
 class = "plain"
-description = "need_des"
+description = "Unmasks the CPU reset of the protocol core."
 
 [[registers.fields]]
 name = "WDT_FLASHBOOT_MOD_EN"
 bits = "12"
 class = "plain"
-description = "need_des"
+description = "Flash boot protection: the ROM arms it; a timeout resets even while WDT_EN is clear."
 
 [[registers.fields]]
 name = "WDT_SYS_RESET_LENGTH"
 bits = "15:13"
 class = "plain"
-description = "need_des"
+description = "System reset signal length selector."
 
 [[registers.fields]]
 name = "WDT_CPU_RESET_LENGTH"
 bits = "18:16"
 class = "plain"
-description = "need_des"
+description = "CPU reset signal length selector."
 
 [[registers.fields]]
 name = "WDT_STG3"
 bits = "21:19"
 class = "plain"
-description = "need_des"
+description = "Timeout action of stage 3: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset."
 
 [[registers.fields]]
 name = "WDT_STG2"
 bits = "24:22"
 class = "plain"
-description = "need_des"
+description = "Timeout action of stage 2: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset."
 
 [[registers.fields]]
 name = "WDT_STG1"
 bits = "27:25"
 class = "plain"
-description = "need_des"
+description = "Timeout action of stage 1: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset."
 
 [[registers.fields]]
 name = "WDT_STG0"
 bits = "30:28"
 class = "plain"
-description = "need_des"
+description = "Timeout action of stage 0: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset."
 
 [[registers.fields]]
 name = "WDT_EN"
 bits = "31"
 class = "plain"
-description = "need_des"
+description = "RTC watchdog enable."
 
 [[registers]]
 name = "CONFIG1"
@@ -151,69 +221,69 @@ description = "need_des"
 [[registers]]
 name = "WPROTECT"
 offset = 0x18
-description = "need_des"
+description = "RTC watchdog write protection: the key unlocks CONFIG0 to FEED, any other value locks them."
 reset = { value = 0x0 }
 
 [[registers.fields]]
 name = "WDT_WKEY"
 bits = "31:0"
 class = "plain"
-description = "need_des"
+description = "Write key; 0x50D83AA1 unlocks."
 
 [[registers]]
 name = "SWD_CONFIG"
 offset = 0x1c
-description = "need_des"
+description = "Super watchdog control; written only while unlocked."
 reset = { value = 0x12c00000 }
-reserved = { mask = 0x3fffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H"] }
+reserved = { mask = 0x3fffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_IDF_4D59230D_S31_RTC_WDT"] }
 
 [[registers.fields]]
 name = "SWD_RESET_FLAG"
 bits = "0"
 class = "read-only"
-description = "need_des"
+description = "Set when the super watchdog reset the chip."
 
 [[registers.fields]]
 name = "SWD_AUTO_FEED_EN"
 bits = "18"
 class = "plain"
-description = "need_des"
+description = "The hardware feeds the super watchdog by itself."
 
 [[registers.fields]]
 name = "SWD_RST_FLAG_CLR"
 bits = "19"
 class = "write-trigger"
-description = "need_des"
+description = "Writing one clears SWD_RESET_FLAG; reads zero."
 
 [[registers.fields]]
 name = "SWD_SIGNAL_WIDTH"
 bits = "29:20"
 class = "plain"
-description = "need_des"
+description = "Width of the super watchdog's reset signal."
 
 [[registers.fields]]
 name = "SWD_DISABLE"
 bits = "30"
 class = "plain"
-description = "need_des"
+description = "Disables the super watchdog."
 
 [[registers.fields]]
 name = "SWD_FEED"
 bits = "31"
 class = "write-trigger"
-description = "need_des"
+description = "Writing one feeds the super watchdog; reads zero."
 
 [[registers]]
 name = "SWD_WPROTECT"
 offset = 0x20
-description = "need_des"
+description = "Super watchdog write protection: the key unlocks SWD_CONFIG, any other value locks it."
 reset = { value = 0x0 }
 
 [[registers.fields]]
 name = "SWD_WKEY"
 bits = "31:0"
 class = "plain"
-description = "need_des"
+description = "Write key; 0x50D83AA1 unlocks."
 
 [[registers]]
 name = "INT_RAW"

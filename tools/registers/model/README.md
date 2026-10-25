@@ -520,7 +520,9 @@ ID of the written catalog: one per pinned file and one per cited line
 (`<FILE>_L<line>`, its description holding the `esp-idf:<path>:<line>`
 locator). The report,
 `target/registers-import/<chip>/report.md`, lists every disagreement and
-what the import made of it. The import owns its type directory.
+what the import made of it. The import writes a chip's first types and
+root; from then on those files, with the curated refinements merged into
+them, are the source of truth, and the import is not run over them again.
 
 The root covers every source in the header's `0..ETS_MAX_INTR_SOURCE`:
 existing SVD bindings name imported instances, and every other source is

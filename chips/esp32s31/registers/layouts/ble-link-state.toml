@@ -1,0 +1,677 @@
+schema = 1
+
+[layout]
+name = "BLE_LINK_STATE"
+description = "Physical link-state format used by advertising, connectable advertising, scanning, connection and DTM. The same lanes have mode-dependent roles; RECEIVE_CONTEXT documents the scanner-policy/connection-time overlap. Software advsm flags belong to a separate software object, not to this hardware allocation."
+size = 132
+align = 4
+
+[layout.review]
+sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[layout.review.opaque]
+sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[layout.words]]
+name = "TX_PATH"
+offset = 0x00
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "HEADER"
+bits = "19:0"
+writer = "cpu"
+description = "A graph link; zero denotes no link."
+points-to = "BLE_BUFFER_HEADER"
+encoding = "ble-compressed"
+
+[[layout.words.fields]]
+name = "MAX_TX_OCTETS"
+bits = "27:20"
+writer = "cpu"
+description = "Connection TX octet limit; other role reset profiles use the same lanes as positional images."
+
+[[layout.words.fields]]
+name = "QUEUE_READY"
+bits = "28"
+writer = "cpu"
+description = "Connection transmit queue ready lane."
+
+[[layout.words.fields]]
+name = "VALID"
+bits = "31"
+writer = "cpu"
+description = "TX path validity lane installed by the role reset."
+
+[[layout.words]]
+name = "SCAN_RESPONSE"
+offset = 0x04
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "HEADER"
+bits = "19:0"
+writer = "cpu"
+description = "A graph link; zero denotes no link."
+points-to = "BLE_BUFFER_HEADER"
+encoding = "ble-compressed"
+
+[[layout.words.fields]]
+name = "PHY_CODE_28_29"
+bits = "29:28"
+writer = "cpu"
+description = "First two-bit PHY code supplied by the advertising reset's mode-to-rate conversion; no TX/RX direction is assigned."
+
+[[layout.words.fields]]
+name = "PHY_CODE_30_31"
+bits = "31:30"
+writer = "cpu"
+description = "Second two-bit PHY code supplied by the advertising reset's mode-to-rate conversion; no TX/RX direction is assigned."
+
+[[layout.words]]
+name = "RX_PATH"
+offset = 0x08
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "HEADER"
+bits = "19:0"
+writer = "cpu"
+description = "A graph link; zero denotes no link."
+points-to = "BLE_BUFFER_HEADER"
+encoding = "ble-compressed"
+
+[[layout.words.fields]]
+name = "UNCONSUMED_LIMIT"
+bits = "27:20"
+writer = "cpu"
+description = "Connection unconsumed-RX limit; other role profiles retain their exact reset image."
+
+[[layout.words.fields]]
+name = "BITS_28_31_OPAQUE"
+opaque = true
+bits = "31:28"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "CONTROL_POLICY"
+offset = 0x0c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_20_23_OPAQUE"
+opaque = true
+bits = "23:20"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BITS_24_27_OPAQUE"
+opaque = true
+bits = "27:24"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BIT_29_OPAQUE"
+opaque = true
+bits = "29"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BIT_31_OPAQUE"
+opaque = true
+bits = "31"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0010_OPAQUE"
+opaque = true
+offset = 0x10
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_20_30_OPAQUE"
+opaque = true
+bits = "30:20"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "PACKET_POLICY"
+offset = 0x14
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_26_27_OPAQUE"
+opaque = true
+bits = "27:26"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "RECEIVE_CONTEXT"
+offset = 0x18
+access = "shared"
+description = "Role-dependent word: scanner policy flags, or the full controller receive-time image of a connection. No individual connection timestamp bit is an independent policy field."
+
+[[layout.words.fields]]
+name = "BITS_0_19_OPAQUE"
+opaque = true
+bits = "19:0"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BIT_20_OPAQUE"
+opaque = true
+bits = "20"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BITS_21_24_OPAQUE"
+opaque = true
+bits = "24:21"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "SCAN_ACCEPT_LIST_FILTER"
+bits = "25"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Scanner accept-list filtering. In connection mode this word is instead a complete controller receive-time image."
+
+[[layout.words.fields]]
+name = "BITS_26_29_OPAQUE"
+opaque = true
+bits = "29:26"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BIT_30_OPAQUE"
+opaque = true
+bits = "30"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "SCAN_STARTED"
+bits = "31"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Scanner start flag. Connection mode preserves the complete receive-time image in this same physical word."
+
+[[layout.words]]
+fields = []
+name = "WORD_001C_OPAQUE"
+opaque = true
+offset = 0x1c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+name = "RX_LIST"
+offset = 0x20
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_6_OPAQUE"
+opaque = true
+bits = "6:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "CLASS"
+bits = "30:28"
+writer = "cpu"
+description = "Global RX memory-list class: one for scanner, two for admitted non-scanners, zero for private connection RX."
+
+[[layout.words]]
+name = "OWN_ADDRESS_POLICY"
+offset = 0x24
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "RESOLVING_ENTRY"
+bits = "19:0"
+writer = "cpu"
+description = "Compressed resolving-list entry address, or zero when no entry is selected. The entry's internal layout is not established here."
+placement = ["dma-window"]
+encoding = "ble-compressed"
+
+[[layout.words.fields]]
+name = "BITS_20_22_OPAQUE"
+opaque = true
+bits = "22:20"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BITS_24_26_OPAQUE"
+opaque = true
+bits = "26:24"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "SOURCE"
+bits = "29:28"
+writer = "cpu"
+description = "Own-address source: public or the role-provided random address."
+
+[[layout.words.fields]]
+name = "BITS_30_31_OPAQUE"
+opaque = true
+bits = "31:30"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+fields = []
+name = "WORD_0028_OPAQUE"
+opaque = true
+offset = 0x28
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+name = "CRC_INITIALIZATION"
+offset = 0x2c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "VALUE"
+bits = "23:0"
+writer = "cpu"
+description = "Link Layer CRC initialization value."
+
+[[layout.words.fields]]
+name = "SCAN_FILTER_POLICY"
+bits = "25:24"
+writer = "cpu"
+description = "Host scanner filter-policy image; the advertising reset clears these lanes."
+
+[[layout.words.fields]]
+name = "READY"
+bits = "31"
+writer = "cpu"
+description = "Connection CRC context ready lane."
+
+[[layout.words]]
+name = "SEQUENCE_POLICY"
+offset = 0x30
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_7_OPAQUE"
+opaque = true
+bits = "7:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BITS_9_12_OPAQUE"
+opaque = true
+bits = "12:9"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BIT_13_OPAQUE"
+opaque = true
+bits = "13"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "COEXISTENCE_PROTECTION"
+bits = "19:14"
+writer = "cpu"
+description = "Connection coexistence protection value."
+
+[[layout.words.fields]]
+name = "BITS_20_21_OPAQUE"
+opaque = true
+bits = "21:20"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "EVENT_SPAN"
+offset = 0x34
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "VALUE"
+bits = "31:0"
+writer = "cpu"
+description = "Role event span/window in controller ticks; ordinary advertising and DTM RX reset it to zero."
+
+[[layout.words]]
+name = "ACCESS_ADDRESS"
+offset = 0x38
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "VALUE"
+bits = "31:0"
+writer = "cpu"
+description = "Link Layer access address in controller bit order."
+
+[[layout.words]]
+name = "OWN_ADDRESS_LOW"
+offset = 0x3c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "VALUE"
+bits = "31:0"
+writer = "cpu"
+description = "First four bytes of the role-provided own address, least significant byte first."
+
+[[layout.words]]
+name = "OWN_ADDRESS_HIGH"
+offset = 0x40
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "VALUE"
+bits = "15:0"
+writer = "cpu"
+description = "Last two own-address bytes."
+
+[[layout.words.fields]]
+name = "BITS_16_17_OPAQUE"
+opaque = true
+bits = "17:16"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0044_OPAQUE"
+opaque = true
+offset = 0x44
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+opaque = true
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0048_OPAQUE"
+opaque = true
+offset = 0x48
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_8_OPAQUE"
+opaque = true
+bits = "8:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BIT_9_OPAQUE"
+opaque = true
+bits = "9"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BITS_16_31_OPAQUE"
+opaque = true
+bits = "31:16"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_004C_OPAQUE"
+opaque = true
+offset = 0x4c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_15_OPAQUE"
+opaque = true
+bits = "15:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "DIRECTION_FINDING"
+offset = 0x50
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "CONFIGURATION"
+bits = "19:0"
+writer = "cpu"
+description = "A graph link; zero denotes no link."
+points-to = "BLE_DIRECTION_FINDING_CONFIGURATION"
+encoding = "ble-compressed"
+
+[[layout.words.fields]]
+name = "BITS_20_23_OPAQUE"
+opaque = true
+bits = "23:20"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "COMMON_RADIO_POLICY"
+bits = "29:24"
+writer = "cpu"
+description = "Six-bit common-radio policy copied from the Controller options; default three."
+
+[[layout.words.fields]]
+name = "READY"
+bits = "30"
+writer = "cpu"
+description = "Ordinary-role direction-finding configuration ready lane."
+
+[[layout.words.fields]]
+name = "BIT_31_OPAQUE"
+opaque = true
+bits = "31"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "DIRECTION_FINDING_POLICY"
+offset = 0x54
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_19_20_OPAQUE"
+opaque = true
+bits = "20:19"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BITS_21_30_OPAQUE"
+opaque = true
+bits = "30:21"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+fields = []
+name = "WORD_0058_OPAQUE"
+opaque = true
+offset = 0x58
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_005C_OPAQUE"
+opaque = true
+offset = 0x5c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+name = "EVENT"
+offset = 0x60
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "PRIORITY"
+bits = "7:0"
+writer = "cpu"
+description = "Event scheduling priority byte."
+
+[[layout.words.fields]]
+name = "POWER_INDEX"
+bits = "15:8"
+writer = "cpu"
+description = "Rounded transmit-power table index copied into the scheduler item."
+
+[[layout.words]]
+name = "SCHEDULER_HEAD"
+offset = 0x64
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "CPU address of the role scheduler/free-chain head."
+points-to = "BLE_SCHEDULER_ITEM"
+
+[[layout.words]]
+name = "RX_HEAD"
+offset = 0x68
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "Full CPU address of the software buffer-header anchor; not a compressed hardware consumer."
+points-to = "BLE_BUFFER_HEADER"
+
+[[layout.words]]
+name = "TX_HEAD"
+offset = 0x6c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "Full CPU address of the software buffer-header anchor; not a compressed hardware consumer."
+points-to = "BLE_BUFFER_HEADER"
+
+[[layout.words]]
+name = "RX_TAIL"
+offset = 0x70
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "Full CPU address of the software buffer-header anchor; not a compressed hardware consumer."
+points-to = "BLE_BUFFER_HEADER"
+
+[[layout.words]]
+name = "TX_TAIL"
+offset = 0x74
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "Full CPU address of the software buffer-header anchor; not a compressed hardware consumer."
+points-to = "BLE_BUFFER_HEADER"
+
+[[layout.words]]
+name = "RX_RESERVE"
+offset = 0x78
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "Full CPU address of the software buffer-header anchor; not a compressed hardware consumer."
+points-to = "BLE_BUFFER_HEADER"
+
+[[layout.words]]
+name = "RX_QUEUE_CONFIGURATION"
+offset = 0x7c
+access = "shared"
+description = "CPU pointer to the receive-queue configuration supplied to link-state allocation; it is not a compressed hardware link."
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "Full CPU address of the software receive-queue configuration. The memory manager dereferences its enable and queue-index bytes before refreshing the link-state RX anchors. The pointed-to object has no published layout."
+
+[[layout.words]]
+fields = []
+name = "WORD_0080_OPAQUE"
+opaque = true
+offset = 0x80
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[review]]
+entity = "BLE_LINK_STATE"
+sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"

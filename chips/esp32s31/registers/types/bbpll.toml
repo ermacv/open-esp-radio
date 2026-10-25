@@ -1,0 +1,206 @@
+# An analog-I2C block type of the curated ESP32-S31 register model.
+schema = 3
+
+[type]
+name = "BBPLL"
+description = "The BBPLL analog-I2C block (code 0x66)."
+space = "analog-i2c"
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_BBPLL"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_BBPLL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "vendor"
+
+[review.entity."I2C_BBPLL_RSTB_DIV_ADC.ADC_RATE_CONFIGURATION"]
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+naming = "descriptive"
+
+[[registers]]
+name = "I2C_BBPLL_IR_CAL_DELAY"
+offset = 0x0
+width = 8
+
+[[registers.fields]]
+name = "I2C_BBPLL_IR_CAL_DELAY"
+bits = "3:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BBPLL_IR_CAL_CK_DIV"
+bits = "7:4"
+class = "plain"
+
+[[registers]]
+name = "I2C_BBPLL_IR_CAL_EXT_CAP"
+offset = 0x1
+width = 8
+
+[[registers.fields]]
+name = "I2C_BBPLL_IR_CAL_EXT_CAP"
+bits = "3:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BBPLL_IR_CAL_ENX_CAP"
+bits = "4"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BBPLL_IR_CAL_RSTB"
+bits = "5"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BBPLL_IR_CAL_START"
+bits = "6"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BBPLL_IR_CAL_UNSTOP"
+bits = "7"
+class = "plain"
+
+[[registers]]
+name = "I2C_BBPLL_OC_REF_DIV"
+offset = 0x2
+width = 8
+
+[[registers.fields]]
+name = "I2C_BBPLL_OC_REF_DIV"
+bits = "3:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BBPLL_OC_DCHGP"
+bits = "6:4"
+class = "plain"
+
+[[registers]]
+name = "I2C_BBPLL_OC_DIV_7_0"
+offset = 0x3
+width = 8
+
+[[registers.fields]]
+name = "I2C_BBPLL_OC_DIV_7_0"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "I2C_BBPLL_RSTB_DIV_ADC"
+offset = 0x4
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xc, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "I2C_BBPLL_RSTB_DIV_ADC"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BBPLL_MODE_HF"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "ADC_RATE_CONFIGURATION"
+bits = "3:2"
+class = "plain"
+description = "Two-bit ADC-rate analog configuration field."
+
+[[registers.fields]]
+name = "I2C_BBPLL_DIV_DAC"
+bits = "4"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BBPLL_DIV_CPU"
+bits = "5"
+class = "plain"
+
+[[registers]]
+name = "I2C_BBPLL_OC_DR1"
+offset = 0x5
+width = 8
+
+[[registers.fields]]
+name = "I2C_BBPLL_OC_DR1"
+bits = "2:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BBPLL_OC_DR3"
+bits = "6:4"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BBPLL_EN_USB"
+bits = "7"
+class = "plain"
+
+[[registers]]
+name = "I2C_BBPLL_OC_DHREF_SEL"
+offset = 0x6
+width = 8
+
+[[registers.fields]]
+name = "I2C_BBPLL_OC_DHREF_SEL"
+bits = "5:4"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BBPLL_OC_DLREF_SEL"
+bits = "7:6"
+class = "plain"
+
+[[registers]]
+name = "I2C_BBPLL_OR_CAL_UDF"
+offset = 0x8
+width = 8
+
+[[registers.fields]]
+name = "I2C_BBPLL_OR_CAL_UDF"
+bits = "4"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BBPLL_OR_CAL_OVF"
+bits = "5"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BBPLL_OR_CAL_END"
+bits = "6"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BBPLL_OR_LOCK"
+bits = "7"
+class = "plain"
+
+[[registers]]
+name = "I2C_BBPLL_OC_VCO_DBIAS"
+offset = 0x9
+width = 8
+
+[[registers.fields]]
+name = "I2C_BBPLL_OC_VCO_DBIAS"
+bits = "1:0"
+class = "plain"
+
+[[registers]]
+name = "I2C_BBPLL_ENT_PLL"
+offset = 0xa
+width = 8
+
+[[registers.fields]]
+name = "I2C_BBPLL_ENT_PLL"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BBPLL_DTEST"
+bits = "5:4"
+class = "plain"

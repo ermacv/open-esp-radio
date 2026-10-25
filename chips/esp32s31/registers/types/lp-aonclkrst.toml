@@ -1,11 +1,12 @@
 # Imported by `cargo registers import` from the pinned vendor SVD and
-# ESP-IDF headers (registers/import.toml).
+# ESP-IDF headers (registers/import.toml), with the curated refinements
+# merged into it; this file, not the import, is the source of truth.
 schema = 3
 
 [type]
 name = "LP_AONCLKRST"
 description = "The LP always-on clock and reset controller: the slow and fast clock sources, the LP resets and the reset causes."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_POWER_DETECTOR", "ESP_IDF_4D59230D_S31_LP_CLKRST", "ESP_IDF_4D59230D_S31_LP_CLKRST_HPCORE1", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
@@ -14,18 +15,86 @@ accuracy = "exact"
 completeness = "complete"
 naming = "vendor"
 
+[review.entity."LP_AONCLKRST_ROOT_CLK_CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_SLOW_CLOCK_SOURCE", "S31_ESP_PACS_SVD"]
+
+[review.entity."LP_AONCLKRST_ROOT_CLK_CONF.LP_AONCLKRST_SLOW_CLK_SEL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_RTC_SLOW_CLOCK_SOURCE", "S31_ESP_PACS_SVD"]
+
+[review.entity."LP_AONCLKRST_ROOT_CLK_CONF.BITS_0_22_OPAQUE"]
+sources = ["S31_MMIO_USE_20701000", "S31_MMIO_DECLARED_20701000"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."LP_AONCLKRST_ROOT_CLK_CONF.LP_AONCLKRST_FAST_CLK_SEL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_MMIO_USE_20701000", "S31_MMIO_DECLARED_20701000"]
+
+[review.entity."LP_AONCLKRST_ROOT_CLK_CONF.LP_AONCLKRST_PLL80M_CLK_FORCE_ON"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_MMIO_USE_20701000", "S31_MMIO_DECLARED_20701000"]
+
+[review.entity."LP_AONCLKRST_ROOT_CLK_CONF.LP_AONCLKRST_XTAL_CLK_FORCE_ON"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_MMIO_USE_20701000", "S31_MMIO_DECLARED_20701000"]
+
+[review.entity."LP_AONCLKRST_ROOT_CLK_CONF.LP_AONCLKRST_FOSC_CLK_FORCE_ON"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_MMIO_USE_20701000", "S31_MMIO_DECLARED_20701000"]
+
+[review.entity."LP_AONCLKRST_ROOT_CLK_CONF.LP_AONCLKRST_ANA_SEL_REF_PLL8M"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_MMIO_USE_20701000", "S31_MMIO_DECLARED_20701000"]
+
+[review.entity."LP_AONCLKRST_RTC_SAR2_PWDET_CCT"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_POWER_DETECTOR"]
+
+[review.entity."LP_AONCLKRST_RTC_SAR2_PWDET_CCT.LP_AONCLKRST_RTC_SAR2_PWDET_CCT"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_POWER_DETECTOR"]
+
+[review.entity."LP_AONCLKRST_HPCORE0_RESET_CAUSE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_LP_CLKRST", "ROM_REV0_RESET_CAUSE_READ"]
+
+[review.entity."LP_AONCLKRST_HPCORE0_RESET_CAUSE.LP_AONCLKRST_HPCORE0_RESET_FLAG"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_LP_CLKRST"]
+
+[review.entity."LP_AONCLKRST_HPCORE0_RESET_CAUSE.LP_AONCLKRST_HPCORE0_RESET_CAUSE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_LP_CLKRST", "ROM_REV0_RESET_CAUSE_READ"]
+
+[review.entity."LP_AONCLKRST_HPCORE1_RESET_CAUSE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_LP_CLKRST_HPCORE1", "ROM_REV0_RESET_CAUSE_READ"]
+
+[review.entity."LP_AONCLKRST_HPCORE1_RESET_CAUSE.LP_AONCLKRST_HPCORE1_RESET_FLAG"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_LP_CLKRST_HPCORE1"]
+
+[review.entity."LP_AONCLKRST_HPCORE1_RESET_CAUSE.LP_AONCLKRST_HPCORE1_RESET_CAUSE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_LP_CLKRST_HPCORE1", "ROM_REV0_RESET_CAUSE_READ"]
+
+[review.entity."LP_AONCLKRST_HPCORE0_RESET_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."LP_AONCLKRST_HPCORE0_RESET_CTRL.LP_AONCLKRST_HPCORE0_SW_RESET"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."LP_AONCLKRST_HPCORE1_RESET_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."LP_AONCLKRST_HPCORE1_RESET_CTRL.LP_AONCLKRST_HPCORE1_SW_RESET"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
 [[registers]]
 name = "LP_AONCLKRST_ROOT_CLK_CONF"
 offset = 0x0
-description = "need_des"
+description = "Low-power root clock configuration. Only the RTC slow-clock source selector is published. The access states the radio's: the radio reads the slow-clock source, and esp-hal's clock tree alone writes the word."
 reset = { value = 0x4000000 }
-reserved = { mask = 0x7fffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "BITS_0_22_OPAQUE"
+bits = "22:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
 
 [[registers.fields]]
 name = "LP_AONCLKRST_SLOW_CLK_SEL"
 bits = "25:23"
 class = "plain"
-description = "need_des"
+description = "RTC slow-clock source: zero is the RC slow oscillator and one the 32 kHz crystal; other values are invalid."
 
 [[registers.fields]]
 name = "LP_AONCLKRST_FAST_CLK_SEL"
@@ -286,7 +355,7 @@ description = "need_des"
 [[registers]]
 name = "LP_AONCLKRST_HPCORE0_RESET_CAUSE"
 offset = 0x30
-description = "need_des"
+description = "Why HP core 0 last left reset. It holds until the next reset, so a host reads it through JTAG after the core returned; the ROM reads bits 6:1 of this word for core 0."
 reset = { value = 0x0 }
 reserved = { mask = 0x3fffff80, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
 
@@ -294,13 +363,13 @@ reserved = { mask = 0x3fffff80, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "LP_AONCLKRST_HPCORE0_RESET_FLAG"
 bits = "0"
 class = "read-only"
-description = "need_des"
+description = "Set when HP core 0 left reset."
 
 [[registers.fields]]
 name = "LP_AONCLKRST_HPCORE0_RESET_CAUSE"
 bits = "6:1"
 class = "read-only"
-description = "6'h1: POR reset 6'h3: digital system software reset 6'h5: PMU HP system power down reset 6'h7: HP system reset from HP watchdog0 6'h8: HP system reset from HP watchdog1 6'h9: HP system reset from LP watchdog 6'hb: HP core reset from HP watchdog 6'hc: HP core software reset 6'hd: HP core reset from LP watchdog 6'hf: brown out reset 6'h10: LP watchdog chip reset 6'h12: super watch dog reset 6'h13: glitch reset 6'h14: efuse crc error reset 6'h16: HP usb jtag chip reset 6'h17: HP usb uart chip reset 6'h18: HP jtag reset 6'h1a: HP core lockup"
+description = "6'h1: POR reset 6'h3: digital system software reset 6'h5: PMU HP system power down reset 6'h7: HP system reset from HP watchdog0 6'h8: HP system reset from HP watchdog1 6'h9: HP system reset from LP watchdog 6'hb: HP core reset from HP watchdog 6'hc: HP core software reset 6'hd: HP core reset from LP watchdog 6'hf: brown out reset 6'h10: LP watchdog chip reset 6'h12: super watch dog reset 6'h13: glitch reset 6'h14: efuse crc error reset 6'h16: HP usb jtag chip reset 6'h17: HP usb uart chip reset 6'h18: HP jtag reset 6'h1a: HP core lockup The reset cause code: one is a power-on reset; others are system, watchdog, brown-out, USB Serial/JTAG and JTAG resets."
 
 [[registers.fields]]
 name = "CLR"
@@ -317,21 +386,21 @@ description = "need_des"
 [[registers]]
 name = "LP_AONCLKRST_HPCORE1_RESET_CAUSE"
 offset = 0x34
-description = "need_des"
+description = "Why HP core 1 last left reset. It holds until the next reset; the ROM reads bits 6:1 of this word for any core but core 0."
 reset = { value = 0x0 }
-reserved = { mask = 0x3fffff80, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+reserved = { mask = 0x3fffff80, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_IDF_4D59230D_S31_LP_CLKRST_HPCORE1"] }
 
 [[registers.fields]]
 name = "LP_AONCLKRST_HPCORE1_RESET_FLAG"
 bits = "0"
 class = "read-only"
-description = "need_des"
+description = "Set when HP core 1 left reset."
 
 [[registers.fields]]
 name = "LP_AONCLKRST_HPCORE1_RESET_CAUSE"
 bits = "6:1"
 class = "read-only"
-description = "6'h1: POR reset 6'h3: digital system software reset 6'h5: PMU HP system power down reset 6'h7: HP system reset from HP watchdog0 6'h8: HP system reset from HP watchdog1 6'h9: HP system reset from LP watchdog 6'hb: HP core reset from HP watchdog 6'hc: HP core software reset 6'hd: HP core reset from LP watchdog 6'hf: brown out reset 6'h10: LP watchdog chip reset 6'h12: super watch dog reset 6'h13: glitch reset 6'h14: efuse crc error reset 6'h16: HP usb jtag chip reset 6'h17: HP usb uart chip reset 6'h18: HP jtag reset 6'h1a: HP core lockup"
+description = "6'h1: POR reset 6'h3: digital system software reset 6'h5: PMU HP system power down reset 6'h7: HP system reset from HP watchdog0 6'h8: HP system reset from HP watchdog1 6'h9: HP system reset from LP watchdog 6'hb: HP core reset from HP watchdog 6'hc: HP core software reset 6'hd: HP core reset from LP watchdog 6'hf: brown out reset 6'h10: LP watchdog chip reset 6'h12: super watch dog reset 6'h13: glitch reset 6'h14: efuse crc error reset 6'h16: HP usb jtag chip reset 6'h17: HP usb uart chip reset 6'h18: HP jtag reset 6'h1a: HP core lockup The reset cause code, with the codes of HP core 0's cause field."
 
 [[registers.fields]]
 name = "CLR"
@@ -385,9 +454,9 @@ description = "need_des"
 [[registers]]
 name = "LP_AONCLKRST_HPCORE0_RESET_CTRL"
 offset = 0x3c
-description = "need_des"
+description = "HP core 0's reset control."
 reset = { value = 0x40010000 }
-reserved = { mask = 0x1fe000ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+reserved = { mask = 0x1fe000ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_IDF_4D59230D_S31_CORE_CONTROL"] }
 
 [[registers.fields]]
 name = "LP_AONCLKRST_HPCORE0_STALL_WAIT"
@@ -417,7 +486,7 @@ description = "write 1 to enable lp_wdt reset hpcore0 feature, write 0 to disabl
 name = "LP_AONCLKRST_HPCORE0_SW_RESET"
 bits = "20"
 class = "write-trigger"
-description = "need_des"
+description = "Writing one resets HP core 0 once; it does not hold the core in reset."
 
 [[registers.fields]]
 name = "LP_AONCLKRST_HPCORE0_OCD_HALT_ON_RESET"
@@ -440,9 +509,9 @@ description = "write 1 to enable hpcore0 lockup reset feature, write 0 to disabl
 [[registers]]
 name = "LP_AONCLKRST_HPCORE1_RESET_CTRL"
 offset = 0x40
-description = "need_des"
+description = "HP core 1's reset control."
 reset = { value = 0x40010000 }
-reserved = { mask = 0x1fe000ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+reserved = { mask = 0x1fe000ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_IDF_4D59230D_S31_CORE_CONTROL"] }
 
 [[registers.fields]]
 name = "LP_AONCLKRST_HPCORE1_STALL_WAIT"
@@ -472,7 +541,7 @@ description = "write 1 to enable lp_wdt reset hpcore1 feature, write 0 to disabl
 name = "LP_AONCLKRST_HPCORE1_SW_RESET"
 bits = "20"
 class = "write-trigger"
-description = "need_des"
+description = "Writing one resets HP core 1 once; it does not hold the core in reset."
 
 [[registers.fields]]
 name = "LP_AONCLKRST_HPCORE1_OCD_HALT_ON_RESET"
@@ -666,7 +735,7 @@ description = "apll sdm value"
 [[registers]]
 name = "LP_AONCLKRST_RTC_SAR2_PWDET_CCT"
 offset = 0x68
-description = "need_des"
+description = "SAR2 power-detector circuit mode. Only encodings two and four are published by reviewed complete ROM bodies."
 reset = { value = 0x0 }
 reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
 
@@ -674,7 +743,7 @@ reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "LP_AONCLKRST_RTC_SAR2_PWDET_CCT"
 bits = "2:0"
 class = "plain"
-description = "rtc_sar2_pwdet_cct value"
+description = "rtc_sar2_pwdet_cct value Three-bit power-detector circuit-mode field."
 
 [[registers]]
 name = "LP_AONCLKRST_DATE"

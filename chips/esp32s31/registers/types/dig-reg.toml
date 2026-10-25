@@ -1,0 +1,110 @@
+# An analog-I2C block type of the curated ESP32-S31 register model.
+schema = 3
+
+[type]
+name = "DIG_REG"
+description = "The DIG_REG analog-I2C block (code 0x6d)."
+space = "analog-i2c"
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_DIG_REG"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_DIG_REG"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "vendor"
+
+[[registers]]
+name = "I2C_DIG_REG_EXT_RTC_DREG"
+offset = 0x4
+width = 8
+
+[[registers.fields]]
+name = "I2C_DIG_REG_EXT_RTC_DREG"
+bits = "4:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_DIG_REG_ENX_RTC_DREG"
+bits = "7"
+class = "plain"
+
+[[registers]]
+name = "I2C_DIG_REG_EXT_RTC_DREG_SLEEP"
+offset = 0x5
+width = 8
+
+[[registers.fields]]
+name = "I2C_DIG_REG_EXT_RTC_DREG_SLEEP"
+bits = "4:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_DIG_REG_ENIF_RTC_DREG"
+bits = "7"
+class = "plain"
+
+[[registers]]
+name = "I2C_DIG_REG_EXT_DIG_DREG"
+offset = 0x6
+width = 8
+
+[[registers.fields]]
+name = "I2C_DIG_REG_EXT_DIG_DREG"
+bits = "4:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_DIG_REG_ENX_DIG_DREG"
+bits = "7"
+class = "plain"
+
+[[registers]]
+name = "I2C_DIG_REG_EXT_DIG_DREG_SLEEP"
+offset = 0x7
+width = 8
+
+[[registers.fields]]
+name = "I2C_DIG_REG_EXT_DIG_DREG_SLEEP"
+bits = "4:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_DIG_REG_ENIF_DIG_DREG"
+bits = "7"
+class = "plain"
+
+[[registers]]
+name = "I2C_DIG_REG_OR_EN_CONT_CAL"
+offset = 0x9
+width = 8
+
+[[registers.fields]]
+name = "I2C_DIG_REG_OR_EN_CONT_CAL"
+bits = "7"
+class = "plain"
+
+[[registers]]
+name = "I2C_DIG_REG_XPD_RTC_REG"
+offset = 0xd
+width = 8
+
+[[registers.fields]]
+name = "I2C_DIG_REG_XPD_RTC_REG"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_DIG_REG_XPD_DIG_REG"
+bits = "3"
+class = "plain"
+
+[[registers]]
+name = "I2C_DIG_REG_SCK_DCAP"
+offset = 0xe
+width = 8
+
+[[registers.fields]]
+name = "I2C_DIG_REG_SCK_DCAP"
+bits = "7:0"
+class = "plain"

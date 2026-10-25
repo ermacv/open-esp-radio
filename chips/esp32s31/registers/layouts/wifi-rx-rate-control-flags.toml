@@ -1,0 +1,55 @@
+schema = 1
+
+[layout]
+name = "WIFI_RX_RATE_CONTROL_FLAGS"
+description = "One captured byte at RX-control prefix offset 3, used by ppRxProtoProc to select a rate-control route. Individual electrical meanings are unassigned."
+size = 1
+align = 1
+
+[layout.review]
+sources = ["BLOB_LIBPP_RX_RATE_ROUTE"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[layout.review.opaque]
+sources = ["BLOB_LIBPP_RX_RATE_ROUTE"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "opaque"
+
+[[layout.bytes]]
+name = "FLAGS"
+offset = 0
+size = 1
+access = "owned"
+
+[[layout.bytes.fields]]
+name = "BIT_4_OPAQUE"
+opaque = true
+bits = "4"
+writer = "hardware"
+description = "With bit 5 clear, selects route zero."
+
+[[layout.bytes.fields]]
+name = "BIT_5_OPAQUE"
+opaque = true
+bits = "5"
+writer = "hardware"
+description = "With bit 4 clear, selects route one; with bit 4 set, suppresses lookup."
+
+[[layout.bytes.fields]]
+name = "BIT_6_OPAQUE"
+opaque = true
+bits = "6"
+writer = "hardware"
+description = "With bits 4 and 5 clear, selects route two."
+
+[[review]]
+entity = "WIFI_RX_RATE_CONTROL_FLAGS.FLAGS"
+sources = ["BLOB_LIBPP_RX_RATE_ROUTE"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"

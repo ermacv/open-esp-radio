@@ -1,0 +1,261 @@
+# An analog-I2C block type of the curated ESP32-S31 register model.
+schema = 3
+
+[type]
+name = "RFPLL"
+description = "The RFPLL analog-I2C block (code 0x62)."
+space = "analog-i2c"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[review]
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[review.opaque]
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+
+[[registers]]
+name = "RFPLL_RESTART_HIGH"
+offset = 0x0
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x60, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RFPLL_RESTART_LOW"
+bits = "5"
+class = "plain"
+description = "Second RFPLL restart control bit."
+
+[[registers.fields]]
+name = "RFPLL_RESTART_HIGH"
+bits = "6"
+class = "plain"
+description = "First RFPLL restart control bit."
+
+[[registers]]
+name = "RFPLL_CAPACITOR_LOW"
+offset = 0x1
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "VALUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "RFPLL_CAPACITOR_HIGH"
+offset = 0x2
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RFPLL_INITIAL_CONFIGURATION_LOW"
+bits = "5:0"
+class = "plain"
+description = "Low six bits of the initial RFPLL configuration."
+
+[[registers.fields]]
+name = "RFPLL_CAPACITOR_HIGH"
+bits = "6"
+class = "plain"
+description = "High RFPLL capacitor-selection bit."
+
+[[registers.fields]]
+name = "RFPLL_INITIAL_CONFIGURATION_HIGH"
+bits = "7"
+class = "plain"
+description = "High bit of the initial RFPLL configuration."
+
+[[registers]]
+name = "RFPLL_DCODE_CKGEN_RESET"
+offset = 0x4
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x80, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RFPLL_DCODE_CKGEN_RESET"
+bits = "7"
+class = "plain"
+description = "RFPLL DCODE clock-generator reset bit."
+
+[[registers]]
+name = "RFPLL_CALIBRATED_CAPACITOR_LOW"
+offset = 0x5
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "VALUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "RFPLL_LOCK_STATUS"
+offset = 0x7
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x6, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RFPLL_LOCK_STATUS"
+bits = "1"
+class = "plain"
+description = "RFPLL lock-status bit."
+
+[[registers.fields]]
+name = "RFPLL_CALIBRATED_CAPACITOR_HIGH"
+bits = "2"
+class = "plain"
+description = "High bit of the calibrated RFPLL capacitor value."
+
+[[registers]]
+name = "RFPLL_CAPACITOR_SEARCH_ENABLE"
+offset = 0xb
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x40, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RFPLL_CAPACITOR_SEARCH_ENABLE"
+bits = "6"
+class = "plain"
+description = "RFPLL capacitor-search enable bit."
+
+[[registers]]
+name = "RFPLL_CAPACITOR_SEARCH_STATUS"
+offset = 0xc
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xc, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RFPLL_CAPACITOR_SEARCH_STATUS"
+bits = "3:2"
+class = "plain"
+description = "RFPLL capacitor-search status field."
+
+[[registers]]
+name = "RFPLL_CHARGE_PUMP_LOCK_STATUS"
+offset = 0xe
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x9f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RFPLL_CHARGE_PUMP_RESULT"
+bits = "4:0"
+class = "plain"
+description = "RFPLL charge-pump calibration result."
+
+[[registers.fields]]
+name = "RFPLL_CHARGE_PUMP_LOCK_STATUS"
+bits = "7"
+class = "plain"
+description = "RFPLL charge-pump lock-status bit."
+
+[[registers]]
+name = "RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE"
+offset = 0xf
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x7f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RFPLL_CHARGE_PUMP_VALUE"
+bits = "4:0"
+class = "plain"
+description = "RFPLL charge-pump control value."
+
+[[registers.fields]]
+name = "RFPLL_CHARGE_PUMP_CALIBRATION_PULSE"
+bits = "5"
+class = "plain"
+description = "RFPLL charge-pump calibration pulse bit."
+
+[[registers.fields]]
+name = "RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE"
+bits = "6"
+class = "plain"
+description = "RFPLL charge-pump calibration enable bit."
+
+[[registers]]
+name = "RFPLL_INTERNAL_DCODE_0"
+offset = 0x11
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x3f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RFPLL_INTERNAL_DCODE_0"
+bits = "5:0"
+class = "plain"
+description = "First internal RFPLL DCODE field."
+
+[[registers]]
+name = "RFPLL_INTERNAL_DCODE_1"
+offset = 0x12
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x3f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RFPLL_INTERNAL_DCODE_1"
+bits = "5:0"
+class = "plain"
+description = "Second internal RFPLL DCODE field."
+
+[[registers]]
+name = "RFPLL_DCODE_0_SOURCE_SELECT"
+offset = 0x13
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x7f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RFPLL_EXTERNAL_DCODE_0"
+bits = "5:0"
+class = "plain"
+description = "First external RFPLL DCODE field."
+
+[[registers.fields]]
+name = "RFPLL_DCODE_0_SOURCE_SELECT"
+bits = "6"
+class = "plain"
+description = "First RFPLL DCODE source-select bit."
+
+[[registers]]
+name = "RFPLL_DCODE_1_SOURCE_SELECT"
+offset = 0x14
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x7f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RFPLL_EXTERNAL_DCODE_1"
+bits = "5:0"
+class = "plain"
+description = "Second external RFPLL DCODE field."
+
+[[registers.fields]]
+name = "RFPLL_DCODE_1_SOURCE_SELECT"
+bits = "6"
+class = "plain"
+description = "Second RFPLL DCODE source-select bit."
+
+[[registers]]
+name = "BYTE_0D_OPAQUE"
+offset = 0xd
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_15_OPAQUE"
+offset = 0x15
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"

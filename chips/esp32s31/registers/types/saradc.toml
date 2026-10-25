@@ -1,0 +1,187 @@
+# An analog-I2C block type of the curated ESP32-S31 register model.
+schema = 3
+
+[type]
+name = "SARADC"
+description = "The SARADC analog-I2C block (code 0x69)."
+space = "analog-i2c"
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_SARADC"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_SARADC"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "vendor"
+
+[[registers]]
+name = "I2C_SARADC_SAR1_INIT_CODE_LSB"
+offset = 0x0
+width = 8
+
+[[registers.fields]]
+name = "I2C_SARADC_SAR1_INIT_CODE_LSB"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "I2C_SARADC_SAR1_INIT_CODE_MSB"
+offset = 0x1
+width = 8
+
+[[registers.fields]]
+name = "I2C_SARADC_SAR1_INIT_CODE_MSB"
+bits = "3:0"
+class = "plain"
+
+[[registers]]
+name = "ADC_SAR1_SAMPLE_CYCLE_ADDR"
+offset = 0x2
+width = 8
+
+[[registers.fields]]
+name = "ADC_SAR1_SAMPLE_CYCLE_ADDR"
+bits = "2:0"
+class = "plain"
+
+[[registers.fields]]
+name = "ADC_SAR1_DREF_ADDR"
+bits = "6:4"
+class = "plain"
+
+[[registers]]
+name = "ADC_SAR2_INITIAL_CODE_LOW_ADDR"
+offset = 0x3
+width = 8
+
+[[registers.fields]]
+name = "ADC_SAR2_INITIAL_CODE_LOW_ADDR"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "ADC_SAR2_INITIAL_CODE_HIGH_ADDR"
+offset = 0x4
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xf, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "ADC_SAR2_INITIAL_CODE_HIGH_ADDR"
+bits = "3:0"
+class = "plain"
+
+[[registers]]
+name = "ADC_SAR2_SAMPLE_CYCLE_ADDR"
+offset = 0x5
+width = 8
+
+[[registers.fields]]
+name = "ADC_SAR2_SAMPLE_CYCLE_ADDR"
+bits = "2:0"
+class = "plain"
+
+[[registers.fields]]
+name = "ADC_SAR2_DREF_ADDR"
+bits = "6:4"
+class = "plain"
+
+[[registers]]
+name = "I2C_SARADC_TSENS_DAC"
+offset = 0x6
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xf, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "I2C_SARADC_TSENS_DAC"
+bits = "3:0"
+class = "plain"
+
+[[registers]]
+name = "ADC_SARADC_DTEST_RTC_ADDR"
+offset = 0x7
+width = 8
+
+[[registers.fields]]
+name = "ADC_SARADC_DTEST_RTC_ADDR"
+bits = "1:0"
+class = "plain"
+
+[[registers.fields]]
+name = "ADC_SARADC_ENT_TSENS_ADDR"
+bits = "2"
+class = "plain"
+
+[[registers]]
+name = "POWER_GLITCH_XPD_VDET_PERIF"
+offset = 0xa
+width = 8
+
+[[registers.fields]]
+name = "POWER_GLITCH_XPD_VDET_PERIF"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "POWER_GLITCH_XPD_VDET_VDDPST"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "POWER_GLITCH_XPD_VDET_PLLBB"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "POWER_GLITCH_XPD_VDET_PLL"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "POWER_GLITCH_MODE_VDET_PERIF"
+bits = "4"
+class = "plain"
+
+[[registers.fields]]
+name = "POWER_GLITCH_MODE_VDET_VDDPST"
+bits = "5"
+class = "plain"
+
+[[registers.fields]]
+name = "POWER_GLITCH_MODE_VDET_PLLBB"
+bits = "6"
+class = "plain"
+
+[[registers.fields]]
+name = "POWER_GLITCH_MODE_VDET_PLL"
+bits = "7"
+class = "plain"
+
+[[registers]]
+name = "POWER_GLITCH_DREF_VDET_PERIF"
+offset = 0xb
+width = 8
+
+[[registers.fields]]
+name = "POWER_GLITCH_DREF_VDET_PERIF"
+bits = "2:0"
+class = "plain"
+
+[[registers.fields]]
+name = "POWER_GLITCH_DREF_VDET_VDDPST"
+bits = "6:4"
+class = "plain"
+
+[[registers]]
+name = "POWER_GLITCH_DREF_VDET_PLLBB"
+offset = 0xc
+width = 8
+
+[[registers.fields]]
+name = "POWER_GLITCH_DREF_VDET_PLLBB"
+bits = "2:0"
+class = "plain"
+
+[[registers.fields]]
+name = "POWER_GLITCH_DREF_VDET_PLL"
+bits = "6:4"
+class = "plain"

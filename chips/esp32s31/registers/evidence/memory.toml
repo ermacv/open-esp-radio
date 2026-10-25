@@ -1,0 +1,6 @@
+# Reviewed register evidence: the RAM regions of the chip root.
+schema = 1
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_SOC_DMA_WINDOW"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/soc.h:177-178 (file sha256 b19cf9e6916f1416b8385160c6de277ff64f8cd80e9cb22d44833d9f9654e92b), Apache-2.0: SOC_DMA_LOW 0x2F000000 and SOC_DMA_HIGH 0x2F080000, the region of memory DMA reaches."

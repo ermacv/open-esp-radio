@@ -1,0 +1,1866 @@
+# A block type of the curated ESP32-S31 register model: no vendor header
+# or SVD describes this block.
+schema = 3
+
+[type]
+name = "IEEE802154"
+description = "The IEEE 802.15.4 MAC at IEEE802154_REG_BASE.\n\nWords 0x0-0x180: Dedicated ESP32-S31 IEEE 802.15.4 MAC aperture at 0x20103000. This selective foundation publishes only register geometry exercised by the pinned public common/chip LL accessors. The public struct and register headers still carry TODO ZB-93 pending an authoritative regdesc CSV, so untouched DTM, timing, debug-selector and modem-sleep words remain deliberately absent and no reset values are claimed.\n\nWord 0x88: One independently bounded shared-baseband reset-idle status word. The complete Bluetooth bbmac_idle_for_swrst leaf proves the exact predicate, but its location inside another protocol aperture prevents Bluetooth-exclusive ownership."
+sources = ["S31_REG_BASE", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "ESP_IDF_7B9CC1AC_S31_IEEE802154_LL", "BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+
+[review]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll"]
+provenance = "imported"
+accuracy = "unknown"
+completeness = "unknown"
+naming = "descriptive"
+
+[review.entity."COMMAND"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."COMMAND.OPCODE"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."CONTROL"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."MULTIPAN%s_SHORT_ADDRESS"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."MULTIPAN%s_PAN_ID"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."MULTIPAN%s_EXTENDED_ADDRESS_LOW"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."MULTIPAN%s_EXTENDED_ADDRESS_HIGH"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."CHANNEL"]
+accuracy = "exact"
+completeness = "partial"
+naming = "vendor"
+
+[review.entity."TX_POWER"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."ED_DURATION"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."ED_CONFIG"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."ED_CONFIG.ED_SAMPLE_MODE"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
+naming = "vendor"
+
+[review.entity."ED_CONFIG.CCA_MODE"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
+naming = "vendor"
+
+[review.entity."ED_CONFIG.CCA_BUSY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
+naming = "vendor"
+
+[review.entity."ACK_TIMEOUT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."EVENT_ENABLE"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."EVENT_ENABLE.EVENTS_7"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+
+[review.entity."EVENT_ENABLE.EVENTS_13"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+
+[review.entity."EVENT_STATUS"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."EVENT_STATUS.TX_DONE"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+
+[review.entity."EVENT_STATUS.RX_DONE"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+
+[review.entity."EVENT_STATUS.ACK_TX_DONE"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+
+[review.entity."EVENT_STATUS.ACK_RX_DONE"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+
+[review.entity."EVENT_STATUS.RX_ABORT"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+
+[review.entity."EVENT_STATUS.TX_ABORT"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+
+[review.entity."EVENT_STATUS.ED_DONE"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+
+[review.entity."EVENT_STATUS.EVENTS_7"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+
+[review.entity."EVENT_STATUS.TIMER0_OVERFLOW"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+
+[review.entity."EVENT_STATUS.TIMER1_OVERFLOW"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+
+[review.entity."EVENT_STATUS.CLOCK_COUNT_MATCH"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+
+[review.entity."EVENT_STATUS.TX_SFD_DONE"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+
+[review.entity."EVENT_STATUS.RX_SFD_DONE"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+
+[review.entity."EVENT_STATUS.EVENTS_13"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "esp-idf-7b9cc1ac-ieee802154-common-ll", "hil-open-ieee802154-ed-done-selected-write-2026-08-25", "hil-open-ieee802154-generated-ed-done-write-2026-08-25"]
+
+[review.entity."RX_ABORT_ENABLE"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."RX_ABORT_ENABLE.RX_ABORT_EN_9_14"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+
+[review.entity."RX_ABORT_ENABLE.RX_ABORT_EN_19_22"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+
+[review.entity."RX_ABORT_ENABLE.RX_ABORT_EN_26_30"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+
+[review.entity."PENDING_CONFIG"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."COEX_PTI"]
+accuracy = "exact"
+completeness = "partial"
+naming = "vendor"
+
+[review.entity."TX_ABORT_ENABLE"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."TX_ABORT_ENABLE.TX_ABORT_EN_9_14"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+
+[review.entity."TX_ABORT_ENABLE.TX_ABORT_EN_19_22"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+
+[review.entity."TX_ABORT_ENABLE.TX_ABORT_EN_25_30"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+
+[review.entity."ENHANCED_ACK_NOTIFY"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."RX_STATUS"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."RX_STATUS.PREAMBLE_MATCH"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
+naming = "vendor"
+
+[review.entity."RX_STATUS.SFD_MATCH"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
+naming = "vendor"
+
+[review.entity."TX_STATUS"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."STATUS"]
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."STATUS.TXRX_STATE"]
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."DTM_CFG"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."TIMER0_THRESHOLD"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."TIMER0_VALUE"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."TIMER1_THRESHOLD"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."TIMER1_VALUE"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."SFD_WAIT"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."TX_DMA_ADDRESS"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."TXDMA_ERR"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."TXDMA_ERR.TXDMA_ERR"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."RX_DMA_ADDRESS"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."RXDMA_ERR"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."RXDMA_ERR.RXDMA_ERR"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."PAON_DELAY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."PAON_DELAY.PAON_DELAY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."TXON_DELAY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."TXON_DELAY.TXON_DELAY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."TXEN_STOP_DELAY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."TXEN_STOP_DELAY.TXEN_STOP_DLY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."TXOFF_DELAY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."TXOFF_DELAY.TXOFF_DELAY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."RXON_DELAY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET", "ESP_PACS_AAA5C2EA_S31_IEEE802154_RXON_DELAY"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."RXON_DELAY.RXON_DELAY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET", "ESP_PACS_AAA5C2EA_S31_IEEE802154_RXON_DELAY"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."TXRX_SWITCH_DELAY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."TXRX_SWITCH_DELAY.TXRX_SWITCH_DELAY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."CONT_RX_DELAY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."CONT_RX_DELAY.CONT_RX_DELAY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."DCDC_CTRL"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."DCDC_CTRL.DCDC_PRE_UP_DELAY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."DCDC_CTRL.DCDC_DOWN_DELAY"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."DCDC_CTRL.DCDC_CTRL_EN"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."DCDC_CTRL.TX_DCDC_UP"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"]
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."SECURITY_CONTROL"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."SECURITY_ADDRESS_LOW"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."SECURITY_ADDRESS_HIGH"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."SECURITY_KEY%s"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."SFD_TIMEOUT_COUNTER"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "ESP_IDF_7B9CC1AC_S31_IEEE802154_LL"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."CRC_ERROR_COUNTER"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "ESP_IDF_7B9CC1AC_S31_IEEE802154_LL"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."ED_ABORT_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."CCA_FAIL_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."RX_FILTER_FAIL_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."NO_RSS_DETECT_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."RX_ABORT_COEX_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."RX_RESTART_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."TX_ACK_ABORT_COEX_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."ED_SCAN_BREAK_COEX_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."RX_ACK_ABORT_COEX_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."RX_ACK_TIMEOUT_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."TX_BREAK_COEX_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."TX_SECURITY_ERROR_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."CCA_BUSY_COUNTER"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."DIAGNOSTIC_COUNTER_CLEAR"]
+accuracy = "exact"
+completeness = "complete"
+
+[[registers]]
+name = "COMMAND"
+offset = 0x0
+description = "Write-only IEEE 802.15.4 MAC command opcode. The public common LL constrains commands to the listed values."
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "OPCODE"
+bits = "7:0"
+class = "write-only"
+values = [{ name = "TX_START", value = 65 }, { name = "RX_START", value = 66 }, { name = "CCA_TX_START", value = 67 }, { name = "ED_START", value = 68 }, { name = "STOP", value = 69 }, { name = "TEST_TX_START", value = 70 }, { name = "TEST_RX_START", value = 71 }, { name = "TEST_STOP", value = 72 }, { name = "TIMER0_START", value = 76 }, { name = "TIMER0_STOP", value = 77 }, { name = "TIMER1_START", value = 78 }, { name = "TIMER1_STOP", value = 79 }]
+write-values-only = true
+
+[[registers]]
+name = "CONTROL"
+offset = 0x4
+description = "Selected MAC policy bits mutated by public common LL accessors. Unused control bits remain absent."
+reserved = { mask = 0x714, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "AUTO_ACK_TX"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "ENHANCED_ACK_TX"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "AUTO_ACK_RX"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "COORDINATOR"
+bits = "6"
+class = "plain"
+
+[[registers.fields]]
+name = "PROMISCUOUS"
+bits = "7"
+class = "plain"
+
+[[registers.fields]]
+name = "PENDING_ENHANCED"
+bits = "12"
+class = "plain"
+description = "Boolean pending-mode selector used by the current public LL. The wider public pending-mode enum is not encoded in this one-bit field."
+
+[[registers.fields]]
+name = "MULTIPAN0_ENABLED"
+bits = "28"
+class = "plain"
+description = "Enable public multipan context zero."
+
+[[registers.fields]]
+name = "MULTIPAN1_ENABLED"
+bits = "29"
+class = "plain"
+description = "Enable public multipan context one."
+
+[[registers.fields]]
+name = "MULTIPAN2_ENABLED"
+bits = "30"
+class = "plain"
+description = "Enable public multipan context two."
+
+[[registers.fields]]
+name = "MULTIPAN3_ENABLED"
+bits = "31"
+class = "plain"
+description = "Enable public multipan context three."
+
+[[registers.fields]]
+name = "IFS_DIS"
+bits = "5"
+class = "plain"
+description = "Open vendor conf.ifs_dis field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "VERSION_FILTER_DIS"
+bits = "11"
+class = "plain"
+description = "Open vendor conf.version_filter_dis field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "TX_WAIT_ACK_TIMEOUT_EN"
+bits = "13"
+class = "plain"
+description = "Open vendor conf.tx_wait_ack_timeout_en field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "FILTER_ENHANCE_DIS"
+bits = "14"
+class = "plain"
+description = "Open vendor conf.filter_enhance_dis field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "RX_FILTER_MULTIPAN_CROSS_CHECK"
+bits = "15"
+class = "plain"
+description = "Open vendor conf.rx_filter_multipan_cross_check field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "COEX_ARB_DELAY"
+bits = "23:16"
+class = "plain"
+description = "Open vendor conf.coex_arb_delay field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "BIT_ORDER"
+bits = "24"
+class = "plain"
+description = "Open vendor conf.bit_order field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "NO_RSSI_TRIGGER_BREAK_EN"
+bits = "25"
+class = "plain"
+description = "Open vendor conf.no_rssi_trigger_break_en field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "COEX_FORCE_RX"
+bits = "26"
+class = "plain"
+description = "Open vendor conf.coex_force_rx field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "RX_DONE_TRIG_IDLE"
+bits = "27"
+class = "plain"
+description = "Open vendor conf.rx_done_trig_idle field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers]]
+name = "MULTIPAN%s_SHORT_ADDRESS"
+offset = 0x8
+dim = { count = 4, stride = 0x10 }
+description = "Sixteen-bit short address for one public multipan context."
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "ADDRESS"
+bits = "15:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xffff }
+
+[[registers]]
+name = "MULTIPAN%s_PAN_ID"
+offset = 0xc
+dim = { count = 4, stride = 0x10 }
+description = "Sixteen-bit PAN identifier for one public multipan context."
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "PAN_ID"
+bits = "15:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xffff }
+
+[[registers]]
+name = "MULTIPAN%s_EXTENDED_ADDRESS_LOW"
+offset = 0x10
+dim = { count = 4, stride = 0x10 }
+description = "Extended-address bytes zero through three packed little-endian by the public common LL."
+
+[[registers.fields]]
+name = "ADDRESS_WORD"
+bits = "31:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "MULTIPAN%s_EXTENDED_ADDRESS_HIGH"
+offset = 0x14
+dim = { count = 4, stride = 0x10 }
+description = "Extended-address bytes four through seven packed little-endian by the public common LL."
+
+[[registers.fields]]
+name = "ADDRESS_WORD"
+bits = "31:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "CHANNEL"
+offset = 0x48
+description = "Selected primary frequency code. Other multi-channel and frequency-hop controls declared by the struct are not used by the public common LL and remain absent."
+reserved = { mask = 0xc0000000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "FREQUENCY_CODE"
+bits = "7:0"
+class = "plain"
+description = "Eight-bit code read and written by ieee802154_ll_get_freq/set_freq; this register model does not equate it to an IEEE channel number."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "SEC_CH_FREQ"
+bits = "15:8"
+class = "plain"
+description = "Open vendor channel.sec_ch_freq field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "RX_MULTI_CH_EN"
+bits = "16"
+class = "plain"
+description = "Open vendor channel.rx_multi_ch_en field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "RX_WAIT_PREMABLE_TIME"
+bits = "23:17"
+class = "plain"
+description = "Open vendor channel.rx_wait_premable_time field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "RX_PREAMBLE_PATTERN_SEL"
+bits = "25:24"
+class = "plain"
+description = "Open vendor channel.rx_preamble_pattern_sel field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "PRI_CH_I2C_SEL"
+bits = "26"
+class = "plain"
+description = "Open vendor channel.pri_ch_i2c_sel field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "SEC_CH_I2C_SEL"
+bits = "27"
+class = "plain"
+description = "Open vendor channel.sec_ch_i2c_sel field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "FAST_FREQHOP_EN"
+bits = "28"
+class = "plain"
+description = "Open vendor channel.fast_freqhop_en field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "FREQ_BASE_SEL"
+bits = "29"
+class = "plain"
+description = "Open vendor channel.freq_base_sel field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers]]
+name = "TX_POWER"
+offset = 0x4c
+description = "Eight-bit transmit-power code written through a preserving bitfield update by the public common LL."
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "POWER_CODE"
+bits = "7:0"
+class = "plain"
+description = "Raw eight-bit hardware code; no dBm conversion is claimed at the register boundary."
+
+[[registers]]
+name = "ED_DURATION"
+offset = 0x50
+description = "Energy-detection duration field written by the public common LL. The adjacent delay field is not used there and remains absent."
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "DURATION"
+bits = "23:0"
+class = "plain"
+description = "Twenty-four-bit physical field. The current public setter accepts only a uint16_t and therefore exercises a strict subset of its declared range."
+
+[[registers.fields]]
+name = "DELAY"
+bits = "27:24"
+class = "plain"
+description = "Open vendor ed_duration.delay field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers]]
+name = "ED_CONFIG"
+offset = 0x54
+description = "Energy-detection and clear-channel-assessment configuration plus read-only result fields used by the public common LL. The pinned reg macros call bits 12:11 ED_SAMPLE_MODE and bit 13 DIS_ED_POWER_SEL, while the pinned struct/common LL operate them as ED_SAMPLE_RATE and ED_SAMPLE_MODE respectively; this model follows the operational struct/common-LL pair and leaves the naming conflict explicit."
+reserved = { mask = 0xfe000700, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "CCA_THRESHOLD_CODE"
+bits = "7:0"
+class = "plain"
+description = "Eight-bit code written from an int8_t; signed physical units are intentionally left to the HAL."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "ED_SAMPLE_RATE"
+bits = "12:11"
+class = "plain"
+values = [{ name = "ONE_PER_US", value = 0 }, { name = "TWO_PER_US", value = 1 }, { name = "FOUR_PER_US", value = 2 }, { name = "EIGHT_PER_US", value = 3 }]
+write-values-only = true
+
+[[registers.fields]]
+name = "ED_SAMPLE_MODE"
+bits = "13"
+class = "plain"
+values = [{ name = "MAXIMUM", value = 0 }, { name = "AVERAGE", value = 1 }]
+write-values-only = true
+
+[[registers.fields]]
+name = "CCA_MODE"
+bits = "15:14"
+class = "plain"
+values = [{ name = "CARRIER", value = 0 }, { name = "ENERGY_DETECTION", value = 1 }, { name = "CARRIER_OR_ENERGY_DETECTION", value = 2 }, { name = "CARRIER_AND_ENERGY_DETECTION", value = 3 }]
+write-values-only = true
+
+[[registers.fields]]
+name = "ED_RSS_CODE"
+bits = "23:16"
+class = "read-only"
+description = "Eight-bit result returned as int8_t by the public common LL."
+
+[[registers.fields]]
+name = "CCA_BUSY"
+bits = "24"
+class = "read-only"
+
+[[registers]]
+name = "ACK_TIMEOUT"
+offset = 0x5c
+description = "Sixteen-bit acknowledgment timeout read and written by the public common LL. Units are not assigned by this register model."
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "TIMEOUT"
+bits = "15:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xffff }
+
+[[registers]]
+name = "EVENT_ENABLE"
+offset = 0x60
+description = "Individual event enables mutated by the public common LL. All fourteen lanes belong to the open vendor events field; individual unnamed events remain descriptive partitions."
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "TX_DONE"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "RX_DONE"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "ACK_TX_DONE"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "ACK_RX_DONE"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "RX_ABORT"
+bits = "4"
+class = "plain"
+
+[[registers.fields]]
+name = "TX_ABORT"
+bits = "5"
+class = "plain"
+
+[[registers.fields]]
+name = "ED_DONE"
+bits = "6"
+class = "plain"
+
+[[registers.fields]]
+name = "EVENTS_7"
+bits = "7"
+class = "plain"
+description = "Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT."
+
+[[registers.fields]]
+name = "TIMER0_OVERFLOW"
+bits = "8"
+class = "plain"
+
+[[registers.fields]]
+name = "TIMER1_OVERFLOW"
+bits = "9"
+class = "plain"
+
+[[registers.fields]]
+name = "CLOCK_COUNT_MATCH"
+bits = "10"
+class = "plain"
+
+[[registers.fields]]
+name = "TX_SFD_DONE"
+bits = "11"
+class = "plain"
+
+[[registers.fields]]
+name = "RX_SFD_DONE"
+bits = "12"
+class = "plain"
+
+[[registers.fields]]
+name = "EVENTS_13"
+bits = "13"
+class = "plain"
+description = "Partition of the open vendor events field, bits 13:13; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT."
+
+[[registers]]
+name = "EVENT_STATUS"
+offset = 0x64
+description = "Individual event status bits read by the public LL. The target-reviewed overlay assigns the read-write W1C contract for the applicable ESP32-S31 revision; unnamed event lanes remain partitions of the open vendor events field. The pinned public LL reads the fourteen-bit event image and clears a requested mask by writing back the intersection of current status and that mask; its ISR samples the complete image and immediately clears that same image. This is the source-level W1C contract ported by the generated affine snapshot transaction. Reset-isolated timer and ED records independently observed selective one-bit clearing while retaining another latched bit. Concurrent same-bit arrival remains a hardware limitation of W1C acknowledgement, not a distinct software access model."
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "TX_DONE"
+bits = "0"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "RX_DONE"
+bits = "1"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "ACK_TX_DONE"
+bits = "2"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "ACK_RX_DONE"
+bits = "3"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "RX_ABORT"
+bits = "4"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "TX_ABORT"
+bits = "5"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "ED_DONE"
+bits = "6"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "EVENTS_7"
+bits = "7"
+class = "write-one-to-clear"
+description = "Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT."
+
+[[registers.fields]]
+name = "TIMER0_OVERFLOW"
+bits = "8"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "TIMER1_OVERFLOW"
+bits = "9"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "CLOCK_COUNT_MATCH"
+bits = "10"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "TX_SFD_DONE"
+bits = "11"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "RX_SFD_DONE"
+bits = "12"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "EVENTS_13"
+bits = "13"
+class = "write-one-to-clear"
+description = "Partition of the open vendor events field, bits 13:13; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT."
+
+[[registers]]
+name = "RX_ABORT_ENABLE"
+offset = 0x68
+description = "Low thirty-one receive-abort enable bits mutated by public LL accessors. Only the finite abort-reason values named by the LL are semantically classified."
+reserved = { mask = 0x80000000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "RX_STOP"
+bits = "0"
+class = "plain"
+description = "Enable bit of abort reason 1 (rx stop)."
+
+[[registers.fields]]
+name = "SFD_TIMEOUT"
+bits = "1"
+class = "plain"
+description = "Enable bit of abort reason 2 (sfd timeout)."
+
+[[registers.fields]]
+name = "CRC_ERROR"
+bits = "2"
+class = "plain"
+description = "Enable bit of abort reason 3 (crc error)."
+
+[[registers.fields]]
+name = "INVALID_LENGTH"
+bits = "3"
+class = "plain"
+description = "Enable bit of abort reason 4 (invalid length)."
+
+[[registers.fields]]
+name = "FILTER_FAIL"
+bits = "4"
+class = "plain"
+description = "Enable bit of abort reason 5 (filter fail)."
+
+[[registers.fields]]
+name = "NO_RSS"
+bits = "5"
+class = "plain"
+description = "Enable bit of abort reason 6 (no rss)."
+
+[[registers.fields]]
+name = "COEXISTENCE_BREAK"
+bits = "6"
+class = "plain"
+description = "Enable bit of abort reason 7 (coexistence break)."
+
+[[registers.fields]]
+name = "UNEXPECTED_ACK"
+bits = "7"
+class = "plain"
+description = "Enable bit of abort reason 8 (unexpected ack)."
+
+[[registers.fields]]
+name = "RX_RESTART"
+bits = "8"
+class = "plain"
+description = "Enable bit of abort reason 9 (rx restart)."
+
+[[registers.fields]]
+name = "RX_ABORT_EN_9_14"
+bits = "14:9"
+class = "plain"
+description = "Partition of the open vendor rx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "TX_ACK_TIMEOUT"
+bits = "15"
+class = "plain"
+description = "Enable bit of abort reason 16 (tx ack timeout)."
+
+[[registers.fields]]
+name = "TX_ACK_STOP"
+bits = "16"
+class = "plain"
+description = "Enable bit of abort reason 17 (tx ack stop)."
+
+[[registers.fields]]
+name = "TX_ACK_COEXISTENCE_BREAK"
+bits = "17"
+class = "plain"
+description = "Enable bit of abort reason 18 (tx ack coexistence break)."
+
+[[registers.fields]]
+name = "ENHANCED_ACK_SECURITY_ERROR"
+bits = "18"
+class = "plain"
+description = "Enable bit of abort reason 19 (enhanced ack security error)."
+
+[[registers.fields]]
+name = "RX_ABORT_EN_19_22"
+bits = "22:19"
+class = "plain"
+description = "Partition of the open vendor rx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "ED_ABORT"
+bits = "23"
+class = "plain"
+description = "Enable bit of abort reason 24 (ed abort)."
+
+[[registers.fields]]
+name = "ED_STOP"
+bits = "24"
+class = "plain"
+description = "Enable bit of abort reason 25 (ed stop)."
+
+[[registers.fields]]
+name = "ED_COEXISTENCE_REJECT"
+bits = "25"
+class = "plain"
+description = "Enable bit of abort reason 26 (ed coexistence reject)."
+
+[[registers.fields]]
+name = "RX_ABORT_EN_26_30"
+bits = "30:26"
+class = "plain"
+description = "Partition of the open vendor rx_abort_en field, bits 30:26; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT."
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers]]
+name = "PENDING_CONFIG"
+offset = 0x6c
+description = "Selected outgoing acknowledgment frame-pending bit. The untouched timeout field remains absent."
+reserved = { mask = 0xfffe, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "FRAME_PENDING"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "PENDING_TIMEOUT"
+bits = "31:16"
+class = "plain"
+description = "Open vendor pending_cfg.pending_timeout field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers]]
+name = "COEX_PTI"
+offset = 0x70
+description = "Selected coexistence priority fields. The public disable-coexistence helper writes value three to each through two preserving field updates. Other antenna and RF controls remain absent."
+reserved = { mask = 0xfffc0000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "TXRX_PTI"
+bits = "4:0"
+class = "plain"
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "ACK_PTI"
+bits = "9:5"
+class = "plain"
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "CLOSE_RF_SEL"
+bits = "10"
+class = "plain"
+description = "Open vendor pti.close_rf_sel field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "ANT_MODE"
+bits = "13:11"
+class = "plain"
+description = "Open vendor pti.ant_mode field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "HW_TX_ACK_ANT_MODE"
+bits = "16:14"
+class = "plain"
+description = "Open vendor pti.hw_tx_ack_ant_mode field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers.fields]]
+name = "STBY_COEX_GRANT_MASK"
+bits = "17"
+class = "plain"
+description = "Open vendor pti.stby_coex_grant_mask field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+
+[[registers]]
+name = "TX_ABORT_ENABLE"
+offset = 0x78
+description = "Low thirty-one transmit-abort enable bits mutated by public LL accessors. Only the finite abort-reason values named by the LL are semantically classified."
+reserved = { mask = 0x80000000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "RX_ACK_STOP"
+bits = "0"
+class = "plain"
+description = "Enable bit of abort reason 1 (rx ack stop)."
+
+[[registers.fields]]
+name = "RX_ACK_SFD_TIMEOUT"
+bits = "1"
+class = "plain"
+description = "Enable bit of abort reason 2 (rx ack sfd timeout)."
+
+[[registers.fields]]
+name = "RX_ACK_CRC_ERROR"
+bits = "2"
+class = "plain"
+description = "Enable bit of abort reason 3 (rx ack crc error)."
+
+[[registers.fields]]
+name = "RX_ACK_INVALID_LENGTH"
+bits = "3"
+class = "plain"
+description = "Enable bit of abort reason 4 (rx ack invalid length)."
+
+[[registers.fields]]
+name = "RX_ACK_FILTER_FAIL"
+bits = "4"
+class = "plain"
+description = "Enable bit of abort reason 5 (rx ack filter fail)."
+
+[[registers.fields]]
+name = "RX_ACK_NO_RSS"
+bits = "5"
+class = "plain"
+description = "Enable bit of abort reason 6 (rx ack no rss)."
+
+[[registers.fields]]
+name = "RX_ACK_COEXISTENCE_BREAK"
+bits = "6"
+class = "plain"
+description = "Enable bit of abort reason 7 (rx ack coexistence break)."
+
+[[registers.fields]]
+name = "RX_ACK_TYPE_NOT_ACK"
+bits = "7"
+class = "plain"
+description = "Enable bit of abort reason 8 (rx ack type not ack)."
+
+[[registers.fields]]
+name = "RX_ACK_RESTART"
+bits = "8"
+class = "plain"
+description = "Enable bit of abort reason 9 (rx ack restart)."
+
+[[registers.fields]]
+name = "TX_ABORT_EN_9_14"
+bits = "14:9"
+class = "plain"
+description = "Partition of the open vendor tx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "RX_ACK_TIMEOUT"
+bits = "15"
+class = "plain"
+description = "Enable bit of abort reason 16 (rx ack timeout)."
+
+[[registers.fields]]
+name = "TX_STOP"
+bits = "16"
+class = "plain"
+description = "Enable bit of abort reason 17 (tx stop)."
+
+[[registers.fields]]
+name = "TX_COEXISTENCE_BREAK"
+bits = "17"
+class = "plain"
+description = "Enable bit of abort reason 18 (tx coexistence break)."
+
+[[registers.fields]]
+name = "TX_SECURITY_ERROR"
+bits = "18"
+class = "plain"
+description = "Enable bit of abort reason 19 (tx security error)."
+
+[[registers.fields]]
+name = "TX_ABORT_EN_19_22"
+bits = "22:19"
+class = "plain"
+description = "Partition of the open vendor tx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "CCA_FAILED"
+bits = "23"
+class = "plain"
+description = "Enable bit of abort reason 24 (cca failed)."
+
+[[registers.fields]]
+name = "CCA_BUSY"
+bits = "24"
+class = "plain"
+description = "Enable bit of abort reason 25 (cca busy)."
+
+[[registers.fields]]
+name = "TX_ABORT_EN_25_30"
+bits = "30:25"
+class = "plain"
+description = "Partition of the open vendor tx_abort_en field, bits 30:25; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers]]
+name = "ENHANCED_ACK_NOTIFY"
+offset = 0x7c
+description = "Write-only enhanced-ack generation-done notification word. The public common LL writes the complete value one; trigger/clear behavior is not inferred."
+
+[[registers.fields]]
+name = "NOTIFY_IMAGE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "RX_STATUS"
+offset = 0x80
+description = "Receive status snapshot returned whole by the public common LL; selected subfields are independently named by the struct and accessor set."
+reserved = { mask = 0xffc0fe00, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "FILTER_FAIL_REASON"
+bits = "3:0"
+class = "read-only"
+
+[[registers.fields]]
+name = "ABORT_REASON"
+bits = "8:4"
+class = "read-only"
+values = [{ name = "RX_STOP", value = 1 }, { name = "SFD_TIMEOUT", value = 2 }, { name = "CRC_ERROR", value = 3 }, { name = "INVALID_LENGTH", value = 4 }, { name = "FILTER_FAIL", value = 5 }, { name = "NO_RSS", value = 6 }, { name = "COEX_BREAK", value = 7 }, { name = "UNEXPECTED_ACK", value = 8 }, { name = "RX_RESTART", value = 9 }, { name = "TX_ACK_TIMEOUT", value = 16 }, { name = "TX_ACK_STOP", value = 17 }, { name = "TX_ACK_COEX_BREAK", value = 18 }, { name = "ENHANCED_ACK_SECURITY_ERROR", value = 19 }, { name = "ED_ABORT", value = 24 }, { name = "ED_STOP", value = 25 }, { name = "ED_COEX_REJECT", value = 26 }]
+
+[[registers.fields]]
+name = "STATE"
+bits = "18:16"
+class = "read-only"
+description = "Three-bit receive state. The public LL only establishes that value one is RECEIVE_SFD and tests for later states with a greater-than comparison."
+
+[[registers.fields]]
+name = "CURRENT_CHANNEL_INDEX"
+bits = "19"
+class = "read-only"
+
+[[registers.fields]]
+name = "PREAMBLE_MATCH"
+bits = "20"
+class = "read-only"
+
+[[registers.fields]]
+name = "SFD_MATCH"
+bits = "21"
+class = "read-only"
+
+[[registers]]
+name = "TX_STATUS"
+offset = 0x84
+description = "Transmit status snapshot returned whole by the public common LL; abort and security-error subfields have public finite reason enums."
+reserved = { mask = 0xfff0fe00, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "STATE"
+bits = "3:0"
+class = "read-only"
+
+[[registers.fields]]
+name = "ABORT_REASON"
+bits = "8:4"
+class = "read-only"
+values = [{ name = "RX_ACK_STOP", value = 1 }, { name = "RX_ACK_SFD_TIMEOUT", value = 2 }, { name = "RX_ACK_CRC_ERROR", value = 3 }, { name = "RX_ACK_INVALID_LENGTH", value = 4 }, { name = "RX_ACK_FILTER_FAIL", value = 5 }, { name = "RX_ACK_NO_RSS", value = 6 }, { name = "RX_ACK_COEX_BREAK", value = 7 }, { name = "RX_ACK_TYPE_NOT_ACK", value = 8 }, { name = "RX_ACK_RESTART", value = 9 }, { name = "RX_ACK_TIMEOUT", value = 16 }, { name = "TX_STOP", value = 17 }, { name = "TX_COEX_BREAK", value = 18 }, { name = "TX_SECURITY_ERROR", value = 19 }, { name = "CCA_FAILED", value = 24 }, { name = "CCA_BUSY", value = 25 }]
+
+[[registers.fields]]
+name = "SECURITY_ERROR"
+bits = "19:16"
+class = "read-only"
+values = [{ name = "FRAME_CONTROL_NOT_SET", value = 1 }, { name = "RESERVED_SECURITY_LEVEL", value = 2 }, { name = "HEADER_PARSE", value = 3 }, { name = "PAYLOAD_ERROR", value = 4 }, { name = "FRAME_COUNTER_SUPPRESSION", value = 5 }]
+
+[[registers]]
+name = "STATUS"
+offset = 0x88
+description = "bbmac_idle_for_swrst requires the observed low four-bit field to be zero before reporting idle."
+
+[[registers.fields]]
+name = "TXRX_STATE"
+bits = "3:0"
+class = "read-only"
+description = "The reset-idle predicate fails when this exact field is nonzero."
+
+[[registers]]
+name = "DTM_CFG"
+offset = 0x98
+description = "Open vendor dtm_cfg word. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset value is claimed."
+reserved = { mask = 0xc000f000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "DTM_TX_LENGTH"
+bits = "7:0"
+class = "read-only"
+
+[[registers.fields]]
+name = "DTM_TX_PAYLOAD_TYPE"
+bits = "11:8"
+class = "read-only"
+
+[[registers.fields]]
+name = "DTM_HOP_FREQ"
+bits = "23:16"
+class = "read-only"
+
+[[registers.fields]]
+name = "DTM_CONT_RX_EN"
+bits = "24"
+class = "read-only"
+
+[[registers.fields]]
+name = "DTM_ON"
+bits = "25"
+class = "read-only"
+
+[[registers.fields]]
+name = "EXTEND_PREAMBLE_BYTE_NUM"
+bits = "29:26"
+class = "read-only"
+
+[[registers]]
+name = "TIMER0_THRESHOLD"
+offset = 0xa8
+description = "Complete timer-zero threshold word written by the public common LL."
+
+[[registers.fields]]
+name = "THRESHOLD"
+bits = "31:0"
+class = "write-only"
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "TIMER0_VALUE"
+offset = 0xac
+description = "Complete timer-zero value word read by the public common LL."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "TIMER1_THRESHOLD"
+offset = 0xb0
+description = "Complete timer-one threshold word written by the public common LL."
+
+[[registers.fields]]
+name = "THRESHOLD"
+bits = "31:0"
+class = "write-only"
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "TIMER1_VALUE"
+offset = 0xb4
+description = "Complete timer-one value word read by the public common LL."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "SFD_WAIT"
+offset = 0xc4
+description = "Open vendor sfd_wait word. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset value is claimed."
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "SFD_WAIT_SYMBOL_NUM"
+bits = "3:0"
+class = "read-only"
+
+[[registers]]
+name = "TX_DMA_ADDRESS"
+offset = 0xd0
+description = "Complete transmit frame-buffer address written by the public common LL. Address validity and buffer lifetime remain HAL responsibilities."
+
+[[registers.fields]]
+name = "ADDRESS"
+bits = "31:0"
+class = "write-only"
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "TXDMA_ERR"
+offset = 0xd8
+description = "Transmit DMA error code, named by the public register header; no public LL accessor reads it."
+
+[[registers.fields]]
+name = "TXDMA_ERR"
+bits = "3:0"
+class = "read-only"
+description = "Transmit DMA error code; no value is assigned a meaning."
+
+[[registers]]
+name = "RX_DMA_ADDRESS"
+offset = 0xe0
+description = "Complete receive frame-buffer address written by the public common LL. Address validity and buffer lifetime remain HAL responsibilities."
+
+[[registers.fields]]
+name = "ADDRESS"
+bits = "31:0"
+class = "write-only"
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "RXDMA_ERR"
+offset = 0xe8
+description = "Receive DMA error code, named by the public register header; no public LL accessor reads it."
+
+[[registers.fields]]
+name = "RXDMA_ERR"
+bits = "3:0"
+class = "read-only"
+description = "Receive DMA error code; no value is assigned a meaning."
+
+[[registers]]
+name = "PAON_DELAY"
+offset = 0x100
+description = "Power-amplifier-on delay. The pinned public driver and LL never write it; the reset value applies unless another owner does. Physical units remain outside the PAC."
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "PAON_DELAY"
+bits = "9:0"
+class = "plain"
+description = "Ten-bit power-amplifier-on delay."
+
+[[registers]]
+name = "TXON_DELAY"
+offset = 0x104
+description = "Transmit-on delay written by the pinned ESP32-S31 IEEE 802.15.4 MAC initializer. The literal value 45 is reviewed; Physical units remain outside the PAC."
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "TXON_DELAY"
+bits = "9:0"
+class = "plain"
+description = "Ten-bit preserving field written with literal 45 by ieee802154_txon_delay_set."
+write-range = { min = 0x0, max = 0x3ff }
+
+[[registers]]
+name = "TXEN_STOP_DELAY"
+offset = 0x108
+description = "Transmit-enable stop delay. The pinned public driver and LL never write it; physical units remain outside the PAC."
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "TXEN_STOP_DLY"
+bits = "5:0"
+class = "plain"
+description = "Six-bit transmit-enable stop delay."
+
+[[registers]]
+name = "TXOFF_DELAY"
+offset = 0x10c
+description = "Transmit-off delay written by the pinned ESP32-S31 IEEE 802.15.4 MAC initializer. The literal value 5 is reviewed; Physical units remain outside the PAC."
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "TXOFF_DELAY"
+bits = "5:0"
+class = "plain"
+description = "Six-bit preserving field written with literal 5 by ieee802154_txon_delay_set."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers]]
+name = "RXON_DELAY"
+offset = 0x110
+description = "Receive-on delay written by the pinned ESP32-S31 IEEE 802.15.4 MAC initializer. The literal value 50 is reviewed; Physical units remain outside the PAC."
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "RXON_DELAY"
+bits = "10:0"
+class = "plain"
+description = "Eleven-bit preserving field written with literal 50 by ieee802154_txon_delay_set."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers]]
+name = "TXRX_SWITCH_DELAY"
+offset = 0x114
+description = "Transmit/receive turnaround delay written by the pinned ESP32-S31 IEEE 802.15.4 MAC initializer. The literal value 117 is reviewed; Physical units remain outside the PAC."
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "TXRX_SWITCH_DELAY"
+bits = "9:0"
+class = "plain"
+description = "Ten-bit preserving field written with literal 117 by ieee802154_txon_delay_set."
+write-range = { min = 0x0, max = 0x3ff }
+
+[[registers]]
+name = "CONT_RX_DELAY"
+offset = 0x118
+description = "Continuous-receive delay. The pinned public driver and LL never write it; physical units remain outside the PAC."
+
+[[registers.fields]]
+name = "CONT_RX_DELAY"
+bits = "5:0"
+class = "plain"
+description = "Six-bit continuous-receive delay."
+
+[[registers]]
+name = "DCDC_CTRL"
+offset = 0x11c
+description = "MAC control of the DC-DC converter around transmission. The pinned public driver and LL never write it; physical units of the delays remain outside the PAC."
+reserved = { mask = 0x7ffe0000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "DCDC_PRE_UP_DELAY"
+bits = "7:0"
+class = "plain"
+description = "Delay before the DC-DC raise."
+
+[[registers.fields]]
+name = "DCDC_DOWN_DELAY"
+bits = "15:8"
+class = "plain"
+description = "Delay before the DC-DC drop."
+
+[[registers.fields]]
+name = "DCDC_CTRL_EN"
+bits = "16"
+class = "plain"
+description = "The MAC controls the DC-DC converter."
+
+[[registers.fields]]
+name = "TX_DCDC_UP"
+bits = "31"
+class = "plain"
+description = "Raise the DC-DC converter for transmission."
+
+[[registers]]
+name = "SECURITY_CONTROL"
+offset = 0x128
+description = "Transmit-security enable and payload-offset fields used by the public common LL."
+reserved = { mask = 0xffff80fe, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "TX_ENABLE"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "PAYLOAD_OFFSET"
+bits = "14:8"
+class = "plain"
+
+[[registers]]
+name = "SECURITY_ADDRESS_LOW"
+offset = 0x12c
+description = "Security extended-address bytes zero through three packed little-endian by the public common LL."
+
+[[registers.fields]]
+name = "ADDRESS_WORD"
+bits = "31:0"
+class = "write-only"
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "SECURITY_ADDRESS_HIGH"
+offset = 0x130
+description = "Security extended-address bytes four through seven packed little-endian by the public common LL."
+
+[[registers.fields]]
+name = "ADDRESS_WORD"
+bits = "31:0"
+class = "write-only"
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "SECURITY_KEY%s"
+offset = 0x134
+dim = { count = 4, stride = 0x4 }
+description = "One little-endian four-byte word of the sixteen-byte transmit-security key written by the public common LL. Key lifecycle and zeroization remain HAL obligations."
+
+[[registers.fields]]
+name = "KEY_WORD"
+bits = "31:0"
+class = "write-only"
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "SFD_TIMEOUT_COUNTER"
+offset = 0x144
+description = "Two read-only diagnostic counters independently read by the common and ESP32-S31 LL headers."
+
+[[registers.fields]]
+name = "SFD_TIMEOUT_COUNT"
+bits = "15:0"
+class = "read-only"
+
+[[registers.fields]]
+name = "RX_FILTER_NOT_WORK_COUNT"
+bits = "31:16"
+class = "read-only"
+
+[[registers]]
+name = "CRC_ERROR_COUNTER"
+offset = 0x148
+description = "Two read-only diagnostic counters independently read by the common and ESP32-S31 LL headers."
+
+[[registers.fields]]
+name = "CRC_ERROR_COUNT"
+bits = "15:0"
+class = "read-only"
+
+[[registers.fields]]
+name = "RX_PREAMBLE_DETECT_ERROR_COUNT"
+bits = "31:16"
+class = "read-only"
+
+[[registers]]
+name = "ED_ABORT_COUNTER"
+offset = 0x14c
+
+[[registers.fields]]
+name = "COUNT"
+bits = "15:0"
+class = "read-only"
+
+[[registers]]
+name = "CCA_FAIL_COUNTER"
+offset = 0x150
+
+[[registers.fields]]
+name = "COUNT"
+bits = "15:0"
+class = "read-only"
+
+[[registers]]
+name = "RX_FILTER_FAIL_COUNTER"
+offset = 0x154
+
+[[registers.fields]]
+name = "COUNT"
+bits = "15:0"
+class = "read-only"
+
+[[registers]]
+name = "NO_RSS_DETECT_COUNTER"
+offset = 0x158
+
+[[registers.fields]]
+name = "COUNT"
+bits = "15:0"
+class = "read-only"
+
+[[registers]]
+name = "RX_ABORT_COEX_COUNTER"
+offset = 0x15c
+
+[[registers.fields]]
+name = "COUNT"
+bits = "15:0"
+class = "read-only"
+
+[[registers]]
+name = "RX_RESTART_COUNTER"
+offset = 0x160
+
+[[registers.fields]]
+name = "COUNT"
+bits = "15:0"
+class = "read-only"
+
+[[registers]]
+name = "TX_ACK_ABORT_COEX_COUNTER"
+offset = 0x164
+
+[[registers.fields]]
+name = "COUNT"
+bits = "15:0"
+class = "read-only"
+
+[[registers]]
+name = "ED_SCAN_BREAK_COEX_COUNTER"
+offset = 0x168
+
+[[registers.fields]]
+name = "COUNT"
+bits = "15:0"
+class = "read-only"
+
+[[registers]]
+name = "RX_ACK_ABORT_COEX_COUNTER"
+offset = 0x16c
+
+[[registers.fields]]
+name = "COUNT"
+bits = "15:0"
+class = "read-only"
+
+[[registers]]
+name = "RX_ACK_TIMEOUT_COUNTER"
+offset = 0x170
+
+[[registers.fields]]
+name = "COUNT"
+bits = "15:0"
+class = "read-only"
+
+[[registers]]
+name = "TX_BREAK_COEX_COUNTER"
+offset = 0x174
+
+[[registers.fields]]
+name = "COUNT"
+bits = "15:0"
+class = "read-only"
+
+[[registers]]
+name = "TX_SECURITY_ERROR_COUNTER"
+offset = 0x178
+
+[[registers.fields]]
+name = "COUNT"
+bits = "15:0"
+class = "read-only"
+
+[[registers]]
+name = "CCA_BUSY_COUNTER"
+offset = 0x17c
+
+[[registers.fields]]
+name = "COUNT"
+bits = "15:0"
+class = "read-only"
+
+[[registers]]
+name = "DIAGNOSTIC_COUNTER_CLEAR"
+offset = 0x180
+description = "Write-only clear bitmap for the seventeen named diagnostic counters. The public common LL writes a complete caller-supplied image; no self-clearing timing is inferred."
+reserved = { mask = 0xfffe0000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
+
+[[registers.fields]]
+name = "ED_SCAN_BREAK_COEX"
+bits = "0"
+class = "write-only"
+
+[[registers.fields]]
+name = "CCA_BUSY"
+bits = "1"
+class = "write-only"
+
+[[registers.fields]]
+name = "CCA_FAIL"
+bits = "2"
+class = "write-only"
+
+[[registers.fields]]
+name = "ED_ABORT"
+bits = "3"
+class = "write-only"
+
+[[registers.fields]]
+name = "TX_SECURITY_ERROR"
+bits = "4"
+class = "write-only"
+
+[[registers.fields]]
+name = "TX_BREAK_COEX"
+bits = "5"
+class = "write-only"
+
+[[registers.fields]]
+name = "TX_ACK_ABORT_COEX"
+bits = "6"
+class = "write-only"
+
+[[registers.fields]]
+name = "RX_ACK_TIMEOUT"
+bits = "7"
+class = "write-only"
+
+[[registers.fields]]
+name = "RX_RESTART"
+bits = "8"
+class = "write-only"
+
+[[registers.fields]]
+name = "RX_ACK_ABORT_COEX"
+bits = "9"
+class = "write-only"
+
+[[registers.fields]]
+name = "RX_ABORT_COEX"
+bits = "10"
+class = "write-only"
+
+[[registers.fields]]
+name = "NO_RSS_DETECT"
+bits = "11"
+class = "write-only"
+
+[[registers.fields]]
+name = "RX_FILTER_FAIL"
+bits = "12"
+class = "write-only"
+
+[[registers.fields]]
+name = "CRC_ERROR"
+bits = "13"
+class = "write-only"
+
+[[registers.fields]]
+name = "SFD_TIMEOUT"
+bits = "14"
+class = "write-only"
+
+[[registers.fields]]
+name = "RX_FILTER_NOT_WORK"
+bits = "15"
+class = "write-only"
+
+[[registers.fields]]
+name = "RX_PREAMBLE_DETECT_ERROR"
+bits = "16"
+class = "write-only"

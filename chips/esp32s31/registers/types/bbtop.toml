@@ -1,0 +1,264 @@
+# An analog-I2C block type of the curated ESP32-S31 register model.
+schema = 3
+
+[type]
+name = "BBTOP"
+description = "The BBTOP analog-I2C block (code 0x67)."
+space = "analog-i2c"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[review]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[review.opaque]
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."TX_IQ_LOOPBACK_ENABLE.TX_IQ_LOOPBACK_ENABLE"]
+sources = ["BLOB_LIBPHY_PHY_RXIQ_CAL_INIT"]
+
+[review.entity."TX_IQ_LOOPBACK_ENABLE"]
+sources = ["BLOB_LIBPHY_PHY_RXIQ_CAL_INIT"]
+
+[review.entity."RF_CLOSE_CONTROL.VALUE"]
+sources = ["BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907"]
+
+[review.entity."RF_CLOSE_CONTROL"]
+sources = ["BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907"]
+
+[review.entity."SHARED_RX_GAIN_CALIBRATION_ENABLE.SHARED_RX_GAIN_CALIBRATION_ENABLE"]
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[review.entity."SHARED_RX_GAIN_CALIBRATION_ENABLE"]
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[registers]]
+name = "TX_IQ_LOOPBACK_ENABLE"
+offset = 0x0
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x40, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "TX_IQ_LOOPBACK_ENABLE"
+bits = "6"
+class = "plain"
+description = "Transmit-IQ calibration loopback enable bit."
+
+[[registers]]
+name = "RF_CLOSE_CONTROL"
+offset = 0x2
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "VALUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "SHARED_RX_GAIN_CALIBRATION_ENABLE"
+offset = 0x3
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x4, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "SHARED_RX_GAIN_CALIBRATION_ENABLE"
+bits = "2"
+class = "plain"
+description = "Shared receive-gain calibration enable bit."
+
+[[registers]]
+name = "BLUETOOTH_TX_POWER_HIGH_0"
+offset = 0x1e
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x7f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "BLUETOOTH_TX_POWER_HIGH_0"
+bits = "5:0"
+class = "plain"
+description = "Six-bit field in the first high Bluetooth transmit-power analog register."
+
+[[registers.fields]]
+name = "BIT_6_OPAQUE"
+bits = "6"
+class = "plain"
+description = "Bit six forced in the high filter-DCAP command-memory and initialization value."
+
+[[registers]]
+name = "BLUETOOTH_TX_POWER_HIGH_1"
+offset = 0x1f
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x3f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "BLUETOOTH_TX_POWER_HIGH_1"
+bits = "5:0"
+class = "plain"
+description = "Six-bit field in the second high Bluetooth transmit-power analog register."
+
+[[registers]]
+name = "BYTE_04_OPAQUE"
+offset = 0x4
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_05_OPAQUE"
+offset = 0x5
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_06_OPAQUE"
+offset = 0x6
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_07_OPAQUE"
+offset = 0x7
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_0C_OPAQUE"
+offset = 0xc
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_0D_OPAQUE"
+offset = 0xd
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_0E_OPAQUE"
+offset = 0xe
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_0F_OPAQUE"
+offset = 0xf
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_14_OPAQUE"
+offset = 0x14
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_15_OPAQUE"
+offset = 0x15
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_16_OPAQUE"
+offset = 0x16
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_17_OPAQUE"
+offset = 0x17
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_18_OPAQUE"
+offset = 0x18
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_19_OPAQUE"
+offset = 0x19
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_1C_OPAQUE"
+offset = 0x1c
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "BYTE_1D_OPAQUE"
+offset = 0x1d
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"

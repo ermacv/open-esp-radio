@@ -1,11 +1,12 @@
 # Imported by `cargo registers import` from the pinned vendor SVD and
-# ESP-IDF headers (registers/import.toml).
+# ESP-IDF headers (registers/import.toml), with the curated refinements
+# merged into it; this file, not the import, is the source of truth.
 schema = 3
 
 [type]
 name = "MODEM_LPCON"
 description = "The modem low-power controller: the modem's low-power clocks, their sources and dividers, and its low-power resets."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_MODEM_LPCON_STRUCT", "BLOB_LIBPHY_PHY_GET_XTAL_FREQ"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"]
@@ -13,6 +14,105 @@ provenance = "imported"
 accuracy = "exact"
 completeness = "complete"
 naming = "vendor"
+
+[review.entity."LP_TIMER_CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_MODEM_LPCON_STRUCT", "S31_ESP_PACS_SVD"]
+
+[review.entity."LP_TIMER_CONF.CLK_LP_TIMER_SEL_OSC_SLOW"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."LP_TIMER_CONF.CLK_LP_TIMER_SEL_OSC_FAST"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."LP_TIMER_CONF.CLK_LP_TIMER_SEL_XTAL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."LP_TIMER_CONF.CLK_LP_TIMER_SEL_XTAL32K"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."LP_TIMER_CONF.CLK_LP_TIMER_DIV_NUM"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."COEX_LP_CLK_CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_MODEM_LPCON_STRUCT", "S31_ESP_PACS_SVD"]
+
+[review.entity."COEX_LP_CLK_CONF.CLK_COEX_LP_SEL_OSC_SLOW"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."COEX_LP_CLK_CONF.CLK_COEX_LP_SEL_OSC_FAST"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."COEX_LP_CLK_CONF.CLK_COEX_LP_SEL_XTAL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."COEX_LP_CLK_CONF.CLK_COEX_LP_SEL_XTAL32K"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."COEX_LP_CLK_CONF.CLK_COEX_LP_DIV_NUM"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."COEX_LP_CLK_CONF.BITS_16_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010F008", "S31_MMIO_DECLARED_2010F008"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WIFI_LP_CLK_CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_MODEM_LPCON_STRUCT", "ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK", "S31_ESP_PACS_SVD"]
+
+[review.entity."WIFI_LP_CLK_CONF.CLK_WIFIPWR_LP_SEL_OSC_SLOW"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."WIFI_LP_CLK_CONF.CLK_WIFIPWR_LP_SEL_OSC_FAST"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."WIFI_LP_CLK_CONF.CLK_WIFIPWR_LP_SEL_XTAL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."WIFI_LP_CLK_CONF.CLK_WIFIPWR_LP_SEL_XTAL32K"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."WIFI_LP_CLK_CONF.CLK_WIFIPWR_LP_DIV_NUM"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_32K_CLK_CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_MODEM_LPCON_STRUCT", "ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_32K_CLK_CONF.CLK_MODEM_32K_SEL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF_POWER_ST"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_MODEM_LPCON_STRUCT", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF_POWER_ST.CLK_WIFIPWR_ST_MAP"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD", "S31_MMIO_USE_2010F020", "S31_MMIO_DECLARED_2010F020"]
+
+[review.entity."CLK_CONF_POWER_ST.CLK_COEX_ST_MAP"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD", "S31_MMIO_USE_2010F020", "S31_MMIO_DECLARED_2010F020"]
+
+[review.entity."CLK_CONF_POWER_ST.CLK_I2C_MST_ST_MAP"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD", "S31_MMIO_USE_2010F020", "S31_MMIO_DECLARED_2010F020"]
+
+[review.entity."CLK_CONF_POWER_ST.CLK_LP_APB_ST_MAP"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_ESP_PACS_SVD", "S31_MMIO_USE_2010F020", "S31_MMIO_DECLARED_2010F020"]
+
+[review.entity."CLK_CONF_POWER_ST.BITS_0_15_OPAQUE"]
+sources = ["S31_MMIO_USE_2010F020", "S31_MMIO_DECLARED_2010F020"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."TICK_CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_MODEM_LPCON_STRUCT", "BLOB_LIBPHY_PHY_GET_XTAL_FREQ", "S31_ESP_PACS_SVD"]
+
+[review.entity."TICK_CONF.MODEM_PWR_TICK_TARGET"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H", "S31_MODEM_LPCON_STRUCT", "BLOB_LIBPHY_PHY_GET_XTAL_FREQ", "S31_ESP_PACS_SVD"]
+
+[review.entity."TICK_CONF.BITS_6_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010F028", "S31_MMIO_DECLARED_2010F028"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
 
 [[registers]]
 name = "TEST_CONF"
@@ -28,6 +128,7 @@ class = "plain"
 [[registers]]
 name = "LP_TIMER_CONF"
 offset = 0x4
+description = "Bluetooth low-power timer source selector and twelve-bit divider."
 reset = { value = 0x0, mask = 0xffff }
 reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
 
@@ -35,61 +136,80 @@ reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUD
 name = "CLK_LP_TIMER_SEL_OSC_SLOW"
 bits = "0"
 class = "plain"
+description = "Select the slow oscillator."
 
 [[registers.fields]]
 name = "CLK_LP_TIMER_SEL_OSC_FAST"
 bits = "1"
 class = "plain"
+description = "Select the fast oscillator."
 
 [[registers.fields]]
 name = "CLK_LP_TIMER_SEL_XTAL"
 bits = "2"
 class = "plain"
+description = "Select the crystal clock."
 
 [[registers.fields]]
 name = "CLK_LP_TIMER_SEL_XTAL32K"
 bits = "3"
 class = "plain"
+description = "Select the 32 kHz crystal clock."
 
 [[registers.fields]]
 name = "CLK_LP_TIMER_DIV_NUM"
 bits = "15:4"
 class = "plain"
+description = "Twelve-bit low-power timer divider image."
+write-range = { min = 0x0, max = 0xfff }
 
 [[registers]]
 name = "COEX_LP_CLK_CONF"
 offset = 0x8
+description = "Coexistence low-power source selector and twelve-bit divider sampled by the coexistence time conversion."
 reset = { value = 0x0, mask = 0xffff }
-reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
 
 [[registers.fields]]
 name = "CLK_COEX_LP_SEL_OSC_SLOW"
 bits = "0"
 class = "plain"
+description = "Select the slow oscillator."
 
 [[registers.fields]]
 name = "CLK_COEX_LP_SEL_OSC_FAST"
 bits = "1"
 class = "plain"
+description = "Select the fast oscillator."
 
 [[registers.fields]]
 name = "CLK_COEX_LP_SEL_XTAL"
 bits = "2"
 class = "plain"
+description = "Select the crystal clock."
 
 [[registers.fields]]
 name = "CLK_COEX_LP_SEL_XTAL32K"
 bits = "3"
 class = "plain"
+description = "Select the 32 kHz crystal clock."
 
 [[registers.fields]]
 name = "CLK_COEX_LP_DIV_NUM"
 bits = "15:4"
 class = "plain"
+description = "Twelve-bit coexistence low-power clock divider image."
+write-range = { min = 0x0, max = 0xfff }
+
+[[registers.fields]]
+name = "BITS_16_31_OPAQUE"
+bits = "31:16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
 
 [[registers]]
 name = "WIFI_LP_CLK_CONF"
 offset = 0xc
+description = "Wi-Fi power-domain low-power source selector and twelve-bit divider."
 reset = { value = 0x0, mask = 0xffff }
 reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
 
@@ -97,26 +217,32 @@ reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUD
 name = "CLK_WIFIPWR_LP_SEL_OSC_SLOW"
 bits = "0"
 class = "plain"
+description = "Select the slow oscillator."
 
 [[registers.fields]]
 name = "CLK_WIFIPWR_LP_SEL_OSC_FAST"
 bits = "1"
 class = "plain"
+description = "Select the fast oscillator."
 
 [[registers.fields]]
 name = "CLK_WIFIPWR_LP_SEL_XTAL"
 bits = "2"
 class = "plain"
+description = "Select the main crystal clock."
 
 [[registers.fields]]
 name = "CLK_WIFIPWR_LP_SEL_XTAL32K"
 bits = "3"
 class = "plain"
+description = "Select the modem 32 kHz clock chosen by MODEM_32K_CLK_CONF."
 
 [[registers.fields]]
 name = "CLK_WIFIPWR_LP_DIV_NUM"
 bits = "15:4"
 class = "plain"
+description = "Twelve-bit Wi-Fi power-domain low-power divider image."
+write-range = { min = 0x0, max = 0xfff }
 
 [[registers]]
 name = "MODEM_SRC_CLK_CONF"
@@ -137,6 +263,7 @@ class = "plain"
 [[registers]]
 name = "MODEM_32K_CLK_CONF"
 offset = 0x14
+description = "Source of the modem 32 kHz clock selected by the low-power XTAL32K selectors."
 reset = { value = 0x0, mask = 0x3 }
 reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
 
@@ -144,6 +271,7 @@ reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUD
 name = "CLK_MODEM_32K_SEL"
 bits = "1:0"
 class = "plain"
+description = "Modem 32 kHz source: zero is the 32 kHz crystal, one the RC32K oscillator and two the external 32 kHz clock."
 
 [[registers]]
 name = "CLK_CONF"
@@ -205,28 +333,38 @@ class = "plain"
 [[registers]]
 name = "CLK_CONF_POWER_ST"
 offset = 0x20
+description = "Four shared clock power-state map fields programmed with the reviewed active-state image."
 reset = { value = 0x0, mask = 0xffff0000 }
-reserved = { mask = 0xffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "BITS_0_15_OPAQUE"
+bits = "15:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
 
 [[registers.fields]]
 name = "CLK_WIFIPWR_ST_MAP"
 bits = "19:16"
 class = "plain"
+description = "Bit 1: Bit one of the Wi-Fi-power clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the Wi-Fi-power clock state map, set by the reviewed shared active-state initialization."
 
 [[registers.fields]]
 name = "CLK_COEX_ST_MAP"
 bits = "23:20"
 class = "plain"
+description = "Bit 1: Bit one of the coexistence clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the coexistence clock state map, set by the reviewed shared active-state initialization."
 
 [[registers.fields]]
 name = "CLK_I2C_MST_ST_MAP"
 bits = "27:24"
 class = "plain"
+description = "Bit 1: Bit one of the PHY-I2C-master clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the PHY-I2C-master clock state map, set by the reviewed shared active-state initialization."
 
 [[registers.fields]]
 name = "CLK_LP_APB_ST_MAP"
 bits = "31:28"
 class = "plain"
+description = "Bit 1: Bit one of the low-power APB clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the low-power APB clock state map, set by the reviewed shared active-state initialization."
 
 [[registers]]
 name = "RST_CONF"
@@ -262,13 +400,20 @@ class = "write-only"
 [[registers]]
 name = "TICK_CONF"
 offset = 0x28
+description = "Fixed-crystal modem-power tick target published by complete phy_get_xtal_freq."
 reset = { value = 0x27, mask = 0x3f }
-reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
 
 [[registers.fields]]
 name = "MODEM_PWR_TICK_TARGET"
 bits = "5:0"
 class = "plain"
+description = "Six-bit target replaced with crystal_frequency_mhz minus one by complete phy_get_xtal_freq."
+
+[[registers.fields]]
+name = "BITS_6_31_OPAQUE"
+bits = "31:6"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
 
 [[registers]]
 name = "MEM_CONF"

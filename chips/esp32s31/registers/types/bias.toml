@@ -1,0 +1,47 @@
+# An analog-I2C block type of the curated ESP32-S31 register model.
+schema = 3
+
+[type]
+name = "BIAS"
+description = "The BIAS analog-I2C block (code 0x6a)."
+space = "analog-i2c"
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_BIAS"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_BIAS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "vendor"
+
+[[registers]]
+name = "I2C_BIAS_DREG_1P6"
+offset = 0x0
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "I2C_BIAS_DREG_1P6"
+bits = "3:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BIAS_DREG_1P1"
+bits = "7:4"
+class = "plain"
+
+[[registers]]
+name = "I2C_BIAS_DREG_1P1_PVT"
+offset = 0x1
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "I2C_BIAS_DREG_1P1_PVT"
+bits = "3:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_BIAS_DREG_2P2_PVT"
+bits = "7:4"
+class = "plain"

@@ -1,11 +1,12 @@
 # Imported by `cargo registers import` from the pinned vendor SVD and
-# ESP-IDF headers (registers/import.toml).
+# ESP-IDF headers (registers/import.toml), with the curated refinements
+# merged into it; this file, not the import, is the source of truth.
 schema = 3
 
 [type]
 name = "I2C_ANA_MST"
 description = "The analog-I2C master that reaches the radio's analog blocks."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_I2C", "BLOB_LIBPHY_PHY_I2C"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"]
@@ -14,15 +15,229 @@ accuracy = "exact"
 completeness = "complete"
 naming = "vendor"
 
+[review.entity."I2C0_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."I2C0_CTRL.SLAVE_ADDR"]
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."I2C0_CTRL.SLAVE_REG_ADDR"]
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."I2C0_CTRL.DATA"]
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."I2C0_CTRL.READ_WRITE"]
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."I2C0_CTRL.I2C0_BUSY"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
+
+[review.entity."I2C0_CTRL.START_OR_RESET"]
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."I2C1_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."I2C1_CTRL.SLAVE_ADDR"]
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."I2C1_CTRL.SLAVE_REG_ADDR"]
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."I2C1_CTRL.DATA"]
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."I2C1_CTRL.READ_WRITE"]
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."I2C1_CTRL.I2C1_BUSY"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
+
+[review.entity."I2C1_CTRL.START_OR_RESET"]
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."I2C1_CTRL.BITS_27_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010F804", "S31_MMIO_DECLARED_2010F804"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."ANA_CONF0"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."ANA_CONF0.BBPLL_CAL_MODE"]
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+naming = "descriptive"
+
+[review.entity."ANA_CONF0.PHY_REGISTER_ENABLE"]
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."ANA_CONF0.PHY_REGISTER_MODE"]
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."ANA_CONF0.ANA_STATUS0"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."ANA_CONF0.BITS_0_1_OPAQUE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"]
+provenance = "imported"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."ANA_CONF0.BITS_4_5_OPAQUE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"]
+provenance = "imported"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."ANA_CONF0.BITS_7_8_OPAQUE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"]
+provenance = "imported"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."ANA_CONF0.BITS_11_23_OPAQUE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"]
+provenance = "imported"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."ANA_CONF1"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."ANA_CONF1.ANA_CONF1"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."ANA_CONF1.ANA_STATUS1"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."ANA_CONF2"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."ANA_CONF2.PHY_HOST_MAP"]
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "observed"
+naming = "descriptive"
+
+[review.entity."ANA_CONF2.BITS_0_3_OPAQUE"]
+sources = ["S31_MMIO_USE_2010F820", "S31_MMIO_DECLARED_2010F820"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."ANA_CONF2.ANA_STATUS2"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_MMIO_USE_2010F820", "S31_MMIO_DECLARED_2010F820"]
+
+[review.entity."ANA_CONF2.BITS_18_23_OPAQUE"]
+sources = ["S31_MMIO_USE_2010F820", "S31_MMIO_DECLARED_2010F820"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."I2C0_CTRL1"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."I2C0_CTRL1.I2C0_SCL_PULSE_DUR"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."I2C0_CTRL1.I2C0_SDA_SIDE_GUARD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."I2C1_CTRL1"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."I2C1_CTRL1.I2C1_SCL_PULSE_DUR"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."I2C1_CTRL1.I2C1_SDA_SIDE_GUARD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."HW_I2C_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."HW_I2C_CTRL.HW_I2C_SCL_PULSE_DUR"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."HW_I2C_CTRL.HW_I2C_SDA_SIDE_GUARD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."HW_I2C_CTRL.ARBITER_DIS"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."HW_I2C_CTRL.BITS_12_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010F82C", "S31_MMIO_DECLARED_2010F82C"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
 [[registers]]
 name = "I2C0_CTRL"
 offset = 0x0
+description = "Analog-register I2C host-0 command and completion word. The ESP-IDF header declares bits 24:0 as one field I2C0_CTRL; the cited sources subdivide it."
 reset = { value = 0x0, mask = 0x3ffffff }
-reserved = { mask = 0xfc000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"] }
+reserved = { mask = 0xf8000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"] }
 
 [[registers.fields]]
-name = "I2C0_CTRL"
-bits = "24:0"
+name = "SLAVE_ADDR"
+bits = "7:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "SLAVE_REG_ADDR"
+bits = "15:8"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "DATA"
+bits = "23:16"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "READ_WRITE"
+bits = "24"
 class = "plain"
 
 [[registers.fields]]
@@ -30,21 +245,57 @@ name = "I2C0_BUSY"
 bits = "25"
 class = "read-only"
 
+[[registers.fields]]
+name = "START_OR_RESET"
+bits = "26"
+class = "plain"
+description = "The ESP-IDF header marks these bits reserved; the cited sources use them."
+
 [[registers]]
 name = "I2C1_CTRL"
 offset = 0x4
+description = "Analog-register I2C host-1 command and completion word. The ESP-IDF header declares bits 24:0 as one field I2C1_CTRL; the cited sources subdivide it."
 reset = { value = 0x0, mask = 0x3ffffff }
-reserved = { mask = 0xfc000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"] }
 
 [[registers.fields]]
-name = "I2C1_CTRL"
-bits = "24:0"
+name = "SLAVE_ADDR"
+bits = "7:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "SLAVE_REG_ADDR"
+bits = "15:8"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "DATA"
+bits = "23:16"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "READ_WRITE"
+bits = "24"
 class = "plain"
 
 [[registers.fields]]
 name = "I2C1_BUSY"
 bits = "25"
 class = "read-only"
+
+[[registers.fields]]
+name = "START_OR_RESET"
+bits = "26"
+class = "plain"
+description = "The ESP-IDF header marks these bits reserved; the cited sources use them."
+
+[[registers.fields]]
+name = "BITS_27_31_OPAQUE"
+bits = "31:27"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
 
 [[registers]]
 name = "I2C0_CONF"
@@ -115,11 +366,45 @@ class = "plain"
 [[registers]]
 name = "ANA_CONF0"
 offset = 0x18
+description = "Shared analog-I2C master control used by PHY register mode and BBPLL calibration. The ESP-IDF header declares bits 23:0 as one field ANA_CONF0; the cited sources subdivide it."
 reset = { value = 0xe408 }
 
 [[registers.fields]]
-name = "ANA_CONF0"
-bits = "23:0"
+name = "BITS_0_1_OPAQUE"
+bits = "1:0"
+class = "plain"
+
+[[registers.fields]]
+name = "BBPLL_CAL_MODE"
+bits = "3:2"
+class = "plain"
+description = "Reviewed two-bit BBPLL calibration mode; complete ROM uses encodings one and two."
+values = [{ name = "DISABLED", value = 1 }, { name = "ENABLED", value = 2 }]
+
+[[registers.fields]]
+name = "BITS_4_5_OPAQUE"
+bits = "5:4"
+class = "plain"
+
+[[registers.fields]]
+name = "PHY_REGISTER_ENABLE"
+bits = "6"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_7_8_OPAQUE"
+bits = "8:7"
+class = "plain"
+
+[[registers.fields]]
+name = "PHY_REGISTER_MODE"
+bits = "10:9"
+class = "plain"
+values = [{ name = "REGISTER_MODE", value = 2 }]
+
+[[registers.fields]]
+name = "BITS_11_23_OPAQUE"
+bits = "23:11"
 class = "plain"
 
 [[registers.fields]]
@@ -130,27 +415,46 @@ class = "read-only"
 [[registers]]
 name = "ANA_CONF1"
 offset = 0x1c
+description = "Shared analog-I2C routing and read-mask word."
 reset = { value = 0x2d }
 
 [[registers.fields]]
 name = "ANA_CONF1"
 bits = "23:0"
 class = "plain"
+description = "Low 24 bits of the complete complemented PHY-I2C read-mask publication."
+write-range = { min = 0x0, max = 0xffffff }
 
 [[registers.fields]]
 name = "ANA_STATUS1"
 bits = "31:24"
 class = "read-only"
+description = "High byte of the complete complemented PHY-I2C read-mask publication."
 
 [[registers]]
 name = "ANA_CONF2"
 offset = 0x20
+description = "Shared analog-I2C host-selection word. The ESP-IDF header declares bits 23:0 as one field ANA_CONF2; the cited sources subdivide it."
 reset = { value = 0x4 }
 
 [[registers.fields]]
-name = "ANA_CONF2"
-bits = "23:0"
+name = "BITS_0_3_OPAQUE"
+bits = "3:0"
 class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "PHY_HOST_MAP"
+bits = "17:4"
+class = "plain"
+description = "Complete host-selection field replaced by phy_get_i2c_hostid_new while unrelated bits are preserved."
+values = [{ name = "REVIEWED_RADIO_MAP", value = 16288 }]
+
+[[registers.fields]]
+name = "BITS_18_23_OPAQUE"
+bits = "23:18"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers.fields]]
 name = "ANA_STATUS2"
@@ -160,6 +464,7 @@ class = "read-only"
 [[registers]]
 name = "I2C0_CTRL1"
 offset = 0x24
+description = "Host-0 timing and clock-selection control."
 reset = { value = 0x42, mask = 0x7ff }
 reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"] }
 
@@ -167,15 +472,18 @@ reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUD
 name = "I2C0_SCL_PULSE_DUR"
 bits = "5:0"
 class = "plain"
+write-range = { min = 0x0, max = 0x3f }
 
 [[registers.fields]]
 name = "I2C0_SDA_SIDE_GUARD"
 bits = "10:6"
 class = "plain"
+write-range = { min = 0x0, max = 0x1f }
 
 [[registers]]
 name = "I2C1_CTRL1"
 offset = 0x28
+description = "Host-1 timing and clock-selection control."
 reset = { value = 0x42, mask = 0x7ff }
 reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"] }
 
@@ -183,32 +491,42 @@ reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUD
 name = "I2C1_SCL_PULSE_DUR"
 bits = "5:0"
 class = "plain"
+write-range = { min = 0x0, max = 0x3f }
 
 [[registers.fields]]
 name = "I2C1_SDA_SIDE_GUARD"
 bits = "10:6"
 class = "plain"
+write-range = { min = 0x0, max = 0x1f }
 
 [[registers]]
 name = "HW_I2C_CTRL"
 offset = 0x2c
+description = "Hardware-host timing and clock-selection control."
 reset = { value = 0x42, mask = 0xfff }
-reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"] }
 
 [[registers.fields]]
 name = "HW_I2C_SCL_PULSE_DUR"
 bits = "5:0"
 class = "plain"
+write-range = { min = 0x0, max = 0x3f }
 
 [[registers.fields]]
 name = "HW_I2C_SDA_SIDE_GUARD"
 bits = "10:6"
 class = "plain"
+write-range = { min = 0x0, max = 0x1f }
 
 [[registers.fields]]
 name = "ARBITER_DIS"
 bits = "11"
 class = "plain"
+
+[[registers.fields]]
+name = "BITS_12_31_OPAQUE"
+bits = "31:12"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
 
 [[registers]]
 name = "I2C_MST_NOUSE"

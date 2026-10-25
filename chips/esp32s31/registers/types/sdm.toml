@@ -1,0 +1,72 @@
+# An analog-I2C block type of the curated ESP32-S31 register model.
+schema = 3
+
+[type]
+name = "SDM"
+description = "The SDM analog-I2C block (code 0x63)."
+space = "analog-i2c"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[review]
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[registers]]
+name = "RFPLL_SDM_UPDATE_ENABLE"
+offset = 0x0
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x8, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RFPLL_SDM_UPDATE_ENABLE"
+bits = "3"
+class = "plain"
+description = "RFPLL sigma-delta update enable bit."
+
+[[registers]]
+name = "RFPLL_SDM_MOST_SIGNIFICANT_BYTE"
+offset = 0x3
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "VALUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "RFPLL_SDM_UPPER_MIDDLE_BYTE"
+offset = 0x4
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "VALUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "RFPLL_SDM_LOWER_MIDDLE_BYTE"
+offset = 0x5
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "VALUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "RFPLL_SDM_LOW"
+offset = 0x6
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x7, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RFPLL_SDM_LOW"
+bits = "2:0"
+class = "plain"
+description = "Low three bits of the RFPLL sigma-delta value."

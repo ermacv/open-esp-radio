@@ -1,11 +1,12 @@
 # Imported by `cargo registers import` from the pinned vendor SVD and
-# ESP-IDF headers (registers/import.toml).
+# ESP-IDF headers (registers/import.toml), with the curated refinements
+# merged into it; this file, not the import, is the source of truth.
 schema = 3
 
 [type]
 name = "EFUSE"
 description = "The eFuse controller: the read-back eFuse blocks, the programming data, commands and status."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_EFUSE_MAC"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
@@ -117,25 +118,25 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H"]
 
 [review.entity."RD_MAC_SYS3.WAFER_VERSION_MINOR"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_IDF_4D59230D_S31_EFUSE_MAC"]
 
 [review.entity."RD_MAC_SYS3.WAFER_VERSION_MAJOR"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_IDF_4D59230D_S31_EFUSE_MAC"]
 
 [review.entity."RD_MAC_SYS3.DISABLE_WAFER_VERSION_MAJOR"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_IDF_4D59230D_S31_EFUSE_MAC"]
 
 [review.entity."RD_MAC_SYS3.DISABLE_BLK_VERSION_MAJOR"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_IDF_4D59230D_S31_EFUSE_MAC"]
 
 [review.entity."RD_MAC_SYS3.BLK_VERSION_MINOR"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_IDF_4D59230D_S31_EFUSE_MAC"]
 
 [review.entity."RD_MAC_SYS3.BLK_VERSION_MAJOR"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_IDF_4D59230D_S31_EFUSE_MAC"]
 
 [review.entity."RD_MAC_SYS3.PSRAM_CAP"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_IDF_4D59230D_S31_EFUSE_MAC"]
 
 [review.entity."RD_MAC_SYS4.PSRAM_CAP_1"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H"]
@@ -1022,6 +1023,24 @@ sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 [review.entity."APB2OTP_EN.APB2OTP_APB2OTP_EN"]
 sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 
+[review.entity."RD_MAC_SYS0"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_EFUSE_MAC"]
+
+[review.entity."RD_MAC_SYS0.MAC_0"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_EFUSE_MAC"]
+
+[review.entity."RD_MAC_SYS1"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_EFUSE_MAC"]
+
+[review.entity."RD_MAC_SYS1.MAC_1"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_EFUSE_MAC"]
+
+[review.entity."RD_MAC_SYS1.MAC_EXT"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_EFUSE_MAC"]
+
+[review.entity."RD_MAC_SYS3"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_EFUSE_MAC"]
+
 [[registers]]
 name = "PGM_DATA%s"
 offset = 0x0
@@ -1750,32 +1769,32 @@ reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 [[registers]]
 name = "RD_MAC_SYS0"
 offset = 0x50
-description = "Represents rd_mac_sys"
+description = "Represents rd_mac_sys Factory MAC address, low 32 bits."
 reset = { value = 0x0 }
 
 [[registers.fields]]
 name = "MAC_0"
 bits = "31:0"
 class = "read-only"
-description = "Represents MAC address. Low 32-bit."
+description = "Represents MAC address. Low 32-bit. MAC address bits 31:0; the last transmitted octet is bits 7:0."
 
 [[registers]]
 name = "RD_MAC_SYS1"
 offset = 0x54
-description = "Represents rd_mac_sys"
+description = "Represents rd_mac_sys Factory MAC address, high 16 bits, and its extended bits."
 reset = { value = 0x0 }
 
 [[registers.fields]]
 name = "MAC_1"
 bits = "15:0"
 class = "read-only"
-description = "Represents MAC address. High 16-bit."
+description = "Represents MAC address. High 16-bit. MAC address bits 47:32; the first transmitted octet is bits 15:8."
 
 [[registers.fields]]
 name = "MAC_EXT"
 bits = "31:16"
 class = "read-only"
-description = "Represents the extended bits of MAC address."
+description = "Represents the extended bits of MAC address. Extended bits of the MAC address."
 
 [[registers]]
 name = "RD_MAC_SYS2"
@@ -1787,51 +1806,51 @@ reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 [[registers]]
 name = "RD_MAC_SYS3"
 offset = 0x5c
-description = "Represents rd_mac_sys"
+description = "Represents rd_mac_sys Chip and eFuse block revisions and the PSRAM capacity."
 reset = { value = 0x0 }
-reserved = { mask = 0x3ffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H"] }
+reserved = { mask = 0x3ffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_EFUSE_REG_H", "ESP_IDF_4D59230D_S31_EFUSE_MAC"] }
 
 [[registers.fields]]
 name = "WAFER_VERSION_MINOR"
 bits = "21:18"
 class = "read-only"
-description = "Minor chip version"
+description = "Minor chip version Minor chip revision."
 
 [[registers.fields]]
 name = "WAFER_VERSION_MAJOR"
 bits = "23:22"
 class = "read-only"
-description = "Major chip version"
+description = "Major chip version Major chip revision."
 
 [[registers.fields]]
 name = "DISABLE_WAFER_VERSION_MAJOR"
 bits = "24"
 class = "read-only"
-description = "Disables check of wafer version major"
+description = "Disables check of wafer version major Disables the check of the major chip revision."
 
 [[registers.fields]]
 name = "DISABLE_BLK_VERSION_MAJOR"
 bits = "25"
 class = "read-only"
-description = "Disables check of blk version major"
+description = "Disables check of blk version major Disables the check of the major block revision."
 
 [[registers.fields]]
 name = "BLK_VERSION_MINOR"
 bits = "28:26"
 class = "read-only"
-description = "BLK_VERSION_MINOR of BLOCK2"
+description = "BLK_VERSION_MINOR of BLOCK2 Minor revision of eFuse block 2."
 
 [[registers.fields]]
 name = "BLK_VERSION_MAJOR"
 bits = "30:29"
 class = "read-only"
-description = "BLK_VERSION_MAJOR of BLOCK2"
+description = "BLK_VERSION_MAJOR of BLOCK2 Major revision of eFuse block 2."
 
 [[registers.fields]]
 name = "PSRAM_CAP"
 bits = "31"
 class = "read-only"
-description = "Psram capacity"
+description = "Psram capacity PSRAM capacity."
 
 [[registers]]
 name = "RD_MAC_SYS4"

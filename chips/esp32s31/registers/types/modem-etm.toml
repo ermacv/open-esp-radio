@@ -1,0 +1,299 @@
+# A block type of the curated ESP32-S31 register model: no vendor header
+# or SVD describes this block.
+schema = 3
+
+[type]
+name = "MODEM_ETM"
+description = "The modem event-task matrix at DR_REG_MODEM_ETM_BASE.\n\nWords 0x0-0x10: ESP32-S31 modem event-task matrix at MODEM_BASE + 0x8800, shared by the IEEE 802.15.4 and Bluetooth lifecycles. The public IEEE 802.15.4 driver names the channel-enable, set and clear words and the per-channel event/task pair at an eight-byte stride, and programs channels zero and one; the BTDM runtime programs channels four through seven through the same words. Channel bits and identifiers without a reviewed user remain absent and no reset values are claimed.\n\nWord 0x11c: Narrow owner for the otherwise isolated word at 0x2010891C. Complete ESP32-S31 BLE PHY initialization writes complete image 0x20 before initializing the BLE hardware accelerator and complete image 0x40 after the surrounding BTMAC and accelerator sequence. The register's physical block, hardware action and the meanings of the two images remain unproved, so no neighboring 0x201088xx words are absorbed.\n\nWord 0x144: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown."
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_MODEM_RADIO_CORE_LOW"]
+
+[review]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.opaque]
+sources = ["S31_MMIO_MANUAL_2010891C"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."CHANNEL_ENABLE"]
+provenance = "imported"
+completeness = "partial"
+naming = "descriptive"
+
+[review.entity."CHANNEL_ENABLE.CH0"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM"]
+provenance = "imported"
+
+[review.entity."CHANNEL_ENABLE.CH1"]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM"]
+provenance = "imported"
+
+[review.entity."CHANNEL_ENABLE_SET"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS"]
+completeness = "partial"
+naming = "descriptive"
+
+[review.entity."CHANNEL_ENABLE_SET.CH0"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM"]
+
+[review.entity."CHANNEL_ENABLE_SET.CH1"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM"]
+
+[review.entity."CHANNEL_ENABLE_SET.CH2"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM"]
+
+[review.entity."CHANNEL_ENABLE_SET.CH4"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS"]
+
+[review.entity."CHANNEL_ENABLE_SET.CH5"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS"]
+
+[review.entity."CHANNEL_ENABLE_SET.CH6"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS"]
+
+[review.entity."CHANNEL_ENABLE_SET.CH7"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS"]
+
+[review.entity."CHANNEL_ENABLE_CLEAR"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL"]
+completeness = "partial"
+naming = "descriptive"
+
+[review.entity."CHANNEL_ENABLE_CLEAR.CH0"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM"]
+
+[review.entity."CHANNEL_ENABLE_CLEAR.CH1"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM"]
+
+[review.entity."CHANNEL_ENABLE_CLEAR.CH2"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS"]
+accuracy = "unknown"
+completeness = "unknown"
+naming = "descriptive"
+
+[review.entity."CHANNEL_ENABLE_CLEAR.CH4"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL"]
+
+[review.entity."CHANNEL_ENABLE_CLEAR.CH5"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL"]
+
+[review.entity."CHANNEL_ENABLE_CLEAR.CH6"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL"]
+
+[review.entity."CHANNEL_ENABLE_CLEAR.CH7"]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL"]
+
+[review.entity."CH%s_EVENT"]
+provenance = "imported"
+naming = "descriptive"
+
+[review.entity."CH%s_EVENT.ID"]
+provenance = "imported"
+completeness = "partial"
+
+[review.entity."CH%s_TASK"]
+provenance = "imported"
+naming = "descriptive"
+
+[review.entity."CH%s_TASK.ID"]
+provenance = "imported"
+completeness = "partial"
+
+[review.entity."VALUE"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "observed"
+naming = "descriptive"
+
+[review.entity."WORD_0144_OPAQUE"]
+sources = ["S31_MMIO_USE_20108944"]
+
+[review.entity."WORD_0144_OPAQUE.BIT_3_OPAQUE"]
+sources = ["S31_MMIO_USE_20108944", "S31_MMIO_DECLARED_20108944"]
+
+[[registers]]
+name = "CHANNEL_ENABLE"
+offset = 0x0
+description = "Channel-enable status word. The IEEE 802.15.4 driver reads it to decide whether a channel must be disabled; the BTDM runtime reads the complete word."
+
+[[registers.fields]]
+name = "CH0"
+bits = "0"
+class = "read-only"
+description = "Channel 0 is enabled."
+
+[[registers.fields]]
+name = "CH1"
+bits = "1"
+class = "read-only"
+description = "Channel 1 is enabled."
+
+[[registers.fields]]
+name = "CH4"
+bits = "4"
+class = "read-only"
+description = "Channel 4 is enabled."
+
+[[registers.fields]]
+name = "CH5"
+bits = "5"
+class = "read-only"
+description = "Channel 5 is enabled."
+
+[[registers.fields]]
+name = "CH6"
+bits = "6"
+class = "read-only"
+description = "Channel 6 is enabled."
+
+[[registers.fields]]
+name = "CH7"
+bits = "7"
+class = "read-only"
+description = "Channel 7 is enabled."
+
+[[registers]]
+name = "CHANNEL_ENABLE_SET"
+offset = 0x4
+description = "Channel-enable set word. Its fields are write-trigger: writing 1 enables that channel and writing 0 has no effect, as in the ESP32-S31 SoC ETM of identical layout. This semantics is not yet verified on the modem ETM hardware. The IEEE 802.15.4 driver writes the word back after reading it with the selected channel bit added; the BTDM runtime writes complete channel images."
+
+[[registers.fields]]
+name = "CH0"
+bits = "0"
+class = "write-trigger"
+description = "Writing 1 enables channel 0."
+
+[[registers.fields]]
+name = "CH1"
+bits = "1"
+class = "write-trigger"
+description = "Writing 1 enables channel 1."
+
+[[registers.fields]]
+name = "CH2"
+bits = "2"
+class = "write-trigger"
+description = "Writing 1 enables channel 2."
+
+[[registers.fields]]
+name = "CH4"
+bits = "4"
+class = "write-trigger"
+description = "Writing 1 enables channel 4."
+
+[[registers.fields]]
+name = "CH5"
+bits = "5"
+class = "write-trigger"
+description = "Writing 1 enables channel 5."
+
+[[registers.fields]]
+name = "CH6"
+bits = "6"
+class = "write-trigger"
+description = "Writing 1 enables channel 6."
+
+[[registers.fields]]
+name = "CH7"
+bits = "7"
+class = "write-trigger"
+description = "Writing 1 enables channel 7."
+
+[[registers]]
+name = "CHANNEL_ENABLE_CLEAR"
+offset = 0x8
+description = "Channel-enable clear word. Its fields are write-trigger: writing 1 disables that channel and writing 0 has no effect, as in the ESP32-S31 SoC ETM of identical layout. This semantics is not yet verified on the modem ETM hardware. The IEEE 802.15.4 driver writes the word back after reading it with the selected channel bit added; the BTDM runtime writes complete single-channel images."
+
+[[registers.fields]]
+name = "CH0"
+bits = "0"
+class = "write-trigger"
+description = "Writing 1 disables channel 0."
+
+[[registers.fields]]
+name = "CH1"
+bits = "1"
+class = "write-trigger"
+description = "Writing 1 disables channel 1."
+
+[[registers.fields]]
+name = "CH2"
+bits = "2"
+class = "write-trigger"
+description = "Writing 1 disables channel 2."
+
+[[registers.fields]]
+name = "CH4"
+bits = "4"
+class = "write-trigger"
+description = "Writing 1 disables channel 4."
+
+[[registers.fields]]
+name = "CH5"
+bits = "5"
+class = "write-trigger"
+description = "Writing 1 disables channel 5."
+
+[[registers.fields]]
+name = "CH6"
+bits = "6"
+class = "write-trigger"
+description = "Writing 1 disables channel 6."
+
+[[registers.fields]]
+name = "CH7"
+bits = "7"
+class = "write-trigger"
+description = "Writing 1 disables channel 7."
+
+[[registers]]
+name = "CH%s_EVENT"
+offset = 0xc
+dim = { count = 8, stride = 0x8 }
+description = "Complete event identifier monitored by the selected channel."
+
+[[registers.fields]]
+name = "ID"
+bits = "31:0"
+class = "plain"
+description = "Event identifier written as a complete word."
+values = [{ name = "IEEE802154_TIMER1_OVERFLOW", value = 79 }, { name = "IEEE802154_TIMER0_OVERFLOW", value = 80 }]
+
+[[registers]]
+name = "CH%s_TASK"
+offset = 0x10
+dim = { count = 8, stride = 0x8 }
+description = "Complete task identifier triggered when the selected channel's event occurs."
+
+[[registers.fields]]
+name = "ID"
+bits = "31:0"
+class = "plain"
+description = "Task identifier written as a complete word."
+values = [{ name = "IEEE802154_ED_TRIG_TX", value = 84 }, { name = "IEEE802154_RX_START", value = 85 }, { name = "IEEE802154_TX_START", value = 88 }]
+
+[[registers]]
+name = "VALUE"
+offset = 0x11c
+description = "Complete ordered images 0x20 then 0x40 around BLE accelerator initialization; their hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "BITS_5_6_OPAQUE"
+bits = "6:5"
+class = "write-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0144_OPAQUE"
+offset = 0x144
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_3_OPAQUE"
+bits = "3"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
