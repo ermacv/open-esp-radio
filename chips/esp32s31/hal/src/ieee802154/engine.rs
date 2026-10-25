@@ -56,8 +56,8 @@ impl DetachedIeee802154Engine {
 
 impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
     /// Detach a quiescent MAC, retaining the DMA placement proof for rebind.
-    /// Stop the operation, return delivered slots and silence the CPU IRQ route
-    /// first. A software-only disable cannot close an active operation epoch.
+    /// Stop the operation and return delivered slots first. A software-only
+    /// disable cannot close an active operation epoch.
     ///
     /// # Errors
     /// Returns the unchanged owner while an operation or DMA epoch is active.
