@@ -65,9 +65,9 @@ pipeline reads the declaration with `cargo metadata` and compiles the
 runtime and the bootstrap with the classes' cfgs (`oer_trace`,
 `oer_profile`, `oer_debug_control`) in a compile cache of their own
 (`target/fw/cargo-<class>-…`); an image that declares none compiles none, in
-`target/fw/cargo`. The probe hooks are no class: `cfg(oer_probe)` belongs to
-`cargo fw probe` alone. No crate has a probe feature, and production has no
-item only a probe uses.
+`target/fw/cargo`. Probes are no class: `cargo fw probe` sets
+`cfg(oer_probe)` for its own builds alone, no production crate reads it, no
+crate has a probe feature, and production has no item only a probe uses.
 
 An `ImageBundle` is one directory with a `bundle.json`:
 

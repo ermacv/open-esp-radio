@@ -28,7 +28,7 @@ use crate::{
 /// Run the bounded search while retaining the caller's exclusive PHY borrow.
 /// A hardware failure leaves that borrow with the caller for fault containment;
 /// this entry does not imply that normal RF operation may resume.
-#[cfg(any(test, oer_probe))]
+#[cfg(test)]
 pub async fn search<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
     clock: &C,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
@@ -50,7 +50,7 @@ pub async fn search<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
 
 /// Search, update every frequency-memory entry when the measured delta is
 /// nonzero, and restore the current channel index before returning success.
-#[cfg(any(test, oer_probe))]
+#[cfg(test)]
 pub async fn correct<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
     clock: &C,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
@@ -84,7 +84,7 @@ pub async fn correct<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
 /// enable selects mode zero. These are different from the ROM's frequency-
 /// disable bit; the existing typed baseband-mode accessor implements the new
 /// operations without duplicating the physical register's identity.
-#[cfg(any(test, oer_probe))]
+#[cfg(test)]
 pub async fn maintain<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
     clock: &C,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
@@ -165,7 +165,7 @@ pub(super) fn envelope<D: PhyShortDelay>(
 /// Execute an admitted thermal transaction, retaining exclusive access across
 /// all waits. Success is available only after restoration (or a hardware-free
 /// skip). Error or cancellation requires the caller to contain the failed epoch.
-#[cfg(any(test, oer_probe))]
+#[cfg(test)]
 pub async fn track<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
     clock: &C,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
@@ -207,7 +207,7 @@ pub async fn track<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
 /// `phy_set_rfpll_freq` path of crystal-duty, IQ and Bluetooth calibration)
 /// through the production target executor. The outer error is an executor
 /// failure; the inner one is the transition's own fail-closed outcome.
-#[cfg(any(test, oer_probe))]
+#[cfg(test)]
 pub async fn program<D: PhyShortDelay>(
     timer: &impl oer_cooperate::CooperativeTimer,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),

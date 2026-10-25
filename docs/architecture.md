@@ -277,8 +277,9 @@ its model and conformance case.
 `trace` (what happened), `profile` (what it costs) and `debug-control`
 (knobs that force paths) are separate classes, each under its own cfg
 (`oer_trace`, `oer_profile`, `oer_debug_control`) that only `cargo fw` sets
-for an image declaring it. Probe hooks compile under `cfg(oer_probe)` for
-`cargo fw probe` images only; production has no item only a probe uses.
+for an image declaring it. Probe images (`cargo fw probe`) are built over the
+production crates' public API alone; production has no item, module or
+`cfg(oer_probe)` only a probe uses.
 
 ## Tools
 

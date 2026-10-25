@@ -12,19 +12,17 @@ pub mod decisions;
 pub mod engine;
 pub mod phy;
 pub mod run;
+pub mod session_entry;
 pub mod wifi;
 
 // Domain modules keep their crate-root paths.
 pub use bluetooth::ble;
-pub use coexistence::{coex, coex_hw};
+pub use coexistence::coex_hw;
 pub use engine::{
     artifacts, contracts, evidence, harness, harness_edges, layout, observation, session, state,
 };
-pub use phy::{
-    calibration_leaves, calibration_prefix, channel, gain, gain_state, i2c, i2c_transport, rfpll,
-    rx_gain, tracking, tracking_graph, tx_dc,
-};
-pub use wifi::{ampdu_resort, low_power_clock, mac, retry, rx_append};
+pub use phy::{calibration_leaves, gain, gain_state, i2c};
+pub use wifi::mac;
 
 /// The ESP32-S31 facts the scenario engine runs with.
 pub static CHIP: oer_vendor_scenario::Chip = oer_vendor_scenario::Chip {

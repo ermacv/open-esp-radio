@@ -329,13 +329,6 @@ impl RadioPartitions {
         RadioHardware::for_host_test().partitions
     }
 
-    /// The radio's owners of an isolated probe image's root
-    /// ([`RadioHardware::for_probe`]).
-    #[cfg(oer_probe)]
-    pub(crate) fn for_probe() -> Self {
-        RadioHardware::for_probe().partitions
-    }
-
     /// Compose the radio's owners from the root's partitions. This performs
     /// no MMIO.
     ///
@@ -443,19 +436,8 @@ impl RadioHardware {
         Self::of_partitions(oer_esp32s31_pac::ownership::partition(claims))
     }
 
-    /// The radio root of an isolated probe image (`cfg(oer_probe)`), which
-    /// takes the chip's root for its radio alone.
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn for_probe() -> Self {
-        let Some(partitions) = oer_esp32s31_pac::take() else {
-            unreachable!("a probe image takes the chip's root once");
-        };
-        Self::of_partitions(partitions)
-    }
-
     /// The radio root of `partitions`, the rest dropped.
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     fn of_partitions(partitions: Partitions) -> Self {
         let Partitions {
             wifi_mac,

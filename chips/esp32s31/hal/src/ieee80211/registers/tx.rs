@@ -694,20 +694,6 @@ impl MacTxCompletionObservation {
         self.ack_snr_encoded = encoded;
         self
     }
-
-    /// Construct a semantic completion in a compiled validation image.
-    #[cfg(oer_probe)]
-    pub const fn new_validation(status: u8, detail: u8) -> Self {
-        Self {
-            status,
-            detail,
-            trigger_flow: false,
-            trigger_based_packet_count: 0,
-            last_tx_was_trigger_based: false,
-            secondary_trigger_based_packet_count: 0,
-            ack_snr_encoded: 0,
-        }
-    }
 }
 
 /// TX completion and BlockAck sampled before acknowledging the completion
@@ -749,24 +735,6 @@ impl MacHtAmpduCompletionObservation {
 
     #[cfg(any(test, feature = "test-support"))]
     pub const fn new_model(
-        tx: MacTxCompletionObservation,
-        block_ack_control: u8,
-        block_ack_starting_sequence: u16,
-        block_ack_bitmap: u64,
-        block_ack_received: bool,
-    ) -> Self {
-        Self {
-            tx,
-            block_ack_control,
-            block_ack_starting_sequence,
-            block_ack_bitmap,
-            block_ack_received,
-        }
-    }
-    /// Construct a sampled A-MPDU completion in a compiled validation image,
-    /// where a hardware double supplies the BlockAck result.
-    #[cfg(oer_probe)]
-    pub const fn new_validation(
         tx: MacTxCompletionObservation,
         block_ack_control: u8,
         block_ack_starting_sequence: u16,
@@ -830,19 +798,6 @@ impl MacTxQueueDetached<'_> {
     /// Construct a detach edge in a native model with no asynchronous DMA.
     #[cfg(any(test, feature = "test-support"))]
     pub const fn new_model(descriptor_head: u32) -> Self {
-        Self {
-            descriptor_address_low: descriptor_head & DESCRIPTOR_ADDRESS_LOW_MASK,
-            _registers: PhantomData,
-        }
-    }
-
-    /// Construct a detach edge in an isolated compiled-validation image.
-    ///
-    /// This is unavailable in production feature sets. It lets a hardware
-    /// double drive the exact upper DMA/LMAC state machine without
-    /// claiming that a real target queue was detached.
-    #[cfg(oer_probe)]
-    pub const fn new_validation(descriptor_head: u32) -> Self {
         Self {
             descriptor_address_low: descriptor_head & DESCRIPTOR_ADDRESS_LOW_MASK,
             _registers: PhantomData,

@@ -66,8 +66,4 @@ pub mod dma_static;
 pub mod phy;
 pub mod platform;
 pub mod usb_serial_jtag;
-/// Bridges of isolated probe images (`cfg(oer_probe)`).
-#[cfg(oer_probe)]
-#[doc(hidden)]
-pub mod validation;
 pub mod watchdog;

@@ -170,19 +170,6 @@ pub(crate) fn queue_in_trigger_flow<P: Placement>(
     }
 }
 
-/// The trigger-flow bits of every ordinary queue and the opaque upper
-/// nibble, in the vendor's packed order, for a probe image.
-#[cfg(oer_probe)]
-#[inline(always)]
-pub(crate) fn trigger_flow_state_for_probe<P: Placement>(registers: &WifiMacTxCommon<P>) -> u32 {
-    let state = registers.read_queue_state();
-    u32::from(state.trigger_flow_queue_0())
-        + u32::from(state.trigger_flow_queue_1()) * 2
-        + u32::from(state.trigger_flow_queue_2()) * 4
-        + u32::from(state.trigger_flow_queue_3()) * 8
-        + state.bits_28_31_opaque().get() * 16
-}
-
 /// The completion event of ordinary logical queue `queue`.
 const fn completion_event(queue: u8) -> AcknowledgeMacTxCompletionConsumed {
     match queue {

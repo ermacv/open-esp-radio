@@ -160,7 +160,7 @@ pub struct PhyCalibrationDcodeCompletion {
 
 impl PhyCalibrationDcodeCompletion {
     /// Inspect measured codes or terminal failure without publishing parent state.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn result(
         &self,
     ) -> Result<crate::analog::dcode::PhyDcodeOutcome, crate::analog::dcode::PhyDcodeFailure> {
@@ -353,7 +353,7 @@ pub struct PhyCalibrationTrackingTransition {
 }
 
 impl PhyCalibrationTrackingTransition {
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn new(
         request: PhyCalibrationTrackingRequest,
         parameters: PhyCalibrationTrackingParameters,

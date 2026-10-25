@@ -367,57 +367,6 @@ impl<R: route::Route> sealed::PhyInitializationAccess for SharedPhyHal<'_, R> {}
 
 impl<R: route::Route> PhyInitializationAccess for SharedPhyHal<'_, R> {}
 
-/// Shared PHY capability over externally supplied registers in an isolated
-/// probe image (`cfg(oer_probe)`).
-///
-/// Compiled vendor-comparison entry points receive the register partition by
-/// pointer. This wrapper owns a fresh restore slot for one call, so a probe
-/// cannot observe or leak another route's calibration restore obligation.
-#[cfg(oer_probe)]
-#[doc(hidden)]
-pub struct ValidationSharedPhy<'registers> {
-    registers: &'registers mut RadioPhyRegisters,
-    restore: PhyRouteState,
-}
-
-#[cfg(oer_probe)]
-impl<'registers> ValidationSharedPhy<'registers> {
-    pub fn new(registers: &'registers mut RadioPhyRegisters) -> Self {
-        Self {
-            registers,
-            restore: PhyRouteState::for_host_test(),
-        }
-    }
-}
-
-#[cfg(oer_probe)]
-impl sealed::SharedPhyAccess for ValidationSharedPhy<'_> {
-    fn pac(&self) -> &RadioPhyRegisters {
-        self.registers
-    }
-
-    fn route_state(&self) -> &PhyRouteState {
-        &self.restore
-    }
-
-    fn parts_mut(&mut self) -> (&mut RadioPhyRegisters, &mut PhyRouteState) {
-        (self.registers, &mut self.restore)
-    }
-}
-
-#[cfg(oer_probe)]
-impl sealed::SharedPhyContext for ValidationSharedPhy<'_> {
-    fn wifi_baseband_enable_observation(&self) -> WifiBasebandEnableObservation {
-        WifiBasebandEnableObservation::from_pac_readback(self.registers.wifi_baseband_is_enabled())
-    }
-}
-
-#[cfg(oer_probe)]
-impl SharedPhyAccess for ValidationSharedPhy<'_> {}
-
-#[cfg(oer_probe)]
-impl SharedPhyContext for ValidationSharedPhy<'_> {}
-
 pub(crate) fn phy_pac(access: &(impl SharedPhyAccess + ?Sized)) -> &RadioPhyRegisters {
     sealed::SharedPhyAccess::pac(access)
 }

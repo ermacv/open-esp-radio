@@ -59,6 +59,10 @@ pub struct Suite {
     pub prepare: Option<Prepare>,
     /// Further claims the suite's own sequences establish.
     pub claims: &'static [(&'static str, &'static str, &'static str)],
+    /// The production entry that starts the probe image's verifier session
+    /// over the production root, when the leaves borrow its owners: every
+    /// case runs it first, as a setup of which nothing is compared.
+    pub session: Option<&'static str>,
 }
 
 impl Suite {
@@ -1127,6 +1131,24 @@ impl LeafRun {
                         .value,
                     )?;
                     let mut setup = vec![];
+                    if let Some(entry) = self.suite.session {
+                        let mut phase = crate::harness::setup(
+                            format!("{name}-session"),
+                            direct(
+                                memcpy,
+                                &[IMAGE_SOURCE, IMAGE_SOURCE, 0],
+                                vec![],
+                                vec![],
+                                vec![],
+                            ),
+                            self.session
+                                .probes
+                                .invoke(entry, vec![], devices(fill), vec![])?,
+                            SessionReset::Cold,
+                        );
+                        phase.stack_fill = Some(fill);
+                        setup.push(phase);
+                    }
                     for (index, (address, bytes)) in image.iter().enumerate() {
                         let length = bytes.len() as u32;
                         let mut phase = crate::harness::setup(
@@ -1145,7 +1167,7 @@ impl LeafRun {
                                 vec![],
                                 vec![],
                             ),
-                            if index == 0 {
+                            if setup.is_empty() {
                                 SessionReset::Cold
                             } else {
                                 SessionReset::Warm

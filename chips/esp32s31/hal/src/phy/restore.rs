@@ -123,7 +123,7 @@ impl PhyRouteState {
     }
 
     /// Fresh state for a host test.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub(crate) const fn for_host_test() -> Self {
         Self::new(PhyRegistration::new())
     }

@@ -691,12 +691,6 @@ impl<P: Placement> BluetoothTxPowerControlI2cAccess for BluetoothTxPowerPort<'_,
     }
 }
 
-/// Configure the reviewed host map and return its typed selection.
-#[cfg(oer_probe)]
-pub fn configure_and_select_host(registers: &mut impl SharedPhyAccess, block: Route) -> Host {
-    AnalogBus::new(&mut phy_blocks_mut(registers).i2c_ana_mst).configure_and_select_host(block)
-}
-
 /// Start one analog-register read.
 pub fn try_start_read(
     registers: &mut impl SharedPhyAccess,

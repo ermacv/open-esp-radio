@@ -11,9 +11,9 @@
 //! `[package.metadata.open-radio] instrumentation = ["trace"]`. Only the
 //! image pipeline sets the cfgs, for the declaring image alone and in a
 //! compile cache of its own, so an image that declares nothing compiles no
-//! instrumentation and its build cache never sees the cfgs. The probe
-//! hooks of the vendor comparison are no class: `cfg(oer_probe)` belongs to
-//! the probe build ([`crate::probe`]).
+//! instrumentation and its build cache never sees the cfgs. The probes of
+//! the vendor comparison are no class: `cfg(oer_probe)` belongs to the probe
+//! build ([`crate::probe`]).
 
 use std::{collections::BTreeSet, path::Path};
 

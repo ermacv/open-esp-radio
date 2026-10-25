@@ -177,14 +177,6 @@ impl MacInterruptSnapshot {
             || sample.bits_29_31_opaque().get() != 0;
         MacInterruptObservation::from_semantic_events(work_events, auxiliary_event, unhandled_event)
     }
-
-    /// The sampled image, for a probe image that reports it to a vendor
-    /// comparison.
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub const fn probe_bits(&self) -> u32 {
-        self.0.bits()
-    }
 }
 
 impl core::fmt::Debug for MacInterruptSnapshot {
@@ -216,14 +208,6 @@ impl MacPowerInterruptSnapshot {
                 || sample.tbtt_3()
                 || sample.bits_8_31_opaque().get() != 0,
         )
-    }
-
-    /// The sampled image, for a probe image that reports it to a vendor
-    /// comparison.
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub const fn probe_bits(&self) -> u32 {
-        self.0.bits()
     }
 }
 

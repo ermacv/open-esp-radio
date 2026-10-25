@@ -14,15 +14,7 @@ pub(crate) mod policy;
 
 pub(crate) mod role;
 
-#[cfg(oer_probe)]
-pub(crate) mod validation;
-
 pub use mac::Ieee802154PowerSequence;
-
-/// Validation entries of the IEEE 802.15.4 coexistence and BTBB writes.
-#[cfg(oer_probe)]
-#[doc(hidden)]
-pub use validation::coex_trace;
 
 pub use lifecycle::{
     IEEE802154_MAX_CHANNEL, IEEE802154_MIN_CHANNEL, Ieee802154Channel, Ieee802154ChannelError,

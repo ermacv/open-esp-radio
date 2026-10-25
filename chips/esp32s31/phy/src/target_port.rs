@@ -165,10 +165,10 @@ impl<G: PhyGrantProtectPort + ?Sized> PhyGrantProtectPort for &mut G {
 /// The weak `phy_acquire_grant_protect` and `phy_release_grant_protect` of the
 /// PHY archive linked without the coexistence archive: both return without
 /// effect. Vendor comparison of PHY-only leaves uses this port.
-#[cfg(any(test, oer_probe))]
+#[cfg(test)]
 pub struct WeakPhyGrantProtect;
 
-#[cfg(any(test, oer_probe))]
+#[cfg(test)]
 impl PhyGrantProtectPort for WeakPhyGrantProtect {
     fn set_grant_protect(&mut self, _enabled: bool) -> Result<(), PhyTargetPortError> {
         Ok(())
@@ -2297,12 +2297,6 @@ pub(crate) async fn switch_phy_channel_with_hal_and_mac_restart<
         .switch_channel_hal_with_mac_restart(state, channel_or_frequency, cbw, channel, observer)
         .await
 }
-
-#[cfg(oer_probe)]
-pub mod temperature;
-
-#[cfg(oer_probe)]
-pub(crate) use radio_lifecycle::reset_wake_i2c_master;
 
 #[cfg(feature = "radio-health")]
 impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {

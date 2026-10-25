@@ -17,7 +17,7 @@ pub(super) struct CompletedFrameLayout {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[cfg(any(test, feature = "test-support", oer_probe))]
+#[cfg(any(test, feature = "test-support"))]
 pub(super) struct RetryFrameLocation {
     pub(super) index: usize,
     pub(super) buffer_address: usize,
@@ -58,7 +58,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
 
     /// Resolve the retained frames. A republication after a protection
     /// failure must retain the complete aggregate.
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     pub(super) fn retry_frame_locations(
         self: Pin<&Self>,
         cookie: TxCookie,
@@ -113,7 +113,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         Ok(locations)
     }
 
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     pub(super) fn compact_retry_metadata(
         mut self: Pin<&mut Self>,
         locations: [Option<RetryFrameLocation>; SLOTS],

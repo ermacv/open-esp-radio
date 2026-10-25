@@ -28,7 +28,7 @@ pub use crate::clock::{
     BluetoothClient, CommonPower, CommonPowerExitFailure, CommonRadioPowerError, Ieee802154Client,
     RadioClient, RadioClientKind, WifiClient,
 };
-#[cfg(any(test, oer_probe))]
+#[cfg(test)]
 use crate::coex::PhyGrantProtectError;
 use crate::coex::{
     CoexEventId, CoexPti, CoexPtiTable, CoexTimerBank, PHY_GRANT_PROTECT_EVENT, PhyGrantProtect,
@@ -466,7 +466,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
 
     /// Record a programmed PHY grant-protect request without register
     /// access, so a host test or a probe image can check the release alone.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     #[doc(hidden)]
     pub fn hold_phy_grant_protect_for_host_test(&mut self) {
         self.state.phy_grant_protected = true;
@@ -1071,7 +1071,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     }
 
     /// Borrow the PHY grant-protect request for one maintenance operation.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn phy_grant_protect(&mut self) -> PhyGrantProtect<'_> {
         let state = self.state_mut();
         let pti = state.coex_pti.pti(PHY_GRANT_PROTECT_EVENT);
@@ -1087,7 +1087,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// # Errors
     ///
     /// The request is already programmed; nothing is written.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn acquire_phy_grant_protect(&mut self) -> Result<(), PhyGrantProtectError> {
         self.phy_grant_protect().acquire()
     }
@@ -1097,7 +1097,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// # Errors
     ///
     /// No request is programmed; nothing is written.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn release_phy_grant_protect(&mut self) -> Result<(), PhyGrantProtectError> {
         self.phy_grant_protect().release()
     }

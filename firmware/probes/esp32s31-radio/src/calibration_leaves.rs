@@ -1,25 +1,27 @@
-//! Capability and scalar ABI setup for shipping calibration leaves.
+//! Scalar ABI setup for shipping calibration leaves.
 
 oer_probe_macros::probe! {
-    /// Profiles select TX-gain restore (enabled domain), forced gain, temperature
-    /// conversion and post-init AGC. The wrapper only acquires the validation owner
-    /// and lowers scalar arguments; production owns every computation and MMIO access.
-    /// Unknown profiles return 0x10003 without touching hardware.
+    /// Profiles select TX-gain restore (enabled domain), forced gain and
+    /// post-init AGC on the session's shared PHY. The wrapper only lowers
+    /// scalar arguments; production owns every computation and MMIO access.
+    /// Unknown profiles, and a session that did not start, return 0x10003
+    /// without touching hardware.
     pub fn open_phy_calibration_leaf(profile: u32, a: u32, b: u32, c: u32) -> u32 {
-        if profile == 2 {
-            return super::temperature_to_power(a, b, c) as u32;
-        }
-        if profile > 3 {
-            return 0x10003;
-        }
-        super::with_phy(|registers| {
+        crate::session::with(|session| {
+            let mut phy = session.radio.phy_hal();
             match profile {
-                0 => super::restore_tx_gain_compensation(a, registers),
-                1 => super::force_digital_gain(a, b, c, registers),
-                3 => super::post_init_agc(registers),
-                _ => unreachable!(),
+                0 => oer_esp32s31_hal::phy::baseband::restore_tx_gain_compensation(&mut phy),
+                1 => oer_esp32s31_hal::phy::baseband::configure_forced_digital_gain(
+                    &mut phy,
+                    a & 1 != 0,
+                    b as i8,
+                    c as i8,
+                ),
+                3 => oer_esp32s31_hal::phy::agc::update_post_initialization(&mut phy),
+                _ => return 0x10003,
             }
             0
         })
+        .unwrap_or(0x10003)
     }
 }

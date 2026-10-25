@@ -656,47 +656,6 @@ impl PhyState {
         }
     }
 
-    /// A probe image's semantic fixture (`cfg(oer_probe)`): it mints no
-    /// registered epoch or RF access.
-    #[cfg(oer_probe)]
-    pub(crate) fn calibration_tracking_fixture(
-        parameters: crate::tracking::calibration::PhyCalibrationTrackingParameters,
-    ) -> Self {
-        let mut state = Self::default();
-        state.common.temperature = parameters.current_temperature;
-        state.common.references.common = parameters.common_reference_temperature;
-        state.common.references.transmit = parameters.transmit_reference_temperature;
-        state.common.crystal_selector = parameters.crystal_selector;
-        state.wifi.current_channel = parameters.current_channel;
-        state.wifi.channel_bandwidth = parameters.channel_bandwidth;
-        if let Some(threshold) = parameters.threshold_override {
-            state.common.temperature_debug = [2, threshold];
-        }
-        state
-    }
-
-    /// [`Self::calibration_tracking_fixture`] with the parameter parent's
-    /// retained inputs (`cfg(oer_probe)`).
-    #[cfg(oer_probe)]
-    pub(crate) fn parameter_tracking_fixture(
-        parameters: crate::tracking::calibration::PhyCalibrationTrackingParameters,
-        gain_adjustment: i8,
-        relaxed_threshold: bool,
-    ) -> Self {
-        let mut state = Self::calibration_tracking_fixture(parameters);
-        state.wifi.tx_gain_adjustment = gain_adjustment;
-        state.wifi.tx_power_tracking_slow = relaxed_threshold.into();
-        state
-    }
-
-    /// Seed the retained RX-gain table last indices as the vendor comparison
-    /// seeds its own state (`cfg(oer_probe)`).
-    #[cfg(oer_probe)]
-    pub(crate) fn seed_rx_table_last_indices(&mut self, shared: u8, wifi: u8) {
-        self.wifi.shared_rx_table_last_index = shared;
-        self.wifi.wifi_rx_table_last_index = wifi;
-    }
-
     pub const fn config(&self) -> &PhyConfig {
         &self.config
     }
@@ -724,7 +683,7 @@ impl PhyState {
     /// Owned 802.11p configuration. Channel selection has no 802.11p step:
     /// complete `phy_chip_set_chan` passes these bytes to `phy_11p_set`,
     /// whose body only writes them back to the same `phy_param` bytes.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn set_dot11p_configuration(&mut self, enabled: u8, configuration: u8) {
         self.wifi.dot11p_enabled = enabled;
         self.wifi.dot11p_configuration = configuration;
@@ -746,7 +705,7 @@ impl PhyState {
         self.wifi.current_level
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn set_bt_power_tracking(&mut self, value: u8) {
         self.bluetooth.power_tracking = value;
     }
@@ -1725,31 +1684,10 @@ impl PhyState {
         Ok(())
     }
 
-    /// The state retaining exactly `cache` (`cfg(oer_probe)`): the replay
-    /// restoration, with the RX-gain table flag the replay deliberately
-    /// clears kept as captured.
-    #[cfg(oer_probe)]
-    pub(crate) fn retained_calibration(
-        config: PhyConfig,
-        cache: &PhyCalibrationCache,
-    ) -> Result<Self, PhyCalibrationCacheError> {
-        let mut state = Self::new(config);
-        state.begin_cached_calibration(config, cache, cache.snapshot.identity)?;
-        state.wifi.calibration.set(
-            WifiCalibrationStatus::RX_GAIN_TABLES,
-            cache.snapshot.wifi.rx_gain_tables_initialized,
-        );
-        // The snapshot is captured after registration, whose temperature
-        // step restarts TX-power tracking from the TX-power reference
-        // (`apply_register_temperature_outcome`, as `phy_get_temp_init`).
-        state.common.references.restart_power_tracking();
-        Ok(state)
-    }
-
     /// The calibration this state retains, as persistence would capture it,
     /// under an all-zero identity: what a vendor comparison or a hardware
     /// cross-check reads the committed fields from.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn retained_calibration_snapshot(&self) -> PhyCalibrationSnapshot {
         self.calibration_snapshot(crate::calibration::registration::PhyCalibrationIdentity {
             rf_cal_version: 0,

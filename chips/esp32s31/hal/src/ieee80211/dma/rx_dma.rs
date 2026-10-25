@@ -422,12 +422,6 @@ impl WifiRxDmaEngine {
         self.registers
     }
 
-    /// The walker's registers, for a probe image's raw vendor transactions.
-    #[cfg(oer_probe)]
-    pub(crate) fn registers_for_probe(&mut self) -> &mut WifiRxDmaRegisters {
-        &mut self.registers
-    }
-
     /// Read the bounded walker projection for diagnostics.
     pub fn snapshot(&self) -> MacRxDmaSnapshot {
         self.registers.mac_rx_dma_snapshot()

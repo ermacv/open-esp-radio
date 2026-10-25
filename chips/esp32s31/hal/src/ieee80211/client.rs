@@ -336,7 +336,7 @@ impl WifiClocked {
 
     /// Borrow the channel HAL for one channel transaction, with the shared
     /// PHY borrowed from the radio domain.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn channel_hal<'hal, B: PlatformClockBackend, P, T>(
         &'hal mut self,
         platform: &'hal mut P,

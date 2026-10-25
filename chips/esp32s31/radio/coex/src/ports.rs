@@ -60,17 +60,6 @@ impl<'radio, B: PlatformClockBackend, T> CoexDomainPorts<'radio, B, T> {
         }
     }
 
-    /// As [`Self::new`], with the vendor's FPGA clock constant selectable for
-    /// a probe image's compiled comparison (`cfg(oer_probe)`).
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn with_real_chip(radio: &'radio mut RadioDomain<B, T>, real_chip: bool) -> Self {
-        Self {
-            radio: RefCell::new(radio),
-            real_chip,
-        }
-    }
-
     /// The timer and clock port handles.
     pub fn ports(
         &self,

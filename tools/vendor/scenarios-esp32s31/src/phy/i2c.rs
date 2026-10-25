@@ -4,11 +4,11 @@
 //! Software comparison under explicit peripheral assumptions, never hardware
 //! qualification. Private inputs, requests and evidence stay in the selected
 //! ignored output.
-use crate::evidence::{events, output, stop};
+use crate::evidence::{events, stop};
 use crate::gain_state::Unmet;
 use crate::harness::{
-    Budget, Buffer, Input, Result, case, data_request, direct, filled, invalid, invocation,
-    named_object, named_section, selection, symbol,
+    Budget, Buffer, Input, Result, case, data_request, direct, invalid, named_object,
+    named_section, selection, setup, symbol,
 };
 use crate::layout::*;
 use crate::phy::image_layout;
@@ -97,10 +97,8 @@ pub struct Options {
     pub linker: PathBuf,
     pub output: PathBuf,
     pub budget: Budget,
-    /// Linked SDK firmware; enables calibration leaves (12.1) and the PBus/DCODE prefix (12.2).
+    /// Linked SDK firmware; enables the calibration leaves (12.1).
     pub sdk: Option<PathBuf>,
-    /// SDK firmware with the RFPLL diagnostics symbol; enables RFPLL (12.3).
-    pub phy_sdk: Option<PathBuf>,
 }
 
 pub const LEAVES_OBLIGATION: Unmet = Unmet {
@@ -108,27 +106,9 @@ pub const LEAVES_OBLIGATION: Unmet = Unmet {
     unit: "12.1",
     reason: "authenticated SDK firmware was not supplied; the four calibration leaves did not execute",
 };
-pub const PREFIX_OBLIGATION: Unmet = Unmet {
-    id: "calibration-prefix",
-    unit: "12.2",
-    reason: "authenticated SDK firmware was not supplied; PBus clear and DCODE did not execute",
-};
-pub const RFPLL_OBLIGATION: Unmet = Unmet {
-    id: "rfpll",
-    unit: "12.3",
-    reason: "authenticated PHY SDK firmware was not supplied; RFPLL search and maintenance did not execute",
-};
-
 /// Obligations that cannot execute with the supplied optional inputs.
-pub fn unmet(sdk: bool, phy_sdk: bool) -> Vec<Unmet> {
-    let mut result = vec![];
-    if !sdk {
-        result.extend([LEAVES_OBLIGATION, PREFIX_OBLIGATION]);
-    }
-    if !phy_sdk {
-        result.push(RFPLL_OBLIGATION);
-    }
-    result
+pub fn unmet(sdk: bool) -> Vec<Unmet> {
+    if sdk { vec![] } else { vec![LEAVES_OBLIGATION] }
 }
 
 /// Linked PHY I2C image with its captured roots and both execution targets.
@@ -154,21 +134,8 @@ impl std::ops::DerefMut for I2c {
     }
 }
 
-pub const LEAVES: [&str; 5] = [
-    "phy_i2c_master_mem_cfg",
-    "phy_i2c_master_command_mem_cfg",
-    "phy_get_i2c_data",
-    "phy_i2c_enter_critical",
-    "phy_i2c_exit_critical",
-];
-
 impl I2c {
     pub fn new(options: &Options) -> Result<Self> {
-        if options.phy_sdk.is_some() && options.sdk.is_none() {
-            return Err(invalid(
-                "--phy-sdk requires --sdk: RFPLL runs inside the calibration prefix",
-            ));
-        }
         let mut inputs = vec![
             Input {
                 role: "phy",
@@ -191,13 +158,6 @@ impl I2c {
                 role: "sdk",
                 path: sdk,
                 sha256: Some(crate::artifacts::sha256("sdk")?),
-            });
-        }
-        if let Some(phy_sdk) = &options.phy_sdk {
-            inputs.push(Input {
-                role: "phy-sdk",
-                path: phy_sdk,
-                sha256: Some(crate::artifacts::sha256("phy-sdk")?),
             });
         }
         let session = Session::start(
@@ -225,9 +185,7 @@ impl I2c {
             return Err(invalid("I2C object or table identity mismatch"));
         }
         let leaves = options.sdk.is_some();
-        let rfpll = options.phy_sdk.is_some();
-        let mut roots: Vec<&str> = LEAVES.to_vec();
-        roots.extend(["phy_get_i2c_read_mask_new", "phy_get_i2c_hostid_new"]);
+        let mut roots: Vec<&str> = vec!["phy_i2c_master_cmd_mem_init"];
         if leaves {
             roots.extend([
                 "phy_txgain_comp_pacfg_new",
@@ -236,24 +194,14 @@ impl I2c {
                 "phy_reg_update_new",
             ]);
         }
-        if rfpll {
-            roots.extend([
-                "phy_rfpll_cap_init_cal_track",
-                "phy_rfpll_cap_track_new",
-                "phy_set_rfpll_freq_new",
-            ]);
-        }
         let select = |input: usize, name: &str| -> Result<oer_analysis_riscv_model::SymbolId> {
             Ok(symbol(inventory, input, name)?.id.clone())
         };
-        // ROM first; the SDK firmware supplies the crystal-clock and
-        // diagnostics symbols the ROM lacks.
+        // ROM first; the SDK firmware supplies the crystal-clock symbols
+        // the ROM lacks.
         let mut candidates = vec![ROM_INPUT];
         if leaves {
             candidates.push(3);
-        }
-        if rfpll {
-            candidates.push(4);
         }
         let link = LinkRequest {
             companions: vec![],
@@ -333,6 +281,20 @@ impl I2c {
     /// Address of a declared production probe.
     pub fn probe(&self, name: &str) -> u32 {
         self.probes.entry(name).unwrap_or_else(|e| panic!("{e}"))
+    }
+
+    /// The probe image's session start before a case of `name`: production
+    /// runs the session entry ([`crate::session_entry::ENTRY`]), the vendor
+    /// an empty ROM `memcpy`; nothing of it is compared.
+    pub fn session_setup(&self, name: &str) -> Result<ExecutionCase> {
+        let memcpy = self.captured(1, "memcpy");
+        Ok(setup(
+            format!("{name}-session"),
+            direct(memcpy, &[INPUT, INPUT, 0], vec![], vec![], vec![]),
+            self.probes
+                .invoke(crate::session_entry::ENTRY, vec![], vec![], vec![])?,
+            SessionReset::Cold,
+        ))
     }
 
     /// Address of a captured (not declared) symbol in one input.
@@ -433,11 +395,13 @@ impl I2c {
                 vec![],
                 vec![selection(SETUP_DESTINATION, 400)],
             )?;
+            // The production command memory borrows the session's shared PHY.
+            cases.push(self.session_setup(name)?);
             cases.push(case(
                 format!("{name}-setup"),
                 left,
                 Some(right),
-                SessionReset::Cold,
+                SessionReset::Warm,
                 true,
             ));
             let left = direct(init, &[0], vec![], vec![bank.clone()], vec![]);
@@ -459,52 +423,6 @@ impl I2c {
             );
             expected_commands.push((cases.len() as u32, command_words(dynamic)));
             cases.push(case(*name, left, Some(right), SessionReset::Warm, false));
-        }
-        let mut descriptors = vec![];
-        for (name, length, expected) in [
-            (LEAVES[0], 6u32, vec![0u8, 0, 1, 1, 44, 1]),
-            (LEAVES[1], 12, vec![0, 0, 0, 1, 1, 1, 44, 1, 2, 0, 0, 0]),
-        ] {
-            for fill in [0u8, 255] {
-                let arguments = vec![Some(INPUT), Some(INPUT + 8)];
-                let memory = vec![filled(INPUT, length, fill)?];
-                let observe = vec![selection(INPUT, length)];
-                descriptors.push((cases.len() as u32, expected.clone()));
-                cases.push(case(
-                    format!("{name}{fill}"),
-                    invocation(
-                        self.root(name),
-                        arguments.clone(),
-                        memory.clone(),
-                        vec![],
-                        observe.clone(),
-                    ),
-                    Some(invocation(
-                        self.probe(&format!("open_phy_trace_{name}")),
-                        arguments,
-                        memory,
-                        vec![],
-                        observe,
-                    )),
-                    SessionReset::Cold,
-                    true,
-                ));
-            }
-        }
-        for name in &LEAVES[2..] {
-            cases.push(case(
-                *name,
-                invocation(self.root(name), vec![], vec![], vec![], vec![]),
-                Some(invocation(
-                    self.probe(&format!("open_phy_trace_{name}")),
-                    vec![],
-                    vec![],
-                    vec![],
-                    vec![],
-                )),
-                SessionReset::Cold,
-                false,
-            ));
         }
         let positive = self.artifacts.len();
         let records = self.compare(
@@ -532,13 +450,11 @@ impl I2c {
                 _ => None,
             })
             .collect();
-        assert_eq!(comparisons.len(), cases.len());
-        assert!(comparisons.iter().all(|v| *v == ComparisonVerdict::Match));
-        assert!(
-            !records
-                .iter()
-                .any(|r| matches!(r, ExecutionEvidence::Event { case, .. } if *case >= 8))
+        assert_eq!(
+            comparisons.len(),
+            cases.iter().filter(|c| c.relation.is_some()).count()
         );
+        assert!(comparisons.iter().all(|v| *v == ComparisonVerdict::Match));
         let models: Vec<_> = records
             .iter()
             .filter_map(|r| match r {
@@ -566,14 +482,9 @@ impl I2c {
                 assert_eq!(events(&records, *index, side), expected, "{index} {side}");
             }
         }
-        for (index, expected) in &descriptors {
-            for side in [false, true] {
-                assert_eq!(&output(&records, *index, side), expected, "{index} {side}");
-            }
-        }
         // A changed replacement input must not be hidden by code-goal completion.
-        let mut different = cases[..2].to_vec();
-        different[1].replacement.as_mut().unwrap().memory[0]
+        let mut different = cases[..3].to_vec();
+        different[2].replacement.as_mut().unwrap().memory[0]
             .seed
             .bytes[1] = 1;
         self.compare(
@@ -582,7 +493,7 @@ impl I2c {
             ComparisonVerdict::Diff,
             COMMAND_EVENTS,
         )?;
-        let mut unknown = cases[1].clone();
+        let mut unknown = cases[2].clone();
         unknown.reset = SessionReset::Cold;
         // The command-parameter pointer (`a0`) is unknown.
         unknown.replacement.as_mut().unwrap().arguments[0] = None;
@@ -592,7 +503,7 @@ impl I2c {
             ComparisonVerdict::Incomplete,
             COMMAND_EVENTS,
         )?;
-        let mut missing = cases[1].clone();
+        let mut missing = cases[2].clone();
         missing.reset = SessionReset::Cold;
         // The vendor image without the ROM, which `Session::targets` maps
         // second.
@@ -706,11 +617,7 @@ mod tests {
 
     #[test]
     fn missing_optional_inputs_are_unmet_obligations() {
-        assert_eq!(
-            unmet(false, false),
-            [LEAVES_OBLIGATION, PREFIX_OBLIGATION, RFPLL_OBLIGATION]
-        );
-        assert_eq!(unmet(true, false), [RFPLL_OBLIGATION]);
-        assert!(unmet(true, true).is_empty());
+        assert_eq!(unmet(false), [LEAVES_OBLIGATION]);
+        assert!(unmet(true).is_empty());
     }
 }
