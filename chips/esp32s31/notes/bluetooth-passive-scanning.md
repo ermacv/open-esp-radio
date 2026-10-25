@@ -107,9 +107,9 @@ scan-backoff state (Vol 6, Part B, 4.4.3.2): the maximum upper limit in
 `api_internalTest_hci_procVsCmds`, reads `BACKOFF_STATE_1` and `BACKOFF_STATE_0` back as
 two nine-bit values, so the hardware maintains that state; which word is the
 count and which the limit is not established. The open Controller supports
-only the default backoff policy, so the restricted PAC owns one fixed
-transaction with the default maximum and exposes no positional choice to HAL
-or higher layers.
+only the default backoff policy, so the HAL owns one fixed
+transaction with the default maximum and exposes no positional choice to
+higher layers.
 
 The already reviewed global-memory classifier is also applicable: scanner
 scheduler kind two uses current/next RX selector one.  DTM's private graph is
@@ -243,7 +243,7 @@ header to `CurrentRx` and then publishes zero to `NextRx`. It subsequently
 clears `RX_VALID` in the current-pointer register and writes back a second
 fresh observation of that register, preserving any intervening hardware
 change. Both selector-one and selector-two publication perform this suffix
-through restricted PAC accessors; the broader meaning of that control bit
+through the HAL over the generated accessors; the broader meaning of that control bit
 remains unassigned. The open driver owns a small fixed RX chain. The general
 allocator, reference counts, callbacks and `os_mbuf` conversion are
 deliberately excluded.
@@ -311,8 +311,8 @@ standalone profile starts with an empty resolving list and keeps address
 resolution disabled. Its semantic descriptor therefore carries the same zero
 entry link without executing a lookup whose result cannot be consumed. The
 accelerator transaction remains required later for privacy-capable active
-scanning and initiating, where it must be exposed through restricted PAC
-accessors rather than recreated above the PAC.
+scanning and initiating, where the HAL writes it over the generated field
+accessors rather than recreating it above the HAL.
 
 Starting from the open driver's zero-based private allocation, the complete
 restricted reset therefore has the following exact nonzero link-state words.
@@ -419,7 +419,7 @@ The first implementation should contain these owners, in this order:
 
 1. a private, pinned scanner graph with affine CPU-owned, published, running,
    completed and reclaimed states;
-2. a restricted-PAC scan-start transaction and stable read accessor for the
+2. a HAL scan-start transaction and stable read accessor for the
    existing scan hardware snapshot;
 3. a controller role that schedules only passive LE 1M windows on channels
    37, 38 and 39 and uses the existing list/interrupt runtime;

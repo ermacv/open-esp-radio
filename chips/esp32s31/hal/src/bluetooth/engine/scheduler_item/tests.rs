@@ -3,7 +3,7 @@ use core::num::NonZeroU32;
 use crate::layouts::*;
 
 use super::{SchedulerItemCompletionStatus, SchedulerItemHeader};
-use crate::bluetooth::engine::sram_link::ControllerSramLinkAddress;
+use crate::bluetooth::engine::sram_link::model_link;
 
 fn item() -> BleSchedulerItem {
     BleSchedulerItem::zeroed()
@@ -16,22 +16,25 @@ fn linking_preserves_flags_and_the_unassigned_tail() {
     words
         .hardware_next()
         .write(BleSchedulerItemHardwareNext::from_bits(0xfff0_0000));
-    let next = ControllerSramLinkAddress::new(0x2f00_0100).expect("test link is representable");
+    let next = model_link(0x2f00_0100);
 
     header.link_hardware_next(Some(next));
     assert_eq!(
         (
             words.hardware_next().read().bits_20_21_opaque(),
-            header.hardware_next_image()
+            header.hardware_next_address()
         ),
-        (3, next.compressed_image())
+        (3, Some(next.controller_address()))
     );
-    assert_eq!(header.hardware_next_image(), next.compressed_image());
+    assert_eq!(
+        header.hardware_next_address(),
+        Some(next.controller_address())
+    );
     assert_eq!(words.hardware_next().read().bits() >> 20, 0xfff);
 
     header.link_hardware_next(None);
     assert_eq!(words.hardware_next().read().bits_20_21_opaque(), 3);
-    assert_eq!(header.hardware_next_image(), 0);
+    assert_eq!(header.hardware_next_address(), None);
     assert_eq!(words.hardware_next().read().bits() >> 20, 0xfff);
 }
 
@@ -85,8 +88,8 @@ fn window_and_links_use_their_own_words() {
     let header = SchedulerItemHeader::new(&words);
     header.set_raw_start(10);
     header.set_raw_end(20);
-    header.set_previous(0x2f00_0200);
-    header.set_completion_link(0x2f00_0300);
+    header.link_previous(Some(model_link(0x2f00_0200)));
+    header.link_completion(Some(model_link(0x2f00_0300)));
 
     assert_eq!((header.raw_start(), header.raw_end()), (10, 20));
     assert_eq!(
@@ -114,16 +117,16 @@ fn list_preparation_resets_the_scheduler_state_and_keeps_role_bits() {
     );
     header.set_control(0x0f5a_1122);
     header.set_status(0);
-    let previous = ControllerSramLinkAddress::new(0x2f00_0100).expect("test link is representable");
-    let next = ControllerSramLinkAddress::new(0x2f00_0200).expect("test link is representable");
+    let previous = model_link(0x2f00_0100);
+    let next = model_link(0x2f00_0200);
 
     header.prepare_for_list(Some(previous), Some(next));
     assert_eq!(
         (
             words.hardware_next().read().bits_20_21_opaque(),
-            header.hardware_next_image()
+            header.hardware_next_address()
         ),
-        (3, next.compressed_image())
+        (3, Some(next.controller_address()))
     );
     // The event and kind bytes stay; `+0x4e` and the `+0x4f` list state clear.
     let control = words.control().read();
@@ -140,7 +143,7 @@ fn list_preparation_resets_the_scheduler_state_and_keeps_role_bits() {
     assert_eq!(header.previous(), 0x2f00_0100);
 
     header.prepare_for_list(None, None);
-    assert_eq!(header.hardware_next_image(), 0);
+    assert_eq!(header.hardware_next_address(), None);
     assert_eq!(header.previous(), 0);
 }
 
@@ -148,13 +151,16 @@ fn list_preparation_resets_the_scheduler_state_and_keeps_role_bits() {
 fn deletion_marks_the_item_and_keeps_its_next_link() {
     let words = item();
     let header = SchedulerItemHeader::new(&words);
-    let next = ControllerSramLinkAddress::new(0x2f00_0200).expect("test link is representable");
+    let next = model_link(0x2f00_0200);
     header.prepare_for_list(None, Some(next));
     header.set_control(0x0000_0011);
 
     header.mark_deleted();
     assert!(words.hardware_next().read().skip());
-    assert_eq!(header.hardware_next_image(), next.compressed_image());
+    assert_eq!(
+        header.hardware_next_address(),
+        Some(next.controller_address())
+    );
     assert!(words.control().read().deleted());
     assert_eq!(words.control().read().event(), 0x11);
 }

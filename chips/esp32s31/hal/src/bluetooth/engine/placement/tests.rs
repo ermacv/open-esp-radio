@@ -54,7 +54,7 @@ fn one_bluetooth_static_claims_and_initializes_every_owner_from_zero() {
     assert!(df.is_disabled_baseline_initialized());
     let devices = LeDeviceTable::place::<HostDma<0x2f01_1000>>(devices);
     assert!(devices.is_empty());
-    assert_eq!(devices.publication().count().get(), 0);
+    assert_eq!(devices.publication().count(), 0);
 
     let config = SchedulerAllocationConfig::new(2, 1, 0).expect("application capacities fit");
     let mut dtm = DtmPool::place::<HostDma<0x2f02_0000>>(dtm, config.direct_test_mode())

@@ -2,7 +2,7 @@
 //!
 //! The pinned Controller archives define no subscriber of the NRT ISR's
 //! linker-assembled broker table. Its complete hard-handler effect is therefore the
-//! restricted PAC sample/sample/acknowledge/acknowledge transaction. This
+//! HAL sample/sample/acknowledge/acknowledge transaction. This
 //! module retains only an acknowledged token without assigning Link-Layer
 //! names or publishing synthetic work.
 
@@ -11,7 +11,7 @@ use oer_esp32s31_hal::bluetooth::{BluetoothNrtInterruptAcknowledged, InterruptRe
 /// One acknowledged NRT epoch for the pinned standalone default profile.
 ///
 /// A future feature-specific policy must consume the epoch before it can
-/// publish any Link-Layer work. No raw status image crosses the PAC boundary.
+/// publish any Link-Layer work. No raw status image crosses the HAL boundary.
 #[derive(Debug, Eq, PartialEq)]
 #[must_use = "the acknowledged NRT epoch must be retained or explicitly consumed"]
 pub struct NrtDefaultInterruptEpoch {

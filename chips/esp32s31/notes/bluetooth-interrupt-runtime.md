@@ -70,7 +70,7 @@ baseline enable groups as fault/assert paths:
 | bank 1 source 8 | none |
 | bank 1 source 12 | complete `IRQ_DIAGNOSTIC_STATE` at `0x2010_1070` |
 
-This is not a Link-Layer completion group. The restricted PAC therefore
+This is not a Link-Layer completion group. The HAL therefore
 projects the acknowledged status into one semantic
 `BluetoothPrimaryInterruptEpoch` and never exports the raw bank or diagnostic
 images. `BluetoothPrimaryFaultSources` also marks any pending status outside
@@ -128,7 +128,7 @@ BLE subscriber uses both its presence and boolean payload to decide whether to
 retry scheduler work.
 
 The reviewed current-link leaf proves that bits 23:20 of this same register
-are the zero-based current hardware-list index. The restricted PAC projects
+are the zero-based current hardware-list index. The HAL projects
 that field from the later sample and the durable primary scheduler event
 retains it beside the busy/reference observation. This identifies the active
 list at that temporal point; it does not identify an affine scheduler item,
@@ -186,8 +186,8 @@ exact broker epoch is replayed.
 
 The open scheduler therefore defines its own typed item lifecycle, with an
 explicit hardware-finished to CPU-readable fence. Reproducing the vendor list
-nodes or OSAL event object is neither required nor desirable. The restricted
-PAC names and transfers the exact 16-bit `SCHEDULER_FINISHED_LIST_STATUS` mask
+nodes or OSAL event object is neither required nor desirable. The HAL
+names and transfers the exact 16-bit `SCHEDULER_FINISHED_LIST_STATUS` mask
 while keeping the destination word positional as
 `SCHEDULER_FINISHED_LIST_REPORT`. The Bluetooth core drains one list bit per
 bounded step; a list-zero bit runs the executor's completion walk, which

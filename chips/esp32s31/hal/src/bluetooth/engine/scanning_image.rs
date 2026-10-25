@@ -8,7 +8,7 @@ use crate::bluetooth::engine::shared_layout::LinkStateImage;
 use crate::layouts::*;
 
 use crate::bluetooth::engine::{
-    le_phy_packet::LeAccessAddress, le_tx_power::LeTxPower, sram_link::ControllerSramLinkAddress,
+    le_phy_packet::LeAccessAddress, le_tx_power::LeTxPower, sram_link::ControllerSramLink,
 };
 
 /// Primary advertising channel observed by one passive scan window.
@@ -77,8 +77,12 @@ impl LegacyScanWindowTicks {
 pub(super) struct LegacyScanRxHeadProjection(BleLinkStateRxPath);
 
 impl LegacyScanRxHeadProjection {
-    pub(super) const fn from_bound(address: ControllerSramLinkAddress) -> Self {
-        Self(BleLinkStateRxPath::from_bits(address.compressed_image()))
+    pub(super) const fn from_bound(address: ControllerSramLink<BleBufferHeader>) -> Self {
+        Self(
+            BleLinkStateRxPath::ZERO
+                .with_header(Some(address.reference()))
+                .expect("a bound link is encodable"),
+        )
     }
 }
 

@@ -179,7 +179,7 @@ pub use rx_memory_list::RxMemoryListClass;
 
 pub use scheduler_context::{BLUETOOTH_SCHEDULER_CONTEXT_BYTES, SchedulerContextStorage};
 
-pub(crate) use sram_link::ControllerSramLinkAddress;
+pub(crate) use sram_link::{ControllerSramLink, SchedulerItemLink};
 
 #[cfg(test)]
 mod test_images;

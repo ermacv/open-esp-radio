@@ -40,7 +40,7 @@ use crate::bluetooth::engine::{
         SchedulerPoolError, SchedulerRoleInstance, SchedulerRoleKind, SchedulerRolePool,
         SchedulerRoleStorage, sealed,
     },
-    sram_link::ControllerSramLinkAddress,
+    sram_link::{ControllerSramLink, SchedulerItemLink},
 };
 
 /// Bytes retained by one connection link-state allocation.
@@ -89,7 +89,7 @@ impl LinkStateStorage {
     fn initialize(&self, binding: &PeripheralConnectionBinding) {
         crate::bluetooth::engine::shared_layout::clear_link_state(&self.layout);
         self.set_scheduler_head(binding.items[EVENT_ITEM]);
-        let sentinel = binding.tx_sentinel.controller_address().address();
+        let sentinel = binding.tx_sentinel.controller_address();
         self.layout
             .tx_head()
             .write(BleLinkStateTxHead::from_bits(sentinel));
@@ -98,12 +98,10 @@ impl LinkStateStorage {
             .write(BleLinkStateTxTail::from_bits(sentinel));
     }
 
-    fn set_scheduler_head(&self, head: ControllerSramLinkAddress) {
+    fn set_scheduler_head(&self, head: SchedulerItemLink) {
         self.layout
             .scheduler_head()
-            .write(BleLinkStateSchedulerHead::from_bits(
-                head.controller_address().address(),
-            ));
+            .write(BleLinkStateSchedulerHead::ZERO.with_address(Some(head.reference())));
     }
 
     /// Mirror the private chain's software head, tail and spare header.
@@ -134,19 +132,23 @@ impl LinkStateStorage {
 
     fn prepare_event_profile(
         &self,
-        receive_head: ControllerSramLinkAddress,
-        transmit_sentinel: ControllerSramLinkAddress,
+        receive_head: ControllerSramLink<BleBufferHeader>,
+        transmit_sentinel: ControllerSramLink<BleBufferHeader>,
         event: &PeripheralConnectionFirstEvent,
     ) {
         let tx = CONNECTION_TX_PATH;
         self.layout.tx_path().write(
-            BleLinkStateTxPath::from_bits(transmit_sentinel.compressed_image())
+            BleLinkStateTxPath::ZERO
+                .with_header(Some(transmit_sentinel.reference()))
+                .expect("a bound link is encodable")
                 .with_max_tx_octets(tx.max_tx_octets())
                 .with_queue_ready(tx.queue_ready())
                 .with_valid(tx.valid()),
         );
         self.layout.rx_path().write(
-            BleLinkStateRxPath::from_bits(receive_head.compressed_image())
+            BleLinkStateRxPath::ZERO
+                .with_header(Some(receive_head.reference()))
+                .expect("a bound link is encodable")
                 .with_unconsumed_limit(255),
         );
         self.layout.control_policy().write(CONNECTION_CONTROL);
@@ -205,13 +207,13 @@ impl LinkStateStorage {
     fn install_direction_finding_workspace(&self, workspace: DirectionFindingWorkspaceLink) {
         let original = self.layout.direction_finding().read();
         self.layout.direction_finding().write(
-            BleLinkStateDirectionFinding::from_bits(
-                workspace.compressed_link_state_configuration(),
-            )
-            .with_common_radio_policy(original.common_radio_policy())
-            .expect("retained radio policy fits")
-            .with_ready(true)
-            .with_bit_31_opaque(original.bit_31_opaque()),
+            BleLinkStateDirectionFinding::ZERO
+                .with_configuration(Some(workspace.link_state_configuration()))
+                .expect("a bound link is encodable")
+                .with_common_radio_policy(original.common_radio_policy())
+                .expect("retained radio policy fits")
+                .with_ready(true)
+                .with_bit_31_opaque(original.bit_31_opaque()),
         );
         self.layout.direction_finding_policy().write(
             self.layout
@@ -264,7 +266,7 @@ impl ItemStorage {
     fn initialize(
         &self,
         binding: &PeripheralConnectionBinding,
-        next_free: Option<ControllerSramLinkAddress>,
+        next_free: Option<SchedulerItemLink>,
     ) {
         crate::bluetooth::engine::shared_layout::clear_scheduler_item(&self.layout);
         self.link_free(next_free);
@@ -276,26 +278,28 @@ impl ItemStorage {
             .write(BleSchedulerItemAllocationNumber::from_bits(u32::from(
                 binding.number,
             )));
-        self.layout
-            .context()
-            .write(BleSchedulerItemContext::from_bits(
-                binding.scheduler_context.compressed_image(),
-            ));
+        self.layout.context().write(
+            BleSchedulerItemContext::ZERO
+                .with_address(Some(binding.scheduler_context.reference()))
+                .expect("a bound link is encodable"),
+        );
         self.layout.link_state().write(
-            BleSchedulerItemLinkState::from_bits(binding.link_state.compressed_image())
+            BleSchedulerItemLinkState::ZERO
+                .with_address(Some(binding.link_state.reference()))
+                .expect("a bound link is encodable")
                 .with_kind(2)
                 .expect("connection prefix fits"),
         );
         self.layout.control().write(CONNECTION_ITEM_CONTROL);
     }
 
-    fn link_free(&self, next_free: Option<ControllerSramLinkAddress>) {
+    fn link_free(&self, next_free: Option<SchedulerItemLink>) {
         self.layout.hardware_next().write(
-            BleSchedulerItemHardwareNext::from_bits(
-                next_free.map_or(0, ControllerSramLinkAddress::compressed_image),
-            )
-            .with_bits_20_21_opaque(3)
-            .expect("allocation prefix fits"),
+            BleSchedulerItemHardwareNext::ZERO
+                .with_address(next_free.map(ControllerSramLink::reference))
+                .expect("a bound link is encodable")
+                .with_bits_20_21_opaque(3)
+                .expect("allocation prefix fits"),
         );
     }
 
@@ -421,11 +425,11 @@ pub struct PeripheralConnectionStorage {
 #[doc(hidden)]
 #[derive(Clone, Copy)]
 pub struct PeripheralConnectionBinding {
-    link_state: ControllerSramLinkAddress,
-    scheduler_context: ControllerSramLinkAddress,
-    items: [ControllerSramLinkAddress; ITEMS],
-    tx_sentinel: ControllerSramLinkAddress,
-    tx_successor: ControllerSramLinkAddress,
+    link_state: ControllerSramLink<BleLinkState>,
+    scheduler_context: ControllerSramLink<BleSchedulerContext>,
+    items: [SchedulerItemLink; ITEMS],
+    tx_sentinel: ControllerSramLink<BleBufferHeader>,
+    tx_successor: ControllerSramLink<BleBufferHeader>,
     tx_packet: LeTxPacketAddress<TX_PACKET_BYTES>,
     rx: LeRxRing<RX_PACKETS>,
     number: u16,
@@ -479,18 +483,14 @@ impl SchedulerRoleStorage for PeripheralConnectionStorage {
         number: u16,
     ) -> PeripheralConnectionBinding {
         PeripheralConnectionBinding {
-            link_state: ControllerSramLinkAddress::from_placed(placement.address(&self.link_state)),
-            scheduler_context: ControllerSramLinkAddress::from_placed(
-                placement.address(&self.scheduler_context),
+            link_state: ControllerSramLink::new(placement.reference(&self.link_state.layout)),
+            scheduler_context: ControllerSramLink::new(
+                placement.reference(self.scheduler_context.layout()),
             ),
-            tx_sentinel: ControllerSramLinkAddress::from_placed(
-                placement.address(&self.tx_sentinel),
-            ),
-            tx_successor: ControllerSramLinkAddress::from_placed(
-                placement.address(&self.tx_successor),
-            ),
+            tx_sentinel: ControllerSramLink::new(placement.reference(&self.tx_sentinel.layout)),
+            tx_successor: ControllerSramLink::new(placement.reference(&self.tx_successor.layout)),
             items: core::array::from_fn(|index| {
-                ControllerSramLinkAddress::from_placed(placement.address(&self.items[index]))
+                ControllerSramLink::new(placement.reference(&self.items[index].layout))
             }),
             tx_packet: LeTxPacketAddress::from_placed(placement, &self.tx_packet),
             rx: LeRxRing::addresses(&self.rx, placement),
@@ -502,7 +502,7 @@ impl SchedulerRoleStorage for PeripheralConnectionStorage {
         &self.items[item].layout
     }
 
-    fn item_link(binding: &PeripheralConnectionBinding, item: usize) -> ControllerSramLinkAddress {
+    fn item_link(binding: &PeripheralConnectionBinding, item: usize) -> SchedulerItemLink {
         binding.items[item]
     }
 
@@ -794,9 +794,7 @@ impl<'pool, 'epoch, const N: usize> PeripheralConnectionPool<'pool, 'epoch, N> {
             .link_state
             .layout
             .tx_tail()
-            .write(BleLinkStateTxTail::from_bits(
-                next_address.controller_address().address(),
-            ));
+            .write(BleLinkStateTxTail::ZERO.with_address(Some(next_address.reference())));
         cpu.state.tx_pending = true;
         Ok(true)
     }
@@ -829,9 +827,7 @@ impl<'pool, 'epoch, const N: usize> PeripheralConnectionPool<'pool, 'epoch, N> {
             .link_state
             .layout
             .tx_head()
-            .write(BleLinkStateTxHead::from_bits(
-                address.controller_address().address(),
-            ));
+            .write(BleLinkStateTxHead::ZERO.with_address(Some(address.reference())));
         cpu.state.tx_current_second = !cpu.state.tx_current_second;
         cpu.state.tx_pending = false;
         Ok(true)

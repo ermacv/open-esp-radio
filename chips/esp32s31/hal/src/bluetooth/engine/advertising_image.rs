@@ -11,7 +11,7 @@ use crate::layouts::*;
 use crate::bluetooth::engine::{
     le_phy_packet::{LeAccessAddress, LeCrcInit},
     le_tx_power::LeTxPower,
-    sram_link::ControllerSramLinkAddress,
+    sram_link::ControllerSramLink,
 };
 
 /// Semantic primary channel selected by one legacy advertising event.
@@ -83,7 +83,7 @@ impl LegacyAdvertisingLinkStateWords {
     /// supported profile leaves clear.
     pub(super) const fn reset(
         mut self,
-        tx_header: ControllerSramLinkAddress,
+        tx_header: ControllerSramLink<BleBufferHeader>,
         own_address: LegacyAdvertisingOwnAddress,
         default_tx_power: LeTxPower,
         priority: SchedulerEventPriority,
@@ -92,7 +92,11 @@ impl LegacyAdvertisingLinkStateWords {
         // pointer index's upper byte and ORs the bound header into it.
         // Operate on the decoded field, independently of its location in SRAM.
         let previous_index = self.word_00.header().to_le_bytes();
-        let next_index = tx_header.compressed_image().to_le_bytes();
+        let next_index = BleLinkStateTxPath::ZERO
+            .with_header(Some(tx_header.reference()))
+            .expect("a bound link is encodable")
+            .header()
+            .to_le_bytes();
         let header_index = u32::from_le_bytes([
             next_index[0],
             next_index[1],

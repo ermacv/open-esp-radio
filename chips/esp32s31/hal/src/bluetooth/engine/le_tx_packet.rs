@@ -8,7 +8,7 @@
 
 #![forbid(unsafe_code)]
 
-use crate::bluetooth::engine::sram_link::ControllerSramLinkAddress;
+use crate::bluetooth::engine::sram_link::ControllerSramLink;
 
 use crate::bluetooth::engine::shared_layout::BufferHeaderImage;
 use crate::layouts::*;
@@ -124,12 +124,12 @@ impl LeTxBufferHeaderStorage {
     pub(super) fn initialize_bound_tx_with_successor<const N: usize>(
         &self,
         packet: LeTxPacketAddress<N>,
-        successor: Option<ControllerSramLinkAddress>,
+        successor: Option<ControllerSramLink<BleBufferHeader>>,
     ) {
         BufferHeaderImage {
-            next: BleBufferHeaderNext::from_bits(
-                successor.map_or(0, ControllerSramLinkAddress::compressed_image),
-            ),
+            next: BleBufferHeaderNext::ZERO
+                .with_address(successor.map(ControllerSramLink::reference))
+                .expect("a bound link is encodable"),
             packet_base: BleBufferHeaderPacketBase::ZERO
                 .with_address(packet.base)
                 .expect("the placed TX buffer address is encodable"),
@@ -147,15 +147,16 @@ impl LeTxBufferHeaderStorage {
         EMPTY_TX_CURSOR.write(&self.layout);
     }
     #[cfg(test)]
-    pub(super) fn successor_image(&self) -> u32 {
-        self.layout.next().read().address()
+    pub(super) fn successor_address(&self) -> Option<u32> {
+        self.layout.next().read().address_address()
     }
-    pub(super) fn link_successor(&self, successor: ControllerSramLinkAddress) {
+    pub(super) fn link_successor(&self, successor: ControllerSramLink<BleBufferHeader>) {
         self.layout.next().write(
             self.layout
                 .next()
                 .read()
-                .with_address_from(BleBufferHeaderNext::from_bits(successor.compressed_image())),
+                .with_address(Some(successor.reference()))
+                .expect("a bound link is encodable"),
         );
     }
     pub(super) fn transmission_completed(&self) -> bool {

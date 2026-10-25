@@ -13,7 +13,7 @@
 
 #![deny(unsafe_code)]
 
-use crate::bluetooth::engine::ControllerSramLinkAddress;
+use crate::bluetooth::engine::SchedulerItemLink;
 
 use crate::bluetooth::engine::scheduler::{
     SchedulerAction, SchedulerIdleInsertion, SchedulerObservation, SchedulerTransactionFault,
@@ -51,12 +51,12 @@ pub(crate) trait SchedulerHardwareBackend {
     type Publications: SchedulerPublications;
     type StartError;
 
-    fn publish_execution_lock(&mut self, at: ControllerSramLinkAddress) -> Lock<Self>;
+    fn publish_execution_lock(&mut self, at: SchedulerItemLink) -> Lock<Self>;
     fn release_execution_lock(&mut self, lock: Lock<Self>);
     fn publish_execution_modify(&mut self, list_deletion: bool) -> Modify<Self>;
     fn release_execution_modify(&mut self, modify: Modify<Self>);
-    fn publish_lock_modify(&mut self, at: ControllerSramLinkAddress) -> LockModify<Self>;
-    fn publish_head(&mut self, head: Option<ControllerSramLinkAddress>);
+    fn publish_lock_modify(&mut self, at: SchedulerItemLink) -> LockModify<Self>;
+    fn publish_head(&mut self, head: Option<SchedulerItemLink>);
     fn index_cancellation(&mut self) -> Indexed<Self>;
     async fn acknowledge_cancellation_source(
         &mut self,
@@ -68,7 +68,7 @@ pub(crate) trait SchedulerHardwareBackend {
         acknowledged: Acknowledged<Self>,
     ) -> Cancellation<Self>;
     fn release_cancellation(&mut self, cancellation: Cancellation<Self>);
-    fn publish_skip(&mut self, at: ControllerSramLinkAddress) -> Skip<Self>;
+    fn publish_skip(&mut self, at: SchedulerItemLink) -> Skip<Self>;
     fn clear_skip(&mut self, skip: Skip<Self>);
 
     async fn observe(
@@ -82,7 +82,7 @@ pub(crate) trait SchedulerHardwareBackend {
 
     async fn start(
         &mut self,
-        head: ControllerSramLinkAddress,
+        head: SchedulerItemLink,
     ) -> Result<Run<Self>, SchedulerStartError<Self::StartError>>;
 }
 

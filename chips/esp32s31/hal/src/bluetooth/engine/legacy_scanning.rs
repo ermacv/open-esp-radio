@@ -31,7 +31,7 @@ use crate::bluetooth::engine::{
         SchedulerPoolError, SchedulerRoleInstance, SchedulerRoleKind, SchedulerRolePool,
         SchedulerRoleStorage, sealed,
     },
-    sram_link::ControllerSramLinkAddress,
+    sram_link::{ControllerSramLink, SchedulerItemLink},
 };
 
 /// Scheduler items of one scanner instance.
@@ -91,11 +91,11 @@ impl LinkStateStorage {
         self.layout.scheduler_head().read().bits()
     }
 
-    fn set_free_head(&self, head: Option<ControllerSramLinkAddress>) {
+    fn set_free_head(&self, head: Option<SchedulerItemLink>) {
         self.layout
             .scheduler_head()
             .write(BleLinkStateSchedulerHead::from_bits(
-                head.map_or(0, |head| head.controller_address().address()),
+                head.map_or(0, |head| head.controller_address()),
             ));
     }
 
@@ -141,9 +141,9 @@ impl ItemStorage {
     fn initialize(
         &self,
         number: u16,
-        next_free: Option<ControllerSramLinkAddress>,
-        scheduler_context: ControllerSramLinkAddress,
-        link_state: ControllerSramLinkAddress,
+        next_free: Option<SchedulerItemLink>,
+        scheduler_context: ControllerSramLink<BleSchedulerContext>,
+        link_state: ControllerSramLink<BleLinkState>,
     ) {
         crate::bluetooth::engine::shared_layout::clear_scheduler_item(&self.layout);
         let header = self.header();
@@ -151,13 +151,15 @@ impl ItemStorage {
             .hardware_next()
             .write(SCHEDULER_ITEM_ALLOCATION_PREFIX);
         header.link_hardware_next(next_free);
-        self.layout
-            .context()
-            .write(BleSchedulerItemContext::from_bits(
-                scheduler_context.compressed_image(),
-            ));
+        self.layout.context().write(
+            BleSchedulerItemContext::ZERO
+                .with_address(Some(scheduler_context.reference()))
+                .expect("a bound link is encodable"),
+        );
         self.layout.link_state().write(
-            BleSchedulerItemLinkState::from_bits(link_state.compressed_image())
+            BleSchedulerItemLinkState::ZERO
+                .with_address(Some(link_state.reference()))
+                .expect("a bound link is encodable")
                 .with_kind(ScanItemKind::Listen.item_kind())
                 .expect("reviewed role kind fits"),
         );
@@ -223,10 +225,10 @@ pub struct LegacyScanStorage {
 #[doc(hidden)]
 #[derive(Clone, Copy)]
 pub struct LegacyScanBinding {
-    link_state: ControllerSramLinkAddress,
-    scheduler_context: ControllerSramLinkAddress,
-    items: [ControllerSramLinkAddress; ITEMS],
-    scan_request_header: ControllerSramLinkAddress,
+    link_state: ControllerSramLink<BleLinkState>,
+    scheduler_context: ControllerSramLink<BleSchedulerContext>,
+    items: [SchedulerItemLink; ITEMS],
+    scan_request_header: ControllerSramLink<BleBufferHeader>,
     scan_request_packet: LeTxPacketAddress<SCAN_REQUEST_TX_PACKET_BYTES>,
     first_number: u16,
 }
@@ -235,7 +237,7 @@ impl LegacyScanBinding {
     fn item_at(&self, address: u32) -> Option<usize> {
         self.items
             .iter()
-            .position(|item| item.controller_address().address() == address)
+            .position(|item| item.controller_address() == address)
     }
 }
 
@@ -270,15 +272,15 @@ impl SchedulerRoleStorage for LegacyScanStorage {
         first_number: u16,
     ) -> LegacyScanBinding {
         LegacyScanBinding {
-            link_state: ControllerSramLinkAddress::from_placed(placement.address(&self.link_state)),
-            scheduler_context: ControllerSramLinkAddress::from_placed(
-                placement.address(&self.scheduler_context),
+            link_state: ControllerSramLink::new(placement.reference(&self.link_state.layout)),
+            scheduler_context: ControllerSramLink::new(
+                placement.reference(self.scheduler_context.layout()),
             ),
-            scan_request_header: ControllerSramLinkAddress::from_placed(
-                placement.address(&self.scan_request_header),
+            scan_request_header: ControllerSramLink::new(
+                placement.reference(&self.scan_request_header.layout),
             ),
             items: core::array::from_fn(|index| {
-                ControllerSramLinkAddress::from_placed(placement.address(&self.items[index]))
+                ControllerSramLink::new(placement.reference(&self.items[index].layout))
             }),
             scan_request_packet: LeTxPacketAddress::from_placed(
                 placement,
@@ -292,7 +294,7 @@ impl SchedulerRoleStorage for LegacyScanStorage {
         &self.items[item].layout
     }
 
-    fn item_link(binding: &LegacyScanBinding, item: usize) -> ControllerSramLinkAddress {
+    fn item_link(binding: &LegacyScanBinding, item: usize) -> SchedulerItemLink {
         binding.items[item]
     }
 
@@ -413,17 +415,18 @@ impl<'pool, 'epoch, const N: usize> LegacyScanPool<'pool, 'epoch, N> {
             let header = cpu.binding.scan_request_header;
             let layout = &cpu.graph.link_state.layout;
             layout.tx_path().write(
-                layout
-                    .tx_path()
-                    .read()
-                    .with_header_from(BleLinkStateTxPath::from_bits(header.compressed_image())),
+                layout.tx_path().read().with_header_from(
+                    BleLinkStateTxPath::ZERO
+                        .with_header(Some(header.reference()))
+                        .expect("a bound link is encodable"),
+                ),
             );
-            layout.tx_head().write(BleLinkStateTxHead::from_bits(
-                header.controller_address().address(),
-            ));
-            layout.tx_tail().write(BleLinkStateTxTail::from_bits(
-                header.controller_address().address(),
-            ));
+            layout
+                .tx_head()
+                .write(BleLinkStateTxHead::ZERO.with_address(Some(header.reference())));
+            layout
+                .tx_tail()
+                .write(BleLinkStateTxTail::ZERO.with_address(Some(header.reference())));
         }
         *cpu.state = LegacyScanState::Reset { event: None };
         Ok(())
@@ -456,13 +459,13 @@ impl<'pool, 'epoch, const N: usize> LegacyScanPool<'pool, 'epoch, N> {
             .item_at(head)
             .ok_or(LegacyScanError::ForeignFreeHead)?;
         let item = &cpu.graph.items[index];
-        let next_free = item.header().hardware_next_image();
+        let next_free = item.header().hardware_next_address();
         let next_free = cpu
             .binding
             .items
             .iter()
             .copied()
-            .find(|link| next_free != 0 && link.compressed_image() == next_free);
+            .find(|link| link.is(next_free));
 
         let link_state = &cpu.graph.link_state;
         link_state.install(link_state.image().with_window(window_ticks));

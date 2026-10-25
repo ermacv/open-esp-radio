@@ -898,3 +898,107 @@ fn a_snapshot_samples_its_named_events_and_documents_its_consumed_event() {
     let output = run(&rust, "fn main() {}");
     assert!(output.is_empty());
 }
+
+/// The shapes with a word of two write triggers (`RAD_KICK`) and the
+/// descriptor pointer published by a field-or-modify instead of its pointer
+/// operation.
+fn with_trigger_word_and_pointer_or() -> std::vec::Vec<(&'static str, &'static str, &'static str)> {
+    let mut edits = SHAPES.to_vec();
+    edits.extend_from_slice(&[
+        (
+            "types/radio.toml",
+            "[[groups]]\nname = \"RAD_CH%s\"",
+            "[[registers]]\nname = \"RAD_KICK\"\noffset = 0x90\n\n[[registers.fields]]\nname = \"GO\"\nbits = \"0\"\nclass = \"write-trigger\"\n\n[[registers.fields]]\nname = \"LEVEL\"\nbits = \"6:4\"\nclass = \"write-trigger\"\n\n[[groups]]\nname = \"RAD_CH%s\"",
+        ),
+        (
+            "policy.toml",
+            "\"RAD_LOW\", \"RAD_HIGH\", \"RAD_RXCTL\"]",
+            "\"RAD_LOW\", \"RAD_HIGH\", \"RAD_RXCTL\", \"RAD_KICK\"]",
+        ),
+        (
+            "policy.toml",
+            "\"RAD_LOW\", \"RAD_HIGH\", \"RAD_RXCTL\"]",
+            "\"RAD_LOW\", \"RAD_HIGH\", \"RAD_RXCTL\", \"RAD_KICK\"]",
+        ),
+        (
+            "policy.toml",
+            "[[pointer-fields]]\nname = \"descriptor\"\nfield = \"RADIO0.RAD_DESC.PTR\"",
+            "[[field-or-modifies]]\nname = \"or_descriptor\"\nfields = [{ field = \"RADIO0.RAD_DESC.PTR\", source-bit-offset = 0 }]",
+        ),
+    ]);
+    edits
+}
+
+const POINTER_AND_TRIGGERS_BEHAVIOUR: &str = r#"
+fn hex(word: u32) -> String {
+    format!("{word:08x}")
+}
+
+/// The vendor's OR takes a typed reference alone; never called, as only the
+/// hardware's placement makes one.
+fn or(task: &mut radio::Task<oer_mmio::Host<'_>>, next: oer_mmio::DmaRef<layouts::RxDescriptor>) {
+    task.or_descriptor(next);
+}
+
+fn main() {
+    let mut memory = [0_u32; 0x40];
+    memory[0x68 / 4] = 0xabcd_1234;
+    {
+        let (mut task, _irq) = radio::radio0_host(&mut memory).expect("memory holds the block");
+        // The zero image of a pointer, every other bit kept.
+        task.modify_low(|w| {
+            w.clear_address();
+        });
+        // Two triggers in one write.
+        task.trigger_kick(|t| {
+            t.go().level(oer_mmio::Bits::new(5).expect("3 bits"));
+        });
+    }
+    println!("low {}", hex(memory[0x68 / 4]));
+    println!("kick {}", hex(memory[0x90 / 4]));
+    memory[0x90 / 4] = 0;
+    {
+        let (mut task, _irq) = radio::radio0_host(&mut memory).expect("memory holds the block");
+        // A field's own trigger stays.
+        task.trigger_kick_go();
+    }
+    println!("go {}", hex(memory[0x90 / 4]));
+}
+"#;
+
+#[test]
+fn a_pointer_takes_its_zero_image_and_triggers_share_one_write() {
+    let output = run(
+        &rendered_with(&with_trigger_word_and_pointer_or()),
+        POINTER_AND_TRIGGERS_BEHAVIOUR,
+    );
+    assert_eq!(
+        output.lines().collect::<Vec<_>>(),
+        ["low abcd0000", "kick 00000051", "go 00000001"]
+    );
+}
+
+#[test]
+fn a_pointer_or_renders_on_its_part_and_reads_the_word_fresh() {
+    let rust = rendered_with(&with_trigger_word_and_pointer_or());
+    for item in [
+        "pub fn or_descriptor(&mut self, value: oer_mmio::DmaRef<super::layouts::RxDescriptor>)",
+        "self.0.write::<0x5c>(self.0.read::<0x5c>() | value.bits());",
+    ] {
+        assert!(rust.contains(item), "{item}\n{rust}");
+    }
+    // A pointer setter never takes an integer, its zero image aside.
+    let refusal = refused(
+        &rust,
+        "fn main() {\n    let mut memory = [0_u32; 0x40];\n    let (mut task, _irq) = radio::radio0_host(&mut memory).unwrap();\n    task.modify_low(|w| { w.set_address(0); });\n}\n",
+    );
+    assert!(refusal.contains("mismatched types"), "{refusal}");
+}
+
+#[test]
+fn a_snapshot_clear_word_has_no_trigger_writer() {
+    let rust = rendered();
+    // `RAD_EVENT_CLR` holds three triggers but only its acknowledgement
+    // writes it.
+    assert!(!rust.contains("pub fn trigger_event_clr("), "{rust}");
+}

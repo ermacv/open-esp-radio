@@ -6602,6 +6602,13 @@ pub mod btdm {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
             }
+
+            /// Set `HEAD_POINTER` to the zero image: no address.
+            #[inline]
+            pub fn clear_head_pointer(&mut self) -> &mut Self {
+                self.0 &= 0xfff00000;
+                self
+            }
         }
     }
 
@@ -19396,6 +19403,13 @@ pub mod bt_mac {
                 self
             }
 
+            /// Set `COMPRESSED_SRAM_POINTER` to the zero image: no address.
+            #[inline]
+            pub fn clear_compressed_sram_pointer(&mut self) -> &mut Self {
+                self.0 &= 0xfff00000;
+                self
+            }
+
             /// Set `HARDWARE_LIST_INDEX`.
             #[inline]
             pub fn set_hardware_list_index(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
@@ -20209,6 +20223,13 @@ pub mod bt_mac {
                 self
             }
 
+            /// Set `COMPRESSED_SRAM_POINTER` to the zero image: no address.
+            #[inline]
+            pub fn clear_compressed_sram_pointer(&mut self) -> &mut Self {
+                self.0 &= 0xfff00000;
+                self
+            }
+
             /// Set `ZERO_IMAGE_20_26`.
             #[inline]
             pub fn set_zero_image_20_26(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
@@ -20438,6 +20459,13 @@ pub mod bt_mac {
                 self.0 = value.bits().wrapping_add(0x4d);
                 self
             }
+
+            /// Set `ADDRESS` to the zero image: no address.
+            #[inline]
+            pub fn clear_address(&mut self) -> &mut Self {
+                self.0 &= 0x00000000;
+                self
+            }
         }
     }
 
@@ -20647,6 +20675,13 @@ pub mod bt_mac {
                 value: oer_mmio::DmaRef<super::super::layouts::BleSchedulerItem>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self
+            }
+
+            /// Set `COMPRESSED_SRAM_POINTER` to the zero image: no address.
+            #[inline]
+            pub fn clear_compressed_sram_pointer(&mut self) -> &mut Self {
+                self.0 &= 0xfff00000;
                 self
             }
 
@@ -21156,6 +21191,13 @@ pub mod bt_mac {
                 self
             }
 
+            /// Set `COMPRESSED_SRAM_POINTER` to the zero image: no address.
+            #[inline]
+            pub fn clear_compressed_sram_pointer(&mut self) -> &mut Self {
+                self.0 &= 0xfff00000;
+                self
+            }
+
             /// Set `RX_VALID`.
             #[inline]
             pub fn set_rx_valid(&mut self, value: bool) -> &mut Self {
@@ -21225,6 +21267,13 @@ pub mod bt_mac {
                 value: oer_mmio::DmaRef<super::super::layouts::BleBufferHeader>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self
+            }
+
+            /// Set `COMPRESSED_SRAM_POINTER` to the zero image: no address.
+            #[inline]
+            pub fn clear_compressed_sram_pointer(&mut self) -> &mut Self {
+                self.0 &= 0xfff00000;
                 self
             }
 
@@ -21305,6 +21354,13 @@ pub mod bt_mac {
                 self
             }
 
+            /// Set `COMPRESSED_SRAM_POINTER` to the zero image: no address.
+            #[inline]
+            pub fn clear_compressed_sram_pointer(&mut self) -> &mut Self {
+                self.0 &= 0xfff00000;
+                self
+            }
+
             /// Set `RX_VALID`.
             #[inline]
             pub fn set_rx_valid(&mut self, value: bool) -> &mut Self {
@@ -21374,6 +21430,13 @@ pub mod bt_mac {
                 value: oer_mmio::DmaRef<super::super::layouts::BleBufferHeader>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self
+            }
+
+            /// Set `COMPRESSED_SRAM_POINTER` to the zero image: no address.
+            #[inline]
+            pub fn clear_compressed_sram_pointer(&mut self) -> &mut Self {
+                self.0 &= 0xfff00000;
                 self
             }
 
@@ -21454,6 +21517,13 @@ pub mod bt_mac {
                 self
             }
 
+            /// Set `COMPRESSED_SRAM_POINTER` to the zero image: no address.
+            #[inline]
+            pub fn clear_compressed_sram_pointer(&mut self) -> &mut Self {
+                self.0 &= 0xfff00000;
+                self
+            }
+
             /// Set `RX_VALID`.
             #[inline]
             pub fn set_rx_valid(&mut self, value: bool) -> &mut Self {
@@ -21523,6 +21593,13 @@ pub mod bt_mac {
                 value: oer_mmio::DmaRef<super::super::layouts::BleBufferHeader>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self
+            }
+
+            /// Set `COMPRESSED_SRAM_POINTER` to the zero image: no address.
+            #[inline]
+            pub fn clear_compressed_sram_pointer(&mut self) -> &mut Self {
+                self.0 &= 0xfff00000;
                 self
             }
 
@@ -23443,6 +23520,33 @@ pub mod bt_mac {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `SCHEDULER_RUN`.
+            #[inline]
+            pub fn scheduler_run(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `BITS_0_13_OPAQUE` to `value`.
+            #[inline]
+            pub fn bits_0_13_opaque(&mut self, value: oer_mmio::Bits<14>) -> &mut Self {
+                self.0 = (self.0 & 0xffffc000) | value.get();
+                self
+            }
+
+            /// Set the write-trigger field `BITS_15_31_OPAQUE` to `value`.
+            #[inline]
+            pub fn bits_15_31_opaque(&mut self, value: oer_mmio::Bits<17>) -> &mut Self {
+                self.0 = (self.0 & 0x00007fff) | (value.get() << 15);
+                self
+            }
+        }
     }
 
     /// The `WORD_04BC_OPAQUE` register.
@@ -24475,6 +24579,13 @@ pub mod bt_mac {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
             }
+
+            /// Set `COMPRESSED_ADDRESS` to the zero image: no address.
+            #[inline]
+            pub fn clear_compressed_address(&mut self) -> &mut Self {
+                self.0 &= 0xfff00000;
+                self
+            }
         }
     }
 
@@ -24553,6 +24664,13 @@ pub mod bt_mac {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
             }
+
+            /// Set `COMPRESSED_SRAM_POINTER` to the zero image: no address.
+            #[inline]
+            pub fn clear_compressed_sram_pointer(&mut self) -> &mut Self {
+                self.0 &= 0xfff00000;
+                self
+            }
         }
     }
 
@@ -24597,6 +24715,13 @@ pub mod bt_mac {
                 value: oer_mmio::DmaRef<super::super::layouts::BlePhyEnvironment>,
             ) -> &mut Self {
                 self.0 = value.bits().wrapping_add(0x2c);
+                self
+            }
+
+            /// Set `ADDRESS` to the zero image: no address.
+            #[inline]
+            pub fn clear_address(&mut self) -> &mut Self {
+                self.0 &= 0x00000000;
                 self
             }
         }
@@ -25697,6 +25822,13 @@ pub mod bt_mac {
                 value: oer_mmio::DmaRef<super::super::layouts::BleDirectionFindingDescriptor>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self
+            }
+
+            /// Set `COMPRESSED_DESCRIPTOR_POINTER` to the zero image: no address.
+            #[inline]
+            pub fn clear_compressed_descriptor_pointer(&mut self) -> &mut Self {
+                self.0 &= 0xfff00000;
                 self
             }
         }
@@ -27428,6 +27560,84 @@ pub mod bt_mac {
             change(&mut value);
             self.0.write::<0x36c>(value.0);
         }
+
+        /// OR the image of `value` into `COMPRESSED_SRAM_POINTER` of a fresh read; every other bit keeps
+        /// the value read, every write-trigger field is zero (`BT_MAC.GLOBAL_RXLINK_1_CURRENT`).
+        ///
+        /// SOURCE: BLOB_LIBBLE_MMGMT_HW_LISTS.
+        #[inline]
+        pub fn or_bluetooth_memory_list_1_pointer_a(
+            &mut self,
+            value: oer_mmio::DmaRef<super::layouts::BleBufferHeader>,
+        ) {
+            self.0
+                .write::<0x280>(self.0.read::<0x280>() | ((value.bits() >> 2) & 0xfffff));
+        }
+
+        /// OR the image of `value` into `COMPRESSED_SRAM_POINTER` of a fresh read; every other bit keeps
+        /// the value read, every write-trigger field is zero (`BT_MAC.GLOBAL_RXLINK_1_NEXT`).
+        ///
+        /// SOURCE: BLOB_LIBBLE_MMGMT_HW_LISTS.
+        #[inline]
+        pub fn or_bluetooth_memory_list_1_pointer_b(
+            &mut self,
+            value: oer_mmio::DmaRef<super::layouts::BleBufferHeader>,
+        ) {
+            self.0
+                .write::<0x284>(self.0.read::<0x284>() | ((value.bits() >> 2) & 0xfffff));
+        }
+
+        /// OR the image of `value` into `COMPRESSED_SRAM_POINTER` of a fresh read; every other bit keeps
+        /// the value read, every write-trigger field is zero (`BT_MAC.GLOBAL_RXLINK_2_CURRENT`).
+        ///
+        /// SOURCE: BLOB_LIBBLE_MMGMT_HW_LISTS.
+        #[inline]
+        pub fn or_bluetooth_memory_list_2_pointer_a(
+            &mut self,
+            value: oer_mmio::DmaRef<super::layouts::BleBufferHeader>,
+        ) {
+            self.0
+                .write::<0x288>(self.0.read::<0x288>() | ((value.bits() >> 2) & 0xfffff));
+        }
+
+        /// OR the image of `value` into `COMPRESSED_SRAM_POINTER` of a fresh read; every other bit keeps
+        /// the value read, every write-trigger field is zero (`BT_MAC.GLOBAL_RXLINK_2_NEXT`).
+        ///
+        /// SOURCE: BLOB_LIBBLE_MMGMT_HW_LISTS.
+        #[inline]
+        pub fn or_bluetooth_memory_list_2_pointer_b(
+            &mut self,
+            value: oer_mmio::DmaRef<super::layouts::BleBufferHeader>,
+        ) {
+            self.0
+                .write::<0x28c>(self.0.read::<0x28c>() | ((value.bits() >> 2) & 0xfffff));
+        }
+
+        /// OR the image of `value` into `COMPRESSED_SRAM_POINTER` of a fresh read; every other bit keeps
+        /// the value read, every write-trigger field is zero (`BT_MAC.GLOBAL_RXLINK_3_CURRENT`).
+        ///
+        /// SOURCE: BLOB_LIBBLE_MMGMT_HW_LISTS.
+        #[inline]
+        pub fn or_bluetooth_memory_list_3_pointer_a(
+            &mut self,
+            value: oer_mmio::DmaRef<super::layouts::BleBufferHeader>,
+        ) {
+            self.0
+                .write::<0x290>(self.0.read::<0x290>() | ((value.bits() >> 2) & 0xfffff));
+        }
+
+        /// OR the image of `value` into `COMPRESSED_SRAM_POINTER` of a fresh read; every other bit keeps
+        /// the value read, every write-trigger field is zero (`BT_MAC.GLOBAL_RXLINK_3_NEXT`).
+        ///
+        /// SOURCE: BLOB_LIBBLE_MMGMT_HW_LISTS.
+        #[inline]
+        pub fn or_bluetooth_memory_list_3_pointer_b(
+            &mut self,
+            value: oer_mmio::DmaRef<super::layouts::BleBufferHeader>,
+        ) {
+            self.0
+                .write::<0x294>(self.0.read::<0x294>() | ((value.bits() >> 2) & 0xfffff));
+        }
     }
 
     /// The `BluetoothResetIdleStatus0` part of `BT_MAC`.
@@ -27568,6 +27778,16 @@ pub mod bt_mac {
         #[inline]
         pub fn trigger_interrupt_clear_bits_15_31_opaque(&mut self, value: oer_mmio::Bits<17>) {
             self.0.write::<0x4b8>(value.get() << 15);
+        }
+
+        /// Write to the write-trigger fields of `INTERRUPT_CLEAR` the change sets, in one
+        /// write, starting each one's hardware action once; every other bit is
+        /// zero or its fixed value.
+        #[inline]
+        pub fn trigger_interrupt_clear(&mut self, change: impl FnOnce(&mut interrupt_clear::T)) {
+            let mut triggers = interrupt_clear::T(0);
+            change(&mut triggers);
+            self.0.write::<0x4b8>(triggers.0);
         }
 
         /// Read `WORD_0538_OPAQUE`.
@@ -33869,6 +34089,40 @@ pub mod cache {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x00000033;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `L1_IBUS0_OVF_INT_CLR`.
+            #[inline]
+            pub fn l1_ibus0_ovf_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `L1_IBUS1_OVF_INT_CLR`.
+            #[inline]
+            pub fn l1_ibus1_ovf_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `L1_DBUS0_OVF_INT_CLR`.
+            #[inline]
+            pub fn l1_dbus0_ovf_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `L1_DBUS1_OVF_INT_CLR`.
+            #[inline]
+            pub fn l1_dbus1_ovf_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+        }
     }
 
     /// The `L1_CACHE_ACS_CNT_INT_RAW` register.
@@ -34348,6 +34602,33 @@ pub mod cache {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x00000013;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `L1_ICACHE0_FAIL_INT_CLR`.
+            #[inline]
+            pub fn l1_icache0_fail_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `L1_ICACHE1_FAIL_INT_CLR`.
+            #[inline]
+            pub fn l1_icache1_fail_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `L1_DCACHE_FAIL_INT_CLR`.
+            #[inline]
+            pub fn l1_dcache_fail_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+        }
     }
 
     /// The `L1_CACHE_ACS_FAIL_INT_RAW` register.
@@ -36018,6 +36299,68 @@ pub mod cache {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x000029d3;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `L1_ICACHE0_PLD_DONE_INT_CLR`.
+            #[inline]
+            pub fn l1_icache0_pld_done_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `L1_ICACHE1_PLD_DONE_INT_CLR`.
+            #[inline]
+            pub fn l1_icache1_pld_done_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `L1_DCACHE_PLD_DONE_INT_CLR`.
+            #[inline]
+            pub fn l1_dcache_pld_done_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `SYNC_DONE_INT_CLR`.
+            #[inline]
+            pub fn sync_done_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `L1_ICACHE0_PLD_ERR_INT_CLR`.
+            #[inline]
+            pub fn l1_icache0_pld_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `L1_ICACHE1_PLD_ERR_INT_CLR`.
+            #[inline]
+            pub fn l1_icache1_pld_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `L1_DCACHE_PLD_ERR_INT_CLR`.
+            #[inline]
+            pub fn l1_dcache_pld_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `SYNC_ERR_INT_CLR`.
+            #[inline]
+            pub fn sync_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+        }
     }
 
     /// The `L1_CACHE_SYNC_PRELOAD_INT_RAW` register.
@@ -45113,6 +45456,26 @@ pub mod efuse {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x00000003;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `READ_DONE_INT_CLR`.
+            #[inline]
+            pub fn read_done_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `PGM_DONE_INT_CLR`.
+            #[inline]
+            pub fn pgm_done_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+        }
     }
 
     /// The `DAC_CONF` register.
@@ -61300,6 +61663,26 @@ pub mod hp_system {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xc0000000;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `HP_SDMMC_ICM_H2X_BRESP_ERR_INT_CLR`.
+            #[inline]
+            pub fn hp_sdmmc_icm_h2x_bresp_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `HP_CPU_ICM_H2X_BRESP_ERR_INT_CLR`.
+            #[inline]
+            pub fn hp_cpu_icm_h2x_bresp_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `HP_CORE_DMACTIVE_LPCORE` register.
@@ -61667,6 +62050,40 @@ pub mod hp_system {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x0000003c;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `HP_CORE0_IBUS_TIMEOUT_INT_CLR`.
+            #[inline]
+            pub fn hp_core0_ibus_timeout_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `HP_CORE1_IBUS_TIMEOUT_INT_CLR`.
+            #[inline]
+            pub fn hp_core1_ibus_timeout_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `HP_CORE0_DBUS_TIMEOUT_INT_CLR`.
+            #[inline]
+            pub fn hp_core0_dbus_timeout_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `HP_CORE1_DBUS_TIMEOUT_INT_CLR`.
+            #[inline]
+            pub fn hp_core1_dbus_timeout_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+        }
     }
 
     /// The `HP_CORE_PAD_WAKEUP_EVENT` register.
@@ -65160,6 +65577,26 @@ pub mod hp_system {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x00000003;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `SDIO_PAD_BIST_OK_INT_CLR`.
+            #[inline]
+            pub fn sdio_pad_bist_ok_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `SDIO_PAD_BIST_FAIL_INT_CLR`.
+            #[inline]
+            pub fn sdio_pad_bist_fail_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+        }
     }
 
     /// The `SDIO_PAD_BIST_ST` register.
@@ -65409,6 +65846,26 @@ pub mod hp_system {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x00000003;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `GMAC0_PAD_BIST_OK_INT_CLR`.
+            #[inline]
+            pub fn gmac0_pad_bist_ok_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `GMAC0_PAD_BIST_FAIL_INT_CLR`.
+            #[inline]
+            pub fn gmac0_pad_bist_fail_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+        }
     }
 
     /// The `GMAC0_PAD_BIST_ST` register.
@@ -65658,6 +66115,26 @@ pub mod hp_system {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x00000003;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `GMAC1_PAD_BIST_OK_INT_CLR`.
+            #[inline]
+            pub fn gmac1_pad_bist_ok_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `GMAC1_PAD_BIST_FAIL_INT_CLR`.
+            #[inline]
+            pub fn gmac1_pad_bist_fail_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+        }
     }
 
     /// The `GMAC1_PAD_BIST_ST` register.
@@ -85243,6 +85720,13 @@ pub mod ieee802154 {
                 self.0 = value.get();
                 self
             }
+
+            /// Set `ADDRESS` to the zero image: no address.
+            #[inline]
+            pub fn clear_address(&mut self) -> &mut Self {
+                self.0 &= 0x00000000;
+                self
+            }
         }
     }
 
@@ -85294,6 +85778,13 @@ pub mod ieee802154 {
                 value: super::super::layouts::DmaWindowAddress,
             ) -> &mut Self {
                 self.0 = value.get();
+                self
+            }
+
+            /// Set `ADDRESS` to the zero image: no address.
+            #[inline]
+            pub fn clear_address(&mut self) -> &mut Self {
+                self.0 &= 0x00000000;
                 self
             }
         }
@@ -92207,6 +92698,26 @@ pub mod lp_aonclkrst {
                 oer_mmio::Bits::truncate(self.0 >> 1)
             }
         }
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `CLR`.
+            #[inline]
+            pub fn clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `LP_AONCLKRST_HPCORE0_RESET_FLAG_CLR`.
+            #[inline]
+            pub fn hpcore0_reset_flag_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `LP_AONCLKRST_HPCORE1_RESET_CAUSE` register.
@@ -92244,6 +92755,26 @@ pub mod lp_aonclkrst {
             #[inline]
             pub const fn hpcore1_reset_cause(self) -> oer_mmio::Bits<6> {
                 oer_mmio::Bits::truncate(self.0 >> 1)
+            }
+        }
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `CLR`.
+            #[inline]
+            pub fn clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `LP_AONCLKRST_HPCORE1_RESET_FLAG_CLR`.
+            #[inline]
+            pub fn hpcore1_reset_flag_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
             }
         }
     }
@@ -93489,6 +94020,19 @@ pub mod lp_aonclkrst {
                 .write::<0x30>(self.0.read::<0x30>() & 0x3fffffff | 0x80000000);
         }
 
+        /// Write to the write-trigger fields of `LP_AONCLKRST_HPCORE0_RESET_CAUSE` the change sets, in one
+        /// write, starting each one's hardware action once; every other bit is
+        /// zero or its fixed value.
+        #[inline]
+        pub fn trigger_hpcore0_reset_cause(
+            &mut self,
+            change: impl FnOnce(&mut hpcore0_reset_cause::T),
+        ) {
+            let mut triggers = hpcore0_reset_cause::T(0);
+            change(&mut triggers);
+            self.0.write::<0x30>(triggers.0);
+        }
+
         /// Read `LP_AONCLKRST_HPCORE1_RESET_CAUSE`.
         #[inline]
         pub fn read_hpcore1_reset_cause(&self) -> hpcore1_reset_cause::R {
@@ -93509,6 +94053,19 @@ pub mod lp_aonclkrst {
         pub fn trigger_hpcore1_reset_cause_hpcore1_reset_flag_clr(&mut self) {
             self.0
                 .write::<0x34>(self.0.read::<0x34>() & 0x3fffffff | 0x80000000);
+        }
+
+        /// Write to the write-trigger fields of `LP_AONCLKRST_HPCORE1_RESET_CAUSE` the change sets, in one
+        /// write, starting each one's hardware action once; every other bit is
+        /// zero or its fixed value.
+        #[inline]
+        pub fn trigger_hpcore1_reset_cause(
+            &mut self,
+            change: impl FnOnce(&mut hpcore1_reset_cause::T),
+        ) {
+            let mut triggers = hpcore1_reset_cause::T(0);
+            change(&mut triggers);
+            self.0.write::<0x34>(triggers.0);
         }
     }
 
@@ -95968,6 +96525,61 @@ pub mod modem_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x000000f7;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `CH0`.
+            #[inline]
+            pub fn ch0(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `CH1`.
+            #[inline]
+            pub fn ch1(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `CH2`.
+            #[inline]
+            pub fn ch2(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `CH4`.
+            #[inline]
+            pub fn ch4(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `CH5`.
+            #[inline]
+            pub fn ch5(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `CH6`.
+            #[inline]
+            pub fn ch6(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `CH7`.
+            #[inline]
+            pub fn ch7(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+        }
     }
 
     /// The `CHANNEL_ENABLE_CLEAR` register.
@@ -95985,6 +96597,61 @@ pub mod modem_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x000000f7;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `CH0`.
+            #[inline]
+            pub fn ch0(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `CH1`.
+            #[inline]
+            pub fn ch1(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `CH2`.
+            #[inline]
+            pub fn ch2(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `CH4`.
+            #[inline]
+            pub fn ch4(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `CH5`.
+            #[inline]
+            pub fn ch5(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `CH6`.
+            #[inline]
+            pub fn ch6(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `CH7`.
+            #[inline]
+            pub fn ch7(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+        }
     }
 
     /// The `CH%s_EVENT` register.
@@ -114837,6 +115504,96 @@ pub mod pmu {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xde00006f;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `TIE_LOW_GLOBAL_XTALX2_ICG`.
+            #[inline]
+            pub fn tie_low_global_xtalx2_icg(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_LOW_GLOBAL_XTAL_ICG`.
+            #[inline]
+            pub fn tie_low_global_xtal_icg(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_LOW_I2C_RETENTION`.
+            #[inline]
+            pub fn tie_low_i2c_retention(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_LOW_XPD_BB_I2C`.
+            #[inline]
+            pub fn tie_low_xpd_bb_i2c(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_LOW_XPD_XTALX2`.
+            #[inline]
+            pub fn tie_low_xpd_xtalx2(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_LOW_XPD_XTAL`.
+            #[inline]
+            pub fn tie_low_xpd_xtal(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_HIGH_GLOBAL_XTALX2_ICG`.
+            #[inline]
+            pub fn tie_high_global_xtalx2_icg(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_HIGH_GLOBAL_XTAL_ICG`.
+            #[inline]
+            pub fn tie_high_global_xtal_icg(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_HIGH_I2C_RETENTION`.
+            #[inline]
+            pub fn tie_high_i2c_retention(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_HIGH_XPD_BB_I2C`.
+            #[inline]
+            pub fn tie_high_xpd_bb_i2c(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_HIGH_XPD_XTALX2`.
+            #[inline]
+            pub fn tie_high_xpd_xtalx2(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_HIGH_XPD_XTAL`.
+            #[inline]
+            pub fn tie_high_xpd_xtal(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `IMM_HP_CK_POWER_1` register.
@@ -114858,6 +115615,54 @@ pub mod pmu {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x7ff80fff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `TIE_LOW_XPD_PLL_I2C` to `value`.
+            #[inline]
+            pub fn tie_low_xpd_pll_i2c(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & 0xfffffff0) | value.get();
+                self
+            }
+
+            /// Set the write-trigger field `TIE_LOW_XPD_PLL` to `value`.
+            #[inline]
+            pub fn tie_low_xpd_pll(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & 0xffffff0f) | (value.get() << 4);
+                self
+            }
+
+            /// Set the write-trigger field `TIE_LOW_GLOBAL_PLL_ICG` to `value`.
+            #[inline]
+            pub fn tie_low_global_pll_icg(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & 0xfffff0ff) | (value.get() << 8);
+                self
+            }
+
+            /// Set the write-trigger field `TIE_HIGH_GLOBAL_PLL_ICG` to `value`.
+            #[inline]
+            pub fn tie_high_global_pll_icg(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & 0xff87ffff) | (value.get() << 19);
+                self
+            }
+
+            /// Set the write-trigger field `TIE_HIGH_XPD_PLL_I2C` to `value`.
+            #[inline]
+            pub fn tie_high_xpd_pll_i2c(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & 0xf87fffff) | (value.get() << 23);
+                self
+            }
+
+            /// Set the write-trigger field `TIE_HIGH_XPD_PLL` to `value`.
+            #[inline]
+            pub fn tie_high_xpd_pll(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & 0x87ffffff) | (value.get() << 27);
+                self
+            }
+        }
     }
 
     /// The `IMM_SLEEP_SYSCLK` register.
@@ -114879,6 +115684,40 @@ pub mod pmu {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xf0000000;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `UPDATE_DIG_ICG_SWITCH`.
+            #[inline]
+            pub fn update_dig_icg_switch(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_LOW_ICG_SLP_SEL`.
+            #[inline]
+            pub fn tie_low_icg_slp_sel(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_HIGH_ICG_SLP_SEL`.
+            #[inline]
+            pub fn tie_high_icg_slp_sel(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `UPDATE_DIG_SYS_CLK_SEL`.
+            #[inline]
+            pub fn update_dig_sys_clk_sel(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `IMM_HP_FUNC_ICG` register.
@@ -114963,6 +115802,26 @@ pub mod pmu {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xc0000000;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `TIE_LOW_LP_ROOTCLK_SEL`.
+            #[inline]
+            pub fn tie_low_lp_rootclk_sel(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_HIGH_LP_ROOTCLK_SEL`.
+            #[inline]
+            pub fn tie_high_lp_rootclk_sel(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `IMM_PAD_HOLD_ALL` register.
@@ -114984,6 +115843,40 @@ pub mod pmu {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xf0000000;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `TIE_HIGH_LP_PAD_HOLD_ALL`.
+            #[inline]
+            pub fn tie_high_lp_pad_hold_all(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_LOW_LP_PAD_HOLD_ALL`.
+            #[inline]
+            pub fn tie_low_lp_pad_hold_all(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_HIGH_HP_PAD_HOLD_ALL`.
+            #[inline]
+            pub fn tie_high_hp_pad_hold_all(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_LOW_HP_PAD_HOLD_ALL`.
+            #[inline]
+            pub fn tie_low_hp_pad_hold_all(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `IMM_I2C_ISO` register.
@@ -115005,6 +115898,26 @@ pub mod pmu {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xc0000000;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `TIE_HIGH_I2C_ISO_EN`.
+            #[inline]
+            pub fn tie_high_i2c_iso_en(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `TIE_LOW_I2C_ISO_EN`.
+            #[inline]
+            pub fn tie_low_i2c_iso_en(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `POWER_WAIT_TIMER0` register.
@@ -118044,6 +118957,47 @@ pub mod pmu {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xf8000000;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `LP_CPU_EXC_INT_CLR`.
+            #[inline]
+            pub fn lp_cpu_exc_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `SDIO_IDLE_INT_CLR`.
+            #[inline]
+            pub fn sdio_idle_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `SW_INT_CLR`.
+            #[inline]
+            pub fn sw_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `SOC_SLEEP_REJECT_INT_CLR`.
+            #[inline]
+            pub fn soc_sleep_reject_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `SOC_WAKEUP_INT_CLR`.
+            #[inline]
+            pub fn soc_wakeup_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `LP_INT_RAW` register.
@@ -118703,6 +119657,96 @@ pub mod pmu {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xfff00000;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `LP_CPU_WAKEUP_INT_CLR`.
+            #[inline]
+            pub fn lp_cpu_wakeup_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `MODEM_SWITCH_ACTIVE_END_INT_CLR`.
+            #[inline]
+            pub fn modem_switch_active_end_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `SLEEP_SWITCH_ACTIVE_END_INT_CLR`.
+            #[inline]
+            pub fn sleep_switch_active_end_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `SLEEP_SWITCH_MODEM_END_INT_CLR`.
+            #[inline]
+            pub fn sleep_switch_modem_end_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `MODEM_SWITCH_SLEEP_END_INT_CLR`.
+            #[inline]
+            pub fn modem_switch_sleep_end_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `ACTIVE_SWITCH_SLEEP_END_INT_CLR`.
+            #[inline]
+            pub fn active_switch_sleep_end_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `MODEM_SWITCH_ACTIVE_START_INT_CLR`.
+            #[inline]
+            pub fn modem_switch_active_start_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `SLEEP_SWITCH_ACTIVE_START_INT_CLR`.
+            #[inline]
+            pub fn sleep_switch_active_start_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `SLEEP_SWITCH_MODEM_START_INT_CLR`.
+            #[inline]
+            pub fn sleep_switch_modem_start_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `MODEM_SWITCH_SLEEP_START_INT_CLR`.
+            #[inline]
+            pub fn modem_switch_sleep_start_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `ACTIVE_SWITCH_SLEEP_START_INT_CLR`.
+            #[inline]
+            pub fn active_switch_sleep_start_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `HP_SW_TRIGGER_INT_CLR`.
+            #[inline]
+            pub fn hp_sw_trigger_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `LP_CPU_PWR0` register.
@@ -118973,6 +120017,26 @@ pub mod pmu {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xc0000000;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `LP_TRIGGER_HP`.
+            #[inline]
+            pub fn lp_trigger_hp(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `HP_TRIGGER_LP`.
+            #[inline]
+            pub fn hp_trigger_lp(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `HP_REGULATOR_CFG` register.
@@ -120910,6 +121974,19 @@ pub mod pmu {
             self.0.write::<0xf0>(0x80000000);
         }
 
+        /// Write to the write-trigger fields of `IMM_HP_CK_POWER_0` the change sets, in one
+        /// write, starting each one's hardware action once; every other bit is
+        /// zero or its fixed value.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_0(
+            &mut self,
+            change: impl FnOnce(&mut imm_hp_ck_power_0::T),
+        ) {
+            let mut triggers = imm_hp_ck_power_0::T(0);
+            change(&mut triggers);
+            self.0.write::<0xf0>(triggers.0);
+        }
+
         /// Write to the write-trigger field `UPDATE_DIG_ICG_SWITCH` of `IMM_SLEEP_SYSCLK`, starting its
         /// hardware action once; every other bit is zero or its fixed value.
         #[inline]
@@ -120936,6 +122013,16 @@ pub mod pmu {
         #[inline]
         pub fn trigger_imm_sleep_sysclk_update_dig_sys_clk_sel(&mut self) {
             self.0.write::<0xf8>(0x80000000);
+        }
+
+        /// Write to the write-trigger fields of `IMM_SLEEP_SYSCLK` the change sets, in one
+        /// write, starting each one's hardware action once; every other bit is
+        /// zero or its fixed value.
+        #[inline]
+        pub fn trigger_imm_sleep_sysclk(&mut self, change: impl FnOnce(&mut imm_sleep_sysclk::T)) {
+            let mut triggers = imm_sleep_sysclk::T(0);
+            change(&mut triggers);
+            self.0.write::<0xf8>(triggers.0);
         }
 
         /// Write to the write-trigger field `UPDATE_DIG_ICG_MODEM_EN` of `IMM_MODEM_ICG`, starting its
@@ -121911,6 +122998,26 @@ pub mod rtc_wdt {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xc0000000;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `SUPER_WDT_INT_CLR`.
+            #[inline]
+            pub fn super_wdt_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `LP_WDT_INT_CLR`.
+            #[inline]
+            pub fn lp_wdt_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `PAUSE_EN` register.
@@ -122405,6 +123512,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `CH_ENABLE0`.
+            #[inline]
+            pub fn ch_enable0(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE1`.
+            #[inline]
+            pub fn ch_enable1(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE2`.
+            #[inline]
+            pub fn ch_enable2(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE3`.
+            #[inline]
+            pub fn ch_enable3(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE4`.
+            #[inline]
+            pub fn ch_enable4(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE5`.
+            #[inline]
+            pub fn ch_enable5(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE6`.
+            #[inline]
+            pub fn ch_enable6(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE7`.
+            #[inline]
+            pub fn ch_enable7(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE8`.
+            #[inline]
+            pub fn ch_enable8(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE9`.
+            #[inline]
+            pub fn ch_enable9(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE10`.
+            #[inline]
+            pub fn ch_enable10(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE11`.
+            #[inline]
+            pub fn ch_enable11(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE12`.
+            #[inline]
+            pub fn ch_enable12(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE13`.
+            #[inline]
+            pub fn ch_enable13(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE14`.
+            #[inline]
+            pub fn ch_enable14(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE15`.
+            #[inline]
+            pub fn ch_enable15(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE16`.
+            #[inline]
+            pub fn ch_enable16(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE17`.
+            #[inline]
+            pub fn ch_enable17(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE18`.
+            #[inline]
+            pub fn ch_enable18(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE19`.
+            #[inline]
+            pub fn ch_enable19(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE20`.
+            #[inline]
+            pub fn ch_enable20(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE21`.
+            #[inline]
+            pub fn ch_enable21(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE22`.
+            #[inline]
+            pub fn ch_enable22(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE23`.
+            #[inline]
+            pub fn ch_enable23(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE24`.
+            #[inline]
+            pub fn ch_enable24(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE25`.
+            #[inline]
+            pub fn ch_enable25(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE26`.
+            #[inline]
+            pub fn ch_enable26(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE27`.
+            #[inline]
+            pub fn ch_enable27(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE28`.
+            #[inline]
+            pub fn ch_enable28(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE29`.
+            #[inline]
+            pub fn ch_enable29(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE30`.
+            #[inline]
+            pub fn ch_enable30(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE31`.
+            #[inline]
+            pub fn ch_enable31(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `CH_ENA_AD0_CLR` register.
@@ -122422,6 +123759,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `CH_DISABLE0`.
+            #[inline]
+            pub fn ch_disable0(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE1`.
+            #[inline]
+            pub fn ch_disable1(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE2`.
+            #[inline]
+            pub fn ch_disable2(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE3`.
+            #[inline]
+            pub fn ch_disable3(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE4`.
+            #[inline]
+            pub fn ch_disable4(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE5`.
+            #[inline]
+            pub fn ch_disable5(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE6`.
+            #[inline]
+            pub fn ch_disable6(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE7`.
+            #[inline]
+            pub fn ch_disable7(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE8`.
+            #[inline]
+            pub fn ch_disable8(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE9`.
+            #[inline]
+            pub fn ch_disable9(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE10`.
+            #[inline]
+            pub fn ch_disable10(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE11`.
+            #[inline]
+            pub fn ch_disable11(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE12`.
+            #[inline]
+            pub fn ch_disable12(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE13`.
+            #[inline]
+            pub fn ch_disable13(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE14`.
+            #[inline]
+            pub fn ch_disable14(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE15`.
+            #[inline]
+            pub fn ch_disable15(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE16`.
+            #[inline]
+            pub fn ch_disable16(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE17`.
+            #[inline]
+            pub fn ch_disable17(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE18`.
+            #[inline]
+            pub fn ch_disable18(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE19`.
+            #[inline]
+            pub fn ch_disable19(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE20`.
+            #[inline]
+            pub fn ch_disable20(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE21`.
+            #[inline]
+            pub fn ch_disable21(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE22`.
+            #[inline]
+            pub fn ch_disable22(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE23`.
+            #[inline]
+            pub fn ch_disable23(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE24`.
+            #[inline]
+            pub fn ch_disable24(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE25`.
+            #[inline]
+            pub fn ch_disable25(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE26`.
+            #[inline]
+            pub fn ch_disable26(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE27`.
+            #[inline]
+            pub fn ch_disable27(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE28`.
+            #[inline]
+            pub fn ch_disable28(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE29`.
+            #[inline]
+            pub fn ch_disable29(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE30`.
+            #[inline]
+            pub fn ch_disable30(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE31`.
+            #[inline]
+            pub fn ch_disable31(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `CH_ENA_AD1` register.
@@ -122574,6 +124141,138 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x0003ffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `CH_ENABLE32`.
+            #[inline]
+            pub fn ch_enable32(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE33`.
+            #[inline]
+            pub fn ch_enable33(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE34`.
+            #[inline]
+            pub fn ch_enable34(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE35`.
+            #[inline]
+            pub fn ch_enable35(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE36`.
+            #[inline]
+            pub fn ch_enable36(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE37`.
+            #[inline]
+            pub fn ch_enable37(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE38`.
+            #[inline]
+            pub fn ch_enable38(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE39`.
+            #[inline]
+            pub fn ch_enable39(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE40`.
+            #[inline]
+            pub fn ch_enable40(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE41`.
+            #[inline]
+            pub fn ch_enable41(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE42`.
+            #[inline]
+            pub fn ch_enable42(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE43`.
+            #[inline]
+            pub fn ch_enable43(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE44`.
+            #[inline]
+            pub fn ch_enable44(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE45`.
+            #[inline]
+            pub fn ch_enable45(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE46`.
+            #[inline]
+            pub fn ch_enable46(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE47`.
+            #[inline]
+            pub fn ch_enable47(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE48`.
+            #[inline]
+            pub fn ch_enable48(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_ENABLE49`.
+            #[inline]
+            pub fn ch_enable49(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+        }
     }
 
     /// The `CH_ENA_AD1_CLR` register.
@@ -122595,6 +124294,138 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x0003ffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `CH_DISABLE32`.
+            #[inline]
+            pub fn ch_disable32(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE33`.
+            #[inline]
+            pub fn ch_disable33(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE34`.
+            #[inline]
+            pub fn ch_disable34(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE35`.
+            #[inline]
+            pub fn ch_disable35(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE36`.
+            #[inline]
+            pub fn ch_disable36(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE37`.
+            #[inline]
+            pub fn ch_disable37(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE38`.
+            #[inline]
+            pub fn ch_disable38(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE39`.
+            #[inline]
+            pub fn ch_disable39(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE40`.
+            #[inline]
+            pub fn ch_disable40(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE41`.
+            #[inline]
+            pub fn ch_disable41(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE42`.
+            #[inline]
+            pub fn ch_disable42(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE43`.
+            #[inline]
+            pub fn ch_disable43(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE44`.
+            #[inline]
+            pub fn ch_disable44(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE45`.
+            #[inline]
+            pub fn ch_disable45(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE46`.
+            #[inline]
+            pub fn ch_disable46(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE47`.
+            #[inline]
+            pub fn ch_disable47(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE48`.
+            #[inline]
+            pub fn ch_disable48(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `CH_DISABLE49`.
+            #[inline]
+            pub fn ch_disable49(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+        }
     }
 
     /// The `CH%s_EVT_ID` register.
@@ -123417,6 +125248,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `GPIO_EVT_CH0_RISE_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch0_rise_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH1_RISE_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch1_rise_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH2_RISE_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch2_rise_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH3_RISE_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch3_rise_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH4_RISE_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch4_rise_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH5_RISE_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch5_rise_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH6_RISE_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch6_rise_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH7_RISE_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch7_rise_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH0_FALL_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch0_fall_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH1_FALL_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch1_fall_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH2_FALL_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch2_fall_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH3_FALL_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch3_fall_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH4_FALL_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch4_fall_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH5_FALL_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch5_fall_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH6_FALL_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch6_fall_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH7_FALL_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch7_fall_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH0_ANY_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch0_any_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH1_ANY_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch1_any_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH2_ANY_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch2_any_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH3_ANY_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch3_any_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH4_ANY_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch4_any_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH5_ANY_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch5_any_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH6_ANY_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch6_any_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_EVT_CH7_ANY_EDGE_ST_CLR`.
+            #[inline]
+            pub fn gpio_evt_ch7_any_edge_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_DUTY_CHNG_END_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_duty_chng_end_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_DUTY_CHNG_END_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_duty_chng_end_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_DUTY_CHNG_END_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_duty_chng_end_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_DUTY_CHNG_END_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_duty_chng_end_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_DUTY_CHNG_END_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_duty_chng_end_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_DUTY_CHNG_END_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_duty_chng_end_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_DUTY_CHNG_END_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_duty_chng_end_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_DUTY_CHNG_END_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_duty_chng_end_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `EVT_ST1` register.
@@ -124137,6 +126198,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `LEDC0_EVT_OVF_CNT_PLS_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_ovf_cnt_pls_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_OVF_CNT_PLS_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_ovf_cnt_pls_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_OVF_CNT_PLS_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_ovf_cnt_pls_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_OVF_CNT_PLS_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_ovf_cnt_pls_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_OVF_CNT_PLS_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_ovf_cnt_pls_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_OVF_CNT_PLS_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_ovf_cnt_pls_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_OVF_CNT_PLS_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_ovf_cnt_pls_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_OVF_CNT_PLS_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_ovf_cnt_pls_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_TIME_OVF_TIMER0_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_time_ovf_timer0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_TIME_OVF_TIMER1_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_time_ovf_timer1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_TIME_OVF_TIMER2_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_time_ovf_timer2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_TIME_OVF_TIMER3_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_time_ovf_timer3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_TIMER0_CMP_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_timer0_cmp_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_TIMER1_CMP_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_timer1_cmp_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_TIMER2_CMP_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_timer2_cmp_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_EVT_TIMER3_CMP_ST_CLR`.
+            #[inline]
+            pub fn ledc0_evt_timer3_cmp_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_DUTY_CHNG_END_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_duty_chng_end_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_DUTY_CHNG_END_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_duty_chng_end_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_DUTY_CHNG_END_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_duty_chng_end_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_DUTY_CHNG_END_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_duty_chng_end_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_DUTY_CHNG_END_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_duty_chng_end_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_DUTY_CHNG_END_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_duty_chng_end_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_DUTY_CHNG_END_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_duty_chng_end_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_DUTY_CHNG_END_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_duty_chng_end_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_OVF_CNT_PLS_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_ovf_cnt_pls_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_OVF_CNT_PLS_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_ovf_cnt_pls_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_OVF_CNT_PLS_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_ovf_cnt_pls_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_OVF_CNT_PLS_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_ovf_cnt_pls_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_OVF_CNT_PLS_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_ovf_cnt_pls_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_OVF_CNT_PLS_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_ovf_cnt_pls_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_OVF_CNT_PLS_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_ovf_cnt_pls_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_OVF_CNT_PLS_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_ovf_cnt_pls_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `EVT_ST2` register.
@@ -124857,6 +127148,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `LEDC1_EVT_TIME_OVF_TIMER0_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_time_ovf_timer0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_TIME_OVF_TIMER1_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_time_ovf_timer1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_TIME_OVF_TIMER2_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_time_ovf_timer2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_TIME_OVF_TIMER3_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_time_ovf_timer3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_TIMER0_CMP_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_timer0_cmp_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_TIMER1_CMP_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_timer1_cmp_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_TIMER2_CMP_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_timer2_cmp_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_EVT_TIMER3_CMP_ST_CLR`.
+            #[inline]
+            pub fn ledc1_evt_timer3_cmp_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `TG0_EVT_CNT_CMP_TIMER0_ST_CLR`.
+            #[inline]
+            pub fn tg0_evt_cnt_cmp_timer0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `TG0_EVT_CNT_CMP_TIMER1_ST_CLR`.
+            #[inline]
+            pub fn tg0_evt_cnt_cmp_timer1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `TG1_EVT_CNT_CMP_TIMER0_ST_CLR`.
+            #[inline]
+            pub fn tg1_evt_cnt_cmp_timer0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `TG1_EVT_CNT_CMP_TIMER1_ST_CLR`.
+            #[inline]
+            pub fn tg1_evt_cnt_cmp_timer1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `SYSTIMER_EVT_CNT_CMP0_ST_CLR`.
+            #[inline]
+            pub fn systimer_evt_cnt_cmp0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `SYSTIMER_EVT_CNT_CMP1_ST_CLR`.
+            #[inline]
+            pub fn systimer_evt_cnt_cmp1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `SYSTIMER_EVT_CNT_CMP2_ST_CLR`.
+            #[inline]
+            pub fn systimer_evt_cnt_cmp2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TIMER0_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_timer0_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TIMER1_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_timer1_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TIMER2_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_timer2_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TIMER0_TEZ_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_timer0_tez_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TIMER1_TEZ_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_timer1_tez_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TIMER2_TEZ_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_timer2_tez_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TIMER0_TEP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_timer0_tep_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TIMER1_TEP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_timer1_tep_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TIMER2_TEP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_timer2_tep_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TIMER0_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_timer0_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TIMER1_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_timer1_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TIMER2_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_timer2_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TIMER0_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_timer0_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TIMER1_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_timer1_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TIMER2_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_timer2_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_OP0_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_op0_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_OP1_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_op1_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `EVT_ST3` register.
@@ -125577,6 +128098,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `MCPWM0_EVT_OP2_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_op2_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_OP0_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_op0_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_OP1_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_op1_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_OP2_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_op2_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_F0_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_f0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_F1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_f1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_F2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_f2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_F0_CLR_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_f0_clr_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_F1_CLR_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_f1_clr_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_F2_CLR_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_f2_clr_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TZ0_CBC_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_tz0_cbc_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TZ1_CBC_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_tz1_cbc_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TZ2_CBC_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_tz2_cbc_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TZ0_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_tz0_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TZ1_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_tz1_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_TZ2_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_tz2_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_CAP0_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_cap0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_CAP1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_cap1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_CAP2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_cap2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_OP0_TEE1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_op0_tee1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_OP1_TEE1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_op1_tee1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_OP2_TEE1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_op2_tee1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_OP0_TEE2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_op0_tee2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_OP1_TEE2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_op1_tee2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_EVT_OP2_TEE2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_evt_op2_tee2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TIMER0_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_timer0_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TIMER1_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_timer1_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TIMER2_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_timer2_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TIMER0_TEZ_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_timer0_tez_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TIMER1_TEZ_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_timer1_tez_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TIMER2_TEZ_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_timer2_tez_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TIMER0_TEP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_timer0_tep_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `EVT_ST4` register.
@@ -126297,6 +129048,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `MCPWM1_EVT_TIMER1_TEP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_timer1_tep_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TIMER2_TEP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_timer2_tep_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TIMER0_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_timer0_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TIMER1_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_timer1_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TIMER2_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_timer2_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TIMER0_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_timer0_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TIMER1_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_timer1_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TIMER2_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_timer2_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_OP0_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_op0_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_OP1_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_op1_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_OP2_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_op2_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_OP0_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_op0_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_OP1_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_op1_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_OP2_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_op2_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_F0_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_f0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_F1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_f1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_F2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_f2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_F0_CLR_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_f0_clr_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_F1_CLR_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_f1_clr_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_F2_CLR_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_f2_clr_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TZ0_CBC_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_tz0_cbc_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TZ1_CBC_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_tz1_cbc_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TZ2_CBC_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_tz2_cbc_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TZ0_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_tz0_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TZ1_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_tz1_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_TZ2_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_tz2_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_CAP0_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_cap0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_CAP1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_cap1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_CAP2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_cap2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_OP0_TEE1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_op0_tee1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_OP1_TEE1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_op1_tee1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_OP2_TEE1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_op2_tee1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `EVT_ST5` register.
@@ -127017,6 +129998,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `MCPWM1_EVT_OP0_TEE2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_op0_tee2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_OP1_TEE2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_op1_tee2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_EVT_OP2_TEE2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_evt_op2_tee2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TIMER0_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_timer0_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TIMER1_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_timer1_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TIMER2_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_timer2_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TIMER0_TEZ_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_timer0_tez_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TIMER1_TEZ_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_timer1_tez_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TIMER2_TEZ_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_timer2_tez_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TIMER0_TEP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_timer0_tep_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TIMER1_TEP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_timer1_tep_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TIMER2_TEP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_timer2_tep_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TIMER0_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_timer0_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TIMER1_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_timer1_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TIMER2_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_timer2_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TIMER0_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_timer0_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TIMER1_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_timer1_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TIMER2_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_timer2_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_OP0_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_op0_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_OP1_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_op1_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_OP2_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_op2_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_OP0_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_op0_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_OP1_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_op1_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_OP2_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_op2_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_F0_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_f0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_F1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_f1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_F2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_f2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_F0_CLR_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_f0_clr_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_F1_CLR_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_f1_clr_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_F2_CLR_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_f2_clr_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TZ0_CBC_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_tz0_cbc_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TZ1_CBC_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_tz1_cbc_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `EVT_ST6` register.
@@ -127737,6 +130948,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `MCPWM2_EVT_TZ2_CBC_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_tz2_cbc_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TZ0_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_tz0_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TZ1_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_tz1_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_TZ2_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_tz2_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_CAP0_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_cap0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_CAP1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_cap1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_CAP2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_cap2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_OP0_TEE1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_op0_tee1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_OP1_TEE1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_op1_tee1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_OP2_TEE1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_op2_tee1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_OP0_TEE2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_op0_tee2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_OP1_TEE2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_op1_tee2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_EVT_OP2_TEE2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_evt_op2_tee2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TIMER0_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_timer0_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TIMER1_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_timer1_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TIMER2_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_timer2_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TIMER0_TEZ_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_timer0_tez_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TIMER1_TEZ_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_timer1_tez_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TIMER2_TEZ_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_timer2_tez_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TIMER0_TEP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_timer0_tep_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TIMER1_TEP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_timer1_tep_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TIMER2_TEP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_timer2_tep_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TIMER0_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_timer0_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TIMER1_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_timer1_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TIMER2_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_timer2_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TIMER0_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_timer0_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TIMER1_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_timer1_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TIMER2_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_timer2_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_OP0_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_op0_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_OP1_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_op1_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_OP2_TEA_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_op2_tea_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_OP0_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_op0_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `EVT_ST7` register.
@@ -128457,6 +131898,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `MCPWM3_EVT_OP1_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_op1_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_OP2_TEB_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_op2_teb_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_F0_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_f0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_F1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_f1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_F2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_f2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_F0_CLR_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_f0_clr_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_F1_CLR_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_f1_clr_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_F2_CLR_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_f2_clr_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TZ0_CBC_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_tz0_cbc_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TZ1_CBC_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_tz1_cbc_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TZ2_CBC_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_tz2_cbc_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TZ0_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_tz0_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TZ1_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_tz1_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_TZ2_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_tz2_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_CAP0_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_cap0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_CAP1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_cap1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_CAP2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_cap2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_OP0_TEE1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_op0_tee1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_OP1_TEE1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_op1_tee1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_OP2_TEE1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_op2_tee1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_OP0_TEE2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_op0_tee2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_OP1_TEE2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_op1_tee2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_EVT_OP2_TEE2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_evt_op2_tee2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `ADC_EVT_EQ_ABOVE_THRESH0_ST_CLR`.
+            #[inline]
+            pub fn adc_evt_eq_above_thresh0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `ADC_EVT_EQ_ABOVE_THRESH1_ST_CLR`.
+            #[inline]
+            pub fn adc_evt_eq_above_thresh1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `ADC_EVT_EQ_BELOW_THRESH0_ST_CLR`.
+            #[inline]
+            pub fn adc_evt_eq_below_thresh0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `ADC_EVT_EQ_BELOW_THRESH1_ST_CLR`.
+            #[inline]
+            pub fn adc_evt_eq_below_thresh1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `ADC_EVT_ADC1_START_ST_CLR`.
+            #[inline]
+            pub fn adc_evt_adc1_start_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `ADC_EVT_ADC2_START_ST_CLR`.
+            #[inline]
+            pub fn adc_evt_adc2_start_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `ADC_EVT_ADC1_DONE_ST_CLR`.
+            #[inline]
+            pub fn adc_evt_adc1_done_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `ADC_EVT_ADC2_DONE_ST_CLR`.
+            #[inline]
+            pub fn adc_evt_adc2_done_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `REGDMA_EVT_DONE0_ST_CLR`.
+            #[inline]
+            pub fn regdma_evt_done0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `EVT_ST8` register.
@@ -129177,6 +132848,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `REGDMA_EVT_DONE1_ST_CLR`.
+            #[inline]
+            pub fn regdma_evt_done1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `REGDMA_EVT_DONE2_ST_CLR`.
+            #[inline]
+            pub fn regdma_evt_done2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `REGDMA_EVT_DONE3_ST_CLR`.
+            #[inline]
+            pub fn regdma_evt_done3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `REGDMA_EVT_FAIL0_ST_CLR`.
+            #[inline]
+            pub fn regdma_evt_fail0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `REGDMA_EVT_FAIL1_ST_CLR`.
+            #[inline]
+            pub fn regdma_evt_fail1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `REGDMA_EVT_FAIL2_ST_CLR`.
+            #[inline]
+            pub fn regdma_evt_fail2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `REGDMA_EVT_FAIL3_ST_CLR`.
+            #[inline]
+            pub fn regdma_evt_fail3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `TMPSNSR_EVT_OVER_LIMIT_ST_CLR`.
+            #[inline]
+            pub fn tmpsnsr_evt_over_limit_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `I2S0_EVT_RX_DONE_ST_CLR`.
+            #[inline]
+            pub fn i2s0_evt_rx_done_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `I2S0_EVT_TX_DONE_ST_CLR`.
+            #[inline]
+            pub fn i2s0_evt_tx_done_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `I2S0_EVT_X_WORDS_RECEIVED_ST_CLR`.
+            #[inline]
+            pub fn i2s0_evt_x_words_received_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `I2S0_EVT_X_WORDS_SENT_ST_CLR`.
+            #[inline]
+            pub fn i2s0_evt_x_words_sent_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `I2S1_EVT_RX_DONE_ST_CLR`.
+            #[inline]
+            pub fn i2s1_evt_rx_done_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `I2S1_EVT_TX_DONE_ST_CLR`.
+            #[inline]
+            pub fn i2s1_evt_tx_done_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `I2S1_EVT_X_WORDS_RECEIVED_ST_CLR`.
+            #[inline]
+            pub fn i2s1_evt_x_words_received_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `I2S1_EVT_X_WORDS_SENT_ST_CLR`.
+            #[inline]
+            pub fn i2s1_evt_x_words_sent_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `ULP_EVT_ERR_INTR_ST_CLR`.
+            #[inline]
+            pub fn ulp_evt_err_intr_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `ULP_EVT_HALT_ST_CLR`.
+            #[inline]
+            pub fn ulp_evt_halt_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `ULP_EVT_START_INTR_ST_CLR`.
+            #[inline]
+            pub fn ulp_evt_start_intr_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `RTC_EVT_TICK_ST_CLR`.
+            #[inline]
+            pub fn rtc_evt_tick_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `RTC_EVT_OVF_ST_CLR`.
+            #[inline]
+            pub fn rtc_evt_ovf_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `RTC_EVT_CMP_ST_CLR`.
+            #[inline]
+            pub fn rtc_evt_cmp_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `PMU_EVT_SLEEP_WEEKUP_ST_CLR`.
+            #[inline]
+            pub fn pmu_evt_sleep_weekup_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_DONE_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_done_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_DONE_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_done_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_DONE_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_done_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_DONE_CH3_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_done_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_DONE_CH4_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_done_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_SUC_EOF_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_suc_eof_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_SUC_EOF_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_suc_eof_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_SUC_EOF_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_suc_eof_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_SUC_EOF_CH3_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_suc_eof_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `EVT_ST9` register.
@@ -129897,6 +133798,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_SUC_EOF_CH4_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_suc_eof_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_FIFO_EMPTY_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_fifo_empty_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_FIFO_EMPTY_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_fifo_empty_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_FIFO_EMPTY_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_fifo_empty_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_FIFO_EMPTY_CH3_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_fifo_empty_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_FIFO_EMPTY_CH4_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_fifo_empty_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_FIFO_FULL_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_fifo_full_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_FIFO_FULL_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_fifo_full_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_FIFO_FULL_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_fifo_full_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_FIFO_FULL_CH3_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_fifo_full_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_IN_FIFO_FULL_CH4_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_in_fifo_full_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_DONE_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_done_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_DONE_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_done_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_DONE_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_done_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_DONE_CH3_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_done_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_DONE_CH4_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_done_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_EOF_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_eof_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_EOF_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_eof_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_EOF_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_eof_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_EOF_CH3_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_eof_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_EOF_CH4_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_eof_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_TOTAL_EOF_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_total_eof_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_TOTAL_EOF_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_total_eof_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_TOTAL_EOF_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_total_eof_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_TOTAL_EOF_CH3_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_total_eof_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_TOTAL_EOF_CH4_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_total_eof_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_FIFO_EMPTY_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_fifo_empty_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_FIFO_EMPTY_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_fifo_empty_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_FIFO_EMPTY_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_fifo_empty_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_FIFO_EMPTY_CH3_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_fifo_empty_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_FIFO_EMPTY_CH4_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_fifo_empty_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_FIFO_FULL_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_fifo_full_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `EVT_ST10` register.
@@ -130617,6 +134748,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_FIFO_FULL_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_fifo_full_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_FIFO_FULL_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_fifo_full_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_FIFO_FULL_CH3_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_fifo_full_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_EVT_OUT_FIFO_FULL_CH4_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_evt_out_fifo_full_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_IN_DONE_CH0_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_in_done_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_IN_DONE_CH1_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_in_done_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_IN_SUC_EOF_CH0_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_in_suc_eof_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_IN_SUC_EOF_CH1_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_in_suc_eof_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_IN_FIFO_EMPTY_CH0_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_in_fifo_empty_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_IN_FIFO_EMPTY_CH1_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_in_fifo_empty_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_IN_FIFO_FULL_CH0_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_in_fifo_full_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_IN_FIFO_FULL_CH1_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_in_fifo_full_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_OUT_DONE_CH0_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_out_done_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_OUT_DONE_CH1_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_out_done_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_OUT_EOF_CH0_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_out_eof_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_OUT_EOF_CH1_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_out_eof_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_OUT_TOTAL_EOF_CH0_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_out_total_eof_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_OUT_TOTAL_EOF_CH1_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_out_total_eof_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_OUT_FIFO_EMPTY_CH0_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_out_fifo_empty_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_OUT_FIFO_EMPTY_CH1_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_out_fifo_empty_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_OUT_FIFO_FULL_CH0_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_out_fifo_full_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_EVT_OUT_FIFO_FULL_CH1_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_evt_out_fifo_full_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_IN_DONE_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_in_done_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_IN_DONE_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_in_done_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_IN_DONE_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_in_done_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_IN_SUC_EOF_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_in_suc_eof_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_IN_SUC_EOF_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_in_suc_eof_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_IN_SUC_EOF_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_in_suc_eof_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_IN_FIFO_EMPTY_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_in_fifo_empty_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_IN_FIFO_EMPTY_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_in_fifo_empty_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_IN_FIFO_EMPTY_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_in_fifo_empty_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_IN_FIFO_FULL_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_in_fifo_full_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `EVT_ST11` register.
@@ -131337,6 +135698,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `PDMA_AXI_EVT_IN_FIFO_FULL_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_in_fifo_full_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_IN_FIFO_FULL_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_in_fifo_full_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_OUT_DONE_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_out_done_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_OUT_DONE_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_out_done_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_OUT_DONE_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_out_done_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_OUT_EOF_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_out_eof_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_OUT_EOF_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_out_eof_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_OUT_EOF_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_out_eof_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_OUT_TOTAL_EOF_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_out_total_eof_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_OUT_TOTAL_EOF_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_out_total_eof_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_OUT_TOTAL_EOF_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_out_total_eof_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_OUT_FIFO_EMPTY_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_out_fifo_empty_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_OUT_FIFO_EMPTY_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_out_fifo_empty_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_OUT_FIFO_EMPTY_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_out_fifo_empty_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_OUT_FIFO_FULL_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_out_fifo_full_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_OUT_FIFO_FULL_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_out_fifo_full_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_EVT_OUT_FIFO_FULL_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_evt_out_fifo_full_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_IN_DONE_CH0_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_in_done_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_IN_DONE_CH1_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_in_done_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_IN_DONE_CH2_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_in_done_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_IN_SUC_EOF_CH0_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_in_suc_eof_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_IN_SUC_EOF_CH1_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_in_suc_eof_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_IN_SUC_EOF_CH2_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_in_suc_eof_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_OUT_DONE_CH0_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_out_done_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_OUT_DONE_CH1_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_out_done_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_OUT_DONE_CH2_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_out_done_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_OUT_DONE_CH3_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_out_done_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_OUT_EOF_CH0_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_out_eof_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_OUT_EOF_CH1_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_out_eof_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_OUT_EOF_CH2_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_out_eof_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_OUT_EOF_CH3_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_out_eof_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_OUT_TOTAL_EOF_CH0_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_out_total_eof_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `EVT_ST12` register.
@@ -131687,6 +136278,110 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x00003fff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `DMA2D_EVT_OUT_TOTAL_EOF_CH1_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_out_total_eof_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_OUT_TOTAL_EOF_CH2_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_out_total_eof_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_EVT_OUT_TOTAL_EOF_CH3_ST_CLR`.
+            #[inline]
+            pub fn dma2d_evt_out_total_eof_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `MODEM_EVT_G0_ST_CLR`.
+            #[inline]
+            pub fn modem_evt_g0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `MODEM_EVT_G1_ST_CLR`.
+            #[inline]
+            pub fn modem_evt_g1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `MODEM_EVT_G2_ST_CLR`.
+            #[inline]
+            pub fn modem_evt_g2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `MODEM_EVT_G3_ST_CLR`.
+            #[inline]
+            pub fn modem_evt_g3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `ZERO_DET_EVT_DELAY_CHANNEL_1_POS_ST_CLR`.
+            #[inline]
+            pub fn zero_det_evt_delay_channel_1_pos_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `ZERO_DET_EVT_DELAY_CHANNEL_2_POS_ST_CLR`.
+            #[inline]
+            pub fn zero_det_evt_delay_channel_2_pos_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `ZERO_DET_EVT_DELAY_CHANNEL_3_POS_ST_CLR`.
+            #[inline]
+            pub fn zero_det_evt_delay_channel_3_pos_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `ZERO_DET_EVT_DELAY_CHANNEL_1_NEG_ST_CLR`.
+            #[inline]
+            pub fn zero_det_evt_delay_channel_1_neg_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `ZERO_DET_EVT_DELAY_CHANNEL_2_NEG_ST_CLR`.
+            #[inline]
+            pub fn zero_det_evt_delay_channel_2_neg_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `ZERO_DET_EVT_DELAY_CHANNEL_3_NEG_ST_CLR`.
+            #[inline]
+            pub fn zero_det_evt_delay_channel_3_neg_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `CORDIC_EVT_RES_RDY_ST_CLR`.
+            #[inline]
+            pub fn cordic_evt_res_rdy_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+        }
     }
 
     /// The `TASK_ST0` register.
@@ -132407,6 +137102,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `GPIO_TASK_CH0_SET_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch0_set_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH1_SET_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch1_set_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH2_SET_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch2_set_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH3_SET_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch3_set_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH4_SET_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch4_set_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH5_SET_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch5_set_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH6_SET_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch6_set_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH7_SET_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch7_set_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH0_CLEAR_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch0_clear_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH1_CLEAR_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch1_clear_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH2_CLEAR_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch2_clear_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH3_CLEAR_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch3_clear_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH4_CLEAR_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch4_clear_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH5_CLEAR_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch5_clear_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH6_CLEAR_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch6_clear_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH7_CLEAR_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch7_clear_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH0_TOGGLE_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch0_toggle_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH1_TOGGLE_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch1_toggle_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH2_TOGGLE_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch2_toggle_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH3_TOGGLE_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch3_toggle_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH4_TOGGLE_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch4_toggle_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH5_TOGGLE_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch5_toggle_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH6_TOGGLE_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch6_toggle_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `GPIO_TASK_CH7_TOGGLE_ST_CLR`.
+            #[inline]
+            pub fn gpio_task_ch7_toggle_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER0_RES_UPDATE_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer0_res_update_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER1_RES_UPDATE_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer1_res_update_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER2_RES_UPDATE_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer2_res_update_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER3_RES_UPDATE_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer3_res_update_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_DUTY_SCALE_UPDATE_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_duty_scale_update_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_DUTY_SCALE_UPDATE_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_duty_scale_update_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_DUTY_SCALE_UPDATE_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_duty_scale_update_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_DUTY_SCALE_UPDATE_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_duty_scale_update_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `TASK_ST1` register.
@@ -133127,6 +138052,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `LEDC0_TASK_DUTY_SCALE_UPDATE_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_duty_scale_update_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_DUTY_SCALE_UPDATE_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_duty_scale_update_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_DUTY_SCALE_UPDATE_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_duty_scale_update_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_DUTY_SCALE_UPDATE_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_duty_scale_update_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER0_CAP_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer0_cap_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER1_CAP_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer1_cap_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER2_CAP_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer2_cap_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER3_CAP_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer3_cap_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_SIG_OUT_DIS_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_sig_out_dis_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_SIG_OUT_DIS_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_sig_out_dis_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_SIG_OUT_DIS_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_sig_out_dis_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_SIG_OUT_DIS_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_sig_out_dis_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_SIG_OUT_DIS_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_sig_out_dis_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_SIG_OUT_DIS_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_sig_out_dis_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_SIG_OUT_DIS_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_sig_out_dis_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_SIG_OUT_DIS_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_sig_out_dis_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_OVF_CNT_RST_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_ovf_cnt_rst_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_OVF_CNT_RST_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_ovf_cnt_rst_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_OVF_CNT_RST_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_ovf_cnt_rst_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_OVF_CNT_RST_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_ovf_cnt_rst_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_OVF_CNT_RST_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_ovf_cnt_rst_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_OVF_CNT_RST_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_ovf_cnt_rst_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_OVF_CNT_RST_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_ovf_cnt_rst_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_OVF_CNT_RST_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_ovf_cnt_rst_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER0_RST_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer0_rst_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER1_RST_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer1_rst_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER2_RST_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer2_rst_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER3_RST_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer3_rst_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER0_RESUME_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer0_resume_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER1_RESUME_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer1_resume_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER2_RESUME_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer2_resume_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER3_RESUME_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer3_resume_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `TASK_ST2` register.
@@ -133847,6 +139002,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `LEDC0_TASK_TIMER0_PAUSE_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer0_pause_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER1_PAUSE_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer1_pause_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER2_PAUSE_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer2_pause_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_TIMER3_PAUSE_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_timer3_pause_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESTART_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_restart_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESTART_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_restart_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESTART_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_restart_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESTART_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_restart_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESTART_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_restart_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESTART_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_restart_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESTART_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_restart_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESTART_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_restart_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_PAUSE_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_pause_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_PAUSE_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_pause_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_PAUSE_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_pause_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_PAUSE_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_pause_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_PAUSE_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_pause_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_PAUSE_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_pause_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_PAUSE_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_pause_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_PAUSE_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_pause_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESUME_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_resume_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESUME_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_resume_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESUME_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_resume_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESUME_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_resume_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESUME_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_resume_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESUME_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_resume_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESUME_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_resume_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC0_TASK_GAMMA_RESUME_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc0_task_gamma_resume_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER0_RES_UPDATE_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer0_res_update_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER1_RES_UPDATE_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer1_res_update_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER2_RES_UPDATE_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer2_res_update_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER3_RES_UPDATE_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer3_res_update_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `TASK_ST3` register.
@@ -134567,6 +139952,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `LEDC1_TASK_DUTY_SCALE_UPDATE_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_duty_scale_update_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_DUTY_SCALE_UPDATE_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_duty_scale_update_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_DUTY_SCALE_UPDATE_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_duty_scale_update_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_DUTY_SCALE_UPDATE_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_duty_scale_update_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_DUTY_SCALE_UPDATE_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_duty_scale_update_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_DUTY_SCALE_UPDATE_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_duty_scale_update_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_DUTY_SCALE_UPDATE_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_duty_scale_update_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_DUTY_SCALE_UPDATE_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_duty_scale_update_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER0_CAP_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer0_cap_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER1_CAP_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer1_cap_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER2_CAP_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer2_cap_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER3_CAP_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer3_cap_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_SIG_OUT_DIS_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_sig_out_dis_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_SIG_OUT_DIS_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_sig_out_dis_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_SIG_OUT_DIS_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_sig_out_dis_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_SIG_OUT_DIS_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_sig_out_dis_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_SIG_OUT_DIS_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_sig_out_dis_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_SIG_OUT_DIS_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_sig_out_dis_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_SIG_OUT_DIS_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_sig_out_dis_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_SIG_OUT_DIS_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_sig_out_dis_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_OVF_CNT_RST_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_ovf_cnt_rst_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_OVF_CNT_RST_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_ovf_cnt_rst_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_OVF_CNT_RST_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_ovf_cnt_rst_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_OVF_CNT_RST_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_ovf_cnt_rst_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_OVF_CNT_RST_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_ovf_cnt_rst_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_OVF_CNT_RST_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_ovf_cnt_rst_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_OVF_CNT_RST_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_ovf_cnt_rst_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_OVF_CNT_RST_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_ovf_cnt_rst_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER0_RST_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer0_rst_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER1_RST_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer1_rst_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER2_RST_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer2_rst_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER3_RST_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer3_rst_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `TASK_ST4` register.
@@ -135287,6 +140902,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `LEDC1_TASK_TIMER0_RESUME_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer0_resume_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER1_RESUME_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer1_resume_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER2_RESUME_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer2_resume_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER3_RESUME_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer3_resume_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER0_PAUSE_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer0_pause_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER1_PAUSE_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer1_pause_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER2_PAUSE_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer2_pause_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_TIMER3_PAUSE_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_timer3_pause_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESTART_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_restart_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESTART_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_restart_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESTART_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_restart_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESTART_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_restart_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESTART_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_restart_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESTART_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_restart_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESTART_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_restart_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESTART_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_restart_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_PAUSE_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_pause_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_PAUSE_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_pause_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_PAUSE_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_pause_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_PAUSE_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_pause_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_PAUSE_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_pause_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_PAUSE_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_pause_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_PAUSE_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_pause_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_PAUSE_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_pause_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESUME_CH0_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_resume_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESUME_CH1_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_resume_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESUME_CH2_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_resume_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESUME_CH3_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_resume_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESUME_CH4_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_resume_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESUME_CH5_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_resume_ch5_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESUME_CH6_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_resume_ch6_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `LEDC1_TASK_GAMMA_RESUME_CH7_ST_CLR`.
+            #[inline]
+            pub fn ledc1_task_gamma_resume_ch7_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `TASK_ST5` register.
@@ -136007,6 +141852,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `TG0_TASK_CNT_START_TIMER0_ST_CLR`.
+            #[inline]
+            pub fn tg0_task_cnt_start_timer0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `TG0_TASK_ALARM_START_TIMER0_ST_CLR`.
+            #[inline]
+            pub fn tg0_task_alarm_start_timer0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `TG0_TASK_CNT_STOP_TIMER0_ST_CLR`.
+            #[inline]
+            pub fn tg0_task_cnt_stop_timer0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `TG0_TASK_CNT_RELOAD_TIMER0_ST_CLR`.
+            #[inline]
+            pub fn tg0_task_cnt_reload_timer0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `TG0_TASK_CNT_CAP_TIMER0_ST_CLR`.
+            #[inline]
+            pub fn tg0_task_cnt_cap_timer0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `TG0_TASK_CNT_START_TIMER1_ST_CLR`.
+            #[inline]
+            pub fn tg0_task_cnt_start_timer1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `TG0_TASK_ALARM_START_TIMER1_ST_CLR`.
+            #[inline]
+            pub fn tg0_task_alarm_start_timer1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `TG0_TASK_CNT_STOP_TIMER1_ST_CLR`.
+            #[inline]
+            pub fn tg0_task_cnt_stop_timer1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `TG0_TASK_CNT_RELOAD_TIMER1_ST_CLR`.
+            #[inline]
+            pub fn tg0_task_cnt_reload_timer1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `TG0_TASK_CNT_CAP_TIMER1_ST_CLR`.
+            #[inline]
+            pub fn tg0_task_cnt_cap_timer1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `TG1_TASK_CNT_START_TIMER0_ST_CLR`.
+            #[inline]
+            pub fn tg1_task_cnt_start_timer0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `TG1_TASK_ALARM_START_TIMER0_ST_CLR`.
+            #[inline]
+            pub fn tg1_task_alarm_start_timer0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `TG1_TASK_CNT_STOP_TIMER0_ST_CLR`.
+            #[inline]
+            pub fn tg1_task_cnt_stop_timer0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `TG1_TASK_CNT_RELOAD_TIMER0_ST_CLR`.
+            #[inline]
+            pub fn tg1_task_cnt_reload_timer0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `TG1_TASK_CNT_CAP_TIMER0_ST_CLR`.
+            #[inline]
+            pub fn tg1_task_cnt_cap_timer0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `TG1_TASK_CNT_START_TIMER1_ST_CLR`.
+            #[inline]
+            pub fn tg1_task_cnt_start_timer1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `TG1_TASK_ALARM_START_TIMER1_ST_CLR`.
+            #[inline]
+            pub fn tg1_task_alarm_start_timer1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `TG1_TASK_CNT_STOP_TIMER1_ST_CLR`.
+            #[inline]
+            pub fn tg1_task_cnt_stop_timer1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `TG1_TASK_CNT_RELOAD_TIMER1_ST_CLR`.
+            #[inline]
+            pub fn tg1_task_cnt_reload_timer1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `TG1_TASK_CNT_CAP_TIMER1_ST_CLR`.
+            #[inline]
+            pub fn tg1_task_cnt_cap_timer1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_CMPR0_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_cmpr0_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_CMPR1_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_cmpr1_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_CMPR2_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_cmpr2_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_CMPR0_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_cmpr0_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_CMPR1_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_cmpr1_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_CMPR2_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_cmpr2_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_GEN_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_gen_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_TIMER0_SYN_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_timer0_syn_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_TIMER1_SYN_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_timer1_syn_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_TIMER2_SYN_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_timer2_syn_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_TIMER0_PERIOD_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_timer0_period_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_TIMER1_PERIOD_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_timer1_period_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `TASK_ST6` register.
@@ -136727,6 +142802,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `MCPWM0_TASK_TIMER2_PERIOD_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_timer2_period_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_TZ0_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_tz0_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_TZ1_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_tz1_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_TZ2_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_tz2_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_CLR0_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_clr0_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_CLR1_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_clr1_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_CLR2_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_clr2_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_CAP0_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_cap0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_CAP1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_cap1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_CAP2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_cap2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_TIMER0_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_timer0_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_TIMER1_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_timer1_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_TIMER2_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_timer2_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_TIMER0_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_timer0_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_TIMER1_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_timer1_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM0_TASK_TIMER2_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm0_task_timer2_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_CMPR0_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_cmpr0_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_CMPR1_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_cmpr1_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_CMPR2_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_cmpr2_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_CMPR0_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_cmpr0_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_CMPR1_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_cmpr1_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_CMPR2_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_cmpr2_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_GEN_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_gen_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_TIMER0_SYN_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_timer0_syn_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_TIMER1_SYN_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_timer1_syn_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_TIMER2_SYN_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_timer2_syn_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_TIMER0_PERIOD_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_timer0_period_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_TIMER1_PERIOD_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_timer1_period_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_TIMER2_PERIOD_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_timer2_period_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_TZ0_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_tz0_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_TZ1_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_tz1_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_TZ2_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_tz2_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `TASK_ST7` register.
@@ -137447,6 +143752,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `MCPWM1_TASK_CLR0_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_clr0_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_CLR1_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_clr1_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_CLR2_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_clr2_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_CAP0_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_cap0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_CAP1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_cap1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_CAP2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_cap2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_TIMER0_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_timer0_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_TIMER1_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_timer1_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_TIMER2_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_timer2_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_TIMER0_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_timer0_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_TIMER1_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_timer1_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM1_TASK_TIMER2_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm1_task_timer2_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_CMPR0_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_cmpr0_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_CMPR1_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_cmpr1_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_CMPR2_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_cmpr2_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_CMPR0_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_cmpr0_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_CMPR1_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_cmpr1_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_CMPR2_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_cmpr2_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_GEN_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_gen_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_TIMER0_SYN_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_timer0_syn_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_TIMER1_SYN_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_timer1_syn_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_TIMER2_SYN_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_timer2_syn_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_TIMER0_PERIOD_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_timer0_period_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_TIMER1_PERIOD_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_timer1_period_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_TIMER2_PERIOD_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_timer2_period_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_TZ0_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_tz0_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_TZ1_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_tz1_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_TZ2_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_tz2_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_CLR0_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_clr0_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_CLR1_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_clr1_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_CLR2_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_clr2_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_CAP0_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_cap0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `TASK_ST8` register.
@@ -138167,6 +144702,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `MCPWM2_TASK_CAP1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_cap1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_CAP2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_cap2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_TIMER0_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_timer0_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_TIMER1_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_timer1_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_TIMER2_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_timer2_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_TIMER0_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_timer0_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_TIMER1_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_timer1_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM2_TASK_TIMER2_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm2_task_timer2_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_CMPR0_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_cmpr0_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_CMPR1_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_cmpr1_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_CMPR2_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_cmpr2_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_CMPR0_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_cmpr0_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_CMPR1_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_cmpr1_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_CMPR2_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_cmpr2_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_GEN_STOP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_gen_stop_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_TIMER0_SYN_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_timer0_syn_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_TIMER1_SYN_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_timer1_syn_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_TIMER2_SYN_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_timer2_syn_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_TIMER0_PERIOD_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_timer0_period_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_TIMER1_PERIOD_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_timer1_period_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_TIMER2_PERIOD_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_timer2_period_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_TZ0_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_tz0_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_TZ1_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_tz1_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_TZ2_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_tz2_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_CLR0_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_clr0_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_CLR1_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_clr1_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_CLR2_OST_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_clr2_ost_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_CAP0_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_cap0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_CAP1_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_cap1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_CAP2_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_cap2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_TIMER0_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_timer0_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_TIMER1_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_timer1_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `TASK_ST9` register.
@@ -138887,6 +145652,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `MCPWM3_TASK_TIMER2_A_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_timer2_a_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_TIMER0_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_timer0_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_TIMER1_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_timer1_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `MCPWM3_TASK_TIMER2_B_UP_ST_CLR`.
+            #[inline]
+            pub fn mcpwm3_task_timer2_b_up_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `ADC_TASK_SAMPLE1_ST_CLR`.
+            #[inline]
+            pub fn adc_task_sample1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `ADC_TASK_SAMPLE2_ST_CLR`.
+            #[inline]
+            pub fn adc_task_sample2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `ADC_TASK_STOP1_ST_CLR`.
+            #[inline]
+            pub fn adc_task_stop1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `ADC_TASK_STOP2_ST_CLR`.
+            #[inline]
+            pub fn adc_task_stop2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `REGDMA_TASK_START0_ST_CLR`.
+            #[inline]
+            pub fn regdma_task_start0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `REGDMA_TASK_START1_ST_CLR`.
+            #[inline]
+            pub fn regdma_task_start1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `REGDMA_TASK_START2_ST_CLR`.
+            #[inline]
+            pub fn regdma_task_start2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `REGDMA_TASK_START3_ST_CLR`.
+            #[inline]
+            pub fn regdma_task_start3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `TMPSNSR_TASK_START_SAMPLE_ST_CLR`.
+            #[inline]
+            pub fn tmpsnsr_task_start_sample_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `TMPSNSR_TASK_STOP_SAMPLE_ST_CLR`.
+            #[inline]
+            pub fn tmpsnsr_task_stop_sample_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `I2S0_TASK_START_RX_ST_CLR`.
+            #[inline]
+            pub fn i2s0_task_start_rx_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `I2S0_TASK_START_TX_ST_CLR`.
+            #[inline]
+            pub fn i2s0_task_start_tx_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `I2S0_TASK_STOP_RX_ST_CLR`.
+            #[inline]
+            pub fn i2s0_task_stop_rx_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `I2S0_TASK_STOP_TX_ST_CLR`.
+            #[inline]
+            pub fn i2s0_task_stop_tx_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `I2S0_TASK_SYNC_CHECK_ST_CLR`.
+            #[inline]
+            pub fn i2s0_task_sync_check_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `I2S1_TASK_START_RX_ST_CLR`.
+            #[inline]
+            pub fn i2s1_task_start_rx_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `I2S1_TASK_START_TX_ST_CLR`.
+            #[inline]
+            pub fn i2s1_task_start_tx_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `I2S1_TASK_STOP_RX_ST_CLR`.
+            #[inline]
+            pub fn i2s1_task_stop_rx_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `I2S1_TASK_STOP_TX_ST_CLR`.
+            #[inline]
+            pub fn i2s1_task_stop_tx_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `I2S1_TASK_SYNC_CHECK_ST_CLR`.
+            #[inline]
+            pub fn i2s1_task_sync_check_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `ULP_TASK_WAKEUP_CPU_ST_CLR`.
+            #[inline]
+            pub fn ulp_task_wakeup_cpu_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `ULP_TASK_INT_CPU_ST_CLR`.
+            #[inline]
+            pub fn ulp_task_int_cpu_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `PMU_TASK_SLEEP_REQ_ST_CLR`.
+            #[inline]
+            pub fn pmu_task_sleep_req_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_TASK_IN_START_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_task_in_start_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_TASK_IN_START_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_task_in_start_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_TASK_IN_START_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_task_in_start_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_TASK_IN_START_CH3_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_task_in_start_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_TASK_IN_START_CH4_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_task_in_start_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `TASK_ST10` register.
@@ -139607,6 +146602,236 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `PDMA_AHB_TASK_OUT_START_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_task_out_start_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_TASK_OUT_START_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_task_out_start_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_TASK_OUT_START_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_task_out_start_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_TASK_OUT_START_CH3_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_task_out_start_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AHB_TASK_OUT_START_CH4_ST_CLR`.
+            #[inline]
+            pub fn pdma_ahb_task_out_start_ch4_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_TASK_IN_START_CH0_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_task_in_start_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_TASK_IN_START_CH1_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_task_in_start_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_TASK_OUT_START_CH0_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_task_out_start_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `LP_PDMA_AHB_TASK_OUT_START_CH1_ST_CLR`.
+            #[inline]
+            pub fn lp_pdma_ahb_task_out_start_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_TASK_IN_START_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_task_in_start_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_TASK_IN_START_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_task_in_start_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_TASK_IN_START_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_task_in_start_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_TASK_OUT_START_CH0_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_task_out_start_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_TASK_OUT_START_CH1_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_task_out_start_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `PDMA_AXI_TASK_OUT_START_CH2_ST_CLR`.
+            #[inline]
+            pub fn pdma_axi_task_out_start_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_TASK_IN_START_CH0_ST_CLR`.
+            #[inline]
+            pub fn dma2d_task_in_start_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_TASK_IN_START_CH1_ST_CLR`.
+            #[inline]
+            pub fn dma2d_task_in_start_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_TASK_IN_START_CH2_ST_CLR`.
+            #[inline]
+            pub fn dma2d_task_in_start_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_TASK_IN_DSCR_READY_CH0_ST_CLR`.
+            #[inline]
+            pub fn dma2d_task_in_dscr_ready_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_TASK_IN_DSCR_READY_CH1_ST_CLR`.
+            #[inline]
+            pub fn dma2d_task_in_dscr_ready_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_TASK_IN_DSCR_READY_CH2_ST_CLR`.
+            #[inline]
+            pub fn dma2d_task_in_dscr_ready_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00100000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_TASK_OUT_START_CH0_ST_CLR`.
+            #[inline]
+            pub fn dma2d_task_out_start_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00200000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_TASK_OUT_START_CH1_ST_CLR`.
+            #[inline]
+            pub fn dma2d_task_out_start_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00400000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_TASK_OUT_START_CH2_ST_CLR`.
+            #[inline]
+            pub fn dma2d_task_out_start_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00800000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_TASK_OUT_START_CH3_ST_CLR`.
+            #[inline]
+            pub fn dma2d_task_out_start_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x01000000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_TASK_OUT_DSCR_READY_CH0_ST_CLR`.
+            #[inline]
+            pub fn dma2d_task_out_dscr_ready_ch0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x02000000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_TASK_OUT_DSCR_READY_CH1_ST_CLR`.
+            #[inline]
+            pub fn dma2d_task_out_dscr_ready_ch1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_TASK_OUT_DSCR_READY_CH2_ST_CLR`.
+            #[inline]
+            pub fn dma2d_task_out_dscr_ready_ch2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `DMA2D_TASK_OUT_DSCR_READY_CH3_ST_CLR`.
+            #[inline]
+            pub fn dma2d_task_out_dscr_ready_ch3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `MODEM_TASK_G0_ST_CLR`.
+            #[inline]
+            pub fn modem_task_g0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `MODEM_TASK_G1_ST_CLR`.
+            #[inline]
+            pub fn modem_task_g1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `MODEM_TASK_G2_ST_CLR`.
+            #[inline]
+            pub fn modem_task_g2_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `TASK_ST11` register.
@@ -139768,6 +146993,47 @@ pub mod soc_etm {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x0000001f;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `MODEM_TASK_G3_ST_CLR`.
+            #[inline]
+            pub fn modem_task_g3_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `CORDIC_TASK_CAL_START_ST_CLR`.
+            #[inline]
+            pub fn cordic_task_cal_start_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `ZERO_DET_TASK_START_ST_CLR`.
+            #[inline]
+            pub fn zero_det_task_start_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `SYSTIMER_TASK_CNT_UPD0_ST_CLR`.
+            #[inline]
+            pub fn systimer_task_cnt_upd0_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `SYSTIMER_TASK_CNT_UPD1_ST_CLR`.
+            #[inline]
+            pub fn systimer_task_cnt_upd1_st_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+        }
     }
 
     /// The `CLK_EN` register.
@@ -142332,6 +149598,54 @@ pub mod spi1_mem_c {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x0000041f;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `SPI_MEM_PER_END_INT_CLR`.
+            #[inline]
+            pub fn per_end_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `SPI_MEM_PES_END_INT_CLR`.
+            #[inline]
+            pub fn pes_end_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `SPI_MEM_WPE_END_INT_CLR`.
+            #[inline]
+            pub fn wpe_end_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `SPI_MEM_SLV_ST_END_INT_CLR`.
+            #[inline]
+            pub fn slv_st_end_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `SPI_MEM_MST_ST_END_INT_CLR`.
+            #[inline]
+            pub fn mst_st_end_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `SPI_MEM_BROWN_OUT_INT_CLR`.
+            #[inline]
+            pub fn brown_out_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+        }
     }
 
     /// The `SPI_MEM_INT_RAW` register.
@@ -145368,6 +152682,54 @@ pub mod spi1_mem_s {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x0000041f;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `PER_END`.
+            #[inline]
+            pub fn per_end(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `PES_END`.
+            #[inline]
+            pub fn pes_end(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `WPE_END`.
+            #[inline]
+            pub fn wpe_end(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `SLV_ST_END`.
+            #[inline]
+            pub fn slv_st_end(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `MST_ST_END`.
+            #[inline]
+            pub fn mst_st_end(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `BROWN_OUT`.
+            #[inline]
+            pub fn brown_out(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+        }
     }
 
     /// The `INT_RAW` register.
@@ -148508,6 +155870,75 @@ pub mod spi_mem_c {
             #[inline]
             pub const fn spi_mem_tx_trans_udf_int_clr(self) -> bool {
                 (self.0 & 0x08000000) != 0
+            }
+        }
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `SPI_MEM_SLV_ST_END_INT_CLR`.
+            #[inline]
+            pub fn spi_mem_slv_st_end_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `SPI_MEM_MST_ST_END_INT_CLR`.
+            #[inline]
+            pub fn spi_mem_mst_st_end_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `SPI_MEM_PMS_REJECT_INT_CLR`.
+            #[inline]
+            pub fn spi_mem_pms_reject_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `SPI_MEM_AXI_RADDR_ERR_INT_CLR`.
+            #[inline]
+            pub fn spi_mem_axi_raddr_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `SPI_MEM_AXI_WR_FLASH_ERR_INT_CLR`.
+            #[inline]
+            pub fn spi_mem_axi_wr_flash_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `SPI_MEM_AXI_WADDR_ERR_INT_CLR`.
+            #[inline]
+            pub fn spi_mem_axi_waddr_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `NANDFLASH_PE_FAIL_INT_CLR`.
+            #[inline]
+            pub fn nandflash_pe_fail_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `NANDFLASH_ECC_ERR_INT_CLR`.
+            #[inline]
+            pub fn nandflash_ecc_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `SPI_MEM_XTS_FAULT_DETECTED_INT_CLR`.
+            #[inline]
+            pub fn spi_mem_xts_fault_detected_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
             }
         }
     }
@@ -162635,6 +170066,110 @@ pub mod spi_mem_s {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xfc0023f8;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `SLV_ST_END`.
+            #[inline]
+            pub fn slv_st_end(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `MST_ST_END`.
+            #[inline]
+            pub fn mst_st_end(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `ECC_ERR`.
+            #[inline]
+            pub fn ecc_err(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `PMS_REJECT`.
+            #[inline]
+            pub fn pms_reject(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `AXI_RADDR_ERR`.
+            #[inline]
+            pub fn axi_raddr_err(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `AXI_WR_FLASH_ERR`.
+            #[inline]
+            pub fn axi_wr_flash_err(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `AXI_WADDR_ERR`.
+            #[inline]
+            pub fn axi_waddr_err(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `XTS_FAULT_DETECTED`.
+            #[inline]
+            pub fn xts_fault_detected(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `RX_TRANS_OVF`.
+            #[inline]
+            pub fn rx_trans_ovf(&mut self) -> &mut Self {
+                self.0 |= 0x04000000;
+                self
+            }
+
+            /// Set the write-trigger field `TX_TRANS_UDF`.
+            #[inline]
+            pub fn tx_trans_udf(&mut self) -> &mut Self {
+                self.0 |= 0x08000000;
+                self
+            }
+
+            /// Set the write-trigger field `DQS0_AFIFO_OVF`.
+            #[inline]
+            pub fn dqs0_afifo_ovf(&mut self) -> &mut Self {
+                self.0 |= 0x10000000;
+                self
+            }
+
+            /// Set the write-trigger field `DQS1_AFIFO_OVF`.
+            #[inline]
+            pub fn dqs1_afifo_ovf(&mut self) -> &mut Self {
+                self.0 |= 0x20000000;
+                self
+            }
+
+            /// Set the write-trigger field `BUS_FIFO1_UDF`.
+            #[inline]
+            pub fn bus_fifo1_udf(&mut self) -> &mut Self {
+                self.0 |= 0x40000000;
+                self
+            }
+
+            /// Set the write-trigger field `BUS_FIFO0_UDF`.
+            #[inline]
+            pub fn bus_fifo0_udf(&mut self) -> &mut Self {
+                self.0 |= 0x80000000;
+                self
+            }
+        }
     }
 
     /// The `INT_RAW` register.
@@ -169970,6 +177505,33 @@ pub mod systimer {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x00000007;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `TARGET0_INT_CLR`.
+            #[inline]
+            pub fn target0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `TARGET1_INT_CLR`.
+            #[inline]
+            pub fn target1_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `TARGET2_INT_CLR`.
+            #[inline]
+            pub fn target2_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+        }
     }
 
     /// The `INT_ST` register.
@@ -172127,6 +179689,33 @@ pub mod timg {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x00000007;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `T0_INT_CLR`.
+            #[inline]
+            pub fn t0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `T1_INT_CLR`.
+            #[inline]
+            pub fn t1_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `WDT_INT_CLR`.
+            #[inline]
+            pub fn wdt_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+        }
     }
 
     /// The `RTCCALICFG2` register.
@@ -175737,6 +183326,152 @@ pub mod uart {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x000fffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `RXFIFO_FULL_INT_CLR`.
+            #[inline]
+            pub fn rxfifo_full_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `TXFIFO_EMPTY_INT_CLR`.
+            #[inline]
+            pub fn txfifo_empty_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `PARITY_ERR_INT_CLR`.
+            #[inline]
+            pub fn parity_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `FRM_ERR_INT_CLR`.
+            #[inline]
+            pub fn frm_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `RXFIFO_OVF_INT_CLR`.
+            #[inline]
+            pub fn rxfifo_ovf_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `DSR_CHG_INT_CLR`.
+            #[inline]
+            pub fn dsr_chg_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `CTS_CHG_INT_CLR`.
+            #[inline]
+            pub fn cts_chg_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `BRK_DET_INT_CLR`.
+            #[inline]
+            pub fn brk_det_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `RXFIFO_TOUT_INT_CLR`.
+            #[inline]
+            pub fn rxfifo_tout_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `SW_XON_INT_CLR`.
+            #[inline]
+            pub fn sw_xon_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `SW_XOFF_INT_CLR`.
+            #[inline]
+            pub fn sw_xoff_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `GLITCH_DET_INT_CLR`.
+            #[inline]
+            pub fn glitch_det_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `TX_BRK_DONE_INT_CLR`.
+            #[inline]
+            pub fn tx_brk_done_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `TX_BRK_IDLE_DONE_INT_CLR`.
+            #[inline]
+            pub fn tx_brk_idle_done_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `TX_DONE_INT_CLR`.
+            #[inline]
+            pub fn tx_done_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `RS485_PARITY_ERR_INT_CLR`.
+            #[inline]
+            pub fn rs485_parity_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+
+            /// Set the write-trigger field `RS485_FRM_ERR_INT_CLR`.
+            #[inline]
+            pub fn rs485_frm_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `RS485_CLASH_INT_CLR`.
+            #[inline]
+            pub fn rs485_clash_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `AT_CMD_CHAR_DET_INT_CLR`.
+            #[inline]
+            pub fn at_cmd_char_det_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `WAKEUP_INT_CLR`.
+            #[inline]
+            pub fn wakeup_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+        }
     }
 
     /// The `CLKDIV_SYNC` register.
@@ -179097,6 +186832,124 @@ pub mod usb_serial_jtag {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0x0000ffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `JTAG_IN_FLUSH_INT_CLR`.
+            #[inline]
+            pub fn jtag_in_flush_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `SOF_INT_CLR`.
+            #[inline]
+            pub fn sof_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `SERIAL_OUT_RECV_PKT_INT_CLR`.
+            #[inline]
+            pub fn serial_out_recv_pkt_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `SERIAL_IN_EMPTY_INT_CLR`.
+            #[inline]
+            pub fn serial_in_empty_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `PID_ERR_INT_CLR`.
+            #[inline]
+            pub fn pid_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `CRC5_ERR_INT_CLR`.
+            #[inline]
+            pub fn crc5_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `CRC16_ERR_INT_CLR`.
+            #[inline]
+            pub fn crc16_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `STUFF_ERR_INT_CLR`.
+            #[inline]
+            pub fn stuff_err_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `IN_TOKEN_REC_IN_EP1_INT_CLR`.
+            #[inline]
+            pub fn in_token_rec_in_ep1_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `USB_BUS_RESET_INT_CLR`.
+            #[inline]
+            pub fn usb_bus_reset_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `OUT_EP1_ZERO_PAYLOAD_INT_CLR`.
+            #[inline]
+            pub fn out_ep1_zero_payload_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+
+            /// Set the write-trigger field `OUT_EP2_ZERO_PAYLOAD_INT_CLR`.
+            #[inline]
+            pub fn out_ep2_zero_payload_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
+                self
+            }
+
+            /// Set the write-trigger field `RTS_CHG_INT_CLR`.
+            #[inline]
+            pub fn rts_chg_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00001000;
+                self
+            }
+
+            /// Set the write-trigger field `DTR_CHG_INT_CLR`.
+            #[inline]
+            pub fn dtr_chg_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00002000;
+                self
+            }
+
+            /// Set the write-trigger field `GET_LINE_CODE_INT_CLR`.
+            #[inline]
+            pub fn get_line_code_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00004000;
+                self
+            }
+
+            /// Set the write-trigger field `SET_LINE_CODE_INT_CLR`.
+            #[inline]
+            pub fn set_line_code_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00008000;
+                self
+            }
+        }
     }
 
     /// The `CONF0` register.
@@ -190616,6 +198469,13 @@ pub mod wifi_mac {
                 value: oer_mmio::DmaRef<super::super::layouts::WifiRxDmaDescriptor>,
             ) -> &mut Self {
                 self.0 = value.bits();
+                self
+            }
+
+            /// Set `ADDRESS` to the zero image: no address.
+            #[inline]
+            pub fn clear_address(&mut self) -> &mut Self {
+                self.0 &= 0x00000000;
                 self
             }
         }
@@ -202139,6 +209999,82 @@ pub mod wifi_mac {
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
         pub const TRIGGERS: u32 = 0xffffffff;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `COLLISION_QUEUE_0`.
+            #[inline]
+            pub fn collision_queue_0(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `COLLISION_QUEUE_1`.
+            #[inline]
+            pub fn collision_queue_1(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `COLLISION_QUEUE_2`.
+            #[inline]
+            pub fn collision_queue_2(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `COLLISION_QUEUE_3`.
+            #[inline]
+            pub fn collision_queue_3(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `BITS_4_15_OPAQUE` to `value`.
+            #[inline]
+            pub fn bits_4_15_opaque(&mut self, value: oer_mmio::Bits<12>) -> &mut Self {
+                self.0 = (self.0 & 0xffff000f) | (value.get() << 4);
+                self
+            }
+
+            /// Set the write-trigger field `TIMEOUT_QUEUE_0`.
+            #[inline]
+            pub fn timeout_queue_0(&mut self) -> &mut Self {
+                self.0 |= 0x00010000;
+                self
+            }
+
+            /// Set the write-trigger field `TIMEOUT_QUEUE_1`.
+            #[inline]
+            pub fn timeout_queue_1(&mut self) -> &mut Self {
+                self.0 |= 0x00020000;
+                self
+            }
+
+            /// Set the write-trigger field `TIMEOUT_QUEUE_2`.
+            #[inline]
+            pub fn timeout_queue_2(&mut self) -> &mut Self {
+                self.0 |= 0x00040000;
+                self
+            }
+
+            /// Set the write-trigger field `TIMEOUT_QUEUE_3`.
+            #[inline]
+            pub fn timeout_queue_3(&mut self) -> &mut Self {
+                self.0 |= 0x00080000;
+                self
+            }
+
+            /// Set the write-trigger field `BITS_20_31_OPAQUE` to `value`.
+            #[inline]
+            pub fn bits_20_31_opaque(&mut self, value: oer_mmio::Bits<12>) -> &mut Self {
+                self.0 = (self.0 & 0x000fffff) | (value.get() << 20);
+                self
+            }
+        }
     }
 
     /// The `QUEUE_STATE` register.
@@ -203227,6 +211163,13 @@ pub mod wifi_mac {
                 value: oer_mmio::DmaRef<super::super::layouts::WifiTxDmaDescriptor>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | (value.bits() & 0xfffff);
+                self
+            }
+
+            /// Set `DESCRIPTOR_ADDRESS_LOW` to the zero image: no address.
+            #[inline]
+            pub fn clear_descriptor_address_low(&mut self) -> &mut Self {
+                self.0 &= 0xfff00000;
                 self
             }
 
@@ -217000,6 +224943,19 @@ pub mod wifi_mac {
         #[inline]
         pub fn trigger_queue_state_clear_bits_20_31_opaque(&mut self, value: oer_mmio::Bits<12>) {
             self.0.write::<0xcb0>(value.get() << 20);
+        }
+
+        /// Write to the write-trigger fields of `QUEUE_STATE_CLEAR` the change sets, in one
+        /// write, starting each one's hardware action once; every other bit is
+        /// zero or its fixed value.
+        #[inline]
+        pub fn trigger_queue_state_clear(
+            &mut self,
+            change: impl FnOnce(&mut queue_state_clear::T),
+        ) {
+            let mut triggers = queue_state_clear::T(0);
+            change(&mut triggers);
+            self.0.write::<0xcb0>(triggers.0);
         }
 
         /// Read `QUEUE_STATE`.

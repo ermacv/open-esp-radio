@@ -4,15 +4,15 @@
 //! module is the only public path used by HAL consumers.  No peripheral owner,
 //! register block, raw accessor, or generic MMIO capability is re-exported.
 
+pub use crate::bluetooth::BluetoothMemoryListSelector;
 pub use oer_esp32s31_pac::{
-    BluetoothMemoryListSelector, CfrValue, CoexTimerClientValue, CoexTimerClockDividerMinusOne,
-    CoexTimerClockSource, CoexTimerPtiValue, CoexTimerRegister,
-    CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource,
-    ExtraSoftApRxBlockAckEntrySnapshot, ForcedRxGain, MAC_TX_POWER_RATE_COUNT,
-    MacApReceivePolicySnapshot, MacAssociationId, MacCcmpKeyIdentity, MacCoexPrioritySnapshot,
-    MacDelaySlot, MacExtraSoftApRxBlockAckEntryIndex, MacHe20PeerConfig, MacHe20PeerError,
-    MacHeBeamformingReportProfile, MacHeBeamformingReportProfileError, MacHeBssColor,
-    MacHeDefaultPacketExtensionDuration, MacHeErSuAckRateProfile, MacHeFecCoding,
+    CfrValue, CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource,
+    CoexTimerPtiValue, CoexTimerRegister, CoexistenceLowPowerClockObservation,
+    CoexistenceLowPowerClockSource, ExtraSoftApRxBlockAckEntrySnapshot, ForcedRxGain,
+    MAC_TX_POWER_RATE_COUNT, MacApReceivePolicySnapshot, MacAssociationId, MacCcmpKeyIdentity,
+    MacCoexPrioritySnapshot, MacDelaySlot, MacExtraSoftApRxBlockAckEntryIndex, MacHe20PeerConfig,
+    MacHe20PeerError, MacHeBeamformingReportProfile, MacHeBeamformingReportProfileError,
+    MacHeBssColor, MacHeDefaultPacketExtensionDuration, MacHeErSuAckRateProfile, MacHeFecCoding,
     MacHeGuardIntervalAndLtf, MacHeMcs, MacHePacketPaddingDuration, MacHeRate,
     MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
     MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot, MacHeTxFormat, MacHeTxParameters,
@@ -45,8 +45,3 @@ pub use crate::phy::restore::{
 
 pub use crate::ieee80211::station_wake::StaTbttScheduleError;
 pub use oer_esp32s31_pac::WifiRxCsiControlMask;
-
-pub(crate) use oer_esp32s31_pac::{
-    BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
-    BluetoothPhyRegisterInitInputs,
-};
