@@ -19,6 +19,7 @@ use espflash::{
 };
 use sha2::{Digest as _, Sha256};
 
+mod partition_table;
 pub mod stage_two;
 
 /// The flash settings an [`Encoding`] names.
@@ -184,13 +185,7 @@ pub fn encode(
 
 /// The binary form of the partition table CSV at `csv`.
 pub fn partition_table(csv: &Path) -> Result<Vec<u8>> {
-    let text =
-        std::fs::read_to_string(csv).map_err(|error| format!("{}: {error}", csv.display()))?;
-    let table = esp_idf_part::PartitionTable::try_from_str(text)
-        .map_err(|error| format!("{}: {error}", csv.display()))?;
-    Ok(table
-        .to_bin()
-        .map_err(|error| format!("{}: {error}", csv.display()))?)
+    Ok(partition_table::Table::read_csv(csv)?.to_binary()?)
 }
 
 /// One partition of a partition table.
@@ -207,23 +202,7 @@ pub struct Partition {
 
 /// The partitions of the table CSV at `csv`, in table order.
 pub fn partitions(csv: &Path) -> Result<Vec<Partition>> {
-    use esp_idf_part::{DataType, SubType, Type};
-    let text =
-        std::fs::read_to_string(csv).map_err(|error| format!("{}: {error}", csv.display()))?;
-    let table = esp_idf_part::PartitionTable::try_from_str(text)
-        .map_err(|error| format!("{}: {error}", csv.display()))?;
-    Ok(table
-        .partitions()
-        .iter()
-        .map(|partition| Partition {
-            name: partition.name(),
-            offset: partition.offset(),
-            size: partition.size(),
-            application: partition.ty() == Type::App,
-            otadata: partition.ty() == Type::Data
-                && partition.subtype() == SubType::Data(DataType::Ota),
-        })
-        .collect())
+    Ok(partition_table::Table::read_csv(csv)?.partitions()?)
 }
 
 /// A warning when an application image of `bytes` fills at least
@@ -318,9 +297,8 @@ pub fn require_chip_image(bytes: &[u8], chip: Chip) -> Result<()> {
 
 /// Fails unless `bytes` are a binary ESP-IDF partition table.
 pub fn require_partition_table(bytes: &[u8]) -> Result<()> {
-    esp_idf_part::PartitionTable::try_from_bytes(bytes.to_vec())
-        .map(|_| ())
-        .map_err(|error| format!("not a binary partition table: {error}").into())
+    partition_table::Table::from_binary(bytes)?;
+    Ok(())
 }
 
 /// Fails unless the ELF holds the ESP-IDF application descriptor the

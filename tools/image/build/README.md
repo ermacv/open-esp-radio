@@ -159,9 +159,24 @@ partition table's.
 Every flash file is encoded at build time with the `espflash` library
 (`encode`): the application in QIO at 80 MHz for 16 MB with 64-KiB MMU
 pages, the bootloader separately in the ROM's DIO (`rom_bootloader` checks
-the segment checksum and digest), partition tables with `esp-idf-part`. The
-build needs no `espflash` executable. The application must fit its
-partition; at 90 % the build warns.
+the segment checksum and digest). The local `encode::partition_table` module
+reads and writes partition tables; `espflash` remains the image encoder and a
+stand host tool, including its transitive dependencies. The build needs no
+`espflash` executable.
+
+The partition-table module supports the pipeline's app/data CSV tables with
+explicit offsets and sizes, decimal/hex numbers and K/M size suffixes. Named
+subtypes are `factory`, `ota_0` through `ota_15`, `nvs`, `ota` and `phy`;
+numeric byte subtypes are retained. Flags are `encrypted` and `readonly`.
+Binary entries use bounded `oer-wire` cursors and typed fields. The writer emits
+an MD5 record and erased padding; the reader accepts the format's optional MD5,
+verifies any MD5 present, and requires an erased end marker. Unknown flag bits
+and all label bytes survive a binary round trip. Invalid input returns typed
+errors, including unknown types, overflow, overlaps and malformed records.
+Format facts are sourced beside the implementation from the ESP32-S31 ESP-IDF
+pin in [`chips/esp32s31/vendor/artifacts.toml`](../../../chips/esp32s31/vendor/artifacts.toml).
+
+The application must fit its partition; at 90 % the build warns.
 
 ## Gates
 
