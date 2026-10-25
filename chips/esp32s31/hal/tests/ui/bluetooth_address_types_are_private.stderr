@@ -7,7 +7,7 @@ error[E0432]: unresolved import `oer_esp32s31_hal::bluetooth::BluetoothControlle
 help: a similar name exists in the module
    |
 13 - use oer_esp32s31_hal::bluetooth::BluetoothControllerSramAddress; // ui-error: E0432
-13 + use oer_esp32s31_hal::bluetooth::BluetoothControllerReset; // ui-error: E0432
+13 + use oer_esp32s31_hal::bluetooth::BluetoothControllerParts; // ui-error: E0432
    |
 
 error[E0432]: unresolved import `oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalReady`

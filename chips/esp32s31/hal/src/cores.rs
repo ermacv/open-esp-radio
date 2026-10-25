@@ -250,6 +250,7 @@ pub(crate) mod rom {
     pub(crate) struct Rom;
 
     #[cfg(target_arch = "riscv32")]
+    #[allow(unsafe_code, reason = "the ROM routines' declarations")]
     unsafe extern "C" {
         /// SOURCE: the pinned ESP32-S31 rev0 ROM (`esp32s31_rev0_rom.elf`,
         /// `chips/esp32s31/vendor/artifacts.toml`): Blobray's function

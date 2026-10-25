@@ -73,6 +73,6 @@ pub fn prepare_control_restore(
 pub fn restore_control(
     registers: &mut impl SharedPhyAccess,
 ) -> Result<(), RxDcoControlRestoreError> {
-    let (phy, restore) = phy_parts_mut(registers);
-    restore.restore_rx_dco_with(|field| restore(&mut phy.peripherals.phy_rx_dco_oracle, field))
+    let (phy, route) = phy_parts_mut(registers);
+    route.restore_rx_dco_with(|field| restore(&mut phy.peripherals.phy_rx_dco_oracle, field))
 }

@@ -9,7 +9,7 @@ use super::{
     PhyRfInitPrefixTransition, PhyRfInitPrefixTransitionError, RcCalibrationAction,
     RcCalibrationCompletion, RcCalibrationTransition, RcCalibrationTransitionError,
     RfpllChargePumpAction, RfpllChargePumpCompletion, RfpllChargePumpOutcome,
-    RfpllChargePumpTransition, fields, registers,
+    RfpllChargePumpTransition,
 };
 use crate::analog::frequency::{
     PhyChannelFrequencyInitAction, PhyChannelFrequencyInitCompletion,

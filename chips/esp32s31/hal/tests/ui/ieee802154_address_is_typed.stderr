@@ -1,7 +1,7 @@
 error[E0308]: mismatched types
  --> tests/ui/ieee802154_address_is_typed.rs:9:30
   |
-9 |     mac.write_tx_dma_address(raw); // ui-error: E0308
+9 |     mac.write_tx_dma_address(raw, |_| {}); // ui-error: E0308
   |         -------------------- ^^^ expected `DmaWindowAddress<DmaWindow>`, found `u32`
   |         |
   |         arguments to this method are incorrect
@@ -11,13 +11,13 @@ error[E0308]: mismatched types
 note: method defined here
  --> $WORKSPACE/chips/esp32s31/pac/src/generated.rs
   |
-  |         pub fn write_tx_dma_address(&mut self, value: super::layouts::DmaWindowAddress) {
+  |         pub fn write_tx_dma_address(
   |                ^^^^^^^^^^^^^^^^^^^^
 
 error[E0308]: mismatched types
   --> tests/ui/ieee802154_address_is_typed.rs:11:30
    |
-11 |     mac.write_rx_dma_address(raw); // ui-error: E0308
+11 |     mac.write_rx_dma_address(raw, |_| {}); // ui-error: E0308
    |         -------------------- ^^^ expected `DmaWindowAddress<DmaWindow>`, found `u32`
    |         |
    |         arguments to this method are incorrect
@@ -27,5 +27,5 @@ error[E0308]: mismatched types
 note: method defined here
   --> $WORKSPACE/chips/esp32s31/pac/src/generated.rs
    |
-   |         pub fn write_rx_dma_address(&mut self, value: super::layouts::DmaWindowAddress) {
+   |         pub fn write_rx_dma_address(
    |                ^^^^^^^^^^^^^^^^^^^^
