@@ -2,24 +2,23 @@
 //! without its driver: the early writer of the bootstrap and a runtime's
 //! early boot, and the fatal path.
 //!
-//! The chip's HAL keeps one [`Ownership`] and builds its register owner
-//! through the `capture` it passes in, which [`Ownership`] calls only after
-//! one compare-and-swap of the block's state made the caller its holder.
-//! Nothing waits for a state:
+//! The chip's root installs the console's parts once ([`Ownership::install`])
+//! in one [`ClaimCell`], whose compare-and-swap of the block's state makes
+//! each caller its only holder. Nothing waits for a state:
 //!
-//! - `Free → Early` for one early record ([`Ownership::write`]), back to
-//!   `Free` once the record's owner is dropped. A record that finds the
-//!   block held by another one, on another hart or the one it interrupted,
+//! - Free → lent for one early record ([`Ownership::write`]), free again
+//!   once the record ends. A record that finds the block lent to another
+//!   one, on another hart or the one it interrupted, or not installed yet,
 //!   is dropped and counted.
-//! - `Free → Driver` when the console's driver takes the block
-//!   ([`Ownership::retire`]). While a record holds it the driver is refused
-//!   ([`RetireError::Busy`]); afterwards every early record is refused and
-//!   goes to the driver.
-//! - `Free → Fatal` for one fatal note ([`Ownership::write_fatal`]), for
-//!   good. The fatal path never takes the block from anyone: while an early
-//!   record or the driver holds it, or a fatal note took it before, the note
-//!   is refused and its caller keeps it elsewhere. So every owner of the
-//!   block lives alone, and the driver's parts hold it for as long as they
+//! - Free → the driver's, for good: the console's driver takes the parts
+//!   out ([`Ownership::retire`]). While a record holds them the driver is
+//!   refused ([`RetireError::Busy`]); afterwards every early record is
+//!   refused and goes to the driver.
+//! - Free → the fatal path's, for good ([`Ownership::write_fatal`]). The
+//!   fatal path never takes the block from anyone: while an early record or
+//!   the driver holds it, or a fatal note took it before, the note is
+//!   refused and its caller keeps it elsewhere. So every holder of the
+//!   block is alone, and the driver's parts hold it for as long as they
 //!   live.
 //!
 //! The early writer writes while the FIFO has room, drops the rest and
@@ -27,9 +26,8 @@
 //! there is nothing to yield to, so it waits for room within
 //! [`EARLY_PATIENCE`] per record. A fatal note never waits.
 
-use core::sync::atomic::{AtomicU8, Ordering};
-
 use oer_diagnostics::{FifoWriter, Lost, Note, Patience};
+use oer_memory::{Claim, ClaimCell};
 
 use crate::EndpointRegisters;
 
@@ -43,18 +41,20 @@ mod tests;
 /// an executor exists there is nothing to yield to.
 pub const EARLY_PATIENCE: Patience = Patience::polls(100_000);
 
-/// No one holds the block: an early record may take it.
-const FREE: u8 = 0;
-/// One early record holds the block.
-const EARLY: u8 = 1;
-/// The console's driver holds the block.
-const DRIVER: u8 = 2;
-/// The fatal path holds the block, for good.
-const FATAL: u8 = 3;
+/// The console's parts as the chip's root installs them: the early and
+/// fatal writers reach only their endpoint.
+pub trait Console {
+    /// The task's registers of the block.
+    type Endpoint: EndpointRegisters;
+    /// The endpoint, for one record.
+    fn endpoint(&mut self) -> &mut Self::Endpoint;
+}
 
 /// The driver could not take the block.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RetireError {
+    /// The chip's root installed no parts yet.
+    Empty,
     /// An early record holds the block now; the caller may try again once
     /// it ended.
     Busy,
@@ -63,18 +63,18 @@ pub enum RetireError {
 }
 
 /// The block's holder and the bytes the writers without the driver dropped.
-pub struct Ownership {
-    state: AtomicU8,
+pub struct Ownership<T> {
+    parts: ClaimCell<T>,
     lost: Lost,
 }
 
-/// The FIFO of a register owner for the diagnostic writer; without an owner
-/// it never has room and a record written to it is only counted.
-pub struct Fifo<R>(Option<R>);
+/// The FIFO of a lent endpoint for the diagnostic writer; without one it
+/// never has room and a record written to it is only counted.
+pub struct Fifo<'a, R>(Option<&'a mut R>);
 
-impl<R: EndpointRegisters> oer_diagnostics::Fifo for Fifo<R> {
+impl<R: EndpointRegisters> oer_diagnostics::Fifo for Fifo<'_, R> {
     fn has_room(&self) -> bool {
-        self.0.as_ref().is_some_and(EndpointRegisters::has_room)
+        self.0.as_deref().is_some_and(EndpointRegisters::has_room)
     }
 
     fn push(&mut self, byte: u8) {
@@ -90,82 +90,79 @@ impl<R: EndpointRegisters> oer_diagnostics::Fifo for Fifo<R> {
     }
 }
 
-impl Ownership {
+impl<T: Console> Ownership<T> {
     pub const fn new() -> Self {
         Self {
-            state: AtomicU8::new(FREE),
+            parts: ClaimCell::new(),
             lost: Lost::new(),
         }
     }
 
-    /// Runs `write` with a writer over the owner `capture` builds, if the
-    /// block is free; the block is free again once that owner is dropped.
-    /// While another early record holds the block, `write` runs over no
-    /// owner and its bytes are counted. Once the driver or the fatal path
-    /// took the block, nothing is called and nothing counted. Returns
-    /// whether the early writer took the record: `false` hands it to the
-    /// driver.
-    pub fn write<R: EndpointRegisters>(
-        &self,
-        capture: impl FnOnce() -> R,
-        write: impl FnOnce(&mut FifoWriter<'_, Fifo<R>>),
-    ) -> bool {
-        match self
-            .state
-            .compare_exchange(FREE, EARLY, Ordering::Acquire, Ordering::Acquire)
-        {
-            Ok(_) => {
+    /// Install the console's parts, once: the block is free from now on.
+    ///
+    /// # Errors
+    ///
+    /// Parts were installed before: `parts` comes back unchanged.
+    pub fn install(&self, parts: T) -> Result<(), T> {
+        self.parts.install(parts)
+    }
+
+    /// Runs `write` with a writer over the endpoint, if the block is free;
+    /// the block is free again once `write` returns. While another early
+    /// record holds the block, or before the parts are installed, `write`
+    /// runs over no endpoint and its bytes are counted. Once the driver or
+    /// the fatal path took the block, nothing is called and nothing
+    /// counted. Returns whether the early writer took the record: `false`
+    /// hands it to the driver.
+    pub fn write(&self, write: impl FnOnce(&mut FifoWriter<'_, Fifo<'_, T::Endpoint>>)) -> bool {
+        let mut write = Some(write);
+        let lent = self.parts.lend(|parts| {
+            if let Some(write) = write.take() {
                 write(&mut FifoWriter::new(
-                    Fifo(Some(capture())),
+                    Fifo(Some(parts.endpoint())),
                     &self.lost,
                     EARLY_PATIENCE,
                 ));
-                // The writer and its owner were dropped above.
-                self.state.store(FREE, Ordering::Release);
+            }
+        });
+        match lent {
+            Ok(()) => true,
+            Err(Claim::Empty | Claim::Lent) => {
+                if let Some(write) = write.take() {
+                    write(&mut FifoWriter::new(Fifo(None), &self.lost, Patience::NONE));
+                }
                 true
             }
-            Err(EARLY) => {
-                write(&mut FifoWriter::new(Fifo(None), &self.lost, Patience::NONE));
-                true
-            }
-            Err(_) => false,
+            Err(Claim::Kept) => false,
         }
     }
 
-    /// Writes `note` without waiting over the owner `capture` builds, if
-    /// the block is free; the block then stays the fatal path's for good.
-    /// While anyone holds the block, nothing is built, written or counted:
-    /// returns `false`, and the caller keeps the note elsewhere.
-    pub fn write_fatal<R: EndpointRegisters>(
-        &self,
-        capture: impl FnOnce() -> R,
-        note: &Note<'_>,
-    ) -> bool {
-        if self
-            .state
-            .compare_exchange(FREE, FATAL, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
-        {
-            return false;
-        }
-        FifoWriter::new(Fifo(Some(capture())), &self.lost, Patience::NONE).note(note);
-        true
+    /// Writes `note` without waiting over the endpoint, if the block is
+    /// free; the block then stays the fatal path's for good. While anyone
+    /// holds the block, or before the parts are installed, nothing is
+    /// written or counted: returns `false`, and the caller keeps the note
+    /// elsewhere.
+    pub fn write_fatal(&self, note: &Note<'_>) -> bool {
+        self.parts
+            .seal(|parts| {
+                FifoWriter::new(Fifo(Some(parts.endpoint())), &self.lost, Patience::NONE)
+                    .note(note);
+            })
+            .is_ok()
     }
 
-    /// Gives the block to the console's driver for good, if it is free:
-    /// every later early record is refused.
+    /// Gives the parts to the console's driver for good, if the block is
+    /// free: every later early record is refused.
     ///
     /// # Errors
-    /// An early record holds the block, or the block was taken before.
-    pub fn retire(&self) -> Result<(), RetireError> {
-        match self
-            .state
-            .compare_exchange(FREE, DRIVER, Ordering::AcqRel, Ordering::Acquire)
-        {
-            Ok(_) => Ok(()),
-            Err(EARLY) => Err(RetireError::Busy),
-            Err(_) => Err(RetireError::Taken),
-        }
+    /// No parts were installed, an early record holds the block, or the
+    /// block was taken before.
+    pub fn retire(&self) -> Result<T, RetireError> {
+        self.parts.take().map_err(|claim| match claim {
+            Claim::Empty => RetireError::Empty,
+            Claim::Lent => RetireError::Busy,
+            Claim::Kept => RetireError::Taken,
+        })
     }
 
     /// Bytes dropped since the last call, for the driver's owner to report
@@ -175,7 +172,7 @@ impl Ownership {
     }
 }
 
-impl Default for Ownership {
+impl<T: Console> Default for Ownership<T> {
     fn default() -> Self {
         Self::new()
     }
