@@ -58,34 +58,6 @@ pub use generated::soc;
 ///     etm.modify_evt_st0(|_| {});
 /// }
 /// ```
-///
-/// GMAC's DMA bus mode is read,
-///
-/// ```
-/// use oer_esp32s31_pac::soc::gmac::Gmac;
-/// fn bus(gmac: &Gmac<oer_mmio::Host<'_>>) {
-///     let _ = gmac.read_register10_axibusmoderegister();
-/// }
-/// ```
-///
-/// its remote wake-up filter port, read in sequence (`gmac_reg.h:916`), is
-/// not,
-///
-/// ```compile_fail
-/// use oer_esp32s31_pac::soc::gmac::Gmac;
-/// fn filter(gmac: &Gmac<oer_mmio::Host<'_>>) {
-///     let _ = gmac.read_register10_remotewakeupframefilterregister();
-/// }
-/// ```
-///
-/// nor its PMT status, which a read clears (`gmac_reg.h:971`):
-///
-/// ```compile_fail
-/// use oer_esp32s31_pac::soc::gmac::Gmac;
-/// fn power(gmac: &Gmac<oer_mmio::Host<'_>>) {
-///     let _ = gmac.read_register11_pmtcontrolandstatusregister();
-/// }
-/// ```
 #[cfg(doctest)]
 pub struct SocHeaderSemantics;
 

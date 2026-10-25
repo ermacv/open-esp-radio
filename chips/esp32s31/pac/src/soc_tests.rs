@@ -81,3 +81,18 @@ fn the_report_lists_the_header_s_narrowings() {
         );
     }
 }
+
+#[test]
+fn peripherals_with_semantics_described_only_in_text_have_no_block() {
+    // GMAC, SDHOST and USB_OTG_HS mix write-one-to-clear flags, destructive
+    // reads and self-clearing bits into `R/W` fields: the generated module
+    // renders none of their registers until a typed API exists.
+    let generated = include_str!("generated.rs");
+    for module in [
+        "\n    pub mod gmac {",
+        "\n    pub mod sdhost {",
+        "\n    pub mod usb_otg_hs {",
+    ] {
+        assert!(!generated.contains(module), "{module}");
+    }
+}

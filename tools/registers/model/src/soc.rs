@@ -61,6 +61,9 @@ pub struct StrictnessOverlay {
     /// The pinned header of each vendor peripheral.
     #[serde(default)]
     pub headers: Vec<HeaderRule>,
+    /// Peripherals whose registers get no API at all.
+    #[serde(default)]
+    pub no_api: Vec<NoApiRule>,
     #[serde(default)]
     pub registers: Vec<RegisterRule>,
     #[serde(default)]
@@ -80,6 +83,17 @@ pub struct HeaderRule {
     /// The `*_struct.h` path, whose device layout reserves words.
     #[serde(default)]
     pub layout: Option<String>,
+}
+
+/// A vendor peripheral whose semantics the headers describe only in text, so
+/// none of its registers has an API (not even a read) until a typed API is
+/// written for it.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct NoApiRule {
+    pub peripheral: String,
+    pub reason: String,
+    pub sources: Vec<String>,
 }
 
 /// What the overlay states about one vendor register.
@@ -243,6 +257,22 @@ impl StrictnessOverlay {
                     rule.peripheral
                 )));
             }
+        }
+        let mut seen = BTreeSet::new();
+        for rule in &self.no_api {
+            if !seen.insert(rule.peripheral.clone()) {
+                return Err(Error::message(format!(
+                    "overlay states {} without API twice",
+                    rule.peripheral
+                )));
+            }
+            if rule.reason.trim().is_empty() {
+                return Err(Error::message(format!(
+                    "overlay no-api entry {} states no reason",
+                    rule.peripheral
+                )));
+            }
+            self.validate_sources(&rule.peripheral, &rule.sources)?;
         }
         let mut seen = BTreeSet::new();
         for rule in &self.registers {
@@ -645,7 +675,18 @@ pub fn render_soc(inputs: &SocInputs<'_>) -> Result<SocRender> {
             let collides = register_modules
                 .get(&module_name(&register.name))
                 .is_some_and(|names| names.len() > 1);
-            let (api, reasons, typed) = if let Some(owner) = curated_owner {
+            let (api, reasons, typed) = if let Some(rule) = inputs
+                .overlay
+                .no_api
+                .iter()
+                .find(|rule| rule.peripheral == name)
+            {
+                (
+                    RegisterApi::None,
+                    vec![format!("no API for the peripheral: {}", rule.reason)],
+                    None,
+                )
+            } else if let Some(owner) = curated_owner {
                 (
                     RegisterApi::None,
                     vec![format!("the curated model's {owner} describes its word")],
@@ -696,6 +737,17 @@ pub fn render_soc(inputs: &SocInputs<'_>) -> Result<SocRender> {
         kept.derived_from = None;
         rendered.push(name);
         device.peripherals.push(kept);
+    }
+    if let Some(rule) = inputs.overlay.no_api.iter().find(|rule| {
+        !vendor
+            .peripherals
+            .iter()
+            .any(|peripheral| peripheral.name == rule.peripheral)
+    }) {
+        return Err(Error::message(format!(
+            "overlay no-api peripheral {} is not in the vendor SVD",
+            rule.peripheral
+        )));
     }
     if let Some((peripheral, register)) = register_rules
         .keys()

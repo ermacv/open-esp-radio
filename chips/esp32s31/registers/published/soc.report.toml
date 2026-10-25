@@ -6,13 +6,25 @@
 schema = 1
 
 [summary]
-peripherals = 103
-skipped-peripherals = 0
+peripherals = 100
+skipped-peripherals = 3
 registers = 4724
-full = 2873
-read = 1502
-none = 349
+full = 2477
+read = 1368
+none = 879
 renamed-fields = 29
+
+[[skipped]]
+peripheral = "GMAC"
+reason = "no register keeps an API"
+
+[[skipped]]
+peripheral = "SDHOST"
+reason = "no register keeps an API"
+
+[[skipped]]
+peripheral = "USB_OTG_HS"
+reason = "no register keeps an API"
 
 [[renamed]]
 peripheral = "EFUSE"
@@ -4691,320 +4703,770 @@ reasons = ["esp-idf:components/soc/esp32s31/register/soc/efuse_reg.h defines no 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER0_MACCONFIGURATIONREGISTER"
-api = "read"
-reasons = ["field DO has no snake-case method name that is not a keyword", "undeclared bits 0x00002000"]
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER1_MACFRAMEFILTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER2_HASHTABLEHIGHREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER3_HASHTABLELOWREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER4_GMIIADDRESSREGISTER"
 api = "none"
-reasons = ["field GMAC_GB is cleared by a read (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:534)"]
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER5_GMIIDATAREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER6_FLOWCONTROLREGISTER"
-api = "read"
-reasons = ["field FCB_BPA is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:624): a one written sets it"]
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER7_VLANTAGREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER8_VERSIONREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER9_DEBUGREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER10_REMOTEWAKEUPFRAMEFILTERREGISTER"
 api = "none"
-reasons = ["field GMAC_WKUPFRM_FILTER is a port read and written in sequence (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:916)"]
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER11_PMTCONTROLANDSTATUSREGISTER"
 api = "none"
-reasons = ["field GMAC_MGKPRCVD is cleared by a read (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:968)"]
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER12_LPICONTROLANDSTATUSREGISTER"
 api = "none"
-reasons = ["field GMAC_TLPIEN is cleared by a read (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:1025)"]
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER13_LPITIMERSCONTROLREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER14_INTERRUPTSTATUSREGISTER"
 api = "none"
-reasons = ["field GMAC_RGSMIIIS is cleared by a read (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:1162)"]
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER15_INTERRUPTMASKREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER16_MACADDRESS0HIGHREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER17_MACADDRESS0LOWREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER18_MACADDRESS1HIGHREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER19_MACADDRESS1LOWREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "MACADDRESS2HIGHREGISTERCONTAINSTHEHIGHER16BITSOFTHETHIRDMACADDRESS"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "MACADDRESS2LOWREGISTERCONTAINSTHELOWER32BITSOFTHETHIRDMACADDRESS"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "MACADDRESS3HIGHREGISTERCONTAINSTHEHIGHER16BITSOFTHEFOURTHMACADDRESS"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "MACADDRESS3LOWREGISTERCONTAINSTHELOWER32BITSOFTHEFOURTHMACADDRESS"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "MACADDRESS4HIGHREGISTERCONTAINSTHEHIGHER16BITSOFTHEFIFTHMACADDRESS"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "MACADDRESS4LOWREGISTERCONTAINSTHELOWER32BITSOFTHEFIFTHMACADDRESS"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "MACADDRESS5HIGHREGISTERCONTAINSTHEHIGHER16BITSOFTHESIXTHMACADDRESS"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "MACADDRESS5LOWREGISTERCONTAINSTHELOWER32BITSOFTHESIXTHMACADDRESS"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "MACADDRESS6HIGHREGISTERCONTAINSTHEHIGHER16BITSOFTHESEVENTHMACADDRESS"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "MACADDRESS6LOWREGISTERCONTAINSTHELOWER32BITSOFTHESEVENTHMACADDRESS"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "MACADDRESS7HIGHREGISTERCONTAINSTHEHIGHER16BITSOFTHEEIGHTHMACADDRESS"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "MACADDRESS7LOWREGISTERCONTAINSTHELOWER32BITSOFTHEEIGHTHMACADDRESS"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER48_ANCONTROLREGISTER"
-api = "read"
-reasons = ["field RAN is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:1748): a one written sets it"]
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER49_ANSTATUSREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER50_AUTONEGOTIATIONADVERTISEMENTREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER51_AUTONEGOTIATIONLINKPARTNERABILITYREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER52_AUTONEGOTIATIONEXPANSIONREGISTER"
 api = "none"
-reasons = ["field GMAC_NPR is cleared by a read (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:1966)"]
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER53_TBIEXTENDEDSTATUSREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER54_SGMII_RGMII_SMIICONTROLANDSTATUSREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER55_WATCHDOGTIMEOUTREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER56_GENERALPURPOSEIOREGISTER"
 api = "none"
-reasons = ["field GMAC_GPIE is cleared by a read (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:2126)"]
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER256_LAYER3ANDLAYER4CONTROLREGISTER0"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER257_LAYER4ADDRESSREGISTER0"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER260_LAYER3ADDRESS0REGISTER0"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER261_LAYER3ADDRESS1REGISTER0"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER262_LAYER3ADDRESS2REGISTER0"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER263_LAYER3ADDRESS3REGISTER0"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER320_HASHTABLEREGISTER0"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER353_VLANTAGINCLUSIONORREPLACEMENTREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER354_VLANHASHTABLEREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER448_TIMESTAMPCONTROLREGISTER"
-api = "read"
-reasons = ["field ATSFC is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:2644): a one written sets it", "field TSADDREG is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:2540): a one written sets it", "field TSINIT is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:2507): a one written sets it", "field TSTRIG is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:2531): a one written sets it", "field TSUPDT is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:2519): a one written sets it"]
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER449_SUBSECONDINCREMENTREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER450_SYSTEMTIMESECONDSREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER451_SYSTEMTIMENANOSECONDSREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER452_SYSTEMTIMESECONDSUPDATEREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER453_SYSTEMTIMENANOSECONDSUPDATEREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER454_TIMESTAMPADDENDREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER455_TARGETTIMESECONDSREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER456_TARGETTIMENANOSECONDSREGISTER"
-api = "read"
-reasons = ["field TRGTBUSY is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:2848): a one written sets it"]
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER457_SYSTEMTIMEHIGHERWORDSECONDSREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER458_TIMESTAMPSTATUSREGISTER"
 api = "none"
-reasons = ["field GMAC_TSTRGTERR is cleared by a read (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:2912)"]
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER459_PPSCONTROLREGISTER"
-api = "read"
-reasons = ["field PPSCMD1 is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:3085): a one written sets it", "field PPSCMD2 is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:3102): a one written sets it", "field PPSCMD3 is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:3119): a one written sets it", "field PPSCTRL0 is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:3017): a one written sets it"]
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER460_AUXILIARYTIMESTAMPNANOSECONDSREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER461_AUXILIARYTIMESTAMPSECONDSREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER462_AVMACCONTROLREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER472_PPS0INTERVALREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER473_PPS0WIDTHREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER480_PPS1TARGETTIMESECONDSREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER481_PPS1TARGETTIMENANOSECONDSREGISTER"
-api = "read"
-reasons = ["field TRGTBUSY1 is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:3310): a one written sets it"]
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER544_MACADDRESS32HIGHREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER0_BUSMODEREGISTER"
-api = "read"
-reasons = ["field SWR is R/W1S_SC (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:3352): a one written sets it"]
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER1_TRANSMITPOLLDEMANDREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER2_RECEIVEPOLLDEMANDREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER3_RECEIVEDESCRIPTORLISTADDRESSREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER4_TRANSMITDESCRIPTORLISTADDRESSREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER5_STATUSREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER6_OPERATIONMODEREGISTER"
-api = "read"
-reasons = ["field FTF is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:4062): a one written sets it"]
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER7_INTERRUPTENABLEREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER8_MISSEDFRAMEANDBUFFEROVERFLOWCOUNTERREGISTER"
 api = "none"
-reasons = ["field GMAC_MISFRMCNT is cleared by a read (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:4304)"]
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER9_RECEIVEINTERRUPTWATCHDOGTIMERREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER10_AXIBUSMODEREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER11_AHBORAXISTATUSREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER18_CURRENTHOSTTRANSMITDESCRIPTORREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER19_CURRENTHOSTRECEIVEDESCRIPTORREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER20_CURRENTHOSTTRANSMITBUFFERADDRESSREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER21_CURRENTHOSTRECEIVEBUFFERADDRESSREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER22_HWFEATUREREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER64_CHANNEL1BUSMODEREGISTER"
-api = "read"
-reasons = ["field CH1_SWR is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:4782): a one written sets it"]
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER65_CHANNEL1TRANSMITPOLLDEMANDREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER66_CHANNEL1RECEIVEPOLLDEMANDREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER67_CHANNEL1RECEIVEDESCRIPTORLISTADDRESSREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER68_CHANNEL1TRANSMITDESCRIPTORLISTADDRESSREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER69_CHANNEL1STATUSREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER70_CHANNEL1OPERATIONMODEREGISTER"
-api = "read"
-reasons = ["field CH1_FTF is R/W1S (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:5493): a one written sets it"]
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER71_CHANNEL1INTERRUPTENABLEREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER72_CHANNEL1MISSEDFRAMEANDBUFFEROVERFLOWCOUNTERREGISTER"
 api = "none"
-reasons = ["field GMAC_CH1_MISFRMCNT is cleared by a read (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:5735)"]
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER73_CHANNEL1RECEIVEINTERRUPTWATCHDOGTIMERREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER76_CHANNEL1SLOTFUNCTIONCONTROLANDSTATUSREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER82_CHANNEL1CURRENTHOSTTRANSMITDESCRIPTORREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER83_CHANNEL1CURRENTHOSTRECEIVEDESCRIPTORREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER84_CHANNEL1CURRENTHOSTTRANSMITBUFFERADDRESSREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER85_CHANNEL1CURRENTHOSTRECEIVEBUFFERADDRESSREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER88_CHANNEL1CBSCONTROLREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER89_CHANNEL1CBSSTATUSREGISTER"
 api = "none"
-reasons = ["field GMAC_CH1_ABSU is cleared by a read (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:5941)"]
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER90_CHANNEL1IDLESLOPECREDITREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER91_CHANNEL1SENDSLOPECREDITREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER92_CHANNEL1HICREDITREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER93_CHANNEL1LOCREDITREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER128_CHANNEL2BUSMODEREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER129_CHANNEL2TRANSMITPOLLDEMANDREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER130_CHANNEL2RECEIVEPOLLDEMANDREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER131_CHANNEL2RECEIVEDESCRIPTORLISTADDRESSREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER132_CHANNEL2TRANSMITDESCRIPTORLISTADDRESSREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER133_CHANNEL2STATUSREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER134_CHANNEL2OPERATIONMODEREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER135_CHANNEL2INTERRUPTENABLEREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER136_CHANNEL2MISSEDFRAMEANDBUFFEROVERFLOWCOUNTERREGISTER"
 api = "none"
-reasons = ["field GMAC_CH2_MISFRMCNT is cleared by a read (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:6982)"]
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER137_CHANNEL2RECEIVEINTERRUPTWATCHDOGTIMERREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER146_CHANNEL2CURRENTHOSTTRANSMITDESCRIPTORREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER147_CHANNEL2CURRENTHOSTRECEIVEDESCRIPTORREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER148_CHANNEL2CURRENTHOSTTRANSMITBUFFERADDRESSREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER149_CHANNEL2CURRENTHOSTRECEIVEBUFFERADDRESSREGISTER"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER152_CHANNEL2CBSCONTROLREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GMAC"
 register = "REGISTER153_CHANNEL2CBSSTATUSREGISTER"
 api = "none"
-reasons = ["field GMAC_CH2_ABSU is cleared by a read (esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:7152)"]
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER154_CHANNEL2IDLESLOPECREDITREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER155_CHANNEL2SENDSLOPECREDITREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER156_CHANNEL2HICREDITREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
+
+[[register]]
+peripheral = "GMAC"
+register = "REGISTER157_CHANNEL2LOCREDITREGISTER"
+api = "none"
+reasons = ["no API for the peripheral: mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"]
 
 [[register]]
 peripheral = "GPIO"
@@ -8050,99 +8512,267 @@ reasons = []
 
 [[register]]
 peripheral = "SDHOST"
+register = "CTRL"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "CLKDIV"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "CLKSRC"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "CLKENA"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "TMOUT"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "CTYPE"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "BLKSIZ"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "BYTCNT"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "INTMASK"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "CMDARG"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "CMD"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
 register = "RESP0"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SDHOST"
 register = "RESP1"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SDHOST"
 register = "RESP2"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SDHOST"
 register = "RESP3"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SDHOST"
 register = "MINTSTS"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "RINTSTS"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SDHOST"
 register = "STATUS"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "FIFOTH"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SDHOST"
 register = "CDETECT"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SDHOST"
 register = "WRTPRT"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SDHOST"
 register = "TCBCNT"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SDHOST"
 register = "TBBCNT"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "DEBNCE"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "USRID"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SDHOST"
 register = "VERID"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SDHOST"
 register = "HCON"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "UHS"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "RST_N"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "BMOD"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SDHOST"
 register = "PLDMND"
 api = "none"
-reasons = ["write-only field PD: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "DBADDR"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "IDSTS"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "IDINTEN"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SDHOST"
 register = "DSCADDR"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SDHOST"
 register = "BUFADDR"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "CARDTHRCTL"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "EMMCDDR"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "ENSHIFT"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "BUFFIFO"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "CLK_EDGE_SEL"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SDHOST"
 register = "RAW_INTS"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "DLL_CLK_CONF"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
+
+[[register]]
+peripheral = "SDHOST"
+register = "DLL_CONF"
+api = "none"
+reasons = ["no API for the peripheral: R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"]
 
 [[register]]
 peripheral = "SHA"
@@ -10648,477 +11278,2235 @@ reasons = []
 
 [[register]]
 peripheral = "USB_OTG_HS"
+register = "GOTGCTL"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "GOTGINT"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "GAHBCFG"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "GUSBCFG"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "GRSTCTL"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "GINTSTS"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "GINTMSK"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
 register = "GRXSTSR"
-api = "read"
-reasons = ["field FN has no snake-case method name that is not a keyword", "undeclared bits 0x01e00000"]
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "GRXSTSP"
-api = "read"
-reasons = ["field FN has no snake-case method name that is not a keyword", "undeclared bits 0x01e00000"]
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "GRXFSIZ"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "GNPTXFSIZ"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "GNPTXSTS"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "GPVNDCTL"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "GSNPSID"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "GHWCFG1"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "GHWCFG2"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "GHWCFG3"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "GHWCFG4"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "GDFIFOCFG"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "GINTMSK2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "GINTSTS2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HPTXFSIZ"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTXF1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTXF2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTXF3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTXF4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTXF5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTXF6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTXF7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCFG"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HFIR"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HFNUM"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HPTXSTS"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HAINT"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HAINTMSK"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HFLBAddr"
-api = "read"
-reasons = ["esp-idf:components/soc/esp32s31/register/soc/usb_otghs_reg.h defines no register HFLBAddr"]
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HPRT"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB0"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB1"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB2"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB3"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB4"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB5"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB6"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB7"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB8"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB9"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB10"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB11"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB12"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB13"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB14"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCCHAR15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCSPLT15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINT15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCINTMSK15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCTSIZ15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "HCDMA15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "HCDMAB15"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DCFG"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DCTL"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DSTS"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPMSK"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPMSK"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DAINT"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DAINTMSK"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DVBUSDIS"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DVBUSPULSE"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DTHRCTL"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEMPMSK"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DEACHINT"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DEACHINTMSK"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPEACHMSK15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPEACHMSK15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS0"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB0"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS1"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB1"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS2"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB2"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS3"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB3"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS4"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB4"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS5"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB5"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS6"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB6"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS7"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB7"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS8"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB8"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS9"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB9"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS10"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB10"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS11"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB11"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS12"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB12"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS13"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB13"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS14"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB14"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPCTL15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPINT15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPTSIZ15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DIEPDMA15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DTXFSTS15"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DIEPDMAB15"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA0"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB0"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA1"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB1"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA2"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB2"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA3"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB3"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA4"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB4"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA5"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB5"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA6"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB6"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA7"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB7"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA8"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB8"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA9"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB9"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA10"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB10"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA11"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB11"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA12"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB12"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA13"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB13"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA14"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB14"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPCTL15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPINT15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPTSIZ15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "DOEPDMA15"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_OTG_HS"
 register = "DOEPDMAB15"
-api = "read"
-reasons = []
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "PCGCCTL"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
+
+[[register]]
+peripheral = "USB_OTG_HS"
+register = "GSTARFXDIS"
+api = "none"
+reasons = ["no API for the peripheral: interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"]
 
 [[register]]
 peripheral = "USB_DEVICE"

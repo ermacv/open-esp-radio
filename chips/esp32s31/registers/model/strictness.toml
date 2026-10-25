@@ -727,6 +727,23 @@ sources = ["esp-idf:components/soc/esp32s31/include/soc/interrupts.h:187"]
 
 # HP_SYS_CLKRST: components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h and hp_sys_clkrst_struct.h.
 
+# A peripheral whose semantics the headers describe only in text gets no API
+# at all; a typed API is added when its driver exists.
+[[no-api]]
+peripheral = "GMAC"
+reason = "mixed semantics described only in text (gmac_reg.h): write-one-to-clear flags in R/W fields, reads that clear another register's flags, a self-clearing flush bit; typed API added when Ethernet is used"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:1162", "esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:3736", "esp-idf:components/soc/esp32s31/register/soc/gmac_reg.h:6740"]
+
+[[no-api]]
+peripheral = "SDHOST"
+reason = "R/W reset bits that hardware clears, described only in text (sdmmc_reg.h); typed API added when SD/MMC is used"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/sdmmc_reg.h:27"]
+
+[[no-api]]
+peripheral = "USB_OTG_HS"
+reason = "interrupt flags in R/W fields that the application clears by writing 1, described only in text (usb_otghs_reg.h); typed API added when USB OTG is used"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/usb_otghs_reg.h:243"]
+
 [[registers]]
 peripheral = "HP_SYS_CLKRST"
 register = "SOC_CLK_SEL"

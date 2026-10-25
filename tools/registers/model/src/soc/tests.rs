@@ -750,3 +750,21 @@ fn every_overlay_entry_names_vendor_geometry_and_cites_a_source() {
     .expect("a line that is no field is refused");
     assert!(error.to_string().contains("is not a field line"), "{error}");
 }
+
+#[test]
+fn a_peripheral_stated_without_api_renders_no_register_and_no_method() {
+    let overlay = "\n[[no-api]]\nperipheral = \"TIMER\"\nreason = \"mixed semantics described only in text\"\nsources = [\"trm:test\"]\n\
+         [[no-api]]\nperipheral = \"TIMER1\"\nreason = \"the same block\"\nsources = [\"trm:test\"]\n";
+    let render = soc(&config(), &config_h(), overlay).expect("renders");
+    assert_eq!(api(&render, "CONFIG"), RegisterApi::None);
+    assert!(reasons(&render, "CONFIG").contains("mixed semantics described only in text"));
+    assert!(!render.rust.contains("pub fn modify_config("));
+    assert!(!render.rust.contains("pub fn read_config("));
+}
+
+#[test]
+fn a_no_api_peripheral_the_svd_lacks_is_an_error() {
+    let overlay =
+        "\n[[no-api]]\nperipheral = \"GHOST\"\nreason = \"none\"\nsources = [\"trm:test\"]\n";
+    assert!(soc(&config(), &config_h(), overlay).is_err());
+}

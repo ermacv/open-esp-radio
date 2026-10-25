@@ -104,6 +104,11 @@ header (`soc_headers.rs`):
   until the overlay corrects its `offset`; `add = true` builds a register
   the SVD lacks from its header definition.
 
+A peripheral whose semantics the headers describe only in text (flags that
+a read clears or a write acknowledges in `R/W` fields, self-clearing bits)
+is stated in the overlay's `[[no-api]]` table with its reason and sources:
+none of its registers is rendered until a typed API exists.
+
 The SVD-only rules stay below the header's: a register with undeclared
 bits, a write-only field, overlapping fields, vendor modified-write values,
 a write constraint, a field without a snake-case name, or a raw interrupt
