@@ -1,20 +1,20 @@
 use std::vec::Vec;
 
-use oer_esp32s31_pac::{
-    Ieee802154AckTimeoutUnits as PacAckTimeoutUnits, Ieee802154CcaMode as PacCcaMode,
-    Ieee802154MacControl as PacMacControl, Ieee802154MacPolicySnapshot as PacMacPolicySnapshot,
-    Ieee802154MultipanEnableState as PacMultipanEnableState,
-    Ieee802154PanIdentity as PacPanIdentity, Ieee802154RxStateCode, Ieee802154TxStateCode,
-};
-
-use oer_esp32s31_pac::{Ieee802154TaskRegisters, RadioPartitions};
+use oer_esp32s31_pac::RadioPartitions;
+use oer_espressif_ieee802154_engine::types::Ieee802154MultipanEnableState;
+use oer_espressif_ieee802154_mac_values::{Ieee802154RxStateCode, Ieee802154TxStateCode};
 
 use super::{
-    Ieee802154FoundationSnapshot, Ieee802154FrequencyCode, Ieee802154Hal, Ieee802154PacHal,
-    Ieee802154Pti, Ieee802154RegisterBackend, Ieee802154StateSnapshot,
+    Ieee802154FoundationSnapshot, Ieee802154Hal, Ieee802154MacHal, Ieee802154Pti,
+    Ieee802154RegisterBackend, Ieee802154StateSnapshot,
 };
-use crate::ieee802154::policy::{
-    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154MacControl, Ieee802154PanIdentity,
+use crate::ieee802154::{
+    lifecycle::Ieee802154Channel,
+    mac,
+    policy::{
+        Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154MacControl, Ieee802154MacPolicySnapshot,
+        Ieee802154PanIdentity,
+    },
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -25,11 +25,11 @@ enum Operation {
     AverageEdSampling,
     TxOnDelay,
     FrequencyCode(u8),
-    CcaMode(u8),
+    CcaMode(Ieee802154CcaMode),
     CcaThreshold(i8),
-    MacControl(PacMacControl),
+    MacControl(Ieee802154MacControl),
     AckTimeout(u16),
-    PrimaryIdentity(PacPanIdentity),
+    PrimaryIdentity(Ieee802154PanIdentity),
     TxRxPti(u8),
     AckPti(u8),
     FoundationSnapshot,
@@ -42,7 +42,7 @@ struct FakeRegisters {
     operations: Vec<Operation>,
     state: Ieee802154StateSnapshot,
     foundation: Ieee802154FoundationSnapshot,
-    policy: PacMacPolicySnapshot,
+    policy: Ieee802154MacPolicySnapshot,
 }
 
 impl FakeRegisters {
@@ -62,14 +62,14 @@ impl FakeRegisters {
                 Ieee802154Pti::new(3).expect("five-bit PTI"),
                 true,
             ),
-            policy: PacMacPolicySnapshot::new(
-                Ieee802154FrequencyCode::new(48),
-                PacCcaMode::CarrierAndEnergyDetection,
+            policy: Ieee802154MacPolicySnapshot::new(
+                48,
+                Ieee802154CcaMode::CarrierAndEnergyDetection,
                 -67,
-                PacAckTimeoutUnits::new(109),
-                PacMacControl::new(true, false, true, false, true, false),
-                PacMultipanEnableState::new(true, false, false, false),
-                PacPanIdentity::new(
+                Ieee802154AckTimeout::from_units(109),
+                Ieee802154MacControl::new(true, false, true, false, true, false),
+                Ieee802154MultipanEnableState::new(true, false, false, false),
+                Ieee802154PanIdentity::new(
                     0x1234,
                     0x5678,
                     [0x10, 0x21, 0x32, 0x43, 0x54, 0x65, 0x76, 0x87],
@@ -100,27 +100,28 @@ impl Ieee802154RegisterBackend for FakeRegisters {
         self.operations.push(Operation::TxOnDelay);
     }
 
-    fn set_frequency_code(&mut self, code: Ieee802154FrequencyCode) {
-        self.operations.push(Operation::FrequencyCode(code.value()));
+    fn set_channel(&mut self, channel: Ieee802154Channel) {
+        self.operations
+            .push(Operation::FrequencyCode(channel.frequency_code()));
     }
 
-    fn set_cca_mode(&mut self, mode: PacCcaMode) {
-        self.operations.push(Operation::CcaMode(mode.field_value()));
+    fn set_cca_mode(&mut self, mode: Ieee802154CcaMode) {
+        self.operations.push(Operation::CcaMode(mode));
     }
 
     fn set_cca_threshold_code(&mut self, threshold: i8) {
         self.operations.push(Operation::CcaThreshold(threshold));
     }
 
-    fn set_mac_control(&mut self, control: PacMacControl) {
+    fn set_mac_control(&mut self, control: Ieee802154MacControl) {
         self.operations.push(Operation::MacControl(control));
     }
 
-    fn set_ack_timeout(&mut self, timeout: PacAckTimeoutUnits) {
-        self.operations.push(Operation::AckTimeout(timeout.value()));
+    fn set_ack_timeout(&mut self, timeout: Ieee802154AckTimeout) {
+        self.operations.push(Operation::AckTimeout(timeout.units()));
     }
 
-    fn set_primary_pan_identity(&mut self, identity: PacPanIdentity) {
+    fn set_primary_pan_identity(&mut self, identity: Ieee802154PanIdentity) {
         self.operations.push(Operation::PrimaryIdentity(identity));
     }
 
@@ -137,7 +138,7 @@ impl Ieee802154RegisterBackend for FakeRegisters {
         self.foundation
     }
 
-    fn mac_policy_snapshot(&mut self) -> PacMacPolicySnapshot {
+    fn mac_policy_snapshot(&mut self) -> Ieee802154MacPolicySnapshot {
         self.operations.push(Operation::MacPolicySnapshot);
         self.policy
     }
@@ -160,7 +161,8 @@ fn typed_operations_reach_the_backend_without_register_images() {
     hal.mask_all_tx_aborts();
     hal.select_average_ed_sampling();
     hal.apply_txon_delay();
-    hal.set_frequency_code(Ieee802154FrequencyCode::new(15));
+    let channel = Ieee802154Channel::new(15).expect("standard channel");
+    hal.set_channel(channel);
     hal.set_cca_mode(Ieee802154CcaMode::CarrierAndEnergyDetection);
     hal.set_cca_threshold_code(-67);
     let control = Ieee802154MacControl::new(true, false, true, false, true, false);
@@ -185,12 +187,14 @@ fn typed_operations_reach_the_backend_without_register_images() {
             Operation::MaskTxAborts,
             Operation::AverageEdSampling,
             Operation::TxOnDelay,
-            Operation::FrequencyCode(15),
-            Operation::CcaMode(3),
+            Operation::FrequencyCode(channel.frequency_code()),
+            Operation::CcaMode(Ieee802154CcaMode::CarrierAndEnergyDetection),
             Operation::CcaThreshold(-67),
-            Operation::MacControl(PacMacControl::new(true, false, true, false, true, false,)),
+            Operation::MacControl(Ieee802154MacControl::new(
+                true, false, true, false, true, false,
+            )),
             Operation::AckTimeout(109),
-            Operation::PrimaryIdentity(PacPanIdentity::new(
+            Operation::PrimaryIdentity(Ieee802154PanIdentity::new(
                 0x1234,
                 0x5678,
                 [0x10, 0x21, 0x32, 0x43, 0x54, 0x65, 0x76, 0x87],
@@ -220,7 +224,7 @@ fn policy_readback_is_converted_to_hal_semantics_once() {
     );
     assert_eq!(
         snapshot.multipan_enable_state(),
-        PacMultipanEnableState::new(true, false, false, false)
+        Ieee802154MultipanEnableState::new(true, false, false, false)
     );
     assert_eq!(snapshot.identity().pan_id(), 0x1234);
     assert_eq!(
@@ -262,9 +266,9 @@ fn state_predicate_samples_once_and_makes_no_idle_claim() {
 #[test]
 fn production_hal_borrows_the_ieee802154_task_partition() {
     let RadioPartitions { ieee802154, .. } = RadioPartitions::for_host_test();
-    let (mut task, mut interrupts) = Ieee802154TaskRegisters::new(ieee802154);
+    let (mut task, interrupts) = mac::split(ieee802154);
     {
-        let mut hal = Ieee802154PacHal::from_owned(&mut task, &mut interrupts);
+        let mut hal = Ieee802154MacHal::from_owned(&mut task, &interrupts);
 
         // Construct the real closed backend and exercise only its
         // portable ordering boundary; host tests must not perform MMIO.
@@ -273,5 +277,5 @@ fn production_hal_borrows_the_ieee802154_task_partition() {
 
     // Reuniting proves the combined borrow consumed neither disjoint
     // ownership half.
-    let _partition = task.into_partition(interrupts);
+    let _partition = mac::reunite(task, interrupts);
 }

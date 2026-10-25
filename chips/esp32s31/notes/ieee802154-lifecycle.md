@@ -248,7 +248,7 @@ acknowledgement. It therefore cannot manufacture, clone, replay, or narrow a
 W1C image after observation. The foundation snapshot still excludes
 `EVENT_STATUS` by ownership: cold/polled acknowledgement consumes the complete
 current pending image, while an active epoch separates task-owned command and
-DMA registers from `Ieee802154InterruptRegisters`, whose hard-IRQ transaction
+DMA registers from `Ieee802154InterruptOwner`, whose hard-IRQ transaction
 samples all event and selected sideband evidence before acknowledging the exact
 snapshot.
 The selected register fact retains its source and hardware provenance in

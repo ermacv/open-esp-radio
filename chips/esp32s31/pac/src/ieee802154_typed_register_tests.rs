@@ -149,7 +149,9 @@ fn a_split_part_reaches_only_its_words() {
     let mut after = before.clone();
     let block = Ieee802154Mac::host(&mut after).expect("memory holds the block");
     let (mut task, interrupt) = block.split();
-    task.issue_ieee802154_tx_start();
+    task.write_command(|writer| {
+        writer.set_opcode(mac::command::Opcode::TxStart);
+    });
     task.modify_ed_config(|writer| {
         writer.set_cca_mode(mac::ed_config::CcaMode::EnergyDetection);
     });
@@ -185,29 +187,13 @@ fn owners_of_two_blocks_do_not_join() {
     else {
         panic!("owners of two blocks joined");
     };
-    other_task.issue_ieee802154_tx_start();
+    other_task.write_command(|writer| {
+        writer.set_opcode(mac::command::Opcode::TxStart);
+    });
     drop(Ieee802154Mac::try_join(task, interrupt).expect("owners of one split"));
     drop(Ieee802154Mac::try_join(other_task, other_interrupt).expect("owners of one split"));
     assert!(first.iter().all(|word| *word == 0));
     assert_eq!(changed(&memory(0), &second).len(), 1, "one command written");
-}
-
-#[test]
-fn a_dma_address_is_published_whole() {
-    let before = memory(u32::MAX);
-    let mut after = before.clone();
-    let mut block = Ieee802154Mac::host(&mut after).expect("memory holds the block");
-    let frame: crate::layouts::DmaRef<crate::layouts::WifiRxDmaDescriptor> =
-        crate::test_memory::reference(0x4080_0000);
-    block.publish_ieee802154_tx_dma_address(frame.address());
-    drop(block);
-    let written: Vec<u32> = after
-        .iter()
-        .zip(&before)
-        .filter(|(after, before)| after != before)
-        .map(|(after, _)| *after)
-        .collect();
-    assert_eq!(written, [frame.bits()], "one word, the whole address");
 }
 
 #[test]

@@ -1233,46 +1233,6 @@ description = "Bit twenty-two set by complete ROM phy_set_tsens_power_."
 sources = ["ROM_REV0_PHY_TSENS", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
 
 [[enum-domains]]
-name = "Ieee802154TxOnDelay"
-description = "The sole transmit-on delay image accepted by the pinned ESP32-S31 IEEE 802.15.4 MAC initialization (ieee802154_txon_delay_set)."
-
-[[enum-domains.values]]
-name = "Delay45"
-value = 0x0000002d
-description = "Literal ten-bit TXON_DELAY image written by ieee802154_txon_delay_set."
-sources = ["BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
-
-[[enum-domains]]
-name = "Ieee802154TxOffDelay"
-description = "The sole transmit-off delay image accepted by the pinned ESP32-S31 IEEE 802.15.4 MAC initialization (ieee802154_txon_delay_set)."
-
-[[enum-domains.values]]
-name = "Delay5"
-value = 5
-description = "Literal six-bit TXOFF_DELAY image written by ieee802154_txon_delay_set."
-sources = ["BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
-
-[[enum-domains]]
-name = "Ieee802154RxOnDelay"
-description = "The sole receive-on delay image accepted by the pinned ESP32-S31 IEEE 802.15.4 MAC initialization (ieee802154_txon_delay_set)."
-
-[[enum-domains.values]]
-name = "Delay50"
-value = 0x00000032
-description = "Literal eleven-bit RXON_DELAY image written by ieee802154_txon_delay_set."
-sources = ["BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
-
-[[enum-domains]]
-name = "Ieee802154TxRxSwitchDelay"
-description = "The sole transmit/receive turnaround delay image accepted by the pinned ESP32-S31 IEEE 802.15.4 MAC initialization (ieee802154_txon_delay_set)."
-
-[[enum-domains.values]]
-name = "Delay117"
-value = 0x00000075
-description = "Literal ten-bit TXRX_SWITCH_DELAY image written by ieee802154_txon_delay_set."
-sources = ["BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
-
-[[enum-domains]]
 name = "BluetoothHalSleepTimerShift"
 description = "Low-three-bit shift selected by the reviewed BTDM HAL scale and period domains."
 
@@ -2062,20 +2022,6 @@ max = 67108863
 sources = ["BLOB_LIBPP_HAL_TSF"]
 
 [[bounded-domains]]
-name = "Ieee802154EdDurationUnits"
-description = "Sixteen-bit energy-detection duration subset accepted by the reviewed public IEEE 802.15.4 common LL setter; physical units remain outside the PAC."
-min = 0
-max = 65535
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[bounded-domains]]
-name = "Ieee802154TxPowerCode"
-description = "Raw eight-bit IEEE 802.15.4 transmit-power field accepted by the public common LL; no dBm conversion or calibration-table meaning is assigned at the PAC boundary."
-min = 0
-max = 255
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[bounded-domains]]
 name = "PhyRxDcoCalibrationControl"
 description = "Two-bit RX-DCO calibration control field retained and restored by complete calibration bodies."
 min = 0
@@ -2160,34 +2106,10 @@ max = 15
 sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
 
 [[opaque-domains]]
-name = "Ieee802154Timer0ThresholdWord"
-description = "Register-specific complete TIMER0 threshold word accepted by the public common LL; no clock source, unit, or deadline policy is assigned at the PAC boundary."
-register = "IEEE802154.TIMER0_THRESHOLD"
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[opaque-domains]]
 name = "PhyFtmEnableVendorArgument"
 description = "Raw argument accepted by complete phy_set_ftm_en; only its low bit is projected into FTM_CONTROL.ENABLE by the generated PAC transaction."
 register = "WIFI_BB.FTM_CONTROL"
 sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
-
-[[opaque-domains]]
-name = "Ieee802154Timer0ValueWord"
-description = "Register-specific complete TIMER0 counter observation returned by the public common LL; no clock source or unit is assigned at the PAC boundary."
-register = "IEEE802154.TIMER0_VALUE"
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[opaque-domains]]
-name = "Ieee802154Timer1ThresholdWord"
-description = "Register-specific complete TIMER1 threshold word accepted by the public common LL; no clock source, unit, or deadline policy is assigned at the PAC boundary."
-register = "IEEE802154.TIMER1_THRESHOLD"
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[opaque-domains]]
-name = "Ieee802154Timer1ValueWord"
-description = "Register-specific complete TIMER1 counter observation returned by the public common LL; no clock source or unit is assigned at the PAC boundary."
-register = "IEEE802154.TIMER1_VALUE"
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 
 [[opaque-domains]]
 name = "StationTsfLowWord"
@@ -2422,18 +2344,6 @@ name = "observe_phy_noise_floor_sixteenth_db_code"
 field = "WIFI_BB.NOISE_FLOOR_MEASUREMENT.SIGNED_SIXTEENTH_DB_CODE"
 sources = ["ROM_REV0_PHY_READ_NOISE_FLOOR", "S31_ESP_PACS_SVD"]
 
-[[full-register-reads]]
-name = "observe_ieee802154_timer0_value"
-field = "IEEE802154.TIMER0_VALUE.VALUE"
-domain = "Ieee802154Timer0ValueWord"
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[full-register-reads]]
-name = "observe_ieee802154_timer1_value"
-field = "IEEE802154.TIMER1_VALUE.VALUE"
-domain = "Ieee802154Timer1ValueWord"
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
 [[partition-image-reads]]
 name = "radio_phy_register_image"
 partition = "RadioPhyPeripherals"
@@ -2487,6 +2397,8 @@ field = "WIFI_BB.SATURATION_GAIN_HIGH.VALUE"
 domain = "AgcSaturationGainHigh"
 sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
 
+# The IEEE 802.15.4 frame-buffer address writes make TX_DMA_ADDRESS and
+# RX_DMA_ADDRESS address fields, set only from a `DmaWindowAddress`.
 [[full-register-writes]]
 name = "publish_ieee802154_tx_dma_address"
 field = "IEEE802154.TX_DMA_ADDRESS.ADDRESS"
@@ -2497,18 +2409,6 @@ sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 name = "publish_ieee802154_rx_dma_address"
 field = "IEEE802154.RX_DMA_ADDRESS.ADDRESS"
 placement = "dma-window"
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[full-register-writes]]
-name = "publish_ieee802154_timer0_threshold"
-field = "IEEE802154.TIMER0_THRESHOLD.THRESHOLD"
-domain = "Ieee802154Timer0ThresholdWord"
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[full-register-writes]]
-name = "publish_ieee802154_timer1_threshold"
-field = "IEEE802154.TIMER1_THRESHOLD.THRESHOLD"
-domain = "Ieee802154Timer1ThresholdWord"
 sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 
 [[full-register-writes]]
@@ -2876,21 +2776,6 @@ fields = ["WIFI_MAC.ENTRY_TAIL_WORD_3%s.VALUE"]
 sources = ["BLOB_LIBPP_HAL_CRYPTO"]
 
 [[zero-based-field-writes]]
-name = "publish_ieee802154_security_address_low"
-fields = ["IEEE802154.SECURITY_ADDRESS_LOW.ADDRESS_WORD"]
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[zero-based-field-writes]]
-name = "publish_ieee802154_security_address_high"
-fields = ["IEEE802154.SECURITY_ADDRESS_HIGH.ADDRESS_WORD"]
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[zero-based-field-writes]]
-name = "publish_ieee802154_security_key_word"
-fields = ["IEEE802154.SECURITY_KEY%s.KEY_WORD"]
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[zero-based-field-writes]]
 name = "mac_he_trigger_queue_control"
 fields = ["WIFI_MAC.QUEUE_CONTROL%s.QOS_NULL_TO_TRANSLATED_BSS", "WIFI_MAC.QUEUE_CONTROL%s.TRIGGER_BASED_ENABLE", "WIFI_MAC.QUEUE_CONTROL%s.MU_EDCA_TIMER_SELECT", "WIFI_MAC.QUEUE_CONTROL%s.MPDU_LENGTH_LINK_ADDRESS", "WIFI_MAC.QUEUE_CONTROL%s.TID"]
 sources = ["BLOB_LIBPP_MAC_TX_SET_TB", "ROM_REV0_MAC_TX_SET_TB"]
@@ -3246,30 +3131,6 @@ value = 0x00040000
 sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
 
 [[fixed-register-images]]
-name = "enable_ieee802154_etm_channel0"
-register = "MODEM_ETM.CHANNEL_ENABLE_SET"
-value = 1
-sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
-
-[[fixed-register-images]]
-name = "enable_ieee802154_etm_channel1"
-register = "MODEM_ETM.CHANNEL_ENABLE_SET"
-value = 2
-sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
-
-[[fixed-register-images]]
-name = "disable_ieee802154_etm_channel0"
-register = "MODEM_ETM.CHANNEL_ENABLE_CLEAR"
-value = 1
-sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
-
-[[fixed-register-images]]
-name = "disable_ieee802154_etm_channel1"
-register = "MODEM_ETM.CHANNEL_ENABLE_CLEAR"
-value = 2
-sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_SOC_ETM"]
-
-[[fixed-register-images]]
 name = "enable_bluetooth_phy_etm_channel2"
 register = "MODEM_ETM.CHANNEL_ENABLE_SET"
 value = 4
@@ -3421,66 +3282,6 @@ name = "prepare_bluetooth_interrupt_output"
 register = "BT_MAC.IRQ_CONTROL_0"
 value = 1
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-
-[[fixed-register-images]]
-name = "issue_ieee802154_tx_start"
-register = "IEEE802154.COMMAND"
-value = 0x00000041
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[fixed-register-images]]
-name = "issue_ieee802154_rx_start"
-register = "IEEE802154.COMMAND"
-value = 0x00000042
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[fixed-register-images]]
-name = "issue_ieee802154_cca_tx_start"
-register = "IEEE802154.COMMAND"
-value = 0x00000043
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[fixed-register-images]]
-name = "issue_ieee802154_ed_start"
-register = "IEEE802154.COMMAND"
-value = 0x00000044
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[fixed-register-images]]
-name = "issue_ieee802154_stop"
-register = "IEEE802154.COMMAND"
-value = 0x00000045
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[fixed-register-images]]
-name = "issue_ieee802154_timer0_start"
-register = "IEEE802154.COMMAND"
-value = 0x0000004c
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[fixed-register-images]]
-name = "issue_ieee802154_timer0_stop"
-register = "IEEE802154.COMMAND"
-value = 0x0000004d
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[fixed-register-images]]
-name = "issue_ieee802154_timer1_start"
-register = "IEEE802154.COMMAND"
-value = 0x0000004e
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[fixed-register-images]]
-name = "issue_ieee802154_timer1_stop"
-register = "IEEE802154.COMMAND"
-value = 0x0000004f
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[fixed-register-images]]
-name = "notify_ieee802154_enhanced_ack_generated"
-register = "IEEE802154.ENHANCED_ACK_NOTIFY"
-value = 1
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 
 [[fixed-register-images]]
 name = "release_bluetooth_interrupt_output_0"
@@ -3753,21 +3554,6 @@ steps = [{ register = "MODEM_ETM.CH2_EVENT", value = 8 }, { register = "MODEM_ET
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
 [[fixed-register-sequences]]
-name = "route_ieee802154_etm_timer0_to_tx_start"
-steps = [{ register = "MODEM_ETM.CH0_EVENT", value = 0x00000050 }, { register = "MODEM_ETM.CH0_TASK", value = 0x00000058 }]
-sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
-
-[[fixed-register-sequences]]
-name = "route_ieee802154_etm_timer0_to_ed_trig_tx"
-steps = [{ register = "MODEM_ETM.CH0_EVENT", value = 0x00000050 }, { register = "MODEM_ETM.CH0_TASK", value = 0x00000054 }]
-sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
-
-[[fixed-register-sequences]]
-name = "route_ieee802154_etm_timer1_to_rx_start"
-steps = [{ register = "MODEM_ETM.CH1_EVENT", value = 0x0000004f }, { register = "MODEM_ETM.CH1_TASK", value = 0x00000055 }]
-sources = ["ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
-
-[[fixed-register-sequences]]
 name = "initialize_mac_last_rx_buffer_entries"
 steps = [{ register = "WIFI_MAC.ENTRY_CONTROL0", value = 0x00023006 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A0", value = 0x00000608 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B0", value = 0x0000ffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL1", value = 0x00023006 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A1", value = 0x00000808 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B1", value = 0x0000ffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL2", value = 0x00023006 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A2", value = 0x00008e88 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B2", value = 0x0000ffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL3", value = 0x0002301c }, { register = "WIFI_MAC.ENTRY_PARAMETER_A3", value = 0x44004300 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B3", value = 0xffffffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL4", value = 0x0002301c }, { register = "WIFI_MAC.ENTRY_PARAMETER_A4", value = 0x43004400 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B4", value = 0xffffffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL5", value = 0x00023011 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A5", value = 1 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B5", value = 0x000000ff }]
 sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
@@ -3861,60 +3647,6 @@ preserve-mask = 0xffbfffff
 input-mask = 0x00400000
 set-mask = 0
 sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
-
-[[masked-register-modifies]]
-name = "set_ieee802154_ed_duration"
-register = "IEEE802154.ED_DURATION"
-domain = "Ieee802154EdDurationUnits"
-preserve-mask = 0xff000000
-input-mask = 0x00ffffff
-set-mask = 0
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[masked-register-modifies]]
-name = "set_ieee802154_tx_power_code"
-register = "IEEE802154.TX_POWER"
-domain = "Ieee802154TxPowerCode"
-preserve-mask = 0xffffff00
-input-mask = 0x000000ff
-set-mask = 0
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[masked-register-modifies]]
-name = "set_ieee802154_tx_on_delay"
-register = "IEEE802154.TXON_DELAY"
-domain = "Ieee802154TxOnDelay"
-preserve-mask = 0xfffffc00
-input-mask = 0x000003ff
-set-mask = 0
-sources = ["BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
-
-[[masked-register-modifies]]
-name = "set_ieee802154_tx_off_delay"
-register = "IEEE802154.TXOFF_DELAY"
-domain = "Ieee802154TxOffDelay"
-preserve-mask = 0xffffffc0
-input-mask = 0x0000003f
-set-mask = 0
-sources = ["BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
-
-[[masked-register-modifies]]
-name = "set_ieee802154_rx_on_delay"
-register = "IEEE802154.RXON_DELAY"
-domain = "Ieee802154RxOnDelay"
-preserve-mask = 0xfffff800
-input-mask = 0x000007ff
-set-mask = 0
-sources = ["BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
-
-[[masked-register-modifies]]
-name = "set_ieee802154_txrx_switch_delay"
-register = "IEEE802154.TXRX_SWITCH_DELAY"
-domain = "Ieee802154TxRxSwitchDelay"
-preserve-mask = 0xfffffc00
-input-mask = 0x000003ff
-set-mask = 0
-sources = ["BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"]
 
 [[masked-register-modifies]]
 name = "publish_pbus_force_test"
@@ -4067,30 +3799,6 @@ value = 0
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
 [[field-or-modifies]]
-name = "enable_ieee802154_rx_abort_baseline"
-fields = [{ field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_COEXISTENCE_BREAK", source-bit-offset = 17 }]
-value = 0x00028000
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[field-or-modifies]]
-name = "enable_ieee802154_rx_abort_all"
-fields = [{ field = "IEEE802154.RX_ABORT_ENABLE.RX_STOP", source-bit-offset = 0 }, { field = "IEEE802154.RX_ABORT_ENABLE.SFD_TIMEOUT", source-bit-offset = 1 }, { field = "IEEE802154.RX_ABORT_ENABLE.CRC_ERROR", source-bit-offset = 2 }, { field = "IEEE802154.RX_ABORT_ENABLE.INVALID_LENGTH", source-bit-offset = 3 }, { field = "IEEE802154.RX_ABORT_ENABLE.FILTER_FAIL", source-bit-offset = 4 }, { field = "IEEE802154.RX_ABORT_ENABLE.NO_RSS", source-bit-offset = 5 }, { field = "IEEE802154.RX_ABORT_ENABLE.COEXISTENCE_BREAK", source-bit-offset = 6 }, { field = "IEEE802154.RX_ABORT_ENABLE.UNEXPECTED_ACK", source-bit-offset = 7 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_RESTART", source-bit-offset = 8 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_ABORT_EN_9_14", source-bit-offset = 9 }, { field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_STOP", source-bit-offset = 16 }, { field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "IEEE802154.RX_ABORT_ENABLE.ENHANCED_ACK_SECURITY_ERROR", source-bit-offset = 18 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_ABORT_EN_19_22", source-bit-offset = 19 }, { field = "IEEE802154.RX_ABORT_ENABLE.ED_ABORT", source-bit-offset = 23 }, { field = "IEEE802154.RX_ABORT_ENABLE.ED_STOP", source-bit-offset = 24 }, { field = "IEEE802154.RX_ABORT_ENABLE.ED_COEXISTENCE_REJECT", source-bit-offset = 25 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_ABORT_EN_26_30", source-bit-offset = 26 }]
-value = 0x7fffffff
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[field-or-modifies]]
-name = "enable_ieee802154_tx_abort_baseline"
-fields = [{ field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_SECURITY_ERROR", source-bit-offset = 18 }, { field = "IEEE802154.TX_ABORT_ENABLE.CCA_FAILED", source-bit-offset = 23 }, { field = "IEEE802154.TX_ABORT_ENABLE.CCA_BUSY", source-bit-offset = 24 }]
-value = 0x01868000
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[field-or-modifies]]
-name = "enable_ieee802154_tx_abort_all"
-fields = [{ field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_STOP", source-bit-offset = 0 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_SFD_TIMEOUT", source-bit-offset = 1 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_CRC_ERROR", source-bit-offset = 2 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_INVALID_LENGTH", source-bit-offset = 3 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_FILTER_FAIL", source-bit-offset = 4 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_NO_RSS", source-bit-offset = 5 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_COEXISTENCE_BREAK", source-bit-offset = 6 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_TYPE_NOT_ACK", source-bit-offset = 7 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_RESTART", source-bit-offset = 8 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_ABORT_EN_9_14", source-bit-offset = 9 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_STOP", source-bit-offset = 16 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_SECURITY_ERROR", source-bit-offset = 18 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_ABORT_EN_19_22", source-bit-offset = 19 }, { field = "IEEE802154.TX_ABORT_ENABLE.CCA_FAILED", source-bit-offset = 23 }, { field = "IEEE802154.TX_ABORT_ENABLE.CCA_BUSY", source-bit-offset = 24 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_ABORT_EN_25_30", source-bit-offset = 25 }]
-value = 0x7fffffff
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[field-or-modifies]]
 name = "initialize_shared_modem_power_state_map"
 fields = [{ field = "MODEM_LPCON.CLK_CONF_POWER_ST.CLK_WIFIPWR_ST_MAP", source-bit-offset = 16 }, { field = "MODEM_LPCON.CLK_CONF_POWER_ST.CLK_COEX_ST_MAP", source-bit-offset = 20 }, { field = "MODEM_LPCON.CLK_CONF_POWER_ST.CLK_I2C_MST_ST_MAP", source-bit-offset = 24 }, { field = "MODEM_LPCON.CLK_CONF_POWER_ST.CLK_LP_APB_ST_MAP", source-bit-offset = 28 }]
 value = 0x66660000
@@ -4137,30 +3845,6 @@ name = "prepare_modem_syscon_clock_map"
 fields = [{ field = "MODEM_SYSCON.CLK_CONF_POWER_ST.CLK_ZB_ST_MAP", source-bit-offset = 8 }, { field = "MODEM_SYSCON.CLK_CONF_POWER_ST.CLK_FE_ST_MAP", source-bit-offset = 12 }, { field = "MODEM_SYSCON.CLK_CONF_POWER_ST.CLK_BT_ST_MAP", source-bit-offset = 16 }, { field = "MODEM_SYSCON.CLK_CONF_POWER_ST.CLK_WIFI_ST_MAP", source-bit-offset = 20 }, { field = "MODEM_SYSCON.CLK_CONF_POWER_ST.CLK_MODEM_PERI_ST_MAP", source-bit-offset = 24 }, { field = "MODEM_SYSCON.CLK_CONF_POWER_ST.CLK_MODEM_APB_ST_MAP", source-bit-offset = 28 }]
 value = 0x64646400
 sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
-
-[[field-clear-modifies]]
-name = "disable_ieee802154_rx_abort_baseline"
-fields = [{ field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_COEXISTENCE_BREAK", source-bit-offset = 17 }]
-value = 0x00028000
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[field-clear-modifies]]
-name = "disable_ieee802154_rx_abort_all"
-fields = [{ field = "IEEE802154.RX_ABORT_ENABLE.RX_STOP", source-bit-offset = 0 }, { field = "IEEE802154.RX_ABORT_ENABLE.SFD_TIMEOUT", source-bit-offset = 1 }, { field = "IEEE802154.RX_ABORT_ENABLE.CRC_ERROR", source-bit-offset = 2 }, { field = "IEEE802154.RX_ABORT_ENABLE.INVALID_LENGTH", source-bit-offset = 3 }, { field = "IEEE802154.RX_ABORT_ENABLE.FILTER_FAIL", source-bit-offset = 4 }, { field = "IEEE802154.RX_ABORT_ENABLE.NO_RSS", source-bit-offset = 5 }, { field = "IEEE802154.RX_ABORT_ENABLE.COEXISTENCE_BREAK", source-bit-offset = 6 }, { field = "IEEE802154.RX_ABORT_ENABLE.UNEXPECTED_ACK", source-bit-offset = 7 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_RESTART", source-bit-offset = 8 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_ABORT_EN_9_14", source-bit-offset = 9 }, { field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_STOP", source-bit-offset = 16 }, { field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "IEEE802154.RX_ABORT_ENABLE.ENHANCED_ACK_SECURITY_ERROR", source-bit-offset = 18 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_ABORT_EN_19_22", source-bit-offset = 19 }, { field = "IEEE802154.RX_ABORT_ENABLE.ED_ABORT", source-bit-offset = 23 }, { field = "IEEE802154.RX_ABORT_ENABLE.ED_STOP", source-bit-offset = 24 }, { field = "IEEE802154.RX_ABORT_ENABLE.ED_COEXISTENCE_REJECT", source-bit-offset = 25 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_ABORT_EN_26_30", source-bit-offset = 26 }]
-value = 0x7fffffff
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[field-clear-modifies]]
-name = "disable_ieee802154_tx_abort_baseline"
-fields = [{ field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_SECURITY_ERROR", source-bit-offset = 18 }, { field = "IEEE802154.TX_ABORT_ENABLE.CCA_FAILED", source-bit-offset = 23 }, { field = "IEEE802154.TX_ABORT_ENABLE.CCA_BUSY", source-bit-offset = 24 }]
-value = 0x01868000
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[field-clear-modifies]]
-name = "disable_ieee802154_tx_abort_all"
-fields = [{ field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_STOP", source-bit-offset = 0 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_SFD_TIMEOUT", source-bit-offset = 1 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_CRC_ERROR", source-bit-offset = 2 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_INVALID_LENGTH", source-bit-offset = 3 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_FILTER_FAIL", source-bit-offset = 4 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_NO_RSS", source-bit-offset = 5 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_COEXISTENCE_BREAK", source-bit-offset = 6 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_TYPE_NOT_ACK", source-bit-offset = 7 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_RESTART", source-bit-offset = 8 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_ABORT_EN_9_14", source-bit-offset = 9 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_STOP", source-bit-offset = 16 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_SECURITY_ERROR", source-bit-offset = 18 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_ABORT_EN_19_22", source-bit-offset = 19 }, { field = "IEEE802154.TX_ABORT_ENABLE.CCA_FAILED", source-bit-offset = 23 }, { field = "IEEE802154.TX_ABORT_ENABLE.CCA_BUSY", source-bit-offset = 24 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_ABORT_EN_25_30", source-bit-offset = 25 }]
-value = 0x7fffffff
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 
 [[field-replace-modifies]]
 name = "configure_bluetooth_cte_six_buffer_limit"
@@ -7959,24 +7643,6 @@ name = "clear_bluetooth_scheduler_cancellation_control"
 fields = [{ field = "BT_MAC.WORD_0204_OPAQUE.CONTROL_0", source-bit-offset = 0 }]
 value = 0
 sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
-
-[[field-replace-modifies]]
-name = "replace_ieee802154_rx_abort_baseline"
-fields = [{ field = "IEEE802154.RX_ABORT_ENABLE.RX_STOP", source-bit-offset = 0 }, { field = "IEEE802154.RX_ABORT_ENABLE.SFD_TIMEOUT", source-bit-offset = 1 }, { field = "IEEE802154.RX_ABORT_ENABLE.CRC_ERROR", source-bit-offset = 2 }, { field = "IEEE802154.RX_ABORT_ENABLE.INVALID_LENGTH", source-bit-offset = 3 }, { field = "IEEE802154.RX_ABORT_ENABLE.FILTER_FAIL", source-bit-offset = 4 }, { field = "IEEE802154.RX_ABORT_ENABLE.NO_RSS", source-bit-offset = 5 }, { field = "IEEE802154.RX_ABORT_ENABLE.COEXISTENCE_BREAK", source-bit-offset = 6 }, { field = "IEEE802154.RX_ABORT_ENABLE.UNEXPECTED_ACK", source-bit-offset = 7 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_RESTART", source-bit-offset = 8 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_ABORT_EN_9_14", source-bit-offset = 9 }, { field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_STOP", source-bit-offset = 16 }, { field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "IEEE802154.RX_ABORT_ENABLE.ENHANCED_ACK_SECURITY_ERROR", source-bit-offset = 18 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_ABORT_EN_19_22", source-bit-offset = 19 }, { field = "IEEE802154.RX_ABORT_ENABLE.ED_ABORT", source-bit-offset = 23 }, { field = "IEEE802154.RX_ABORT_ENABLE.ED_STOP", source-bit-offset = 24 }, { field = "IEEE802154.RX_ABORT_ENABLE.ED_COEXISTENCE_REJECT", source-bit-offset = 25 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_ABORT_EN_26_30", source-bit-offset = 26 }]
-value = 0x00028000
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[field-replace-modifies]]
-name = "replace_ieee802154_rx_abort_ed_operation"
-fields = [{ field = "IEEE802154.RX_ABORT_ENABLE.RX_STOP", source-bit-offset = 0 }, { field = "IEEE802154.RX_ABORT_ENABLE.SFD_TIMEOUT", source-bit-offset = 1 }, { field = "IEEE802154.RX_ABORT_ENABLE.CRC_ERROR", source-bit-offset = 2 }, { field = "IEEE802154.RX_ABORT_ENABLE.INVALID_LENGTH", source-bit-offset = 3 }, { field = "IEEE802154.RX_ABORT_ENABLE.FILTER_FAIL", source-bit-offset = 4 }, { field = "IEEE802154.RX_ABORT_ENABLE.NO_RSS", source-bit-offset = 5 }, { field = "IEEE802154.RX_ABORT_ENABLE.COEXISTENCE_BREAK", source-bit-offset = 6 }, { field = "IEEE802154.RX_ABORT_ENABLE.UNEXPECTED_ACK", source-bit-offset = 7 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_RESTART", source-bit-offset = 8 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_ABORT_EN_9_14", source-bit-offset = 9 }, { field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_STOP", source-bit-offset = 16 }, { field = "IEEE802154.RX_ABORT_ENABLE.TX_ACK_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "IEEE802154.RX_ABORT_ENABLE.ENHANCED_ACK_SECURITY_ERROR", source-bit-offset = 18 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_ABORT_EN_19_22", source-bit-offset = 19 }, { field = "IEEE802154.RX_ABORT_ENABLE.ED_ABORT", source-bit-offset = 23 }, { field = "IEEE802154.RX_ABORT_ENABLE.ED_STOP", source-bit-offset = 24 }, { field = "IEEE802154.RX_ABORT_ENABLE.ED_COEXISTENCE_REJECT", source-bit-offset = 25 }, { field = "IEEE802154.RX_ABORT_ENABLE.RX_ABORT_EN_26_30", source-bit-offset = 26 }]
-value = 0x03800000
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[field-replace-modifies]]
-name = "replace_ieee802154_tx_abort_baseline"
-fields = [{ field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_STOP", source-bit-offset = 0 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_SFD_TIMEOUT", source-bit-offset = 1 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_CRC_ERROR", source-bit-offset = 2 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_INVALID_LENGTH", source-bit-offset = 3 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_FILTER_FAIL", source-bit-offset = 4 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_NO_RSS", source-bit-offset = 5 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_COEXISTENCE_BREAK", source-bit-offset = 6 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_TYPE_NOT_ACK", source-bit-offset = 7 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_RESTART", source-bit-offset = 8 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_ABORT_EN_9_14", source-bit-offset = 9 }, { field = "IEEE802154.TX_ABORT_ENABLE.RX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_STOP", source-bit-offset = 16 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_SECURITY_ERROR", source-bit-offset = 18 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_ABORT_EN_19_22", source-bit-offset = 19 }, { field = "IEEE802154.TX_ABORT_ENABLE.CCA_FAILED", source-bit-offset = 23 }, { field = "IEEE802154.TX_ABORT_ENABLE.CCA_BUSY", source-bit-offset = 24 }, { field = "IEEE802154.TX_ABORT_ENABLE.TX_ABORT_EN_25_30", source-bit-offset = 25 }]
-value = 0x01868000
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 
 [[field-replace-modifies]]
 name = "assert_lp_tsens_reset"

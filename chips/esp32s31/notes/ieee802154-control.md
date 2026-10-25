@@ -260,8 +260,8 @@ on-air capability.
 ## Implementation boundary
 
 The [MAC engine](../../espressif/ieee802154-engine/src/engine.rs)
-owns the vendor state machine, `next_operation` and its DMA buffers; the PAC
-owns register authority. This repository has no runtime that serializes the
+owns the vendor state machine, `next_operation` and its DMA buffers; the
+HAL's MAC owners hold the PAC's generated register parts. This repository has no runtime that serializes the
 engine with the MAC owners and routes source 132.
 A `STOP` write is not a proof of terminal DMA quiescence. RF/BTBB readiness,
 TX-power policy and on-air service require separate evidence.

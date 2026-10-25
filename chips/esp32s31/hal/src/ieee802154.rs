@@ -17,7 +17,7 @@ pub(crate) mod role;
 #[cfg(oer_probe)]
 pub(crate) mod validation;
 
-pub use oer_esp32s31_pac::{Ieee802154MultipanIndex, Ieee802154PowerSequence};
+pub use mac::Ieee802154PowerSequence;
 
 /// Validation entries of the IEEE 802.15.4 coexistence and BTBB writes.
 #[cfg(oer_probe)]

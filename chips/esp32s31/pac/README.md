@@ -25,10 +25,15 @@ transactions, including sourced whole-word images and snapshot
 acknowledgements. The `soc` pass retains the vendor's field prefixes;
 API-policy blocks use the field names declared in the reviewed model.
 
-The PAC exports the handwritten domain modules `bluetooth`, `wifi`,
-`ieee802154`, `phy`, `modem`, `boot`, `platform`, `watchdog` and `pll_power`.
-They assemble owned register parts and provide the register-local operations
-and straight-line transactions described below. The analog-host operations
+The PAC exports the handwritten domain modules `bluetooth`, `wifi`, `phy`,
+`modem`, `boot`, `platform`, `watchdog` and `pll_power`. They assemble owned
+register parts and provide the register-local operations and straight-line
+transactions described below. IEEE 802.15.4 has no domain module: its
+partition (`Ieee802154Partition`) holds the generated parts, the MAC block,
+the modem ETM's channels zero and one and the baseband's receive-information
+read, from the public `ieee802154_mac`, `modem_etm` and `bt_v3_2_baseband`
+modules, and the HAL performs every IEEE 802.15.4 operation over their field
+accessors. The analog-host operations
 are in `phy/i2c.rs`. Sequencing with phases, polling, retries, interrupt
 routing and lifecycle policy belongs to the HAL; a PAC domain operation
 keeps no in-flight state between calls.
