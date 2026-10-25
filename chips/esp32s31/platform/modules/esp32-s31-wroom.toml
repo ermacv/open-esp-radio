@@ -2,7 +2,7 @@
 # ESP32-S31-Function-CoreBoard-1 carries, with the flash and PSRAM fitted on
 # it. Its boards (../boards/) extend it.
 schema = 2
-extends = "../chip.toml"
+extends = "../rom-rev0.toml"
 
 # The module is the ESP32-S31-WROOM-3 (PCB antenna) in its N16R16 variant.
 # SOURCE: owner, 2026-10-25 (the stand boards carry ESP32-S31-WROOM-3-N16R16).

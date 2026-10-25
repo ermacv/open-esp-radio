@@ -196,7 +196,7 @@ impl Image {
     ) -> Result<Self> {
         let rom = profile.facts.rom.as_ref().ok_or_else(|| {
             format!(
-                "chips/{}/platform/chip.toml names no [rom] ELF",
+                "chips/{}/platform names no ROM layer with a [rom] ELF",
                 profile.facts.id
             )
         })?;

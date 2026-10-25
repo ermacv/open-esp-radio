@@ -347,11 +347,8 @@ fn sram_inventory_reads_placement_symbols_sections_and_the_boundary_source() {
     assert_eq!(sram.free(), u64::from(region.length) - 0x520);
     assert!(sram.ranges.iter().any(|range| range.name == ".text"));
     assert!(sram.source.contains("chips/esp32s31/platform/chip.toml"));
-    assert!(sram.source.contains("chips/esp32s31/layout/src/lib.rs"));
-    assert!(
-        sram.source
-            .contains("ROM boot-stack side above the end is already excluded")
-    );
+    assert!(sram.source.contains("[boot-chain] application-sram-end"));
+    assert!(sram.source.contains("[rom] sram"));
 }
 
 #[test]

@@ -174,37 +174,28 @@ impl Measurements {
             .memory
             .as_ref()
             .ok_or("sizes: chip has no memory map")?;
-        // Retained SRAM is outside the placement gate's application SRAM
-        // range; the chip facts name it.
-        let retained = memory
-            .retained
-            .ok_or("sizes: chip has no retained memory")?;
         let mut out = Self::default();
         for section in file.sections().filter(|section| section.allocated) {
             let end = section
                 .address
                 .checked_add(section.size)
                 .ok_or("section address overflow")?;
-            let kind = if memory.sram.contains_range(section.address, end)
-                || retained.contains_range(section.address, end)
-            {
-                "sram"
-            } else if memory
-                .psram
-                .is_some_and(|r| r.contains_range(section.address, end))
-                || memory
-                    .runtime_psram
-                    .is_some_and(|r| r.contains_range(section.address, end))
-            {
-                "psram"
-            } else if memory.flash_xip.contains_range(section.address, end) {
-                "flash"
-            } else {
-                return Err(format!(
-                    "sizes: section {} at {:#x}..{end:#x} is outside the chip memory map",
-                    section.name, section.address
-                )
-                .into());
+            // The memory kind is the region's attributes: internal RAM (the
+            // application's SRAM and the retained memory) is uncached, PSRAM
+            // cached and writable, flash cached and read-only.
+            let attributes = memory
+                .region_of(section.address, end)
+                .ok_or_else(|| {
+                    format!(
+                        "sizes: section {} at {:#x}..{end:#x} is outside the chip memory map",
+                        section.name, section.address
+                    )
+                })?
+                .attributes;
+            let kind = match (attributes.cached, attributes.writable) {
+                (false, _) => "sram",
+                (true, true) => "psram",
+                (true, false) => "flash",
             };
             let filler = padding::ranges(&file, &section);
             let measured = Section {

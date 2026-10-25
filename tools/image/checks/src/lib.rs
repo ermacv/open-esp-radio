@@ -634,7 +634,7 @@ impl Gates {
         }
         if input.profile.facts.rom.is_none() {
             let missing = CheckResult::MissingContract(format!(
-                "chips/{}/platform/chip.toml names no [rom] ELF",
+                "chips/{}/platform names no ROM layer with a [rom] ELF",
                 input.profile.facts.id
             ));
             for name in self.requested(CheckedElf::Bootstrap) {

@@ -1,6 +1,7 @@
 # The chip layer of the ESP32-S31's facts: what host tools cannot derive from
 # the chip id. It extends the ISA of its harts and the Espressif family; its
-# module and board (modules/, boards/) extend it. Paths follow the id by
+# ROM layer (rom-<revision>.toml), module and board (modules/, boards/)
+# extend it. Paths follow the id by
 # convention, such as registers/<id>.
 schema = 2
 id = "esp32s31"
@@ -41,13 +42,14 @@ start = "reset"
 # from it. The PSRAM's size is the module's; stage two lies in it after the
 # bootstrap's probe page (`runtime-psram`).
 [memory]
-# Application-owned internal SRAM, `SRAM_START..SRAM_SEG_END` of ESP-IDF's
-# application memory map; the ROM boot stack side lies above it.
+# The internal HP SRAM, the ROM's and the boot chain's reserves at its top
+# included; the application's SRAM (`sram`) is the part below what the boot
+# chain keeps (`[boot-chain] application-sram-end`).
 #
-# SOURCE: ESP-IDF 4d59230d `components/esp_system/ld/esp32s31/ld.hp_mem_defs:9`
-# (`SRAM_SEG_END 0x2F07AFC0`) and `memory.ld.in:21-26`
-# (`SRAM_SIZE = SRAM_SEG_END - SRAM_START`, without the ULP HP-memory reserve).
-sram = { origin = 0x2f000000, length = 0x0007afc0 }
+# SOURCE: ESP-IDF 4d59230d `components/soc/esp32s31/include/soc/soc.h:152-155`
+# (`SOC_IRAM_LOW`/`SOC_DRAM_LOW 0x2F000000`, `SOC_IRAM_HIGH`/`SOC_DRAM_HIGH
+# 0x2F080000`).
+internal-sram = { origin = 0x2f000000, length = 0x00080000 }
 # The unified 64-MiB Flash XIP instruction/data window.
 #
 # SOURCE: ESP-IDF 4d59230d `components/soc/esp32s31/include/soc/soc.h:138-141`
@@ -67,8 +69,31 @@ retained = { origin = 0x2e000000, length = 0x8000 }
 # The runtime's task stacks lie in PSRAM.
 task-stacks = "psram"
 
+# What each region is. The internal SRAM is instruction and data RAM at one
+# address and the radio's DMA window; LP RAM is executable and outside that
+# window; flash and PSRAM are reached through the cache, PSRAM outside the
+# DMA window.
+#
+# SOURCE: ESP-IDF 4d59230d `components/soc/esp32s31/include/soc/soc.h:138-144`
+# (`SOC_IROM_LOW..SOC_IROM_HIGH` flash, `SOC_EXTRAM_LOW..SOC_EXTRAM_HIGH`
+# PSRAM), `:156-159` (`SOC_RTC_IRAM`/`SOC_RTC_DRAM`), `:167-170` (`SOC_DIRAM_*`),
+# `:177-178` (`SOC_DMA_LOW 0x2F000000`, `SOC_DMA_HIGH 0x2F080000`).
+[memory.attributes]
+sram = { executable = true, cached = false, dma = true, retained = false, writable = true }
+retained = { executable = true, cached = false, dma = false, retained = true, writable = true }
+flash-xip = { executable = true, cached = true, dma = false, retained = false, writable = false }
+psram = { executable = true, cached = true, dma = false, retained = false, writable = true }
+
 # What the pinned second-stage bootloader keeps for itself.
 [boot-chain]
+# The end of ESP-IDF's application memory map, `SRAM_START..SRAM_SEG_END`:
+# the application's SRAM ends here. The internal SRAM above it holds the
+# ROM's boot stacks and data (rom-rev0.toml).
+#
+# SOURCE: ESP-IDF 4d59230d `components/esp_system/ld/esp32s31/ld.hp_mem_defs:9`
+# (`SRAM_SEG_END 0x2F07AFC0`) and `memory.ld.in:19-23`
+# (`SRAM_SIZE = SRAM_SEG_END - SRAM_START`, without the ULP HP-memory reserve).
+application-sram-end = 0x2f07afc0
 # SOURCE: ESP-IDF 4d59230d
 # `components/bootloader/subproject/main/ld/esp32s31/bootloader.memory.ld.in:39-64`
 # (usable end 0x2f07afb0 minus the 0x2000 stack, 0x5000 `dram_seg` and 0x7000
@@ -109,21 +134,6 @@ starters = [
     "*CpuControl*::start_app_core*",
     "*CpuControl*::unpark_core*",
     "*::start_core1*",
-]
-
-# The mask ROM the stack analyses read: the pinned ROM ELF
-# (chips/esp32s31/vendor/artifacts.toml), the reviewed function summaries
-# and the vendor radio ROM no image may call into: the stack and interrupt
-# checks fail when a root's walk reaches it.
-[rom]
-elf = "rom"
-# SOURCE: ESP-IDF 4d59230d `components/esp_rom/esp32s31/ld/esp32s31.rom.ld`
-# (the ECO0 ROM of the board's revision 0 chip).
-linker-script = "rom/esp32s31-eco0.x"
-summaries = "chips/esp32s31/platform/rom-functions.toml"
-forbidden = [
-    { name = "eco0-radio-api", start = 0x2f800bf0, end = 0x2f8016bc },
-    { name = "eco0-radio-body", start = 0x2f823c12, end = 0x2f83e6d0 },
 ]
 
 # The Rust probe images of the vendor comparison (firmware/probes),

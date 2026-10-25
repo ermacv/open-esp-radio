@@ -117,8 +117,8 @@ impl Sram {
         Self {
             region,
             source: format!(
-                "chips/{}/platform/chip.toml [memory].sram; application-owned SRAM_START..SRAM_SEG_END; ROM boot-stack side above the end is already excluded (source: chips/{}/layout/src/lib.rs, ESP-IDF memory map)",
-                profile.facts.id, profile.facts.id
+                "chips/{}/platform/chip.toml [memory] internal-sram below [boot-chain] application-sram-end (ESP-IDF SRAM_START..SRAM_SEG_END), clear of the ROM data of [rom] sram",
+                profile.facts.id
             ),
             ranges,
             placed,

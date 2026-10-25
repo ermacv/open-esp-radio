@@ -70,15 +70,52 @@ impl Region {
     }
 }
 
+/// What a region of the memory map is, as the chip layer states it for each
+/// region it maps (`[memory.attributes]`); the checks read these, never a
+/// region's name.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct Attributes {
+    /// The CPU fetches instructions from it.
+    pub executable: bool,
+    /// Access goes through the cache and its MMU: code there cannot run while
+    /// the cache is off.
+    pub cached: bool,
+    /// It lies in the window the radio's DMA reaches (`SOC_DMA_LOW` to
+    /// `SOC_DMA_HIGH`).
+    pub dma: bool,
+    /// No reset entry initializes it: a record there survives a reset.
+    pub retained: bool,
+    /// An image's own code writes it.
+    pub writable: bool,
+}
+
+/// A region of the memory map with its name, as [`Memory::region`] names it,
+/// and its attributes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MappedRegion {
+    pub name: &'static str,
+    pub region: Region,
+    pub attributes: Attributes,
+}
+
 /// The address map host tools check images against and the chip's layout
 /// crate (`chips/<id>/layout`) generates its `LAYOUT` from.
 ///
-/// The chip names its SRAM, its flash window, where PSRAM lies and its
-/// retained memory; the module names the PSRAM's size; `runtime_psram` is the
-/// PSRAM after the family's bootstrap probe page.
+/// The chip names its internal SRAM, its flash window, where PSRAM lies, its
+/// retained memory and the attributes of each region; the module names the
+/// PSRAM's size; `sram` is the internal SRAM below what the boot chain keeps
+/// (`[boot-chain] application-sram-end`); `runtime_psram` is the PSRAM after
+/// the family's bootstrap probe page.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Memory {
+    /// The chip's whole internal (HP) SRAM, the ROM's and the boot chain's
+    /// reserves included.
+    pub internal_sram: Region,
+    /// The internal SRAM the application owns: from the internal SRAM's
+    /// origin up to the boot chain's reserve, clear of every range the ROM
+    /// keeps while an image runs.
     pub sram: Region,
     pub flash_xip: Region,
     /// The module's PSRAM in the cached external RAM aperture, on a chip
@@ -99,19 +136,49 @@ pub struct Memory {
     /// The region the runtime's task stacks lie in, by [`Memory::region`]
     /// name.
     pub task_stacks: String,
+    /// The attributes of every region the chip maps, by [`Memory::region`]
+    /// name: `sram`, `flash-xip` and, where mapped, `psram` and `retained`.
+    /// `runtime-psram` has the PSRAM's.
+    pub attributes: BTreeMap<String, Attributes>,
 }
 
 impl Memory {
-    /// The region a placement rule names: `sram`, `flash-xip`, `psram` or
-    /// `runtime-psram`; `None` for one the chip does not map.
+    /// The region a placement rule names: `sram`, `retained`, `flash-xip`,
+    /// `psram` or `runtime-psram`; `None` for one the chip does not map.
     pub fn region(&self, name: &str) -> Option<Region> {
-        match name {
-            "sram" => Some(self.sram),
-            "flash-xip" => Some(self.flash_xip),
-            "psram" => self.psram,
-            "runtime-psram" => self.runtime_psram,
-            _ => None,
-        }
+        self.regions()
+            .into_iter()
+            .find(|mapped| mapped.name == name)
+            .map(|mapped| mapped.region)
+    }
+
+    /// Every region the chip maps with its attributes, the narrower first:
+    /// `runtime-psram` before the `psram` it lies in.
+    pub fn regions(&self) -> Vec<MappedRegion> {
+        let named = [
+            ("sram", "sram", Some(self.sram)),
+            ("retained", "retained", self.retained),
+            ("flash-xip", "flash-xip", Some(self.flash_xip)),
+            ("runtime-psram", "psram", self.runtime_psram),
+            ("psram", "psram", self.psram),
+        ];
+        named
+            .into_iter()
+            .filter_map(|(name, kind, region)| {
+                Some(MappedRegion {
+                    name,
+                    region: region?,
+                    attributes: *self.attributes.get(kind)?,
+                })
+            })
+            .collect()
+    }
+
+    /// The region `start..end` lies wholly in, if any.
+    pub fn region_of(&self, start: u64, end: u64) -> Option<MappedRegion> {
+        self.regions()
+            .into_iter()
+            .find(|mapped| mapped.region.contains_range(start, end))
     }
 
     /// The region the task stacks lie in.
@@ -121,9 +188,27 @@ impl Memory {
 
     /// SRAM lies below PSRAM (the trap entries tell an interrupt stack from a
     /// task stack by address), flash and PSRAM lie in the shared cache window
-    /// of a chip that has one, and the boot chain's loader and retained tail
-    /// lie in SRAM and the retained memory.
-    pub(crate) fn validate(&self, boot_chain: Option<&BootChain>) -> Result<()> {
+    /// of a chip that has one, the boot chain's loader and retained tail lie
+    /// in SRAM and the retained memory, every mapped region has its
+    /// attributes, and the ROM's SRAM ranges lie in the internal SRAM, those
+    /// it keeps while an image runs clear of the application's SRAM.
+    pub(crate) fn validate(&self, boot_chain: Option<&BootChain>, rom: Option<&Rom>) -> Result<()> {
+        let mut mapped: alloc::collections::BTreeSet<&str> = ["sram", "flash-xip"].into();
+        if self.psram.is_some() {
+            mapped.insert("psram");
+        }
+        if self.retained.is_some() {
+            mapped.insert("retained");
+        }
+        let stated: alloc::collections::BTreeSet<&str> =
+            self.attributes.keys().map(String::as_str).collect();
+        if stated != mapped {
+            return Err(format!(
+                "`[memory.attributes]` must name exactly the mapped regions {mapped:?}, \
+                 and names {stated:?}"
+            )
+            .into());
+        }
         if self
             .psram
             .is_some_and(|psram| self.sram.end() > psram.origin)
@@ -158,12 +243,54 @@ impl Memory {
                 return Err("the boot chain's retained tail needs the retained memory".into());
             }
         }
+        let mut below = self.internal_sram.origin;
+        for range in rom.map_or(&[][..], |rom| &rom.sram) {
+            if range.start < below {
+                return Err(format!(
+                    "the ROM's SRAM ranges must be in address order without overlap: `{}` \
+                     starts at {:#010x}",
+                    range.name, range.start
+                )
+                .into());
+            }
+            below = range.end;
+            if range.end <= range.start
+                || !self
+                    .internal_sram
+                    .contains_range(u64::from(range.start), u64::from(range.end))
+            {
+                return Err(format!(
+                    "the ROM's SRAM range `{}` {:#010x}..{:#010x} must lie in the internal SRAM",
+                    range.name, range.start, range.end
+                )
+                .into());
+            }
+            if range.kept == Kept::Running
+                && range.start < self.sram.end()
+                && self.sram.origin < range.end
+            {
+                return Err(format!(
+                    "the ROM keeps `{}` {:#010x}..{:#010x} while an image runs, inside the \
+                     application's SRAM {:#010x}..{:#010x}",
+                    range.name,
+                    range.start,
+                    range.end,
+                    self.sram.origin,
+                    self.sram.end()
+                )
+                .into());
+            }
+        }
         Ok(())
     }
 
     /// The cached regions: code there cannot run while the cache is off.
     pub fn cached(&self) -> Vec<Region> {
-        core::iter::once(self.flash_xip).chain(self.psram).collect()
+        self.regions()
+            .into_iter()
+            .filter(|mapped| mapped.attributes.cached)
+            .map(|mapped| mapped.region)
+            .collect()
     }
 }
 
@@ -310,6 +437,11 @@ pub struct StagedBoot {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct BootChain {
+    /// The end of the application memory map of the pinned ESP-IDF: the
+    /// internal SRAM from here up the boot chain keeps for itself (the
+    /// second-stage loader, the ROM's boot stacks and data), and the
+    /// application's SRAM ends here.
+    pub application_sram_end: u32,
     /// Start of the loader's `iram_loader_seg`. The loader runs from here
     /// while it loads the bootstrap image, so every segment of that image it
     /// loads ends below this address.
@@ -338,6 +470,9 @@ pub struct StageTwo {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Rom {
+    /// The chip revision whose mask ROM this is: one of the chip's
+    /// `revisions`.
+    pub revision: String,
     /// The id of the pinned ROM ELF in `chips/<id>/vendor/artifacts.toml`
     /// (`oer-vendor-pins`) the stack analyses run with.
     pub elf: String,
@@ -351,6 +486,35 @@ pub struct Rom {
     /// The ROM symbol script the images link with, relative to the chip's
     /// layout crate's `linker` directory (`chips/<id>/layout/linker`).
     pub linker_script: String,
+    /// What the ROM uses of the internal SRAM, `start..end`, and while it
+    /// keeps each range.
+    #[serde(default)]
+    pub sram: Vec<RomSram>,
+}
+
+/// A range of internal SRAM the mask ROM uses.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct RomSram {
+    pub name: String,
+    pub start: u32,
+    pub end: u32,
+    pub kept: Kept,
+}
+
+/// While the ROM keeps a range of SRAM.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Kept {
+    /// Only in the ROM's UART, USB or SPI download mode, which never runs an
+    /// image.
+    Download,
+    /// Until the boot chain hands the CPU to the image: the ROM's boot
+    /// stacks, which the second-stage loader runs on.
+    Boot,
+    /// While an image runs: the ROM's `.data` and `.bss`, which the ROM
+    /// functions an image calls use.
+    Running,
 }
 
 /// A named ROM address range, `start..end`.

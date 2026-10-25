@@ -296,8 +296,8 @@ size count once, and an interior address counts the whole object. References
 without a sized data symbol remain visible and contribute no invented size.
 SRAM usage is the union of the placement contract's SRAM ranges and allocated
 SRAM sections, including NOLOAD interrupt stacks and DMA. Overlaps count once;
-the contract's upper boundary already excludes the ROM boot-stack side (the
-chip's layout documents its ESP-IDF source). These are static byte counts of
+the contract's upper boundary is the boot chain's reserve, below the ROM's data
+(the chip facts' `[boot-chain] application-sram-end` and `[rom] sram`). These are static byte counts of
 resolved paths, without relocation alignment or dynamically addressed data;
 data and SRAM measurements do not participate in a gate's verdict.
 Independently of the installed interrupt handlers, it also follows linked

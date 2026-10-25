@@ -7,9 +7,12 @@ contracts; details live with their owners.
 
 The [shared layout](../chips/espressif/staged-layout/README.md) defines the
 regions; their addresses and sizes are the
-[chip facts](../chips/espressif/facts/README.md): the chip layer's SRAM,
-flash window and retained memory, the module's PSRAM, `runtime-psram` after
-the family's bootstrap probe page, and what the boot chain keeps. The
+[chip facts](../chips/espressif/facts/README.md): the chip layer's internal
+SRAM, flash window and retained memory with each region's attributes, the
+module's PSRAM, `runtime-psram` after the family's bootstrap probe page, what
+the boot chain keeps and what the ROM of the chip's revision uses of the
+internal SRAM. The application's SRAM is the internal SRAM below the boot
+chain's reserve, clear of the ROM's data. The
 [S31](../chips/esp32s31/layout/src/lib.rs) and
 [C5](../chips/esp32c5/layout/src/lib.rs) layout crates generate their
 `LAYOUT`, and through it the linker scripts' `--defsym` values, from those

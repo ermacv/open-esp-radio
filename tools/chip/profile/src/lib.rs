@@ -416,6 +416,7 @@ mod tests {
             "chips/espressif/platform/isa/rv32imac.toml",
             "chips/espressif/platform/family.toml",
             "chips/esp32c5/platform/chip.toml",
+            "chips/esp32c5/platform/rom-rev100.toml",
             "chips/esp32c5/platform/modules/esp32-c5-wroom-1-n16r8.toml",
             "chips/esp32c5/platform/boards/esp32-c5-devkit.toml",
             // The chip's stack policy sizes the default task stack.

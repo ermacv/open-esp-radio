@@ -1,0 +1,40 @@
+# The ROM layer of the ESP32-S31's facts: the mask ROM of the revision 0
+# chip the board carries. It extends the chip layer; the module (modules/)
+# extends it.
+schema = 2
+extends = "chip.toml"
+
+# The mask ROM the stack analyses read: the pinned ROM ELF
+# (chips/esp32s31/vendor/artifacts.toml), the reviewed function summaries,
+# the vendor radio ROM no image may call into (the stack and interrupt checks
+# fail when a root's walk reaches it) and what the ROM uses of the internal
+# SRAM.
+[rom]
+revision = "rev0"
+elf = "rom"
+# SOURCE: ESP-IDF 4d59230d `components/esp_rom/esp32s31/ld/esp32s31.rom.ld`
+# (the ECO0 ROM of the board's revision 0 chip).
+linker-script = "rom/esp32s31-eco0.x"
+summaries = "chips/esp32s31/platform/rom-functions.toml"
+forbidden = [
+    { name = "eco0-radio-api", start = 0x2f800bf0, end = 0x2f8016bc },
+    { name = "eco0-radio-body", start = 0x2f823c12, end = 0x2f83e6d0 },
+]
+# The ROM's SRAM, from its ELF's symbols: no ROM symbol lies in
+# 0x2f000000..0x2f068d00. The boot stacks are the span between the download
+# buffers and the first data symbol, where ESP-IDF places the two cores'
+# startup stacks. ESP-IDF's bootloader map (`bootloader.memory.ld.in` below)
+# states other bounds for the same ranges; the pinned ELF's symbols are these.
+#
+# SOURCE: Blobray (`cargo blobray symbols --input rom=pin:esp32s31/rom`):
+# `rom[]::g_shared_buffers` 0x2f068d00, 0x11900 bytes (`.bss_shared_bufs`);
+# `rom[]::s_is_rsa` 0x2f07e600 (`.data_ets`), the lowest `.data`/`.bss`
+# symbol; `rom[]::g_saved_pc` 0x2f07fff8, 8 bytes (`.bss.interface.common`),
+# the highest. ESP-IDF 4d59230d
+# `components/bootloader/subproject/main/ld/esp32s31/bootloader.memory.ld.in:12-15,57-90`
+# (shared buffers, PRO and APP CPU startup stacks, ROM `.bss` and `.data`).
+sram = [
+    { name = "download-buffers", start = 0x2f068d00, end = 0x2f07a600, kept = "download" },
+    { name = "boot-stacks", start = 0x2f07a600, end = 0x2f07e600, kept = "boot" },
+    { name = "data", start = 0x2f07e600, end = 0x2f080000, kept = "running" },
+]

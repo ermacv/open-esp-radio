@@ -11,7 +11,8 @@ use alloc::{
 
 use crate::{Result, Source};
 
-/// Every tracked layer file and each chip's stack policy
+/// Every tracked layer file (the ROM's of each revision included) and each
+/// chip's stack policy
 /// (`chips/<id>/platform/stack.toml`, whose default task stack the layout
 /// takes): its path relative to the root and its text.
 pub const FILES: &[(&str, &str)] = &[
@@ -32,6 +33,10 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../../esp32c5/platform/chip.toml"),
     ),
     (
+        "chips/esp32c5/platform/rom-rev100.toml",
+        include_str!("../../../esp32c5/platform/rom-rev100.toml"),
+    ),
+    (
         "chips/esp32c5/platform/stack.toml",
         include_str!("../../../esp32c5/platform/stack.toml"),
     ),
@@ -46,6 +51,10 @@ pub const FILES: &[(&str, &str)] = &[
     (
         "chips/esp32s31/platform/chip.toml",
         include_str!("../../../esp32s31/platform/chip.toml"),
+    ),
+    (
+        "chips/esp32s31/platform/rom-rev0.toml",
+        include_str!("../../../esp32s31/platform/rom-rev0.toml"),
     ),
     (
         "chips/esp32s31/platform/stack.toml",
@@ -126,7 +135,8 @@ mod tests {
     }
 
     /// The layer files of the tree this crate is built from: the family's
-    /// and, for every chip, its chip layer, stack policy, modules and boards.
+    /// and, for every chip, its chip layer, the ROM layer of each of its
+    /// revisions that has one, stack policy, modules and boards.
     #[test]
     fn the_tracked_files_are_every_layer_of_the_tree() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
@@ -136,6 +146,18 @@ mod tests {
         for entry in std::fs::read_dir(&chips).expect("chips/ is readable") {
             let platform = entry.expect("a readable entry").path().join("platform");
             if platform.join("chip.toml").is_file() {
+                let chip = std::fs::read_to_string(platform.join("chip.toml"))
+                    .expect("a readable chip layer");
+                let chip: toml::Table = toml::from_str(&chip).expect("a TOML chip layer");
+                for revision in chip["revisions"].as_array().expect("revisions") {
+                    let rom = platform.join(format!(
+                        "rom-{}.toml",
+                        revision.as_str().expect("a revision name")
+                    ));
+                    if rom.is_file() {
+                        found.push(rom);
+                    }
+                }
                 found.push(platform.join("chip.toml"));
                 found.push(platform.join("stack.toml"));
                 toml_files(&platform.join("modules"), &mut found);
