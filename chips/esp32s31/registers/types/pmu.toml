@@ -1,0 +1,4100 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "PMU"
+description = "The power management unit: power states of the HP and LP domains, the modem power domain and the cores' stall requests."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_CPLL_I2C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_BBPLL_I2C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_APLL_I2C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_MPLL_I2C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_CPLL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_BBPLL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_APLL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_MPLL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_MODEM_HP_CK_POWER.HP_MODEM_XPD_CPLL_I2C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_MODEM_HP_CK_POWER.HP_MODEM_XPD_BBPLL_I2C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_MODEM_HP_CK_POWER.HP_MODEM_XPD_APLL_I2C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_MODEM_HP_CK_POWER.HP_MODEM_XPD_MPLL_I2C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_MODEM_HP_CK_POWER.HP_MODEM_XPD_CPLL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_MODEM_HP_CK_POWER.HP_MODEM_XPD_BBPLL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_MODEM_HP_CK_POWER.HP_MODEM_XPD_APLL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_MODEM_HP_CK_POWER.HP_MODEM_XPD_MPLL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_SLEEP_HP_CK_POWER.HP_SLEEP_XPD_CPLL_I2C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_SLEEP_HP_CK_POWER.HP_SLEEP_XPD_BBPLL_I2C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_SLEEP_HP_CK_POWER.HP_SLEEP_XPD_APLL_I2C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_SLEEP_HP_CK_POWER.HP_SLEEP_XPD_MPLL_I2C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_SLEEP_HP_CK_POWER.HP_SLEEP_XPD_CPLL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_SLEEP_HP_CK_POWER.HP_SLEEP_XPD_BBPLL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_SLEEP_HP_CK_POWER.HP_SLEEP_XPD_APLL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_SLEEP_HP_CK_POWER.HP_SLEEP_XPD_MPLL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+
+[review.entity."HP_SLEEP_LP_DCDC_RESERVE"]
+sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review.entity."HP_SLEEP_LP_DCDC_RESERVE.PMU_HP_SLEEP_LP_DCDC_RESERVE"]
+sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review.entity."LP_SLEEP_LP_BIAS_RESERVE"]
+sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review.entity."LP_SLEEP_LP_BIAS_RESERVE.PMU_LP_SLEEP_LP_BIAS_RESERVE"]
+sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[registers]]
+name = "HP_ACTIVE_DIG_POWER"
+offset = 0x0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_ACTIVE_VDD_SPI_PD_EN"
+bits = "20"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_PD_HP_ALIVE_PD_EN"
+bits = "21"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_HP_MEM_DSLP"
+bits = "22"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_PD_HP_MEM_PD_EN"
+bits = "26:23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_PD_MODEM_TOP_PD_EN"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_PD_HP_CNNT_PD_EN"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_PD_HP_CPU_PD_EN"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_PD_MODEM_PWR_PD_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_PD_TOP_PD_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_ACTIVE_ICG_HP_FUNC"
+offset = 0x4
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_ACTIVE_DIG_ICG_FUNC_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_ACTIVE_ICG_HP_APB"
+offset = 0x8
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_ACTIVE_DIG_ICG_APB_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_ACTIVE_ICG_HP_FUNC1"
+offset = 0xc
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_ACTIVE_DIG_ICG_FUNC1_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_ACTIVE_ICG_HP_APB1"
+offset = 0x10
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_ACTIVE_DIG_ICG_APB1_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_ACTIVE_ICG_MODEM"
+offset = 0x14
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_ACTIVE_DIG_ICG_MODEM_CODE"
+bits = "31:30"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_ACTIVE_HP_SYS_CNTL"
+offset = 0x18
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xc07fffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_ACTIVE_C_CHANNEL"
+bits = "23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_UART_WAKEUP_EN"
+bits = "24"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_LP_PAD_HOLD_ALL"
+bits = "25"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_HP_PAD_HOLD_ALL"
+bits = "26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_DIG_PAD_SLP_SEL"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_DIG_PAUSE_WDT"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_DIG_CPU_STALL"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_ACTIVE_HP_CK_POWER"
+offset = 0x1c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x8007ffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_ACTIVE_XPD_XTALX2"
+bits = "19"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_I2C_ISO_EN"
+bits = "20"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_I2C_RETENTION"
+bits = "21"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_XPD_BB_I2C"
+bits = "22"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_XPD_CPLL_I2C"
+bits = "23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_XPD_BBPLL_I2C"
+bits = "24"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_XPD_APLL_I2C"
+bits = "25"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_XPD_MPLL_I2C"
+bits = "26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_XPD_CPLL"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_XPD_BBPLL"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_XPD_APLL"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_XPD_MPLL"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_ACTIVE_BIAS"
+offset = 0x20
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x1ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_ACTIVE_XPD_BIAS"
+bits = "25"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_DBG_ATTEN"
+bits = "29:26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_PD_CUR"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_ACTIVE_BACKUP"
+offset = 0x24
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x9000230f, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SLEEP2ACTIVE_BACKUP_MODEM_CLK_CODE"
+bits = "5:4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM2ACTIVE_BACKUP_MODEM_CLK_CODE"
+bits = "7:6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_RETENTION_MODE"
+bits = "10"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP2ACTIVE_RETENTION_EN"
+bits = "11"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM2ACTIVE_RETENTION_EN"
+bits = "12"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP2ACTIVE_BACKUP_CLK_SEL"
+bits = "15:14"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM2ACTIVE_BACKUP_CLK_SEL"
+bits = "17:16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP2ACTIVE_BACKUP_MODE"
+bits = "22:18"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM2ACTIVE_BACKUP_MODE"
+bits = "27:23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP2ACTIVE_BACKUP_EN"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM2ACTIVE_BACKUP_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_ACTIVE_BACKUP_CLK"
+offset = 0x28
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "HP_ACTIVE_BACKUP_ICG_FUNC_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_ACTIVE_BACKUP1_CLK"
+offset = 0x2c
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "HP_ACTIVE_BACKUP_ICG_FUNC1_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_ACTIVE_SYSCLK"
+offset = 0x30
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_ACTIVE_DIG_SYS_CLK_NO_DIV"
+bits = "26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_ICG_SYS_CLOCK_EN"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_SYS_CLK_SLP_SEL"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_ICG_SLP_SEL"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_DIG_SYS_CLK_SEL"
+bits = "31:30"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_ACTIVE_HP_REGULATOR0"
+offset = 0x34
+description = "need_des"
+reset = { value = 0xc667f180 }
+reserved = { mask = 0x7, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "DIG_DBIAS_INIT"
+bits = "3"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_DBIAS_VOL"
+bits = "8:4"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_DBIAS_VOL"
+bits = "13:9"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "DIG_REGULATOR0_DBIAS_SEL"
+bits = "14"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_HP_REGULATOR_SLP_CONNECT_EN"
+bits = "15"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_HP_REGULATOR_SLP_MEM_XPD"
+bits = "16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_HP_REGULATOR_SLP_LOGIC_XPD"
+bits = "17"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_HP_REGULATOR_XPD"
+bits = "18"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_HP_REGULATOR_SLP_MEM_DBIAS"
+bits = "22:19"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_HP_REGULATOR_SLP_LOGIC_DBIAS"
+bits = "26:23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE_HP_REGULATOR_DBIAS"
+bits = "31:27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_ACTIVE_HP_REGULATOR1"
+offset = 0x38
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_ACTIVE_HP_REGULATOR_DRV_B"
+bits = "31:8"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_ACTIVE_XTAL"
+offset = 0x3c
+description = "need_des"
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_ACTIVE_XPD_XTAL"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_DIG_POWER"
+offset = 0x40
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MODEM_VDD_SPI_PD_EN"
+bits = "20"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_PD_HP_ALIVE_PD_EN"
+bits = "21"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_HP_MEM_DSLP"
+bits = "22"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_PD_HP_MEM_PD_EN"
+bits = "26:23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_PD_MODEM_TOP_PD_EN"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_PD_HP_CNNT_PD_EN"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_PD_HP_CPU_PD_EN"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_PD_MODEM_PWR_PD_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_PD_TOP_PD_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_ICG_HP_FUNC"
+offset = 0x44
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_MODEM_DIG_ICG_FUNC_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_ICG_HP_APB"
+offset = 0x48
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_MODEM_DIG_ICG_APB_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_ICG_HP_FUNC1"
+offset = 0x4c
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_MODEM_DIG_ICG_FUNC1_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_ICG_HP_APB1"
+offset = 0x50
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_MODEM_DIG_ICG_APB1_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_ICG_MODEM"
+offset = 0x54
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MODEM_DIG_ICG_MODEM_CODE"
+bits = "31:30"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_HP_SYS_CNTL"
+offset = 0x58
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xc07fffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MODEM_C_CHANNEL"
+bits = "23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_UART_WAKEUP_EN"
+bits = "24"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_LP_PAD_HOLD_ALL"
+bits = "25"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_HP_PAD_HOLD_ALL"
+bits = "26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_DIG_PAD_SLP_SEL"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_DIG_PAUSE_WDT"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_DIG_CPU_STALL"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_HP_CK_POWER"
+offset = 0x5c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x8007ffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MODEM_XPD_XTALX2"
+bits = "19"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_I2C_ISO_EN"
+bits = "20"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_I2C_RETENTION"
+bits = "21"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_XPD_BB_I2C"
+bits = "22"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_XPD_CPLL_I2C"
+bits = "23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_XPD_BBPLL_I2C"
+bits = "24"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_XPD_APLL_I2C"
+bits = "25"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_XPD_MPLL_I2C"
+bits = "26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_XPD_CPLL"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_XPD_BBPLL"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_XPD_APLL"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_XPD_MPLL"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_BIAS"
+offset = 0x60
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x1ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MODEM_XPD_BIAS"
+bits = "25"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_DBG_ATTEN"
+bits = "29:26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_PD_CUR"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_BACKUP"
+offset = 0x64
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xde0f33cf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SLEEP2MODEM_BACKUP_MODEM_CLK_CODE"
+bits = "5:4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_RETENTION_MODE"
+bits = "10"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP2MODEM_RETENTION_EN"
+bits = "11"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP2MODEM_BACKUP_CLK_SEL"
+bits = "15:14"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP2MODEM_BACKUP_MODE"
+bits = "24:20"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP2MODEM_BACKUP_EN"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_BACKUP_CLK"
+offset = 0x68
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "HP_MODEM_BACKUP_ICG_FUNC_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_BACKUP1_CLK"
+offset = 0x6c
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "HP_MODEM_BACKUP_ICG_FUNC1_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_SYSCLK"
+offset = 0x70
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MODEM_DIG_SYS_CLK_NO_DIV"
+bits = "26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_ICG_SYS_CLOCK_EN"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_SYS_CLK_SLP_SEL"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_ICG_SLP_SEL"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_DIG_SYS_CLK_SEL"
+bits = "31:30"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_HP_REGULATOR0"
+offset = 0x74
+description = "need_des"
+reset = { value = 0xc6678000 }
+reserved = { mask = 0x7fff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MODEM_HP_REGULATOR_SLP_CONNECT_EN"
+bits = "15"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_HP_REGULATOR_SLP_MEM_XPD"
+bits = "16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_HP_REGULATOR_SLP_LOGIC_XPD"
+bits = "17"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_HP_REGULATOR_XPD"
+bits = "18"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_HP_REGULATOR_SLP_MEM_DBIAS"
+bits = "22:19"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_HP_REGULATOR_SLP_LOGIC_DBIAS"
+bits = "26:23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM_HP_REGULATOR_DBIAS"
+bits = "31:27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_HP_REGULATOR1"
+offset = 0x78
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MODEM_HP_REGULATOR_DRV_B"
+bits = "31:8"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_MODEM_XTAL"
+offset = 0x7c
+description = "need_des"
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MODEM_XPD_XTAL"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_DIG_POWER"
+offset = 0x80
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SLEEP_VDD_SPI_PD_EN"
+bits = "20"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_PD_HP_ALIVE_PD_EN"
+bits = "21"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_HP_MEM_DSLP"
+bits = "22"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_PD_HP_MEM_PD_EN"
+bits = "26:23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_PD_MODEM_TOP_PD_EN"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_PD_HP_CNNT_PD_EN"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_PD_HP_CPU_PD_EN"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_PD_MODEM_PWR_PD_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_PD_TOP_PD_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_ICG_HP_FUNC"
+offset = 0x84
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_SLEEP_DIG_ICG_FUNC_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_ICG_HP_APB"
+offset = 0x88
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_SLEEP_DIG_ICG_APB_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_ICG_HP_FUNC1"
+offset = 0x8c
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_SLEEP_DIG_ICG_FUNC1_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_ICG_HP_APB1"
+offset = 0x90
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_SLEEP_DIG_ICG_APB1_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_ICG_MODEM"
+offset = 0x94
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SLEEP_DIG_ICG_MODEM_CODE"
+bits = "31:30"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_HP_SYS_CNTL"
+offset = 0x98
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xc07fffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SLEEP_C_CHANNEL"
+bits = "23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_UART_WAKEUP_EN"
+bits = "24"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_LP_PAD_HOLD_ALL"
+bits = "25"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_HP_PAD_HOLD_ALL"
+bits = "26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_DIG_PAD_SLP_SEL"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_DIG_PAUSE_WDT"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_DIG_CPU_STALL"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_HP_CK_POWER"
+offset = 0x9c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x8007ffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SLEEP_XPD_XTALX2"
+bits = "19"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_I2C_ISO_EN"
+bits = "20"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_I2C_RETENTION"
+bits = "21"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_XPD_BB_I2C"
+bits = "22"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_XPD_CPLL_I2C"
+bits = "23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_XPD_BBPLL_I2C"
+bits = "24"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_XPD_APLL_I2C"
+bits = "25"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_XPD_MPLL_I2C"
+bits = "26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_XPD_CPLL"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_XPD_BBPLL"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_XPD_APLL"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_XPD_MPLL"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_BIAS"
+offset = 0xa0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x1ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SLEEP_XPD_BIAS"
+bits = "25"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_DBG_ATTEN"
+bits = "29:26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_PD_CUR"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_BACKUP"
+offset = 0xa4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xc83f, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MODEM2SLEEP_BACKUP_MODEM_CLK_CODE"
+bits = "7:6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE2SLEEP_BACKUP_MODEM_CLK_CODE"
+bits = "9:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_RETENTION_MODE"
+bits = "10"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM2SLEEP_RETENTION_EN"
+bits = "12"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE2SLEEP_RETENTION_EN"
+bits = "13"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM2SLEEP_BACKUP_CLK_SEL"
+bits = "17:16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE2SLEEP_BACKUP_CLK_SEL"
+bits = "19:18"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM2SLEEP_BACKUP_MODE"
+bits = "24:20"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE2SLEEP_BACKUP_MODE"
+bits = "29:25"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MODEM2SLEEP_BACKUP_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_ACTIVE2SLEEP_BACKUP_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_BACKUP_CLK"
+offset = 0xa8
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "HP_SLEEP_BACKUP_ICG_FUNC_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_BACKUP1_CLK"
+offset = 0xac
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "HP_SLEEP_BACKUP_ICG_FUNC1_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_SYSCLK"
+offset = 0xb0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SLEEP_DIG_SYS_CLK_NO_DIV"
+bits = "26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_ICG_SYS_CLOCK_EN"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_SYS_CLK_SLP_SEL"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_ICG_SLP_SEL"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_DIG_SYS_CLK_SEL"
+bits = "31:30"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_HP_REGULATOR0"
+offset = 0xb4
+description = "need_des"
+reset = { value = 0xc6678000 }
+reserved = { mask = 0x7fff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SLEEP_HP_REGULATOR_SLP_CONNECT_EN"
+bits = "15"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_HP_REGULATOR_SLP_MEM_XPD"
+bits = "16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_HP_REGULATOR_SLP_LOGIC_XPD"
+bits = "17"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_HP_REGULATOR_XPD"
+bits = "18"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_HP_REGULATOR_SLP_MEM_DBIAS"
+bits = "22:19"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_HP_REGULATOR_SLP_LOGIC_DBIAS"
+bits = "26:23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_HP_REGULATOR_DBIAS"
+bits = "31:27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_HP_REGULATOR1"
+offset = 0xb8
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SLEEP_HP_REGULATOR_DRV_B"
+bits = "31:8"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_XTAL"
+offset = 0xbc
+description = "need_des"
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SLEEP_XPD_XTAL"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_LP_REGULATOR0"
+offset = 0xc0
+description = "need_des"
+reset = { value = 0xc6600000 }
+reserved = { mask = 0x1fffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SLEEP_LP_REGULATOR_SLP_XPD"
+bits = "21"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_LP_REGULATOR_XPD"
+bits = "22"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_LP_REGULATOR_SLP_DBIAS"
+bits = "26:23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_LP_REGULATOR_DBIAS"
+bits = "31:27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_LP_REGULATOR1"
+offset = 0xc4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SLEEP_LP_REGULATOR_DRV_B"
+bits = "31:28"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_LP_DCDC_RESERVE"
+offset = 0xc8
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "PMU_HP_SLEEP_LP_DCDC_RESERVE"
+bits = "31:0"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_LP_DIG_POWER"
+offset = 0xcc
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SLEEP_LP_MEM_DSLP"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_PD_LP_PERI_PD_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_SLEEP_LP_CK_POWER"
+offset = 0xd0
+description = "need_des"
+reset = { value = 0x40000000 }
+reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SLEEP_XPD_XTAL32K"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_XPD_RC32K"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_XPD_FOSC_CLK"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SLEEP_PD_OSC_CLK"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_SLEEP_LP_BIAS_RESERVE"
+offset = 0xd4
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "PMU_LP_SLEEP_LP_BIAS_RESERVE"
+bits = "31:0"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "LP_SLEEP_LP_REGULATOR0"
+offset = 0xd8
+description = "need_des"
+reset = { value = 0xc6600000 }
+reserved = { mask = 0x1fffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_SLEEP_LP_REGULATOR_SLP_XPD"
+bits = "21"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_SLEEP_LP_REGULATOR_XPD"
+bits = "22"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_SLEEP_LP_REGULATOR_SLP_DBIAS"
+bits = "26:23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_SLEEP_LP_REGULATOR_DBIAS"
+bits = "31:27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_SLEEP_LP_REGULATOR1"
+offset = 0xdc
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_SLEEP_LP_REGULATOR_DRV_B"
+bits = "31:28"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_SLEEP_XTAL"
+offset = 0xe0
+description = "need_des"
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_SLEEP_XPD_XTAL"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_SLEEP_LP_DIG_POWER"
+offset = 0xe4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_SLEEP_LP_MEM_DSLP"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_SLEEP_PD_LP_PERI_PD_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_SLEEP_LP_CK_POWER"
+offset = 0xe8
+description = "need_des"
+reset = { value = 0x40000000 }
+reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_SLEEP_XPD_XTAL32K"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_SLEEP_XPD_RC32K"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_SLEEP_XPD_FOSC_CLK"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_SLEEP_PD_OSC_CLK"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_SLEEP_BIAS"
+offset = 0xec
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x1ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_SLEEP_XPD_BIAS"
+bits = "25"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_SLEEP_DBG_ATTEN"
+bits = "29:26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_SLEEP_PD_CUR"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "IMM_HP_CK_POWER_0"
+offset = 0xf0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x21ffff90, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "TIE_LOW_GLOBAL_XTALX2_ICG"
+bits = "0"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_LOW_GLOBAL_XTAL_ICG"
+bits = "1"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_LOW_I2C_RETENTION"
+bits = "2"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_LOW_XPD_BB_I2C"
+bits = "3"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_LOW_XPD_XTALX2"
+bits = "5"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_LOW_XPD_XTAL"
+bits = "6"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_HIGH_GLOBAL_XTALX2_ICG"
+bits = "25"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_HIGH_GLOBAL_XTAL_ICG"
+bits = "26"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_HIGH_I2C_RETENTION"
+bits = "27"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_HIGH_XPD_BB_I2C"
+bits = "28"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_HIGH_XPD_XTALX2"
+bits = "30"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_HIGH_XPD_XTAL"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "IMM_HP_CK_POWER_1"
+offset = 0xf4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x8007f000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "TIE_LOW_XPD_PLL_I2C"
+bits = "3:0"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_LOW_XPD_PLL"
+bits = "7:4"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_LOW_GLOBAL_PLL_ICG"
+bits = "11:8"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_HIGH_GLOBAL_PLL_ICG"
+bits = "22:19"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_HIGH_XPD_PLL_I2C"
+bits = "26:23"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_HIGH_XPD_PLL"
+bits = "30:27"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "IMM_SLEEP_SYSCLK"
+offset = 0xf8
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "UPDATE_DIG_ICG_SWITCH"
+bits = "28"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_LOW_ICG_SLP_SEL"
+bits = "29"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_HIGH_ICG_SLP_SEL"
+bits = "30"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "UPDATE_DIG_SYS_CLK_SEL"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "IMM_HP_FUNC_ICG"
+offset = 0xfc
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "UPDATE_DIG_ICG_FUNC_EN"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "IMM_HP_APB_ICG"
+offset = 0x100
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "UPDATE_DIG_ICG_APB_EN"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "IMM_MODEM_ICG"
+offset = 0x104
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "UPDATE_DIG_ICG_MODEM_EN"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "IMM_LP_ICG"
+offset = 0x108
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "TIE_LOW_LP_ROOTCLK_SEL"
+bits = "30"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_HIGH_LP_ROOTCLK_SEL"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "IMM_PAD_HOLD_ALL"
+offset = 0x10c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "TIE_HIGH_LP_PAD_HOLD_ALL"
+bits = "28"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_LOW_LP_PAD_HOLD_ALL"
+bits = "29"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_HIGH_HP_PAD_HOLD_ALL"
+bits = "30"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_LOW_HP_PAD_HOLD_ALL"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "IMM_I2C_ISO"
+offset = 0x110
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "TIE_HIGH_I2C_ISO_EN"
+bits = "30"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "TIE_LOW_I2C_ISO_EN"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "POWER_WAIT_TIMER0"
+offset = 0x114
+description = "need_des"
+reset = { value = 0x7fbfdfe0 }
+reserved = { mask = 0x1f, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "DG_HP_POWERDOWN_TIMER"
+bits = "13:5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "DG_HP_POWERUP_TIMER"
+bits = "22:14"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "DG_HP_PD_WAIT_TIMER"
+bits = "31:23"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "POWER_WAIT_TIMER1"
+offset = 0x118
+description = "need_des"
+reset = { value = 0x7fbf7e00 }
+reserved = { mask = 0x1ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "DG_LP_POWERDOWN_TIMER"
+bits = "15:9"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "DG_LP_POWERUP_TIMER"
+bits = "22:16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "DG_LP_PD_WAIT_TIMER"
+bits = "31:23"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "POWER_WAIT_TIMER2"
+offset = 0x11c
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "DG_LP_ISO_WAIT_TIMER"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "DG_LP_RST_WAIT_TIMER"
+bits = "15:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "DG_HP_ISO_WAIT_TIMER"
+bits = "23:16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "DG_HP_RST_WAIT_TIMER"
+bits = "31:24"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "POWER_PD_TOP_CNTL"
+offset = 0x120
+description = "need_des"
+reset = { value = 0x1c }
+reserved = { mask = 0x7fff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "FORCE_TOP_RESET"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_TOP_ISO"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_TOP_PU"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_TOP_NO_RESET"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_TOP_NO_ISO"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_TOP_PD"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_TOP_MASK"
+bits = "10:6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_TOP_PD_MASK"
+bits = "31:27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "POWER_PD_HP_ALIVE_CNTL"
+offset = 0x124
+description = "need_des"
+reset = { value = 0x1c }
+reserved = { mask = 0x7fff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "FORCE_HP_ALIVE_RESET"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_ALIVE_ISO"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_ALIVE_PU"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_ALIVE_NO_RESET"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_ALIVE_NO_ISO"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_ALIVE_PD"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_HP_ALIVE_MASK"
+bits = "10:6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_HP_ALIVE_PD_MASK"
+bits = "31:27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "POWER_PD_MODEM_PWR_CNTL"
+offset = 0x128
+description = "need_des"
+reset = { value = 0x1c }
+reserved = { mask = 0x7fff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "FORCE_MODEM_PWR_RESET"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_MODEM_PWR_ISO"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_MODEM_PWR_PU"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_MODEM_PWR_NO_RESET"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_MODEM_PWR_NO_ISO"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_MODEM_PWR_PD"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_MODEM_PWR_MASK"
+bits = "10:6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_MODEM_PWR_PD_MASK"
+bits = "31:27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "POWER_PD_HPCPU_CNTL"
+offset = 0x12c
+description = "need_des"
+reset = { value = 0x1c }
+reserved = { mask = 0x7fff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "FORCE_HP_CPU_RESET"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_CPU_ISO"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_CPU_PU"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_CPU_NO_RESET"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_CPU_NO_ISO"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_CPU_PD"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_HP_CPU_MASK"
+bits = "10:6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_HP_CPU_PD_MASK"
+bits = "31:27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "POWER_PD_HPCNNT_CNTL"
+offset = 0x130
+description = "need_des"
+reset = { value = 0x1c }
+reserved = { mask = 0x7fff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "FORCE_HP_CNNT_RESET"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_CNNT_ISO"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_CNNT_PU"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_CNNT_NO_RESET"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_CNNT_NO_ISO"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_CNNT_PD"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_HP_CNNT_MASK"
+bits = "10:6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_HP_CNNT_PD_MASK"
+bits = "31:27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "POWER_PD_MODEM_TOP_CNTL"
+offset = 0x134
+description = "need_des"
+reset = { value = 0x1c }
+reserved = { mask = 0x7fff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "FORCE_MODEM_TOP_RESET"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_MODEM_TOP_ISO"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_MODEM_TOP_PU"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_MODEM_TOP_NO_RESET"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_MODEM_TOP_NO_ISO"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_MODEM_TOP_PD"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_MODEM_TOP_MASK"
+bits = "10:6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_MODEM_TOP_PD_MASK"
+bits = "31:27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "POWER_PD_LPPERI_CNTL"
+offset = 0x138
+description = "need_des"
+reset = { value = 0x1c }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "FORCE_LP_PERI_RESET"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_LP_PERI_ISO"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_LP_PERI_PU"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_LP_PERI_NO_RESET"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_LP_PERI_NO_ISO"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_LP_PERI_PD"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "POWER_PD_MEM_CNTL"
+offset = 0x13c
+description = "need_des"
+reset = { value = 0xff000000 }
+reserved = { mask = 0xffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "FORCE_HP_MEM_ISO"
+bits = "3:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_MEM_PD"
+bits = "7:4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_MEM_NO_ISO"
+bits = "27:24"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_MEM_PU"
+bits = "31:28"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "POWER_PD_MEM_MASK"
+offset = 0x140
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x18000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "PD_HP_MEM2_PD_MASK"
+bits = "4:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_HP_MEM1_PD_MASK"
+bits = "9:5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_HP_MEM0_PD_MASK"
+bits = "14:10"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_HP_MEM2_MASK"
+bits = "21:17"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_HP_MEM1_MASK"
+bits = "26:22"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_HP_MEM0_MASK"
+bits = "31:27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "POWER_HP_PAD"
+offset = 0x144
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "FORCE_HP_PAD_NO_ISO_ALL"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FORCE_HP_PAD_ISO_ALL"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "POWER_VDD_SPI_CNTL"
+offset = 0x148
+description = "need_des"
+reset = { value = 0x63fc0000 }
+reserved = { mask = 0x3ffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "VDD_SPI_PWR_WAIT"
+bits = "28:18"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "VDD_SPI_PWR_SW"
+bits = "30:29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "VDD_SPI_PWR_SEL_SW"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "POWER_CK_WAIT_CNTL"
+offset = 0x14c
+description = "need_des"
+reset = { value = 0x1000100 }
+
+[[registers.fields]]
+name = "PMU_WAIT_XTL_STABLE"
+bits = "15:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_WAIT_PLL_STABLE"
+bits = "31:16"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "SLP_WAKEUP_CNTL0"
+offset = 0x150
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "SLP_REJECT_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_REQ"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "SLP_WAKEUP_CNTL1"
+offset = 0x154
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "SLEEP_REJECT_ENA"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "SLP_WAKEUP_CNTL2"
+offset = 0x158
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "WAKEUP_ENA"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "SLP_WAKEUP_CNTL3"
+offset = 0x15c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffc0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_MIN_SLP_VAL"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_MIN_SLP_VAL"
+bits = "15:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_PRT_SEL"
+bits = "17:16"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "SLP_WAKEUP_CNTL4"
+offset = 0x160
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "SLP_REJECT_CAUSE_CLR"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "SLP_WAKEUP_CNTL5"
+offset = 0x164
+description = "need_des"
+reset = { value = 0x1000080 }
+reserved = { mask = 0xf00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_WAIT_TARGET"
+bits = "19:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_ANA_WAIT_TARGET"
+bits = "31:24"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "SLP_WAKEUP_CNTL6"
+offset = 0x168
+description = "need_des"
+reset = { value = 0x80 }
+reserved = { mask = 0x3ff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "SOC_WAKEUP_WAIT"
+bits = "19:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SOC_WAKEUP_WAIT_CFG"
+bits = "31:30"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "SLP_WAKEUP_CNTL7"
+offset = 0x16c
+description = "need_des"
+reset = { value = 0x10000 }
+reserved = { mask = 0xffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "ANA_WAIT_TARGET"
+bits = "31:16"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "SLP_WAKEUP_STATUS0"
+offset = 0x170
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "WAKEUP_CAUSE"
+bits = "31:0"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "SLP_WAKEUP_STATUS1"
+offset = 0x174
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "REJECT_CAUSE"
+bits = "31:0"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "HP_CK_POWERON"
+offset = 0x178
+description = "need_des"
+reset = { value = 0x32 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "I2C_POR_WAIT_TARGET"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_CK_CNTL"
+offset = 0x17c
+description = "need_des"
+reset = { value = 0xa0a }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "MODIFY_ICG_CNTL_WAIT"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SWITCH_ICG_CNTL_WAIT"
+bits = "15:8"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "POR_STATUS"
+offset = 0x180
+description = "need_des"
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "POR_DONE"
+bits = "31"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "RF_PWC"
+offset = 0x184
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "XPD_RF_CIRCUIT"
+bits = "31:16"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "BACKUP_CFG"
+offset = 0x188
+description = "need_des"
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "BACKUP_SYS_CLK_NO_DIV"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "INT_RAW"
+offset = 0x18c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_CPU_EXC_INT_RAW"
+bits = "27"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "SDIO_IDLE_INT_RAW"
+bits = "28"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "SW_INT_RAW"
+bits = "29"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "SOC_SLEEP_REJECT_INT_RAW"
+bits = "30"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "SOC_WAKEUP_INT_RAW"
+bits = "31"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers]]
+name = "HP_INT_ST"
+offset = 0x190
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_CPU_EXC_INT_ST"
+bits = "27"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "SDIO_IDLE_INT_ST"
+bits = "28"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "SW_INT_ST"
+bits = "29"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "SOC_SLEEP_REJECT_INT_ST"
+bits = "30"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "SOC_WAKEUP_INT_ST"
+bits = "31"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "HP_INT_ENA"
+offset = 0x194
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_CPU_EXC_INT_ENA"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SDIO_IDLE_INT_ENA"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SW_INT_ENA"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SOC_SLEEP_REJECT_INT_ENA"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SOC_WAKEUP_INT_ENA"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_INT_CLR"
+offset = 0x198
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_CPU_EXC_INT_CLR"
+bits = "27"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "SDIO_IDLE_INT_CLR"
+bits = "28"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "SW_INT_CLR"
+bits = "29"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "SOC_SLEEP_REJECT_INT_CLR"
+bits = "30"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "SOC_WAKEUP_INT_CLR"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "LP_INT_RAW"
+offset = 0x19c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_CPU_WAKEUP_INT_RAW"
+bits = "20"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_ACTIVE_END_INT_RAW"
+bits = "21"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_ACTIVE_END_INT_RAW"
+bits = "22"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_MODEM_END_INT_RAW"
+bits = "23"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_SLEEP_END_INT_RAW"
+bits = "24"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "ACTIVE_SWITCH_SLEEP_END_INT_RAW"
+bits = "25"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_ACTIVE_START_INT_RAW"
+bits = "26"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_ACTIVE_START_INT_RAW"
+bits = "27"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_MODEM_START_INT_RAW"
+bits = "28"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_SLEEP_START_INT_RAW"
+bits = "29"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "ACTIVE_SWITCH_SLEEP_START_INT_RAW"
+bits = "30"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SW_TRIGGER_INT_RAW"
+bits = "31"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers]]
+name = "LP_INT_ST"
+offset = 0x1a0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_CPU_WAKEUP_INT_ST"
+bits = "20"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_ACTIVE_END_INT_ST"
+bits = "21"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_ACTIVE_END_INT_ST"
+bits = "22"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_MODEM_END_INT_ST"
+bits = "23"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_SLEEP_END_INT_ST"
+bits = "24"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "ACTIVE_SWITCH_SLEEP_END_INT_ST"
+bits = "25"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_ACTIVE_START_INT_ST"
+bits = "26"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_ACTIVE_START_INT_ST"
+bits = "27"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_MODEM_START_INT_ST"
+bits = "28"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_SLEEP_START_INT_ST"
+bits = "29"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "ACTIVE_SWITCH_SLEEP_START_INT_ST"
+bits = "30"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SW_TRIGGER_INT_ST"
+bits = "31"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "LP_INT_ENA"
+offset = 0x1a4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_CPU_WAKEUP_INT_ENA"
+bits = "20"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_ACTIVE_END_INT_ENA"
+bits = "21"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_ACTIVE_END_INT_ENA"
+bits = "22"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_MODEM_END_INT_ENA"
+bits = "23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_SLEEP_END_INT_ENA"
+bits = "24"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "ACTIVE_SWITCH_SLEEP_END_INT_ENA"
+bits = "25"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_ACTIVE_START_INT_ENA"
+bits = "26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_ACTIVE_START_INT_ENA"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_MODEM_START_INT_ENA"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_SLEEP_START_INT_ENA"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "ACTIVE_SWITCH_SLEEP_START_INT_ENA"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SW_TRIGGER_INT_ENA"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_INT_CLR"
+offset = 0x1a8
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_CPU_WAKEUP_INT_CLR"
+bits = "20"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_ACTIVE_END_INT_CLR"
+bits = "21"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_ACTIVE_END_INT_CLR"
+bits = "22"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_MODEM_END_INT_CLR"
+bits = "23"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_SLEEP_END_INT_CLR"
+bits = "24"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "ACTIVE_SWITCH_SLEEP_END_INT_CLR"
+bits = "25"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_ACTIVE_START_INT_CLR"
+bits = "26"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_ACTIVE_START_INT_CLR"
+bits = "27"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "SLEEP_SWITCH_MODEM_START_INT_CLR"
+bits = "28"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "MODEM_SWITCH_SLEEP_START_INT_CLR"
+bits = "29"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "ACTIVE_SWITCH_SLEEP_START_INT_CLR"
+bits = "30"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SW_TRIGGER_INT_CLR"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "LP_CPU_PWR0"
+offset = 0x1ac
+description = "need_des"
+reset = { value = 0x1ff00000 }
+reserved = { mask = 0x3fffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_CPU_WAITI_RDY"
+bits = "0"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_CPU_STALL_RDY"
+bits = "1"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_CPU_FORCE_STALL"
+bits = "18"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_CPU_SLP_WAITI_FLAG_EN"
+bits = "19"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_CPU_SLP_STALL_FLAG_EN"
+bits = "20"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_CPU_SLP_STALL_WAIT"
+bits = "28:21"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_CPU_SLP_STALL_EN"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_CPU_SLP_RESET_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_CPU_SLP_BYPASS_INTR_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_CPU_PWR1"
+offset = 0x1b0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_CPU_SLEEP_REQ"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "LP_CPU_PWR2"
+offset = 0x1b4
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "LP_CPU_WAKEUP_EN"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_LP_CPU_COMM"
+offset = 0x1b8
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "LP_TRIGGER_HP"
+bits = "30"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_TRIGGER_LP"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "HP_REGULATOR_CFG"
+offset = 0x1bc
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "DIG_REGULATOR_EN_CAL"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "MAIN_STATE"
+offset = 0x1c0
+description = "need_des"
+reset = { value = 0x8100800 }
+reserved = { mask = 0x7ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "PMU_MAIN_LAST_ST_STATE"
+bits = "17:11"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_MAIN_TAR_ST_STATE"
+bits = "24:18"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_MAIN_CUR_ST_STATE"
+bits = "31:25"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "PWR_STATE"
+offset = 0x1c4
+description = "need_des"
+reset = { value = 0x802000 }
+reserved = { mask = 0x1fff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "PMU_BACKUP_ST_STATE"
+bits = "17:13"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_LP_PWR_ST_STATE"
+bits = "22:18"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_HP_PWR_ST_STATE"
+bits = "31:23"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "CLK_STATE0"
+offset = 0x1c8
+description = "need_des"
+reset = { value = 0x2 }
+reserved = { mask = 0x62007ffd, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "STABLE_XPD_XTAL_STATE"
+bits = "1"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_SYS_CLK_SLP_SEL_STATE"
+bits = "15"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_SYS_CLK_SEL_STATE"
+bits = "17:16"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_SYS_CLK_NO_DIV_STATE"
+bits = "18"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_ICG_SYS_CLK_EN_STATE"
+bits = "19"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_ICG_MODEM_SWITCH_STATE"
+bits = "20"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_ICG_MODEM_CODE_STATE"
+bits = "22:21"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_ICG_SLP_SEL_STATE"
+bits = "23"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_ICG_GLOBAL_XTAL_STATE"
+bits = "24"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_ANA_I2C_ISO_EN_STATE"
+bits = "26"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_ANA_I2C_RETENTION_STATE"
+bits = "27"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_ANA_XPD_BB_I2C_STATE"
+bits = "28"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_ANA_XPD_XTAL_STATE"
+bits = "31"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "CLK_STATE1"
+offset = 0x1cc
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "PMU_ICG_FUNC_EN_STATE"
+bits = "31:0"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "CLK_STATE2"
+offset = 0x1d0
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "PMU_ICG_APB_EN_STATE"
+bits = "31:0"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "CLK_STATE3"
+offset = 0x1d4
+description = "need_des"
+reset = { value = 0xffff0000 }
+reserved = { mask = 0xffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "STABLE_XPD_PLL_STATE"
+bits = "19:16"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_ICG_GLOBAL_PLL_STATE"
+bits = "23:20"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_ANA_XPD_PLL_I2C_STATE"
+bits = "27:24"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "PMU_ANA_XPD_PLL_STATE"
+bits = "31:28"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "VDD_SPI_STATUS"
+offset = 0x1d8
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x1fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "FLASH_POWER_READY"
+bits = "29"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "FLASH_POWER_SEL_DONE"
+bits = "30"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "STABLE_VDD_SPI_PWR_DRV"
+bits = "31"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "VDD_SPI_CFG"
+offset = 0x1dc
+description = "need_des"
+reset = { value = 0x28804b0 }
+
+[[registers.fields]]
+name = "FLASH_SW_POWER_SEL"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FLASH_POWER_SEL_SW_CTRL"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FLASH_SWITCH_TIME"
+bits = "11:2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FLASH_STABLE_TIME"
+bits = "21:12"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "FLASH_COOLDOWN_TIME"
+bits = "31:22"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "VDD_SPI_DISCHARGE_CFG"
+offset = 0x1e0
+description = "need_des"
+reset = { value = 0x8 }
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "FLASH_DISCHARGE_TIME"
+bits = "9:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "VDD_SDIO_CFG"
+offset = 0x1e4
+description = "need_des"
+reset = { value = 0x28 }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "SDIO_SW_POWER_SEL"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SDIO_POWER_SEL_SW_CTRL"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SDIO_SWITCH_TIME"
+bits = "11:2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "PSRAM_CFG"
+offset = 0x1e8
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "PSRAM_XPD"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "CPU_STALL_SW"
+offset = 0x1ec
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "HPCORE1_SW_STALL_CODE"
+bits = "23:16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HPCORE0_SW_STALL_CODE"
+bits = "31:24"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "EXT_WAKEUP_LV"
+offset = 0x1f0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffe00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "EXT_WAKEUP_LV"
+bits = "20:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "EXT_WAKEUP_SEL"
+offset = 0x1f4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffe00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "EXT_WAKEUP_SEL"
+bits = "20:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "EXT_WAKEUP_ST"
+offset = 0x1f8
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffe00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "EXT_WAKEUP_STATUS"
+bits = "20:0"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "EXT_WAKEUP_CNTL"
+offset = 0x1fc
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "EXT_WAKEUP_STATUS_CLR"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "EXT_WAKEUP_FILTER"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "SDIO_WAKEUP_CNTL"
+offset = 0x200
+description = "control the wait timer register for sdio wakeup control"
+reset = { value = 0x3ff }
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "SDIO_ACT_DNUM"
+bits = "9:0"
+class = "plain"
+description = "delay number config for sdio wakeup control"
+
+[[registers]]
+name = "TOUCH_PWR_CTRL"
+offset = 0x204
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x1f0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "TOUCH_SLEEP_CYCLES"
+bits = "15:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "TOUCH_WAIT_CYCLES"
+bits = "29:21"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "TOUCH_SLEEP_TIMER_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "TOUCH_FORCE_DONE"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "ANA_PERI_PWR_CTRL"
+offset = 0x208
+description = "need_des"
+reset = { value = 0x40000000 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "XPD_PERIF_I2C"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "RSTB_PERIF_I2C"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "RDN_ECO"
+offset = 0x20c
+description = "used for future potential eco, others don't care"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "PMU_RDN_ECO_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "PUF_MEM_CTRL"
+offset = 0x210
+description = "used for future potential eco, others don't care"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "PUF_MEM_PSW"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PUF_MEM_ISO"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PUF_MEM_DISCHARGE"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "SLP_WAKEUP_CNTL8"
+offset = 0x214
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffc0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "PD_TOP_PU_DELT_TIMER"
+bits = "2:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_HP_CPU_PU_DELT_TIMER"
+bits = "5:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_MODEM_TOP_PU_DELT_TIMER"
+bits = "8:6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_MODEM_PWR_PU_DELT_TIMER"
+bits = "11:9"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_HP_CNNT_PU_DELT_TIMER"
+bits = "14:12"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "PD_HP_ALIVE_PU_DELT_TIMER"
+bits = "17:15"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "EXT_LDO_CTRL"
+offset = 0x218
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "EXT_LDO_TIE_HIGH"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "EXT_LDO_EN_VDET"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "EXT_CUR_LIM"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "EXT_LDO_MUL"
+bits = "5:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "EXT_LDO_DREF"
+bits = "9:6"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "DEBUG_RO"
+offset = 0x21c
+description = "used for future potential eco, others don't care"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffff80, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_PWR_STATE"
+bits = "5:0"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "IO_0P2A_OVDET"
+bits = "6"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "LPCPU_WAKEUP_CAUSE"
+offset = 0x220
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "LPCPU_WAKEUP_CAUSE"
+bits = "31:0"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "BACKUP_WAIT_TARGET"
+offset = 0x224
+description = "need_des"
+reset = { value = 0xf }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "BACKUP_WAIT_TARGET"
+bits = "3:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "DATE"
+offset = 0x3fc
+description = "need_des"
+reset = { value = 0x250902 }
+
+[[registers.fields]]
+name = "PMU_DATE"
+bits = "30:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "31"
+class = "plain"
+description = "need_des"

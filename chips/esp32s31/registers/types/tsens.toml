@@ -1,0 +1,280 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "TSENS"
+description = "The temperature sensor."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."RND_ECO_LOW"]
+sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review.entity."RND_ECO_LOW.RND_ECO_LOW"]
+sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review.entity."RND_ECO_HIGH"]
+sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review.entity."RND_ECO_HIGH.RND_ECO_HIGH"]
+sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review.entity."RND_ECO_CS"]
+sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review.entity."RND_ECO_CS.RND_ECO_EN"]
+sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review.entity."RND_ECO_CS.RND_ECO_RESULT"]
+sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[registers]]
+name = "CTRL"
+offset = 0x0
+description = "Tsens configuration."
+reset = { value = 0x19400 }
+reserved = { mask = 0xff000800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H"] }
+
+[[registers.fields]]
+name = "OUT"
+bits = "7:0"
+class = "read-only"
+description = "Temperature sensor data out."
+
+[[registers.fields]]
+name = "READY"
+bits = "8"
+class = "read-only"
+description = "Indicate temperature sensor out ready."
+
+[[registers.fields]]
+name = "SAMPLE_EN"
+bits = "9"
+class = "plain"
+description = "Enable sample signal for wakeup module."
+
+[[registers.fields]]
+name = "WAKEUP_MASK"
+bits = "10"
+class = "plain"
+description = "Wake up signal mask."
+
+[[registers.fields]]
+name = "INT_EN"
+bits = "12"
+class = "plain"
+description = "Enable temperature sensor to send out interrupt."
+
+[[registers.fields]]
+name = "IN_INV"
+bits = "13"
+class = "plain"
+description = "Invert temperature sensor data."
+
+[[registers.fields]]
+name = "CLK_DIV"
+bits = "21:14"
+class = "plain"
+description = "Temperature sensor clock divider."
+
+[[registers.fields]]
+name = "POWER_UP"
+bits = "22"
+class = "plain"
+description = "Temperature sensor power up."
+
+[[registers.fields]]
+name = "POWER_UP_FORCE"
+bits = "23"
+class = "plain"
+description = "1: dump out & power up controlled by SW, 0: by FSM."
+
+[[registers]]
+name = "INT_RAW"
+offset = 0x8
+description = "Tsens interrupt raw registers."
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H"] }
+
+[[registers.fields]]
+name = "COCPU_TSENS_WAKE_INT_RAW"
+bits = "0"
+class = "write-one-to-clear"
+description = "Tsens wakeup interrupt raw."
+
+[[registers]]
+name = "INT_ST"
+offset = 0xc
+description = "Tsens interrupt status registers."
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H"] }
+
+[[registers.fields]]
+name = "COCPU_TSENS_WAKE_INT_ST"
+bits = "0"
+class = "read-only"
+description = "Tsens wakeup interrupt status."
+
+[[registers]]
+name = "INT_ENA"
+offset = 0x10
+description = "Tsens interrupt enable registers."
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H"] }
+
+[[registers.fields]]
+name = "COCPU_TSENS_WAKE_INT_ENA"
+bits = "0"
+class = "write-one-to-clear"
+description = "Tsens wakeup interrupt enable."
+
+[[registers]]
+name = "INT_CLR"
+offset = 0x14
+description = "Tsens interrupt clear registers."
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H"] }
+
+[[registers.fields]]
+name = "COCPU_TSENS_WAKE_INT_CLR"
+bits = "0"
+class = "write-trigger"
+description = "Tsens wakeup interrupt clear."
+
+[[registers]]
+name = "CLK_CONF"
+offset = 0x18
+description = "Tsens regbank configuration registers."
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "0"
+class = "plain"
+description = "Tsens regbank clock gating enable."
+
+[[registers]]
+name = "INT_ENA_W1TS"
+offset = 0x1c
+description = "Tsens wakeup interrupt enable assert."
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H"] }
+
+[[registers.fields]]
+name = "COCPU_TSENS_WAKE_INT_ENA_W1TS"
+bits = "0"
+class = "write-trigger"
+description = "Write 1 to this field to assert interrupt enable."
+
+[[registers]]
+name = "INT_ENA_W1TC"
+offset = 0x20
+description = "Tsens wakeup interrupt enable deassert."
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H"] }
+
+[[registers.fields]]
+name = "COCPU_TSENS_WAKE_INT_ENA_W1TC"
+bits = "0"
+class = "write-trigger"
+description = "Write 1 to this field to deassert interrupt enable."
+
+[[registers]]
+name = "WAKEUP_CTRL"
+offset = 0x24
+description = "Tsens wakeup control registers."
+reset = { value = 0x3fc000 }
+reserved = { mask = 0x1fc03f00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H"] }
+
+[[registers.fields]]
+name = "WAKEUP_TH_LOW"
+bits = "7:0"
+class = "plain"
+description = "Lower threshold."
+
+[[registers.fields]]
+name = "WAKEUP_TH_HIGH"
+bits = "21:14"
+class = "plain"
+description = "Upper threshold."
+
+[[registers.fields]]
+name = "WAKEUP_OVER_UPPER_TH"
+bits = "29"
+class = "read-only"
+description = "Indicates that this wakeup event arose from exceeding upper threshold."
+
+[[registers.fields]]
+name = "WAKEUP_EN"
+bits = "30"
+class = "plain"
+description = "Tsens wakeup enable."
+
+[[registers.fields]]
+name = "WAKEUP_MODE"
+bits = "31"
+class = "plain"
+description = "0:absolute value comparison mode. 1: relative value comparison mode."
+
+[[registers]]
+name = "SAMPLE_RATE"
+offset = 0x28
+description = "Hardware automatic sampling control registers."
+reset = { value = 0x14 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H"] }
+
+[[registers.fields]]
+name = "SAMPLE_RATE"
+bits = "15:0"
+class = "plain"
+description = "Hardware automatic sampling rate."
+
+[[registers]]
+name = "RND_ECO_LOW"
+offset = 0x2c
+description = "N/A"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "RND_ECO_LOW"
+bits = "31:0"
+class = "read-only"
+description = "N/A"
+
+[[registers]]
+name = "RND_ECO_HIGH"
+offset = 0x30
+description = "N/A"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "RND_ECO_HIGH"
+bits = "31:0"
+class = "read-only"
+description = "N/A"
+
+[[registers]]
+name = "RND_ECO_CS"
+offset = 0x34
+description = "N/A"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "RND_ECO_EN"
+bits = "0"
+class = "read-only"
+description = "N/A"
+
+[[registers.fields]]
+name = "RND_ECO_RESULT"
+bits = "1"
+class = "read-only"
+description = "N/A"

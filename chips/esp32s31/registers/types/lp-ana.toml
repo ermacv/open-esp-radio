@@ -1,0 +1,243 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "LP_ANA"
+description = "The LP analog peripheral registers: brownout detector, reset sources and the analog power controls."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "LP_ANA_BOD_MODE0_CNTL"
+offset = 0x0
+description = "need_des"
+reset = { value = 0xffc0100 }
+reserved = { mask = 0x3f, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_CLOSE_FLASH_ENA"
+bits = "6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_PD_RF_ENA"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_INTR_WAIT"
+bits = "17:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_RESET_WAIT"
+bits = "27:18"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_CNT_CLR"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_INTR_ENA"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_RESET_SEL"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_RESET_ENA"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_ANA_BOD_MODE1_CNTL"
+offset = 0x4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE1_RESET_ENA"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_ANA_VDD_SOURCE_CNTL"
+offset = 0x8
+description = "need_des"
+reset = { value = 0x3f }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ANA_DETMODE_SEL"
+bits = "5:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_ANA_PG_GLITCH_CNTL"
+offset = 0x18
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ANA_POWER_GLITCH_RESET_ENA"
+bits = "31:26"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_ANA_FIB_ENABLE"
+offset = 0x1c
+description = "need_des"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "LP_ANA_ANA_FIB_ENA"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_ANA_INT_RAW"
+offset = 0x20
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_INT_RAW"
+bits = "31"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers]]
+name = "LP_ANA_INT_ST"
+offset = 0x24
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_INT_ST"
+bits = "31"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "LP_ANA_INT_ENA"
+offset = 0x28
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_INT_ENA"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_ANA_INT_CLR"
+offset = 0x2c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_INT_CLR"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "LP_ANA_LP_INT_RAW"
+offset = 0x30
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_LP_INT_RAW"
+bits = "31"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers]]
+name = "LP_ANA_LP_INT_ST"
+offset = 0x34
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_LP_INT_ST"
+bits = "31"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "LP_ANA_LP_INT_ENA"
+offset = 0x38
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_LP_INT_ENA"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_ANA_LP_INT_CLR"
+offset = 0x3c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE0_LP_INT_CLR"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "LP_ANA_DATE"
+offset = 0x3fc
+description = "need_des"
+reset = { value = 0x2505140 }
+
+[[registers.fields]]
+name = "LP_ANA_LP_ANA_DATE"
+bits = "30:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_ANA_CLK_EN"
+bits = "31"
+class = "plain"
+description = "need_des"

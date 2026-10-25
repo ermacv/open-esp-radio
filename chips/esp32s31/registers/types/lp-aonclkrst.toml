@@ -1,0 +1,695 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "LP_AONCLKRST"
+description = "The LP always-on clock and reset controller: the slow and fast clock sources, the LP resets and the reset causes."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "LP_AONCLKRST_ROOT_CLK_CONF"
+offset = 0x0
+description = "need_des"
+reset = { value = 0x4000000 }
+reserved = { mask = 0x7fffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_SLOW_CLK_SEL"
+bits = "25:23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_FAST_CLK_SEL"
+bits = "27:26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_PLL80M_CLK_FORCE_ON"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_XTAL_CLK_FORCE_ON"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_FOSC_CLK_FORCE_ON"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_ANA_SEL_REF_PLL8M"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_LP_CLK_PO_EN"
+offset = 0x4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CLK_CORE_EFUSE_OEN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CLK_LP_BUS_OEN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CLK_AON_SLOW_OEN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CLK_AON_FAST_OEN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CLK_SLOW_OEN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CLK_FAST_OEN"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CLK_FOSC_OEN"
+bits = "6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CLK_RC32K_OEN"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CLK_SXTAL_OEN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CLK_SOSC_OEN"
+bits = "9"
+class = "plain"
+description = "1'b1: probe sosc clk on 1'b0: probe sosc clk off"
+
+[[registers]]
+name = "LP_AONCLKRST_MISC"
+offset = 0x8
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_ETM_EVENT_TICK_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_TIMER"
+offset = 0xc
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_LP_TIMER_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_WDT"
+offset = 0x10
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_LP_WDT_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_CLOCKCALI"
+offset = 0x14
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x1fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_LP_CLK_CALI_XTAL_FORCE_ON"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_LP_CLK_CALI_FOSC_RST_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_LP_CLK_CALI_SOSC_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_ANAPERI"
+offset = 0x18
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_LP_ANAPERI_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_HUK"
+offset = 0x1c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_LP_HUK_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_FOSC_DFREQ"
+offset = 0x20
+description = "need_des"
+reset = { value = 0x41400000 }
+reserved = { mask = 0x3fffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_FOSC_DFREQ"
+bits = "31:22"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_RC32K_DFREQ"
+offset = 0x24
+description = "need_des"
+reset = { value = 0x28a }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_RC32K_DFREQ"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_SOSC_DFREQ"
+offset = 0x28
+description = "need_des"
+reset = { value = 0x2b000000 }
+reserved = { mask = 0x3fffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_SOSC_DFREQ"
+bits = "31:22"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_XTAL32K"
+offset = 0x2c
+description = "need_des"
+reset = { value = 0x66c00000 }
+reserved = { mask = 0x3fffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_DRES_XTAL32K"
+bits = "24:22"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_DGM_XTAL32K"
+bits = "27:25"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_DBUF_XTAL32K"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_DAC_XTAL32K"
+bits = "31:29"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_HPCORE0_RESET_CAUSE"
+offset = 0x30
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffff80, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE0_RESET_FLAG"
+bits = "0"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE0_RESET_CAUSE"
+bits = "6:1"
+class = "read-only"
+description = "6'h1: POR reset 6'h3: digital system software reset 6'h5: PMU HP system power down reset 6'h7: HP system reset from HP watchdog0 6'h8: HP system reset from HP watchdog1 6'h9: HP system reset from LP watchdog 6'hb: HP core reset from HP watchdog 6'hc: HP core software reset 6'hd: HP core reset from LP watchdog 6'hf: brown out reset 6'h10: LP watchdog chip reset 6'h12: super watch dog reset 6'h13: glitch reset 6'h14: efuse crc error reset 6'h16: HP usb jtag chip reset 6'h17: HP usb uart chip reset 6'h18: HP jtag reset 6'h1a: HP core lockup"
+
+[[registers.fields]]
+name = "CLR"
+bits = "30"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE0_RESET_FLAG_CLR"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_HPCORE1_RESET_CAUSE"
+offset = 0x34
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffff80, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE1_RESET_FLAG"
+bits = "0"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE1_RESET_CAUSE"
+bits = "6:1"
+class = "read-only"
+description = "6'h1: POR reset 6'h3: digital system software reset 6'h5: PMU HP system power down reset 6'h7: HP system reset from HP watchdog0 6'h8: HP system reset from HP watchdog1 6'h9: HP system reset from LP watchdog 6'hb: HP core reset from HP watchdog 6'hc: HP core software reset 6'hd: HP core reset from LP watchdog 6'hf: brown out reset 6'h10: LP watchdog chip reset 6'h12: super watch dog reset 6'h13: glitch reset 6'h14: efuse crc error reset 6'h16: HP usb jtag chip reset 6'h17: HP usb uart chip reset 6'h18: HP jtag reset 6'h1a: HP core lockup"
+
+[[registers.fields]]
+name = "CLR"
+bits = "30"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE1_RESET_FLAG_CLR"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_LPCORE_RESET_CAUSE"
+offset = 0x38
+description = "need_des"
+reset = { value = 0x20000000 }
+reserved = { mask = 0x1fffff80, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_LPCORE_RESET_FLAG"
+bits = "0"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_LPCORE_RESET_CAUSE"
+bits = "6:1"
+class = "read-only"
+description = "6'h1: POR reset 6'h9: PMU LP PERI power down reset 6'ha: PMU LP CPU reset 6'hf: brown out reset 6'h10: LP watchdog chip reset 6'h12: super watch dog reset 6'h13: glitch reset 6'h14: software reset"
+
+[[registers.fields]]
+name = "PMU_LP_CPU_MASK"
+bits = "29"
+class = "plain"
+description = "1'b0: enable lpcore pmu_lp_cpu_reset reset_cause, 1'b1: disable lpcore pmu_lp_cpu_reset reset_cause"
+
+[[registers.fields]]
+name = "CLR"
+bits = "30"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_LPCORE_RESET_FLAG_CLR"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_HPCORE0_RESET_CTRL"
+offset = 0x3c
+description = "need_des"
+reset = { value = 0x40010000 }
+reserved = { mask = 0x1fe000ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE0_STALL_WAIT"
+bits = "14:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE0_STALL_EN"
+bits = "15"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE0_RESET_LENGTH"
+bits = "18:16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE0_ENABLE_LP_WDT_RESET"
+bits = "19"
+class = "plain"
+description = "write 1 to enable lp_wdt reset hpcore0 feature, write 0 to disable lp_wdt reset hpcore0 feature"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE0_SW_RESET"
+bits = "20"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE0_OCD_HALT_ON_RESET"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE0_STAT_VECTOR_SEL"
+bits = "30"
+class = "plain"
+description = "1'b1: boot from HP TCM ROM: 0x4FC00000 1'b0: boot from LP TCM RAM: 0x50108000"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE0_LOCKUP_RESET_EN"
+bits = "31"
+class = "plain"
+description = "write 1 to enable hpcore0 lockup reset feature, write 0 to disable hpcore0 lockup reset feature"
+
+[[registers]]
+name = "LP_AONCLKRST_HPCORE1_RESET_CTRL"
+offset = 0x40
+description = "need_des"
+reset = { value = 0x40010000 }
+reserved = { mask = 0x1fe000ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE1_STALL_WAIT"
+bits = "14:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE1_STALL_EN"
+bits = "15"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE1_RESET_LENGTH"
+bits = "18:16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE1_ENABLE_LP_WDT_RESET"
+bits = "19"
+class = "plain"
+description = "write 1 to enable lp_wdt reset hpcore1 feature, write 0 to disable lp_wdt reset hpcore1 feature"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE1_SW_RESET"
+bits = "20"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE1_OCD_HALT_ON_RESET"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE1_STAT_VECTOR_SEL"
+bits = "30"
+class = "plain"
+description = "1'b1: boot from HP TCM ROM: 0x4FC00000 1'b0: boot from LP TCM RAM: 0x50108000"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_HPCORE1_LOCKUP_RESET_EN"
+bits = "31"
+class = "plain"
+description = "write 1 to enable hpcore1 lockup reset feature, write 0 to disable hpcore1 lockup reset feature"
+
+[[registers]]
+name = "LP_AONCLKRST_TOUCH_AON"
+offset = 0x44
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_HP_CLK_CTRL"
+offset = 0x48
+description = "HP Clock Control Register."
+reset = { value = 0x28 }
+reserved = { mask = 0xffffff80, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CLK_XTAL_FREQ"
+bits = "6:0"
+class = "read-only"
+description = "XTAL Clock Freq Indication. 7'd40: xtal_40m, 7'd48: xtal_48m"
+
+[[registers]]
+name = "LP_AONCLKRST_CPLL_DIV"
+offset = 0x4c
+description = "need_des"
+reset = { value = 0xf2 }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CPLL_REF_DIV"
+bits = "3:0"
+class = "plain"
+description = "cpll ref div value"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CPLL_FB_DIV"
+bits = "11:4"
+class = "plain"
+description = "cpll fb div value"
+
+[[registers]]
+name = "LP_AONCLKRST_APLL_DIV"
+offset = 0x50
+description = "need_des"
+reset = { value = 0x85 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_APLL_REF_DIV"
+bits = "2:0"
+class = "plain"
+description = "apll ref div value"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_APLL_OUT_DIV"
+bits = "7:3"
+class = "plain"
+description = "apll out div value"
+
+[[registers]]
+name = "LP_AONCLKRST_MSPI_DIV"
+offset = 0x54
+description = "need_des"
+reset = { value = 0xc1 }
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_MSPI_REF_DIV"
+bits = "2:0"
+class = "plain"
+description = "MSPI ref div value"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_MSPI_FB_DIV"
+bits = "7:3"
+class = "plain"
+description = "MSPI fb div value"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_MSPI_CHGP_DCUR"
+bits = "8"
+class = "plain"
+description = "MSPI chgp_dcur value"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_MSPI_LF_RES"
+bits = "9"
+class = "plain"
+description = "MSPI lf_res value"
+
+[[registers]]
+name = "LP_AONCLKRST_LP_ADI"
+offset = 0x58
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_AONCLKRST_LPROOT_CLK_DIV"
+offset = 0x5c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffff88, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_LPAON_CLK_DIV_NUM"
+bits = "2:0"
+class = "plain"
+description = "lp aon clock divide num"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_LPPERI_CLK_DIV_NUM"
+bits = "6:4"
+class = "plain"
+description = "lp peri clock divide num"
+
+[[registers]]
+name = "LP_AONCLKRST_CPLL_CFG"
+offset = 0x60
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CPLL_DBIAS"
+bits = "2:0"
+class = "plain"
+description = "cpll dbias value"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CPLL_DCHGP"
+bits = "5:3"
+class = "plain"
+description = "cpll dchgp value"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CPLL_DR1"
+bits = "8:6"
+class = "plain"
+description = "cpll dr1 value"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CPLL_DR3"
+bits = "11:9"
+class = "plain"
+description = "cpll dr3 value"
+
+[[registers]]
+name = "LP_AONCLKRST_APLL_SDM"
+offset = 0x64
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffc00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_APLL_SDM"
+bits = "21:0"
+class = "plain"
+description = "apll sdm value"
+
+[[registers]]
+name = "LP_AONCLKRST_RTC_SAR2_PWDET_CCT"
+offset = 0x68
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_RTC_SAR2_PWDET_CCT"
+bits = "2:0"
+class = "plain"
+description = "rtc_sar2_pwdet_cct value"
+
+[[registers]]
+name = "LP_AONCLKRST_DATE"
+offset = 0x3fc
+description = "need_des"
+reset = { value = 0x2507300 }
+
+[[registers.fields]]
+name = "LP_AONCLKRST_DATE"
+bits = "30:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AONCLKRST_CLK_EN"
+bits = "31"
+class = "plain"
+description = "need_des"

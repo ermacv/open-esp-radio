@@ -1,0 +1,3362 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "SPI_MEM_S"
+description = "The PSRAM SPI controller's cache side: PSRAM timing, MMU entries and the access-fault status."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.entity."CACHE_FCTRL.AXI_REQ_EN"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L289", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_FCTRL.CACHE_USR_ADDR_4BYTE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_FCTRL.CACHE_FLASH_USR_CMD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_FCTRL.FDIN_DUAL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_FCTRL.FDOUT_DUAL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_FCTRL.FADDR_DUAL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_FCTRL.FDIN_QUAD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_FCTRL.FDOUT_QUAD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_FCTRL.FADDR_QUAD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_FCTRL.ARB_WEI_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_FCTRL.ARB_REQ0_PRI"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_FCTRL.ARB_REQ1_PRI"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_FCTRL.ARB_REQ0_WEI"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_FCTRL.ARB_REQ1_WEI"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_FCTRL.SAME_AW_AR_ADDR_CHK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_FCTRL.CLOSE_AXI_INF_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"]
+provenance = "derived"
+
+[review.entity."CACHE_SCTRL.CACHE_USR_SADDR_4BYTE"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L120", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L708", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_STRUCT_H_L753"]
+provenance = "derived"
+
+[review.entity."CACHE_SCTRL.USR_SRAM_DIO"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L708", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_STRUCT_H_L753"]
+provenance = "derived"
+
+[review.entity."CACHE_SCTRL.USR_SRAM_QIO"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L708", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_STRUCT_H_L753"]
+provenance = "derived"
+
+[review.entity."CACHE_SCTRL.USR_WR_SRAM_DUMMY"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L134", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L708", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_STRUCT_H_L753"]
+provenance = "derived"
+
+[review.entity."CACHE_SCTRL.USR_RD_SRAM_DUMMY"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L149", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L708", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_STRUCT_H_L753"]
+provenance = "derived"
+
+[review.entity."CACHE_SCTRL.CACHE_SRAM_USR_RCMD"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L91", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L708", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_STRUCT_H_L753"]
+provenance = "derived"
+
+[review.entity."CACHE_SCTRL.SRAM_RDUMMY_CYCLELEN"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L150", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L708", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_STRUCT_H_L753"]
+provenance = "derived"
+
+[review.entity."CACHE_SCTRL.SRAM_ADDR_BITLEN"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L107", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L708", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_STRUCT_H_L753"]
+provenance = "derived"
+
+[review.entity."CACHE_SCTRL.CACHE_SRAM_USR_WCMD"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L74", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L708", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_STRUCT_H_L753"]
+provenance = "derived"
+
+[review.entity."CACHE_SCTRL.SRAM_OCT"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L244", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L708", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_STRUCT_H_L753"]
+provenance = "derived"
+
+[review.entity."CACHE_SCTRL.SRAM_WDUMMY_CYCLELEN"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L135", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L708", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_STRUCT_H_L753"]
+provenance = "derived"
+
+[review.entity."SRAM_CMD.SDIN_OCT"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L248", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "derived"
+
+[review.entity."SRAM_CMD.SDOUT_OCT"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L247", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "derived"
+
+[review.entity."SRAM_CMD.SADDR_OCT"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L246", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "derived"
+
+[review.entity."SRAM_CMD.SCMD_OCT"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L245", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "derived"
+
+[review.entity."SRAM_CMD.SDUMMY_WOUT"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L179", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "derived"
+
+[review.entity."SRAM_CMD.SDIN_HEX"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L261", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "derived"
+
+[review.entity."SRAM_CMD.SDOUT_HEX"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L262", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "derived"
+
+[review.entity."SRAM_DRD_CMD.CACHE_SRAM_USR_RD_CMD_VALUE"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L93", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "derived"
+
+[review.entity."SRAM_DRD_CMD.CACHE_SRAM_USR_RD_CMD_BITLEN"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L92", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "derived"
+
+[review.entity."SRAM_DWR_CMD.CACHE_SRAM_USR_WR_CMD_VALUE"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L76", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "derived"
+
+[review.entity."SRAM_DWR_CMD.CACHE_SRAM_USR_WR_CMD_BITLEN"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L75", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "derived"
+
+[review.entity."SRAM_CLK.SCLKCNT_L"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L493", "ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L494", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "derived"
+
+[review.entity."SRAM_CLK.SCLKCNT_H"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L493", "ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L494", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "derived"
+
+[review.entity."SRAM_CLK.SCLKCNT_N"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L493", "ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L494", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "derived"
+
+[review.entity."SRAM_CLK.SCLK_EQU_SYSCLK"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_MSPI_ESP32S31_INCLUDE_HAL_PSRAM_CTRLR_LL_H_L491", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "derived"
+
+[review.entity."MMU_ITEM_CONTENT.PADDR"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_CACHE_ESP32S31_INCLUDE_HAL_MMU_LL_H_L325", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L59", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L63", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L66", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L76", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L4192"]
+provenance = "derived"
+
+[review.entity."MMU_ITEM_CONTENT.ACCESS_PSRAM"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_CACHE_ESP32S31_INCLUDE_HAL_MMU_LL_H_L325", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L59", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L63", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L66", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L76", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L4192"]
+provenance = "derived"
+
+[review.entity."MMU_ITEM_CONTENT.VALID"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_CACHE_ESP32S31_INCLUDE_HAL_MMU_LL_H_L325", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L59", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L63", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L66", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L76", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L4192"]
+provenance = "derived"
+
+[review.entity."MMU_ITEM_CONTENT.SENSITIVE"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_CACHE_ESP32S31_INCLUDE_HAL_MMU_LL_H_L325", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L59", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L63", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L66", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L76", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L4192"]
+provenance = "derived"
+
+[[registers]]
+name = "CMD"
+offset = 0x0
+description = "SPI0 FSM status register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffbff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "MST_ST"
+bits = "3:0"
+class = "read-only"
+description = "The current status of SPI0 master FSM: spi0_mst_st. 0: idle state, 1:SPI0_GRANT , 2: program/erase suspend state, 3: SPI0 read data state, 4: wait cache/EDMA sent data is stored in SPI0 TX FIFO, 5: SPI0 write data state."
+
+[[registers.fields]]
+name = "SLV_ST"
+bits = "7:4"
+class = "read-only"
+description = "The current status of SPI0 slave FSM: mspi_st. 0: idle state, 1: preparation state, 2: send command state, 3: send address state, 4: wait state, 5: read data state, 6:write data state, 7: done state, 8: read data end state."
+
+[[registers.fields]]
+name = "USR"
+bits = "18"
+class = "read-only"
+description = "SPI0 USR_CMD start bit, only used when SPI_MEM_S_AXI_REQ_EN is cleared.  An operation will be triggered when the bit is set. The bit will be cleared once the operation done.1: enable 0: disable."
+
+[[registers]]
+name = "CTRL"
+offset = 0x8
+description = "SPI0 control register."
+reset = { value = 0x802c200c }
+reserved = { mask = 0x3e439c80, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "WDUMMY_DQS_ALWAYS_OUT"
+bits = "0"
+class = "plain"
+description = "In the dummy phase of an MSPI write data transfer when accesses to flash, the level of SPI_DQS is output by the MSPI controller."
+
+[[registers.fields]]
+name = "WDUMMY_ALWAYS_OUT"
+bits = "1"
+class = "plain"
+description = "In the dummy phase of an MSPI write data transfer when accesses to flash, the level of SPI_IO[7:0] is output by the MSPI controller."
+
+[[registers.fields]]
+name = "FDUMMY_RIN"
+bits = "2"
+class = "plain"
+description = "In an MSPI read data transfer when accesses to flash, the level of SPI_IO[7:0] is output by the MSPI controller in the first half part of dummy phase. It is used to mask invalid SPI_DQS in the half part of dummy phase."
+
+[[registers.fields]]
+name = "FDUMMY_WOUT"
+bits = "3"
+class = "plain"
+description = "In an MSPI write data transfer when accesses to flash, the level of SPI_IO[7:0] is output by the MSPI controller in the second half part of dummy phase. It is used to pre-drive flash."
+
+[[registers.fields]]
+name = "FDOUT_OCT"
+bits = "4"
+class = "plain"
+description = "Apply 8 signals during write-data phase 1:enable 0: disable"
+
+[[registers.fields]]
+name = "FDIN_OCT"
+bits = "5"
+class = "plain"
+description = "Apply 8 signals during read-data phase 1:enable 0: disable"
+
+[[registers.fields]]
+name = "FADDR_OCT"
+bits = "6"
+class = "plain"
+description = "Apply 8 signals during address phase 1:enable 0: disable"
+
+[[registers.fields]]
+name = "FCMD_QUAD"
+bits = "8"
+class = "plain"
+description = "Apply 4 signals during command phase 1:enable 0: disable"
+
+[[registers.fields]]
+name = "FCMD_OCT"
+bits = "9"
+class = "plain"
+description = "Apply 8 signals during command phase 1:enable 0: disable"
+
+[[registers.fields]]
+name = "FASTRD_MODE"
+bits = "13"
+class = "plain"
+description = "This bit enable the bits: SPI_MEM_S_FREAD_QIO, SPI_MEM_S_FREAD_DIO, SPI_MEM_S_FREAD_QOUT and SPI_MEM_S_FREAD_DOUT. 1: enable 0: disable."
+
+[[registers.fields]]
+name = "FREAD_DUAL"
+bits = "14"
+class = "plain"
+description = "In the read operations, read-data phase apply 2 signals. 1: enable 0: disable."
+
+[[registers.fields]]
+name = "Q_POL"
+bits = "18"
+class = "plain"
+description = "The bit is used to set MISO line polarity, 1: high 0, low"
+
+[[registers.fields]]
+name = "D_POL"
+bits = "19"
+class = "plain"
+description = "The bit is used to set MOSI line polarity, 1: high 0, low"
+
+[[registers.fields]]
+name = "FREAD_QUAD"
+bits = "20"
+class = "plain"
+description = "In the read operations read-data phase apply 4 signals. 1: enable 0: disable."
+
+[[registers.fields]]
+name = "WP_REG"
+bits = "21"
+class = "plain"
+description = "Write protect signal output when SPI is idle.  1: output high, 0: output low."
+
+[[registers.fields]]
+name = "FREAD_DIO"
+bits = "23"
+class = "plain"
+description = "In the read operations address phase and read-data phase apply 2 signals. 1: enable 0: disable."
+
+[[registers.fields]]
+name = "FREAD_QIO"
+bits = "24"
+class = "plain"
+description = "In the read operations address phase and read-data phase apply 4 signals. 1: enable 0: disable."
+
+[[registers.fields]]
+name = "DQS_IE_ALWAYS_ON"
+bits = "30"
+class = "plain"
+description = "When accesses to flash, 1: the IE signals of pads connected to SPI_DQS are always 1. 0: Others."
+
+[[registers.fields]]
+name = "DATA_IE_ALWAYS_ON"
+bits = "31"
+class = "plain"
+description = "When accesses to flash, 1: the IE signals of pads connected to SPI_IO[7:0] are always 1. 0: Others."
+
+[[registers]]
+name = "CTRL1"
+offset = 0xc
+description = "SPI0 control1 register."
+reset = { value = 0x28c00000 }
+reserved = { mask = 0x3ffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_MODE"
+bits = "1:0"
+class = "plain"
+description = "SPI clock mode bits. 0: SPI clock is off when CS inactive 1: SPI clock is delayed one cycle after CS inactive 2: SPI clock is delayed two cycles after CS inactive 3: SPI clock is always on."
+
+[[registers.fields]]
+name = "AR_SIZE0_1_SUPPORT_EN"
+bits = "22"
+class = "plain"
+description = "1: MSPI supports ARSIZE 0~3. When ARSIZE =0~2, MSPI read address is 4*n and reply the real AXI read data back. 0: When ARSIZE 0~1, MSPI reply SLV_ERR."
+
+[[registers.fields]]
+name = "AW_SIZE0_1_SUPPORT_EN"
+bits = "23"
+class = "plain"
+description = "1: MSPI supports AWSIZE 0~3. 0: When AWSIZE 0~1, MSPI reply SLV_ERR."
+
+[[registers.fields]]
+name = "RRESP_ECC_ERR_EN"
+bits = "24"
+class = "plain"
+description = "1: RRESP is SLV_ERR when there is a ECC error in AXI read data. 0: RRESP is OKAY when there is a ECC error in AXI read data. The ECC error information is recorded in SPI_MEM_S_ECC_ERR_ADDR_REG."
+
+[[registers.fields]]
+name = "AR_SPLICE_EN"
+bits = "25"
+class = "plain"
+description = "Set this bit to enable AXI Read Splice-transfer."
+
+[[registers.fields]]
+name = "AW_SPLICE_EN"
+bits = "26"
+class = "plain"
+description = "Set this bit to enable AXI Write Splice-transfer."
+
+[[registers.fields]]
+name = "RAM0_EN"
+bits = "27"
+class = "read-only"
+description = "When SPI_MEM_S_DUAL_RAM_EN is 0 and SPI_MEM_S_RAM0_EN is 1, only EXT_RAM0 will be accessed. When SPI_MEM_S_DUAL_RAM_EN is 0 and SPI_MEM_S_RAM0_EN is 0, only EXT_RAM1 will be accessed. When SPI_MEM_S_DUAL_RAM_EN is 1,  EXT_RAM0 and EXT_RAM1 will be accessed at the same time."
+
+[[registers.fields]]
+name = "DUAL_RAM_EN"
+bits = "28"
+class = "read-only"
+description = "Set this bit to enable DUAL-RAM mode, EXT_RAM0 and EXT_RAM1 will be accessed at the same time."
+
+[[registers.fields]]
+name = "FAST_WRITE_EN"
+bits = "29"
+class = "plain"
+description = "Set this bit to write data faster, do not wait write data has been stored in tx_bus_fifo_l2. It will wait 4*T_clk_ctrl to insure the write data has been stored in  tx_bus_fifo_l2."
+
+[[registers.fields]]
+name = "RXFIFO_RST"
+bits = "30"
+class = "write-trigger"
+description = "The synchronous reset signal for SPI0 RX AFIFO and all the AES_MSPI SYNC FIFO to receive signals from AXI.  Set this bit to reset these FIFO."
+
+[[registers.fields]]
+name = "TXFIFO_RST"
+bits = "31"
+class = "write-trigger"
+description = "The synchronous reset signal for SPI0 TX AFIFO and all the AES_MSPI SYNC FIFO to send signals to AXI. Set this bit to reset these FIFO."
+
+[[registers]]
+name = "CTRL2"
+offset = 0x10
+description = "SPI0 control2 register."
+reset = { value = 0x2c21 }
+reserved = { mask = 0xff8000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "CS_SETUP_TIME"
+bits = "4:0"
+class = "plain"
+description = "(cycles-1) of prepare phase by SPI Bus clock, this bits are combined with SPI_MEM_S_CS_SETUP bit."
+
+[[registers.fields]]
+name = "CS_HOLD_TIME"
+bits = "9:5"
+class = "plain"
+description = "SPI CS signal is delayed to inactive by SPI bus clock, this bits are combined with SPI_MEM_S_CS_HOLD bit."
+
+[[registers.fields]]
+name = "ECC_CS_HOLD_TIME"
+bits = "12:10"
+class = "plain"
+description = "SPI_MEM_S_CS_HOLD_TIME + SPI_MEM_S_ECC_CS_HOLD_TIME is the SPI0 CS hold cycle in ECC mode when accessed flash."
+
+[[registers.fields]]
+name = "ECC_SKIP_PAGE_CORNER"
+bits = "13"
+class = "plain"
+description = "1: SPI0 and SPI1 skip page corner when accesses flash. 0: Not skip page corner when accesses flash."
+
+[[registers.fields]]
+name = "ECC_16TO18_BYTE_EN"
+bits = "14"
+class = "plain"
+description = "Set this bit to enable SPI0 and SPI1 ECC 16 bytes data with 2 ECC bytes mode when accesses flash."
+
+[[registers.fields]]
+name = "SPLIT_TRANS_EN"
+bits = "24"
+class = "plain"
+description = "Set this bit to enable SPI0 split one AXI read flash transfer into two SPI transfers when one transfer will cross flash or EXT_RAM page corner, valid no matter whether there is an ECC region or not."
+
+[[registers.fields]]
+name = "CS_HOLD_DELAY"
+bits = "30:25"
+class = "plain"
+description = "These bits are used to set the minimum CS high time tSHSL between SPI burst transfer when accesses to flash. tSHSL is (SPI_MEM_S_CS_HOLD_DELAY[5:0] + 1) MSPI core clock cycles."
+
+[[registers.fields]]
+name = "SYNC_RESET"
+bits = "31"
+class = "write-trigger"
+description = "The spi0_mst_st and spi0_slv_st will be reset."
+
+[[registers]]
+name = "CLOCK"
+offset = 0x14
+description = "SPI clock division control register."
+reset = { value = 0x30103 }
+reserved = { mask = 0x7f000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "CLKCNT_L"
+bits = "7:0"
+class = "plain"
+description = "In the master mode it must be equal to SPI_MEM_S_CLKCNT_N."
+
+[[registers.fields]]
+name = "CLKCNT_H"
+bits = "15:8"
+class = "plain"
+description = "In the master mode it must be floor((SPI_MEM_S_CLKCNT_N+1)/2-1)."
+
+[[registers.fields]]
+name = "CLKCNT_N"
+bits = "23:16"
+class = "plain"
+description = "In the master mode it is the divider of spi_mem_clk. So spi_mem_clk frequency is system/(SPI_MEM_S_CLKCNT_N+1)"
+
+[[registers.fields]]
+name = "CLK_EQU_SYSCLK"
+bits = "31"
+class = "plain"
+description = "1: 1-division mode, the frequency of SPI bus clock equals to that of MSPI module clock."
+
+[[registers]]
+name = "USER"
+offset = 0x18
+description = "SPI0 user register."
+reset = { value = 0x0 }
+reserved = { mask = 0xdbfffd3f, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "CS_HOLD"
+bits = "6"
+class = "plain"
+description = "spi cs keep low when spi is in  done  phase. 1: enable 0: disable."
+
+[[registers.fields]]
+name = "CS_SETUP"
+bits = "7"
+class = "plain"
+description = "spi cs is enable when spi is in  prepare  phase. 1: enable 0: disable."
+
+[[registers.fields]]
+name = "CK_OUT_EDGE"
+bits = "9"
+class = "plain"
+description = "The bit combined with SPI_MEM_S_CK_IDLE_EDGE bit to control SPI clock mode 0~3."
+
+[[registers.fields]]
+name = "USR_DUMMY_IDLE"
+bits = "26"
+class = "plain"
+description = "spi clock is disable in dummy phase when the bit is enable."
+
+[[registers.fields]]
+name = "USR_DUMMY"
+bits = "29"
+class = "plain"
+description = "This bit enable the dummy phase of an operation."
+
+[[registers]]
+name = "USER1"
+offset = 0x1c
+description = "SPI0 user1 register."
+reset = { value = 0x5c000047 }
+reserved = { mask = 0x3fff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "USR_DUMMY_CYCLELEN"
+bits = "5:0"
+class = "plain"
+description = "The length in spi_mem_clk cycles of dummy phase. The register value shall be (cycle_num-1)."
+
+[[registers.fields]]
+name = "USR_DBYTELEN"
+bits = "11:6"
+class = "read-only"
+description = "SPI0 USR_CMD read or write data byte length -1"
+
+[[registers.fields]]
+name = "USR_ADDR_BITLEN"
+bits = "31:26"
+class = "plain"
+description = "The length in bits of address phase. The register value shall be (bit_num-1)."
+
+[[registers]]
+name = "USER2"
+offset = 0x20
+description = "SPI0 user2 register."
+reset = { value = 0x70000000 }
+reserved = { mask = 0xfff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "USR_COMMAND_VALUE"
+bits = "15:0"
+class = "plain"
+description = "The value of  command."
+
+[[registers.fields]]
+name = "USR_COMMAND_BITLEN"
+bits = "31:28"
+class = "plain"
+description = "The length in bits of command phase. The register value shall be (bit_num-1)"
+
+[[registers]]
+name = "RD_STATUS"
+offset = 0x2c
+description = "SPI0 read control register."
+reset = { value = 0x0 }
+reserved = { mask = 0xf000ffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "WB_MODE"
+bits = "23:16"
+class = "debug-only"
+description = "Mode bits in the flash fast read mode  it is combined with spi_mem_fastrd_mode bit. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "WB_MODE_BITLEN"
+bits = "26:24"
+class = "debug-only"
+description = "Mode bits length for flash fast read mode. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "WB_MODE_EN"
+bits = "27"
+class = "debug-only"
+description = "Mode bits is valid while this bit is enable. 1: enable 0: disable. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers]]
+name = "MISC"
+offset = 0x34
+description = "SPI0 misc register"
+reset = { value = 0x70 }
+reserved = { mask = 0xfffff80f, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "DQ_OE_CTRL"
+bits = "4"
+class = "plain"
+description = "For SPI BUS IO,  APB ctrl IO DQ OE func.1: enable 0: disable."
+
+[[registers.fields]]
+name = "CK_OE_CTRL"
+bits = "5"
+class = "plain"
+description = "For SPI BUS IO,  APB ctrl IO CK OE func.1: enable 0: disable."
+
+[[registers.fields]]
+name = "CS_OE_CTRL"
+bits = "6"
+class = "plain"
+description = "For SPI BUS IO,  APB ctrl IO CS OE func.1: enable 0: disable."
+
+[[registers.fields]]
+name = "FSUB_PIN"
+bits = "7"
+class = "read-only"
+description = "For SPI0,  flash is connected to SUBPINs."
+
+[[registers.fields]]
+name = "SSUB_PIN"
+bits = "8"
+class = "read-only"
+description = "For SPI0,  sram is connected to SUBPINs."
+
+[[registers.fields]]
+name = "CK_IDLE_EDGE"
+bits = "9"
+class = "plain"
+description = "1: SPI_CLK line is high when idle     0: spi clk line is low when idle"
+
+[[registers.fields]]
+name = "CS_KEEP_ACTIVE"
+bits = "10"
+class = "plain"
+description = "SPI_CS line keep low when the bit is set."
+
+[[registers]]
+name = "CACHE_FCTRL"
+offset = 0x3c
+description = "SPI0 bit mode control register."
+reset = { value = 0xc0000000 }
+reserved = { mask = 0x3ff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L568"] }
+
+[[registers.fields]]
+name = "AXI_REQ_EN"
+bits = "0"
+class = "plain"
+description = "Allow AXI accesses to external RAM."
+
+[[registers.fields]]
+name = "CACHE_USR_ADDR_4BYTE"
+bits = "1"
+class = "debug-only"
+description = "The header's field CACHE_USR_ADDR_4BYTE."
+
+[[registers.fields]]
+name = "CACHE_FLASH_USR_CMD"
+bits = "2"
+class = "debug-only"
+description = "The header's field CACHE_FLASH_USR_CMD."
+
+[[registers.fields]]
+name = "FDIN_DUAL"
+bits = "3"
+class = "debug-only"
+description = "The header's field FDIN_DUAL."
+
+[[registers.fields]]
+name = "FDOUT_DUAL"
+bits = "4"
+class = "debug-only"
+description = "The header's field FDOUT_DUAL."
+
+[[registers.fields]]
+name = "FADDR_DUAL"
+bits = "5"
+class = "debug-only"
+description = "The header's field FADDR_DUAL."
+
+[[registers.fields]]
+name = "FDIN_QUAD"
+bits = "6"
+class = "debug-only"
+description = "The header's field FDIN_QUAD."
+
+[[registers.fields]]
+name = "FDOUT_QUAD"
+bits = "7"
+class = "debug-only"
+description = "The header's field FDOUT_QUAD."
+
+[[registers.fields]]
+name = "FADDR_QUAD"
+bits = "8"
+class = "debug-only"
+description = "The header's field FADDR_QUAD."
+
+[[registers.fields]]
+name = "ARB_WEI_EN"
+bits = "9"
+class = "plain"
+description = "The header's field ARB_WEI_EN."
+
+[[registers.fields]]
+name = "ARB_REQ0_PRI"
+bits = "10"
+class = "plain"
+description = "The header's field ARB_REQ0_PRI."
+
+[[registers.fields]]
+name = "ARB_REQ1_PRI"
+bits = "11"
+class = "plain"
+description = "The header's field ARB_REQ1_PRI."
+
+[[registers.fields]]
+name = "ARB_REQ0_WEI"
+bits = "15:12"
+class = "plain"
+description = "The header's field ARB_REQ0_WEI."
+
+[[registers.fields]]
+name = "ARB_REQ1_WEI"
+bits = "19:16"
+class = "plain"
+description = "The header's field ARB_REQ1_WEI."
+
+[[registers.fields]]
+name = "SAME_AW_AR_ADDR_CHK_EN"
+bits = "30"
+class = "plain"
+description = "The header's field SAME_AW_AR_ADDR_CHK_EN."
+
+[[registers.fields]]
+name = "CLOSE_AXI_INF_EN"
+bits = "31"
+class = "plain"
+description = "Close the AXI interface to external RAM."
+
+[[registers]]
+name = "CACHE_SCTRL"
+offset = 0x40
+description = "SPI0 external RAM control register"
+reset = { value = 0x55c070 }
+reserved = { mask = 0xf0003000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L708", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_STRUCT_H_L753"] }
+
+[[registers.fields]]
+name = "CACHE_USR_SADDR_4BYTE"
+bits = "0"
+class = "plain"
+description = "The header's field CACHE_USR_SADDR_4BYTE."
+
+[[registers.fields]]
+name = "USR_SRAM_DIO"
+bits = "1"
+class = "debug-only"
+description = "The header's field USR_SRAM_DIO."
+
+[[registers.fields]]
+name = "USR_SRAM_QIO"
+bits = "2"
+class = "debug-only"
+description = "The header's field USR_SRAM_QIO."
+
+[[registers.fields]]
+name = "USR_WR_SRAM_DUMMY"
+bits = "3"
+class = "plain"
+description = "The header's field USR_WR_SRAM_DUMMY."
+
+[[registers.fields]]
+name = "USR_RD_SRAM_DUMMY"
+bits = "4"
+class = "plain"
+description = "The header's field USR_RD_SRAM_DUMMY."
+
+[[registers.fields]]
+name = "CACHE_SRAM_USR_RCMD"
+bits = "5"
+class = "plain"
+description = "The header's field CACHE_SRAM_USR_RCMD."
+
+[[registers.fields]]
+name = "SRAM_RDUMMY_CYCLELEN"
+bits = "11:6"
+class = "plain"
+description = "The read dummy phase's length minus one."
+
+[[registers.fields]]
+name = "SRAM_ADDR_BITLEN"
+bits = "19:14"
+class = "plain"
+description = "The address phase's length minus one."
+
+[[registers.fields]]
+name = "CACHE_SRAM_USR_WCMD"
+bits = "20"
+class = "plain"
+description = "The header's field CACHE_SRAM_USR_WCMD."
+
+[[registers.fields]]
+name = "SRAM_OCT"
+bits = "21"
+class = "plain"
+description = "The cache's external RAM access uses eight lines."
+
+[[registers.fields]]
+name = "SRAM_WDUMMY_CYCLELEN"
+bits = "27:22"
+class = "plain"
+description = "The write dummy phase's length minus one."
+
+[[registers]]
+name = "SRAM_CMD"
+offset = 0x44
+description = "SPI0 external RAM mode control register"
+reset = { value = 0x80c00000 }
+reserved = { mask = 0x30002000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "SCLK_MODE"
+bits = "1:0"
+class = "debug-only"
+description = "SPI clock mode bits. 0: SPI clock is off when CS inactive 1: SPI clock is delayed one cycle after CS inactive 2: SPI clock is delayed two cycles after CS inactive 3: SPI clock is always on. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SWB_MODE"
+bits = "9:2"
+class = "debug-only"
+description = "Mode bits in the external RAM fast read mode  it is combined with spi_mem_fastrd_mode bit. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SDIN_DUAL"
+bits = "10"
+class = "debug-only"
+description = "For SPI0 external RAM , din phase apply 2 signals. 1: enable 0: disable. The bit is the same with spi_mem_usr_sram_dio. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SDOUT_DUAL"
+bits = "11"
+class = "debug-only"
+description = "For SPI0 external RAM , dout phase apply 2 signals. 1: enable 0: disable. The bit is the same with spi_mem_usr_sram_dio. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SADDR_DUAL"
+bits = "12"
+class = "debug-only"
+description = "For SPI0 external RAM , address phase apply 2 signals. 1: enable 0: disable. The bit is the same with spi_mem_usr_sram_dio. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SDIN_QUAD"
+bits = "14"
+class = "debug-only"
+description = "For SPI0 external RAM , din phase apply 4 signals. 1: enable 0: disable. The bit is the same with spi_mem_usr_sram_qio. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SDOUT_QUAD"
+bits = "15"
+class = "debug-only"
+description = "For SPI0 external RAM , dout phase apply 4 signals. 1: enable 0: disable. The bit is the same with spi_mem_usr_sram_qio. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SADDR_QUAD"
+bits = "16"
+class = "debug-only"
+description = "For SPI0 external RAM , address phase apply 4 signals. 1: enable 0: disable. The bit is the same with spi_mem_usr_sram_qio. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SCMD_QUAD"
+bits = "17"
+class = "debug-only"
+description = "For SPI0 external RAM , cmd phase apply 4 signals. 1: enable 0: disable. The bit is the same with spi_mem_usr_sram_qio. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SDIN_OCT"
+bits = "18"
+class = "plain"
+description = "For SPI0 external RAM , din phase apply 8 signals. 1: enable 0: disable. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SDOUT_OCT"
+bits = "19"
+class = "plain"
+description = "For SPI0 external RAM , dout phase apply 8 signals. 1: enable 0: disable. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SADDR_OCT"
+bits = "20"
+class = "plain"
+description = "For SPI0 external RAM , address phase apply 4 signals. 1: enable 0: disable. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SCMD_OCT"
+bits = "21"
+class = "plain"
+description = "For SPI0 external RAM , cmd phase apply 8 signals. 1: enable 0: disable. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SDUMMY_RIN"
+bits = "22"
+class = "debug-only"
+description = "In the dummy phase of a MSPI read data transfer when accesses to external RAM, the signal level of SPI bus is output by the MSPI controller. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SDUMMY_WOUT"
+bits = "23"
+class = "plain"
+description = "In the dummy phase of a MSPI write data transfer when accesses to external RAM, the signal level of SPI bus is output by the MSPI controller. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "WDUMMY_DQS_ALWAYS_OUT"
+bits = "24"
+class = "plain"
+description = "In the dummy phase of an MSPI write data transfer when accesses to external RAM, the level of SPI_DQS is output by the MSPI controller."
+
+[[registers.fields]]
+name = "WDUMMY_ALWAYS_OUT"
+bits = "25"
+class = "plain"
+description = "In the dummy phase of an MSPI write data transfer when accesses to external RAM, the level of SPI_IO[7:0] is output by the MSPI controller."
+
+[[registers.fields]]
+name = "SDIN_HEX"
+bits = "26"
+class = "plain"
+description = "For SPI0 external RAM , din phase apply 16 signals. 1: enable 0: disable. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SDOUT_HEX"
+bits = "27"
+class = "plain"
+description = "For SPI0 external RAM , dout phase apply 16 signals. 1: enable 0: disable. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "DQS_IE_ALWAYS_ON"
+bits = "30"
+class = "plain"
+description = "When accesses to external RAM, 1: the IE signals of pads connected to SPI_DQS are always 1. 0: Others."
+
+[[registers.fields]]
+name = "DATA_IE_ALWAYS_ON"
+bits = "31"
+class = "plain"
+description = "When accesses to external RAM, 1: the IE signals of pads connected to SPI_IO[7:0] are always 1. 0: Others."
+
+[[registers]]
+name = "SRAM_DRD_CMD"
+offset = 0x48
+description = "SPI0 external RAM DDR read command control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "CACHE_SRAM_USR_RD_CMD_VALUE"
+bits = "15:0"
+class = "plain"
+description = "For SPI0,When cache mode is enable it is the read command value of command phase for sram. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "CACHE_SRAM_USR_RD_CMD_BITLEN"
+bits = "31:28"
+class = "plain"
+description = "For SPI0,When cache mode is enable it is the length in bits of command phase for sram. The register value shall be (bit_num-1). This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers]]
+name = "SRAM_DWR_CMD"
+offset = 0x4c
+description = "SPI0 external RAM DDR write command control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "CACHE_SRAM_USR_WR_CMD_VALUE"
+bits = "15:0"
+class = "plain"
+description = "For SPI0,When cache mode is enable it is the write command value of command phase for sram. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "CACHE_SRAM_USR_WR_CMD_BITLEN"
+bits = "31:28"
+class = "plain"
+description = "For SPI0,When cache mode is enable it is the in bits of command phase  for sram. The register value shall be (bit_num-1). This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers]]
+name = "SRAM_CLK"
+offset = 0x50
+description = "SPI0 external RAM clock control register"
+reset = { value = 0x30103 }
+reserved = { mask = 0x7f000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "SCLKCNT_L"
+bits = "7:0"
+class = "plain"
+description = "For SPI0 external RAM  interface, it must be equal to SPI_MEM_S_SCLKCNT_N. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SCLKCNT_H"
+bits = "15:8"
+class = "plain"
+description = "For SPI0 external RAM  interface, it must be floor((SPI_MEM_S_SCLKCNT_N+1)/2-1). This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SCLKCNT_N"
+bits = "23:16"
+class = "plain"
+description = "For SPI0 external RAM  interface, it is the divider of spi_mem_clk. So spi_mem_clk frequency is system/(SPI_MEM_S_SCLKCNT_N+1) This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "SCLK_EQU_SYSCLK"
+bits = "31"
+class = "plain"
+description = "For SPI0 external RAM  interface, 1: spi_mem_clk is equal to system 0: spi_mem_clk is divided from system clock. This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers]]
+name = "FSM"
+offset = 0x54
+description = "SPI0 FSM status register"
+reset = { value = 0x200 }
+reserved = { mask = 0xffe0007f, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "LOCK_DELAY_TIME"
+bits = "18:7"
+class = "plain"
+description = "The lock delay time of SPI0/1 arbiter by spi0_slv_st, after PER is sent by SPI1."
+
+[[registers.fields]]
+name = "FLASH_LOCK_EN"
+bits = "19"
+class = "plain"
+description = "The lock enable for FLASH to lock spi0 trans req.1: Enable. 0: Disable."
+
+[[registers.fields]]
+name = "SRAM_LOCK_EN"
+bits = "20"
+class = "plain"
+description = "The lock enable for external RAM to lock spi0 trans req.1: Enable. 0: Disable."
+
+[[registers]]
+name = "INT_ENA"
+offset = 0xc0
+description = "SPI0 interrupt enable register"
+reset = { value = 0x0 }
+reserved = { mask = 0x3ffdc07, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "SLV_ST_END"
+bits = "3"
+class = "plain"
+description = "The enable bit for SPI_MEM_S_SLV_ST_END_INT interrupt."
+
+[[registers.fields]]
+name = "MST_ST_END"
+bits = "4"
+class = "plain"
+description = "The enable bit for SPI_MEM_S_MST_ST_END_INT interrupt."
+
+[[registers.fields]]
+name = "ECC_ERR"
+bits = "5"
+class = "plain"
+description = "The enable bit for SPI_MEM_S_ECC_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "PMS_REJECT"
+bits = "6"
+class = "plain"
+description = "The enable bit for SPI_MEM_S_PMS_REJECT_INT interrupt."
+
+[[registers.fields]]
+name = "AXI_RADDR_ERR"
+bits = "7"
+class = "plain"
+description = "The enable bit for SPI_MEM_S_AXI_RADDR_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "AXI_WR_FLASH_ERR"
+bits = "8"
+class = "plain"
+description = "The enable bit for SPI_MEM_S_AXI_WR_FALSH_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "AXI_WADDR_ERR"
+bits = "9"
+class = "plain"
+description = "The enable bit for SPI_MEM_S_AXI_WADDR_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "XTS_FAULT_DETECTED"
+bits = "13"
+class = "plain"
+description = "The enable  bit for SPI_MEM_S_XTS_FAULT_DETECTED_INT interrupt."
+
+[[registers.fields]]
+name = "RX_TRANS_OVF"
+bits = "26"
+class = "plain"
+description = "The enable bit for SPI_MEM_S_RX_TRANS_OVF_INT interrupt."
+
+[[registers.fields]]
+name = "TX_TRANS_UDF"
+bits = "27"
+class = "plain"
+description = "The enable bit for SPI_MEM_S_TX_TRANS_UDF_INT interrupt."
+
+[[registers.fields]]
+name = "DQS0_AFIFO_OVF"
+bits = "28"
+class = "plain"
+description = "The enable bit for SPI_MEM_S_DQS0_AFIFO_OVF_INT interrupt."
+
+[[registers.fields]]
+name = "DQS1_AFIFO_OVF"
+bits = "29"
+class = "plain"
+description = "The enable bit for SPI_MEM_S_DQS1_AFIFO_OVF_INT interrupt."
+
+[[registers.fields]]
+name = "BUS_FIFO1_UDF"
+bits = "30"
+class = "plain"
+description = "The enable bit for SPI_MEM_S_BUS_FIFO1_UDF_INT interrupt."
+
+[[registers.fields]]
+name = "BUS_FIFO0_UDF"
+bits = "31"
+class = "plain"
+description = "The enable bit for SPI_MEM_S_BUS_FIFO0_UDF_INT interrupt."
+
+[[registers]]
+name = "INT_CLR"
+offset = 0xc4
+description = "SPI0 interrupt clear register"
+reset = { value = 0x0 }
+reserved = { mask = 0x3ffdc07, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "SLV_ST_END"
+bits = "3"
+class = "write-trigger"
+description = "The clear bit for SPI_MEM_S_SLV_ST_END_INT interrupt."
+
+[[registers.fields]]
+name = "MST_ST_END"
+bits = "4"
+class = "write-trigger"
+description = "The clear bit for SPI_MEM_S_MST_ST_END_INT interrupt."
+
+[[registers.fields]]
+name = "ECC_ERR"
+bits = "5"
+class = "write-trigger"
+description = "The clear bit for SPI_MEM_S_ECC_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "PMS_REJECT"
+bits = "6"
+class = "write-trigger"
+description = "The clear bit for SPI_MEM_S_PMS_REJECT_INT interrupt."
+
+[[registers.fields]]
+name = "AXI_RADDR_ERR"
+bits = "7"
+class = "write-trigger"
+description = "The clear bit for SPI_MEM_S_AXI_RADDR_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "AXI_WR_FLASH_ERR"
+bits = "8"
+class = "write-trigger"
+description = "The clear bit for SPI_MEM_S_AXI_WR_FALSH_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "AXI_WADDR_ERR"
+bits = "9"
+class = "write-trigger"
+description = "The clear bit for SPI_MEM_S_AXI_WADDR_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "XTS_FAULT_DETECTED"
+bits = "13"
+class = "write-trigger"
+description = "The clear  bit for SPI_MEM_S_XTS_FAULT_DETECTED_INT interrupt."
+
+[[registers.fields]]
+name = "RX_TRANS_OVF"
+bits = "26"
+class = "write-trigger"
+description = "The clear bit for SPI_MEM_S_RX_TRANS_OVF_INT interrupt."
+
+[[registers.fields]]
+name = "TX_TRANS_UDF"
+bits = "27"
+class = "write-trigger"
+description = "The clear bit for SPI_MEM_S_TX_TRANS_UDF_INT interrupt."
+
+[[registers.fields]]
+name = "DQS0_AFIFO_OVF"
+bits = "28"
+class = "write-trigger"
+description = "The clear bit for SPI_MEM_S_DQS0_AFIFO_OVF_INT interrupt."
+
+[[registers.fields]]
+name = "DQS1_AFIFO_OVF"
+bits = "29"
+class = "write-trigger"
+description = "The clear bit for SPI_MEM_S_DQS1_AFIFO_OVF_INT interrupt."
+
+[[registers.fields]]
+name = "BUS_FIFO1_UDF"
+bits = "30"
+class = "write-trigger"
+description = "The clear bit for SPI_MEM_S_BUS_FIFO1_UDF_INT interrupt."
+
+[[registers.fields]]
+name = "BUS_FIFO0_UDF"
+bits = "31"
+class = "write-trigger"
+description = "The clear bit for SPI_MEM_S_BUS_FIFO0_UDF_INT interrupt."
+
+[[registers]]
+name = "INT_RAW"
+offset = 0xc8
+description = "SPI0 interrupt raw register"
+reset = { value = 0x0 }
+reserved = { mask = 0x3ffdc07, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "SLV_ST_END"
+bits = "3"
+class = "write-one-to-clear"
+description = "The raw bit for SPI_MEM_S_SLV_ST_END_INT interrupt. 1: Triggered when spi0_slv_st is changed from non idle state to idle state. It means that SPI_CS raises high. 0: Others"
+
+[[registers.fields]]
+name = "MST_ST_END"
+bits = "4"
+class = "write-one-to-clear"
+description = "The raw bit for SPI_MEM_S_MST_ST_END_INT interrupt. 1: Triggered when spi0_mst_st is changed from non idle state to idle state. 0: Others."
+
+[[registers.fields]]
+name = "ECC_ERR"
+bits = "5"
+class = "write-one-to-clear"
+description = "The raw bit for SPI_MEM_S_ECC_ERR_INT interrupt. When SPI_FMEM_S_ECC_ERR_INT_EN is set and  SPI_SMEM_S_ECC_ERR_INT_EN is cleared, this bit is triggered when the error times of SPI0/1 ECC read flash are equal or bigger than SPI_MEM_S_ECC_ERR_INT_NUM. When SPI_FMEM_S_ECC_ERR_INT_EN is cleared and  SPI_SMEM_S_ECC_ERR_INT_EN is set, this bit is triggered when the error times of SPI0/1 ECC read external RAM are equal or bigger than SPI_MEM_S_ECC_ERR_INT_NUM. When SPI_FMEM_S_ECC_ERR_INT_EN and SPI_SMEM_S_ECC_ERR_INT_EN are set, this bit is triggered when the total error times of SPI0/1 ECC read external RAM and flash are equal or bigger than SPI_MEM_S_ECC_ERR_INT_NUM. When SPI_FMEM_S_ECC_ERR_INT_EN and  SPI_SMEM_S_ECC_ERR_INT_EN are cleared, this bit will not be triggered."
+
+[[registers.fields]]
+name = "PMS_REJECT"
+bits = "6"
+class = "write-one-to-clear"
+description = "The raw bit for SPI_MEM_S_PMS_REJECT_INT interrupt. 1: Triggered when SPI1 access is rejected. 0: Others."
+
+[[registers.fields]]
+name = "AXI_RADDR_ERR"
+bits = "7"
+class = "write-one-to-clear"
+description = "The raw bit for SPI_MEM_S_AXI_RADDR_ERR_INT interrupt. 1: Triggered when AXI read address is invalid by compared to MMU configuration. 0: Others."
+
+[[registers.fields]]
+name = "AXI_WR_FLASH_ERR"
+bits = "8"
+class = "write-one-to-clear"
+description = "The raw bit for SPI_MEM_S_AXI_WR_FALSH_ERR_INT interrupt. 1: Triggered when AXI write flash request is received. 0: Others."
+
+[[registers.fields]]
+name = "AXI_WADDR_ERR"
+bits = "9"
+class = "write-one-to-clear"
+description = "The raw bit for SPI_MEM_S_AXI_WADDR_ERR_INT interrupt. 1: Triggered when AXI write address is invalid by compared to MMU configuration. 0: Others."
+
+[[registers.fields]]
+name = "XTS_FAULT_DETECTED"
+bits = "13"
+class = "write-one-to-clear"
+description = "The raw bit for SPI_MEM_S_XTS_FAULT_DETECTED_INT interrupt. 1: Triggered when xts aes core detected fault injection attack. 0: Others."
+
+[[registers.fields]]
+name = "RX_TRANS_OVF"
+bits = "26"
+class = "write-one-to-clear"
+description = "The raw bit for  SPI_MEM_S_RX_TRANS_OVF_INT interrupt. 1: Triggered when the rx fifo to spi bus is overrflow."
+
+[[registers.fields]]
+name = "TX_TRANS_UDF"
+bits = "27"
+class = "write-one-to-clear"
+description = "The raw bit for SPI_MEM_S_TX_TRANS_UDF_INT interrupt. 1: Triggered when the tx fifo to spi bus is underflow."
+
+[[registers.fields]]
+name = "DQS0_AFIFO_OVF"
+bits = "28"
+class = "write-one-to-clear"
+description = "The raw bit for SPI_MEM_S_DQS0_AFIFO_OVF_INT interrupt. 1: Triggered when the AFIFO connected to SPI_DQS1 is overflow."
+
+[[registers.fields]]
+name = "DQS1_AFIFO_OVF"
+bits = "29"
+class = "write-one-to-clear"
+description = "The raw bit for SPI_MEM_S_DQS1_AFIFO_OVF_INT interrupt. 1: Triggered when the AFIFO connected to SPI_DQS is overflow."
+
+[[registers.fields]]
+name = "BUS_FIFO1_UDF"
+bits = "30"
+class = "write-one-to-clear"
+description = "The raw bit for SPI_MEM_S_BUS_FIFO1_UDF_INT interrupt. 1: Triggered when BUS1 FIFO is underflow."
+
+[[registers.fields]]
+name = "BUS_FIFO0_UDF"
+bits = "31"
+class = "write-one-to-clear"
+description = "The raw bit for SPI_MEM_S_BUS_FIFO0_UDF_INT interrupt. 1: Triggered when BUS0 FIFO is underflow."
+
+[[registers]]
+name = "INT_ST"
+offset = 0xcc
+description = "SPI0 interrupt status register"
+reset = { value = 0x0 }
+reserved = { mask = 0x3ffdc07, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "SLV_ST_END"
+bits = "3"
+class = "read-only"
+description = "The status bit for SPI_MEM_S_SLV_ST_END_INT interrupt."
+
+[[registers.fields]]
+name = "MST_ST_END"
+bits = "4"
+class = "read-only"
+description = "The status bit for SPI_MEM_S_MST_ST_END_INT interrupt."
+
+[[registers.fields]]
+name = "ECC_ERR"
+bits = "5"
+class = "read-only"
+description = "The status bit for SPI_MEM_S_ECC_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "PMS_REJECT"
+bits = "6"
+class = "read-only"
+description = "The status bit for SPI_MEM_S_PMS_REJECT_INT interrupt."
+
+[[registers.fields]]
+name = "AXI_RADDR_ERR"
+bits = "7"
+class = "read-only"
+description = "The enable bit for SPI_MEM_S_AXI_RADDR_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "AXI_WR_FLASH_ERR"
+bits = "8"
+class = "read-only"
+description = "The enable bit for SPI_MEM_S_AXI_WR_FALSH_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "AXI_WADDR_ERR"
+bits = "9"
+class = "read-only"
+description = "The enable bit for SPI_MEM_S_AXI_WADDR_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "XTS_FAULT_DETECTED"
+bits = "13"
+class = "read-only"
+description = "The status bit for SPI_MEM_S_XTS_FAULT_DETECTED_INT interrupt."
+
+[[registers.fields]]
+name = "RX_TRANS_OVF"
+bits = "26"
+class = "read-only"
+description = "The status bit for  SPI_MEM_S_RX_TRANS_OVF_INT interrupt."
+
+[[registers.fields]]
+name = "TX_TRANS_UDF"
+bits = "27"
+class = "read-only"
+description = "The status bit for SPI_MEM_S_TX_TRANS_UDF_INT interrupt."
+
+[[registers.fields]]
+name = "DQS0_AFIFO_OVF"
+bits = "28"
+class = "read-only"
+description = "The status bit for SPI_MEM_S_DQS0_AFIFO_OVF_INT interrupt."
+
+[[registers.fields]]
+name = "DQS1_AFIFO_OVF"
+bits = "29"
+class = "read-only"
+description = "The status bit for SPI_MEM_S_DQS1_AFIFO_OVF_INT interrupt."
+
+[[registers.fields]]
+name = "BUS_FIFO1_UDF"
+bits = "30"
+class = "read-only"
+description = "The status bit for SPI_MEM_S_BUS_FIFO1_UDF_INT interrupt."
+
+[[registers.fields]]
+name = "BUS_FIFO0_UDF"
+bits = "31"
+class = "read-only"
+description = "The status bit for SPI_MEM_S_BUS_FIFO0_UDF_INT interrupt."
+
+[[registers]]
+name = "DDR"
+offset = 0xd4
+description = "SPI0 flash DDR mode control register"
+reset = { value = 0x3020 }
+reserved = { mask = 0x82c00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "EN"
+bits = "0"
+class = "plain"
+description = "1: in DDR mode,  0 in SDR mode"
+
+[[registers.fields]]
+name = "VAR_DUMMY"
+bits = "1"
+class = "plain"
+description = "Set the bit to enable variable dummy cycle in spi DDR mode."
+
+[[registers.fields]]
+name = "RDAT_SWP"
+bits = "2"
+class = "plain"
+description = "Set the bit to reorder rx data of the word in spi DDR mode."
+
+[[registers.fields]]
+name = "WDAT_SWP"
+bits = "3"
+class = "plain"
+description = "Set the bit to reorder tx data of the word in spi DDR mode."
+
+[[registers.fields]]
+name = "CMD_DIS"
+bits = "4"
+class = "plain"
+description = "the bit is used to disable dual edge in command phase when DDR mode."
+
+[[registers.fields]]
+name = "OUTMINBYTELEN"
+bits = "11:5"
+class = "plain"
+description = "It is the minimum output data length in the panda device."
+
+[[registers.fields]]
+name = "TX_DDR_MSK_EN"
+bits = "12"
+class = "plain"
+description = "Set this bit to mask the first or the last byte in SPI0 ECC DDR write mode, when accesses to flash."
+
+[[registers.fields]]
+name = "RX_DDR_MSK_EN"
+bits = "13"
+class = "plain"
+description = "Set this bit to mask the first or the last byte in SPI0 ECC DDR read mode, when accesses to flash."
+
+[[registers.fields]]
+name = "USR_DDR_DQS_THD"
+bits = "20:14"
+class = "plain"
+description = "The delay number of data strobe which from memory based on SPI clock."
+
+[[registers.fields]]
+name = "DQS_LOOP"
+bits = "21"
+class = "plain"
+description = "1: Do not need the input of SPI_DQS signal, SPI0 starts to receive data when spi0_slv_st is in SPI_MEM_S_DIN state. It is used when there is no SPI_DQS signal or SPI_DQS signal is not stable. 0: SPI0 starts to store data at the positive and negative edge of SPI_DQS."
+
+[[registers.fields]]
+name = "CLK_DIFF_EN"
+bits = "24"
+class = "plain"
+description = "Set this bit to enable the differential SPI_CLK#."
+
+[[registers.fields]]
+name = "DQS_CA_IN"
+bits = "26"
+class = "plain"
+description = "Set this bit to enable the input of SPI_DQS signal in SPI phases of CMD and ADDR."
+
+[[registers.fields]]
+name = "HYPERBUS_DUMMY_2X"
+bits = "27"
+class = "plain"
+description = "Set this bit to enable the vary dummy function in SPI HyperBus mode, when SPI0 accesses flash or SPI1 accesses flash or sram."
+
+[[registers.fields]]
+name = "CLK_DIFF_INV"
+bits = "28"
+class = "plain"
+description = "Set this bit to invert SPI_DIFF when accesses to flash. ."
+
+[[registers.fields]]
+name = "OCTA_RAM_ADDR"
+bits = "29"
+class = "plain"
+description = "Set this bit to enable octa_ram address out when accesses to flash, which means ADDR_OUT[31:0] = {spi_usr_addr_value[25:4], 6'd0, spi_usr_addr_value[3:1], 1'b0}."
+
+[[registers.fields]]
+name = "HYPERBUS_CA"
+bits = "30"
+class = "plain"
+description = "Set this bit to enable HyperRAM address out when accesses to flash, which means ADDR_OUT[31:0] = {spi_usr_addr_value[19:4], 13'd0, spi_usr_addr_value[3:1]}."
+
+[[registers]]
+name = "SMEM_DDR"
+offset = 0xd8
+description = "SPI0 external RAM DDR mode control register"
+reset = { value = 0x3020 }
+reserved = { mask = 0x82c00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "EN"
+bits = "0"
+class = "plain"
+description = "1: in DDR mode,  0 in SDR mode"
+
+[[registers.fields]]
+name = "VAR_DUMMY"
+bits = "1"
+class = "plain"
+description = "Set the bit to enable variable dummy cycle in spi DDR mode."
+
+[[registers.fields]]
+name = "RDAT_SWP"
+bits = "2"
+class = "plain"
+description = "Set the bit to reorder rx data of the word in spi DDR mode."
+
+[[registers.fields]]
+name = "WDAT_SWP"
+bits = "3"
+class = "plain"
+description = "Set the bit to reorder tx data of the word in spi DDR mode."
+
+[[registers.fields]]
+name = "CMD_DIS"
+bits = "4"
+class = "plain"
+description = "the bit is used to disable dual edge in command phase when DDR mode."
+
+[[registers.fields]]
+name = "OUTMINBYTELEN"
+bits = "11:5"
+class = "plain"
+description = "It is the minimum output data length in the DDR psram."
+
+[[registers.fields]]
+name = "TX_DDR_MSK_EN"
+bits = "12"
+class = "plain"
+description = "Set this bit to mask the first or the last byte in SPI0 ECC DDR write mode, when accesses to external RAM."
+
+[[registers.fields]]
+name = "RX_DDR_MSK_EN"
+bits = "13"
+class = "plain"
+description = "Set this bit to mask the first or the last byte in SPI0 ECC DDR read mode, when accesses to external RAM."
+
+[[registers.fields]]
+name = "USR_DDR_DQS_THD"
+bits = "20:14"
+class = "plain"
+description = "The delay number of data strobe which from memory based on SPI clock."
+
+[[registers.fields]]
+name = "DQS_LOOP"
+bits = "21"
+class = "plain"
+description = "1: Do not need the input of SPI_DQS signal, SPI0 starts to receive data when spi0_slv_st is in SPI_MEM_S_DIN state. It is used when there is no SPI_DQS signal or SPI_DQS signal is not stable. 0: SPI0 starts to store data at the positive and negative edge of SPI_DQS."
+
+[[registers.fields]]
+name = "CLK_DIFF_EN"
+bits = "24"
+class = "plain"
+description = "Set this bit to enable the differential SPI_CLK#."
+
+[[registers.fields]]
+name = "DQS_CA_IN"
+bits = "26"
+class = "plain"
+description = "Set this bit to enable the input of SPI_DQS signal in SPI phases of CMD and ADDR."
+
+[[registers.fields]]
+name = "HYPERBUS_DUMMY_2X"
+bits = "27"
+class = "plain"
+description = "Set this bit to enable the vary dummy function in SPI HyperBus mode, when SPI0 accesses flash or SPI1 accesses flash or sram."
+
+[[registers.fields]]
+name = "CLK_DIFF_INV"
+bits = "28"
+class = "plain"
+description = "Set this bit to invert SPI_DIFF when accesses to external RAM. ."
+
+[[registers.fields]]
+name = "OCTA_RAM_ADDR"
+bits = "29"
+class = "plain"
+description = "Set this bit to enable octa_ram address out when accesses to external RAM, which means ADDR_OUT[31:0] = {spi_usr_addr_value[25:4], 6'd0, spi_usr_addr_value[3:1], 1'b0}."
+
+[[registers.fields]]
+name = "HYPERBUS_CA"
+bits = "30"
+class = "plain"
+description = "Set this bit to enable HyperRAM address out when accesses to external RAM, which means ADDR_OUT[31:0] = {spi_usr_addr_value[19:4], 13'd0, spi_usr_addr_value[3:1]}."
+
+[[registers]]
+name = "DLL_DLY_DB"
+offset = 0xdc
+description = "MSPI DLL function and debug configuration register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "DLL_DB_CFG_VLD_CNT"
+bits = "7:0"
+class = "plain"
+description = "Configures the end time of the debug window."
+
+[[registers.fields]]
+name = "DLL_DB_CNT_MODE_SEL"
+bits = "11:8"
+class = "plain"
+description = "[3]:1-spi_din[15:8]. 0-spi_din[7:0]. [2]:1-only shift wptr or rptr. 0-both shift wptr and rptr. [1]:1-wprt[3:0] and rptr[3:0]. 0-rptr[3:0] and wprt[3:0]. [0]:1-neg_ptr[3:0]. 0-pos_prt[3:0]."
+
+[[registers.fields]]
+name = "DLL_DB_CNT_CLR"
+bits = "12"
+class = "plain"
+description = "Configures the start time of the debug window. 1: Clear db_vld_cnt to 0 and Get ready for debug. 0: No debug."
+
+[[registers.fields]]
+name = "DLL_DIN_DLY_SEL"
+bits = "13"
+class = "plain"
+description = "Configures the din channel. 1: Use  delayed data. 0: Do not use delayed data."
+
+[[registers]]
+name = "DLL_DB_ST0"
+offset = 0xe0
+description = "MSPI DLL debug status0 register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "DB_FIFO_CNT_H"
+bits = "31:0"
+class = "read-only"
+description = "Debug  for DLL FIFO pointer. Use a 64bits shift register to record pointer changes during the debug window. db_fifo_cnt[63:32]"
+
+[[registers]]
+name = "DLL_DB_ST1"
+offset = 0xe4
+description = "MSPI DLL debug status1 register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "DB_FIFO_CNT_L"
+bits = "31:0"
+class = "read-only"
+description = "Debug  for DLL FIFO pointer. Use a 64bits shift register to record pointer changes during the debug window. db_fifo_cnt[31:0]"
+
+[[registers]]
+name = "FMEM_PMS%s_ATTR"
+offset = 0x100
+dim = { count = 4, stride = 0x4 }
+description = "SPI1 flash PMS section 0 attribute register"
+reset = { value = 0x1b }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "RD_ATTR"
+bits = "0"
+class = "plain"
+description = "1: SPI1 flash PMS section 0 read accessible. 0: Not allowed."
+
+[[registers.fields]]
+name = "WR_ATTR"
+bits = "1"
+class = "plain"
+description = "1: SPI1 flash PMS section 0 write accessible. 0: Not allowed."
+
+[[registers.fields]]
+name = "ECC"
+bits = "2"
+class = "plain"
+description = "SPI1 flash PMS section 0 ECC mode, 1: enable ECC mode. 0: Disable it. The flash PMS section 0 is configured by registers SPI_FMEM_S_PMS0_ADDR_REG and SPI_FMEM_S_PMS0_SIZE_REG."
+
+[[registers.fields]]
+name = "NONSECURE_RD_ATTR"
+bits = "3"
+class = "plain"
+description = "1: SPI1 flash  non-secure PMS section 0 read accessible. 0: Not allowed."
+
+[[registers.fields]]
+name = "NONSECURE_WR_ATTR"
+bits = "4"
+class = "plain"
+description = "1: SPI1 flash non-secure PMS section 0 write accessible. 0: Not allowed."
+
+[[registers.fields]]
+name = "NONSECURE_ECC"
+bits = "5"
+class = "plain"
+description = "SPI1 flash non-secure PMS section 0 ECC mode, 1: enable ECC mode. 0: Disable it. The flash PMS section 0 is configured by registers SPI_FMEM_S_PMS0_ADDR_REG and SPI_FMEM_S_PMS0_SIZE_REG."
+
+[[registers]]
+name = "FMEM_PMS%s_ADDR"
+offset = 0x110
+dim = { count = 4, stride = 0x4 }
+description = "SPI1 flash PMS section 0 start address register"
+reset = { value = 0x0 }
+reserved = { mask = 0xe0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "ADDR_S"
+bits = "28:0"
+class = "plain"
+description = "SPI1 flash PMS section 0 start address value"
+
+[[registers]]
+name = "FMEM_PMS%s_SIZE"
+offset = 0x120
+dim = { count = 4, stride = 0x4 }
+description = "SPI1 flash PMS section 0 start address register"
+reset = { value = 0x1000 }
+reserved = { mask = 0xfffe0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "SIZE"
+bits = "16:0"
+class = "plain"
+description = "SPI1 flash PMS section 0 address region is (SPI_FMEM_S_PMS0_ADDR_S, SPI_FMEM_S_PMS0_ADDR_S + SPI_FMEM_S_PMS0_SIZE)"
+
+[[registers]]
+name = "SMEM_PMS%s_ATTR"
+offset = 0x130
+dim = { count = 4, stride = 0x4 }
+description = "SPI1 external RAM PMS section 0 attribute register"
+reset = { value = 0x1b }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "RD_ATTR"
+bits = "0"
+class = "plain"
+description = "1: SPI1 external RAM PMS section 0 read accessible. 0: Not allowed."
+
+[[registers.fields]]
+name = "WR_ATTR"
+bits = "1"
+class = "plain"
+description = "1: SPI1 external RAM PMS section 0 write accessible. 0: Not allowed."
+
+[[registers.fields]]
+name = "ECC"
+bits = "2"
+class = "plain"
+description = "SPI1 external RAM PMS section 0 ECC mode, 1: enable ECC mode. 0: Disable it. The external RAM PMS section 0 is configured by registers SPI_SMEM_S_PMS0_ADDR_REG and SPI_SMEM_S_PMS0_SIZE_REG."
+
+[[registers.fields]]
+name = "NONSECURE_RD_ATTR"
+bits = "3"
+class = "plain"
+description = "1: SPI1 external RAM non-secure PMS section 0 read accessible. 0: Not allowed."
+
+[[registers.fields]]
+name = "NONSECURE_WR_ATTR"
+bits = "4"
+class = "plain"
+description = "1: SPI1 external RAM non-secure PMS section 0 write accessible. 0: Not allowed."
+
+[[registers.fields]]
+name = "NONSECURE_ECC"
+bits = "5"
+class = "plain"
+description = "SPI1 external RAM non-secure PMS section 0 ECC mode, 1: enable ECC mode. 0: Disable it. The external RAM PMS section 0 is configured by registers SPI_SMEM_S_PMS0_ADDR_REG and SPI_SMEM_S_PMS0_SIZE_REG."
+
+[[registers]]
+name = "SMEM_PMS%s_ADDR"
+offset = 0x140
+dim = { count = 4, stride = 0x4 }
+description = "SPI1 external RAM PMS section 0 start address register"
+reset = { value = 0x0 }
+reserved = { mask = 0xe0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "ADDR_S"
+bits = "28:0"
+class = "plain"
+description = "SPI1 external RAM PMS section 0 start address value"
+
+[[registers]]
+name = "SMEM_PMS%s_SIZE"
+offset = 0x150
+dim = { count = 4, stride = 0x4 }
+description = "SPI1 external RAM PMS section 0 start address register"
+reset = { value = 0x1000 }
+reserved = { mask = 0xfffe0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "SIZE"
+bits = "16:0"
+class = "plain"
+description = "SPI1 external RAM PMS section 0 address region is (SPI_SMEM_S_PMS0_ADDR_S, SPI_SMEM_S_PMS0_ADDR_S + SPI_SMEM_S_PMS0_SIZE)"
+
+[[registers]]
+name = "PMS_REJECT"
+offset = 0x160
+description = "SPI1 access reject register"
+reset = { value = 0x0 }
+reserved = { mask = 0x7ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "PM_EN"
+bits = "27"
+class = "plain"
+description = "Set this bit to enable SPI0/1 transfer permission control function."
+
+[[registers.fields]]
+name = "PMS_LD"
+bits = "28"
+class = "write-one-to-clear"
+description = "1: SPI1 write access error. 0: No write access error. It is cleared by when SPI_MEM_S_PMS_REJECT_INT_CLR bit is set."
+
+[[registers.fields]]
+name = "PMS_ST"
+bits = "29"
+class = "write-one-to-clear"
+description = "1: SPI1 read access error. 0: No read access error. It is cleared by when SPI_MEM_S_PMS_REJECT_INT_CLR bit is set."
+
+[[registers.fields]]
+name = "PMS_MULTI_HIT"
+bits = "30"
+class = "write-one-to-clear"
+description = "1: SPI1 access is rejected because of address miss. 0: No address miss error. It is cleared by when  SPI_MEM_S_PMS_REJECT_INT_CLR bit is set."
+
+[[registers.fields]]
+name = "PMS_IVD"
+bits = "31"
+class = "write-one-to-clear"
+description = "1: SPI1 access is rejected because of address multi-hit. 0: No address multi-hit error. It is cleared by when  SPI_MEM_S_PMS_REJECT_INT_CLR bit is set."
+
+[[registers]]
+name = "PMS_REJECT_ADDR"
+offset = 0x164
+description = "SPI1 access reject addr register"
+reset = { value = 0x0 }
+reserved = { mask = 0xe0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "REJECT_ADDR"
+bits = "28:0"
+class = "write-one-to-clear"
+description = "This bits show the first SPI1 access error address. It is cleared by when SPI_MEM_S_PMS_REJECT_INT_CLR bit is set."
+
+[[registers]]
+name = "ECC_CTRL"
+offset = 0x168
+description = "MSPI ECC control register"
+reset = { value = 0x1005000 }
+reserved = { mask = 0x90001f, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "ECC_ERR_CNT"
+bits = "10:5"
+class = "write-one-to-clear"
+description = "This bits show the error times of MSPI ECC read. It is cleared by when SPI_MEM_S_ECC_ERR_INT_CLR bit is set."
+
+[[registers.fields]]
+name = "FMEM_ECC_ERR_INT_NUM"
+bits = "16:11"
+class = "plain"
+description = "Set the error times of MSPI ECC read to generate MSPI SPI_MEM_S_ECC_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "FMEM_ECC_ERR_INT_EN"
+bits = "17"
+class = "plain"
+description = "Set this bit to calculate the error times of MSPI ECC read when accesses to flash."
+
+[[registers.fields]]
+name = "FMEM_PAGE_SIZE"
+bits = "19:18"
+class = "plain"
+description = "Set the page size of the flash accessed by MSPI. 0: 256 bytes. 1: 512 bytes. 2: 1024 bytes. 3: 2048 bytes."
+
+[[registers.fields]]
+name = "FMEM_ECC_ADDR_EN"
+bits = "21"
+class = "plain"
+description = "Set this bit to enable MSPI ECC address conversion, no matter MSPI accesses to the ECC region or non-ECC region of flash. If there is no ECC region in flash, this bit should be 0. Otherwise, this bit should be 1."
+
+[[registers.fields]]
+name = "USR_ECC_ADDR_EN"
+bits = "22"
+class = "plain"
+description = "Set this bit to enable ECC address convert in SPI0/1 USR_CMD transfer."
+
+[[registers.fields]]
+name = "ECC_CONTINUE_RECORD_ERR_EN"
+bits = "24"
+class = "plain"
+description = "1: The error information in SPI_MEM_S_ECC_ERR_BITS and SPI_MEM_S_ECC_ERR_ADDR is updated when there is an ECC error. 0: SPI_MEM_S_ECC_ERR_BITS and SPI_MEM_S_ECC_ERR_ADDR record the first ECC error information."
+
+[[registers.fields]]
+name = "ECC_ERR_BITS"
+bits = "31:25"
+class = "write-one-to-clear"
+description = "Records the first ECC error bit number in the 16 bytes(From 0~127, corresponding to byte 0 bit 0 to byte 15 bit 7)"
+
+[[registers]]
+name = "ECC_ERR_ADDR"
+offset = 0x16c
+description = "MSPI ECC error address register"
+reset = { value = 0x0 }
+reserved = { mask = 0xe0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "ECC_ERR_ADDR"
+bits = "28:0"
+class = "write-one-to-clear"
+description = "This bits show the first MSPI ECC error address. It is cleared by when SPI_MEM_S_ECC_ERR_INT_CLR bit is set."
+
+[[registers]]
+name = "AXI_ERR_ADDR"
+offset = 0x170
+description = "SPI0 AXI request error address."
+reset = { value = 0x0 }
+reserved = { mask = 0xe0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "AXI_ERR_ADDR"
+bits = "28:0"
+class = "write-one-to-clear"
+description = "This bits show the first AXI write/read invalid error or AXI write flash error address. It is cleared by when SPI_MEM_S_AXI_WADDR_ERR_INT_CLR, SPI_MEM_S_AXI_WR_FLASH_ERR_IN_CLR or SPI_MEM_S_AXI_RADDR_ERR_IN_CLR bit is set."
+
+[[registers]]
+name = "SMEM_ECC_CTRL"
+offset = 0x174
+description = "MSPI ECC control register"
+reset = { value = 0x80000 }
+reserved = { mask = 0xffe1ffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "ECC_ERR_INT_EN"
+bits = "17"
+class = "plain"
+description = "Set this bit to calculate the error times of MSPI ECC read when accesses to external RAM."
+
+[[registers.fields]]
+name = "PAGE_SIZE"
+bits = "19:18"
+class = "plain"
+description = "Set the page size of the external RAM accessed by MSPI. 0: 256 bytes. 1: 512 bytes. 2: 1024 bytes. 3: 2048 bytes."
+
+[[registers.fields]]
+name = "ECC_ADDR_EN"
+bits = "20"
+class = "plain"
+description = "Set this bit to enable MSPI ECC address conversion, no matter MSPI accesses to the ECC region or non-ECC region of external RAM. If there is no ECC region in external RAM, this bit should be 0. Otherwise, this bit should be 1."
+
+[[registers]]
+name = "SMEM_AXI_ADDR_CTRL"
+offset = 0x178
+description = "SPI0 AXI address control register"
+reset = { value = 0xfc000000 }
+reserved = { mask = 0x3ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "ALL_FIFO_EMPTY"
+bits = "26"
+class = "read-only"
+description = "The empty status of all AFIFO and SYNC_FIFO in MSPI module. 1: All AXI transfers and SPI0 transfers are done. 0: Others."
+
+[[registers.fields]]
+name = "RDATA_AFIFO_REMPTY"
+bits = "27"
+class = "read-only"
+description = "1: RDATA_AFIFO is empty. 0: At least one AXI read transfer is pending."
+
+[[registers.fields]]
+name = "RADDR_AFIFO_REMPTY"
+bits = "28"
+class = "read-only"
+description = "1: AXI_RADDR_CTL_AFIFO is empty. 0: At least one AXI read transfer is pending."
+
+[[registers.fields]]
+name = "WDATA_AFIFO_REMPTY"
+bits = "29"
+class = "read-only"
+description = "1: WDATA_AFIFO is empty. 0: At least one AXI write transfer is pending."
+
+[[registers.fields]]
+name = "WBLEN_AFIFO_REMPTY"
+bits = "30"
+class = "read-only"
+description = "1: WBLEN_AFIFO is empty. 0: At least one AXI write transfer is pending."
+
+[[registers.fields]]
+name = "ALL_AXI_TRANS_AFIFO_EMPTY"
+bits = "31"
+class = "read-only"
+description = "This bit is set when WADDR_AFIFO, WBLEN_AFIFO, WDATA_AFIFO, AXI_RADDR_CTL_AFIFO and RDATA_AFIFO are empty and spi0_mst_st is IDLE."
+
+[[registers]]
+name = "AXI_ERR_RESP_EN"
+offset = 0x17c
+description = "SPI0 AXI error response enable register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "AW_RESP_EN_MMU_VLD"
+bits = "0"
+class = "plain"
+description = "Set this bit  to enable AXI response function for mmu valid err in axi write trans."
+
+[[registers.fields]]
+name = "AW_RESP_EN_MMU_GID"
+bits = "1"
+class = "plain"
+description = "Set this bit  to enable AXI response function for mmu gid err in axi write trans."
+
+[[registers.fields]]
+name = "AW_RESP_EN_AXI_SIZE"
+bits = "2"
+class = "plain"
+description = "Set this bit  to enable AXI response function for axi size err in axi write trans."
+
+[[registers.fields]]
+name = "AW_RESP_EN_AXI_FLASH"
+bits = "3"
+class = "plain"
+description = "Set this bit  to enable AXI response function for axi flash err in axi write trans."
+
+[[registers.fields]]
+name = "AW_RESP_EN_MMU_ECC"
+bits = "4"
+class = "plain"
+description = "Set this bit  to enable AXI response function for mmu ecc err in axi write trans."
+
+[[registers.fields]]
+name = "AW_RESP_EN_MMU_SENS"
+bits = "5"
+class = "plain"
+description = "Set this bit  to enable AXI response function for mmu sens in err axi write trans."
+
+[[registers.fields]]
+name = "AW_RESP_EN_AXI_WSTRB"
+bits = "6"
+class = "plain"
+description = "Set this bit  to enable AXI response function for axi wstrb err in axi write trans."
+
+[[registers.fields]]
+name = "AR_RESP_EN_MMU_VLD"
+bits = "7"
+class = "plain"
+description = "Set this bit  to enable AXI response function for mmu valid err in axi read trans."
+
+[[registers.fields]]
+name = "AR_RESP_EN_MMU_GID"
+bits = "8"
+class = "plain"
+description = "Set this bit  to enable AXI response function for mmu gid err in axi read trans."
+
+[[registers.fields]]
+name = "AR_RESP_EN_MMU_ECC"
+bits = "9"
+class = "plain"
+description = "Set this bit  to enable AXI response function for mmu ecc err in axi read trans."
+
+[[registers.fields]]
+name = "AR_RESP_EN_MMU_SENS"
+bits = "10"
+class = "plain"
+description = "Set this bit  to enable AXI response function for mmu sensitive err in axi read trans."
+
+[[registers.fields]]
+name = "AR_RESP_EN_AXI_SIZE"
+bits = "11"
+class = "plain"
+description = "Set this bit  to enable AXI response function for axi size err in axi read trans."
+
+[[registers]]
+name = "TIMING_CALI"
+offset = 0x180
+description = "SPI0 flash timing calibration register"
+reset = { value = 0x1 }
+reserved = { mask = 0xffffff80, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "TIMING_CLK_ENA"
+bits = "0"
+class = "plain"
+description = "The bit is used to enable timing adjust clock for all reading operations."
+
+[[registers.fields]]
+name = "TIMING_CALI"
+bits = "1"
+class = "plain"
+description = "The bit is used to enable timing auto-calibration for all reading operations."
+
+[[registers.fields]]
+name = "EXTRA_DUMMY_CYCLELEN"
+bits = "4:2"
+class = "plain"
+description = "add extra dummy spi clock cycle length for spi clock calibration."
+
+[[registers.fields]]
+name = "DLL_TIMING_CALI"
+bits = "5"
+class = "plain"
+description = "Set this bit to enable DLL for timing calibration in DDR mode when accessed to flash."
+
+[[registers.fields]]
+name = "UPDATE"
+bits = "6"
+class = "write-trigger"
+description = "Set this bit to update delay mode, delay num and extra dummy in MSPI."
+
+[[registers]]
+name = "DIN_MODE"
+offset = 0x184
+description = "MSPI flash input timing delay mode control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf8000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "DIN0_MODE"
+bits = "2:0"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN1_MODE"
+bits = "5:3"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN2_MODE"
+bits = "8:6"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN3_MODE"
+bits = "11:9"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN4_MODE"
+bits = "14:12"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb, 3: input with the spi_clk"
+
+[[registers.fields]]
+name = "DIN5_MODE"
+bits = "17:15"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb, 3: input with the spi_clk"
+
+[[registers.fields]]
+name = "DIN6_MODE"
+bits = "20:18"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb, 3: input with the spi_clk"
+
+[[registers.fields]]
+name = "DIN7_MODE"
+bits = "23:21"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb, 3: input with the spi_clk"
+
+[[registers.fields]]
+name = "DINS_MODE"
+bits = "26:24"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb, 3: input with the spi_clk"
+
+[[registers]]
+name = "DIN_NUM"
+offset = 0x188
+description = "MSPI flash input timing delay number control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffc0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "DIN0_NUM"
+bits = "1:0"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN1_NUM"
+bits = "3:2"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN2_NUM"
+bits = "5:4"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN3_NUM"
+bits = "7:6"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN4_NUM"
+bits = "9:8"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN5_NUM"
+bits = "11:10"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN6_NUM"
+bits = "13:12"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN7_NUM"
+bits = "15:14"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DINS_NUM"
+bits = "17:16"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers]]
+name = "DOUT_MODE"
+offset = 0x18c
+description = "MSPI flash output timing adjustment control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "DOUT0_MODE"
+bits = "0"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT1_MODE"
+bits = "1"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT2_MODE"
+bits = "2"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT3_MODE"
+bits = "3"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT4_MODE"
+bits = "4"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the spi_clk"
+
+[[registers.fields]]
+name = "DOUT5_MODE"
+bits = "5"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the spi_clk"
+
+[[registers.fields]]
+name = "DOUT6_MODE"
+bits = "6"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the spi_clk"
+
+[[registers.fields]]
+name = "DOUT7_MODE"
+bits = "7"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the spi_clk"
+
+[[registers.fields]]
+name = "DOUTS_MODE"
+bits = "8"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the spi_clk"
+
+[[registers]]
+name = "SMEM_TIMING_CALI"
+offset = 0x190
+description = "MSPI external RAM timing calibration register"
+reset = { value = 0x2a81 }
+reserved = { mask = 0xffff8040, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "TIMING_CLK_ENA"
+bits = "0"
+class = "plain"
+description = "For sram, the bit is used to enable timing adjust clock for all reading operations."
+
+[[registers.fields]]
+name = "TIMING_CALI"
+bits = "1"
+class = "plain"
+description = "For sram, the bit is used to enable timing auto-calibration for all reading operations."
+
+[[registers.fields]]
+name = "EXTRA_DUMMY_CYCLELEN"
+bits = "4:2"
+class = "plain"
+description = "For sram, add extra dummy spi clock cycle length for spi clock calibration."
+
+[[registers.fields]]
+name = "DLL_TIMING_CALI"
+bits = "5"
+class = "plain"
+description = "Set this bit to enable DLL for timing calibration in DDR mode when accessed to EXT_RAM."
+
+[[registers.fields]]
+name = "DQS0_270_SEL"
+bits = "8:7"
+class = "plain"
+description = "Set these bits to delay dqs signal & invert delayed signal for DLL timing adjust. 2'd0: 0.5ns, 2'd1: 1.0ns, 2'd2: 1.5ns 2'd3: 2.0ns."
+
+[[registers.fields]]
+name = "DQS0_90_SEL"
+bits = "10:9"
+class = "plain"
+description = "Set these bits to delay dqs signal for DLL timing adjust. 2'd0: 0.5ns, 2'd1: 1.0ns, 2'd2: 1.5ns 2'd3: 2.0ns."
+
+[[registers.fields]]
+name = "DQS1_270_SEL"
+bits = "12:11"
+class = "plain"
+description = "Set these bits to delay dqs signal & invert delayed signal for DLL timing adjust. 2'd0: 0.5ns, 2'd1: 1.0ns, 2'd2: 1.5ns 2'd3: 2.0ns."
+
+[[registers.fields]]
+name = "DQS1_90_SEL"
+bits = "14:13"
+class = "plain"
+description = "Set these bits to delay dqs signal for DLL timing adjust. 2'd0: 0.5ns, 2'd1: 1.0ns, 2'd2: 1.5ns 2'd3: 2.0ns."
+
+[[registers]]
+name = "SMEM_DIN_MODE"
+offset = 0x194
+description = "MSPI external RAM input timing delay mode control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf8000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "DIN0_MODE"
+bits = "2:0"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN1_MODE"
+bits = "5:3"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN2_MODE"
+bits = "8:6"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN3_MODE"
+bits = "11:9"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN4_MODE"
+bits = "14:12"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN5_MODE"
+bits = "17:15"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN6_MODE"
+bits = "20:18"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN7_MODE"
+bits = "23:21"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DINS_MODE"
+bits = "26:24"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers]]
+name = "SMEM_DIN_NUM"
+offset = 0x198
+description = "MSPI external RAM input timing delay number control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffc0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "DIN0_NUM"
+bits = "1:0"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN1_NUM"
+bits = "3:2"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN2_NUM"
+bits = "5:4"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN3_NUM"
+bits = "7:6"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN4_NUM"
+bits = "9:8"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN5_NUM"
+bits = "11:10"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN6_NUM"
+bits = "13:12"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN7_NUM"
+bits = "15:14"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DINS_NUM"
+bits = "17:16"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers]]
+name = "SMEM_DOUT_MODE"
+offset = 0x19c
+description = "MSPI external RAM output timing adjustment control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "DOUT0_MODE"
+bits = "0"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT1_MODE"
+bits = "1"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT2_MODE"
+bits = "2"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT3_MODE"
+bits = "3"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT4_MODE"
+bits = "4"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT5_MODE"
+bits = "5"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT6_MODE"
+bits = "6"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT7_MODE"
+bits = "7"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUTS_MODE"
+bits = "8"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers]]
+name = "SMEM_AC"
+offset = 0x1a0
+description = "MSPI external RAM ECC and SPI CS timing control register"
+reset = { value = 0xb084 }
+reserved = { mask = 0x1fe0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "CS_SETUP"
+bits = "0"
+class = "plain"
+description = "For SPI0 and SPI1, spi cs is enable when spi is in prepare phase. 1: enable 0: disable."
+
+[[registers.fields]]
+name = "CS_HOLD"
+bits = "1"
+class = "plain"
+description = "For SPI0 and SPI1, spi cs keep low when spi is in done phase. 1: enable 0: disable."
+
+[[registers.fields]]
+name = "CS_SETUP_TIME"
+bits = "6:2"
+class = "plain"
+description = "For spi0, (cycles-1) of prepare phase by spi clock this bits are combined with spi_mem_cs_setup bit."
+
+[[registers.fields]]
+name = "CS_HOLD_TIME"
+bits = "11:7"
+class = "plain"
+description = "For SPI0 and SPI1, spi cs signal is delayed to inactive by spi clock this bits are combined with spi_mem_cs_hold bit."
+
+[[registers.fields]]
+name = "ECC_CS_HOLD_TIME"
+bits = "14:12"
+class = "plain"
+description = "SPI_SMEM_S_CS_HOLD_TIME + SPI_SMEM_S_ECC_CS_HOLD_TIME is the SPI0 and SPI1 CS hold cycles in ECC mode when accessed external RAM."
+
+[[registers.fields]]
+name = "ECC_SKIP_PAGE_CORNER"
+bits = "15"
+class = "plain"
+description = "1: SPI0 skips page corner when accesses external RAM. 0: Not skip page corner when accesses external RAM."
+
+[[registers.fields]]
+name = "ECC_16TO18_BYTE_EN"
+bits = "16"
+class = "plain"
+description = "Set this bit to enable SPI0 and SPI1 ECC 16 bytes data with 2 ECC bytes mode when accesses external RAM."
+
+[[registers.fields]]
+name = "CS_HOLD_DELAY"
+bits = "30:25"
+class = "plain"
+description = "These bits are used to set the minimum CS high time tSHSL between SPI burst transfer when accesses to external RAM. tSHSL is (SPI_SMEM_S_CS_HOLD_DELAY[5:0] + 1) MSPI core clock cycles."
+
+[[registers.fields]]
+name = "SPLIT_TRANS_EN"
+bits = "31"
+class = "plain"
+description = "Set this bit to enable SPI0 split one AXI accesses EXT_RAM transfer into two SPI transfers when one transfer will cross flash/EXT_RAM page corner, valid no matter whether there is an ECC region or not."
+
+[[registers]]
+name = "SMEM_DIN_HEX_MODE"
+offset = 0x1a4
+description = "MSPI 16x external RAM input timing delay mode control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf8000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "SPI_SMEM_S_DIN08_MODE"
+bits = "2:0"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "SPI_SMEM_S_DIN09_MODE"
+bits = "5:3"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN10_MODE"
+bits = "8:6"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN11_MODE"
+bits = "11:9"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN12_MODE"
+bits = "14:12"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN13_MODE"
+bits = "17:15"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN14_MODE"
+bits = "20:18"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DIN15_MODE"
+bits = "23:21"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DINS_HEX_MODE"
+bits = "26:24"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: input without delayed, 1: input with the posedge of clk_apb,2 input with the negedge of clk_apb,  3: input with the posedge of clk_160, 4 input with the negedge of clk_160, 5: input with the spi_clk high edge,  6: input with the spi_clk low edge"
+
+[[registers]]
+name = "SMEM_DIN_HEX_NUM"
+offset = 0x1a8
+description = "MSPI 16x external RAM input timing delay number control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffc0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "SPI_SMEM_S_DIN08_NUM"
+bits = "1:0"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "SPI_SMEM_S_DIN09_NUM"
+bits = "3:2"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN10_NUM"
+bits = "5:4"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN11_NUM"
+bits = "7:6"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN12_NUM"
+bits = "9:8"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN13_NUM"
+bits = "11:10"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN14_NUM"
+bits = "13:12"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DIN15_NUM"
+bits = "15:14"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers.fields]]
+name = "DINS_HEX_NUM"
+bits = "17:16"
+class = "plain"
+description = "the input signals are delayed by system clock cycles, 0: delayed by 1 cycle, 1: delayed by 2 cycles,..."
+
+[[registers]]
+name = "SMEM_DOUT_HEX_MODE"
+offset = 0x1ac
+description = "MSPI 16x external RAM output timing adjustment control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "SPI_SMEM_S_DOUT08_MODE"
+bits = "0"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "SPI_SMEM_S_DOUT09_MODE"
+bits = "1"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT10_MODE"
+bits = "2"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT11_MODE"
+bits = "3"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT12_MODE"
+bits = "4"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT13_MODE"
+bits = "5"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT14_MODE"
+bits = "6"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUT15_MODE"
+bits = "7"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers.fields]]
+name = "DOUTS_HEX_MODE"
+bits = "8"
+class = "plain"
+description = "the output signals are delayed by system clock cycles, 0: output without delayed, 1: output with the posedge of clk_apb,2 output with the negedge of clk_apb, 3: output with the posedge of clk_160,4 output with the negedge of clk_160,5: output with the spi_clk high edge ,6: output with the spi_clk low edge"
+
+[[registers]]
+name = "CLOCK_GATE"
+offset = 0x200
+description = "SPI0 clock gate register"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "0"
+class = "plain"
+description = "Register clock gate enable signal. 1: Enable. 0: Disable."
+
+[[registers.fields]]
+name = "MSPI_CLK_FORCE_ON"
+bits = "1"
+class = "plain"
+description = "MSPI lowpower function clock gate force on signal. 1: Enable. 0: Disable."
+
+[[registers]]
+name = "NAND_FLASH_EN"
+offset = 0x204
+description = "NAND FLASH control register"
+reset = { value = 0xfffe }
+reserved = { mask = 0xfff80000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "EN"
+bits = "0"
+class = "read-only"
+description = "NAND FLASH function enable signal. 1: Enable NAND FLASH, Disable NOR FLASH. 0: Disable NAND FLASH, Enable NOR FLASH."
+
+[[registers.fields]]
+name = "SEQ_HD_INDEX"
+bits = "15:1"
+class = "read-only"
+description = "NAND FLASH spi seq head index configure register. Every 5 bits represent  the 1st index of a SPI CMD sequence.[14:10]:usr; [9:5]:axi_rd; [4:0]:axi_wr."
+
+[[registers.fields]]
+name = "SEQ_USR_TRIG"
+bits = "16"
+class = "read-only"
+description = "NAND FLASH spi seq user trigger configure register. SPI_MEM_S_NAND_FLASH_SEQ_USR_TRIG is corresponds to SPI_MEM_S_NAND_FLASH_SEQ_HD_INDEX[14:10].1: enable 0: disable."
+
+[[registers.fields]]
+name = "LUT_EN"
+bits = "17"
+class = "read-only"
+description = "NAND FLASH spi seq & cmd lut cfg en. 1: enable 0: disable."
+
+[[registers.fields]]
+name = "SEQ_USR_WEND"
+bits = "18"
+class = "read-only"
+description = "Used with SPI_MEM_S_NAND_FLASH_SEQ_USR_TRIG to indicate the last page program ,and to execute page execute. 1: write end 0: write in a page size."
+
+[[registers]]
+name = "NAND_FLASH_SR_ADDR0"
+offset = 0x208
+description = "NAND FLASH SPI SEQ control register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "SR_ADDR0"
+bits = "7:0"
+class = "read-only"
+description = "configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register"
+
+[[registers.fields]]
+name = "SR_ADDR1"
+bits = "15:8"
+class = "read-only"
+description = "configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register"
+
+[[registers.fields]]
+name = "SR_ADDR2"
+bits = "23:16"
+class = "read-only"
+description = "configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register"
+
+[[registers.fields]]
+name = "SR_ADDR3"
+bits = "31:24"
+class = "read-only"
+description = "configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register"
+
+[[registers]]
+name = "NAND_FLASH_SR_DIN0"
+offset = 0x20c
+description = "NAND FLASH SPI SEQ control register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "SR_DIN0"
+bits = "7:0"
+class = "read-only"
+description = "spi read state register data to this register for SPI SEQ need. SPI_MEM_S_NAND_FLASH_SR_DIN0_REG corresponds to SPI_MEM_S_NAND_FLASH_SR_ADDR0_REG."
+
+[[registers.fields]]
+name = "SR_DIN1"
+bits = "15:8"
+class = "read-only"
+description = "spi read state register data to this register for SPI SEQ need. SPI_MEM_S_NAND_FLASH_SR_DIN0_REG corresponds to SPI_MEM_S_NAND_FLASH_SR_ADDR0_REG."
+
+[[registers.fields]]
+name = "SR_DIN2"
+bits = "23:16"
+class = "read-only"
+description = "spi read state register data to this register for SPI SEQ need. SPI_MEM_S_NAND_FLASH_SR_DIN0_REG corresponds to SPI_MEM_S_NAND_FLASH_SR_ADDR0_REG."
+
+[[registers.fields]]
+name = "SR_DIN3"
+bits = "31:24"
+class = "read-only"
+description = "spi read state register data to this register for SPI SEQ need. SPI_MEM_S_NAND_FLASH_SR_DIN0_REG corresponds to SPI_MEM_S_NAND_FLASH_SR_ADDR0_REG."
+
+[[registers]]
+name = "NAND_FLASH_CFG_DATA0"
+offset = 0x210
+description = "NAND FLASH SPI SEQ control register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "CFG_DATA0"
+bits = "15:0"
+class = "read-only"
+description = "configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data"
+
+[[registers.fields]]
+name = "CFG_DATA1"
+bits = "31:16"
+class = "read-only"
+description = "configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data"
+
+[[registers]]
+name = "NAND_FLASH_CFG_DATA1"
+offset = 0x214
+description = "NAND FLASH SPI SEQ control register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "CFG_DATA2"
+bits = "15:0"
+class = "read-only"
+description = "configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data"
+
+[[registers.fields]]
+name = "CFG_DATA3"
+bits = "31:16"
+class = "read-only"
+description = "configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data"
+
+[[registers]]
+name = "NAND_FLASH_CFG_DATA2"
+offset = 0x218
+description = "NAND FLASH SPI SEQ control register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "CFG_DATA4"
+bits = "15:0"
+class = "read-only"
+description = "configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data"
+
+[[registers.fields]]
+name = "CFG_DATA5"
+bits = "31:16"
+class = "read-only"
+description = "configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data"
+
+[[registers]]
+name = "NAND_FLASH_CMD_LUT0"
+offset = 0x240
+description = "MSPI NAND FLASH CMD LUT control register"
+reset = { value = 0x0 }
+reserved = { mask = 0x80000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "LUT_CMD_VALUE"
+bits = "15:0"
+class = "read-only"
+description = "MSPI NAND FLASH config cmd value at cmd lut address 0."
+
+[[registers.fields]]
+name = "LUT_SFSM_ST_EN"
+bits = "19:16"
+class = "read-only"
+description = "MSPI NAND FLASH config sfsm_st_en at cmd lut address 0.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period."
+
+[[registers.fields]]
+name = "LUT_CMD_LEN"
+bits = "23:20"
+class = "read-only"
+description = "MSPI NAND FLASH config cmd length at cmd lut address 0."
+
+[[registers.fields]]
+name = "LUT_ADDR_LEN"
+bits = "27:24"
+class = "read-only"
+description = "MSPI NAND FLASH config address length at cmd lut address 0."
+
+[[registers.fields]]
+name = "LUT_DATA_LEN"
+bits = "29:28"
+class = "read-only"
+description = "MSPI NAND FLASH config data length at cmd lut address 0."
+
+[[registers.fields]]
+name = "LUT_BUS_EN"
+bits = "30"
+class = "read-only"
+description = "MSPI NAND FLASH config spi_bus_en at cmd lut address 0,SPI could use DUAL/QUAD mode while enable, SPI could use SINGLE mode while disable.1:Enable. 0:Disable.(Note these registers are described to indicate the SPI_MEM_S_NAND_FLASH_CMD_LUT0_REG's field. The number of CMD LUT entries can be defined by the user, but cannot exceed 16 )"
+
+[[registers]]
+name = "NAND_FLASH_SPI_SEQ0"
+offset = 0x280
+description = "NAND FLASH SPI SEQ control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffff8000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "SEQ_TAIL_FLG"
+bits = "0"
+class = "read-only"
+description = "MSPI NAND FLASH config seq_tail_flg at spi seq index 0.1: The last index for sequence. 0: Not the last index."
+
+[[registers.fields]]
+name = "SR_CHK_EN"
+bits = "1"
+class = "read-only"
+description = "MSPI NAND FLASH config sr_chk_en at spi seq index 0. 1: enable 0: disable."
+
+[[registers.fields]]
+name = "DIN_INDEX"
+bits = "5:2"
+class = "read-only"
+description = "MSPI NAND FLASH config din_index at spi seq index 0.  Use with SPI_MEM_S_NAND_FLASH_CFG_DATA"
+
+[[registers.fields]]
+name = "ADDR_INDEX"
+bits = "9:6"
+class = "read-only"
+description = "MSPI NAND FLASH config addr_index at spi seq index 0.  Use with SPI_MEM_S_NAND_FLASH_SR_ADDR"
+
+[[registers.fields]]
+name = "REQ_OR_CFG"
+bits = "10"
+class = "read-only"
+description = "MSPI NAND FLASH config reg_or_cfg at spi seq index 0. 1: AXI/APB request  0: SPI SEQ configuration."
+
+[[registers.fields]]
+name = "CMD_INDEX"
+bits = "14:11"
+class = "read-only"
+description = "MSPI NAND FLASH config spi_cmd_index at spi seq index 0. Use to find SPI command in CMD LUT.(Note these registers are described to indicate the SPI_MEM_S_NAND_FLASH_SPI_SEQ_REG' fieldd The number of CMD LUT entries can be defined by the user, but cannot exceed 16 )"
+
+[[registers]]
+name = "XTS_PLAIN_BASE"
+offset = 0x300
+description = "The base address of the memory that stores plaintext in Manual Encryption"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "XTS_PLAIN"
+bits = "31:0"
+class = "plain"
+description = "This field is only used to generate include file in c case. This field is useless. Please do not use this field."
+
+[[registers]]
+name = "XTS_LINESIZE"
+offset = 0x340
+description = "Manual Encryption Line-Size register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "XTS_LINESIZE"
+bits = "1:0"
+class = "plain"
+description = "This bits stores the line-size parameter which will be used in manual encryption calculation. It decides how many bytes will be encrypted one time. 0: 16-bytes, 1: 32-bytes, 2: 64-bytes, 3:reserved."
+
+[[registers]]
+name = "XTS_DESTINATION"
+offset = 0x344
+description = "Manual Encryption destination register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "XTS_DESTINATION"
+bits = "0"
+class = "plain"
+description = "This bit stores the destination parameter which will be used in manual encryption calculation. 0: flash(default), 1: psram(reserved). Only default value can be used."
+
+[[registers]]
+name = "XTS_PHYSICAL_ADDRESS"
+offset = 0x348
+description = "Manual Encryption physical address register"
+reset = { value = 0x0 }
+reserved = { mask = 0xc0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "XTS_PHYSICAL_ADDRESS"
+bits = "29:0"
+class = "plain"
+description = "This bits stores the physical-address parameter which will be used in manual encryption calculation. This value should aligned with byte number decided by line-size parameter."
+
+[[registers]]
+name = "XTS_TRIGGER"
+offset = 0x34c
+description = "Manual Encryption physical address register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "XTS_TRIGGER"
+bits = "0"
+class = "write-trigger"
+description = "Set this bit to trigger the process of manual encryption calculation. This action should only be asserted when manual encryption status is 0. After this action, manual encryption status becomes 1. After calculation is done, manual encryption status becomes 2."
+
+[[registers]]
+name = "XTS_RELEASE"
+offset = 0x350
+description = "Manual Encryption physical address register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "XTS_RELEASE"
+bits = "0"
+class = "write-trigger"
+description = "Set this bit to release encrypted result to mspi. This action should only be asserted when manual encryption status is 2. After this action, manual encryption status will become 3."
+
+[[registers]]
+name = "XTS_DESTROY"
+offset = 0x354
+description = "Manual Encryption physical address register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "XTS_DESTROY"
+bits = "0"
+class = "write-trigger"
+description = "Set this bit to destroy encrypted result. This action should be asserted only when manual encryption status is 3. After this action, manual encryption status will become 0."
+
+[[registers]]
+name = "XTS_STATE"
+offset = 0x358
+description = "Manual Encryption physical address register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "XTS_STATE"
+bits = "1:0"
+class = "read-only"
+description = "This bits stores the status of manual encryption. 0: idle, 1: busy of encryption calculation, 2: encryption calculation is done but the encrypted result is invisible to mspi, 3: the encrypted result is visible to mspi."
+
+[[registers]]
+name = "XTS_DATE"
+offset = 0x35c
+description = "Manual Encryption version register"
+reset = { value = 0x20210907 }
+reserved = { mask = 0xc0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "XTS_DATE"
+bits = "29:0"
+class = "plain"
+description = "This bits stores the last modified-time of manual encryption feature."
+
+[[registers]]
+name = "MMU_ITEM_CONTENT"
+offset = 0x37c
+description = "MSPI-MMU item content register"
+reset = { value = 0x37c }
+reserved = { mask = 0xffffe000, sources = ["ESP_IDF_4D59230D_ESP_HAL_CACHE_ESP32S31_INCLUDE_HAL_MMU_LL_H_L325", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L59", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L63", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L66", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L76", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H_L4192"] }
+
+[[registers.fields]]
+name = "PADDR"
+bits = "9:0"
+class = "plain"
+description = "The physical PSRAM page."
+
+[[registers.fields]]
+name = "ACCESS_PSRAM"
+bits = "10"
+class = "plain"
+description = "The entry maps PSRAM: set in every PSRAM entry."
+
+[[registers.fields]]
+name = "VALID"
+bits = "11"
+class = "plain"
+description = "The entry is valid."
+
+[[registers.fields]]
+name = "SENSITIVE"
+bits = "12"
+class = "plain"
+description = "Accesses through the entry are decrypted."
+
+[[registers]]
+name = "MMU_ITEM_INDEX"
+offset = 0x380
+description = "MSPI-MMU item index register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "MMU_ITEM_INDEX"
+bits = "31:0"
+class = "plain"
+description = "MSPI-MMU item index"
+
+[[registers]]
+name = "MMU_POWER_CTRL"
+offset = 0x384
+description = "MSPI MMU power control register"
+reset = { value = 0x13200000 }
+reserved = { mask = 0xffe6, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "MMU_MEM_FORCE_ON"
+bits = "0"
+class = "plain"
+description = "Set this bit to enable mmu-memory clock force on"
+
+[[registers.fields]]
+name = "MMU_PAGE_SIZE"
+bits = "4:3"
+class = "plain"
+description = "0: Max page size , 1: Max page size/2 , 2: Max page size/4, 3: Max page size/8"
+
+[[registers.fields]]
+name = "AUX_CTRL"
+bits = "29:16"
+class = "plain"
+description = "MMU PSRAM aux control register"
+
+[[registers.fields]]
+name = "RDN_ENA"
+bits = "30"
+class = "debug-only"
+description = "ECO register enable bit This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers.fields]]
+name = "RDN_RESULT"
+bits = "31"
+class = "debug-only"
+description = "MSPI module clock domain and AXI clock domain ECO register result register This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers]]
+name = "DPA_CTRL"
+offset = 0x388
+description = "SPI memory cryption DPA register"
+reset = { value = 0x2f }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "CRYPT_SECURITY_LEVEL"
+bits = "2:0"
+class = "plain"
+description = "Set the security level of spi mem cryption. 0: Shut off cryption DPA function. 1-7: The bigger the number is, the more secure the cryption is. (Note that the performance of cryption will decrease together with this number increasing)"
+
+[[registers.fields]]
+name = "CRYPT_CALC_D_DPA_EN"
+bits = "3"
+class = "plain"
+description = "Only available when SPI_CRYPT_SECURITY_LEVEL is not 0. 1: Enable DPA in the calculation that using key 1 or key 2. 0: Enable DPA only in the calculation that using key 1."
+
+[[registers.fields]]
+name = "CRYPT_DPA_SELECT_REGISTER"
+bits = "4"
+class = "plain"
+description = "1: MSPI XTS DPA clock gate is controlled by SPI_CRYPT_CALC_D_DPA_EN and SPI_CRYPT_SECURITY_LEVEL. 0: Controlled by efuse bits."
+
+[[registers.fields]]
+name = "XTS_SHADOW_FOR_SEC"
+bits = "5"
+class = "plain"
+description = "1: shadow core mode for security (against fault injection attack). 0: shadow core mode for performance."
+
+[[registers]]
+name = "XTS_PSEUDO_ROUND_CONF"
+offset = 0x38c
+description = "SPI memory cryption PSEUDO register"
+reset = { value = 0x45c }
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "MODE_PSEUDO"
+bits = "1:0"
+class = "plain"
+description = "Set the mode of pseudo. 2'b00: crypto without pseudo. 2'b01: state T with pseudo and state D without pseudo. 2'b10: state T with pseudo and state D with few pseudo. 2'b11: crypto with pseudo."
+
+[[registers.fields]]
+name = "PSEUDO_RNG_CNT"
+bits = "4:2"
+class = "plain"
+description = "xts aes peseudo function base round that must be performed."
+
+[[registers.fields]]
+name = "PSEUDO_BASE"
+bits = "8:5"
+class = "plain"
+description = "xts aes peseudo function base round that must be performed."
+
+[[registers.fields]]
+name = "PSEUDO_INC"
+bits = "10:9"
+class = "plain"
+description = "xts aes peseudo function increment round that will be performed randomly between 0 & 2**(inc+1)."
+
+[[registers]]
+name = "REGISTERRND_ECO_HIGH"
+offset = 0x3f0
+description = "MSPI ECO high register"
+reset = { value = 0x37c }
+
+[[registers.fields]]
+name = "REGISTERRND_ECO_HIGH"
+bits = "31:0"
+class = "debug-only"
+description = "ECO high register This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers]]
+name = "REGISTERRND_ECO_LOW"
+offset = 0x3f4
+description = "MSPI ECO low register"
+reset = { value = 0x37c }
+
+[[registers.fields]]
+name = "REGISTERRND_ECO_LOW"
+bits = "31:0"
+class = "debug-only"
+description = "ECO low register This field is only for internal debugging purposes. Do not use it in applications."
+
+[[registers]]
+name = "DATE"
+offset = 0x3fc
+description = "SPI0 version control register"
+reset = { value = 0x2509030 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI_MEM_S_REG_H"] }
+
+[[registers.fields]]
+name = "DATE"
+bits = "27:0"
+class = "plain"
+description = "SPI0 register version."

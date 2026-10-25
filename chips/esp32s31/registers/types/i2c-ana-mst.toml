@@ -1,0 +1,267 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "I2C_ANA_MST"
+description = "The analog-I2C master that reaches the radio's analog blocks."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "I2C0_CTRL"
+offset = 0x0
+reset = { value = 0x0, mask = 0x3ffffff }
+reserved = { mask = 0xfc000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"] }
+
+[[registers.fields]]
+name = "I2C0_CTRL"
+bits = "24:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C0_BUSY"
+bits = "25"
+class = "read-only"
+
+[[registers]]
+name = "I2C1_CTRL"
+offset = 0x4
+reset = { value = 0x0, mask = 0x3ffffff }
+reserved = { mask = 0xfc000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"] }
+
+[[registers.fields]]
+name = "I2C1_CTRL"
+bits = "24:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C1_BUSY"
+bits = "25"
+class = "read-only"
+
+[[registers]]
+name = "I2C0_CONF"
+offset = 0x8
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "I2C0_CONF"
+bits = "23:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C0_STATUS"
+bits = "31:24"
+class = "read-only"
+
+[[registers]]
+name = "I2C1_CONF"
+offset = 0xc
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "I2C1_CONF"
+bits = "23:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C1_STATUS"
+bits = "31:24"
+class = "read-only"
+
+[[registers]]
+name = "I2C_BURST_CONF"
+offset = 0x10
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "I2C_MST_BURST_CTRL"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "I2C_BURST_STATUS"
+offset = 0x14
+reset = { value = 0x40000000, mask = 0xfff00007 }
+reserved = { mask = 0xffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"] }
+
+[[registers.fields]]
+name = "I2C_MST_BURST_DONE"
+bits = "0"
+class = "read-only"
+
+[[registers.fields]]
+name = "I2C_MST0_BURST_ERR_FLAG"
+bits = "1"
+class = "read-only"
+
+[[registers.fields]]
+name = "I2C_MST1_BURST_ERR_FLAG"
+bits = "2"
+class = "read-only"
+
+[[registers.fields]]
+name = "I2C_MST_BURST_TIMEOUT_CNT"
+bits = "31:20"
+class = "plain"
+
+[[registers]]
+name = "ANA_CONF0"
+offset = 0x18
+reset = { value = 0xe408 }
+
+[[registers.fields]]
+name = "ANA_CONF0"
+bits = "23:0"
+class = "plain"
+
+[[registers.fields]]
+name = "ANA_STATUS0"
+bits = "31:24"
+class = "read-only"
+
+[[registers]]
+name = "ANA_CONF1"
+offset = 0x1c
+reset = { value = 0x2d }
+
+[[registers.fields]]
+name = "ANA_CONF1"
+bits = "23:0"
+class = "plain"
+
+[[registers.fields]]
+name = "ANA_STATUS1"
+bits = "31:24"
+class = "read-only"
+
+[[registers]]
+name = "ANA_CONF2"
+offset = 0x20
+reset = { value = 0x4 }
+
+[[registers.fields]]
+name = "ANA_CONF2"
+bits = "23:0"
+class = "plain"
+
+[[registers.fields]]
+name = "ANA_STATUS2"
+bits = "31:24"
+class = "read-only"
+
+[[registers]]
+name = "I2C0_CTRL1"
+offset = 0x24
+reset = { value = 0x42, mask = 0x7ff }
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"] }
+
+[[registers.fields]]
+name = "I2C0_SCL_PULSE_DUR"
+bits = "5:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C0_SDA_SIDE_GUARD"
+bits = "10:6"
+class = "plain"
+
+[[registers]]
+name = "I2C1_CTRL1"
+offset = 0x28
+reset = { value = 0x42, mask = 0x7ff }
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"] }
+
+[[registers.fields]]
+name = "I2C1_SCL_PULSE_DUR"
+bits = "5:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C1_SDA_SIDE_GUARD"
+bits = "10:6"
+class = "plain"
+
+[[registers]]
+name = "HW_I2C_CTRL"
+offset = 0x2c
+reset = { value = 0x42, mask = 0xfff }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"] }
+
+[[registers.fields]]
+name = "HW_I2C_SCL_PULSE_DUR"
+bits = "5:0"
+class = "plain"
+
+[[registers.fields]]
+name = "HW_I2C_SDA_SIDE_GUARD"
+bits = "10:6"
+class = "plain"
+
+[[registers.fields]]
+name = "ARBITER_DIS"
+bits = "11"
+class = "plain"
+
+[[registers]]
+name = "I2C_MST_NOUSE"
+offset = 0x30
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "I2C_MST_NOUSE"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "EXT_I2C_MASK"
+offset = 0x34
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "EXT_I2C_SDA_I_MASK"
+bits = "15:0"
+class = "plain"
+
+[[registers.fields]]
+name = "EXT_I2C_SDA_O_MASK"
+bits = "31:16"
+class = "plain"
+
+[[registers]]
+name = "I2C_MASK"
+offset = 0x38
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "I2C_SDA_I_MASK"
+bits = "15:0"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_SDA_O_MASK"
+bits = "31:16"
+class = "plain"
+
+[[registers]]
+name = "DATE"
+offset = 0x3c
+reset = { value = 0x2411290, mask = 0x1fffffff }
+reserved = { mask = 0xe0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H"] }
+
+[[registers.fields]]
+name = "DATE"
+bits = "27:0"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "28"
+class = "plain"

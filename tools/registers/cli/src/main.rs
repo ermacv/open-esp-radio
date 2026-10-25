@@ -27,6 +27,13 @@ enum Command {
         #[arg(long)]
         address_space: String,
     },
+    /// Import the chip's vendor blocks (`chips/<chip>/registers/import.toml`)
+    /// from the pinned vendor SVD and ESP-IDF headers into block types and
+    /// the chip root; write the report to `target/registers-import/<chip>`.
+    Import {
+        #[arg(long)]
+        chip: String,
+    },
     Validate {
         #[arg(long)]
         manifest: PathBuf,
@@ -146,6 +153,15 @@ fn run() -> oer_registers_generate::Result<()> {
             let count =
                 oer_registers_generate::import_svd(&source, &directory, &chip, &address_space)?;
             println!("imported {count} unreviewed peripherals; original XML retained");
+        }
+        Command::Import { chip } => {
+            let imported = oer_registers_generate::import::run(&ctx.root, &chip)?;
+            println!(
+                "imported {} block types; {} findings in {}",
+                imported.types,
+                imported.report.findings.len(),
+                imported.report_path.display()
+            );
         }
         Command::Validate { manifest } => {
             oer_registers_generate::Publication::load(&manifest)?;

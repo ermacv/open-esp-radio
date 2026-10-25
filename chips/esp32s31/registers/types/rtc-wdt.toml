@@ -1,0 +1,323 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "RTC_WDT"
+description = "The RTC watchdog and the super watchdog."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "CONFIG0"
+offset = 0x0
+description = "need_des"
+reset = { value = 0x13214 }
+reserved = { mask = 0x1ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H"] }
+
+[[registers.fields]]
+name = "WDT_PAUSE_IN_SLP"
+bits = "9"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "WDT_APPCPU_RESET_EN"
+bits = "10"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "WDT_PROCPU_RESET_EN"
+bits = "11"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "WDT_FLASHBOOT_MOD_EN"
+bits = "12"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "WDT_SYS_RESET_LENGTH"
+bits = "15:13"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "WDT_CPU_RESET_LENGTH"
+bits = "18:16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "WDT_STG3"
+bits = "21:19"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "WDT_STG2"
+bits = "24:22"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "WDT_STG1"
+bits = "27:25"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "WDT_STG0"
+bits = "30:28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "WDT_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "CONFIG1"
+offset = 0x4
+description = "need_des"
+reset = { value = 0x30d40 }
+
+[[registers.fields]]
+name = "WDT_STG0_HOLD"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "CONFIG2"
+offset = 0x8
+description = "need_des"
+reset = { value = 0x13880 }
+
+[[registers.fields]]
+name = "WDT_STG1_HOLD"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "CONFIG3"
+offset = 0xc
+description = "need_des"
+reset = { value = 0xfff }
+
+[[registers.fields]]
+name = "WDT_STG2_HOLD"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "CONFIG4"
+offset = 0x10
+description = "need_des"
+reset = { value = 0xfff }
+
+[[registers.fields]]
+name = "WDT_STG3_HOLD"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "FEED"
+offset = 0x14
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H"] }
+
+[[registers.fields]]
+name = "FEED"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "WPROTECT"
+offset = 0x18
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "WDT_WKEY"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "SWD_CONFIG"
+offset = 0x1c
+description = "need_des"
+reset = { value = 0x12c00000 }
+reserved = { mask = 0x3fffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H"] }
+
+[[registers.fields]]
+name = "SWD_RESET_FLAG"
+bits = "0"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "SWD_AUTO_FEED_EN"
+bits = "18"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SWD_RST_FLAG_CLR"
+bits = "19"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "SWD_SIGNAL_WIDTH"
+bits = "29:20"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SWD_DISABLE"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SWD_FEED"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "SWD_WPROTECT"
+offset = 0x20
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "SWD_WKEY"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "INT_RAW"
+offset = 0x24
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H"] }
+
+[[registers.fields]]
+name = "SUPER_WDT_INT_RAW"
+bits = "30"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_WDT_INT_RAW"
+bits = "31"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers]]
+name = "INT_ST"
+offset = 0x28
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H"] }
+
+[[registers.fields]]
+name = "SUPER_WDT_INT_ST"
+bits = "30"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_WDT_INT_ST"
+bits = "31"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "INT_ENA"
+offset = 0x2c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H"] }
+
+[[registers.fields]]
+name = "SUPER_WDT_INT_ENA"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_WDT_INT_ENA"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "INT_CLR"
+offset = 0x30
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H"] }
+
+[[registers.fields]]
+name = "SUPER_WDT_INT_CLR"
+bits = "30"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_WDT_INT_CLR"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "PAUSE_EN"
+offset = 0x34
+description = "need_des"
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_WDT_REG_H"] }
+
+[[registers.fields]]
+name = "PAUSE_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "DATE"
+offset = 0x3fc
+description = "need_des"
+reset = { value = 0x2505300 }
+
+[[registers.fields]]
+name = "LP_WDT_DATE"
+bits = "30:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "31"
+class = "plain"
+description = "need_des"

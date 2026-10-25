@@ -1,0 +1,701 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "HP_ALIVE_SYS"
+description = "The HP always-on system registers."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "HP_CLK_CTRL"
+offset = 0x0
+description = "HP Clock Control Register."
+reset = { value = 0xfffe0000 }
+reserved = { mask = 0x701ffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "HP_XTALX2_80M_CLK_EN"
+bits = "17"
+class = "plain"
+description = "XTALx2 80M Clock Enalbe."
+
+[[registers.fields]]
+name = "HP_ROOT_CLK_EN"
+bits = "18"
+class = "plain"
+description = "HP SoC Root Clock Enable."
+
+[[registers.fields]]
+name = "HP_XTAL_32K_CLK_EN"
+bits = "19"
+class = "plain"
+description = "XTAL 32K Clock Enable."
+
+[[registers.fields]]
+name = "HP_RC_32K_CLK_EN"
+bits = "20"
+class = "plain"
+description = "RC 32K Clock Enable."
+
+[[registers.fields]]
+name = "HP_SOSC_150K_CLK_EN"
+bits = "21"
+class = "plain"
+description = "SOSC 150K Clock Enable."
+
+[[registers.fields]]
+name = "HP_PLL_80M_CLK_EN"
+bits = "22"
+class = "plain"
+description = "PLL 8M Clock Enable."
+
+[[registers.fields]]
+name = "HP_AUDIO_PLL_CLK_EN"
+bits = "23"
+class = "plain"
+description = "AUDIO PLL Clock Enable."
+
+[[registers.fields]]
+name = "HP_FOSC_20M_CLK_EN"
+bits = "27"
+class = "plain"
+description = "FOSC 20M Clock Enable."
+
+[[registers.fields]]
+name = "HP_XTAL_40M_CLK_EN"
+bits = "28"
+class = "plain"
+description = "XTAL 40M Clock Enalbe."
+
+[[registers.fields]]
+name = "HP_CPLL_300M_CLK_EN"
+bits = "29"
+class = "plain"
+description = "CPLL 300M Clock Enable."
+
+[[registers.fields]]
+name = "HP_SPLL_480M_CLK_EN"
+bits = "30"
+class = "plain"
+description = "SPLL 480M Clock Enable."
+
+[[registers.fields]]
+name = "HP_MPLL_500M_CLK_EN"
+bits = "31"
+class = "plain"
+description = "MPLL 500M Clock Enable."
+
+[[registers]]
+name = "HP_PAD_PARLIO_CTRL"
+offset = 0x4
+description = "HP Clock Control Register."
+reset = { value = 0xc0000000 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PAD_PARLIO_TX_CLK_EN"
+bits = "30"
+class = "plain"
+description = "PARLIO TX Clock From Pad Enable."
+
+[[registers.fields]]
+name = "HP_PAD_PARLIO_RX_CLK_EN"
+bits = "31"
+class = "plain"
+description = "PARLIO RX Clock From Pad Enable."
+
+[[registers]]
+name = "HP_PAD_I2S0_CTRL"
+offset = 0x8
+description = "HP Clock Control Register."
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PAD_I2S0_MCLK_EN"
+bits = "31"
+class = "plain"
+description = "I2S0 MCLK Clock From Pad Enable."
+
+[[registers]]
+name = "HP_PAD_I2S1_CTRL"
+offset = 0xc
+description = "HP Clock Control Register."
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PAD_I2S1_MCLK_EN"
+bits = "31"
+class = "plain"
+description = "I2S1 MCLK Clock From Pad Enable."
+
+[[registers]]
+name = "HP_PAD_UART0_CTRL"
+offset = 0x10
+description = "HP Clock Control Register."
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PAD_UART0_SLP_CLK_EN"
+bits = "31"
+class = "plain"
+description = "UART0 SLP Clock From Pad Enable."
+
+[[registers]]
+name = "HP_PAD_UART1_CTRL"
+offset = 0x14
+description = "HP Clock Control Register."
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PAD_UART1_SLP_CLK_EN"
+bits = "31"
+class = "plain"
+description = "UART1 SLP Clock From Pad Enable."
+
+[[registers]]
+name = "HP_PAD_UART2_CTRL"
+offset = 0x18
+description = "HP Clock Control Register."
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PAD_UART2_SLP_CLK_EN"
+bits = "31"
+class = "plain"
+description = "UART2 SLP Clock From Pad Enable."
+
+[[registers]]
+name = "HP_PAD_UART3_CTRL"
+offset = 0x1c
+description = "HP Clock Control Register."
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PAD_UART3_SLP_CLK_EN"
+bits = "31"
+class = "plain"
+description = "UART3 SLP Clock From Pad Enable."
+
+[[registers]]
+name = "MODEM_CLK_AON"
+offset = 0x20
+description = "need_des"
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "SEL"
+bits = "31"
+class = "plain"
+description = "Modem clk aon sel. 0: foscl 1:xtal"
+
+[[registers]]
+name = "USB_CTRL"
+offset = 0x24
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffe0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "USB_OTGHS_PHY_CHRGVBUS"
+bits = "0"
+class = "plain"
+description = "phy chrgvbus"
+
+[[registers.fields]]
+name = "USB_OTGHS_PHY_DISCHRGVBUS"
+bits = "1"
+class = "plain"
+description = "phy dischrgvbus"
+
+[[registers.fields]]
+name = "USB_OTGHS_PHY_DMPULLDOWN"
+bits = "2"
+class = "plain"
+description = "phy dmpulldown"
+
+[[registers.fields]]
+name = "USB_OTGHS_PHY_DPPULLDOWN"
+bits = "3"
+class = "plain"
+description = "phy dppulldown"
+
+[[registers.fields]]
+name = "USB_OTGHS_PHY_IDPULLUP"
+bits = "4"
+class = "plain"
+description = "phy idpullup"
+
+[[registers]]
+name = "HP_TCM_MEM_LP_CTRL"
+offset = 0x28
+description = "configure rmemory power in lp system register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "HP_TCM_L0_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures layer0 hp_sram memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "HP_TCM_L0_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down layer0 hp_sram memory."
+
+[[registers.fields]]
+name = "HP_TCM_MEM_L0_LP_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control layer0 hp_sram memory, disbale hardware control."
+
+[[registers.fields]]
+name = "HP_TCM_L1_MEM_LP_MODE"
+bits = "5:4"
+class = "plain"
+description = "Configures layer1 hp_sram memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "HP_TCM_L1_MEM_LP_EN"
+bits = "6"
+class = "plain"
+description = "Set this bit to power down layer1 hp_sram memory."
+
+[[registers.fields]]
+name = "HP_TCM_MEM_L1_LP_FORCE_CTRL"
+bits = "7"
+class = "plain"
+description = "Set this bit to force software control layer1 hp_sram memory, disbale hardware control."
+
+[[registers.fields]]
+name = "HP_TCM_L2_MEM_LP_MODE"
+bits = "9:8"
+class = "plain"
+description = "Configures layer2 hp_sram memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "HP_TCM_L2_MEM_LP_EN"
+bits = "10"
+class = "plain"
+description = "Set this bit to power down layer2 hp_sram memory."
+
+[[registers.fields]]
+name = "HP_TCM_MEM_L2_LP_FORCE_CTRL"
+bits = "11"
+class = "plain"
+description = "Set this bit to force software control layer2 hp_sram memory, disbale hardware control."
+
+[[registers.fields]]
+name = "HP_TCM_L3_MEM_LP_MODE"
+bits = "13:12"
+class = "plain"
+description = "Configures layer3 hp_sram memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "HP_TCM_L3_MEM_LP_EN"
+bits = "14"
+class = "plain"
+description = "Set this bit to power down layer3 hp_sram memory."
+
+[[registers.fields]]
+name = "HP_TCM_MEM_L3_LP_FORCE_CTRL"
+bits = "15"
+class = "plain"
+description = "Set this bit to force software control layer3 hp_sram memory, disbale hardware control."
+
+[[registers]]
+name = "FLASH_MMU_MEM_LP_CTRL"
+offset = 0x2c
+description = "configure rmemory power in lp system register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "FLASH_MMU_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures flash_mmu memory low power mode in low power stage.\\\\ 0: deep sleep\\\\ 1: light sleep\\\\ 2(default): shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "FLASH_MMU_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down flash_mmu memory."
+
+[[registers.fields]]
+name = "FLASH_MMU_MEM_LP_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control flash_mmu memory, disbale hardware control."
+
+[[registers]]
+name = "PSRAM_MMU_MEM_LP_CTRL"
+offset = 0x30
+description = "configure rmemory power in lp system register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "PSRAM_MMU_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures psram_mmu memory low power mode in low power stage.\\\\ 0: deep sleep\\\\ 1: light sleep\\\\ 2(default): shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "PSRAM_MMU_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down psram_mmu memory."
+
+[[registers.fields]]
+name = "PSRAM_MMU_MEM_LP_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control psram_mmu memory, disbale hardware control."
+
+[[registers]]
+name = "SPRAM_MEM_AUX_CTRL"
+offset = 0x34
+description = "spram mem aux ctrl , control TOP/CNNT/MODEM power domain"
+reset = { value = 0x2070 }
+
+[[registers.fields]]
+name = "SPRAM_MEM_AUX_CTRL"
+bits = "31:0"
+class = "plain"
+description = "spram mem aux ctrl , control TOP/CNNT/MODEM power domain"
+
+[[registers]]
+name = "SPRF_MEM_AUX_CTRL"
+offset = 0x38
+description = "sprf mem aux ctrl , control TOP/CNNT power domain"
+reset = { value = 0x2070 }
+
+[[registers.fields]]
+name = "SPRF_MEM_AUX_CTRL"
+bits = "31:0"
+class = "plain"
+description = "sprf mem aux ctrl , control TOP/CNNT/MODEM power domain"
+
+[[registers]]
+name = "SDPRF_MEM_AUX_CTRL"
+offset = 0x40
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "SDPRF_MEM_AUX_CTRL"
+bits = "31:0"
+class = "plain"
+description = "sdprf mem aux ctrl , control TOP/CNNT/MODEM power domain"
+
+[[registers]]
+name = "CPU_SPROM_MEM_AUX_CTRL"
+offset = 0x44
+description = "need_des"
+reset = { value = 0x70 }
+
+[[registers.fields]]
+name = "CPU_SPROM_MEM_AUX_CTRL"
+bits = "31:0"
+class = "plain"
+description = "sprom mem aux ctrl , control CPU power domain"
+
+[[registers]]
+name = "CPU_SPRF_MEM_AUX_CTRL"
+offset = 0x48
+description = "need_des"
+reset = { value = 0x2070 }
+
+[[registers.fields]]
+name = "CPU_SPRF_MEM_AUX_CTRL"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "INTR_HP2LP_CONF_0"
+offset = 0x7c
+description = "intr hp2lp configuration register 0"
+reset = { value = 0xffffffff }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers]]
+name = "INTR_HP2LP_CONF_1"
+offset = 0x80
+description = "intr hp2lp configuration register 1"
+reset = { value = 0xffffffff }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers]]
+name = "INTR_HP2LP_CONF_2"
+offset = 0x84
+description = "intr hp2lp configuration register 2"
+reset = { value = 0xffffffff }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers]]
+name = "INTR_HP2LP_CONF_3"
+offset = 0x88
+description = "intr hp2lp configuration register 3"
+reset = { value = 0xffffffff }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers]]
+name = "INTR_HP2LP_CONF_4"
+offset = 0x8c
+description = "intr hp2lp configuration register 4"
+reset = { value = 0xff }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers]]
+name = "INTR_HP2LP_STATUS_0"
+offset = 0x90
+description = "intr hp2lp status register 0"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers]]
+name = "INTR_HP2LP_STATUS_1"
+offset = 0x94
+description = "intr hp2lp status register 1"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers]]
+name = "INTR_HP2LP_STATUS_2"
+offset = 0x98
+description = "intr hp2lp status register 2"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers]]
+name = "INTR_HP2LP_STATUS_3"
+offset = 0x9c
+description = "intr hp2lp status register 3"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers]]
+name = "INTR_HP2LP_STATUS_4"
+offset = 0xa0
+description = "intr hp2lp status register 4"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers]]
+name = "CPU_SPRAM_MEM_AUX_CTRL"
+offset = 0xa4
+description = "spram mem aux ctrl , control CPU power domain"
+reset = { value = 0x2070 }
+
+[[registers.fields]]
+name = "CPU_SPRAM_MEM_AUX_CTRL"
+bits = "31:0"
+class = "plain"
+description = "spram mem aux ctrl , control CPU power domain"
+
+[[registers]]
+name = "BUS_CLOCK_GATE_BYPASS"
+offset = 0xa8
+description = "bus clock gating bypass configuration register"
+reset = { value = 0x1f }
+reserved = { mask = 0xffffffe0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "AHB_CLK_GATING_BYPASS"
+bits = "0"
+class = "plain"
+description = "Set 1 to bypass the clock gating for ahb bus"
+
+[[registers.fields]]
+name = "APB_CLK_GATING_BYPASS"
+bits = "1"
+class = "plain"
+description = "Set 1 to bypass the clock gating for apb bus"
+
+[[registers.fields]]
+name = "AXI_CLK_GATING_BYPASS"
+bits = "2"
+class = "plain"
+description = "Set 1 to bypass the clock gating for axi bus"
+
+[[registers.fields]]
+name = "MEM_CLK_GATING_BYPASS"
+bits = "3"
+class = "plain"
+description = "Set 1 to bypass the clock gating for mem bus"
+
+[[registers.fields]]
+name = "AHB_MTX_CLK_GATING_BYPASS"
+bits = "4"
+class = "plain"
+description = "Set 1 to bypass the clock gating for ahb mtx"
+
+[[registers]]
+name = "RST_EVENT_BYPASS"
+offset = 0xac
+description = "bus clock gating bypass configuration register"
+reset = { value = 0x8 }
+reserved = { mask = 0xffffff80, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "ICMAPB"
+bits = "0"
+class = "plain"
+description = "Set 1 to bypass none-power_on reset source"
+
+[[registers.fields]]
+name = "ICMSYS"
+bits = "1"
+class = "plain"
+description = "Set 1 to bypass none-power_on reset source"
+
+[[registers.fields]]
+name = "ICMCPU"
+bits = "2"
+class = "plain"
+description = "Set 1 to bypass none-power_on reset source"
+
+[[registers.fields]]
+name = "CLKRST"
+bits = "3"
+class = "plain"
+description = "Set 1 to bypass none-power_on reset source"
+
+[[registers.fields]]
+name = "CLKRST_REG"
+bits = "4"
+class = "plain"
+description = "Set 1 to bypass none-power_on reset source"
+
+[[registers.fields]]
+name = "IOMUX"
+bits = "5"
+class = "plain"
+description = "Set 1 to bypass none-power_on reset source"
+
+[[registers.fields]]
+name = "RST_BYPASS_LOCK"
+bits = "6"
+class = "plain"
+description = "Set 1 to lock reset event bypass configuration"
+
+[[registers]]
+name = "USB_OTGHS_CTRL"
+offset = 0xb0
+description = "usb_otghs Control configuration register"
+reset = { value = 0x104 }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_ALIVE_SYS_REG_H"] }
+
+[[registers.fields]]
+name = "REG_USB_OTGHS_PHY_PLL_FORCE_EN"
+bits = "0"
+class = "plain"
+description = "Set this bit as 1 to force use reg_usb_otghs_phy_pll_en"
+
+[[registers.fields]]
+name = "REG_USB_OTGHS_PHY_PLL_EN"
+bits = "1"
+class = "plain"
+description = "pll_en for phy inf"
+
+[[registers.fields]]
+name = "REG_USB_OTGHS_PHY_SUSPENDM_FORCE_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit as 1 to force use reg_usb_otghs_phy_suspendm"
+
+[[registers.fields]]
+name = "REG_USB_OTGHS_PHY_SUSPENDM"
+bits = "3"
+class = "plain"
+description = "phy suspendm"
+
+[[registers.fields]]
+name = "REG_USB_OTGHS_PHY_RESET_FORCE_EN"
+bits = "4"
+class = "plain"
+description = "Set this bit as 1 to force use reg_usb_otghs_phy_reset"
+
+[[registers.fields]]
+name = "REG_USB_OTGHS_PHY_RESET"
+bits = "5"
+class = "plain"
+description = "phy reset"
+
+[[registers.fields]]
+name = "REG_USB_OTGHS_PHY_TXBITSTUFF_EN"
+bits = "6"
+class = "plain"
+description = "phy txbitstuff_en"
+
+[[registers.fields]]
+name = "REG_USB_OTGHS_PHY_OTG_SUSPENDM"
+bits = "7"
+class = "plain"
+description = "phy otg_suspendm"
+
+[[registers.fields]]
+name = "REG_USB_OTGHS_PHY_REFCLK_MODE"
+bits = "8"
+class = "plain"
+description = "phy refclk_mode"
+
+[[registers.fields]]
+name = "REG_USB_OTGHS_CORE_SS_SCALEDOWN_MODE"
+bits = "10:9"
+class = "plain"
+description = "usb otghs core ss_scaledown_mode"
+
+[[registers.fields]]
+name = "REG_USB_OTGHS_PHY_SELF_TEST"
+bits = "11"
+class = "plain"
+description = "phy self_test"
+
+[[registers.fields]]
+name = "REG_USB_OTGHS_PHY_TEST_DONE"
+bits = "12"
+class = "read-only"
+description = "phy test_bist"
+
+[[registers.fields]]
+name = "REG_USB_OTGHS_PHY_DTO"
+bits = "13"
+class = "read-only"
+description = "phy dto"
+
+[[registers]]
+name = "DATE"
+offset = 0x3fc
+description = "need_des"
+reset = { value = 0x2509110 }
+
+[[registers.fields]]
+name = "DATE"
+bits = "30:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "31"
+class = "plain"
+description = "need_des"

@@ -493,6 +493,44 @@ and numeric mux inputs. `gate_groups()` returns resolved fields and sources;
 `shared_controls()`, `clock_sources()`, `interrupt_sources()` and
 `unbound_interrupts()` retain their checked root facts.
 
+### Importing vendor blocks
+
+`chip_import::import` (`cargo registers import --chip <chip>`) writes block
+types, the chip root and an evidence catalog from the blocks a chip's
+`registers/import.toml` lists: a type per header device layout, its
+instances by SVD peripheral (or by `reg_base.h` macro for a block the SVD
+lacks). It reads the pinned vendor SVD and the pinned ESP-IDF headers
+(`vendor/artifacts.toml`); where they disagree the header wins: offsets,
+fields and bits, each field's `class` (with `debug-only` and `read-clears`
+from the header's descriptions), defaults and reserved bits. The SVD names
+registers and the fields at the header's bits, binds interrupt sources
+and states the reset of bits no header field covers. Interrupts are resolved
+by name in `interrupts.h`, which supplies their numbers even when the SVD
+number differs. An instance's optional `interrupts = { SVD_NAME = "HEADER_NAME" }`
+maps differing spellings explicitly; the imported binding cites the SVD and
+the target enumerator's line. An unknown identity or unused mapping is an
+error. A register the header lacks keeps its SVD fields as
+`read-only`; one in a word the header's layout reserves is left out. SVD
+arrays whose elements import identically become `dim` registers. Instances
+listed as one type must import identically. The strictness overlay's
+command registers, ports, `define-fields`, driver writes and values move as
+data. The lanes outside `define-fields` are reserved, citing the overlay's
+layout evidence along with the header. Every `sources` entry is an evidence
+ID of the written catalog: one per pinned file and one per cited line
+(`<FILE>_L<line>`, its description holding the `esp-idf:<path>:<line>`
+locator). The report,
+`target/registers-import/<chip>/report.md`, lists every disagreement and
+what the import made of it. The import owns its type directory.
+
+The root covers every source in the header's `0..ETS_MAX_INTR_SOURCE`:
+existing SVD bindings name imported instances, and every other source is
+explicitly unbound with a reason. Names remove `ETS_` and either
+`_INTR_SOURCE` or `_SOURCE`, preserving embedded `INTR` segments. Each
+enumerator, including `ETS_MAX_INTR_SOURCE`, has its own line evidence ID;
+the root's source count cites all those lines. Missing bounds, gaps and
+duplicate source identities are errors. For S31, unbound reasons name the
+unresolved flash/PSRAM controller pair and the PMT/PMU alias conflict.
+
 ## Analog-I2C space
 
 The chip manifest's `indirect-spaces = ["analog/phy.toml"]` selects one

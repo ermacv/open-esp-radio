@@ -1,0 +1,672 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "TIMG"
+description = "A timer group: two general-purpose timers, the main watchdog and the RTC slow clock calibration."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "T0CONFIG"
+offset = 0x0
+description = "Timer 0 configuration register"
+reset = { value = 0x60002000 }
+reserved = { mask = 0xbff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "T_ALARM_EN"
+bits = "10"
+class = "self-clearing"
+description = "Configures whether or not to enable the timer 0 alarm function. This bit will be automatically cleared once an alarm occurs.\\\\ 0: Disable \\\\ 1: Enable \\\\"
+
+[[registers.fields]]
+name = "T_DIVCNT_RST"
+bits = "12"
+class = "write-trigger"
+description = "Configures whether or not to reset the timer 0 's clock divider counter. \\\\ 0: No effect \\\\ 1: Reset \\\\"
+
+[[registers.fields]]
+name = "T_DIVIDER"
+bits = "28:13"
+class = "plain"
+description = "Represents the timer 0 clock (T0_clk) prescaler value."
+
+[[registers.fields]]
+name = "T_AUTORELOAD"
+bits = "29"
+class = "plain"
+description = "Configures whether or not to enable the timer 0 auto-reload function at the time of alarm. \\\\ 0: No effect \\\\ 1: Enable \\\\"
+
+[[registers.fields]]
+name = "T_INCREASE"
+bits = "30"
+class = "plain"
+description = "Configures the counting direction of the timer 0 time-base counter. \\\\ 0: Decrement \\\\ 1: Increment \\\\"
+
+[[registers.fields]]
+name = "T_EN"
+bits = "31"
+class = "hardware-written"
+description = "Configures whether or not to enable the timer 0 time-base counter. \\\\ 0: Disable \\\\ 1: Enable \\\\"
+
+[[registers]]
+name = "T0LO"
+offset = 0x4
+description = "Timer 0 current value, low 32 bits"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "T_LO"
+bits = "31:0"
+class = "read-only"
+description = "Represents the low 32 bits of the time-base counter of timer 0. Valid only after writing to TIMG_T0UPDATE_REG. \\\\ Measurement unit: T0_clk \\\\"
+
+[[registers]]
+name = "T0HI"
+offset = 0x8
+description = "Timer 0 current value, high 22 bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xffc00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "T_HI"
+bits = "21:0"
+class = "read-only"
+description = "Represents the high 22 bits of the time-base counter of timer 0. Valid only after writing to TIMG_T0UPDATE_REG. \\\\ Measurement unit: T0_clk \\\\"
+
+[[registers]]
+name = "T0UPDATE"
+offset = 0xc
+description = "Write to copy current timer value to TIMGn_T0LO_REG or TIMGn_T0HI_REG"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "T_UPDATE"
+bits = "31"
+class = "self-clearing"
+description = "Configures to latch the counter value. \\\\ 0: Latch \\\\ 1: Latch \\\\"
+
+[[registers]]
+name = "T0ALARMLO"
+offset = 0x10
+description = "Timer 0 alarm value, low 32 bits"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "T_ALARM_LO"
+bits = "31:0"
+class = "plain"
+description = "Configures the low 32 bits of timer 0 alarm trigger time-base counter value. Valid only when TIMG_T0_ALARM_EN is 1. \\\\ Measurement unit: T0_clk \\\\"
+
+[[registers]]
+name = "T0ALARMHI"
+offset = 0x14
+description = "Timer 0 alarm value, high bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xffc00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "T_ALARM_HI"
+bits = "21:0"
+class = "plain"
+description = "Configures the high 22 bits of timer 0 alarm trigger time-base counter value. Valid only when TIMG_T0_ALARM_EN is 1. \\\\ Measurement unit: T0_clk \\\\"
+
+[[registers]]
+name = "T0LOADLO"
+offset = 0x18
+description = "Timer 0 reload value, low 32 bits"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "T_LOAD_LO"
+bits = "31:0"
+class = "plain"
+description = "Configures low 32 bits of the value that a reload will load onto timer 0 time-base counter. \\\\ Measurement unit: T0_clk \\\\"
+
+[[registers]]
+name = "T0LOADHI"
+offset = 0x1c
+description = "Timer 0 reload value, high 22 bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xffc00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "T_LOAD_HI"
+bits = "21:0"
+class = "plain"
+description = "Configures high 22 bits of the value that a reload will load onto timer 0 time-base counter. \\\\ Measurement unit: T0_clk \\\\"
+
+[[registers]]
+name = "T0LOAD"
+offset = 0x20
+description = "Write to reload timer from TIMG_T0LOADLO_REG or TIMG_T0LOADHI_REG"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "T_LOAD"
+bits = "31:0"
+class = "write-trigger"
+description = "Write any value to trigger a timer 0 time-base counter reload."
+
+[[registers]]
+name = "T1CONFIG"
+offset = 0x24
+description = "Timer 1 configuration register"
+reset = { value = 0x60002000 }
+reserved = { mask = 0xbff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "T_ALARM_EN"
+bits = "10"
+class = "self-clearing"
+description = "Configures whether or not to enable the timer 1 alarm function. This bit will be automatically cleared once an alarm occurs.\\\\ 0: Disable \\\\ 1: Enable \\\\"
+
+[[registers.fields]]
+name = "T_DIVCNT_RST"
+bits = "12"
+class = "write-trigger"
+description = "Configures whether or not to reset the timer 1 's clock divider counter. \\\\ 0: No effect \\\\ 1: Reset \\\\"
+
+[[registers.fields]]
+name = "T_DIVIDER"
+bits = "28:13"
+class = "plain"
+description = "Represents the timer 1 clock (T1_clk) prescaler value."
+
+[[registers.fields]]
+name = "T_AUTORELOAD"
+bits = "29"
+class = "plain"
+description = "Configures whether or not to enable the timer 1 auto-reload function at the time of alarm. \\\\ 0: No effect \\\\ 1: Enable \\\\"
+
+[[registers.fields]]
+name = "T_INCREASE"
+bits = "30"
+class = "plain"
+description = "Configures the counting direction of the timer 1 time-base counter. \\\\ 0: Decrement \\\\ 1: Increment \\\\"
+
+[[registers.fields]]
+name = "T_EN"
+bits = "31"
+class = "hardware-written"
+description = "Configures whether or not to enable the timer 1 time-base counter. \\\\ 0: Disable \\\\ 1: Enable \\\\"
+
+[[registers]]
+name = "T1LO"
+offset = 0x28
+description = "Timer 1 current value, low 32 bits"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "T_LO"
+bits = "31:0"
+class = "read-only"
+description = "Represents the low 32 bits of the time-base counter of timer 1. Valid only after writing to TIMG_T1UPDATE_REG. \\\\ Measurement unit: T1_clk \\\\"
+
+[[registers]]
+name = "T1HI"
+offset = 0x2c
+description = "Timer 1 current value, high 22 bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xffc00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "T_HI"
+bits = "21:0"
+class = "read-only"
+description = "Represents the high 22 bits of the time-base counter of timer 1. Valid only after writing to TIMG_T1UPDATE_REG. \\\\ Measurement unit: T1_clk \\\\"
+
+[[registers]]
+name = "T1UPDATE"
+offset = 0x30
+description = "Write to copy current timer value to TIMGn_T0LO_REG or TIMGn_T0HI_REG"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "T_UPDATE"
+bits = "31"
+class = "self-clearing"
+description = "Configures to latch the counter value. \\\\ 0: Latch \\\\ 1: Latch \\\\"
+
+[[registers]]
+name = "T1ALARMLO"
+offset = 0x34
+description = "Timer 1 alarm value, low 32 bits"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "T_ALARM_LO"
+bits = "31:0"
+class = "plain"
+description = "Configures the low 32 bits of timer 1 alarm trigger time-base counter value. Valid only when TIMG_T1_ALARM_EN is 1. \\\\ Measurement unit: T1_clk \\\\"
+
+[[registers]]
+name = "T1ALARMHI"
+offset = 0x38
+description = "Timer 1 alarm value, high bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xffc00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "T_ALARM_HI"
+bits = "21:0"
+class = "plain"
+description = "Configures the high 22 bits of timer 1 alarm trigger time-base counter value. Valid only when TIMG_T1_ALARM_EN is 1. \\\\ Measurement unit: T1_clk \\\\"
+
+[[registers]]
+name = "T1LOADLO"
+offset = 0x3c
+description = "Timer 1 reload value, low 32 bits"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "T_LOAD_LO"
+bits = "31:0"
+class = "plain"
+description = "Configures low 32 bits of the value that a reload will load onto timer 1 time-base counter. \\\\ Measurement unit: T1_clk \\\\"
+
+[[registers]]
+name = "T1LOADHI"
+offset = 0x40
+description = "Timer 1 reload value, high 22 bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xffc00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "T_LOAD_HI"
+bits = "21:0"
+class = "plain"
+description = "Configures high 22 bits of the value that a reload will load onto timer 1 time-base counter. \\\\ Measurement unit: T1_clk \\\\"
+
+[[registers]]
+name = "T1LOAD"
+offset = 0x44
+description = "Write to reload timer from TIMG_T1LOADLO_REG or TIMG_T1LOADHI_REG"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "T_LOAD"
+bits = "31:0"
+class = "write-trigger"
+description = "Write any value to trigger a timer 1 time-base counter reload."
+
+[[registers]]
+name = "WDTCONFIG0"
+offset = 0x48
+description = "Watchdog timer configuration register"
+reset = { value = 0x4c000 }
+reserved = { mask = 0x200fff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "WDT_APPCPU_RESET_EN"
+bits = "12"
+class = "plain"
+description = "Configures whether to mask the CPU reset generated by MWDT. Valid only when write protection is disabled. \\\\ 0: Mask \\\\ 1: Unmask \\\\"
+
+[[registers.fields]]
+name = "WDT_PROCPU_RESET_EN"
+bits = "13"
+class = "plain"
+description = "Configures whether to mask the CPU reset generated by MWDT. Valid only when write protection is disabled. \\\\ 0: Mask \\\\ 1: Unmask \\\\"
+
+[[registers.fields]]
+name = "WDT_FLASHBOOT_MOD_EN"
+bits = "14"
+class = "plain"
+description = "Configures whether to enable flash boot protection.\\\\ 0: Disable \\\\ 1: Enable \\\\"
+
+[[registers.fields]]
+name = "WDT_SYS_RESET_LENGTH"
+bits = "17:15"
+class = "plain"
+description = "Configures the system reset signal length. Valid only when write protection is disabled. \\\\ Measurement unit: mwdt_clk \\begin{multicols}{2} 0: 8 \\\\ 1: 16 \\\\ 2: 24 \\\\ 3: 32 \\\\ 4: 40 \\\\ 5: 64 \\\\ 6: 128 \\\\ 7: 256 \\\\ \\end{multicols}"
+
+[[registers.fields]]
+name = "WDT_CPU_RESET_LENGTH"
+bits = "20:18"
+class = "plain"
+description = "Configures the CPU reset signal length. Valid only when write protection is disabled.\\\\ Measurement unit: mwdt_clk \\\\ \\begin{multicols}{2} 0: 8 \\\\ 1: 16 \\\\ 2: 24 \\\\ 3: 32 \\\\ 4: 40 \\\\ 5: 64 \\\\ 6: 128 \\\\ 7: 256 \\\\ \\end{multicols}"
+
+[[registers.fields]]
+name = "WDT_CONF_UPDATE_EN"
+bits = "22"
+class = "write-trigger"
+description = "Configures to update the WDT configuration registers.\\\\ 0: No effect \\\\ 1: Update \\\\"
+
+[[registers.fields]]
+name = "WDT_STG3"
+bits = "24:23"
+class = "plain"
+description = "Configures the timeout action of stage 3. See details in TIMG_WDT_STG0. Valid only when write protection is disabled."
+
+[[registers.fields]]
+name = "WDT_STG2"
+bits = "26:25"
+class = "plain"
+description = "Configures the timeout action of stage 2. See details in TIMG_WDT_STG0. Valid only when write protection is disabled."
+
+[[registers.fields]]
+name = "WDT_STG1"
+bits = "28:27"
+class = "plain"
+description = "Configures the timeout action of stage 1. See details in TIMG_WDT_STG0. Valid only when write protection is disabled."
+
+[[registers.fields]]
+name = "WDT_STG0"
+bits = "30:29"
+class = "plain"
+description = "Configures the timeout action of stage 0. Valid only when write protection is disabled. \\\\ 0: No effect \\\\ 1: Interrupt \\\\ 2: Reset CPU \\\\ 3: Reset system \\\\"
+
+[[registers.fields]]
+name = "WDT_EN"
+bits = "31"
+class = "plain"
+description = "Configures whether or not to enable the MWDT. Valid only when write protection is disabled. \\\\ 0: Disable \\\\ 1: Enable \\\\"
+
+[[registers]]
+name = "WDTCONFIG1"
+offset = 0x4c
+description = "Watchdog timer prescaler register"
+reset = { value = 0x10000 }
+reserved = { mask = 0xfffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "WDT_DIVCNT_RST"
+bits = "0"
+class = "write-trigger"
+description = "Configures whether to reset WDT 's clock divider counter. \\\\ 0: No effect \\\\ 1: Reset \\\\"
+
+[[registers.fields]]
+name = "WDT_CLK_PRESCALE"
+bits = "31:16"
+class = "plain"
+description = "Configures MWDT clock prescaler value. Valid only when write protection is disabled. \\\\ MWDT clock period = MWDT's clock source period * TIMG_WDT_CLK_PRESCALE. \\\\"
+
+[[registers]]
+name = "WDTCONFIG2"
+offset = 0x50
+description = "Watchdog timer stage 0 timeout value"
+reset = { value = 0x18cba80 }
+
+[[registers.fields]]
+name = "WDT_STG0_HOLD"
+bits = "31:0"
+class = "plain"
+description = "Configures the stage 0 timeout value. Valid only when write protection is disabled. \\\\ Measurement unit: mwdt_clk \\\\"
+
+[[registers]]
+name = "WDTCONFIG3"
+offset = 0x54
+description = "Watchdog timer stage 1 timeout value"
+reset = { value = 0x7ffffff }
+
+[[registers.fields]]
+name = "WDT_STG1_HOLD"
+bits = "31:0"
+class = "plain"
+description = "Configures the stage 1 timeout value. Valid only when write protection is disabled.\\\\ Measurement unit: mwdt_clk \\\\"
+
+[[registers]]
+name = "WDTCONFIG4"
+offset = 0x58
+description = "Watchdog timer stage 2 timeout value"
+reset = { value = 0xfffff }
+
+[[registers.fields]]
+name = "WDT_STG2_HOLD"
+bits = "31:0"
+class = "plain"
+description = "Configures the stage 2 timeout value. Valid only when write protection is disabled. \\\\ Measurement unit: mwdt_clk \\\\"
+
+[[registers]]
+name = "WDTCONFIG5"
+offset = 0x5c
+description = "Watchdog timer stage 3 timeout value"
+reset = { value = 0xfffff }
+
+[[registers.fields]]
+name = "WDT_STG3_HOLD"
+bits = "31:0"
+class = "plain"
+description = "Configures the stage 3 timeout value. Valid only when write protection is disabled. \\\\ Measurement unit: mwdt_clk \\\\"
+
+[[registers]]
+name = "WDTFEED"
+offset = 0x60
+description = "Write to feed the watchdog timer"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "WDT_FEED"
+bits = "31:0"
+class = "write-trigger"
+description = "Write any value to feed the MWDT. Valid only when write protection is disabled."
+
+[[registers]]
+name = "WDTWPROTECT"
+offset = 0x64
+description = "Watchdog write protect register"
+reset = { value = 0x50d83aa1 }
+
+[[registers.fields]]
+name = "WDT_WKEY"
+bits = "31:0"
+class = "plain"
+description = "Configures a different value than its reset value to enable write protection."
+
+[[registers]]
+name = "RTCCALICFG"
+offset = 0x68
+description = "RTC frequency calculation configuration register 0"
+reset = { value = 0x11000 }
+reserved = { mask = 0x6fff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "RTC_CALI_START_CYCLING"
+bits = "12"
+class = "plain"
+description = "Configures the frequency calculation mode. \\\\ 0: one-shot frequency calculation \\\\ 1: periodic frequency calculation \\\\"
+
+[[registers.fields]]
+name = "RTC_CALI_RDY"
+bits = "15"
+class = "read-only"
+description = "Represents whether one-shot frequency calculation is done.\\\\ 0: Not done \\\\ 1: Done \\\\"
+
+[[registers.fields]]
+name = "RTC_CALI_MAX"
+bits = "30:16"
+class = "plain"
+description = "Configures the time to calculate RTC slow clock's frequency. \\\\ Measurement unit: XTAL_CLK \\\\"
+
+[[registers.fields]]
+name = "RTC_CALI_START"
+bits = "31"
+class = "plain"
+description = "Configures whether to enable one-shot frequency calculation. \\\\ 0: Disable \\\\ 1: Enable \\\\"
+
+[[registers]]
+name = "RTCCALICFG1"
+offset = 0x6c
+description = "RTC frequency calculation configuration register 1"
+reset = { value = 0x0 }
+reserved = { mask = 0x7e, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "RTC_CALI_CYCLING_DATA_VLD"
+bits = "0"
+class = "read-only"
+description = "Represents whether periodic frequency calculation is done. \\\\ 0: Not done \\\\ 1: Done \\\\"
+
+[[registers.fields]]
+name = "RTC_CALI_VALUE"
+bits = "31:7"
+class = "read-only"
+description = "Represents the value countered by XTAL_CLK when one-shot or periodic frequency calculation is done. It is used to calculate RTC slow clock's frequency."
+
+[[registers]]
+name = "INT_ENA_TIMERS"
+offset = 0x70
+description = "Interrupt enable bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "T0_INT_ENA"
+bits = "0"
+class = "plain"
+description = "Write 1 to enable the TIMG_T0_INT interrupt."
+
+[[registers.fields]]
+name = "T1_INT_ENA"
+bits = "1"
+class = "plain"
+description = "Write 1 to enable the TIMG_T1_INT interrupt."
+
+[[registers.fields]]
+name = "WDT_INT_ENA"
+bits = "2"
+class = "plain"
+description = "Write 1 to enable the TIMG_WDT_INT interrupt."
+
+[[registers]]
+name = "INT_RAW_TIMERS"
+offset = 0x74
+description = "Raw interrupt status"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "T0_INT_RAW"
+bits = "0"
+class = "write-one-to-clear"
+description = "The raw interrupt status bit of the TIMG_T0_INT interrupt."
+
+[[registers.fields]]
+name = "T1_INT_RAW"
+bits = "1"
+class = "write-one-to-clear"
+description = "The raw interrupt status bit of the TIMG_T1_INT interrupt."
+
+[[registers.fields]]
+name = "WDT_INT_RAW"
+bits = "2"
+class = "write-one-to-clear"
+description = "The raw interrupt status bit of the TIMG_WDT_INT interrupt."
+
+[[registers]]
+name = "INT_ST_TIMERS"
+offset = 0x78
+description = "Masked interrupt status"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "T0_INT_ST"
+bits = "0"
+class = "read-only"
+description = "The masked interrupt status bit of the TIMG_T0_INT interrupt."
+
+[[registers.fields]]
+name = "T1_INT_ST"
+bits = "1"
+class = "read-only"
+description = "The masked interrupt status bit of the TIMG_T1_INT interrupt."
+
+[[registers.fields]]
+name = "WDT_INT_ST"
+bits = "2"
+class = "read-only"
+description = "The masked interrupt status bit of the TIMG_WDT_INT interrupt."
+
+[[registers]]
+name = "INT_CLR_TIMERS"
+offset = 0x7c
+description = "Interrupt clear bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "T0_INT_CLR"
+bits = "0"
+class = "write-trigger"
+description = "Write 1 to clear the TIMG_T0_INT interrupt."
+
+[[registers.fields]]
+name = "T1_INT_CLR"
+bits = "1"
+class = "write-trigger"
+description = "Write 1 to clear the TIMG_T1_INT interrupt."
+
+[[registers.fields]]
+name = "WDT_INT_CLR"
+bits = "2"
+class = "write-trigger"
+description = "Write 1 to clear the TIMG_WDT_INT interrupt."
+
+[[registers]]
+name = "RTCCALICFG2"
+offset = 0x80
+description = "RTC frequency calculation configuration register 2"
+reset = { value = 0xffffff98 }
+reserved = { mask = 0x6, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "RTC_CALI_TIMEOUT"
+bits = "0"
+class = "read-only"
+description = "Represents whether RTC frequency calculation is timeout. \\\\ 0: No timeout \\\\ 1: Timeout \\\\"
+
+[[registers.fields]]
+name = "RTC_CALI_TIMEOUT_RST_CNT"
+bits = "6:3"
+class = "plain"
+description = "Configures the cycles that reset frequency calculation timeout. \\\\ Measurement unit: XTAL_CLK \\\\"
+
+[[registers.fields]]
+name = "RTC_CALI_TIMEOUT_THRES"
+bits = "31:7"
+class = "plain"
+description = "Configures the threshold value for the RTC frequency calculation timer. If the timer's value exceeds this threshold, a timeout is triggered.\\\\ Measurement unit: XTAL_CLK \\\\"
+
+[[registers]]
+name = "NTIMERS_DATE"
+offset = 0xf8
+description = "Timer version control register"
+reset = { value = 0x2209142 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "NTIMGS_DATE"
+bits = "27:0"
+class = "plain"
+description = "Version control register"
+
+[[registers]]
+name = "REGCLK"
+offset = 0xfc
+description = "Timer group clock gate register"
+reset = { value = 0x70000000 }
+reserved = { mask = 0x6fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+
+[[registers.fields]]
+name = "ETM_EN"
+bits = "28"
+class = "plain"
+description = "Configures whether to enable timer's ETM task and event. \\\\ 0: Disable \\\\ 1: Enable \\\\"
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "31"
+class = "plain"
+description = "Configures whether to enable gate clock signal for registers. \\\\ 0: Force clock on for registers \\\\ 1: Support clock only when registers are read or written to by software. \\\\"
