@@ -13,15 +13,18 @@
 //!
 //! - `R/W` is a plain field, `RO`/`R`/`HRO` a read-only one, `WT` a write
 //!   trigger (a wider one written with its value);
-//! - a one-bit `R/W/SC` or `R/W/WTC` field is a command: software sets it to
-//!   start, the hardware clears it when done;
 //! - a register whose every field is write-one-to-clear (`WTC`, `W1C`) is
 //!   sampled and acknowledged, never modified;
-//! - any other writable field the hardware also changes (`R/W/SS`, a wider
-//!   `R/W/SC`, ...), a set-only one (`W1S`, `WTS`, `WS`), a class this
+//! - a writable field the hardware also changes (`R/W/SC`, `R/W/WTC`,
+//!   `R/W/SS`, ...), a set-only one (`W1S`, `WTS`, `WS`), a class this
 //!   module does not know and a write-one-to-clear field beside others
 //!   leave the register read-only, unless the overlay makes it a command
-//!   port's data word;
+//!   register (`[[commands]]`, one-bit `R/W/SC` and `R/W/WTC` fields only)
+//!   or a command port's data word: that a field clears itself does not
+//!   say that writing zero to it is harmless;
+//! - a field the header describes as only for internal debugging ("Do not
+//!   use it in applications") is never written: it is read only, a write
+//!   trigger among them a lane every write leaves zero;
 //! - a field the header describes as `Reserved` is no field: its bits are
 //!   reserved and kept by every write;
 //! - a field a read clears ("cleared by a read", `R_SS_RC`) or a port read
@@ -47,9 +50,10 @@ pub(crate) enum Class {
     ReadOnly,
     /// `WT`: a write starts an action.
     Trigger,
-    /// `R/W/SC`, `R/W/WTC`: software sets it to start a command, and the
-    /// hardware clears it when the command is done.
-    Command,
+    /// `R/W/SC`, `R/W/WTC`: software sets it, and the hardware clears it.
+    /// Only an overlay `[[commands]]` entry makes one bit of it a command;
+    /// otherwise it is a field the hardware also changes.
+    SelfClearing,
     /// `WTC`, `W1C` without `W`: a one written clears it.
     OneToClear,
     /// `R/W` the hardware also changes (`SC`, `SS`, `WTC`): a
@@ -75,7 +79,7 @@ pub(crate) fn class(access: &str) -> Class {
         ["R", "W"] | ["RW"] | ["W", "R"] => Class::Plain,
         ["RO" | "R" | "HRO"] => Class::ReadOnly,
         ["WT"] => Class::Trigger,
-        ["R", "W", "SC" | "WTC"] => Class::Command,
+        ["R", "W", "SC" | "WTC"] => Class::SelfClearing,
         ["WO"] => Class::WriteOnly,
         _ if tokens
             .iter()
@@ -104,6 +108,13 @@ pub(crate) fn reserved_description(description: &str) -> bool {
             .next()
             .is_none_or(|next| !next.is_ascii_alphanumeric())
     })
+}
+
+/// Whether a description keeps the field to internal debugging: "This
+/// field is only for internal debugging purposes. Do not use it in
+/// applications."
+pub(crate) fn debug_only(description: &str) -> bool {
+    description.contains("Do not use it in applications")
 }
 
 fn words(description: &str) -> Vec<String> {
@@ -370,6 +381,9 @@ pub(crate) struct DerivedField {
     pub(crate) class: Class,
     pub(crate) access: String,
     pub(crate) source: String,
+    /// The header describes the field as only for internal debugging: an
+    /// application never writes it.
+    pub(crate) debug: bool,
 }
 
 /// What the header states about one vendor register.
@@ -391,6 +405,9 @@ pub(crate) struct Derived {
     /// The reasons in `narrow` that are only a field the hardware also
     /// changes: a command port's data word lifts them.
     pub(crate) hardware: BTreeSet<String>,
+    /// The reason in `narrow` of each one-bit self-clearing field: a
+    /// command register (`[[commands]]`) lifts them.
+    pub(crate) self_clearing: BTreeMap<String, String>,
     /// Vendor fields the header names otherwise at the same bits: the
     /// header's name without its peripheral prefix, which the API takes.
     pub(crate) renamed: BTreeMap<String, String>,
@@ -508,6 +525,7 @@ pub(crate) fn derive_register(
                 class: class(&header_field.access),
                 access: header_field.access.clone(),
                 source: cite(path, header_field),
+                debug: debug_only(&header_field.description),
             },
         );
     }
@@ -524,8 +542,7 @@ pub(crate) fn derive_register(
             .find(|svd| svd.name == name)
             .map_or(1, |svd| svd.width);
         let reason = match field.class {
-            Class::HardwareWritable => Some("the hardware also changes it"),
-            Class::Command if width > 1 => Some("the hardware also changes it"),
+            Class::HardwareWritable | Class::SelfClearing => Some("the hardware also changes it"),
             Class::SetOnly => Some("a one written sets it"),
             Class::Unknown => Some("an access class without a rule"),
             Class::OneToClear if !one_to_clear => {
@@ -538,8 +555,11 @@ pub(crate) fn derive_register(
                 "field {name} is {} ({}): {reason}",
                 field.access, field.source
             );
-            if matches!(field.class, Class::HardwareWritable | Class::Command) {
+            if matches!(field.class, Class::HardwareWritable | Class::SelfClearing) {
                 derived.hardware.insert(text.clone());
+            }
+            if field.class == Class::SelfClearing && width == 1 {
+                derived.self_clearing.insert(name.clone(), text.clone());
             }
             derived.narrow.push(text);
         }

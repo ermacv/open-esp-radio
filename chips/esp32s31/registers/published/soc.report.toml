@@ -9,8 +9,8 @@ schema = 1
 peripherals = 100
 skipped-peripherals = 3
 registers = 4724
-full = 2568
-read = 1277
+full = 2506
+read = 1339
 none = 879
 renamed-fields = 29
 
@@ -256,6 +256,12 @@ reasons = ["its module name is not a unique identifier"]
 
 [[register]]
 peripheral = "AES"
+register = "ENDIAN"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "AES"
 register = "STATE"
 api = "read"
 reasons = []
@@ -283,6 +289,18 @@ peripheral = "AES"
 register = "T0_MEM[%s]"
 api = "none"
 reasons = ["8 bits wide"]
+
+[[register]]
+peripheral = "AES"
+register = "AAD_BLOCK_NUM"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "AES"
+register = "REMAINDER_BIT_NUM"
+api = "read"
+reasons = []
 
 [[register]]
 peripheral = "AES"
@@ -2320,6 +2338,30 @@ reasons = []
 
 [[register]]
 peripheral = "CACHE"
+register = "LOCK_CTRL"
+api = "read"
+reasons = ["field LOCK_ENA is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1497): the hardware also changes it", "field UNLOCK_ENA is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1506): the hardware also changes it"]
+
+[[register]]
+peripheral = "CACHE"
+register = "L1_ICACHE0_PRELOAD_CTRL"
+api = "read"
+reasons = ["field L1_ICACHE0_PRELOAD_ENA is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1673): the hardware also changes it"]
+
+[[register]]
+peripheral = "CACHE"
+register = "L1_ICACHE1_PRELOAD_CTRL"
+api = "read"
+reasons = ["field L1_ICACHE1_PRELOAD_ENA is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1744): the hardware also changes it"]
+
+[[register]]
+peripheral = "CACHE"
+register = "L1_ICACHE2_PRELOAD_CTRL"
+api = "read"
+reasons = ["field L1_ICACHE2_PRELOAD_ENA is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1817): the hardware also changes it"]
+
+[[register]]
+peripheral = "CACHE"
 register = "L1_ICACHE2_PRELOAD_ADDR"
 api = "read"
 reasons = []
@@ -2332,6 +2374,12 @@ reasons = []
 
 [[register]]
 peripheral = "CACHE"
+register = "L1_ICACHE3_PRELOAD_CTRL"
+api = "read"
+reasons = ["field L1_ICACHE3_PRELOAD_ENA is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1899): the hardware also changes it"]
+
+[[register]]
+peripheral = "CACHE"
 register = "L1_ICACHE3_PRELOAD_ADDR"
 api = "read"
 reasons = []
@@ -2341,6 +2389,12 @@ peripheral = "CACHE"
 register = "L1_ICACHE3_PRELOAD_SIZE"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "CACHE"
+register = "L1_DCACHE_PRELOAD_CTRL"
+api = "read"
+reasons = ["field L1_DCACHE_PRELOAD_ENA is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1979): the hardware also changes it"]
 
 [[register]]
 peripheral = "CACHE"
@@ -2788,6 +2842,12 @@ reasons = []
 
 [[register]]
 peripheral = "CACHE"
+register = "L2_CACHE_PRELOAD_CTRL"
+api = "read"
+reasons = ["field L2_CACHE_PRELOAD_ENA is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:5120): the hardware also changes it"]
+
+[[register]]
+peripheral = "CACHE"
 register = "L2_CACHE_PRELOAD_ADDR"
 api = "read"
 reasons = []
@@ -2860,6 +2920,12 @@ reasons = []
 
 [[register]]
 peripheral = "CACHE"
+register = "L2_CACHE_ACS_CNT_INT_RAW"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "CACHE"
 register = "L2_CACHE_ACS_CNT_INT_ST"
 api = "read"
 reasons = []
@@ -2873,6 +2939,12 @@ reasons = []
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_ACS_FAIL_INT_ENA"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "CACHE"
+register = "L2_CACHE_ACS_FAIL_INT_RAW"
 api = "read"
 reasons = []
 
@@ -3118,6 +3190,12 @@ reasons = []
 
 [[register]]
 peripheral = "CACHE"
+register = "L2_CACHE_SYNC_PRELOAD_INT_RAW"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "CACHE"
 register = "L2_CACHE_SYNC_PRELOAD_INT_ST"
 api = "read"
 reasons = []
@@ -3178,15 +3256,51 @@ reasons = []
 
 [[register]]
 peripheral = "CACHE"
+register = "L2_CACHE_DEBUG_BUS"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "CACHE"
 register = "LEVEL_SPLIT1"
 api = "none"
 reasons = ["no readable field remains"]
 
 [[register]]
 peripheral = "CACHE"
+register = "REDUNDANCY_SIG0"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "CACHE"
+register = "REDUNDANCY_SIG1"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "CACHE"
+register = "REDUNDANCY_SIG2"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "CACHE"
+register = "REDUNDANCY_SIG3"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "CACHE"
 register = "REDUNDANCY_SIG4"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "CORDIC"
+register = "CSR_CFG"
+api = "read"
+reasons = ["field UPDATE_FLAG is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/cordic_reg.h:74): the hardware also changes it"]
 
 [[register]]
 peripheral = "CORDIC"
@@ -3310,6 +3424,12 @@ reasons = ["FIFO or data port candidate: a read may change it"]
 
 [[register]]
 peripheral = "DMA2D"
+register = "OUT_LINK_CONF_CH%s"
+api = "read"
+reasons = ["field OUTLINK_RESTART_CH is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/dma2d_reg.h:677): the hardware also changes it", "field OUTLINK_START_CH is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/dma2d_reg.h:670): the hardware also changes it", "field OUTLINK_STOP_CH is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/dma2d_reg.h:663): the hardware also changes it"]
+
+[[register]]
+peripheral = "DMA2D"
 register = "OUT_STATE_CH%s"
 api = "read"
 reasons = []
@@ -3361,6 +3481,12 @@ peripheral = "DMA2D"
 register = "IN_POP_CH%s"
 api = "none"
 reasons = ["FIFO or data port candidate: a read may change it"]
+
+[[register]]
+peripheral = "DMA2D"
+register = "IN_LINK_CONF_CH%s"
+api = "read"
+reasons = ["field INLINK_RESTART_CH is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/dma2d_reg.h:4763): the hardware also changes it", "field INLINK_START_CH is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/dma2d_reg.h:4756): the hardware also changes it", "field INLINK_STOP_CH is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/dma2d_reg.h:4749): the hardware also changes it"]
 
 [[register]]
 peripheral = "DMA2D"
@@ -3487,6 +3613,12 @@ peripheral = "ECC"
 register = "MULT_INT_ST"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "ECC"
+register = "MULT_CONF"
+api = "read"
+reasons = ["field MULT_START is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/ecc_mult_reg.h:65): the hardware also changes it", "field MULT_START: a write-trigger candidate"]
 
 [[register]]
 peripheral = "ECC"
@@ -3834,7 +3966,7 @@ reasons = []
 peripheral = "EFUSE"
 register = "CMD"
 api = "read"
-reasons = ["command field READ_CMD is not one readable and writable bit (the overlay's register access)", "command field PGM_CMD is not one readable and writable bit (the overlay's register access)"]
+reasons = ["field PGM_CMD is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/efuse_reg.h:3366): the hardware also changes it", "field READ_CMD is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/efuse_reg.h:3357): the hardware also changes it"]
 
 [[register]]
 peripheral = "EFUSE"
@@ -5652,7 +5784,7 @@ reasons = ["its module name is not a unique identifier"]
 peripheral = "GPIO"
 register = "FUNC%s_OUT_SEL_CFG"
 api = "read"
-reasons = ["field FUNC_OUT_SEL is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:15804): the hardware also changes it"]
+reasons = ["field FUNC_OUT_INV_SEL is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:15823): the hardware also changes it", "field FUNC_OUT_SEL is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/gpio_reg.h:15804): the hardware also changes it"]
 
 [[register]]
 peripheral = "GPIO"
@@ -6454,6 +6586,12 @@ reasons = ["field COMMAND7_DONE is R/W/SS (esp-idf:components/soc/esp32s31/regis
 
 [[register]]
 peripheral = "I2C0"
+register = "SCL_SP_CONF"
+api = "read"
+reasons = ["field SCL_RST_SLV_EN is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/i2c_reg.h:1351): the hardware also changes it"]
+
+[[register]]
+peripheral = "I2C0"
 register = "TXFIFO_START_ADDR"
 api = "read"
 reasons = []
@@ -6541,6 +6679,12 @@ peripheral = "I2C1"
 register = "COMD7"
 api = "read"
 reasons = ["field COMMAND7_DONE is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/i2c_reg.h:1305): the hardware also changes it"]
+
+[[register]]
+peripheral = "I2C1"
+register = "SCL_SP_CONF"
+api = "read"
+reasons = ["field SCL_RST_SLV_EN is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/i2c_reg.h:1351): the hardware also changes it"]
 
 [[register]]
 peripheral = "I2C1"
@@ -6640,6 +6784,12 @@ reasons = ["field COMMAND7_DONE is R/W/SS (esp-idf:components/soc/esp32s31/regis
 
 [[register]]
 peripheral = "LP_I2C"
+register = "SCL_SP_CONF"
+api = "read"
+reasons = ["field SCL_RST_SLV_EN is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/lp_i2c_reg.h:1122): the hardware also changes it"]
+
+[[register]]
+peripheral = "LP_I2C"
 register = "SCL_STRETCH_CONF"
 api = "none"
 reasons = ["the pinned layout reserves its word (esp-idf:components/soc/esp32s31/register/soc/lp_i2c_struct.h:866)"]
@@ -6664,6 +6814,18 @@ reasons = []
 
 [[register]]
 peripheral = "I2S0"
+register = "RX_CONF"
+api = "read"
+reasons = ["field RX_START is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/i2s_reg.h:193): the hardware also changes it", "field RX_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/i2s_reg.h:229): the hardware also changes it", "field RX_START: a write-trigger candidate", "field RX_UPDATE: a write-trigger candidate"]
+
+[[register]]
+peripheral = "I2S0"
+register = "TX_CONF"
+api = "read"
+reasons = ["field TX_START is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/i2s_reg.h:345): the hardware also changes it", "field TX_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/i2s_reg.h:390): the hardware also changes it", "field TX_START: a write-trigger candidate", "field TX_UPDATE: a write-trigger candidate"]
+
+[[register]]
+peripheral = "I2S0"
 register = "STATE"
 api = "read"
 reasons = []
@@ -6673,6 +6835,18 @@ peripheral = "I2S1"
 register = "INT_ST"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "I2S1"
+register = "RX_CONF"
+api = "read"
+reasons = ["field RX_START is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/i2s_reg.h:193): the hardware also changes it", "field RX_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/i2s_reg.h:229): the hardware also changes it", "field RX_START: a write-trigger candidate", "field RX_UPDATE: a write-trigger candidate"]
+
+[[register]]
+peripheral = "I2S1"
+register = "TX_CONF"
+api = "read"
+reasons = ["field TX_START is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/i2s_reg.h:345): the hardware also changes it", "field TX_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/i2s_reg.h:390): the hardware also changes it", "field TX_START: a write-trigger candidate", "field TX_UPDATE: a write-trigger candidate"]
 
 [[register]]
 peripheral = "I2S1"
@@ -6934,9 +7108,33 @@ reasons = ["8 bits wide"]
 
 [[register]]
 peripheral = "LCD_CAM"
+register = "CAM_CTRL"
+api = "read"
+reasons = ["field CAM_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/lcd_cam_reg.h:100): the hardware also changes it", "field CAM_UPDATE: a write-trigger candidate"]
+
+[[register]]
+peripheral = "LCD_CAM"
+register = "CAM_CTRL1"
+api = "read"
+reasons = ["field CAM_START is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/lcd_cam_reg.h:234): the hardware also changes it", "field CAM_START: a write-trigger candidate"]
+
+[[register]]
+peripheral = "LCD_CAM"
+register = "LCD_USER"
+api = "read"
+reasons = ["field LCD_START is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/lcd_cam_reg.h:529): the hardware also changes it", "field LCD_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/lcd_cam_reg.h:486): the hardware also changes it", "field LCD_UPDATE: a write-trigger candidate", "field LCD_START: a write-trigger candidate"]
+
+[[register]]
+peripheral = "LCD_CAM"
 register = "LC_DMA_INT_ST"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "LEDC0"
+register = "CH%s_CONF1"
+api = "read"
+reasons = ["field DUTY_START_CH is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/ledc_reg.h:118): the hardware also changes it"]
 
 [[register]]
 peripheral = "LEDC0"
@@ -6961,6 +7159,12 @@ peripheral = "LEDC0"
 register = "TIMER%s_CNT_CAP"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "LEDC1"
+register = "CH%s_CONF1"
+api = "read"
+reasons = ["field DUTY_START_CH is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/ledc_reg.h:118): the hardware also changes it"]
 
 [[register]]
 peripheral = "LEDC1"
@@ -7429,6 +7633,12 @@ peripheral = "LP_UART"
 register = "AFIFO_STATUS"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "LP_UART"
+register = "REG_UPDATE"
+api = "read"
+reasons = ["field REG_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/lp_uart_reg.h:1384): the hardware also changes it", "field REG_UPDATE: a write-trigger candidate"]
 
 [[register]]
 peripheral = "MCPWM0"
@@ -8044,6 +8254,12 @@ reasons = ["its module name is not a unique identifier"]
 
 [[register]]
 peripheral = "RMT"
+register = "CH%sCONF1"
+api = "read"
+reasons = ["field MEM_OWNER_CH is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/rmt_reg.h:617): the hardware also changes it"]
+
+[[register]]
+peripheral = "RMT"
 register = "CH%sSTATUS"
 api = "none"
 reasons = ["its module name is not a unique identifier"]
@@ -8440,6 +8656,18 @@ reasons = ["no API for the peripheral: R/W reset bits that hardware clears, desc
 
 [[register]]
 peripheral = "SHA"
+register = "T_STRING"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SHA"
+register = "T_LENGTH"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SHA"
 register = "START"
 api = "none"
 reasons = ["write-only field START: a write-trigger candidate", "undeclared bits 0x00000001", "no readable field remains"]
@@ -8536,7 +8764,19 @@ reasons = []
 
 [[register]]
 peripheral = "SPI0"
+register = "SPI_MEM_RD_STATUS"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI0"
 register = "SPI_MEM_CACHE_SCTRL"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI0"
+register = "SPI_MEM_SRAM_CMD"
 api = "read"
 reasons = []
 
@@ -8715,6 +8955,18 @@ api = "read"
 reasons = ["field PADDR: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [9:0]", "field ACCESS_SPIRAM: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [10:10]", "field SPIRAM_VALID: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [11:11]", "field VALID: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [12:12]", "field SPIRAM_SENSITIVE: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [12:12]", "field SENSITIVE: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [13:13]", "overlapping fields SPIRAM_SENSITIVE, VALID", "undeclared bits 0xffffd000"]
 
 [[register]]
+peripheral = "SPI0"
+register = "SPI_MEM_REGISTERRND_ECO_HIGH"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI0"
+register = "SPI_MEM_REGISTERRND_ECO_LOW"
+api = "read"
+reasons = []
+
+[[register]]
 peripheral = "SPI1"
 register = "SPI_MEM_RD_STATUS"
 api = "read"
@@ -8725,6 +8977,18 @@ peripheral = "SPI1"
 register = "SPI_MEM_TX_CRC"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_CACHE_FCTRL"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_FLASH_SUS_CTRL"
+api = "read"
+reasons = ["field SPI_MEM_FLASH_PER is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:983): the hardware also changes it", "field SPI_MEM_FLASH_PES is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:992): the hardware also changes it"]
 
 [[register]]
 peripheral = "SPI1"
@@ -8752,9 +9016,39 @@ reasons = []
 
 [[register]]
 peripheral = "MEMSPI2"
+register = "RD_STATUS"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "MEMSPI2"
 register = "CACHE_FCTRL"
 api = "none"
 reasons = ["a field array"]
+
+[[register]]
+peripheral = "MEMSPI2"
+register = "CACHE_SCTRL"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "MEMSPI2"
+register = "SRAM_DRD_CMD"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "MEMSPI2"
+register = "SRAM_DWR_CMD"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "MEMSPI2"
+register = "SRAM_CLK"
+api = "read"
+reasons = []
 
 [[register]]
 peripheral = "MEMSPI2"
@@ -8919,6 +9213,18 @@ api = "read"
 reasons = []
 
 [[register]]
+peripheral = "MEMSPI2"
+register = "REGISTERRND_ECO_HIGH"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "MEMSPI2"
+register = "REGISTERRND_ECO_LOW"
+api = "read"
+reasons = []
+
+[[register]]
 peripheral = "MEMSPI3"
 register = "RD_STATUS"
 api = "read"
@@ -8938,6 +9244,18 @@ reasons = []
 
 [[register]]
 peripheral = "MEMSPI3"
+register = "CACHE_FCTRL"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "MEMSPI3"
+register = "FLASH_SUS_CTRL"
+api = "read"
+reasons = ["field FLASH_PER is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:978): the hardware also changes it", "field FLASH_PES is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:987): the hardware also changes it"]
+
+[[register]]
+peripheral = "MEMSPI3"
 register = "SUS_STATUS"
 api = "read"
 reasons = ["field FLASH_SUS is R/W/SS/SC (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:1096): the hardware also changes it"]
@@ -8953,6 +9271,12 @@ peripheral = "MEMSPI3"
 register = "INT_ST"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "SPI2"
+register = "SPI_CMD"
+api = "read"
+reasons = ["field SPI_USR is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi_reg.h:34): the hardware also changes it"]
 
 [[register]]
 peripheral = "SPI2"
@@ -9072,7 +9396,7 @@ reasons = ["field SPI_SLV_DATA_BITLEN is R/W/SS (esp-idf:components/soc/esp32s31
 peripheral = "SPI3"
 register = "SPI_CMD"
 api = "read"
-reasons = ["undeclared bits 0x0003ffff"]
+reasons = ["field SPI_USR is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/spi_reg.h:34): the hardware also changes it", "undeclared bits 0x0003ffff"]
 
 [[register]]
 peripheral = "SPI3"
@@ -9432,7 +9756,7 @@ reasons = ["its module name is not a unique identifier"]
 peripheral = "TIMG0"
 register = "T0CONFIG"
 api = "read"
-reasons = ["field T_EN is R/W/SS/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:67): the hardware also changes it"]
+reasons = ["field T_ALARM_EN is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:22): the hardware also changes it", "field T_EN is R/W/SS/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:67): the hardware also changes it"]
 
 [[register]]
 peripheral = "TIMG0"
@@ -9448,9 +9772,15 @@ reasons = []
 
 [[register]]
 peripheral = "TIMG0"
+register = "T0UPDATE"
+api = "read"
+reasons = ["field T_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:109): the hardware also changes it"]
+
+[[register]]
+peripheral = "TIMG0"
 register = "T1CONFIG"
 api = "read"
-reasons = ["field T_EN is R/W/SS/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:237): the hardware also changes it"]
+reasons = ["field T_ALARM_EN is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:192): the hardware also changes it", "field T_EN is R/W/SS/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:237): the hardware also changes it"]
 
 [[register]]
 peripheral = "TIMG0"
@@ -9463,6 +9793,12 @@ peripheral = "TIMG0"
 register = "T1HI"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "TIMG0"
+register = "T1UPDATE"
+api = "read"
+reasons = ["field T_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:279): the hardware also changes it"]
 
 [[register]]
 peripheral = "TIMG0"
@@ -9510,7 +9846,7 @@ reasons = []
 peripheral = "TIMG1"
 register = "T0CONFIG"
 api = "read"
-reasons = ["field T_EN is R/W/SS/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:67): the hardware also changes it"]
+reasons = ["field T_ALARM_EN is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:22): the hardware also changes it", "field T_EN is R/W/SS/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:67): the hardware also changes it"]
 
 [[register]]
 peripheral = "TIMG1"
@@ -9526,9 +9862,15 @@ reasons = []
 
 [[register]]
 peripheral = "TIMG1"
+register = "T0UPDATE"
+api = "read"
+reasons = ["field T_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:109): the hardware also changes it"]
+
+[[register]]
+peripheral = "TIMG1"
 register = "T1CONFIG"
 api = "read"
-reasons = ["field T_EN is R/W/SS/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:237): the hardware also changes it"]
+reasons = ["field T_ALARM_EN is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:192): the hardware also changes it", "field T_EN is R/W/SS/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:237): the hardware also changes it"]
 
 [[register]]
 peripheral = "TIMG1"
@@ -9541,6 +9883,12 @@ peripheral = "TIMG1"
 register = "T1HI"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "TIMG1"
+register = "T1UPDATE"
+api = "read"
+reasons = ["field T_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:279): the hardware also changes it"]
 
 [[register]]
 peripheral = "TIMG1"
@@ -10467,6 +10815,12 @@ api = "read"
 reasons = []
 
 [[register]]
+peripheral = "UART0"
+register = "REG_UPDATE"
+api = "read"
+reasons = ["field REG_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/uart_reg.h:1638): the hardware also changes it", "field REG_UPDATE: a write-trigger candidate"]
+
+[[register]]
 peripheral = "UART1"
 register = "FIFO"
 api = "none"
@@ -10545,6 +10899,12 @@ api = "read"
 reasons = []
 
 [[register]]
+peripheral = "UART1"
+register = "REG_UPDATE"
+api = "read"
+reasons = ["field REG_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/uart_reg.h:1638): the hardware also changes it", "field REG_UPDATE: a write-trigger candidate"]
+
+[[register]]
 peripheral = "UART2"
 register = "FIFO"
 api = "none"
@@ -10623,6 +10983,12 @@ api = "read"
 reasons = []
 
 [[register]]
+peripheral = "UART2"
+register = "REG_UPDATE"
+api = "read"
+reasons = ["field REG_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/uart_reg.h:1638): the hardware also changes it", "field REG_UPDATE: a write-trigger candidate"]
+
+[[register]]
 peripheral = "UART3"
 register = "FIFO"
 api = "none"
@@ -10699,6 +11065,12 @@ peripheral = "UART3"
 register = "AFIFO_STATUS"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "UART3"
+register = "REG_UPDATE"
+api = "read"
+reasons = ["field REG_UPDATE is R/W/SC (esp-idf:components/soc/esp32s31/register/soc/uart_reg.h:1638): the hardware also changes it", "field REG_UPDATE: a write-trigger candidate"]
 
 [[register]]
 peripheral = "UHCI0"

@@ -16,9 +16,9 @@
 //! own their register, with their masks checked by `const` assertions.
 //! A policy-declared write-trigger field is zero in every read-modify-write
 //! of its register and one only in its explicit trigger; a policy-declared
-//! command field is zero in every read-modify-write, one only in its start
-//! (which refuses while a command of its exclusive group runs) and read
-//! while it runs; a policy-declared FIFO port is only popped and pushed,
+//! command register is written only by its starts, each refusing while a
+//! self-clearing bit of the register still reads one; a policy-declared
+//! FIFO port is only popped and pushed,
 //! and a command port's data words are read and stored whole. A policy pointer field is set only
 //! from the image of a typed DMA reference; a status-to-clear snapshot
 //! acknowledges exactly what it sampled; a read capability gives up a
@@ -72,7 +72,7 @@ impl PacApiPack {
         pack.interrupt_sources.clear();
         pack.write_trigger_fields.clear();
         pack.fifo_ports.clear();
-        pack.command_fields.clear();
+        pack.command_registers.clear();
         pack.data_ports.clear();
         pack.read_capabilities.clear();
         pack.register_divisions.clear();
@@ -169,7 +169,7 @@ impl PacApiPack {
             )
             .chain(self.fifo_ports.iter().map(|port| port.peripheral.as_str()))
             .chain(
-                self.command_fields
+                self.command_registers
                     .iter()
                     .map(|command| command.peripheral.as_str()),
             )
@@ -573,7 +573,7 @@ impl PacApiPack {
             )
             .chain(self.fifo_ports.iter().map(|port| port.peripheral.as_str()))
             .chain(
-                self.command_fields
+                self.command_registers
                     .iter()
                     .map(|command| command.peripheral.as_str()),
             )
@@ -640,6 +640,17 @@ struct Enumeration {
     complete: bool,
 }
 
+/// What a bit of a command register is.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CommandBit {
+    /// Started by writing one; the hardware clears it when done.
+    Command,
+    /// Written with each start, by the start's argument.
+    Qualifier,
+    /// A self-clearing bit no start sets: read, zero in every start.
+    Held,
+}
+
 #[derive(Clone)]
 struct TypedField<'a> {
     info: &'a FieldInfo,
@@ -655,11 +666,8 @@ struct TypedField<'a> {
     image: Option<&'a PointerField>,
     /// A write-trigger field: only its explicit trigger writes one to it.
     trigger: bool,
-    /// A command field: only its start writes one to it, and it reads one
-    /// while the command runs.
-    command: bool,
-    /// A command of the register's exclusive group.
-    exclusive: bool,
+    /// A bit of a command register: a command, a qualifier or a held bit.
+    command: Option<CommandBit>,
     /// A field whose one permitted value is zero: zero in every write.
     zero: bool,
     enumeration: Option<Enumeration>,
@@ -696,7 +704,7 @@ impl TypedField<'_> {
     }
 
     fn has_setter(&self) -> bool {
-        self.writable && !self.pointer && !self.trigger && !self.command && !self.zero
+        self.writable && !self.pointer && !self.trigger && self.command.is_none() && !self.zero
     }
 
     /// Whether a writer changes the field: by a setter or, for a policy
@@ -825,28 +833,30 @@ impl TypedRegister<'_> {
             .fold(0, |mask, field| mask | field.mask())
     }
 
-    /// The bits of the register's command fields.
+    /// The bits of the register's commands.
     fn commands(&self) -> u32 {
         self.fields
             .iter()
-            .filter(|field| field.command)
+            .filter(|field| field.command == Some(CommandBit::Command))
             .fold(0, |mask, field| mask | field.mask())
     }
 
-    /// The bits of the register's exclusive command group.
-    fn exclusive(&self) -> u32 {
+    /// The self-clearing bits of a command register: a start refuses while
+    /// any reads one, and writes zero to all but its own.
+    fn busy(&self) -> u32 {
         self.fields
             .iter()
-            .filter(|field| field.exclusive)
+            .filter(|field| field.command.is_some())
             .fold(0, |mask, field| mask | field.mask())
     }
 
-    /// The bits a read-modify-write writes zero to, as a constant
-    /// expression: write triggers, commands and constant-zero fields.
+    /// The bits a write other than a field's own writes zero to, as a
+    /// constant expression: write triggers, self-clearing command bits and
+    /// constant-zero fields.
     fn modify_zero(&self) -> Option<String> {
         let masks = [
             (self.triggers(), "TRIGGERS"),
-            (self.commands(), "COMMANDS"),
+            (self.busy(), "BUSY"),
             (self.zeros(), "ZERO"),
         ]
         .into_iter()
@@ -905,9 +915,8 @@ struct DeclaredKinds<'k, 'p> {
     images: &'k BTreeMap<(&'p str, &'p str), &'p PointerField>,
     /// The `(register, field)` write-trigger fields.
     triggers: &'k BTreeSet<(&'p str, &'p str)>,
-    /// The `(register, field)` command fields, and whether each is in its
-    /// register's exclusive group.
-    commands: &'k BTreeMap<(&'p str, &'p str), bool>,
+    /// The `(register, field)` bits of command registers.
+    commands: &'k BTreeMap<(&'p str, &'p str), CommandBit>,
     /// Whether the register is a FIFO port.
     fifo: bool,
     /// Whether the register holds a command port's data words.
@@ -1056,14 +1065,27 @@ impl<'a> TypedBlock<'a> {
             .map(|port| port.register.as_str())
             .collect::<BTreeSet<_>>();
         let commands = policy
-            .command_fields
+            .command_registers
             .iter()
             .filter(|command| command.peripheral == name)
-            .map(|command| {
-                (
-                    (command.register.as_str(), command.field.as_str()),
-                    command.exclusive,
-                )
+            .flat_map(|command| {
+                let register = command.register.as_str();
+                command
+                    .commands
+                    .iter()
+                    .map(move |field| ((register, field.as_str()), CommandBit::Command))
+                    .chain(
+                        command
+                            .qualifiers
+                            .iter()
+                            .map(move |field| ((register, field.as_str()), CommandBit::Qualifier)),
+                    )
+                    .chain(
+                        command
+                            .held
+                            .iter()
+                            .map(move |field| ((register, field.as_str()), CommandBit::Held)),
+                    )
             })
             .collect::<BTreeMap<_, _>>();
         let ports = policy
@@ -1159,6 +1181,14 @@ impl<'a> TypedBlock<'a> {
         {
             return Err(Error::message(format!(
                 "PAC API {operation:?} names data port {name}.{register}, which is only read and stored whole"
+            )));
+        }
+        if let Some((operation, register)) = policy
+            .typed_register_operations(name)
+            .find(|(_, register)| commands.keys().any(|(command, _)| command == register))
+        {
+            return Err(Error::message(format!(
+                "PAC API {operation:?} names command register {name}.{register}, which only its starts write"
             )));
         }
         if let Some((register, field)) = images.keys().find(|(register, field)| {
@@ -2922,7 +2952,7 @@ impl<'a> TypedRegister<'a> {
             )));
         }
         if let Some(command) = fields.iter().find(|field| {
-            field.command
+            field.command.is_some()
                 && (field.width != 1
                     || !field.readable
                     || !field.writable
@@ -2939,6 +2969,16 @@ impl<'a> TypedRegister<'a> {
             return Err(Error::message(format!(
                 "typed command field {peripheral}.{}.{} must be one readable and writable bit of an ordinary register",
                 info.name, command.info.name
+            )));
+        }
+        if fields.iter().any(|field| field.command.is_some())
+            && let Some(other) = fields
+                .iter()
+                .find(|field| field.command.is_none() && (field.writes() || field.trigger))
+        {
+            return Err(Error::message(format!(
+                "typed command register {peripheral}.{} is written only by its starts, but its field {} has a setter or a trigger",
+                info.name, other.info.name
             )));
         }
         if port
@@ -3075,11 +3115,10 @@ impl<'a> TypedRegister<'a> {
                  let mut value = {module}::W(self.0.{});\n\
                  change(&mut value);\n\
                  self.0.{};\n}}\n",
-                match (self.triggers() != 0, self.commands() != 0) {
-                    (false, false) => "",
-                    (true, false) => " and every write-trigger field is zero",
-                    (false, true) => " and every command field is zero",
-                    (true, true) => " and every write-trigger and command field is zero",
+                if self.triggers() == 0 {
+                    ""
+                } else {
+                    " and every write-trigger field is zero"
                 },
                 self.modify_read_call(),
                 self.write_call("value.0")
@@ -3128,7 +3167,10 @@ impl<'a> TypedRegister<'a> {
             let image = if self.readable {
                 format!("(self.0.{}) | {bits}", self.modify_read_call())
             } else {
-                bits
+                // Written alone: the shift needs no parentheses.
+                bits.strip_prefix('(')
+                    .and_then(|bits| bits.strip_suffix(')'))
+                    .map_or(bits.clone(), str::to_owned)
             };
             let _ = writeln!(
                 body,
@@ -3148,12 +3190,16 @@ impl<'a> TypedRegister<'a> {
         }
     }
 
-    /// Whether each command field reads one: its command still runs.
+    /// Whether each command reads one: it still runs.
     fn render_busy(&self, body: &mut String) {
         let module = &self.method;
         let index = self.index_parameter();
         let name = &self.info.name;
-        for field in self.fields.iter().filter(|field| field.command) {
+        for field in self
+            .fields
+            .iter()
+            .filter(|field| field.command == Some(CommandBit::Command))
+        {
             let _ = writeln!(
                 body,
                 "/// Whether the command `{}` of `{name}` still runs: the hardware\n\
@@ -3168,52 +3214,70 @@ impl<'a> TypedRegister<'a> {
         }
     }
 
-    /// The start of each command field: the one write that sets it,
-    /// keeping every other field read and zero in every other command and
-    /// trigger. A command of the exclusive group refuses while any command
-    /// of the group runs.
+    /// The start of each command: the one write of the register, refused
+    /// while any self-clearing bit reads one, so it writes zero only over
+    /// zero. It sets the command and each qualifier its argument sets, and
+    /// keeps every other field read.
     fn render_commands(&self, body: &mut String) {
         let module = &self.method;
         let index = self.index_parameter();
         let name = &self.info.name;
-        // A register with a command field has a command mask.
         let Some(zero) = self.modify_zero().filter(|_| self.commands() != 0) else {
             return;
         };
-        for field in self.fields.iter().filter(|field| field.command) {
+        let qualifiers = self
+            .fields
+            .iter()
+            .filter(|field| field.command == Some(CommandBit::Qualifier))
+            .collect::<Vec<_>>();
+        let parameters = qualifiers
+            .iter()
+            .map(|field| format!("{}: bool, ", field.method))
+            .collect::<String>();
+        let qualified = qualifiers
+            .iter()
+            .map(|field| {
+                format!(
+                    " | if {} {{ 0x{:08x} }} else {{ 0 }}",
+                    field.method,
+                    field.mask()
+                )
+            })
+            .collect::<String>();
+        let named = qualifiers
+            .iter()
+            .map(|field| format!("`{}`", field.info.name))
+            .collect::<Vec<_>>()
+            .join(", ");
+        for field in self
+            .fields
+            .iter()
+            .filter(|field| field.command == Some(CommandBit::Command))
+        {
             let method = field.method.trim_start_matches("r#");
-            if field.exclusive {
-                let _ = writeln!(
-                    body,
-                    "/// Start the command `{}` of `{name}`: write one to it once; every\n\
-                     /// other field keeps the value read, every other command and trigger\n\
-                     /// is zero. It refuses while a command of the register's exclusive\n\
-                     /// group runs.\n\
-                     #[inline]\npub fn start_{module}_{method}(&mut self, {index}) -> Result<(), oer_mmio::CommandBusy> {{\n\
-                     let value = self.0.{};\n\
-                     if value & {module}::EXCLUSIVE != 0 {{\n\
-                     return Err(oer_mmio::CommandBusy {{ running: value & {module}::EXCLUSIVE }});\n}}\n\
-                     self.0.{};\nOk(())\n}}\n",
-                    field.info.name,
-                    self.read_call(),
-                    self.write_call(&format!("(value & !{zero}) | 0x{:08x}", field.mask()))
-                );
-            } else {
-                let _ = writeln!(
-                    body,
-                    "/// Start the command `{}` of `{name}`: write one to it once; every\n\
-                     /// other field keeps the value read, every other command and trigger\n\
-                     /// is zero.\n\
-                     #[inline]\npub fn start_{module}_{method}(&mut self, {index}) {{\n\
-                     self.0.{};\n}}\n",
-                    field.info.name,
-                    self.write_call(&format!(
-                        "(self.0.{}) | 0x{:08x}",
-                        self.modify_read_call(),
-                        field.mask()
-                    ))
-                );
-            }
+            let _ = writeln!(
+                body,
+                "/// Start the command `{}` of `{name}`: one write sets it{}; every\n\
+                 /// other field keeps the value read, every other self-clearing bit is\n\
+                 /// zero. It refuses, writing nothing, while any self-clearing bit of\n\
+                 /// the register reads one (`BUSY`).\n\
+                 #[inline]\npub fn start_{module}_{method}(&mut self, {index}{parameters}) -> Result<(), oer_mmio::CommandBusy> {{\n\
+                 let value = self.0.{};\n\
+                 if value & {module}::BUSY != 0 {{\n\
+                 return Err(oer_mmio::CommandBusy {{ running: value & {module}::BUSY }});\n}}\n\
+                 self.0.{};\nOk(())\n}}\n",
+                field.info.name,
+                if named.is_empty() {
+                    String::new()
+                } else {
+                    format!(" with {named} as given")
+                },
+                self.read_call(),
+                self.write_call(&format!(
+                    "(value & !{zero}) | 0x{:08x}{qualified}",
+                    field.mask()
+                ))
+            );
         }
     }
 
@@ -3380,19 +3444,17 @@ impl<'a> TypedRegister<'a> {
         if self.commands() != 0 {
             let _ = writeln!(
                 output,
-                "/// The bits of the command fields: zero in every read-modify-write,\n\
-                 /// one only in a command's start.\n\
+                "/// The bits of the commands: each set only by its start.\n\
                  pub const COMMANDS: u32 = 0x{:08x};\n",
                 self.commands()
             );
         }
-        if self.exclusive() != 0 {
+        if self.busy() != 0 {
             let _ = writeln!(
                 output,
-                "/// The bits of the exclusive command group: a start of one refuses\n\
-                 /// while any of them reads one.\n\
-                 pub const EXCLUSIVE: u32 = 0x{:08x};\n",
-                self.exclusive()
+                "/// The self-clearing bits: a start refuses while any reads one.\n\
+                 pub const BUSY: u32 = 0x{:08x};\n",
+                self.busy()
             );
         }
         if self.zeros() != 0 {
@@ -3685,8 +3747,7 @@ impl<'a> TypedField<'a> {
             pointer: kinds.pointers.contains(&key),
             image,
             trigger: kinds.triggers.contains(&key),
-            command: kinds.commands.contains_key(&key),
-            exclusive: kinds.commands.get(&key).copied().unwrap_or(false),
+            command: kinds.commands.get(&key).copied(),
             zero,
             enumeration,
         })

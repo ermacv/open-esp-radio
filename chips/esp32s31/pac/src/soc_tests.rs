@@ -29,29 +29,60 @@ fn a_register_its_header_does_not_confirm_is_only_read() {
 }
 
 #[test]
-fn a_cache_sync_command_starts_once_and_its_group_refuses_a_second() {
+fn a_cache_sync_command_starts_once_and_refuses_while_one_runs() {
     let mut words = [0_u32; crate::soc::cache::SIZE / 4];
+    // SYNC_RGID (bits 8:5) is 3; the overlay's `[[commands]]` entry makes
+    // SYNC_CTRL a command register written only by its starts.
+    let offset = crate::soc::cache::sync_ctrl::OFFSET / 4;
+    words[offset] = 3 << 5;
     let mut cache = Cache::host(&mut words).expect("memory holds the block");
     // CACHE.SYNC_CTRL's four sync commands are mutually exclusive
     // (`cache_reg.h:1576`): the hardware runs one at a time.
     assert_eq!(cache.start_sync_ctrl_writeback_ena(), Ok(()));
     assert!(cache.sync_ctrl_writeback_ena_busy());
     assert!(!cache.sync_ctrl_invalidate_ena_busy());
-    assert!(cache.start_sync_ctrl_invalidate_ena().is_err());
-    assert!(
-        !cache.read_sync_ctrl().invalidate_ena(),
-        "a refused start writes nothing"
+    assert_eq!(
+        cache.start_sync_ctrl_invalidate_ena(),
+        Err(oer_mmio::CommandBusy { running: 1 << 2 })
     );
-    // Changing the group id while the write-back runs starts nothing again.
-    cache.modify_sync_ctrl(|sync| {
-        sync.set_sync_rgid(oer_mmio::Bits::constant::<3>());
-    });
     let sync = cache.read_sync_ctrl();
-    assert!(
-        !sync.writeback_ena(),
-        "a read-modify-write writes zero to every command"
+    assert!(!sync.invalidate_ena(), "a refused start writes nothing");
+    assert_eq!(sync.sync_rgid().get(), 3, "a start keeps the group id read");
+    drop(cache);
+    assert_eq!(words[offset], (3 << 5) | (1 << 2));
+}
+
+#[test]
+fn a_flash_user_command_waits_for_every_self_clearing_bit_of_its_register() {
+    let mut words = [0_u32; crate::soc::spi1::SIZE / 4];
+    // FLASH_RDSR (bit 27) still runs: a debugging command the application
+    // never starts (`spi1_mem_c_reg.h:125`), held at zero by every start.
+    words[0] = 1 << 27;
+    let mut spi = crate::soc::spi1::Spi1::host(&mut words).expect("memory holds the block");
+    assert_eq!(
+        spi.start_spi_mem_cmd_spi_mem_usr(),
+        Err(oer_mmio::CommandBusy { running: 1 << 27 })
     );
-    assert_eq!(sync.sync_rgid().get(), 3);
+    drop(spi);
+    assert_eq!(words[0], 1 << 27, "a refused start writes nothing");
+    words[0] = 0;
+    let mut spi = crate::soc::spi1::Spi1::host(&mut words).expect("memory holds the block");
+    assert_eq!(spi.start_spi_mem_cmd_spi_mem_usr(), Ok(()));
+    assert!(spi.spi_mem_cmd_spi_mem_usr_busy());
+    drop(spi);
+    assert_eq!(words[0], 1 << 18);
+}
+
+#[test]
+fn a_word_of_write_triggers_alone_is_written_from_zero_and_never_read() {
+    let mut words = [0_u32; crate::soc::pmu::SIZE / 4];
+    let offset = crate::soc::pmu::imm_hp_ck_power_1::OFFSET / 4;
+    // Whatever the word reads, a trigger writes its field alone.
+    words[offset] = u32::MAX;
+    let mut pmu = crate::soc::pmu::Pmu::host(&mut words).expect("memory holds the block");
+    pmu.trigger_imm_hp_ck_power_1_tie_high_xpd_pll(oer_mmio::Bits::constant::<0b1010>());
+    drop(pmu);
+    assert_eq!(words[offset], 0b1010 << 27);
 }
 
 #[test]

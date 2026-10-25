@@ -774,6 +774,12 @@ register = "APB_FREQ_CTRL0"
 reserved = 0xffffc000
 sources = ["esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h:95", "esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:117"]
 
+[[commands]]
+peripheral = "HP_SYS_CLKRST"
+register = "ROOT_CLK_CTRL0"
+fields = ["REG_SOC_CLK_UPDATE"]
+sources = ["esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h:121", "esp-idf:components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:604"]
+
 [[registers]]
 peripheral = "HP_SYS_CLKRST"
 register = "CPU_WFI_DELAY_CTRL0"
@@ -2898,6 +2904,12 @@ sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1475", "esp
 
 [[registers]]
 peripheral = "CACHE"
+register = "LOCK_CTRL"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1496"]
+
+[[registers]]
+peripheral = "CACHE"
 register = "LOCK_MAP"
 reserved = 0xffffffc0
 sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1534", "esp-idf:components/soc/esp32s31/register/soc/cache_struct.h:1625"]
@@ -2908,10 +2920,10 @@ register = "LOCK_SIZE"
 reserved = 0xffff0000
 sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1561", "esp-idf:components/soc/esp32s31/register/soc/cache_struct.h:1654"]
 
-[[registers]]
+[[commands]]
 peripheral = "CACHE"
 register = "SYNC_CTRL"
-exclusive-commands = ["INVALIDATE_ENA", "CLEAN_ENA", "WRITEBACK_ENA", "WRITEBACK_INVALIDATE_ENA"]
+fields = ["INVALIDATE_ENA", "CLEAN_ENA", "WRITEBACK_ENA", "WRITEBACK_INVALIDATE_ENA"]
 sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1574"]
 
 [[registers]]
@@ -2928,9 +2940,21 @@ sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1659", "esp
 
 [[registers]]
 peripheral = "CACHE"
+register = "L1_ICACHE0_PRELOAD_CTRL"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1672"]
+
+[[registers]]
+peripheral = "CACHE"
 register = "L1_ICACHE0_PRELOAD_SIZE"
 reserved = 0xffffc000
 sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1730", "esp-idf:components/soc/esp32s31/register/soc/cache_struct.h:1812"]
+
+[[registers]]
+peripheral = "CACHE"
+register = "L1_ICACHE1_PRELOAD_CTRL"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1743"]
 
 [[registers]]
 peripheral = "CACHE"
@@ -2940,15 +2964,33 @@ sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1801", "esp
 
 [[registers]]
 peripheral = "CACHE"
+register = "L1_ICACHE2_PRELOAD_CTRL"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1816"]
+
+[[registers]]
+peripheral = "CACHE"
 register = "L1_ICACHE2_PRELOAD_SIZE"
 reserved = 0xffffc000
 sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1882", "esp-idf:components/soc/esp32s31/register/soc/cache_struct.h:1945"]
 
 [[registers]]
 peripheral = "CACHE"
+register = "L1_ICACHE3_PRELOAD_CTRL"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1898"]
+
+[[registers]]
+peripheral = "CACHE"
 register = "L1_ICACHE3_PRELOAD_SIZE"
 reserved = 0xffffc000
 sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1964", "esp-idf:components/soc/esp32s31/register/soc/cache_struct.h:2014"]
+
+[[registers]]
+peripheral = "CACHE"
+register = "L1_DCACHE_PRELOAD_CTRL"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:1978"]
 
 [[registers]]
 peripheral = "CACHE"
@@ -3583,6 +3625,12 @@ peripheral = "CACHE"
 register = "L2_CACHE_PRELOCK_CONF"
 reserved = 0xffffffc0
 sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:5031", "esp-idf:components/soc/esp32s31/register/soc/cache_struct.h:1525"]
+
+[[registers]]
+peripheral = "CACHE"
+register = "L2_CACHE_PRELOAD_CTRL"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/cache_reg.h:5119"]
 
 [[registers]]
 peripheral = "CACHE"
@@ -4731,6 +4779,12 @@ sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6488", 
 
 # SPI1: components/soc/esp32s31/register/soc/spi1_mem_c_reg.h and spi1_mem_c_struct.h.
 
+[[commands]]
+peripheral = "SPI1"
+register = "SPI_MEM_CMD"
+fields = ["SPI_MEM_USR"]
+sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:16"]
+
 [[registers]]
 peripheral = "SPI1"
 register = "SPI_MEM_CTRL1"
@@ -4920,6 +4974,12 @@ peripheral = "SPI1"
 register = "SPI_MEM_FLASH_WAITI_CTRL"
 reserved = 0x000001e0
 sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:923", "esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_struct.h:597"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_FLASH_SUS_CTRL"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:982"]
 
 [[registers]]
 peripheral = "SPI1"
@@ -5429,6 +5489,12 @@ sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:4363", 
 
 # MEMSPI3: components/soc/esp32s31/register/soc/spi1_mem_s_reg.h and spi1_mem_s_struct.h.
 
+[[commands]]
+peripheral = "MEMSPI3"
+register = "CMD"
+fields = ["USR"]
+sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:16"]
+
 [[registers]]
 peripheral = "MEMSPI3"
 register = "CTRL1"
@@ -5508,6 +5574,12 @@ peripheral = "MEMSPI3"
 register = "FLASH_WAITI_CTRL"
 reserved = 0x000001e0
 sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:918", "esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_struct.h:595"]
+
+[[registers]]
+peripheral = "MEMSPI3"
+register = "FLASH_SUS_CTRL"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:977"]
 
 [[registers]]
 peripheral = "MEMSPI3"
@@ -5726,6 +5798,18 @@ sources = ["esp-idf:components/soc/esp32s31/register/soc/systimer_reg.h:563", "e
 
 [[registers]]
 peripheral = "TIMG0"
+register = "T0UPDATE"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:108"]
+
+[[registers]]
+peripheral = "TIMG0"
+register = "T1UPDATE"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:278"]
+
+[[registers]]
+peripheral = "TIMG0"
 register = "WDTCONFIG1"
 reserved = 0x0000fffe
 sources = ["esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:488", "esp-idf:components/soc/esp32s31/register/soc/timer_group_struct.h:306"]
@@ -5782,6 +5866,18 @@ sources = ["esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:784",
 
 
 # TIMG1: components/soc/esp32s31/register/soc/timer_group_reg.h and timer_group_struct.h.
+
+[[registers]]
+peripheral = "TIMG1"
+register = "T0UPDATE"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:108"]
+
+[[registers]]
+peripheral = "TIMG1"
+register = "T1UPDATE"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32s31/register/soc/timer_group_reg.h:278"]
 
 [[registers]]
 peripheral = "TIMG1"

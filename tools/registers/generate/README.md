@@ -194,17 +194,20 @@ only `trigger_<register>_<field>` writes one: the value read with every
 trigger zero and this field one, or, in a write-only register, this field
 alone. A wider trigger (a mask of lines to strobe) takes its value,
 `trigger_<register>_<field>(value)`; a shared block and a division's
-shared trigger word hold one-bit triggers only. `[[command-fields]]`
-(`peripheral`, `register`, `field`, `exclusive`, `sources`) declares a
-one-bit readable and writable field software sets to start a command and
-the hardware clears when it is done (`R/W/SC`, `R/W/WTC`). The field keeps
-its getter but has no setter; the register module holds `COMMANDS`, every
-read-modify-write writes zero there (a running command is never started
-again), `start_<register>_<field>` writes the value read with every command
-and trigger zero and this field one, and `<register>_<field>_busy` reads
-it. The `exclusive` commands of a register form its group (`EXCLUSIVE`):
-their start returns `Result<(), oer_mmio::CommandBusy>` and refuses, writing
-nothing, while any of them reads one. `[[data-ports]]` (`peripheral`,
+shared trigger word hold one-bit triggers only. `[[command-registers]]` (`peripheral`, `register`, `commands`, optional
+`qualifiers` and `held`, `sources`) declares a register written only by
+starts of its `commands`: one-bit readable and writable fields software sets
+to start a command and the hardware clears when it is done.
+`start_<register>_<command>` takes a `bool` per qualifier (a one-bit field
+written with the command, such as a program/erase flag) and returns
+`Result<(), oer_mmio::CommandBusy>`: it refuses, writing nothing, while any
+command, qualifier or `held` bit (self-clearing bits no start sets) reads
+one (`BUSY`); otherwise one write sets the command and the qualifiers given,
+zero in every other bit of `BUSY`, and keeps every other field read. So the
+zero a start writes never lands on a running command, and starts one after
+another never clear each other. `<register>_<command>_busy` reads a
+command; every other field keeps its getter and has no setter, the register
+has no `modify_` and no policy transaction names it. `[[data-ports]]` (`peripheral`,
 `register`, `sources`) declares the data words of a command port: a
 register or array of one readable and writable field the hardware also
 writes. It is read (`read_<register>`) and stored whole

@@ -9,8 +9,8 @@ schema = 1
 peripherals = 61
 skipped-peripherals = 1
 registers = 2003
-full = 1132
-read = 590
+full = 1101
+read = 621
 none = 281
 renamed-fields = 36
 
@@ -686,6 +686,12 @@ reasons = []
 
 [[register]]
 peripheral = "ECC"
+register = "CONF"
+api = "read"
+reasons = ["field START is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/ecc_mult_reg.h:65): the hardware also changes it", "field START: a write-trigger candidate"]
+
+[[register]]
+peripheral = "ECC"
 register = "K_MEM[%s]"
 api = "none"
 reasons = ["no fields"]
@@ -970,7 +976,7 @@ reasons = []
 peripheral = "EFUSE"
 register = "CMD"
 api = "read"
-reasons = ["command field READ_CMD is not one readable and writable bit (the overlay's register access)", "command field PGM_CMD is not one readable and writable bit (the overlay's register access)"]
+reasons = ["field PGM_CMD is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2889): the hardware also changes it", "field READ_CMD is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2880): the hardware also changes it"]
 
 [[register]]
 peripheral = "EFUSE"
@@ -1778,6 +1784,12 @@ reasons = ["field DATA is R/W/WTC (esp-idf:components/soc/esp32c5/register/soc/g
 
 [[register]]
 peripheral = "GPIO"
+register = "ENABLE1"
+api = "read"
+reasons = ["field DATA is R/W/WTC (esp-idf:components/soc/esp32c5/register/soc/gpio_reg.h:186): the hardware also changes it"]
+
+[[register]]
+peripheral = "GPIO"
 register = "IN"
 api = "none"
 reasons = ["its module name is not a unique identifier"]
@@ -1793,6 +1805,12 @@ peripheral = "GPIO"
 register = "STATUS"
 api = "read"
 reasons = ["field INTERRUPT is R/W/WTC (esp-idf:components/soc/esp32c5/register/soc/gpio_reg.h:266): the hardware also changes it"]
+
+[[register]]
+peripheral = "GPIO"
+register = "STATUS1"
+api = "read"
+reasons = ["field INTERRUPT is R/W/WTC (esp-idf:components/soc/esp32c5/register/soc/gpio_reg.h:323): the hardware also changes it"]
 
 [[register]]
 peripheral = "GPIO"
@@ -1864,7 +1882,7 @@ reasons = ["esp-idf:components/soc/esp32c5/register/soc/gpio_reg.h defines no re
 peripheral = "GPIO"
 register = "FUNC%s_OUT_SEL_CFG"
 api = "read"
-reasons = ["field FUNC_OUT_SEL is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/gpio_reg.h:6141): the hardware also changes it"]
+reasons = ["field FUNC_OUT_INV_SEL is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/gpio_reg.h:6160): the hardware also changes it", "field FUNC_OUT_SEL is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/gpio_reg.h:6141): the hardware also changes it"]
 
 [[register]]
 peripheral = "GPIO"
@@ -1899,6 +1917,12 @@ reasons = ["esp-idf:components/soc/esp32c5/register/soc/gpio_ext_reg.h defines n
 [[register]]
 peripheral = "GPIO_EXT"
 register = "INT_ST"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "GPIO_EXT"
+register = "PIN_CTRL"
 api = "read"
 reasons = []
 
@@ -2138,6 +2162,12 @@ reasons = []
 
 [[register]]
 peripheral = "HP_SYSTEM"
+register = "MEM_TEST_CONF"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "HP_SYSTEM"
 register = "SPROM_CTRL"
 api = "none"
 reasons = ["no readable field remains"]
@@ -2162,9 +2192,33 @@ reasons = ["no readable field remains"]
 
 [[register]]
 peripheral = "HP_SYSTEM"
+register = "RND_ECO"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "HP_SYSTEM"
+register = "RND_ECO_LOW"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "HP_SYSTEM"
+register = "RND_ECO_HIGH"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "HP_SYSTEM"
 register = "DEBUG"
 api = "none"
 reasons = ["no readable field remains"]
+
+[[register]]
+peripheral = "HP_SYSTEM"
+register = "CLOCK_GATE"
+api = "read"
+reasons = []
 
 [[register]]
 peripheral = "HUK"
@@ -2270,6 +2324,12 @@ reasons = ["field COMMAND7_DONE is R/W/SS (esp-idf:components/soc/esp32c5/regist
 
 [[register]]
 peripheral = "I2C0"
+register = "SCL_SP_CONF"
+api = "read"
+reasons = ["field SCL_RST_SLV_EN is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/i2c_reg.h:1389): the hardware also changes it"]
+
+[[register]]
+peripheral = "I2C0"
 register = "TXFIFO_START_ADDR"
 api = "read"
 reasons = []
@@ -2285,6 +2345,18 @@ peripheral = "I2S0"
 register = "INT_ST"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "I2S0"
+register = "RX_CONF"
+api = "read"
+reasons = ["field RX_START is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/i2s_reg.h:165): the hardware also changes it", "field RX_UPDATE is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/i2s_reg.h:201): the hardware also changes it", "field RX_START: a write-trigger candidate", "field RX_UPDATE: a write-trigger candidate"]
+
+[[register]]
+peripheral = "I2S0"
+register = "TX_CONF"
+api = "read"
+reasons = ["field TX_START is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/i2s_reg.h:317): the hardware also changes it", "field TX_UPDATE is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/i2s_reg.h:362): the hardware also changes it", "field TX_START: a write-trigger candidate", "field TX_UPDATE: a write-trigger candidate"]
 
 [[register]]
 peripheral = "I2S0"
@@ -2894,6 +2966,12 @@ reasons = ["8 bits wide"]
 
 [[register]]
 peripheral = "LEDC"
+register = "CH%s_CONF1"
+api = "read"
+reasons = ["field DUTY_START_CH is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/ledc_reg.h:104): the hardware also changes it"]
+
+[[register]]
+peripheral = "LEDC"
 register = "CH%s_DUTY_R"
 api = "read"
 reasons = []
@@ -3005,6 +3083,36 @@ peripheral = "LP_AON"
 register = "SAR_CCT"
 api = "none"
 reasons = ["the curated model's LP_AON_RADIO describes its word"]
+
+[[register]]
+peripheral = "LP_AON"
+register = "MODEM_BUS"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "LP_AON"
+register = "SPRAM_CTRL"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "LP_AON"
+register = "SPRF_CTRL"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "LP_AON"
+register = "DEBUG_SEL0"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "LP_AON"
+register = "DEBUG_SEL1"
+api = "read"
+reasons = []
 
 [[register]]
 peripheral = "LP_APM0"
@@ -3206,6 +3314,12 @@ reasons = ["field I2C_COMMAND7_DONE is R/W/SS (esp-idf:components/soc/esp32c5/re
 
 [[register]]
 peripheral = "LP_I2C0"
+register = "I2C_SCL_SP_CONF"
+api = "read"
+reasons = ["field I2C_SCL_RST_SLV_EN is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/lp_i2c_reg.h:1136): the hardware also changes it"]
+
+[[register]]
+peripheral = "LP_I2C0"
 register = "I2C_TXFIFO_START_ADDR"
 api = "read"
 reasons = []
@@ -3311,6 +3425,12 @@ peripheral = "LP_UART"
 register = "AFIFO_STATUS"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "LP_UART"
+register = "REG_UPDATE"
+api = "read"
+reasons = ["field REG_UPDATE is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/lp_uart_reg.h:1379): the hardware also changes it", "field REG_UPDATE: a write-trigger candidate"]
 
 [[register]]
 peripheral = "LP_WDT"
@@ -3503,6 +3623,12 @@ peripheral = "PCR"
 register = "ADC_DAC_INV_PHASE_CONF"
 api = "none"
 reasons = ["the pinned layout reserves its word (esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:2350)"]
+
+[[register]]
+peripheral = "PCR"
+register = "BUS_CLK_UPDATE"
+api = "read"
+reasons = ["field BUS_CLOCK_UPDATE is R/W/WTC (esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2305): the hardware also changes it"]
 
 [[register]]
 peripheral = "PCR"
@@ -3956,6 +4082,12 @@ reasons = []
 
 [[register]]
 peripheral = "RMT"
+register = "TX_CH%sCONF0"
+api = "read"
+reasons = ["field TX_STOP_CH0 is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/rmt_reg.h:134): the hardware also changes it"]
+
+[[register]]
+peripheral = "RMT"
 register = "RX_CH%sCONF0"
 api = "read"
 reasons = ["esp-idf:components/soc/esp32c5/register/soc/rmt_reg.h defines no register RX_CH0CONF0", "undeclared bits 0xcc000000"]
@@ -4031,6 +4163,12 @@ peripheral = "SHA"
 register = "MODE"
 api = "read"
 reasons = ["field MODE: esp-idf:components/soc/esp32c5/register/soc/sha_reg.h:16 has no field at bits [2:0]", "undeclared bits 0x00000008"]
+
+[[register]]
+peripheral = "SHA"
+register = "T_STRING"
+api = "read"
+reasons = []
 
 [[register]]
 peripheral = "SHA"
@@ -4196,6 +4334,18 @@ reasons = ["FIFO or data port candidate: a read may change it"]
 
 [[register]]
 peripheral = "SPI0"
+register = "MEM_RD_STATUS"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI0"
+register = "MEM_SRAM_CLK"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI0"
 register = "MEM_FSM"
 api = "read"
 reasons = ["field MEM_LOCK_DELAY_TIME: esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:973 has no field at bits [11:7]", "field MEM_FLASH_LOCK_EN: esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:973 has no field at bits [12:12]", "field MEM_SRAM_LOCK_EN: esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:973 has no field at bits [13:13]", "undeclared bits 0x001fc000"]
@@ -4334,6 +4484,12 @@ reasons = []
 
 [[register]]
 peripheral = "SPI1"
+register = "SPI_MEM_FLASH_SUS_CTRL"
+api = "read"
+reasons = ["field SPI_MEM_FLASH_PER is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:948): the hardware also changes it", "field SPI_MEM_FLASH_PES is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:957): the hardware also changes it"]
+
+[[register]]
+peripheral = "SPI1"
 register = "SPI_MEM_SUS_STATUS"
 api = "read"
 reasons = ["field SPI_MEM_FLASH_SUS is R/W/SS/SC (esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1066): the hardware also changes it"]
@@ -4343,6 +4499,12 @@ peripheral = "SPI1"
 register = "SPI_MEM_INT_ST"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "SPI2"
+register = "SPI_CMD"
+api = "read"
+reasons = ["field SPI_USR is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/spi_reg.h:39): the hardware also changes it"]
 
 [[register]]
 peripheral = "SPI2"
@@ -4636,7 +4798,7 @@ reasons = []
 peripheral = "TIMG0"
 register = "T0CONFIG"
 api = "read"
-reasons = ["field T0_EN is R/W/SS/SC (esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:62): the hardware also changes it"]
+reasons = ["field T0_ALARM_EN is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:17): the hardware also changes it", "field T0_EN is R/W/SS/SC (esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:62): the hardware also changes it"]
 
 [[register]]
 peripheral = "TIMG0"
@@ -4649,6 +4811,12 @@ peripheral = "TIMG0"
 register = "T0HI"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "TIMG0"
+register = "T0UPDATE"
+api = "read"
+reasons = ["field T0_UPDATE is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:104): the hardware also changes it"]
 
 [[register]]
 peripheral = "TIMG0"
@@ -4750,7 +4918,7 @@ reasons = []
 peripheral = "TIMG1"
 register = "T0CONFIG"
 api = "read"
-reasons = ["field T0_EN is R/W/SS/SC (esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:62): the hardware also changes it"]
+reasons = ["field T0_ALARM_EN is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:17): the hardware also changes it", "field T0_EN is R/W/SS/SC (esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:62): the hardware also changes it"]
 
 [[register]]
 peripheral = "TIMG1"
@@ -4763,6 +4931,12 @@ peripheral = "TIMG1"
 register = "T0HI"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "TIMG1"
+register = "T0UPDATE"
+api = "read"
+reasons = ["field T0_UPDATE is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:104): the hardware also changes it"]
 
 [[register]]
 peripheral = "TIMG1"
@@ -5245,6 +5419,12 @@ api = "read"
 reasons = []
 
 [[register]]
+peripheral = "UART0"
+register = "REG_UPDATE"
+api = "read"
+reasons = ["field REG_UPDATE is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/uart_reg.h:1638): the hardware also changes it", "field REG_UPDATE: a write-trigger candidate"]
+
+[[register]]
 peripheral = "UART1"
 register = "FIFO"
 api = "none"
@@ -5321,6 +5501,12 @@ peripheral = "UART1"
 register = "AFIFO_STATUS"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "UART1"
+register = "REG_UPDATE"
+api = "read"
+reasons = ["field REG_UPDATE is R/W/SC (esp-idf:components/soc/esp32c5/register/soc/uart_reg.h:1638): the hardware also changes it", "field REG_UPDATE: a write-trigger candidate"]
 
 [[register]]
 peripheral = "UHCI0"

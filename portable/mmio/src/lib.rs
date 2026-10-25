@@ -1106,11 +1106,11 @@ impl<const COUNT: usize> Index<COUNT> {
     }
 }
 
-/// A command start refused: a command of the register's exclusive group
-/// still runs, and the hardware takes one of them at a time.
+/// A command start refused, writing nothing: a self-clearing bit of the
+/// command register still reads one, and a start would write zero over it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CommandBusy {
-    /// The group's bits that read one: the commands still running.
+    /// The register's self-clearing bits that read one: what still runs.
     pub running: u32,
 }
 

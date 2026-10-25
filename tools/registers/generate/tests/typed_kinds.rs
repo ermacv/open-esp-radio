@@ -1,5 +1,5 @@
 //! Run the typed renderer's write-trigger field, FIFO port, shared block,
-//! command field and data port over host memory: the policy declares the kinds, the rendered blocks are compiled
+//! command register and data port over host memory: the policy declares the kinds, the rendered blocks are compiled
 //! against `oer-mmio` in its own directory and its tests observe the words.
 use std::fs;
 
@@ -35,9 +35,10 @@ const SVD: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 <register><name>CTRL</name><addressOffset>0x0</addressOffset><size>32</size><access>read-write</access><fields>
 <field><name>INVALIDATE</name><bitOffset>0</bitOffset><bitWidth>1</bitWidth></field>
 <field><name>CLEAN</name><bitOffset>1</bitOffset><bitWidth>1</bitWidth></field>
-<field><name>GO</name><bitOffset>2</bitOffset><bitWidth>1</bitWidth></field>
+<field><name>ERASE</name><bitOffset>2</bitOffset><bitWidth>1</bitWidth></field>
+<field><name>PROBE</name><bitOffset>3</bitOffset><bitWidth>1</bitWidth></field>
 <field><name>DONE</name><bitOffset>4</bitOffset><bitWidth>1</bitWidth><access>read-only</access></field>
-<field><name>RGID</name><bitOffset>5</bitOffset><bitWidth>4</bitWidth></field>
+<field><name>RGID</name><bitOffset>5</bitOffset><bitWidth>4</bitWidth><access>read-only</access></field>
 </fields></register>
 <register><name>W%s</name><addressOffset>0x4</addressOffset><size>32</size><access>read-write</access>
 <dim>4</dim><dimIncrement>4</dimIncrement><fields>
@@ -78,24 +79,12 @@ register = "OP"
 field = "UPDATE"
 sources = ["FIXTURE"]
 
-[[command-fields]]
+[[command-registers]]
 peripheral = "CACHE"
 register = "CTRL"
-field = "INVALIDATE"
-exclusive = true
-sources = ["FIXTURE"]
-
-[[command-fields]]
-peripheral = "CACHE"
-register = "CTRL"
-field = "CLEAN"
-exclusive = true
-sources = ["FIXTURE"]
-
-[[command-fields]]
-peripheral = "CACHE"
-register = "CTRL"
-field = "GO"
+commands = ["INVALIDATE", "CLEAN"]
+qualifiers = ["ERASE"]
+held = ["PROBE"]
 sources = ["FIXTURE"]
 
 [[data-ports]]
@@ -192,54 +181,48 @@ fn a_shared_block_strobes_and_stores_whole_words_through_shared_borrows() {
 
 const INVALIDATE: u32 = 1 << 0;
 const CLEAN: u32 = 1 << 1;
-const GO: u32 = 1 << 2;
+const ERASE: u32 = 1 << 2;
+const PROBE: u32 = 1 << 3;
 const RGID: u32 = 0b1111 << 5;
 const CTRL: usize = 0;
 
 #[test]
-fn a_read_modify_write_never_replays_a_command() {
-    let mut memory = vec![u32::MAX; cache::SIZE / 4];
+fn a_start_sets_its_command_and_qualifier_in_one_write_and_keeps_the_rest() {
+    let mut memory = vec![RGID | (1 << 20); cache::SIZE / 4];
     let mut block = cache::Cache::host(&mut memory).expect("memory holds the block");
-    block.modify_ctrl(|writer| {
-        writer.set_rgid(oer_mmio::Bits::constant::<0b0101>());
-    });
-    drop(block);
-    assert_eq!(
-        memory[CTRL],
-        u32::MAX & !(INVALIDATE | CLEAN | GO) & !(0b1010 << 5),
-        "every command is zero, every other bit keeps the value read"
-    );
-}
-
-#[test]
-fn a_start_sets_only_its_command_and_its_busy_reads_it() {
-    let mut memory = vec![RGID | INVALIDATE; cache::SIZE / 4];
-    let mut block = cache::Cache::host(&mut memory).expect("memory holds the block");
+    assert!(!block.ctrl_invalidate_busy());
+    assert_eq!(block.start_ctrl_invalidate(true), Ok(()));
     assert!(block.ctrl_invalidate_busy());
-    assert!(!block.ctrl_go_busy());
-    block.start_ctrl_go();
-    assert!(block.ctrl_go_busy());
-    assert!(!block.ctrl_invalidate_busy(), "the running command is not replayed");
+    assert_eq!(block.read_ctrl().rgid().get(), 0b1111);
     drop(block);
-    assert_eq!(memory[CTRL], RGID | GO);
+    assert_eq!(memory[CTRL], RGID | (1 << 20) | INVALIDATE | ERASE);
 }
 
 #[test]
-fn an_exclusive_command_refuses_while_its_group_runs() {
-    let mut memory = vec![RGID | CLEAN; cache::SIZE / 4];
+fn a_start_refuses_while_any_self_clearing_bit_runs_and_writes_nothing() {
+    for running in [INVALIDATE, CLEAN, ERASE, PROBE] {
+        let mut memory = vec![RGID | running; cache::SIZE / 4];
+        let mut block = cache::Cache::host(&mut memory).expect("memory holds the block");
+        assert_eq!(
+            block.start_ctrl_clean(false),
+            Err(oer_mmio::CommandBusy { running })
+        );
+        drop(block);
+        assert_eq!(memory[CTRL], RGID | running, "a refused start writes nothing");
+    }
+}
+
+#[test]
+fn starts_one_after_another_never_clear_a_running_command_or_its_qualifier() {
+    let mut memory = vec![0; cache::SIZE / 4];
     let mut block = cache::Cache::host(&mut memory).expect("memory holds the block");
+    assert_eq!(block.start_ctrl_invalidate(true), Ok(()));
     assert_eq!(
-        block.start_ctrl_invalidate(),
-        Err(oer_mmio::CommandBusy { running: CLEAN })
+        block.start_ctrl_clean(false),
+        Err(oer_mmio::CommandBusy { running: INVALIDATE | ERASE })
     );
     drop(block);
-    assert_eq!(memory[CTRL], RGID | CLEAN, "a refused start writes nothing");
-    memory[CTRL] = RGID | GO;
-    let mut block = cache::Cache::host(&mut memory).expect("memory holds the block");
-    assert_eq!(block.start_ctrl_invalidate(), Ok(()), "GO is outside the group");
-    assert_eq!(block.start_ctrl_clean(), Err(oer_mmio::CommandBusy { running: INVALIDATE }));
-    drop(block);
-    assert_eq!(memory[CTRL], RGID | INVALIDATE);
+    assert_eq!(memory[CTRL], INVALIDATE | ERASE);
 }
 
 #[test]

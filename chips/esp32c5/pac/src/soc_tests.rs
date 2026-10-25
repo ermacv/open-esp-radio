@@ -79,3 +79,31 @@ fn the_report_lists_the_header_s_narrowings() {
         "register = \"CTRL_CLK_OUT_EN\"\nsvd = \"CLK_320M_OEN\"\nsource = \"CLK_480M_OEN\""
     ));
 }
+
+#[test]
+fn a_user_command_and_its_program_erase_qualifier_start_in_one_write() {
+    // SPI_MEM_FLASH_PE goes with SPI_MEM_USR (`spi1_mem_reg.h:33`), as
+    // `spimem_flash_ll_user_start` writes both (`spimem_flash_ll.h:453`).
+    let mut words = [0_u32; crate::soc::spi1::SIZE / 4];
+    let mut spi = crate::soc::spi1::Spi1::host(&mut words).expect("memory holds the block");
+    assert_eq!(spi.start_spi_mem_cmd_spi_mem_usr(true), Ok(()));
+    // A second start while the first runs refuses: it would clear the
+    // qualifier of the running command.
+    assert_eq!(
+        spi.start_spi_mem_cmd_spi_mem_usr(false),
+        Err(oer_mmio::CommandBusy {
+            running: (1 << 18) | (1 << 17)
+        })
+    );
+    drop(spi);
+    assert_eq!(words[0], (1 << 18) | (1 << 17));
+    words[0] = 0;
+    let mut spi = crate::soc::spi1::Spi1::host(&mut words).expect("memory holds the block");
+    assert_eq!(spi.start_spi_mem_cmd_spi_mem_usr(false), Ok(()));
+    drop(spi);
+    assert_eq!(
+        words[0],
+        1 << 18,
+        "a read or write command has no qualifier"
+    );
+}

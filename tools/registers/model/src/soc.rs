@@ -19,9 +19,9 @@
 //!
 //! The chip's strictness overlay ([`StrictnessOverlay`]) adds what the SVD
 //! lacks, each entry with its source: access, read side effects,
-//! write-one-to-clear, write triggers, exclusive command groups, FIFO and
-//! command data ports, enumerated values and reserved bits, and the
-//! interrupt sources the SVD does not list. The report
+//! write-one-to-clear, write triggers, command registers, FIFO and command
+//! data ports, enumerated values and reserved bits, and the interrupt
+//! sources the SVD does not list. The report
 //! ([`SocRender::report`]) lists every register the pass narrowed, with its
 //! reasons.
 //!
@@ -39,14 +39,14 @@ use std::{
 use serde::Deserialize;
 use svd_rs::{
     Access, Device, EnumeratedValue, EnumeratedValues, MaybeArray, ModifiedWriteValues, Peripheral,
-    RegisterCluster, ValidateLevel,
+    RegisterCluster, ValidateLevel, WriteConstraint, WriteConstraintRange,
 };
 
 use crate::soc_headers::{
     Class, Derived, HeaderFacts, Lookup, SvdField, derive_register, elements, read_clears,
 };
 use crate::{
-    CommandField, DataPort, Error, FifoPort, InterruptSource, OwnershipPartition, PacApiPack,
+    CommandRegister, DataPort, Error, FifoPort, InterruptSource, OwnershipPartition, PacApiPack,
     Result, WriteTriggerField,
 };
 
@@ -72,6 +72,31 @@ pub struct StrictnessOverlay {
     pub fields: Vec<FieldRule>,
     #[serde(default)]
     pub interrupts: Vec<InterruptRule>,
+    /// Command registers: the only fields the API starts.
+    #[serde(default)]
+    pub commands: Vec<CommandRule>,
+}
+
+/// A command register (`[[commands]]`): its `fields` are commands software
+/// starts by writing one and the hardware clears when done. The register is
+/// written only by these starts: a start refuses while any self-clearing
+/// bit of the register reads one, so the zero it writes to the others
+/// never lands on a running command. Every other field is only read. The
+/// sources state the start and the completion of each command; a
+/// one-bit `R/W/SC` or `R/W/WTC` field not named is held: read, and zero in
+/// every start.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct CommandRule {
+    pub peripheral: String,
+    pub register: String,
+    /// The vendor names of the command fields.
+    pub fields: Vec<String>,
+    /// One-bit fields a start writes together with its command, each set
+    /// or clear by the start's argument (a program/erase qualifier).
+    #[serde(default)]
+    pub qualifiers: Vec<String>,
+    pub sources: Vec<String>,
 }
 
 /// The pinned ESP-IDF headers of one vendor peripheral: the source of its
@@ -131,10 +156,6 @@ pub struct RegisterRule {
     /// keep their access.
     #[serde(default)]
     pub raw_status_writable: bool,
-    /// The register's command fields (by their vendor names) the hardware
-    /// runs one at a time: a start refuses while any of them runs.
-    #[serde(default)]
-    pub exclusive_commands: Vec<String>,
     /// The data words of a command port: one field the hardware also
     /// writes, read and stored whole, never modified.
     #[serde(default)]
@@ -156,8 +177,7 @@ pub struct FieldRule {
     #[serde(default)]
     pub access: Option<OverlayAccess>,
     /// `plain` clears a name's trigger candidate; `write-trigger` makes the
-    /// field one only its explicit trigger sets; `command` makes it a
-    /// command only its start sets and the hardware clears.
+    /// field one only its explicit trigger sets.
     #[serde(default)]
     pub kind: Option<FieldKind>,
     /// The field's values.
@@ -210,7 +230,6 @@ impl OverlayAccess {
 pub enum FieldKind {
     Plain,
     WriteTrigger,
-    Command,
 }
 
 impl StrictnessOverlay {
@@ -313,17 +332,6 @@ impl StrictnessOverlay {
                     "overlay register {subject} is a data port and a FIFO port or write-one-to-clear"
                 )));
             }
-            let mut group = BTreeSet::new();
-            if rule.exclusive_commands.len() == 1
-                || !rule
-                    .exclusive_commands
-                    .iter()
-                    .all(|field| group.insert(field))
-            {
-                return Err(Error::message(format!(
-                    "overlay register {subject}: exclusive commands are two or more distinct fields"
-                )));
-            }
         }
         let mut seen = BTreeSet::new();
         for rule in &self.fields {
@@ -340,6 +348,48 @@ impl StrictnessOverlay {
                         value.value
                     )));
                 }
+            }
+        }
+        let mut seen = BTreeSet::new();
+        for rule in &self.commands {
+            let subject = format!("{}.{}", rule.peripheral, rule.register);
+            if !seen.insert(subject.clone()) {
+                return Err(Error::message(format!(
+                    "overlay states the commands of {subject} twice"
+                )));
+            }
+            self.validate_sources(&subject, &rule.sources)?;
+            if !rule
+                .sources
+                .iter()
+                .any(|source| source.starts_with("esp-idf:"))
+            {
+                return Err(Error::message(format!(
+                    "overlay commands of {subject} cite no esp-idf register definition"
+                )));
+            }
+            let mut fields = BTreeSet::new();
+            if rule.fields.is_empty()
+                || !rule
+                    .fields
+                    .iter()
+                    .chain(&rule.qualifiers)
+                    .all(|field| fields.insert(field))
+            {
+                return Err(Error::message(format!(
+                    "overlay commands of {subject}: one or more commands, each field named once"
+                )));
+            }
+            if let Some(register) = self.registers.iter().find(|register| {
+                register.peripheral == rule.peripheral && register.register == rule.register
+            }) && (register.access.is_some()
+                || register.fifo
+                || register.write_one_to_clear
+                || register.data_port)
+            {
+                return Err(Error::message(format!(
+                    "overlay register {subject} is a command register and has an access, a FIFO, write-one-to-clear or data-port rule"
+                )));
             }
         }
         let mut names = BTreeSet::new();
@@ -618,6 +668,12 @@ pub fn render_soc(inputs: &SocInputs<'_>) -> Result<SocRender> {
             )
         })
         .collect::<BTreeMap<_, _>>();
+    let command_rules = overlay
+        .commands
+        .iter()
+        .map(|rule| ((rule.peripheral.as_str(), rule.register.as_str()), rule))
+        .collect::<BTreeMap<_, _>>();
+    let mut matched_commands = BTreeSet::new();
     let mut matched_registers = BTreeSet::new();
     let mut matched_fields = BTreeSet::new();
     let mut verdicts = Vec::new();
@@ -737,12 +793,19 @@ pub fn render_soc(inputs: &SocInputs<'_>) -> Result<SocRender> {
                 )
             } else {
                 let header = header_view(&facts, &name, register)?;
+                let commands = command_rules.get(&key).copied();
+                if commands.is_some() {
+                    matched_commands.insert(key);
+                }
                 classify(
                     &vendor,
                     peripheral,
                     register,
-                    rule,
-                    &field_rules,
+                    Rules {
+                        register: rule,
+                        fields: &field_rules,
+                        commands,
+                    },
                     &header,
                     &mut collected,
                 )?
@@ -785,6 +848,14 @@ pub fn render_soc(inputs: &SocInputs<'_>) -> Result<SocRender> {
             "overlay register {peripheral}.{register} is not in the vendor SVD"
         )));
     }
+    if let Some((peripheral, register)) = command_rules
+        .keys()
+        .find(|key| !matched_commands.contains(*key))
+    {
+        return Err(Error::message(format!(
+            "overlay commands of {peripheral}.{register} name no register the pass classifies"
+        )));
+    }
     if let Some((peripheral, register, field)) = field_rules
         .keys()
         .find(|key| !matched_fields.contains(*key))
@@ -820,7 +891,7 @@ pub fn render_soc(inputs: &SocInputs<'_>) -> Result<SocRender> {
     fifos.retain(|port: &FifoPort| {
         rendered_registers.contains(&(port.peripheral.clone(), port.register.clone()))
     });
-    commands.retain(|command: &CommandField| {
+    commands.retain(|command: &CommandRegister| {
         rendered_registers.contains(&(command.peripheral.clone(), command.register.clone()))
     });
     ports.retain(|port: &DataPort| {
@@ -832,7 +903,7 @@ pub fn render_soc(inputs: &SocInputs<'_>) -> Result<SocRender> {
     pack.options.typed_peripherals = rendered.clone();
     pack.write_trigger_fields = triggers;
     pack.fifo_ports = fifos;
-    pack.command_fields = commands;
+    pack.command_registers = commands;
     pack.data_ports = ports;
     for peripheral in &device.peripherals {
         if let [interrupt] = peripheral.interrupt.as_slice() {
@@ -905,9 +976,28 @@ pub fn render_soc(inputs: &SocInputs<'_>) -> Result<SocRender> {
 struct Collected {
     triggers: Vec<WriteTriggerField>,
     fifos: Vec<FifoPort>,
-    commands: Vec<CommandField>,
+    commands: Vec<CommandRegister>,
     ports: Vec<DataPort>,
     renames: Vec<Rename>,
+}
+
+/// The overlay's rules on one vendor register.
+#[derive(Clone, Copy)]
+struct Rules<'r> {
+    register: Option<&'r RegisterRule>,
+    fields: &'r BTreeMap<(&'r str, &'r str, &'r str), &'r FieldRule>,
+    commands: Option<&'r CommandRule>,
+}
+
+/// What a field of a command register is.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CommandRole {
+    /// Started by writing one, cleared by the hardware.
+    Command,
+    /// Written with a start, by the start's argument.
+    Qualifier,
+    /// A self-clearing bit no start sets: read, zero in every start.
+    Held,
 }
 
 /// A vendor field the API names after its source.
@@ -1206,11 +1296,15 @@ fn classify(
     device: &Device,
     peripheral: &Peripheral,
     register: &svd_rs::Register,
-    rule: Option<&RegisterRule>,
-    field_rules: &BTreeMap<(&str, &str, &str), &FieldRule>,
+    rules: Rules<'_>,
     header: &HeaderView,
     collected: &mut Collected,
 ) -> Result<(RegisterApi, Vec<String>, Option<svd_rs::Register>)> {
+    let Rules {
+        register: rule,
+        fields: field_rules,
+        commands: command_rule,
+    } = rules;
     let Collected {
         triggers,
         fifos,
@@ -1220,7 +1314,6 @@ fn classify(
     } = collected;
     let name = peripheral.name.as_str();
     let data_port = rule.is_some_and(|rule| rule.data_port);
-    let exclusive = rule.map_or(&[][..], |rule| rule.exclusive_commands.as_slice());
     let mut typed = register.clone();
     typed.description = typed.description.as_deref().map(doc_line);
     let properties = crate::pac_api_svd::merged_properties(device, peripheral, register);
@@ -1286,10 +1379,29 @@ fn classify(
             if let Some(reason) = &derived.none {
                 return Ok((RegisterApi::None, vec![reason.clone()], None));
             }
+            if let Some(commands) = command_rule
+                && let Some(field) = commands
+                    .fields
+                    .iter()
+                    .chain(&commands.qualifiers)
+                    .find(|field| !derived.self_clearing.contains_key(*field))
+            {
+                return Err(Error::message(format!(
+                    "overlay names {name}.{}.{field} a command or qualifier, but its header does not make it one self-clearing bit (R/W/SC, R/W/WTC)",
+                    register.name
+                )));
+            }
             let kept = derived
                 .narrow
                 .iter()
-                .filter(|reason| !(data_port && derived.hardware.contains(*reason)))
+                .filter(|reason| {
+                    !(data_port && derived.hardware.contains(*reason))
+                        && !(command_rule.is_some()
+                            && derived
+                                .self_clearing
+                                .values()
+                                .any(|lifted| lifted == *reason))
+                })
                 .cloned()
                 .collect::<Vec<_>>();
             if !kept.is_empty() {
@@ -1329,6 +1441,12 @@ fn classify(
             None,
         ));
     }
+    if command_rule.is_some() && derived.is_none() {
+        return Err(Error::message(format!(
+            "overlay names commands of {name}.{}, which no pinned header defines",
+            register.name
+        )));
+    }
     let explicit_w1c = rule.is_some_and(|rule| rule.write_one_to_clear);
     let w1c = explicit_w1c || derived.is_some_and(|derived| derived.one_to_clear);
     let mut header_reserved = 0_u32;
@@ -1359,6 +1477,9 @@ fn classify(
         ));
     }
     let mut declared = 0_u32;
+    let mut roles = Vec::new();
+    let mut register_triggers = 0_usize;
+    let mut zero_lanes = 0_usize;
     for field in fields {
         let MaybeArray::Single(mut info) = field else {
             continue;
@@ -1407,6 +1528,24 @@ fn classify(
         }
         // The overlay's field access, else its register access, else the
         // header's class, else the SVD's field access, else the register's.
+        let role = command_rule.and_then(|commands| {
+            if commands.fields.contains(&svd_name) {
+                Some(CommandRole::Command)
+            } else if commands.qualifiers.contains(&svd_name) {
+                Some(CommandRole::Qualifier)
+            } else {
+                derived
+                    .is_some_and(|derived| derived.self_clearing.contains_key(&svd_name))
+                    .then_some(CommandRole::Held)
+            }
+        });
+        let debug = derived_field.is_some_and(|field| field.debug);
+        if debug && matches!(role, Some(CommandRole::Command | CommandRole::Qualifier)) {
+            return Err(Error::message(format!(
+                "overlay names {name}.{}.{svd_name} a command or qualifier, but its header keeps it to internal debugging",
+                register.name
+            )));
+        }
         let field_access = match (
             field_rule.and_then(|rule| rule.access),
             rule.and_then(|rule| rule.access),
@@ -1414,13 +1553,38 @@ fn classify(
             (Some(field), _) => field.svd(),
             (None, Some(_)) => access,
             (None, None) => match derived_field.map(|field| field.class) {
-                Some(Class::Plain | Class::Trigger | Class::OneToClear | Class::Command) => {
+                Some(Class::Plain | Class::Trigger | Class::OneToClear | Class::SelfClearing) => {
                     Access::ReadWrite
                 }
                 Some(Class::ReadOnly) => Access::ReadOnly,
                 Some(Class::WriteOnly) => Access::WriteOnly,
                 _ => info.access.unwrap_or(access),
             },
+        };
+        // A debugging field is never written: read only, or a lane every
+        // write leaves zero when a read returns nothing it holds.
+        let class = derived_field.map(|field| field.class);
+        let zero_lane = debug
+            && field_access.can_write()
+            && (matches!(class, Some(Class::Trigger)) || !field_access.can_read());
+        // A command register is written only by its starts: every other
+        // field is only read there.
+        let field_access = if role.is_some() {
+            Access::ReadWrite
+        } else if zero_lane {
+            field_access
+        } else if field_access.can_write() && (debug || command_rule.is_some()) {
+            if !field_access.can_read() {
+                narrow = true;
+                reasons.push(format!(
+                    "write-only field {} of a command register",
+                    info.name
+                ));
+                continue;
+            }
+            Access::ReadOnly
+        } else {
+            field_access
         };
         info.access = Some(field_access);
         info.enumerated_values.clear();
@@ -1460,10 +1624,25 @@ fn classify(
         if w1c {
             info.modified_write_values = Some(ModifiedWriteValues::OneToClear);
         }
+        if zero_lane {
+            info.write_constraint = Some(WriteConstraint::Range(WriteConstraintRange {
+                min: 0,
+                max: 0,
+            }));
+            declared |= (u32::MAX >> (32 - width)) << offset;
+            zero_lanes += 1;
+            kept.push(MaybeArray::Single(info));
+            continue;
+        }
+        if let Some(role) = role {
+            roles.push((role, info.name.clone()));
+            declared |= (u32::MAX >> (32 - width)) << offset;
+            kept.push(MaybeArray::Single(info));
+            continue;
+        }
         let kind = field_rule.and_then(|rule| rule.kind).or_else(|| {
             derived_field.and_then(|field| match field.class {
-                Class::Trigger => Some(FieldKind::WriteTrigger),
-                Class::Command if width == 1 => Some(FieldKind::Command),
+                Class::Trigger if field_access.can_write() => Some(FieldKind::WriteTrigger),
                 Class::Plain => Some(FieldKind::Plain),
                 _ => None,
             })
@@ -1478,28 +1657,14 @@ fn classify(
                 |rule| rule.sources.clone(),
             )
         };
-        if kind == Some(FieldKind::Command) {
-            if width != 1 || field_access != Access::ReadWrite {
-                narrow = true;
-                reasons.push(format!(
-                    "command field {} is not one readable and writable bit{}",
-                    info.name,
-                    if rule.and_then(|rule| rule.access).is_some() {
-                        " (the overlay's register access)"
-                    } else {
-                        ""
-                    }
-                ));
-            } else {
-                commands.push(CommandField {
-                    peripheral: name.to_owned(),
-                    register: register.name.clone(),
-                    field: info.name.clone(),
-                    exclusive: exclusive.contains(&svd_name),
-                    sources: cited(),
-                });
+        if kind == Some(FieldKind::WriteTrigger) {
+            if command_rule.is_some() {
+                return Err(Error::message(format!(
+                    "overlay makes {name}.{} a command register, but its field {} is a write trigger",
+                    register.name, info.name
+                )));
             }
-        } else if kind == Some(FieldKind::WriteTrigger) {
+            register_triggers += 1;
             triggers.push(WriteTriggerField {
                 peripheral: name.to_owned(),
                 register: register.name.clone(),
@@ -1552,24 +1717,30 @@ fn classify(
             reasons.join("; ")
         )));
     }
-    if let Some(field) = exclusive.iter().find(|field| {
-        !commands.iter().any(|command| {
-            command.peripheral == name
-                && command.register == register.name
-                && fields_svd_name(renames, name, &register.name, &command.field) == **field
-        })
-    }) {
+    if command_rule.is_some() && narrow {
         return Err(Error::message(format!(
-            "overlay names {name}.{}.{field} an exclusive command, but it is no command field",
-            register.name
+            "overlay makes {name}.{} a command register, but it stays read-only: {}",
+            register.name,
+            reasons.join("; ")
         )));
+    }
+    // A word of write triggers alone is written from zero, never read.
+    if !narrow
+        && register_triggers > 0
+        && register_triggers + zero_lanes == kept.len()
+        && rule.is_none_or(|rule| rule.access.is_none() && !rule.fifo && !rule.data_port)
+    {
+        access = Access::WriteOnly;
+        for field in &mut kept {
+            if let MaybeArray::Single(info) = field {
+                info.access = Some(Access::WriteOnly);
+            }
+        }
     }
     if narrow {
         access = Access::ReadOnly;
         triggers
             .retain(|trigger| !(trigger.peripheral == name && trigger.register == register.name));
-        commands
-            .retain(|command| !(command.peripheral == name && command.register == register.name));
         kept.retain(|field| field.access.is_none_or(|access| access.can_read()));
         for field in &mut kept {
             field.access = Some(Access::ReadOnly);
@@ -1593,6 +1764,23 @@ fn classify(
             peripheral: name.to_owned(),
             register: register.name.clone(),
             sources: rule.map(|rule| rule.sources.clone()).unwrap_or_default(),
+        });
+    }
+    if let Some(rule) = command_rule {
+        let named = |wanted: CommandRole| {
+            roles
+                .iter()
+                .filter(|(role, _)| *role == wanted)
+                .map(|(_, field)| field.clone())
+                .collect::<Vec<_>>()
+        };
+        commands.push(CommandRegister {
+            peripheral: name.to_owned(),
+            register: register.name.clone(),
+            commands: named(CommandRole::Command),
+            qualifiers: named(CommandRole::Qualifier),
+            held: named(CommandRole::Held),
+            sources: rule.sources.clone(),
         });
     }
     if data_port {
@@ -1628,22 +1816,6 @@ fn classify(
         RegisterApi::Read
     };
     Ok((api, reasons, Some(typed)))
-}
-
-/// The vendor name of `field` of `register`: the API names some fields
-/// after their source.
-fn fields_svd_name<'n>(
-    renames: &'n [Rename],
-    peripheral: &str,
-    register: &str,
-    field: &'n str,
-) -> &'n str {
-    renames
-        .iter()
-        .find(|rename| {
-            rename.peripheral == peripheral && rename.register == register && rename.source == field
-        })
-        .map_or(field, |rename| rename.svd.as_str())
 }
 
 /// The chip's interrupt sources: the vendor SVD's and the overlay's.
