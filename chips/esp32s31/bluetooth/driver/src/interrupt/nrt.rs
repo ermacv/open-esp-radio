@@ -19,31 +19,35 @@ pub struct NrtDefaultInterruptEpoch {
 }
 
 trait NrtInterruptBackend {
-    fn capture_nrt_and_acknowledge(&mut self) -> BluetoothNrtInterruptAcknowledged;
+    fn capture_nrt_and_acknowledge(&mut self) -> Option<BluetoothNrtInterruptAcknowledged>;
 }
 
 impl NrtInterruptBackend for InterruptRegistersOwner {
-    fn capture_nrt_and_acknowledge(&mut self) -> BluetoothNrtInterruptAcknowledged {
+    fn capture_nrt_and_acknowledge(&mut self) -> Option<BluetoothNrtInterruptAcknowledged> {
         self.capture_nrt_and_acknowledge()
     }
 }
 
 fn execute_nrt_default_interrupt_step(
     backend: &mut impl NrtInterruptBackend,
-) -> NrtDefaultInterruptEpoch {
-    NrtDefaultInterruptEpoch {
-        _acknowledged: backend.capture_nrt_and_acknowledge(),
-    }
+) -> Option<NrtDefaultInterruptEpoch> {
+    backend
+        .capture_nrt_and_acknowledge()
+        .map(|acknowledged| NrtDefaultInterruptEpoch {
+            _acknowledged: acknowledged,
+        })
 }
 
-/// Capture and acknowledge one source-133 epoch for the default profile.
+/// Capture and acknowledge one source-133 epoch for the default profile;
+/// `None` when both snapshots were clear (the shared line raised by another
+/// source), with nothing written.
 ///
 /// The function is finite and publishes no scheduler, timer, HCI or
 /// Link-Layer event. Supporting a later feature that registers an NRT consumer
 /// requires a different typed policy rather than changing this disposition.
 pub(crate) fn step_nrt_default_interrupt(
     interrupts: &mut InterruptRegistersOwner,
-) -> NrtDefaultInterruptEpoch {
+) -> Option<NrtDefaultInterruptEpoch> {
     execute_nrt_default_interrupt_step(interrupts)
 }
 

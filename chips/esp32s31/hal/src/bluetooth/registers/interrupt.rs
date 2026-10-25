@@ -262,20 +262,20 @@ fn execute_primary_release(control: &mut impl BluetoothInterruptControl) {
     control.mask_primary_baseline_bank_1();
 }
 
-/// Controller-side interrupt output prepared before a CPU route is installed.
+/// Controller-side interrupt output prepared by the bank's interrupt handler
+/// when it opens the epoch.
 ///
 /// This state owns the exact baseline clear/enable transaction followed by
-/// `IRQ_CONTROL_0 = 1`, immediately before the vendor platform allocates the
-/// primary CPU interrupt. It still exposes no status capture: both CPU routes
-/// must share one staged ISR owner before either route is enabled.
-#[must_use = "the prepared Bluetooth interrupt output must be routed or released"]
+/// `IRQ_CONTROL_0 = 1`, which the vendor runs immediately before it allocates
+/// the primary CPU interrupt. It still exposes no status capture: the handler
+/// stages it at once for sources 124 and 133.
+#[must_use = "the prepared Bluetooth interrupt output must be staged or released"]
 pub struct BluetoothInterruptOutputPrepared<P: BluetoothPlacements = Chip> {
     pub(crate) peripherals: InterruptBlocks<P>,
 }
 
 impl<P: BluetoothPlacements> BluetoothInterruptSetup<P> {
-    /// Prepare the controller-side interrupt output before installing a CPU
-    /// route.
+    /// Prepare the controller-side interrupt output in the bank's handler.
     ///
     /// SOURCE: complete ESP32-S31 `libbtdm_common.a` `btdm_hal.c` helpers. The
     /// composite setup clears bank images `0x0000_8000` and `0x0000_1300`,
@@ -318,7 +318,7 @@ impl<P: BluetoothPlacements> BluetoothInterruptOutputPrepared<P> {
     /// The prepared bank as its handler holds it for the epoch. Performs no
     /// MMIO; the handler serving sources 124 and 133 calls it when it opens
     /// the epoch and keeps the bank until the output is released.
-    pub fn stage_for_cpu_routes(self) -> BluetoothInterruptRegisters<P> {
+    pub fn stage_for_handler(self) -> BluetoothInterruptRegisters<P> {
         BluetoothInterruptRegisters {
             peripherals: self.peripherals,
         }

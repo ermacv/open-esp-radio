@@ -375,13 +375,12 @@ impl BluetoothInterruptSetup {
 
 /// Bluetooth interrupt-bank capability staged for a powered ISR epoch.
 ///
-/// [`BluetoothInterruptOutputPrepared::stage_for_cpu_routes`] constructs this
+/// [`BluetoothInterruptOutputPrepared::stage_for_handler`] constructs this
 /// value only after the baseline masks and controller output have been
-/// prepared. The platform retains it in stable storage shared by the primary
-/// and NRT handlers before enabling either CPU route: sources 124
-/// (`MODEM_BT_MAC`) and 133 (`MODEM_BT_MAC_INT1`) sample and acknowledge the
-/// same bank, so this one owner serves both.
-#[must_use = "the Bluetooth interrupt owner must be deactivated and reunited"]
+/// prepared, in the one handler of sources 124 (`MODEM_BT_MAC`) and 133
+/// (`MODEM_BT_MAC_INT1`): both sample and acknowledge the same bank, so this
+/// one owner serves both. It leaves the handler only released.
+#[must_use = "the Bluetooth interrupt owner leaves its handler only released"]
 pub struct BluetoothInterruptRegisters<P: BluetoothPlacements = Chip> {
     pub(crate) peripherals: InterruptBlocks<P>,
 }

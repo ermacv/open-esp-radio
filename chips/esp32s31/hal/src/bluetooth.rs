@@ -115,6 +115,15 @@ struct Partition {
     interrupts: RegistersBluetoothInterruptSetup,
 }
 
+/// The type naming the interrupt sources of the controller's bank: the
+/// primary source 124 and the NRT source 133, which one handler samples and
+/// acknowledges through the bank (`InterruptSources`).
+pub type BluetoothInterruptBankSources = oer_esp32s31_pac::bt_mac::BluetoothInterruptBank;
+
+/// The type naming the modem low-power timer's interrupt source 127
+/// (`InterruptSource`).
+pub type ModemLpTimerSource = oer_esp32s31_pac::modem_pwr::BtdmRuntimeControl;
+
 /// Unpowered Bluetooth client holding its partition.
 ///
 /// Construction splits the partition without touching MMIO. It proves
@@ -782,12 +791,12 @@ impl ModemLpTimerCounterStartedOwner {
         self.runtime_control
     }
 
-    /// Transfer the unique started timer into stable source-127 ISR storage.
+    /// The unique started timer as the source-127 handler holds it.
     ///
-    /// This transition performs no MMIO and exposes no raw register owner. The
-    /// platform must store the returned value before enabling the CPU route
-    /// and recover it only after that route is disabled and no hard handler
-    /// remains in flight.
+    /// This transition performs no MMIO and exposes no raw register owner.
+    /// The timer's handler starts the timer and keeps the returned owner
+    /// until the Controller reset, lending it to the task only for software
+    /// work.
     pub fn stage_for_interrupt(self) -> ModemLpTimerInterruptReadyOwner {
         ModemLpTimerInterruptReadyOwner { timer: self.timer }
     }
@@ -1009,14 +1018,11 @@ pub struct InterruptSetupOwner {
 impl InterruptSetupOwner {
     /// Execute the reviewed baseline clear/enable/output preparation.
     ///
-    /// The controller lifecycle owns completed HAL-init and quiescent dynamic
-    /// sources. The returned state remains retained until stable ISR storage
-    /// is ready.
-    ///
-    /// The caller runs it after the completed controller HAL-init, with
-    /// quiescent dynamic sources and the primary and NRT CPU routes still
-    /// inactive: an order of the Controller's lifecycle, which publishes no
-    /// memory to the hardware.
+    /// The bank's interrupt handler runs it when the task opens the epoch,
+    /// after the completed controller HAL-init and with quiescent dynamic
+    /// sources: an order of the Controller's lifecycle, which publishes no
+    /// memory to the hardware. The handler holds the prepared bank, so no
+    /// armed source reaches a line whose handler lacks it.
     pub fn prepare_controller_output(self) -> InterruptOutputPreparedOwner {
         InterruptOutputPreparedOwner {
             registers: self.registers.prepare_controller_output(),
@@ -1024,19 +1030,17 @@ impl InterruptSetupOwner {
     }
 }
 
-/// Controller IRQ output prepared but not yet transferred into stable ISR
-/// storage or bound to a CPU route.
+/// Controller IRQ output prepared in the bank's handler, not yet staged.
 #[must_use = "the prepared Bluetooth output must be staged or released"]
 pub struct InterruptOutputPreparedOwner {
     registers: registers::BluetoothInterruptOutputPrepared,
 }
 
 impl InterruptOutputPreparedOwner {
-    /// Transfer the register partition to the state required by shared ISR
-    /// storage before either platform route is enabled.
-    pub fn stage_for_cpu_routes(self) -> InterruptRegistersOwner {
+    /// The prepared bank as its handler holds it for the epoch.
+    pub fn stage_for_handler(self) -> InterruptRegistersOwner {
         InterruptRegistersOwner {
-            registers: self.registers.stage_for_cpu_routes(),
+            registers: self.registers.stage_for_handler(),
             #[cfg(feature = "bluetooth-engine")]
             diagnostic_selection: DiagnosticSelection::None,
             fault_acknowledged: false,
@@ -1044,8 +1048,8 @@ impl InterruptOutputPreparedOwner {
         }
     }
 
-    /// Execute the reviewed controller-output release transaction after CPU
-    /// routes have been removed.
+    /// Execute the reviewed controller-output release transaction on a bank
+    /// that never reached its handler's epoch.
     ///
     /// Dynamic Link-Layer sources must already be quiescent. This transaction
     /// alone is not controller, packet, BTBB, PHY or clock teardown. Even on

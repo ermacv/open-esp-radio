@@ -1,10 +1,10 @@
-//! CPU route policy, P3 capture and P2 classification of latched inputs.
+//! The one handler of the Bluetooth interrupts and its gate, P3 capture and
+//! P2 classification of latched inputs.
 
 pub(crate) mod classifier;
+pub mod gate;
 mod halves;
 pub(crate) mod nrt;
-#[cfg(target_arch = "riscv32")]
-mod ports;
 pub(crate) mod primary;
 pub(crate) mod route;
 pub(crate) mod wake;
@@ -16,15 +16,16 @@ pub use classifier::{
     SchedulerWorkerWakeClass,
 };
 
-pub use halves::{ControllerInterruptHalf, RadioDoorbell, SchedulerDoorbell};
+pub use gate::{
+    BluetoothInterruptEnds, BluetoothInterruptGate, BluetoothInterruptSignals,
+    BluetoothInterruptStorage, BluetoothInterrupts, BluetoothInterruptsOf, ChipGate, DoorbellLine,
+    GateError, GateOpenRefused, ModemLpTimerPort,
+};
+pub use halves::{RadioDoorbell, SchedulerDoorbell};
 pub use nrt::NrtDefaultInterruptEpoch;
 
 pub use primary::PrimaryInterruptCapture;
 
-#[cfg(target_arch = "riscv32")]
-pub use ports::{
-    InterruptOwnerRestartStorage, InterruptOwnerStorage, SharedInterruptDispatchStorage,
-};
 pub use route::{CpuInterruptRoutePolicy, CpuInterruptSource, InterruptHandlerResidency};
 
 pub use wake::{

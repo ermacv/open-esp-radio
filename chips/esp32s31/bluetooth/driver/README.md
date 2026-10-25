@@ -75,22 +75,34 @@ clocked client; constructor refusal returns its untouched inputs. Terminal
 failures retain every hardware partition and the arena in absorbing
 quarantine. There is no reset-failure extraction or late-stop recovery.
 
-One `ControllerInterruptHalf` holds the IRQ register owner and the HAL's
-request endpoint in stable P3 storage. Primary, NRT and shared radio doorbell
-entries service that same half. The owning task engine at P2 retains the arena
-and every scheduler transaction; it has no access to the IRQ register owner.
-`Engine::install_scheduler_interrupts` binds a static single-request channel
-to its installation epoch. `SchedulerDoorbell` rings the image's shared
-`FROM_CPU` line 3 and waits on a dedicated P2 `IrqSignal`. The shared handler
-acknowledges the software interrupt before visiting the radio halves.
+One interrupt table entry binds `interrupt::BluetoothInterrupts` once, at
+start: the controller bank's primary (124) and NRT (133) sources, the modem
+low-power timer (127) and the shared radio doorbell (`FROM_CPU` line 3), all
+on one line at level three on core 0. Its handler,
+`BluetoothInterrupts::service`, lowers the doorbell, takes the timer owner the
+task rearmed and one gate request, serves one request of the scheduler
+channel, samples and acknowledges the primary status and the NRT snapshots,
+then steps the timer; a clear status writes nothing. The part holds a gate
+for the bank and one for the timer, and touches a register owner only while
+its gate holds it.
 
-IRQ-bank changes and fresh diagnostic samples return durable, affine replies.
-The installation epoch and a command number that never wraps or resets reject
-stale replies. A dropped pending exchange retains its seat and prevents
-retirement. Stop and route removal return the P3 endpoint; both quiet halves
-reunite before reset and channel reuse. Scheduler hardware locks retain their
-protocol meaning. Scheduler and modem-timer wake cells keep their independent
-`IrqSignal` handoffs.
+`interrupt::BluetoothInterruptGate` is the task's end. Opening an epoch takes
+the router's `Bound` proof and hands the handler the unprepared bank, the
+HAL's channel endpoint and the initialized timer: the handler prepares the
+controller output, then starts the runtime timer, so no source is armed while
+the task holds its owner. The timer's software work crosses through
+`interrupt::ModemLpTimerPort`. The route is never removed and nothing is
+masked at the interrupt controller: the task and the handler share no lock,
+only one-slot queues, the doorbell and the static reply signal.
+
+`Engine::install_scheduler_interrupts` binds a static single-request channel
+to its installation epoch. `SchedulerDoorbell` rings the doorbell and waits
+on a dedicated P2 `IrqSignal`. IRQ-bank changes and fresh diagnostic samples
+return durable, affine replies. The installation epoch and a command number
+that never wraps or resets reject stale replies. A dropped pending exchange
+retains its seat and prevents retirement. Scheduler hardware locks retain
+their protocol meaning. Scheduler and modem-timer wake cells keep their
+independent `IrqSignal` handoffs.
 
 ## Controller time
 
@@ -133,16 +145,11 @@ Start:
 4. join BTBB and the PHY client set, finish initial/due tracking, then consume
    `BluetoothRfReady` to initialize the BLE PHY and public address;
 5. after the actor answers tracked readiness, take the runtime once, bind its
-   request channel, publish the P3 half and timer in stable storage, then bind
-   the CPU routes.
+   request channel and open the interrupt handler's gates with the bank, the
+   channel endpoint and the timer.
 
-The interrupt sources are `MODEM_BT_MAC` (source 124), `MODEM_LP_TIMER`
-(source 127) and `MODEM_BT_MAC_INT1` (source 133), bound as one same-core set
-at level three on core 0 to the primary, modem-timer and default NRT
-handlers. The dispatcher is complete before the first route is enabled, so
-an interrupt pending at once observes it. Once published, the storage stays
-reserved after retirement: old static Controller borrows outlive it until a
-board reset.
+The interrupt table binds the handler's part once per boot, before any
+epoch; its storage stays reserved for every later epoch.
 
 While it runs, every change of the active roles moves the Bluetooth LE
 coexistence status bits ([`coex_status`](src/coex_status.rs)), and
@@ -152,15 +159,22 @@ another radio shares the antenna, which selects the coexistence priorities
 
 Stop:
 
-1. stop the physical scheduler through P3 while the shared doorbell remains
-   live, drain events, RX/TX and finished lists, and settle the modem timer;
-2. disable the BLE routes, remove dispatch, retire the drained timer and P3
-   half, and reunite both quiet request-channel endpoints;
-3. `shutdown::retire` checks worker/engine retirement and releases Controller
-   output. Return that affine owner to `ControllerLifecycle`; only the exact
-   running installation is accepted;
-4. the actor leaves BTBB/PHY, resets the Controller, releases Bluetooth clocks,
-   coexistence and common power, and closes RF only for the last member.
+1. stop the physical scheduler through P3, drain events, RX/TX and finished
+   lists, and retire the drained modem-timer task (its owner stays with the
+   handler);
+2. `shutdown::retire` checks the workers and the stopped scheduler, releases
+   the Controller output in alternating steps (the handler's idle sample, the
+   task's list heads, the handler's mask, the task's RUN disable, the
+   handler's release), closes the bank's gate (the released bank and the
+   channel endpoint leave the handler), reunites both quiet channel endpoints
+   and has the handler disable the timer's compare. A fault the handler
+   acknowledged during the epoch refuses the release. Return the retired
+   Controller to `ControllerLifecycle`; only the exact running installation
+   is accepted;
+3. the actor leaves BTBB/PHY and resets the Controller; the lifecycle then
+   takes the timer from its handler, which gives it up only after the reset,
+   and the actor releases Bluetooth clocks, coexistence and common power and
+   closes RF only for the last member.
 
 The reset returns the complete arena. `into_reset` and `BluetoothAttachment::into_stopped`
 allow a fresh scoped installation after the attachment loan is normally detached;
@@ -191,6 +205,6 @@ after drain. Retirement waits for an abandoned clock answer before returning
 the poster. P2 constructs an epoch-keyed endpoint without entering that cell
 and serves correlated clock requests through the mailbox.
 
-`firmware/apps/b0` composes actor join/tracking, P3 publication, H4 Reset/Rand
-and 1M DTM commands, End, IRQ detachment, leave/reset and arena return. Its
+`firmware/apps/b0` composes actor join/tracking, the interrupt gate, H4
+Reset/Rand and 1M DTM commands, End, leave/reset and arena return. Its
 two-boot RF/count gate is qualified; hardware port conformance is unqualified.

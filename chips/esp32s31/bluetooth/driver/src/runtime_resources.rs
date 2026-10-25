@@ -51,6 +51,16 @@ impl<X: SignalExecutor> ControllerEventCells<X> {
         }
     }
 
+    /// The scheduler worker's wake, which the interrupt handler publishes.
+    pub(crate) const fn scheduler_wake(&self) -> &SchedulerWakeCell<X> {
+        &self.scheduler_wake
+    }
+
+    /// The source-127 worker's wake, which the interrupt handler publishes.
+    pub(crate) const fn timer_wake(&self) -> &ModemLpTimerWorkerWakeCell<X> {
+        &self.modem_lp_timer_worker_wake
+    }
+
     /// Whether no notification or expiration is pending.
     ///
     /// # Errors
@@ -238,6 +248,26 @@ impl<'runtime, X: SignalExecutor, M: ControllerMemory>
     /// The HAL task owner of this powered Controller epoch.
     pub fn task_owner(&mut self) -> &mut TaskResources<M> {
         &mut self.task
+    }
+
+    /// Whether the epoch may release its controller output: no worker and
+    /// no controller-time request holds work and the physical scheduler is
+    /// stopped. The scheduler channel stays installed for the release.
+    ///
+    /// # Errors
+    ///
+    /// The first obligation that remains.
+    pub fn stopped_for_output_release(&self) -> Result<(), ControllerTaskRetirementError> {
+        self.runtime
+            .retirement_ready()
+            .map_err(ControllerTaskRetirementError::Runtime)?;
+        self.task
+            .controller_time_retirement_ready()
+            .map_err(ControllerTaskRetirementError::ControllerTime)?;
+        if !self.task.scheduler_stopped() {
+            return Err(ControllerTaskRetirementError::EngineNotStopped);
+        }
+        Ok(())
     }
 
     /// Return the task owner once no worker and no controller-time request

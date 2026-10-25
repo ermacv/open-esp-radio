@@ -36,7 +36,6 @@ pub enum ModemLpTimerWorkerWakePublication {
 }
 
 /// The one source-127 readiness fact.
-#[cfg(any(target_arch = "riscv32", test))]
 const WORKER_PENDING: u32 = 1;
 
 /// Durable, coalescing source-127 ISR-to-task readiness cell.
@@ -57,7 +56,6 @@ impl<X: SignalExecutor> ModemLpTimerWorkerWakeCell<X> {
         Self { signal }
     }
 
-    #[cfg(any(target_arch = "riscv32", test))]
     fn publish_from_interrupt(&self) -> ModemLpTimerWorkerWakePublication {
         if self.signal.raise(WORKER_PENDING) {
             ModemLpTimerWorkerWakePublication::Pended
@@ -121,7 +119,6 @@ pub enum ModemLpTimerPublishedInterruptStep {
 
 impl ModemLpTimerStableInterruptStep {
     /// Publish task readiness while preserving the exact register disposition.
-    #[cfg(any(target_arch = "riscv32", test))]
     pub fn publish<X: SignalExecutor>(
         self,
         worker_wake: &ModemLpTimerWorkerWakeCell<X>,
