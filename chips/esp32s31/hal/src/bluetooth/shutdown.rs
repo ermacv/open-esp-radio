@@ -1,16 +1,21 @@
 //! Final Bluetooth reset and timer reunion before the clocks are released.
 //!
-//! Caller admission retains the idle task, released output and drained
-//! source-127 owner, and Bluetooth has left the shared BTBB baseband. Reset
-//! uses the same reviewed S31 `modem_clock_module_mac_reset(PERIPH_BT_MODULE)`
-//! domain transaction as boot and `btdm_lp_shutdown`; no synthetic
-//! runtime-counter stop register is used.
+//! Caller admission retains the idle task and released output, the timer's
+//! handler disabled its compare and still holds the source-127 owner, and
+//! Bluetooth has left the shared BTBB baseband. Reset uses the same reviewed
+//! S31 `modem_clock_module_mac_reset(PERIPH_BT_MODULE)` domain transaction as
+//! boot and `btdm_lp_shutdown`; no synthetic runtime-counter stop register is
+//! used. The timer leaves its handler only after the reset, when no source of
+//! the reset domain raises it, and the reunion takes it then.
 
 use crate::power::PlatformClockBackend;
 
-use crate::bluetooth::registers::{BluetoothInterruptSetup, BluetoothModemLpTimerRegisters};
+use crate::bluetooth::registers::{BluetoothInterruptSetup, BluetoothTaskRegisters};
 
-use super::{ClockedOwner, Partition, TaskOwner};
+use super::{
+    ClockedOwner, ModemLpTimerCompareDisabled, ModemLpTimerInterruptReadyOwner, Partition,
+    TaskOwner,
+};
 use crate::domain::{RadioClient, RadioDomain};
 
 /// Proof that the Bluetooth Controller domains were reset.
@@ -51,13 +56,13 @@ pub enum BluetoothShutdownError {
     ControllerReset,
 }
 
-/// Failed shutdown keeps every hardware partition private.
+/// Failed shutdown keeps every hardware partition private; the timer stays
+/// with its handler.
 #[must_use = "failed Bluetooth shutdown retains the complete partition"]
 pub struct BluetoothShutdownFailure {
     error: BluetoothShutdownError,
     _task: TaskOwner,
     _output: BluetoothInterruptSetup,
-    _timer: BluetoothModemLpTimerRegisters,
 }
 
 impl BluetoothShutdownFailure {
@@ -79,11 +84,13 @@ trait Control {
     fn time_pending(&self) -> bool;
     fn timer_separated(&self) -> bool;
     fn btbb_held(&self) -> bool;
-    fn disable_compare(&mut self);
     fn reset_controller(&mut self);
     fn reset_released(&self) -> bool;
 }
 
+/// Admit the reset and reset the Controller domains. The timer's handler
+/// disabled its compare before (the caller's proof), as the physical
+/// counter shutdown follows from the reset and the clock release.
 fn prepare(control: &mut impl Control) -> Result<(), BluetoothShutdownError> {
     if control.time_pending() {
         return Err(BluetoothShutdownError::ControllerTimePending);
@@ -94,7 +101,6 @@ fn prepare(control: &mut impl Control) -> Result<(), BluetoothShutdownError> {
     if control.btbb_held() {
         return Err(BluetoothShutdownError::BtbbHeld);
     }
-    control.disable_compare();
     control.reset_controller();
     if !control.reset_released() {
         return Err(BluetoothShutdownError::ControllerReset);
@@ -105,7 +111,6 @@ fn prepare(control: &mut impl Control) -> Result<(), BluetoothShutdownError> {
 struct Hardware<'a, B: PlatformClockBackend, T> {
     task: &'a mut TaskOwner,
     radio: &'a mut RadioDomain<B, T>,
-    timer: &'a mut BluetoothModemLpTimerRegisters,
 }
 
 impl<B: PlatformClockBackend, T> Control for Hardware<'_, B, T> {
@@ -117,12 +122,6 @@ impl<B: PlatformClockBackend, T> Control for Hardware<'_, B, T> {
     }
     fn btbb_held(&self) -> bool {
         self.radio.holds_btbb(RadioClient::Bluetooth)
-    }
-    fn disable_compare(&mut self) {
-        // The outer retired Controller owns inactive CPU routes and a drained
-        // software queue. Compare is disabled before the timer domain reset;
-        // physical counter shutdown follows from reset and clock release.
-        self.timer.disable_compare();
     }
     fn reset_controller(&mut self) {
         self.task
@@ -136,27 +135,52 @@ impl<B: PlatformClockBackend, T> Control for Hardware<'_, B, T> {
     }
 }
 
-/// Reset the Controller, reunite the drained timer and return to the clocked
-/// owner with the reset proof.
+/// The reset Controller, awaiting its timer from the timer's handler.
+#[must_use = "the reset Controller returns to the clocked owner with its timer"]
+pub struct BluetoothControllerResetTimerPending {
+    task: BluetoothTaskRegisters,
+    output: BluetoothInterruptSetup,
+}
+
+impl BluetoothControllerResetTimerPending {
+    /// Reunite the timer its handler gave up after the reset and return to
+    /// the clocked owner with the proof of the reset. Performs no MMIO.
+    pub fn reunite(
+        self,
+        timer: ModemLpTimerInterruptReadyOwner,
+    ) -> (ClockedOwner, BluetoothControllerReset) {
+        (
+            ClockedOwner {
+                partition: Partition {
+                    task: self.task,
+                    modem_lp_timer: timer.timer,
+                    interrupts: self.output,
+                },
+            },
+            BluetoothControllerReset { _private: () },
+        )
+    }
+}
+
+/// Reset the Controller, whose timer's handler disabled its compare, and
+/// await the timer.
 ///
-/// All memory stays retained until this operation completes. Failure has no
-/// hardware escape.
+/// All memory stays retained until the reunion. Failure has no hardware
+/// escape.
 pub(super) fn shut_down<B: PlatformClockBackend, T>(
     mut task: TaskOwner,
     radio: &mut RadioDomain<B, T>,
     output: BluetoothInterruptSetup,
-    mut timer: BluetoothModemLpTimerRegisters,
-) -> Result<(ClockedOwner, BluetoothControllerReset), BluetoothShutdownFailure> {
+    _compare: ModemLpTimerCompareDisabled,
+) -> Result<BluetoothControllerResetTimerPending, BluetoothShutdownFailure> {
     if let Err(error) = prepare(&mut Hardware {
         task: &mut task,
         radio,
-        timer: &mut timer,
     }) {
         return Err(BluetoothShutdownFailure {
             error,
             _task: task,
             _output: output,
-            _timer: timer,
         });
     }
     let TaskOwner {
@@ -166,16 +190,10 @@ pub(super) fn shut_down<B: PlatformClockBackend, T>(
         reunitable: _,
         epoch: _,
     } = task;
-    Ok((
-        ClockedOwner {
-            partition: Partition {
-                task: registers,
-                modem_lp_timer: timer,
-                interrupts: output,
-            },
-        },
-        BluetoothControllerReset { _private: () },
-    ))
+    Ok(BluetoothControllerResetTimerPending {
+        task: registers,
+        output,
+    })
 }
 
 #[cfg(test)]
@@ -185,13 +203,22 @@ mod tests;
 pub(super) fn failure_for_host_test(
     task: TaskOwner,
     output: BluetoothInterruptSetup,
-    timer: BluetoothModemLpTimerRegisters,
     error: BluetoothShutdownError,
 ) -> BluetoothShutdownFailure {
     BluetoothShutdownFailure {
         error,
         _task: task,
         _output: output,
-        _timer: timer,
+    }
+}
+
+#[cfg(test)]
+pub(super) fn reset_for_host_test(
+    task: TaskOwner,
+    output: BluetoothInterruptSetup,
+) -> BluetoothControllerResetTimerPending {
+    BluetoothControllerResetTimerPending {
+        task: task.registers,
+        output,
     }
 }

@@ -1,6 +1,6 @@
 //! Register operations and absorbing terminal custody of the whole arena.
 
-use super::{ControllerMemory, Engine};
+use super::{ControllerMemory, Engine, scheduler};
 use crate::bluetooth::{self, ControllerHalBorrow};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -28,7 +28,6 @@ enum ShutdownRetention<M: ControllerMemory> {
     NotStopped {
         engine: Engine<M>,
         output: bluetooth::InterruptOutputReleasedOwner,
-        timer: bluetooth::ModemLpTimerInterruptReadyOwner,
     },
     Reset {
         registers: bluetooth::BluetoothShutdownFailure,
@@ -47,6 +46,26 @@ impl<M: ControllerMemory> core::fmt::Debug for EngineShutdownFailure<M> {
         f.debug_struct("EngineShutdownFailure")
             .field("error", &self.error)
             .finish_non_exhaustive()
+    }
+}
+
+/// The reset Controller and its retained arena, awaiting the timer its
+/// handler gives up after the reset.
+#[must_use = "the reset Controller returns its arena with its timer"]
+pub struct EngineResetTimerPending<M: ControllerMemory> {
+    controller: bluetooth::BluetoothControllerResetTimerPending,
+    memory: M,
+}
+
+impl<M: ControllerMemory> EngineResetTimerPending<M> {
+    /// Reunite the timer and return the clocked client with the arena.
+    pub fn reunite(self, timer: bluetooth::ModemLpTimerInterruptReadyOwner) -> EngineShutDown<M> {
+        let (clocked, reset) = self.controller.reunite(timer);
+        EngineShutDown {
+            clocked,
+            arena: self.memory.reclaim(&reset),
+            reset,
+        }
     }
 }
 
@@ -279,29 +298,48 @@ impl<M: ControllerMemory> Engine<M> {
         !self.is_quarantined() && self.memory.scheduler_stopped()
     }
 
-    pub fn release_controller_output<C: oer_time::Clock>(
+    /// Release the controller output of the stopped epoch: the task's
+    /// admission and list-head check and RUN disable, alternating with the
+    /// handler's idle sample, mask and release over the scheduler channel.
+    ///
+    /// # Errors
+    ///
+    /// A refused step, with nothing written after it, or a failed exchange.
+    pub async fn release_controller_output(
         &mut self,
-        output: bluetooth::InterruptOutputAfterRoutesOwner,
-        settle: oer_time::settle::Settle<'_, C>,
-    ) -> Result<
-        bluetooth::InterruptOutputReleasedOwner,
-        (
-            bluetooth::BluetoothControllerOutputReleaseError,
-            bluetooth::InterruptOutputAfterRoutesOwner,
-        ),
-    > {
-        output.try_release_idle_controller_output(&mut self.registers, settle)
+        bell: &impl scheduler::interrupt::SchedulerDoorbell,
+    ) -> Result<bluetooth::BluetoothOutputReleased, EngineOutputReleaseError> {
+        let admitted = self
+            .registers
+            .admit_output_release()
+            .map_err(EngineOutputReleaseError::Output)?;
+        let channel =
+            self.scheduler_interrupts
+                .as_mut()
+                .ok_or(EngineOutputReleaseError::Channel(
+                    scheduler::interrupt::SchedulerInterruptError::NotInstalled,
+                ))?;
+        let sampled = channel.sample_idle_output(bell, admitted).await??;
+        let heads = self
+            .registers
+            .confirm_scheduler_heads_absent(sampled)
+            .map_err(EngineOutputReleaseError::Output)?;
+        let masked = channel.mask_output(bell, heads).await?;
+        let run = self.registers.disable_scheduler_run(masked);
+        Ok(channel.release_output(bell, run).await??)
     }
 
+    /// Reset the stopped Controller, whose output is released and whose
+    /// timer's handler disabled its compare, and await that timer.
     #[allow(clippy::result_large_err)]
     pub fn shut_down<B: crate::power::PlatformClockBackend, T>(
         self,
         radio: &mut crate::domain::RadioDomain<B, T>,
         output: bluetooth::InterruptOutputReleasedOwner,
-        timer: bluetooth::ModemLpTimerInterruptReadyOwner,
-    ) -> Result<EngineShutDown<M>, EngineShutdownFailure<M>> {
-        self.shut_down_with(output, timer, |registers, output, timer| {
-            registers.shut_down(radio, output, timer)
+        compare: bluetooth::ModemLpTimerCompareDisabled,
+    ) -> Result<EngineResetTimerPending<M>, EngineShutdownFailure<M>> {
+        self.shut_down_with(output, |registers, output| {
+            registers.shut_down(radio, output, compare)
         })
     }
 
@@ -309,23 +347,20 @@ impl<M: ControllerMemory> Engine<M> {
     fn shut_down_with(
         self,
         output: bluetooth::InterruptOutputReleasedOwner,
-        timer: bluetooth::ModemLpTimerInterruptReadyOwner,
         reset_registers: impl FnOnce(
             bluetooth::TaskOwner,
             bluetooth::InterruptOutputReleasedOwner,
-            bluetooth::ModemLpTimerInterruptReadyOwner,
         ) -> Result<
-            (bluetooth::ClockedOwner, bluetooth::BluetoothControllerReset),
+            bluetooth::BluetoothControllerResetTimerPending,
             bluetooth::BluetoothShutdownFailure,
         >,
-    ) -> Result<EngineShutDown<M>, EngineShutdownFailure<M>> {
+    ) -> Result<EngineResetTimerPending<M>, EngineShutdownFailure<M>> {
         if !self.retirement_ready() {
             return Err(EngineShutdownFailure {
                 error: EngineShutdownError::NotStopped,
                 _retained: ShutdownRetention::NotStopped {
                     engine: self,
                     output,
-                    timer,
                 },
             });
         }
@@ -339,12 +374,8 @@ impl<M: ControllerMemory> Engine<M> {
             initialized: _,
             phy_initialized: _,
         } = self;
-        match reset_registers(registers, output, timer) {
-            Ok((clocked, reset)) => Ok(EngineShutDown {
-                clocked,
-                arena: memory.reclaim(&reset),
-                reset,
-            }),
+        match reset_registers(registers, output) {
+            Ok(controller) => Ok(EngineResetTimerPending { controller, memory }),
             Err(registers) => Err(EngineShutdownFailure {
                 error: EngineShutdownError::Reset(registers.error()),
                 _retained: ShutdownRetention::Reset {
@@ -354,6 +385,27 @@ impl<M: ControllerMemory> Engine<M> {
                 },
             }),
         }
+    }
+}
+
+/// Why the controller output of a stopped epoch was not released.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EngineOutputReleaseError {
+    /// A step of the release refused; nothing after it was written.
+    Output(bluetooth::BluetoothControllerOutputReleaseError),
+    /// The exchange with the handler failed.
+    Channel(scheduler::interrupt::SchedulerInterruptError),
+}
+
+impl From<scheduler::interrupt::SchedulerInterruptError> for EngineOutputReleaseError {
+    fn from(error: scheduler::interrupt::SchedulerInterruptError) -> Self {
+        Self::Channel(error)
+    }
+}
+
+impl From<bluetooth::BluetoothControllerOutputReleaseError> for EngineOutputReleaseError {
+    fn from(error: bluetooth::BluetoothControllerOutputReleaseError) -> Self {
+        Self::Output(error)
     }
 }
 

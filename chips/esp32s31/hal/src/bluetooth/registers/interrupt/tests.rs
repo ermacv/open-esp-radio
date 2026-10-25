@@ -184,7 +184,7 @@ impl BluetoothPrimaryInterruptControl for EpochRecorder {
 #[test]
 fn primary_epoch_acknowledges_before_conditional_fault_capture() {
     let mut recorder = EpochRecorder::fault_sources();
-    let epoch = execute_primary_interrupt_epoch(&mut recorder);
+    let epoch = execute_primary_interrupt_epoch(&mut recorder).expect("fault sources are pending");
 
     assert_eq!(
         recorder.operations,
@@ -208,7 +208,8 @@ fn primary_epoch_acknowledges_before_conditional_fault_capture() {
 #[test]
 fn primary_epoch_skips_diagnostic_reads_without_matching_sources() {
     let mut recorder = EpochRecorder::empty();
-    let epoch = execute_primary_interrupt_epoch(&mut recorder);
+    recorder.bank_0.source_21_pending = true;
+    let epoch = execute_primary_interrupt_epoch(&mut recorder).expect("source 21 is pending");
 
     assert_eq!(
         recorder.operations,
@@ -220,6 +221,19 @@ fn primary_epoch_skips_diagnostic_reads_without_matching_sources() {
         ]
     );
     assert!(!epoch.fault_sources().is_fault());
+    assert!(epoch.bank_0_source_21_pending());
+}
+
+#[test]
+fn a_clear_primary_status_writes_nothing() {
+    // The shared line's handler samples the bank on every entry; with both
+    // status words clear it acknowledges nothing.
+    let mut recorder = EpochRecorder::empty();
+    assert!(execute_primary_interrupt_epoch(&mut recorder).is_none());
+    assert_eq!(
+        recorder.operations,
+        [EpochOperation::SampleBank0, EpochOperation::SampleBank1]
+    );
 }
 
 #[test]
