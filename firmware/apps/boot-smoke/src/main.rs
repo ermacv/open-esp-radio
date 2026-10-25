@@ -6,8 +6,8 @@
 //! the mapping, reports the panic record the previous boot left, if any, and
 //! sends typed diagnostics the host renders as `OER-RESULT: pass boot-smoke`.
 
-use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
 use oer_esp32s31_board as board;
+use oer_esp32s31_hal::usb_serial_jtag;
 use oer_espressif_staged_runtime::diagnostics::{self, BootSmokePassed, Console};
 use oer_espressif_staged_runtime::panic;
 
@@ -21,8 +21,15 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let peripherals = esp_hal::init(esp_hal::Config::default());
     let (_psram, _adopted) =
         handoff.adopt(INTERRUPT_TABLE, board::BootstrapPsram(peripherals.PSRAM));
-    let mut console = UsbSerialJtag::new(peripherals.USB_DEVICE);
-    let mut diagnostics = Console::new(|bytes| console.write(bytes));
+    // No executor exists: the early writer waits for room within its budget
+    // and counts what it drops.
+    let mut diagnostics = Console::new(|bytes| {
+        if usb_serial_jtag::early_text(bytes) {
+            Ok(())
+        } else {
+            Err(())
+        }
+    });
     if let Some(record) = previous {
         let _ = diagnostics::previous_panic(&mut diagnostics, &record);
     }

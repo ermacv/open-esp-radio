@@ -343,15 +343,19 @@ mod tests {
         let mut report = crate::report::Report::new(6, [2; 6], [4; 6]);
         o.report(&mut report);
         let mut recorded = false;
-        report
-            .notes(|note| {
+        {
+            let mut notes = core::pin::pin!(report.notes(async |note| {
                 if note.topic == oer_diagnostics::Topic::W3Bridge {
                     assert_eq!(note.words(), &[1, RX as u32, RX as u32]);
                     recorded = true;
                 }
                 Ok::<(), ()>(())
-            })
-            .unwrap();
+            }));
+            assert!(matches!(
+                notes.as_mut().poll(&mut cx),
+                core::task::Poll::Ready(Ok(()))
+            ));
+        }
         assert!(recorded);
         assert!(general.try_alloc().is_some());
         let returned: std::vec::Vec<_> = (0..RX).map(|_| pool.try_alloc().unwrap()).collect();

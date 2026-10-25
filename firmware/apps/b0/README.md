@@ -33,14 +33,15 @@ this RF/count procedure; a successful build alone proves neither.
 A non-command H4 kind sends Hardware Error and restores the parser boundary.
 An incomplete command expires after 100 ms of inter-byte silence; the next
 H4 kind starts a fresh command. These input errors leave the radio enabled.
-Each response owns its send cursor. Physical faults request fail-stop before
-a single nonblocking attempt to report Hardware Error, so host backpressure
-cannot delay stopping. A refused port submission returns an ordinary HCI
+Each response is one frame written whole to the console's endpoint, which
+returns once the host read it. Physical faults request fail-stop before a
+single attempt to report Hardware Error that never waits, so host
+backpressure cannot delay stopping. A refused port submission returns an ordinary HCI
 status without awaiting a terminal. A failed installation answers P1 before
 parking with its retained owner.
 
-USB flush retries retain one published transfer until its fresh completion.
-P2 retains an active receiver between finite 1 ms command turns, so Test End
+The command reader keeps what one read brings until the parser takes it, and
+waits for the host only until the unfinished command's deadline. P2 retains an active receiver between finite 1 ms command turns, so Test End
 can stop a quiet receiver without waiting for a packet. Confirmed stop
 reclaims an interrupted event without counting it; naturally completed
 events count only valid received packets. Every DTM event restores the

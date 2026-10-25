@@ -1,53 +1,62 @@
-//! Each response owns its cursor; failure or cancellation cannot offset the next.
-use oer_bluetooth_hci::HciControllerResponse;
-use oer_time::{Duration, Timer};
+//! Each response is one frame written whole: failure or cancellation cannot
+//! offset the next.
+use core::{future::poll_fn, pin::pin, task::Poll};
 
-pub trait Sink {
-    type Error;
-    fn write(&mut self, byte: u8) -> nb::Result<(), Self::Error>;
-    fn flush(&mut self) -> nb::Result<(), Self::Error>;
-}
+use embedded_io_async::Write;
+use oer_bluetooth_hci::HciControllerResponse;
+
+/// The longest frame: the H4 indicator, an event's two header bytes and its
+/// 255 parameter bytes.
+pub const MAX_FRAME: usize = 1 + 2 + 255;
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct Failed;
 
-pub async fn send(
-    sink: &mut impl Sink,
-    timer: &impl Timer,
-    poll: Duration,
-    response: &impl HciControllerResponse,
-) -> Result<(), Failed> {
-    for byte in core::iter::once(response.kind() as u8).chain(response.as_bytes().iter().copied()) {
-        loop {
-            match sink.write(byte) {
-                Ok(()) => break,
-                Err(nb::Error::WouldBlock) => timer.wait_for(poll).await.map_err(|_| Failed)?,
-                Err(nb::Error::Other(_)) => return Err(Failed),
-            }
-        }
-    }
-    loop {
-        match sink.flush() {
-            Ok(()) => return Ok(()),
-            Err(nb::Error::WouldBlock) => timer.wait_for(poll).await.map_err(|_| Failed)?,
-            Err(nb::Error::Other(_)) => return Err(Failed),
-        }
-    }
+/// The response as one H4 frame, or `None` when it outgrows [`MAX_FRAME`].
+fn frame(response: &impl HciControllerResponse) -> Option<([u8; MAX_FRAME], usize)> {
+    let body = response.as_bytes();
+    let length = 1 + body.len();
+    let mut frame = [0; MAX_FRAME];
+    *frame.first_mut()? = response.kind() as u8;
+    frame.get_mut(1..length)?.copy_from_slice(body);
+    Some((frame, length))
 }
 
-/// Stop authority is issued before touching the host FIFO. No retry or wait
-/// can delay returning it, even when the host never reads another byte.
-pub fn fail_stop<R>(
+/// Writes `response` and returns once the host read it. The frame goes to
+/// the writer in one call, so a dropped `send` leaves the next response to
+/// start at its indicator whenever the writer takes a call whole or not at
+/// all.
+pub async fn send(
+    writer: &mut impl Write,
+    response: &impl HciControllerResponse,
+) -> Result<(), Failed> {
+    let (frame, length) = frame(response).ok_or(Failed)?;
+    let bytes = frame.get(..length).ok_or(Failed)?;
+    writer.write_all(bytes).await.map_err(|_| Failed)
+}
+
+/// Stop authority is issued before touching the host. The frame is offered
+/// to the writer once and never waited for: no retry or wait can delay
+/// returning it, even when the host never reads another byte. The writer
+/// takes what its FIFO has room for; the rest is dropped.
+pub async fn fail_stop<R>(
     stop: impl FnOnce() -> R,
-    sink: &mut impl Sink,
+    writer: &mut impl Write,
     response: &impl HciControllerResponse,
 ) -> R {
     let stopped = stop();
-    for byte in core::iter::once(response.kind() as u8).chain(response.as_bytes().iter().copied()) {
-        if sink.write(byte).is_err() {
-            return stopped;
-        }
+    if let Some((frame, length)) = frame(response)
+        && let Some(bytes) = frame.get(..length)
+    {
+        let mut write = pin!(writer.write_all(bytes));
+        // One poll hands the frame over; dropping the write abandons the wait
+        // for the host.
+        poll_fn(|cx| {
+            let _ = write.as_mut().poll(cx);
+            Poll::Ready(())
+        })
+        .await;
     }
-    let _ = sink.flush();
     stopped
 }
 
@@ -56,13 +65,15 @@ mod tests {
     use super::*;
     use core::{
         cell::Cell,
+        convert::Infallible,
         future::Future,
         pin::pin,
         task::{Context, Poll, Waker},
     };
+    use embedded_io_async::{ErrorKind, ErrorType};
     use oer_bluetooth_hci::bt_hci::PacketKind;
-    use oer_time_virtual::VirtualClock;
     use std::vec::Vec;
+
     struct Response;
     impl HciControllerResponse for Response {
         fn kind(&self) -> PacketKind {
@@ -72,85 +83,99 @@ mod tests {
             &[0x10, 1, 9]
         }
     }
+
+    /// A writer that takes a call whole, refuses it, or never completes it.
     struct Output<'a> {
         bytes: Vec<u8>,
-        fail_at: Option<usize>,
-        flush_error: bool,
+        refuse: bool,
         blocked: bool,
         stopped: Option<&'a Cell<bool>>,
     }
-    impl Sink for Output<'_> {
-        type Error = ();
-        fn write(&mut self, byte: u8) -> nb::Result<(), ()> {
+    impl ErrorType for Output<'_> {
+        type Error = ErrorKind;
+    }
+    impl Write for Output<'_> {
+        async fn write(&mut self, buffer: &[u8]) -> Result<usize, ErrorKind> {
             if let Some(stopped) = self.stopped {
                 assert!(stopped.get());
             }
             if self.blocked {
-                return Err(nb::Error::WouldBlock);
+                core::future::pending::<Infallible>().await;
             }
-            if self.fail_at == Some(self.bytes.len()) {
-                return Err(nb::Error::Other(()));
+            if self.refuse {
+                return Err(ErrorKind::Other);
             }
-            self.bytes.push(byte);
-            Ok(())
+            self.bytes.extend_from_slice(buffer);
+            Ok(buffer.len())
         }
-        fn flush(&mut self) -> nb::Result<(), ()> {
-            if self.flush_error {
-                Err(nb::Error::Other(()))
-            } else {
-                Ok(())
-            }
+        async fn flush(&mut self) -> Result<(), ErrorKind> {
+            Ok(())
         }
     }
     fn output() -> Output<'static> {
         Output {
             bytes: Vec::new(),
-            fail_at: None,
-            flush_error: false,
+            refuse: false,
             blocked: false,
             stopped: None,
         }
     }
-    #[test]
-    fn write_and_flush_errors_do_not_reuse_a_response_cursor() {
-        let clock = VirtualClock::<1>::new();
-        let mut cx = Context::from_waker(Waker::noop());
-        for flush_error in [false, true] {
-            let mut sink = output();
-            sink.flush_error = flush_error;
-            sink.fail_at = if flush_error { None } else { Some(2) };
-            assert_eq!(
-                pin!(send(&mut sink, &clock, Duration::from_millis(1), &Response)).poll(&mut cx),
-                Poll::Ready(Err(Failed))
-            );
-            let restart = sink.bytes.len();
-            sink.fail_at = None;
-            sink.flush_error = false;
-            assert_eq!(
-                pin!(send(&mut sink, &clock, Duration::from_millis(1), &Response)).poll(&mut cx),
-                Poll::Ready(Ok(()))
-            );
-            assert_eq!(&sink.bytes[restart..], &[4, 0x10, 1, 9]);
-        }
+    fn poll<F: Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
+        future.poll(&mut Context::from_waker(Waker::noop()))
     }
+
+    #[test]
+    fn a_response_is_one_frame_with_its_indicator() {
+        let mut sink = output();
+        assert_eq!(poll(pin!(send(&mut sink, &Response))), Poll::Ready(Ok(())));
+        assert_eq!(sink.bytes, [4, 0x10, 1, 9]);
+    }
+
+    #[test]
+    fn a_refused_frame_does_not_offset_the_next_one() {
+        let mut sink = output();
+        sink.refuse = true;
+        assert_eq!(
+            poll(pin!(send(&mut sink, &Response))),
+            Poll::Ready(Err(Failed))
+        );
+        sink.refuse = false;
+        assert_eq!(poll(pin!(send(&mut sink, &Response))), Poll::Ready(Ok(())));
+        assert_eq!(sink.bytes, [4, 0x10, 1, 9]);
+    }
+
     #[test]
     fn cancellation_under_backpressure_starts_the_next_response_at_its_kind() {
-        let clock = VirtualClock::<1>::new();
-        let mut cx = Context::from_waker(Waker::noop());
         let mut sink = output();
         sink.blocked = true;
         {
-            let mut send = pin!(send(&mut sink, &clock, Duration::from_millis(1), &Response));
-            assert!(send.as_mut().poll(&mut cx).is_pending());
-            assert!(clock.next_deadline().is_some());
+            let mut send = pin!(send(&mut sink, &Response));
+            assert!(poll(send.as_mut()).is_pending());
         }
         sink.blocked = false;
-        assert_eq!(
-            pin!(send(&mut sink, &clock, Duration::from_millis(1), &Response)).poll(&mut cx),
-            Poll::Ready(Ok(()))
-        );
+        assert_eq!(poll(pin!(send(&mut sink, &Response))), Poll::Ready(Ok(())));
         assert_eq!(sink.bytes, [4, 0x10, 1, 9]);
     }
+
+    #[test]
+    fn a_response_longer_than_a_frame_is_refused_unwritten() {
+        struct Long([u8; MAX_FRAME]);
+        impl HciControllerResponse for Long {
+            fn kind(&self) -> PacketKind {
+                PacketKind::Event
+            }
+            fn as_bytes(&self) -> &[u8] {
+                &self.0
+            }
+        }
+        let mut sink = output();
+        assert_eq!(
+            poll(pin!(send(&mut sink, &Long([0; MAX_FRAME])))),
+            Poll::Ready(Err(Failed))
+        );
+        assert!(sink.bytes.is_empty());
+    }
+
     #[test]
     fn a_full_fifo_cannot_delay_or_precede_fail_stop() {
         let stopped = Cell::new(false);
@@ -160,17 +185,27 @@ mod tests {
             ..output()
         };
         assert_eq!(
-            fail_stop(
+            poll(pin!(fail_stop(
                 || {
                     stopped.set(true);
                     42
                 },
                 &mut sink,
                 &Response
-            ),
-            42
+            ))),
+            Poll::Ready(42)
         );
         assert!(stopped.get());
         assert!(sink.bytes.is_empty());
+    }
+
+    #[test]
+    fn fail_stop_offers_its_frame_when_the_host_listens() {
+        let mut sink = output();
+        assert_eq!(
+            poll(pin!(fail_stop(|| 7, &mut sink, &Response))),
+            Poll::Ready(7)
+        );
+        assert_eq!(sink.bytes, [4, 0x10, 1, 9]);
     }
 }

@@ -66,6 +66,14 @@ impl Commands {
         }
         false
     }
+    /// When the unfinished command expires, if one is being received.
+    pub fn deadline(&self) -> Option<Instant> {
+        if self.receiving && !self.complete() {
+            self.deadline
+        } else {
+            None
+        }
+    }
     pub fn reset(&mut self) {
         self.used = 0;
         self.expected = None;

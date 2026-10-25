@@ -537,15 +537,15 @@ pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; GATES]) {
 
 /// Emits the notes of the block and counts its lines: a line is one note or
 /// several that the host joins.
-struct Block<'e, E, F: FnMut(&Note<'_>) -> Result<(), E>> {
+struct Block<'e, E, F: AsyncFnMut(&Note<'_>) -> Result<(), E>> {
     emit: &'e mut F,
     lines: u32,
 }
 
-impl<E, F: FnMut(&Note<'_>) -> Result<(), E>> Block<'_, E, F> {
+impl<E, F: AsyncFnMut(&Note<'_>) -> Result<(), E>> Block<'_, E, F> {
     /// One note of the line that is being written.
-    fn part(&mut self, note: &Note<'_>) -> Result<(), E> {
-        (self.emit)(note)
+    async fn part(&mut self, note: &Note<'_>) -> Result<(), E> {
+        (self.emit)(note).await
     }
 
     /// The line that its parts made is complete.
@@ -558,7 +558,7 @@ impl<E, F: FnMut(&Note<'_>) -> Result<(), E>> Block<'_, E, F> {
 /// before the next, so that a long line costs the frame one note.
 macro_rules! parts {
     ($block:expr, $($note:expr),+ $(,)?) => {{
-        $($block.part(&$note)?;)+
+        $($block.part(&$note).await?;)+
     }};
 }
 
@@ -645,7 +645,7 @@ fn max_p99(histogram: &CycleHistogram, cpu_hz: u32) -> (u64, u64) {
     )
 }
 
-fn block_lines<E, F: FnMut(&Note<'_>) -> Result<(), E>>(
+async fn block_lines<E, F: AsyncFnMut(&Note<'_>) -> Result<(), E>>(
     block: &mut Block<'_, E, F>,
     run: &Run<'_>,
 ) -> Result<(), E> {
@@ -771,7 +771,7 @@ fn block_lines<E, F: FnMut(&Note<'_>) -> Result<(), E>>(
         );
     }
     for (index, cycle) in run.cycles.iter().enumerate() {
-        exhaust(block, index, cycle)?;
+        exhaust(block, index, cycle).await?;
     }
     for (index, cycle) in run.cycles.iter().enumerate() {
         parts!(
@@ -794,7 +794,7 @@ fn block_lines<E, F: FnMut(&Note<'_>) -> Result<(), E>>(
             ),
             Note::w1_own_c(cycle.oversized),
         );
-        own_discards(block, &cycle.discards)?;
+        own_discards(block, &cycle.discards).await?;
         block.end_line();
     }
     let prefix = &rx.prefix;
@@ -1018,33 +1018,35 @@ fn block_lines<E, F: FnMut(&Note<'_>) -> Result<(), E>>(
         )
     );
     for gate in gates {
-        block.part(&Note::w1_gate_name(gate.name))?;
-        block.part(&match gate.outcome {
-            Outcome::Pass => Note::w1_gate_pass(),
-            Outcome::Fail(reason) => Note::w1_gate_fail(reason),
-            Outcome::Unexercised(reason) => Note::w1_gate_unexercised(reason),
-        })?;
+        block.part(&Note::w1_gate_name(gate.name)).await?;
+        block
+            .part(&match gate.outcome {
+                Outcome::Pass => Note::w1_gate_pass(),
+                Outcome::Fail(reason) => Note::w1_gate_fail(reason),
+                Outcome::Unexercised(reason) => Note::w1_gate_unexercised(reason),
+            })
+            .await?;
         block.end_line();
     }
     Ok(())
 }
 
 /// The discard counts of an own line: the nonzero ones, or a dash.
-fn own_discards<E, F: FnMut(&Note<'_>) -> Result<(), E>>(
+async fn own_discards<E, F: AsyncFnMut(&Note<'_>) -> Result<(), E>>(
     block: &mut Block<'_, E, F>,
     counts: &[u32; 15],
 ) -> Result<(), E> {
     if counts.iter().all(|&count| count == 0) {
-        return block.part(&Note::w1_discards_none());
+        return block.part(&Note::w1_discards_none()).await;
     }
     let low_any = counts.iter().take(8).any(|&count| count != 0);
-    block.part(&Note::w1_discards_a(counts))?;
-    block.part(&Note::w1_discards_b((counts, low_any)))
+    block.part(&Note::w1_discards_a(counts)).await?;
+    block.part(&Note::w1_discards_b((counts, low_any))).await
 }
 
 /// The walker and ring snapshot that the first drop of hold cycle `index`
 /// took; every value `-` without one.
-fn exhaust<E, F: FnMut(&Note<'_>) -> Result<(), E>>(
+async fn exhaust<E, F: AsyncFnMut(&Note<'_>) -> Result<(), E>>(
     block: &mut Block<'_, E, F>,
     index: usize,
     cycle: &Cycle,
@@ -1092,38 +1094,42 @@ fn exhaust<E, F: FnMut(&Note<'_>) -> Result<(), E>>(
 }
 
 /// Print the block and the verdict line as notes.
-pub fn print<E>(mut emit: impl FnMut(&Note<'_>) -> Result<(), E>, run: &Run<'_>) -> Result<(), E> {
-    emit(&Note::w1_begin())?;
+pub async fn print<E>(
+    mut emit: impl AsyncFnMut(&Note<'_>) -> Result<(), E>,
+    run: &Run<'_>,
+) -> Result<(), E> {
+    emit(&Note::w1_begin()).await?;
     let mut block = Block {
         emit: &mut emit,
         lines: 0,
     };
-    block_lines(&mut block, run)?;
+    block_lines(&mut block, run).await?;
     let lines = block.lines;
-    emit(&Note::w1_end(lines))?;
+    emit(&Note::w1_end(lines)).await?;
     let (verdict, gates) = gates(run);
     if gates.iter().all(|gate| gate.outcome == Outcome::Pass) {
         return emit(&Note::w1_pass(
             verdict.beacons,
             verdict.required.unwrap_or(0),
-        ));
+        ))
+        .await;
     }
-    emit(&Note::w1_fail_begin())?;
+    emit(&Note::w1_fail_begin()).await?;
     let mut first = true;
     for gate in gates {
         if gate.outcome == Outcome::Pass {
             continue;
         }
         if !first {
-            emit(&Note::w1_fail_separator())?;
+            emit(&Note::w1_fail_separator()).await?;
         }
-        emit(&Note::w1_fail_gate(gate.name))?;
+        emit(&Note::w1_fail_gate(gate.name)).await?;
         match gate.outcome {
             Outcome::Pass => {}
-            Outcome::Fail(reason) => emit(&Note::w1_fail_reason(reason))?,
-            Outcome::Unexercised(_) => emit(&Note::w1_fail_not_exercised())?,
+            Outcome::Fail(reason) => emit(&Note::w1_fail_reason(reason)).await?,
+            Outcome::Unexercised(_) => emit(&Note::w1_fail_not_exercised()).await?,
         }
         first = false;
     }
-    emit(&Note::w1_fail_end())
+    emit(&Note::w1_fail_end()).await
 }

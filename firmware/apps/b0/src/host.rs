@@ -1,10 +1,9 @@
 //! H4 on USB Serial/JTAG. All FIFO waits yield; P1 owns no radio registers.
 use super::*;
 use core::{future::poll_fn, ops::ControlFlow};
-use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
 
 /// The host's console.
-pub(crate) type Console = UsbSerialJtag<'static, esp_hal::Blocking>;
+pub(crate) type Console = crate::usb::Console;
 /// The host's entropy source.
 pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
 use oer_bluetooth_hci::{
@@ -17,15 +16,18 @@ use oer_bluetooth_hci::{
 use oer_bluetooth_le_controller::dtm::{self, Accepted, Entropy};
 use oer_bluetooth_le_port::TxPower;
 use oer_esp32s31_bluetooth_driver::port::{DtmCaps, Fault};
-use oer_firmware_apps_b0::{h4::Commands, tx};
+use oer_firmware_apps_b0::{
+    h4::Commands,
+    rx::{self, Inbox, Received},
+    tx,
+};
 use oer_radio_port as rp;
-use oer_time::{Clock, Duration, Timer};
+use oer_time::Timer;
 
 type Id = bridge::slot::Id;
 type Backend = bridge::Backend<Id>;
 type Reset = dtm::Reset<rp::Root<Id>>;
 const STOP: Opcode = Opcode::new(OpcodeGroup::new(63), 0);
-const POLL: Duration = Duration::from_millis(1);
 
 struct RandomValue(Option<[u8; 8]>);
 impl Entropy for RandomValue {
@@ -33,37 +35,25 @@ impl Entropy for RandomValue {
         self.0.take().ok_or(dtm::EntropyUnavailable)
     }
 }
-enum Received {
-    Command,
-    Framing,
-}
 struct Io {
     console: Console,
+    /// The console's pads, held so that nothing switches them off.
+    _pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
+    inbox: Inbox,
     rng: Rng,
     commands: Commands,
     entropy: RandomValue,
 }
 impl Io {
     async fn receive(&mut self) -> Result<Received, Fault> {
-        while !self.commands.complete() {
-            if self.commands.expire(EmbassyClock.now()) {
-                return Ok(Received::Framing);
-            }
-            match self.console.read_byte() {
-                Ok(byte) => {
-                    if self.commands.push(byte, EmbassyClock.now()).is_err() {
-                        self.commands.reset();
-                        return Ok(Received::Framing);
-                    }
-                }
-                Err(nb::Error::WouldBlock) => EmbassyClock
-                    .wait_for(POLL)
-                    .await
-                    .map_err(|_| Fault::Hardware)?,
-                Err(nb::Error::Other(_)) => return Err(Fault::Hardware),
-            }
-        }
-        Ok(Received::Command)
+        rx::receive(
+            &mut self.console,
+            &mut self.inbox,
+            &mut self.commands,
+            &EmbassyClock,
+        )
+        .await
+        .map_err(|_| Fault::Hardware)
     }
     async fn entropy(&mut self) -> Result<(), Fault> {
         self.entropy.0 = None;
@@ -82,22 +72,9 @@ impl Io {
         Ok(())
     }
     async fn send(&mut self, response: &impl HciControllerResponse) -> Result<(), Fault> {
-        tx::send(self, &EmbassyClock, POLL, response)
+        tx::send(&mut self.console, response)
             .await
             .map_err(|_| Fault::Hardware)
-    }
-}
-impl tx::Sink for Io {
-    type Error = ();
-    fn write(&mut self, byte: u8) -> nb::Result<(), ()> {
-        self.console
-            .write_byte_nb(byte)
-            .map_err(|error| error.map(|_| ()))
-    }
-    fn flush(&mut self) -> nb::Result<(), ()> {
-        self.console
-            .flush_tx_nb()
-            .map_err(|error| error.map(|_| ()))
     }
 }
 enum Disposition {
@@ -214,9 +191,10 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
             Err(fault) => {
                 let stopped = tx::fail_stop(
                     || owner.fail_stop(),
-                    self.io,
+                    &mut self.io.console,
                     &HardwareError([0x10, 1, fault as u8]),
-                );
+                )
+                .await;
                 rp::Ended::fail_stop(stopped, Err(fault))
             }
         }
@@ -242,12 +220,15 @@ impl HciControllerResponse for StopComplete {
 }
 pub async fn serve(
     console: Console,
+    pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
     rng: Rng,
     channel: bridge::FrontendChannel,
     power: TxPower,
 ) {
     let mut io = Io {
         console,
+        _pads: pads,
+        inbox: Inbox::new(),
         rng,
         commands: Commands::new(),
         entropy: RandomValue(None),
@@ -262,7 +243,12 @@ pub async fn serve(
         let frontend = match frontend {
             Ok(frontend) => frontend,
             Err(fault) => {
-                tx::fail_stop(|| (), &mut io, &HardwareError([0x10, 1, fault as u8]));
+                tx::fail_stop(
+                    || (),
+                    &mut io.console,
+                    &HardwareError([0x10, 1, fault as u8]),
+                )
+                .await;
                 core::future::pending::<()>().await;
                 return;
             }

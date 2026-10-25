@@ -88,7 +88,10 @@ impl Report {
 
     /// All twelve body rows are emitted on success and on failure, as typed
     /// notes: the host renders the console text `cargo fw w3 check` reads.
-    pub fn notes<E>(&self, mut emit: impl FnMut(&Note<'static>) -> Result<(), E>) -> Result<(), E> {
+    pub async fn notes<E>(
+        &self,
+        mut emit: impl AsyncFnMut(&Note<'static>) -> Result<(), E>,
+    ) -> Result<(), E> {
         if self.service_rx_queue_full != 0
             || self.service_rx_rejected != 0
             || self.port_events_lost != 0
@@ -98,24 +101,27 @@ impl Report {
                 self.service_rx_rejected,
                 u32::from(self.service_rx_reasons),
                 self.port_events_lost,
-            ))?;
+            ))
+            .await?;
         }
         if self.malformed_ip != 0 || self.queue_drops != 0 {
-            emit(&Note::w3_diag(self.malformed_ip, self.queue_drops))?;
+            emit(&Note::w3_diag(self.malformed_ip, self.queue_drops)).await?;
         }
         if self.probes.socket_errors != 0 || self.probes.timeouts != 0 {
             emit(&Note::w3_probes(
                 self.probes.socket_errors,
                 self.probes.timeouts,
                 self.probes.last_socket_error_text(),
-            ))?;
+            ))
+            .await?;
         }
         if self.bridge.turns != 0 {
             emit(&Note::w3_bridge(
                 self.bridge.turns,
                 self.bridge.rx_frames,
                 self.bridge.rx_max,
-            ))?;
+            ))
+            .await?;
         }
         let gates = self.gates();
         let lease = self.lease.unwrap_or(Lease {
@@ -123,40 +129,45 @@ impl Report {
             router: Ipv4Addr::UNSPECIFIED,
             prefix: 0,
         });
-        emit(&Note::w3_begin())?;
+        emit(&Note::w3_begin()).await?;
         emit(&Note::w3_config(
             u32::from(self.channel),
             self.target,
             self.stand,
-        ))?;
-        emit(&Note::w3_association(self.authenticated, self.associated))?;
+        ))
+        .await?;
+        emit(&Note::w3_association(self.authenticated, self.associated)).await?;
         emit(&Note::w3_lease(
             self.lease.is_some(),
             lease.address.octets(),
             lease.router.octets(),
             u32::from(lease.prefix),
-        ))?;
+        ))
+        .await?;
         emit(&Note::w3_ping(
             self.sent,
             self.received,
             u32::from(INTERVAL_MS),
-        ))?;
-        emit(&Note::w3_peer_ping(self.peer_requests, self.peer_replies))?;
+        ))
+        .await?;
+        emit(&Note::w3_peer_ping(self.peer_requests, self.peer_replies)).await?;
         emit(&Note::w3_stats(
             self.tx_timeout,
             self.queue_collision,
             self.irq_free as u32,
-        ))?;
-        emit(&Note::w3_departure(self.deauth_sent))?;
+        ))
+        .await?;
+        emit(&Note::w3_departure(self.deauth_sent)).await?;
         for (id, pass) in ["a", "b", "c", "d", "f"].into_iter().zip(gates) {
-            emit(&Note::w3_gate(id, pass))?;
+            emit(&Note::w3_gate(id, pass)).await?;
         }
-        emit(&Note::w3_end())?;
+        emit(&Note::w3_end()).await?;
         emit(&if gates.into_iter().all(|gate| gate) {
             Note::w3_pass()
         } else {
             Note::w3_fail()
         })
+        .await
     }
 }
 
@@ -164,18 +175,30 @@ impl Report {
 mod tests {
     extern crate std;
     use super::*;
+    use core::{
+        future::Future,
+        pin::pin,
+        task::{Context, Poll, Waker},
+    };
     use std::{string::String, vec::Vec};
+
+    /// The report's notes wait for no one: the future completes in one poll.
+    fn ready<T>(future: impl Future<Output = T>) -> T {
+        match pin!(future).poll(&mut Context::from_waker(Waker::noop())) {
+            Poll::Ready(value) => value,
+            Poll::Pending => panic!("a report written to a String never waits"),
+        }
+    }
 
     /// The console text the host renders from the report's notes.
     fn text(report: &Report) -> String {
         let mut text = String::new();
-        report
-            .notes(|note| {
-                oer_diagnostics::render::note(note, &mut text)?;
-                text.push_str("\r\n");
-                Ok::<(), core::fmt::Error>(())
-            })
-            .expect("String accepts writes");
+        ready(report.notes(async |note| {
+            oer_diagnostics::render::note(note, &mut text)?;
+            text.push_str("\r\n");
+            Ok::<(), core::fmt::Error>(())
+        }))
+        .expect("String accepts writes");
         text
     }
 
