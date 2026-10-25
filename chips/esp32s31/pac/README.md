@@ -57,8 +57,9 @@ baseband that Bluetooth and IEEE 802.15.4 both initialize, form the separate
 `SharedRadioRegisters` owner; a transaction touching both protocol and shared
 registers takes it as an explicit argument, and the coexistence timer bank
 belongs to it. Its radio PHY partition and shared blocks are public fields,
-which the HAL's BTBB initialization writes over their field accessors. Per-protocol coexistence priority registers stay with that
-protocol's partition. The PAC holds no protocol route: the HAL owns the
+which the HAL's BTBB initialization writes over their field accessors.
+Per-protocol coexistence priority registers stay with that protocol's
+partition. The PAC holds no protocol route: the HAL owns the
 neutral radio root, decides which partitions each route consumes and where
 the shared owner lives, retains the others and supplies multi-register
 sequencing, polling, delay, recovery and lifecycle policy.
