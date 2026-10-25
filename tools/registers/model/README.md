@@ -1,5 +1,274 @@
 # Register model library
 
+## Block types and the chip root
+
+`chip_model::ChipModel::load(root, evidence)` reads a chip as one root file
+and the block type files it includes. Generation still reads the
+schema-3 manifest and its schema-2 fragments described below; that format
+is deleted in the same change that moves the generator to this one, and no
+adapter joins the two.
+
+A **block type** is one hardware block, one TOML file, without an address:
+every register has an offset from the block's base. A type is never a
+slice of a block by owner or function; who owns which words is policy.
+Blocks with a different register set are different types. The **root**
+includes the types, places their **instances** at absolute addresses, and
+holds the chip's interrupt sources, the analog-I2C space, the RAM regions
+and the placement of memory layouts.
+
+### Block type file (`schema = 3`)
+
+```toml
+schema = 3
+
+[type]
+name = "TIMG"
+description = "Timer group: two timers and a watchdog."
+space = "mmio"                    # or "analog-i2c": byte registers by index
+sources = ["IDF_TIMG_REG_H"]
+
+[[interrupt-outputs]]             # named outputs; instances map them to sources
+name = "T0"
+sources = ["IDF_TIMG_REG_H"]
+
+[review]                          # every register and field, unless overridden
+sources = ["IDF_TIMG_REG_H"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.opaque]                   # registers and fields named `*_OPAQUE`
+sources = ["BLOB_TIMG_USE"]       # (naming = "opaque" is implied)
+provenance = "observed"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."INT_RAW.T0"]      # only the keys that differ from the default
+accuracy = "bounded"
+
+[[registers]]
+name = "INT_RAW"
+offset = 0x70                     # from the block's base
+width = 32                        # 8, 16 or 32 (mmio, default 32); 8 (analog-i2c)
+description = "Raw interrupt status."
+reset = { value = 0, mask = 0xffffffff }   # mask: the bits whose reset is known
+reserved = { mask = 0xfffffff8, sources = ["IDF_TIMG_REG_H"] }
+
+[[registers.fields]]
+name = "T0"
+bits = "0"                        # "n" or "high:low"
+class = "write-one-to-clear"
+
+[[registers]]
+name = "WORD_0080_OPAQUE"         # positional name: offset from the block's base
+offset = 0x80
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "REGCLK_%s"                # one repeated word: `dim`, `%s` is the index
+offset = 0x90
+dim = { count = 2, stride = 4 }
+
+[[registers.fields]]
+name = "DIV"
+bits = "7:0"
+class = "plain"
+write-range = { min = 1, max = 255 }
+values = [{ name = "BYPASS", value = 1, description = "Undivided." }]
+
+[[groups]]                        # a repeated group of registers
+name = "T%s"                      # expanded `T0`, `T1`
+offset = 0x00
+count = 2
+stride = 0x24
+
+[[groups.registers]]
+name = "CONFIG"
+offset = 0x00                     # from the start of the group
+
+[[groups.registers.fields]]
+name = "EN"
+bits = "31"
+class = "plain"
+
+[[groups.registers]]
+name = "LOAD"
+offset = 0x20
+
+[[groups.registers.fields]]
+name = "LOAD"
+bits = "0"
+class = "write-trigger"
+
+[[registers]]
+name = "CMD"
+offset = 0xa0
+
+[[registers.fields]]
+name = "READ"
+bits = "0"
+class = "self-clearing"
+
+[[registers.fields]]
+name = "ERASE"
+bits = "1"
+class = "self-clearing"
+
+[[registers.fields]]
+name = "BUSY"
+bits = "2"
+class = "self-clearing"
+
+[[registers.fields]]
+name = "WHOLE_CHIP"
+bits = "3"
+class = "self-clearing"
+
+[[commands]]                      # a command register
+register = "CMD"                  # `GROUP.REGISTER` inside a group
+commands = ["READ", "ERASE"]
+qualifiers = ["WHOLE_CHIP"]
+held = ["BUSY"]
+sources = ["IDF_TIMG_REG_H"]
+```
+
+Every field has one `class` from a closed set. The class alone fixes what a
+read and a write do; there is no separate access key.
+
+| `class` | Header classes | What the renderer can generate |
+| --- | --- | --- |
+| `plain` | `R/W` | getter, setter and read-modify-write |
+| `read-only` | `RO`, `R`, `HRO`, `RO/SS` | getter only |
+| `write-only` | `WO` | setter in a write from zero; no getter |
+| `write-trigger` | `WT` | `trigger_<register>_<field>` (a wider one with its value); zero in every other write; no getter |
+| `write-one-to-clear` | `WTC`, `W1C` | in a register of only such fields: a sample token and its acknowledgement; otherwise getter only |
+| `set-only` | `W1S`, `WTS`, `WS`, `R/W1` | getter only |
+| `self-clearing` | `R/W/SC`, `R/W/WTC` | getter only, unless a `[[commands]]` entry names it |
+| `hardware-written` | `R/W/SS`, `R/W/SS/SC`, ... | getter only, unless it is a data port's field |
+| `read-clears` | `R_SS_RC`, "cleared by a read" | nothing: its register has no API |
+| `debug-only` | "Do not use it in applications" | getter only; never written |
+
+Register-level constructs live in the type file:
+
+- `[[commands]]`: `commands` are one-bit `self-clearing` fields software
+  starts; `qualifiers` are one-bit `self-clearing` fields a start writes by
+  its argument; `held` names every other one-bit `self-clearing` field of
+  the register. Together they are the register's exclusive group: a start
+  refuses, writing nothing, while any of them reads one. A command register
+  has no `write-trigger` or `read-clears` field and no port or read side
+  effect;
+- `fifo = { sources }`: a FIFO port, popped and pushed only; one field, no
+  `dim`, not `write-one-to-clear`;
+- `data-port = { sources }`: a command port's data word, read and stored
+  whole; one `plain` or `hardware-written` field;
+- `read-side-effect = { sources }`: a read changes the hardware; no API;
+- `reset = { value, mask }` and `reserved = { mask, sources }`: reserved
+  bits are never fields and every write keeps them;
+- analog-I2C types only: `read-safe = { epoch, comparison-mask, sources }`
+  and `[[registers.views]]` (`name`, `field`, `bits`, `sources`, a strict
+  subrange of one field).
+
+A whole-word fixed image is a transaction, so it stays in the PAC policy
+(`fixed-register-images`, `whole-word = true`).
+
+`dim` repeats a single word (`count` at least 2, `stride` at least the
+register's bytes, the name holds one `%s`). `[[groups]]` repeat a set of
+registers, which take their offsets from the group's start; the group name
+holds one `%s`, `stride` covers every register of the group, and a group
+holds no group. No two words of a type overlap: registers, `dim` elements
+and group elements alike.
+
+Review is by exception. `[review]` is the default record of every register
+and field, `[review.opaque]` of every one whose name ends in `_OPAQUE`
+(with `naming = "opaque"`). A `[review.entity."KEY"]` with `KEY` one of
+`REGISTER`, `REGISTER.FIELD`, `GROUP.REGISTER` or `GROUP.REGISTER.FIELD`
+(the template names, `%s` included) overrides the keys it states, and only
+keys that differ. After the merge every register and field has sources,
+provenance, accuracy, completeness and naming; the naming rules of
+[Name origin](#name-origin) apply, with a positional name's offset taken
+from the block's base (a group register at the group's first element; a
+`dim` register inserts `_%s`), and `BYTE_<index>_OPAQUE` for an analog
+register. An observation of one instance is a source of that instance in
+the root, not a second review.
+
+### Chip root file (`schema = 4`)
+
+```toml
+schema = 4
+chip = "esp32s31"
+types = ["types/timg.toml", "types/bbpll.toml"]   # relative to the root
+layouts = ["layouts/rx-descriptor.toml"]
+
+[[instances]]
+name = "TIMG0"
+type = "TIMG"
+base = 0x20580000
+extent = { size = 0x1000 }        # covered by the instance's sources
+sources = ["IDF_REG_BASE_H"]
+
+[[instances]]
+name = "BT_CORE"
+type = "BT_CORE"
+base = 0x20101000
+extent = { size = 0x800, partial = true, sources = ["BLOB_BT_WORDS"] }
+sources = ["BLOB_BT_WORDS"]
+
+[[interrupts]]
+name = "TG0_T0_LEVEL"
+source = 51
+instance = "TIMG0"
+output = "T0"                     # required when the type names outputs
+sources = ["IDF_INTERRUPTS_H"]
+
+[[analog-i2c.instances]]
+name = "BBPLL"
+type = "BBPLL"                    # a type with space = "analog-i2c"
+code = 0x66
+sources = ["IDF_REGI2C_BBPLL_H"]
+
+[[analog-i2c.instances.routes]]
+profile = "phy"
+request-code = 0x66
+host = 0
+read-select = 0
+read-mask-bits = 32
+sources = ["IDF_REGI2C_CTRL"]
+
+[[ram-regions]]
+name = "dma-window"
+base = 0x2f000000
+size = 0x80000
+sources = ["IDF_SOC_H_DMA"]
+
+[[layout-placements]]
+layout = "RX_DESCRIPTOR"
+regions = ["dma-window"]
+```
+
+An instance has no per-instance patch: TIMG0 and TIMG1 are two instances of
+one type. Every word of its type lies inside its extent, and no two MMIO
+instances or RAM regions overlap. A `partial` extent is the part of a block
+the sources show, with its own sources; a block known only from vendor
+binaries is a descriptive type with such an extent. Every interrupt source
+has a unique name and number and is bound to an existing instance and, when
+its type names outputs, to one of them; several sources may lead to one
+output. Analog-I2C instances are addressed by their block code, not by a
+CPU address, and keep their request routes. Memory layout files keep their
+own format without a file-level `placement`; the root places each one in
+RAM regions, which an address field's `placement` also names.
+
+Loading expands every instance: each register element and field gets an
+absolute address (an `AnalogAddress` in the analog space) and the identity
+`INSTANCE.REGISTER.FIELD`, with `%s` replaced by the `dim` or group index
+(`TIMG0.T1.CONFIG.EN`). Every `sources` entry must exist in the evidence
+catalogs. Every check here runs on load and fails with a typed
+`chip_model::Error` that names the file and the entity.
+
 ## Analog-I2C space
 
 The chip manifest's `indirect-spaces = ["analog/phy.toml"]` selects one
