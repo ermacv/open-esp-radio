@@ -23,7 +23,7 @@ mod tx_rate_checkpoint;
 use core::future::poll_fn;
 use esp_hal::interrupt::software::SoftwareInterrupt;
 use oer_esp32s31_phy::{PhyCalibrationIdentity, concurrent::ConcurrentPhy, phy_get_rf_cal_version};
-use oer_espressif_esp_hal_radio::{RadioSingletons, take_radio};
+use oer_espressif_esp_hal_radio::{RadioSingletons, take_pll_power, take_radio};
 use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder};
 use oer_hil_agent::base::Intake;
 use oer_hil_protocol::{
@@ -149,6 +149,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             lp_tsens: peripherals.LP_TSENS,
         },
         &psram,
+        take_pll_power(peripherals.PMU).release(),
     );
     let (domain, partitions) =
         hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());

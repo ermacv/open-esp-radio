@@ -4,7 +4,11 @@ The handoff of the ESP32-S31 radio blocks from esp-hal to the radio HAL
 (docs/architecture.md, "Hardware"), and the radio's platform
 clocks on esp-hal.
 
-- `take_radio(RadioSingletons, &Psram)` consumes esp-hal's singletons of the
+- `take_pll_power(PMU)` consumes esp-hal's `PMU` singleton and returns the
+  bootstrap's owner of the PMU's radio view (`BootstrapPllPower`); its
+  `release()` yields the `PllPowerReleased` that `take_radio` takes, so the
+  bootstrap's owner and the radio root never exist at once.
+- `take_radio(RadioSingletons, &Psram, PllPowerReleased)` consumes esp-hal's singletons of the
   blocks the radio owns whole (`I2C_ANA_MST`, `MODEM_SYSCON`, `MODEM_LPCON`,
   `WIFI`, `BT`, `IEEE802154`, `LP_TSENS`) and returns the HAL's
   `RadioHardware` and the clock provider. The adopted `Psram` proves that

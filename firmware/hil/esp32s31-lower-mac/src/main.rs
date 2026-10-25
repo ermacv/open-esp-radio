@@ -17,7 +17,7 @@ use oer_esp32s31_phy::{
 };
 use oer_esp32s31_radio_client::{LpClock, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
-use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
+use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_pll_power, take_radio};
 use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder};
 use oer_hil_agent::base::Intake;
 use oer_hil_protocol::{
@@ -114,6 +114,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             lp_tsens: peripherals.LP_TSENS,
         },
         &psram,
+        take_pll_power(peripherals.PMU).release(),
     );
     let (domain, partitions) = hardware.split(ConcurrentPhy::new());
     let (end, cells) = claim().expect("diagnostic radio actor");

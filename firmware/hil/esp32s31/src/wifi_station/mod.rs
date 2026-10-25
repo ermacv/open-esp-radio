@@ -25,7 +25,7 @@ use oer_esp32s31_phy::{
 };
 use oer_esp32s31_radio_client::{LpClock, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
-use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
+use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_pll_power, take_radio};
 use oer_espressif_executor::{InterruptExecutor, LevelOrder};
 
 use oer_memory::{Placed, StaticPlace};
@@ -114,7 +114,11 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         ieee802154: peripherals.IEEE802154,
         lp_tsens: peripherals.LP_TSENS,
     };
-    let (hardware, clocks) = take_radio(singletons, &psram);
+    let (hardware, clocks) = take_radio(
+        singletons,
+        &psram,
+        take_pll_power(peripherals.PMU).release(),
+    );
     let (domain, partitions) =
         hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {

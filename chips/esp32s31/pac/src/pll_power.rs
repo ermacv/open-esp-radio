@@ -4,12 +4,31 @@
 //! the CPLL and MPLL power and their analog-I2C power, which the bootstrap
 //! sets before it programs the CPU clock and the PSRAM clock, and the
 //! front-end clock image and baseband analog-I2C power, which the radio
-//! sets when it opens the PHY. The word belongs to the radio's PMU view,
-//! which the radio root claims. The bootstrap claims the same view for its
-//! own epoch, before the radio root exists, and gives it up before the
-//! radio root claims it: [`BootstrapPllPower`] reaches only the four PLL
-//! power fields, and each change is one read-modify-write that keeps every
-//! other bit of the word.
+//! sets when it opens the PHY. The word belongs to the radio's PMU view.
+//! The bootstrap claims the view first, from [`PllPowerHandoff`]:
+//! [`BootstrapPllPower`] reaches only the four PLL power fields, and each
+//! change is one read-modify-write that keeps every other bit of the word.
+//! Consuming the owner with [`BootstrapPllPower::release`] yields
+//! [`PllPowerReleased`], which the radio root
+//! ([`crate::RadioPartitions::from_handoff`]) takes by value, so the two
+//! owners of the view never exist at once:
+//!
+//! ```compile_fail,E0382
+//! use oer_esp32s31_pac::{
+//!     RadioHandoff, RadioPartitions,
+//!     pll_power::{BootstrapPllPower, PllPower, PllPowerHandoff},
+//! };
+//! fn overlap(radio: RadioHandoff, pll: PllPowerHandoff) {
+//!     let mut bootstrap = BootstrapPllPower::from_handoff(pll);
+//!     let partitions = RadioPartitions::from_handoff(radio, bootstrap.release());
+//!     bootstrap.set_pll_power(PllPower::default()); // the owner was consumed
+//! }
+//! ```
+//!
+//! ```compile_fail,E0423
+//! use oer_esp32s31_pac::pll_power::PllPowerReleased;
+//! let released = PllPowerReleased(()); // only `release` makes one
+//! ```
 //!
 //! SOURCE: S31_PMU_HEADERS (`pmu_reg.h`: `PMU_HP_ACTIVE_XPD_CPLL_I2C` bit 23,
 //! `PMU_HP_ACTIVE_XPD_MPLL_I2C` bit 26, `PMU_HP_ACTIVE_XPD_CPLL` bit 27,
@@ -32,10 +51,9 @@ impl PllPowerHandoff {
     /// Assert the bootstrap's epoch of the PMU's radio view.
     ///
     /// # Safety
-    /// Call at most once per boot, before the radio root
-    /// ([`crate::RadioPartitions::from_handoff`]) exists. The
-    /// [`BootstrapPllPower`] made from it is dropped before the radio root
-    /// is built, and no other code writes the PMU's radio view meanwhile.
+    /// Call at most once per boot. No code other than the
+    /// [`BootstrapPllPower`] made from it, and after its release the radio
+    /// root, writes the PMU's radio view.
     #[allow(
         unsafe_code,
         reason = "the bootstrap proves exclusive ownership of the PMU's radio view for its epoch"
@@ -58,8 +76,13 @@ pub struct PllPower {
     pub mpll_i2c: bool,
 }
 
+/// Proof that the bootstrap's owner of the PMU's radio view was consumed;
+/// the radio root takes it by value.
+#[must_use = "the radio root needs the released PMU view"]
+pub struct PllPowerReleased(());
+
 /// The bootstrap's owner of the PLL power fields.
-#[must_use = "dropping the owner ends the bootstrap's epoch of the PLL power fields"]
+#[must_use = "the radio root needs the owner's release"]
 pub struct BootstrapPllPower<P: Placement = Fixed<{ pmu_radio::BASE }>>(PmuRadio<P>);
 
 impl BootstrapPllPower {
@@ -74,8 +97,10 @@ impl BootstrapPllPower {
             reason = "the bootstrap claims the PMU's radio view once, from its handoff"
         )]
         // SAFETY: `PllPowerHandoff`'s constructor guarantees that this owner
-        // is the only one of the PMU's radio view until it is dropped, which
-        // happens before the radio root claims the view again. The generated
+        // is the only one of the PMU's radio view, and it is consumed here,
+        // so the view is claimed once. The radio root claims the view again
+        // only from the `PllPowerReleased` that consuming this owner yields,
+        // so the two owners never exist at once. The generated
         // `const` assertion beside the typed blocks checks that no other
         // typed block lists its words; esp-hal's writes of this word are
         // reviewed in `registers/shared-words.toml`.
@@ -85,6 +110,12 @@ impl BootstrapPllPower {
 }
 
 impl<P: Placement> BootstrapPllPower<P> {
+    /// End the bootstrap's epoch of the PMU's radio view: the owner is
+    /// consumed, and the proof hands the view to the radio root.
+    pub fn release(self) -> PllPowerReleased {
+        PllPowerReleased(())
+    }
+
     /// The PLL power fields read now.
     pub fn pll_power(&self) -> PllPower {
         let word = self.0.read_hp_active_hp_ck_power();

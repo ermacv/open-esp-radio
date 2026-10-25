@@ -1,6 +1,7 @@
 use super::{
     ChannelCbwFields, PhyFrequencyI2cNumberAddresses, bss_tx_offset, channel_cbw_fields,
-    nrx_frequency_quotient, publish_i2c_number_addresses, publish_nrx_frequency, rv32_signed_div,
+    nrx_frequency_quotient, publish_i2c_number_addresses, publish_nrx_frequency,
+    publish_nrx_frequency_between_samples, rv32_signed_div,
 };
 use crate::generated::phy_frequency_channel_oracle::{
     self as frequency, PhyFrequencyChannelOracle,
@@ -142,4 +143,38 @@ fn the_nrx_frequency_keeps_the_high_fields_it_read_and_stores_the_quotient() {
             nrx_frequency_quotient(shift, 2412)
         );
     }
+}
+
+#[test]
+fn the_nrx_shift_comes_from_the_first_sample_and_the_high_fields_from_the_second() {
+    // The first sample: shift selector 0x03 + 1 * 0x20.
+    let mut memory = vec![0x2300_0000; frequency::SIZE / 4];
+    let mut registers =
+        PhyFrequencyChannelOracle::host(&mut memory).expect("memory holds the block");
+    let first_shift = 0x03 + 0x20;
+    // The word the second sample reads: high fields 0x05 and 0.
+    let second_low = oer_mmio::Bits::<5>::new(0x05).expect("five bits");
+    let second_high = oer_mmio::Bits::<3>::new(0).expect("three bits");
+    let second_shift = 0x05;
+    assert_ne!(
+        nrx_frequency_quotient(first_shift, 2412),
+        nrx_frequency_quotient(second_shift, 2412)
+    );
+    let mut between_samples = 0;
+    publish_nrx_frequency_between_samples(&mut registers, 2412, |registers| {
+        between_samples += 1;
+        registers.publish_nrx_frequency_fields(
+            oer_mmio::Bits::new(0).expect("zero fits"),
+            second_low,
+            second_high,
+        );
+    });
+    assert_eq!(between_samples, 1);
+    let written = registers.read_nrx_frequency_control();
+    assert_eq!(written.bits_24_28_opaque(), second_low);
+    assert_eq!(written.bits_29_31_opaque(), second_high);
+    assert_eq!(
+        written.bits_0_23_opaque().get(),
+        nrx_frequency_quotient(first_shift, 2412)
+    );
 }

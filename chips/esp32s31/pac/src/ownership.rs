@@ -232,9 +232,7 @@ impl RadioHandoff {
     /// # Safety
     /// Call at most once. The caller consumed the platform's analog-I2C,
     /// modem clock, Wi-Fi, Bluetooth and IEEE 802.15.4 singletons, and no
-    /// other code may access their radio register partitions thereafter;
-    /// the bootstrap's [`crate::pll_power::BootstrapPllPower`], which
-    /// claims the PMU's radio view for its own epoch, is dropped.
+    /// other code may access their radio register partitions thereafter.
     #[allow(
         unsafe_code,
         reason = "the platform proves exclusive radio MMIO ownership"
@@ -256,18 +254,25 @@ impl RadioHandoff {
 /// let partitions = RadioPartitions::from_handoff();
 /// ```
 ///
-/// ```compile_fail,E0382
+/// ```compile_fail,E0061
 /// use oer_esp32s31_pac::{RadioHandoff, RadioPartitions};
-/// fn duplicate(handoff: RadioHandoff) {
-///     let first = RadioPartitions::from_handoff(handoff);
-///     let second = RadioPartitions::from_handoff(handoff);
+/// fn without_released_pmu(handoff: RadioHandoff) {
+///     let partitions = RadioPartitions::from_handoff(handoff);
 /// }
 /// ```
 ///
 /// ```compile_fail,E0382
-/// use oer_esp32s31_pac::{RadioHandoff, RadioPartitions};
-/// fn duplicate(handoff: RadioHandoff) {
-///     let partitions = RadioPartitions::from_handoff(handoff);
+/// use oer_esp32s31_pac::{RadioHandoff, RadioPartitions, pll_power::PllPowerReleased};
+/// fn duplicate(handoff: RadioHandoff, first: PllPowerReleased, second: PllPowerReleased) {
+///     let first = RadioPartitions::from_handoff(handoff, first);
+///     let second = RadioPartitions::from_handoff(handoff, second);
+/// }
+/// ```
+///
+/// ```compile_fail,E0382
+/// use oer_esp32s31_pac::{RadioHandoff, RadioPartitions, pll_power::PllPowerReleased};
+/// fn duplicate(handoff: RadioHandoff, pmu: PllPowerReleased) {
+///     let partitions = RadioPartitions::from_handoff(handoff, pmu);
 ///     let _first = partitions.wifi_mac;
 ///     let _second = partitions.wifi_mac;
 /// }
@@ -288,19 +293,25 @@ pub struct RadioPartitions {
 
 impl RadioPartitions {
     /// Adopt the platform's consumed radio owners without a second
-    /// singleton, and claim the typed blocks once.
+    /// singleton, and claim the typed blocks once. `pll_power` proves the
+    /// bootstrap's owner of the PMU's radio view was consumed.
     #[allow(
         unsafe_code,
         reason = "the consumed handoff proves unique register ownership"
     )]
-    pub fn from_handoff(_handoff: RadioHandoff) -> Self {
+    pub fn from_handoff(
+        _handoff: RadioHandoff,
+        _pll_power: crate::pll_power::PllPowerReleased,
+    ) -> Self {
         #[allow(
             clippy::disallowed_methods,
             reason = "the radio root claims the typed blocks once, from the handoff"
         )]
         // SAFETY: `RadioHandoff`'s constructor guarantees exclusive, permanent
         // ownership of every radio register partition, and it is consumed
-        // here, so this root is built once: no other owner of the generated
+        // here, so this root is built once; the consumed `PllPowerReleased`
+        // proves the bootstrap's owner of the PMU's radio view no longer
+        // exists: no other owner of the generated
         // singleton's peripherals or of the typed blocks' words exists. The
         // typed blocks' words lie in no svd2rust partition (the generator
         // renders a typed peripheral only as its typed block). The generated

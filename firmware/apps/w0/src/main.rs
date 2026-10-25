@@ -43,7 +43,7 @@ use oer_esp32s31_phy::{
 use oer_esp32s31_radio_client::{DomainHealth, Failure};
 use oer_esp32s31_radio_client::{LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
-use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
+use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_pll_power, take_radio};
 use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder};
 use oer_espressif_staged_runtime::panic;
 use oer_ieee80211_wire::address::IndividualAddress;
@@ -148,7 +148,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         ieee802154: peripherals.IEEE802154,
         lp_tsens: peripherals.LP_TSENS,
     };
-    let (hardware, clocks) = take_radio(singletons, &psram);
+    let (hardware, clocks) = take_radio(
+        singletons,
+        &psram,
+        take_pll_power(peripherals.PMU).release(),
+    );
     let (domain, partitions) =
         hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
     usb::early(&Note::w0_identity(

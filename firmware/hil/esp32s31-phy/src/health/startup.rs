@@ -31,6 +31,7 @@ pub(crate) fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             lp_tsens: peripherals.LP_TSENS,
         },
         &psram,
+        take_pll_power(peripherals.PMU).release(),
     );
     let (domain, partitions) =
         hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());

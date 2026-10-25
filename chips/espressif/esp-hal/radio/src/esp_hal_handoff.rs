@@ -2,12 +2,15 @@
 
 use esp_hal::{
     clock::ll,
-    peripherals::{BT, I2C_ANA_MST, IEEE802154, LP_TSENS, MODEM_LPCON, MODEM_SYSCON, WIFI},
+    peripherals::{BT, I2C_ANA_MST, IEEE802154, LP_TSENS, MODEM_LPCON, MODEM_SYSCON, PMU, WIFI},
     psram::Psram,
 };
 use oer_esp32s31_hal::{
     power::{PlatformClock, PlatformClockAbandonment},
-    root::{AnalogBusOwnership, RadioHandoff, RadioHardware},
+    root::{
+        AnalogBusOwnership, BootstrapPllPower, PllPowerHandoff, PllPowerReleased, RadioHandoff,
+        RadioHardware,
+    },
 };
 
 use crate::PlatformClocks;
@@ -68,12 +71,37 @@ impl PlatformClockBackend for EspHal {
     fn abandon(_clock: PlatformClock, _how: PlatformClockAbandonment) {}
 }
 
+/// Take the bootstrap's owner of the PMU's radio view from esp-hal's `PMU`
+/// singleton.
+///
+/// esp-hal's `init` is the bootstrap of an esp-hal image: it has powered the
+/// PLLs before this runs. Consuming the owner with
+/// [`BootstrapPllPower::release`] yields the proof [`take_radio`] takes.
+pub fn take_pll_power(pmu: PMU<'static>) -> BootstrapPllPower {
+    let _consumed: PMU<'static> = pmu;
+    #[allow(
+        unsafe_code,
+        reason = "the consumed esp-hal PMU singleton is the ownership the token asserts"
+    )]
+    // SAFETY: esp-hal hands the `PMU` singleton out once and it is consumed
+    // above, so this runs at most once per program. esp-hal's own writes of
+    // the PMU's radio view, in its clock tree, are reviewed with their
+    // coordination in `chips/esp32s31/registers/shared-words.toml`.
+    let handoff = unsafe { PllPowerHandoff::assume_exclusive() };
+    BootstrapPllPower::from_handoff(handoff)
+}
+
 /// Hand the radio blocks from esp-hal to the radio HAL.
 ///
 /// `singletons` are consumed: esp-hal hands each out once, so this runs at
 /// most once per program. `psram` proves that this image adopted PSRAM, whose
-/// MPLL reference esp-hal never releases.
-pub fn take_radio(singletons: RadioSingletons, psram: &Psram) -> (RadioHardware, EspHalClocks) {
+/// MPLL reference esp-hal never releases. `pll_power` proves the bootstrap's
+/// owner of the PMU's radio view ([`take_pll_power`]) was consumed.
+pub fn take_radio(
+    singletons: RadioSingletons,
+    psram: &Psram,
+    pll_power: PllPowerReleased,
+) -> (RadioHardware, EspHalClocks) {
     let _adopted: &Psram = psram;
     // The tokens are never handed back: no other owner of these blocks can
     // be constructed from esp-hal for the rest of the program.
@@ -95,7 +123,7 @@ pub fn take_radio(singletons: RadioSingletons, psram: &Psram) -> (RadioHardware,
         )
     };
     (
-        RadioHardware::from_handoff(handoff, analog_bus),
+        RadioHardware::from_handoff(handoff, analog_bus, pll_power),
         EspHalClocks::new(),
     )
 }

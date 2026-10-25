@@ -156,11 +156,22 @@ fn publish_nrx_frequency<P: Placement>(
     frequency_registers: &mut PhyFrequencyChannelOracle<P>,
     frequency: u32,
 ) {
+    publish_nrx_frequency_between_samples(frequency_registers, frequency, |_| {});
+}
+
+/// [`publish_nrx_frequency`] with `between` run once between the ROM's two
+/// samples of the word, where a test changes the word to tell them apart.
+fn publish_nrx_frequency_between_samples<P: Placement>(
+    frequency_registers: &mut PhyFrequencyChannelOracle<P>,
+    frequency: u32,
+    between: impl FnOnce(&mut PhyFrequencyChannelOracle<P>),
+) {
     // The ROM intentionally samples this word twice. The first sample
     // supplies the complete eight-bit shift selector; the second supplies
     // both high fields preserved by the final publication.
     let first = frequency_registers.read_nrx_frequency_control();
     let shift = first.bits_24_28_opaque().get() + first.bits_29_31_opaque().get() * 0x20;
+    between(frequency_registers);
     let previous = frequency_registers.read_nrx_frequency_control();
     frequency_registers.publish_nrx_frequency_fields(
         oer_mmio::Bits::new(nrx_frequency_quotient(shift, frequency))

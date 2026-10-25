@@ -13,6 +13,11 @@ pub use oer_esp32s31_pac::MacLocalTime;
 /// The platform's proof that it consumed every radio singleton, which
 /// [`RadioHardware::from_handoff`] takes.
 pub use oer_esp32s31_pac::RadioHandoff;
+/// The bootstrap's owner of the PMU's radio view, its handoff and the proof
+/// of its release, which [`RadioHardware::from_handoff`] takes.
+pub use oer_esp32s31_pac::pll_power::{
+    BootstrapPllPower, PllPower, PllPowerHandoff, PllPowerReleased,
+};
 
 use crate::power::PlatformClockBackend;
 use oer_esp32s31_pac::{
@@ -37,10 +42,10 @@ use crate::{
 /// `I2C_ANA_MST` singleton. Without it there is no radio root:
 ///
 /// ```compile_fail,E0061
-/// use oer_esp32s31_hal::root::{RadioHandoff, RadioHardware};
+/// use oer_esp32s31_hal::root::{PllPowerReleased, RadioHandoff, RadioHardware};
 ///
-/// fn root(handoff: RadioHandoff) -> RadioHardware {
-///     RadioHardware::from_handoff(handoff)
+/// fn root(handoff: RadioHandoff, pll_power: PllPowerReleased) -> RadioHardware {
+///     RadioHardware::from_handoff(handoff, pll_power)
 /// }
 /// ```
 #[derive(Debug)]
@@ -103,10 +108,15 @@ impl RadioHardware {
     ///
     /// `analog_bus` proves the caller owns the analog-I2C master: the PHY
     /// writes analog registers through transactions split across executor
-    /// polls, which no other writer may interleave.
-    pub fn from_handoff(handoff: RadioHandoff, _analog_bus: AnalogBusOwnership) -> Self {
+    /// polls, which no other writer may interleave. `pll_power` proves the
+    /// bootstrap's owner of the PMU's radio view was consumed.
+    pub fn from_handoff(
+        handoff: RadioHandoff,
+        _analog_bus: AnalogBusOwnership,
+        pll_power: PllPowerReleased,
+    ) -> Self {
         Self {
-            partitions: RadioPartitions::from_handoff(handoff),
+            partitions: RadioPartitions::from_handoff(handoff, pll_power),
             phy_registration: PhyRegistration::new(),
         }
     }
