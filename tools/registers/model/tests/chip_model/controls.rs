@@ -330,6 +330,100 @@ rejects_control!(
     ErrorKind::Control(_)
 );
 rejects_control!(
+    one_instance_cannot_use_one_field_as_gate_and_reset,
+    "root.toml",
+    "resets = [{ role = \"group\"",
+    "resets = [{ role = \"other\", field = \"CR.CONTROL_1.GATE\", sources = [\"SRC_HEADER\"] }, { role = \"group\"",
+    ErrorKind::Control(_)
+);
+rejects_control!(
+    one_instance_cannot_use_one_field_as_gate_and_mux,
+    "root.toml",
+    "muxes = [{ role = \"timer\"",
+    "muxes = [{ role = \"other\", field = \"CR.CONTROL_1.GATE\", inputs = { 1 = \"OSC\" }, sources = [\"SRC_HEADER\"] }, { role = \"timer\"",
+    ErrorKind::Control(_)
+);
+rejects_control!(
+    one_instance_cannot_use_one_field_as_reset_and_mux,
+    "root.toml",
+    "muxes = [{ role = \"timer\"",
+    "muxes = [{ role = \"other\", field = \"CR.CONTROL_1.RESET\", inputs = { 1 = \"OSC\" }, sources = [\"SRC_HEADER\"] }, { role = \"timer\"",
+    ErrorKind::Control(_)
+);
+
+#[test]
+fn shared_field_cannot_mix_control_kinds_in_either_instance_order() -> TestResult {
+    for (first, second) in [
+        ("clocks", "resets"),
+        ("resets", "clocks"),
+        ("clocks", "muxes"),
+        ("muxes", "clocks"),
+        ("resets", "muxes"),
+        ("muxes", "resets"),
+    ] {
+        let fixture = fixture()?;
+        for (instance, list) in [("TIMG0", first), ("TIMG1", second)] {
+            let inputs = if list == "muxes" {
+                ", inputs = { 1 = \"OSC\" }"
+            } else {
+                ""
+            };
+            let links = LINKS.replacen(
+                &format!("{list} = ["),
+                &format!("{list} = [{{ role = \"other\", field = \"CR.CONTROL_0.GATE\", sources = [\"SRC_HEADER\"]{inputs} }}, "),
+                1,
+            );
+            fixture.edit(
+                "root.toml",
+                &format!("name = \"{instance}\"\n{LINKS}"),
+                &format!("name = \"{instance}\"\n{links}"),
+            )?;
+        }
+        let path = fixture.dir.path().join("root.toml");
+        let root = fs::read_to_string(path)?;
+        fixture.write(
+            "root.toml",
+            &format!("{root}\n[[shared-controls]]\nname = \"MIXED\"\nfield = \"CR.CONTROL_0.GATE\"\ninstances = [\"TIMG0\", \"TIMG1\"]\nsources = [\"SRC_HEADER\"]\n"),
+        )?;
+        let error = fixture.rejection()?;
+        assert!(
+            matches!(error.kind, ErrorKind::Control(_)),
+            "{first}/{second}: {error}"
+        );
+        assert!(error.entity.starts_with("TIMG1."), "{error}");
+        assert!(error.path.ends_with("root.toml"), "{error}");
+    }
+    Ok(())
+}
+
+#[test]
+fn instance_controls_cannot_reference_their_own_block() -> TestResult {
+    for list in ["clocks", "resets", "muxes"] {
+        for field in ["CR.CONTROL_0.GATE", "CR.BANK0.CONFIG.GATE"] {
+            let fixture = fixture()?;
+            let inputs = if list == "muxes" {
+                ", inputs = { 1 = \"OSC\" }"
+            } else {
+                ""
+            };
+            fixture.edit(
+                "root.toml",
+                "name = \"CR\"\ntype = \"CLOCK\"\n",
+                &format!("name = \"CR\"\ntype = \"CLOCK\"\n{list} = [{{ role = \"self\", field = \"{field}\", sources = [\"SRC_HEADER\"]{inputs} }}]\n"),
+            )?;
+            let error = fixture.rejection()?;
+            assert!(
+                matches!(error.kind, ErrorKind::Control(_)),
+                "{list}/{field}: {error}"
+            );
+            assert!(error.entity.starts_with("CR."), "{error}");
+            assert!(error.path.ends_with("root.toml"), "{error}");
+        }
+    }
+    Ok(())
+}
+
+rejects_control!(
     clock_unknown_parent,
     "root.toml",
     "parent = \"OSC\"",
@@ -378,6 +472,34 @@ rejects_control!(
     "\"CR.CONTROL_1.STATUS\"",
     ErrorKind::ControlField { .. }
 );
+rejects_control!(
+    gate_group_cannot_contain_a_reset,
+    "root.toml",
+    "\"CR.BANK1.CONFIG.GATE\"",
+    "\"CR.CONTROL_1.RESET\"",
+    ErrorKind::GateGroup(_)
+);
+
+#[test]
+fn gate_group_cannot_contain_a_one_bit_mux() -> TestResult {
+    let fixture = fixture()?;
+    fixture.edit(
+        "root.toml",
+        "muxes = [{ role = \"timer\"",
+        "muxes = [{ role = \"other\", field = \"CR.CONTROL_0.GATE\", inputs = { 1 = \"OSC\" }, sources = [\"SRC_HEADER\"] }, { role = \"timer\"",
+    )?;
+    fixture.edit(
+        "root.toml",
+        "\"CR.BANK1.CONFIG.GATE\"",
+        "\"CR.CONTROL_0.GATE\"",
+    )?;
+    let error = fixture.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::GateGroup(_)), "{error}");
+    assert_eq!(error.entity, "VENDOR_PAIR");
+    assert!(error.path.ends_with("root.toml"), "{error}");
+    Ok(())
+}
+
 rejects_control!(
     unbound_duplicate_number,
     "root.toml",
@@ -540,6 +662,51 @@ rejects_control!(
     "clocks = [{ role = \"bus\", field = \"CR.CONTROL_0.GATE\", sources = [\"SRC_HEADER\"] }, { role = \"bus\"",
     ErrorKind::Control(_)
 );
+
+#[test]
+fn control_roles_reject_empty_kebab_segments() -> TestResult {
+    for original in ["bus", "group", "timer"] {
+        for role in ["-", "--x", "a-", "-a", "a--b"] {
+            let fixture = fixture()?;
+            fixture.edit(
+                "root.toml",
+                &format!("role = \"{original}\""),
+                &format!("role = \"{role}\""),
+            )?;
+            let error = fixture.rejection()?;
+            assert!(
+                matches!(error.kind, ErrorKind::Control(_)),
+                "{role}: {error}"
+            );
+            assert!(error.path.ends_with("root.toml"), "{error}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn control_roles_accept_lowercase_alphanumeric_kebab_segments() -> TestResult {
+    for role in ["a", "bus-clock", "bus-2", "48m", "32k", "0", "a1-b2"] {
+        let fixture = fixture()?;
+        for original in ["bus", "group", "timer"] {
+            fixture.edit(
+                "root.toml",
+                &format!("role = \"{original}\""),
+                &format!("role = \"{role}\""),
+            )?;
+        }
+        let model = fixture.load()?;
+        assert_eq!(
+            model
+                .controls()
+                .iter()
+                .filter(|link| link.role == role)
+                .count(),
+            3
+        );
+    }
+    Ok(())
+}
 
 rejects_control!(
     missing_source_inventory,
@@ -788,6 +955,12 @@ interrupt-sources = {{ count = 0, sources = ["SRC_HEADER"] }}
 name = "CR"
 type = "CLOCK"
 base = 0
+extent = {{ size = 4 }}
+sources = ["SRC_BASE"]
+[[instances]]
+name = "CLIENT"
+type = "CLOCK"
+base = 4
 extent = {{ size = 4 }}
 sources = ["SRC_BASE"]
 muxes = [{{ role = "clock", field = "CR.CONTROL.SELECT", inputs = {{ {encoding} = "OSC" }}, sources = ["SRC_HEADER"] }}]

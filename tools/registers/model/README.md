@@ -303,11 +303,15 @@ An MMIO instance's `clocks` and `resets` are lists of `{ role, field,
 sources }`; `muxes` adds `inputs = { encoding = "CLOCK_SOURCE" }`.
 `field` is an absolute expanded `INSTANCE.REGISTER.FIELD` identity,
 including concrete `dim` and group indices. The referenced instance must
-be an MMIO instance of the root. Gates and resets require one `plain` bit;
-a mux requires a `plain` field. Roles are nonempty lowercase letters,
-digits and hyphens, unique within each list. Several roles of one instance
-still count as one user. Input keys are canonical unsigned decimal numbers
-within the field's width; every value names a declared `[[clock-sources]]` entry.
+be a different MMIO instance of the root; links to the instance's own block
+are rejected. Gates and resets require one `plain` bit; a mux requires a
+`plain` field. A field has one control kind across all instance links and
+gate groups: clock gate, reset or mux. Roles are nonempty segments of ASCII
+lowercase letters and digits separated by single hyphens, unique within each
+list; leading, trailing and consecutive hyphens are rejected. Several roles
+of one instance still count as one user. Input keys are canonical unsigned
+decimal numbers within the field's width; every value names a declared
+`[[clock-sources]]` entry.
 The input map is nonempty and identical for all users of one selector;
 unlisted encodings remain unknown.
 
@@ -320,7 +324,9 @@ sharing concerns the same field, not adjacent bits or policy dependencies.
 
 `[[gate-groups]]` names a vendor's fixed group of distinct one-bit `plain`
 fields, with `fields` and `sources`. It has no consumers or ordering;
-group membership does not count as another instance using a field.
+group membership does not count as another instance using a field. A group
+may include a linked clock gate or a gate without instance links, but never
+a field linked as a reset or mux.
 `[[clock-sources]]` has a unique `name`, `sources`, optional positive
 `frequency-hz`, and optional `parent` naming another clock source. Parent
 cycles and unknown parents are errors; unknown frequencies stay absent.

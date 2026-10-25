@@ -109,6 +109,7 @@ pub(super) fn expand(
         .try_reserve_exact(count)
         .map_err(|error| context.error(&root.chip, ErrorKind::Allocation(error)))?;
     let mut users: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+    let mut field_kinds: BTreeMap<&str, ControlKind> = BTreeMap::new();
     let mut mux_inputs = BTreeMap::new();
     for instance in &root.instances {
         let mut roles = BTreeSet::new();
@@ -144,11 +145,12 @@ pub(super) fn expand(
             }));
         for (kind, role, identity, sources, inputs) in controls {
             let entity = format!("{}.{kind:?}.{role}", instance.name);
-            if role.is_empty()
-                || !role
-                    .chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-            {
+            if role.split('-').any(|part| {
+                part.is_empty()
+                    || !part
+                        .bytes()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+            }) {
                 return Err(context.error(
                     &entity,
                     ErrorKind::Control("role must be lowercase-kebab".to_owned()),
@@ -161,7 +163,27 @@ pub(super) fn expand(
                 ));
             }
             context.sources(&entity, sources)?;
+            if identity.split('.').next() == Some(instance.name.as_str()) {
+                return Err(context.error(
+                    &entity,
+                    ErrorKind::Control(format!(
+                        "{identity} belongs to this instance; in-block controls belong to the block type"
+                    )),
+                ));
+            }
             let field = resolve(&entity, identity, kind)?;
+            if let Some(previous) = field_kinds.insert(identity, kind)
+                && previous != kind
+            {
+                return Err(context.error(
+                    &entity,
+                    ErrorKind::Control(format!(
+                        "{identity} is used as both {} and {}",
+                        previous.label(),
+                        kind.label()
+                    )),
+                ));
+            }
             let mut decoded = BTreeMap::new();
             if let Some(inputs) = inputs {
                 if inputs.is_empty() {
@@ -244,8 +266,21 @@ pub(super) fn expand(
         resolved
             .try_reserve_exact(group.fields.len())
             .map_err(|error| context.error(&group.name, ErrorKind::Allocation(error)))?;
-        for field in &group.fields {
-            resolved.push(resolve(&group.name, field, ControlKind::Clock)?);
+        for identity in &group.fields {
+            let field = resolve(&group.name, identity, ControlKind::Clock)?;
+            if let Some(previous) = field_kinds.insert(identity, ControlKind::Clock)
+                && previous != ControlKind::Clock
+            {
+                return Err(context.error(
+                    &group.name,
+                    ErrorKind::GateGroup(format!(
+                        "{identity} is used as both {} and {}",
+                        previous.label(),
+                        ControlKind::Clock.label()
+                    )),
+                ));
+            }
+            resolved.push(field);
         }
         groups.push(ExpandedGateGroup {
             name: group.name.clone(),
