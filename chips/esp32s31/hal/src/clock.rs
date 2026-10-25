@@ -75,8 +75,9 @@ impl ClockPort for RadioPhyRegisters {
 /// The platform clock references common radio power holds.
 ///
 /// The 160 MHz reference, the analog-I2C master clock and the MPLL are shared
-/// with other SoC users, so their platform owner (ESP-HAL) counts references
-/// and alone writes their gates. Common power holds one guard for each for as
+/// with other SoC users, so their platform owner
+/// ([`ChipClocks`](crate::power::ChipClocks)) counts references and alone
+/// writes their gates. Common power holds one guard for each for as
 /// long as any client holds it; a retried power-up takes only the references
 /// it does not hold yet.
 #[derive(Debug)]
@@ -120,10 +121,21 @@ impl<B: PlatformClockBackend> PlatformClockRefs<B> {
         Ok(())
     }
 
-    fn release(&mut self, clock: PlatformClock) {
-        if let Some(guard) = self.slot(clock).take() {
-            guard.release();
+    /// Give back the reference to `clock`, if held.
+    ///
+    /// # Errors
+    ///
+    /// The platform refused the release: the guard stays held here.
+    fn release(&mut self, clock: PlatformClock) -> Result<(), PlatformClockError> {
+        let slot = self.slot(clock);
+        if let Some(guard) = slot.take()
+            && let Err(refused) = guard.release()
+        {
+            let error = refused.error();
+            *slot = Some(refused.into_guard());
+            return Err(error);
         }
+        Ok(())
     }
 
     fn count_into(&self, holds: &mut PlatformClockHolds) {
@@ -279,6 +291,9 @@ pub enum CommonRadioPowerError {
     Power(crate::power::PowerError),
     /// The last client's cold-power baseline did not read back.
     Restore(WifiPowerRestoreCheckpoint),
+    /// The platform refused to take back the last client's reference to
+    /// this clock, which stays held.
+    Release(PlatformClock),
 }
 
 /// Common modem/PHY power shared by concurrently running clients.
@@ -408,8 +423,9 @@ impl<B: PlatformClockBackend> CommonRadioPower<B> {
     /// reference, restores the cold baseline and then gives back the 160 MHz
     /// and MPLL references, as the vendor closes a gate before releasing its source.
     ///
-    /// A failed step keeps the client entered and returns its proof so the
-    /// exit can be retried.
+    /// A failed step, a refused release included, keeps the client entered
+    /// and returns its proof so the exit can be retried; a retry gives back
+    /// only the references still held.
     pub(crate) fn exit<K: RadioClientKind>(
         &mut self,
         port: &mut impl ClockPort,
@@ -417,15 +433,24 @@ impl<B: PlatformClockBackend> CommonRadioPower<B> {
     ) -> Result<(), CommonPowerExitFailure<K>> {
         let client = power.client();
         if self.clients == client_bit(client) {
-            self.refs.release(PlatformClock::AnalogI2cMaster);
+            let refused = |power, clock| CommonPowerExitFailure {
+                power,
+                error: CommonRadioPowerError::Release(clock),
+            };
+            if self.refs.release(PlatformClock::AnalogI2cMaster).is_err() {
+                return Err(refused(power, PlatformClock::AnalogI2cMaster));
+            }
             if let Err(checkpoint) = self.power.restore(port) {
                 return Err(CommonPowerExitFailure {
                     power,
                     error: CommonRadioPowerError::Restore(checkpoint),
                 });
             }
-            self.refs.release(PlatformClock::Pll160m);
-            self.refs.release(PlatformClock::Mpll);
+            for clock in [PlatformClock::Pll160m, PlatformClock::Mpll] {
+                if self.refs.release(clock).is_err() {
+                    return Err(refused(power, clock));
+                }
+            }
         }
         self.clients &= !client_bit(client);
         Ok(())

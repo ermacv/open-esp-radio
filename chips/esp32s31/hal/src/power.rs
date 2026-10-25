@@ -236,8 +236,10 @@ pub(crate) mod test_clocks;
 #[cfg(test)]
 mod tests;
 
+mod chip_clocks;
 pub(crate) mod clock;
+pub use chip_clocks::{ChipClocks, PsramMpll};
 pub use clock::{
     PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
-    PlatformClockGuard, PlatformClockHolds, PlatformClockProvider,
+    PlatformClockGuard, PlatformClockHolds, PlatformClockProvider, PlatformClockReleaseRefused,
 };

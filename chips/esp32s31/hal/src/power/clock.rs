@@ -190,7 +190,7 @@ mod executor;
 pub(crate) use executor::ModemPlatformClocks;
 pub use executor::{
     PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
-    PlatformClockGuard, PlatformClockHolds, PlatformClockProvider,
+    PlatformClockGuard, PlatformClockHolds, PlatformClockProvider, PlatformClockReleaseRefused,
 };
 pub(crate) use executor::{execute_acquire, execute_release};
 

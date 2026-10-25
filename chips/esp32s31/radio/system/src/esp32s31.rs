@@ -465,8 +465,11 @@ where
                     CommonRadioPowerError::AlreadyEntered => Failure::ClientFailed,
                     // The first client's power sequence stopped at a
                     // read-back checkpoint: common power is half applied.
+                    // Entry gives no reference back, so a refused release
+                    // is not reached here; it would leave power as uncertain.
                     error @ (CommonRadioPowerError::Power(_)
-                    | CommonRadioPowerError::Restore(_)) => {
+                    | CommonRadioPowerError::Restore(_)
+                    | CommonRadioPowerError::Release(_)) => {
                         wifi_poisoned(RequestKind::Join, PoisonCause::CommonPower(error))
                     }
                 };

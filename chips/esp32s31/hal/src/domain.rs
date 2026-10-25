@@ -259,7 +259,8 @@ pub enum LowPowerClockError {
     AlreadySelected,
     /// Bluetooth does not select its low-power timer clock.
     NotSelected,
-    /// The platform clock owner refused the timer gate reference.
+    /// The platform clock owner refused to take or give back the timer
+    /// gate reference.
     PlatformClock(PlatformClockError),
 }
 
@@ -854,7 +855,9 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     ///
     /// # Errors
     ///
-    /// Bluetooth does not select its clock.
+    /// Bluetooth does not select its clock, or the platform refused to take
+    /// the timer gate reference back: the sources stay deselected and the
+    /// reference stays held, for a retry.
     pub fn deselect_bluetooth_low_power_clock(
         &mut self,
         _owner: &BluetoothTaskRegisters,
@@ -864,7 +867,11 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
             return Err(LowPowerClockError::NotSelected);
         };
         deselect_bluetooth_low_power_clock(state.registers.radio_phy_mut());
-        timer.release();
+        if let Err(refused) = timer.release() {
+            let error = refused.error();
+            state.bluetooth_low_power_clock = Some(refused.into_guard());
+            return Err(LowPowerClockError::PlatformClock(error));
+        }
         Ok(())
     }
 
