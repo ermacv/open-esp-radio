@@ -1,11 +1,12 @@
 # Imported by `cargo registers import` from the pinned vendor SVD and
-# ESP-IDF headers (registers/import.toml).
+# ESP-IDF headers (registers/import.toml), with the curated refinements
+# merged into it; this file, not the import, is the source of truth.
 schema = 3
 
 [type]
 name = "MODEM_SYSCON"
 description = "The modem system controller: the clocks and resets of the Wi-Fi, Bluetooth and IEEE 802.15.4 blocks, the front end and the modem memories."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"]
@@ -13,6 +14,262 @@ provenance = "imported"
 accuracy = "exact"
 completeness = "complete"
 naming = "vendor"
+
+[review.entity."CLK_CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF.CLK_I2C_MST_SEL_160M"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF.CLK_ETM_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF.CLK_ZB_APB_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF.CLK_ZBMAC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF.CLK_MODEM_SEC_ECB_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF.CLK_MODEM_SEC_CCM_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF.CLK_MODEM_SEC_BAH_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF.CLK_MODEM_SEC_APB_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF.CLK_MODEM_SEC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF.CLK_BLE_TIMER_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF.PWDET_SAR_CLOCK_ENA"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MMIO_USE_20109C04", "S31_MMIO_DECLARED_20109C04"]
+
+[review.entity."CLK_CONF.PWDET_CLK_DIV_NUM"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MMIO_USE_20109C04", "S31_MMIO_DECLARED_20109C04"]
+
+[review.entity."CLK_CONF.CLK_TX_DAC_INV_ENA"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MMIO_USE_20109C04", "S31_MMIO_DECLARED_20109C04"]
+
+[review.entity."CLK_CONF.CLK_RX_ADC_INV_ENA"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MMIO_USE_20109C04", "S31_MMIO_DECLARED_20109C04"]
+
+[review.entity."CLK_CONF.CLK_PWDET_ADC_INV_ENA"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MMIO_USE_20109C04", "S31_MMIO_DECLARED_20109C04"]
+
+[review.entity."CLK_CONF.CLK_DATA_DUMP_MUX"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MMIO_USE_20109C04", "S31_MMIO_DECLARED_20109C04"]
+
+[review.entity."CLK_CONF.BITS_13_20_OPAQUE"]
+sources = ["S31_MMIO_USE_20109C04", "S31_MMIO_DECLARED_20109C04"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."CLK_CONF.CLK_DATA_DUMP_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MMIO_USE_20109C04", "S31_MMIO_DECLARED_20109C04"]
+
+[review.entity."CLK_CONF_POWER_ST"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF_POWER_ST.CLK_ZB_ST_MAP"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "S31_MMIO_USE_20109C0C", "S31_MMIO_DECLARED_20109C0C"]
+
+[review.entity."CLK_CONF_POWER_ST.CLK_FE_ST_MAP"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "S31_MMIO_USE_20109C0C", "S31_MMIO_DECLARED_20109C0C"]
+
+[review.entity."CLK_CONF_POWER_ST.CLK_BT_ST_MAP"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "S31_MMIO_USE_20109C0C", "S31_MMIO_DECLARED_20109C0C"]
+
+[review.entity."CLK_CONF_POWER_ST.CLK_WIFI_ST_MAP"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "S31_MMIO_USE_20109C0C", "S31_MMIO_DECLARED_20109C0C"]
+
+[review.entity."CLK_CONF_POWER_ST.CLK_MODEM_PERI_ST_MAP"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "S31_MMIO_USE_20109C0C", "S31_MMIO_DECLARED_20109C0C"]
+
+[review.entity."CLK_CONF_POWER_ST.CLK_MODEM_APB_ST_MAP"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "S31_MMIO_USE_20109C0C", "S31_MMIO_DECLARED_20109C0C"]
+
+[review.entity."CLK_CONF_POWER_ST.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_USE_20109C0C", "S31_MMIO_DECLARED_20109C0C"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."MODEM_RST_CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_RST_CONF.RST_WIFIBB"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_RST_CONF.RST_WIFIMAC"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_RST_CONF.RST_BTMAC_APB"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_RST_CONF.RST_BTMAC"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_RST_CONF.RST_ZBMAC_APB"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_RST_CONF.RST_ZBMAC"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_RST_CONF.RST_MODEM_ECB"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_RST_CONF.RST_MODEM_CCM"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_RST_CONF.RST_MODEM_BAH"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_RST_CONF.RST_MODEM_SEC"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_RST_CONF.RST_BLE_TIMER"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_WIFIBB_22M_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_WIFIBB_40M_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_WIFIBB_44M_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_WIFIBB_80M_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_WIFIBB_40X_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_WIFIBB_80X_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_WIFIBB_40X1_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_WIFIBB_80X1_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_WIFIBB_160X1_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_WIFIMAC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_WIFI_APB_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_FE_80M_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_FE_160M_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_FE_APB_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_BT_APB_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_BTBB_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_BTMAC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_FE_PWDET_ADC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_FE_ADC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_FE_DAC_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+
+[review.entity."CLK_CONF1.CLK_FE_20M_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MMIO_USE_20109C14", "S31_MMIO_DECLARED_20109C14"]
+
+[review.entity."CLK_CONF1.CLK_FE_40M_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MMIO_USE_20109C14", "S31_MMIO_DECLARED_20109C14"]
+
+[review.entity."CLK_CONF1.BITS_22_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20109C14", "S31_MMIO_DECLARED_20109C14"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WIFI_BB_CFG"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_LIBPHY_PHY_BB_INIT"]
+
+[review.entity."WIFI_BB_CFG.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20109C18"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WIFI_BB_CFG.WIFI_ENABLE"]
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WIFI_BB_CFG.BSS_CBW_40_DIGITAL"]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+naming = "descriptive"
+
+[review.entity."WIFI_BB_CFG.BIT_3_OPAQUE"]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "S31_MMIO_DECLARED_20109C18"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WIFI_BB_CFG.BITS_11_13_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20109C18"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WIFI_BB_CFG.BIT_28_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20109C18"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WIFI_BB_CFG.BITS_4_10_OPAQUE"]
+sources = ["S31_MMIO_USE_20109C18", "S31_MMIO_DECLARED_20109C18"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WIFI_BB_CFG.BITS_14_27_OPAQUE"]
+sources = ["S31_MMIO_USE_20109C18", "S31_MMIO_DECLARED_20109C18"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WIFI_BB_CFG.BITS_29_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20109C18", "S31_MMIO_DECLARED_20109C18"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
 
 [[registers]]
 name = "TEST_CONF"
@@ -73,8 +330,8 @@ class = "plain"
 [[registers]]
 name = "CLK_CONF"
 offset = 0x4
+description = "Shared modem clock selectors and protocol clock gates."
 reset = { value = 0x200002, mask = 0xffe01fff }
-reserved = { mask = 0x1fe000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"] }
 
 [[registers.fields]]
 name = "PWDET_SAR_CLOCK_ENA"
@@ -105,6 +362,13 @@ class = "plain"
 name = "CLK_I2C_MST_SEL_160M"
 bits = "12"
 class = "plain"
+description = "Select the 160 MHz PHY-I2C-master source."
+
+[[registers.fields]]
+name = "BITS_13_20_OPAQUE"
+bits = "20:13"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
 
 [[registers.fields]]
 name = "CLK_DATA_DUMP_MUX"
@@ -115,51 +379,61 @@ class = "plain"
 name = "CLK_ETM_EN"
 bits = "22"
 class = "plain"
+description = "Enable the modem ETM clock."
 
 [[registers.fields]]
 name = "CLK_ZB_APB_EN"
 bits = "23"
 class = "plain"
+description = "Enable the IEEE 802.15.4 APB clock."
 
 [[registers.fields]]
 name = "CLK_ZBMAC_EN"
 bits = "24"
 class = "plain"
+description = "Enable the IEEE 802.15.4 MAC clock."
 
 [[registers.fields]]
 name = "CLK_MODEM_SEC_ECB_EN"
 bits = "25"
 class = "plain"
+description = "Enable the modem-security ECB clock."
 
 [[registers.fields]]
 name = "CLK_MODEM_SEC_CCM_EN"
 bits = "26"
 class = "plain"
+description = "Enable the modem-security CCM clock."
 
 [[registers.fields]]
 name = "CLK_MODEM_SEC_BAH_EN"
 bits = "27"
 class = "plain"
+description = "Enable the modem-security BAH clock."
 
 [[registers.fields]]
 name = "CLK_MODEM_SEC_APB_EN"
 bits = "28"
 class = "plain"
+description = "Enable the modem-security APB clock."
 
 [[registers.fields]]
 name = "CLK_MODEM_SEC_EN"
 bits = "29"
 class = "plain"
+description = "Enable the modem-security functional clock."
 
 [[registers.fields]]
 name = "CLK_BLE_TIMER_EN"
 bits = "30"
 class = "plain"
+description = "Enable the Bluetooth low-power timer clock."
 
 [[registers.fields]]
 name = "CLK_DATA_DUMP_EN"
 bits = "31"
 class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers]]
 name = "CLK_CONF_FORCE_ON"
@@ -240,42 +514,55 @@ class = "plain"
 [[registers]]
 name = "CLK_CONF_POWER_ST"
 offset = 0xc
+description = "Six modem-domain power-state clock-map fields."
 reset = { value = 0x0, mask = 0xffffff00 }
-reserved = { mask = 0xff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"] }
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
 
 [[registers.fields]]
 name = "CLK_ZB_ST_MAP"
 bits = "11:8"
 class = "plain"
+description = "Bit 2: Bit two of the IEEE 802.15.4 domain state map, set by the reviewed modem clock initialization."
 
 [[registers.fields]]
 name = "CLK_FE_ST_MAP"
 bits = "15:12"
 class = "plain"
+description = "Bit 1: Bit one of the radio-front-end domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the radio-front-end domain state map, set by the reviewed modem clock initialization."
 
 [[registers.fields]]
 name = "CLK_BT_ST_MAP"
 bits = "19:16"
 class = "plain"
+description = "Bit 2: Bit two of the Bluetooth domain state map, set by the reviewed modem clock initialization."
 
 [[registers.fields]]
 name = "CLK_WIFI_ST_MAP"
 bits = "23:20"
 class = "plain"
+description = "Bit 1: Bit one of the Wi-Fi domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the Wi-Fi domain state map, set by the reviewed modem clock initialization."
 
 [[registers.fields]]
 name = "CLK_MODEM_PERI_ST_MAP"
 bits = "27:24"
 class = "plain"
+description = "Bit 2: Bit two of the modem-peripheral domain state map, set by the reviewed modem clock initialization."
 
 [[registers.fields]]
 name = "CLK_MODEM_APB_ST_MAP"
 bits = "31:28"
 class = "plain"
+description = "Bit 1: Bit one of the modem-APB domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the modem-APB domain state map, set by the reviewed modem clock initialization."
 
 [[registers]]
 name = "MODEM_RST_CONF"
 offset = 0x10
+description = "Shared radio-domain reset controls."
 reset = { value = 0x0, mask = 0xefdfff00 }
 reserved = { mask = 0x102000ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"] }
 
@@ -283,11 +570,13 @@ reserved = { mask = 0x102000ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUD
 name = "RST_WIFIBB"
 bits = "8"
 class = "plain"
+description = "Wi-Fi baseband reset."
 
 [[registers.fields]]
 name = "RST_WIFIMAC"
 bits = "9"
 class = "plain"
+description = "Wi-Fi MAC reset."
 
 [[registers.fields]]
 name = "RST_FE_PWDET_ADC"
@@ -318,11 +607,13 @@ class = "plain"
 name = "RST_BTMAC_APB"
 bits = "15"
 class = "plain"
+description = "Bluetooth MAC APB reset."
 
 [[registers.fields]]
 name = "RST_BTMAC"
 bits = "16"
 class = "plain"
+description = "Bluetooth MAC reset."
 
 [[registers.fields]]
 name = "RST_BTBB_APB"
@@ -353,36 +644,43 @@ class = "plain"
 name = "RST_ZBMAC_APB"
 bits = "23"
 class = "plain"
+description = "IEEE 802.15.4 MAC APB reset."
 
 [[registers.fields]]
 name = "RST_ZBMAC"
 bits = "24"
 class = "plain"
+description = "IEEE 802.15.4 MAC reset."
 
 [[registers.fields]]
 name = "RST_MODEM_ECB"
 bits = "25"
 class = "plain"
+description = "Modem-security ECB reset."
 
 [[registers.fields]]
 name = "RST_MODEM_CCM"
 bits = "26"
 class = "plain"
+description = "Modem-security CCM reset."
 
 [[registers.fields]]
 name = "RST_MODEM_BAH"
 bits = "27"
 class = "plain"
+description = "Modem-security BAH reset."
 
 [[registers.fields]]
 name = "RST_MODEM_SEC"
 bits = "29"
 class = "plain"
+description = "Modem-security reset."
 
 [[registers.fields]]
 name = "RST_BLE_TIMER"
 bits = "30"
 class = "plain"
+description = "Bluetooth low-power timer reset."
 
 [[registers.fields]]
 name = "RST_DATA_DUMP"
@@ -392,8 +690,8 @@ class = "plain"
 [[registers]]
 name = "CLK_CONF1"
 offset = 0x14
+description = "Wi-Fi, Bluetooth and front-end clock gates."
 reset = { value = 0x0, mask = 0x3fffff }
-reserved = { mask = 0xffc00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"] }
 
 [[registers.fields]]
 name = "CLK_WIFIBB_22M_EN"
@@ -505,15 +803,72 @@ name = "CLK_FE_DAC_EN"
 bits = "21"
 class = "plain"
 
+[[registers.fields]]
+name = "BITS_22_31_OPAQUE"
+bits = "31:22"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
+
 [[registers]]
 name = "WIFI_BB_CFG"
 offset = 0x18
+description = "Instruction-reviewed Wi-Fi baseband shared control. The ESP-IDF header declares bits 31:0 as one field WIFI_BB_CFG; the cited sources subdivide it."
 reset = { value = 0x0 }
 
 [[registers.fields]]
-name = "WIFI_BB_CFG"
-bits = "31:0"
+name = "BIT_0_OPAQUE"
+bits = "0"
 class = "plain"
+
+[[registers.fields]]
+name = "WIFI_ENABLE"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "BSS_CBW_40_DIGITAL"
+bits = "2"
+class = "plain"
+description = "Digital BSS 40 MHz channel-width control that complete phy_bb_bss_cbw40_dig publishes; zero disables and one enables the recovered path."
+values = [{ name = "DISABLED", value = 0 }, { name = "ENABLED", value = 1 }]
+write-values-only = true
+
+[[registers.fields]]
+name = "BIT_3_OPAQUE"
+bits = "3"
+class = "plain"
+description = "Cleared by complete phy_bb_bss_cbw40_dig together with BSS_CBW_40_DIGITAL."
+
+[[registers.fields]]
+name = "BITS_4_10_OPAQUE"
+bits = "10:4"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_11_13_OPAQUE"
+bits = "13:11"
+class = "plain"
+description = "Reviewed baseband AGC update mode used by initialization and subsequent register updates."
+values = [{ name = "INITIALIZATION", value = 1 }, { name = "REGISTER_UPDATES_ENABLED", value = 7 }]
+write-values-only = true
+
+[[registers.fields]]
+name = "BITS_14_27_OPAQUE"
+bits = "27:14"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_28_OPAQUE"
+bits = "28"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_29_31_OPAQUE"
+bits = "31:29"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers]]
 name = "FE_CFG"

@@ -1,0 +1,8 @@
+# An analog-I2C block type of the curated ESP32-S31 register model.
+schema = 3
+
+[type]
+name = "SAR_MASTER"
+description = "The SAR_MASTER analog-I2C block (code 0x10)."
+space = "analog-i2c"
+sources = ["ESP_IDF_4D59230D_S31_ANALOG_SLAVE_SELECTION"]

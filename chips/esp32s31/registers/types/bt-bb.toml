@@ -1,0 +1,3791 @@
+# A block type of the curated ESP32-S31 register model: no vendor header
+# or SVD describes this block.
+schema = 3
+
+[type]
+name = "BT_BB"
+description = "The Bluetooth baseband (BTBB) with its AGC (BTAGC) and the shared ZBBB window. Known only from vendor binaries.\n\nWords 0x0-0x1c4: Bluetooth baseband control and status words recovered from complete, named bt_bb_v2.o accessors in the ESP32-S31 vendor library. Field geometry and argument-to-field transforms are exact. ARGUMENT_N labels deliberately retain unknown C signature semantics rather than inventing a hardware meaning.\n\nWord 0x10: One physical baseband timing word reached by the common BTBB initializer. The named vendor leaf carries a historical Zigbee prefix, but the current evidence proves only the exact shared initialization transaction and does not grant protocol-exclusive ownership.\n\nWords 0x18-0x464: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown.\n\nWords 0x94-0x1fc: Bluetooth direction-finding control words recovered from complete, independently named CTE accessors in the ESP32-S31 vendor baseband library. Only fields touched by those accessors are described; untouched bits remain unassigned.\n\nWord 0xb4: Receive sample-dump words programmed by complete librftest adctrig and set_dump_mode. Dumped words are read back from 0x2f060000 as signed ten-bit components in bits 9:0 and 19:10 (complete print_dump_data and sampledeal); that aperture is not radio MMIO.\n\nWord 0x130: The halfword antenna-map window of the Bluetooth direction-finding block, which the vendor CTE setter stores halfword by halfword. Kept for bit-use coverage: its registers are not 32 bits wide, so no typed owner exists.\n\nWords 0x800-0x900: Sparse BTAGC words absent from the public platform PAC.\n\nWords 0xc00-0xc38: Independently bounded words in the ZBBB window touched by complete Bluetooth baseband receive-setup and reset-idle leaves. Names describe only those exact operations; they do not claim that the physical block is owned exclusively by Bluetooth or assign a wider ZBBB protocol meaning."
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "BLOB_LIBBTBB_BLE_TX_CONFIG_CHECK", "BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST", "BLOB_LIBBTBB_CHANNEL_POWER_CONTROL", "BLOB_LIBBTBB_GAUSSIAN_COEFFICIENTS", "BLOB_LIBBTBB_BT_TX_SET", "BLOB_LIBBTBB_BT_AGC_RESTART_SET", "BLOB_LIBBTBB_SHARED_TX_TIMING_INIT", "S31_MMIO_MODEM_RADIO_CORE_LOW", "BLOB_LIBBTBB_BT_CTE_ACCESSORS", "BLOB_LIBRFTEST_ADCTRIG", "BLOB_LIBRFTEST_SET_DUMP_MODE", "BLOB_LIBRFTEST_PRINT_DUMP_DATA", "ESP_IDF_25FE69F_S31_PHY_RETENTION", "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_SHARED_RX_INIT", "BLOB_LIBBTBB_BT_BB_V2_INIT"]
+
+[[interrupt-outputs]]
+name = "PRIMARY"
+description = "The baseband interrupt."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L144"]
+
+[[interrupt-outputs]]
+name = "NMI"
+description = "The baseband's non-maskable interrupt."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L145"]
+
+[review]
+sources = ["BLOB_LIBBTBB_BT_CTE_ACCESSORS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[review.opaque]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."RX_SETUP_CONTROL_0"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+completeness = "partial"
+
+[review.entity."RX_SETUP_CONTROL_0.BIT_0_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_20102000"]
+completeness = "complete"
+
+[review.entity."CHANNEL_POWER_CONTROL"]
+sources = ["BLOB_LIBBTBB_CHANNEL_POWER_CONTROL"]
+completeness = "partial"
+
+[review.entity."CHANNEL_POWER_CONTROL.CHANNEL_POWER_BITS_8_9"]
+sources = ["BLOB_LIBBTBB_CHANNEL_POWER_CONTROL"]
+
+[review.entity."CHANNEL_POWER_CONTROL.BITS_10_11_OPAQUE"]
+sources = ["S31_MMIO_USE_20102004", "S31_MMIO_DECLARED_20102004"]
+
+[review.entity."RX_SETUP_IMAGE_0"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+completeness = "partial"
+
+[review.entity."RX_SETUP_IMAGE_0.CONFIG_IMAGE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+
+[review.entity."RX_SETUP_IMAGE_0.TX_SETUP_IMAGE"]
+sources = ["BLOB_LIBBTBB_BT_TX_SET"]
+
+[review.entity."AUXILIARY_TX_ON_DELAY"]
+sources = ["BLOB_LIBBTBB_SHARED_TX_TIMING_INIT"]
+completeness = "partial"
+
+[review.entity."AUXILIARY_TX_ON_DELAY.ENCODED_IMAGE"]
+sources = ["BLOB_LIBBTBB_SHARED_TX_TIMING_INIT"]
+
+[review.entity."LE_TX_ON_DELAY"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."LE_TX_ON_DELAY.BITS_16_18_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "S31_MMIO_DECLARED_20102014"]
+completeness = "complete"
+
+[review.entity."LE_TX_ON_DELAY.ENCODED_VALUE_MINUS_10"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."LE_TX_ON_DELAY.BITS_11_15_OPAQUE"]
+sources = ["S31_MMIO_USE_20102014", "S31_MMIO_DECLARED_20102014"]
+
+[review.entity."WORD_0018_OPAQUE"]
+sources = ["S31_MMIO_USE_20102018"]
+
+[review.entity."WORD_0018_OPAQUE.BITS_16_26_OPAQUE"]
+sources = ["S31_MMIO_USE_20102018", "S31_MMIO_DECLARED_20102018"]
+
+[review.entity."TX_CONFIG_CHECK_VALUE"]
+sources = ["BLOB_LIBBTBB_BLE_TX_CONFIG_CHECK"]
+completeness = "partial"
+
+[review.entity."TX_CONFIG_CHECK_VALUE.TX_RAMPUP_DELAY"]
+sources = ["BLOB_LIBBTBB_BLE_TX_CONFIG_CHECK"]
+naming = "vendor"
+
+[review.entity."RX_SETUP_CONTROL_1"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+completeness = "partial"
+
+[review.entity."RX_SETUP_CONTROL_1.BIT_2_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_2010204C"]
+completeness = "complete"
+
+[review.entity."LE_CORRELATION_THRESHOLD_0"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."LE_CORRELATION_THRESHOLD_0.AA_LC_ENABLE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."LE_CORRELATION_THRESHOLD_0.ARGUMENT_2"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."LE_CORRELATION_THRESHOLD_1"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."LE_CORRELATION_THRESHOLD_1.ARGUMENT_1"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."LE_CORRELATION_THRESHOLD_1.ARGUMENT_0"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."RX_CORRELATOR_CONTROL"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."RX_CORRELATOR_CONTROL.CONFIG_VALUE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."RX_CORRELATOR_CONTROL.RX_SETUP_ENABLE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+
+[review.entity."RX_CORRELATOR_CONTROL.BIT_13_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "S31_MMIO_DECLARED_20102068"]
+completeness = "complete"
+
+[review.entity."BT_V3_2_BASEBAND_SOFTWARE_RESET_IDLE_STATUS"]
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+completeness = "partial"
+
+[review.entity."BT_V3_2_BASEBAND_SOFTWARE_RESET_IDLE_STATUS.BITS_15_16_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST", "S31_MMIO_DECLARED_2010207C"]
+completeness = "complete"
+
+[review.entity."BT_V3_2_BASEBAND_SOFTWARE_RESET_IDLE_STATUS.BITS_20_23_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST", "S31_MMIO_DECLARED_2010207C"]
+completeness = "complete"
+
+[review.entity."BT_V3_2_BASEBAND_SOFTWARE_RESET_IDLE_STATUS.BITS_18_19_OPAQUE"]
+sources = ["S31_MMIO_USE_2010207C", "S31_MMIO_DECLARED_2010207C"]
+
+[review.entity."WORD_0084_OPAQUE"]
+sources = ["S31_MMIO_USE_20102084"]
+
+[review.entity."WORD_0084_OPAQUE.BIT_11_OPAQUE"]
+sources = ["S31_MMIO_USE_20102084", "S31_MMIO_DECLARED_20102084"]
+
+[review.entity."WORD_0084_OPAQUE.BIT_17_OPAQUE"]
+sources = ["S31_MMIO_USE_20102084", "S31_MMIO_DECLARED_20102084"]
+
+[review.entity."WORD_0088_OPAQUE"]
+sources = ["S31_MMIO_USE_20102088"]
+
+[review.entity."WORD_0088_OPAQUE.BITS_0_19_OPAQUE"]
+sources = ["S31_MMIO_USE_20102088", "S31_MMIO_DECLARED_20102088"]
+
+[review.entity."WORD_0090_OPAQUE"]
+sources = ["S31_MMIO_USE_20102090"]
+
+[review.entity."WORD_0090_OPAQUE.BIT_11_OPAQUE"]
+sources = ["S31_MMIO_USE_20102090", "S31_MMIO_DECLARED_20102090"]
+
+[review.entity."WORD_0090_OPAQUE.BIT_17_OPAQUE"]
+sources = ["S31_MMIO_USE_20102090", "S31_MMIO_DECLARED_20102090"]
+
+[review.entity."WORD_0090_OPAQUE.BIT_19_OPAQUE"]
+sources = ["S31_MMIO_USE_20102090", "S31_MMIO_DECLARED_20102090"]
+
+[review.entity."LC_8M_CONTROL"]
+completeness = "partial"
+
+[review.entity."WORD_00AC_OPAQUE"]
+sources = ["S31_MMIO_USE_201020AC"]
+
+[review.entity."WORD_00AC_OPAQUE.BITS_29_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201020AC", "S31_MMIO_DECLARED_201020AC"]
+
+[review.entity."CURRENT_RX_INFO"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "ESP_IDF_7B9CC1AC_IEEE802154_RECENT_RSSI"]
+completeness = "partial"
+
+[review.entity."CURRENT_RX_INFO.RSSI"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "ESP_IDF_7B9CC1AC_IEEE802154_RECENT_RSSI"]
+
+[review.entity."CURRENT_RX_INFO.BITS_8_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201020B0", "S31_MMIO_DECLARED_201020B0"]
+
+[review.entity."WORD_00B4_OPAQUE"]
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+completeness = "unknown"
+
+[review.entity."WORD_00B4_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020B4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."TX_CCA_CONTROL_0"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."TX_CCA_CONTROL_0.APPLY"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_CONTROL_0.SET_ARGUMENT_1"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_CONTROL_0.PERIOD_ARGUMENT_0_IMAGE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_CONTROL_0.BITS_20_22_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "S31_MMIO_DECLARED_201020B8"]
+completeness = "complete"
+
+[review.entity."TX_CCA_CONTROL_0.PERIOD_ARGUMENT_0_MINUS_ARGUMENT_1_IMAGE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_CONTROL_0.SET_ARGUMENT_0"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_CONTROL_1"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."TX_CCA_CONTROL_1.SET_ARGUMENT_4"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_CONTROL_1.SET_ARGUMENT_3"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_CONTROL_1.SET_ARGUMENT_2"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_CONTROL_1.DEFAULT_CONFIG_VALUE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_CONTROL_1.RX_SETUP_ENABLE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+
+[review.entity."TX_CCA_CONTROL_2"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."TX_CCA_CONTROL_2.SET_ARGUMENT_9"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_CONTROL_2.SET_ARGUMENT_8"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_CONTROL_2.SET_ARGUMENT_7"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_CONTROL_2.SET_ARGUMENT_6"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_CONTROL_2.SET_ARGUMENT_5"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_CONTROL_2.RX_SETUP_ENABLE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+
+[review.entity."TX_CCA_CONTROL_2.RX_SETUP_DISABLE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+
+[review.entity."TX_CCA_FIFO_STATUS"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."TX_CCA_FIFO_STATUS.RESET"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_FIFO_STATUS.COUNT"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_FIFO_STATUS.EMPTY"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_FIFO_STATUS.FULL"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_FIFO_STATUS.BITS_21_24_OPAQUE"]
+sources = ["S31_MMIO_USE_201020D4", "S31_MMIO_DECLARED_201020D4"]
+
+[review.entity."TX_CCA_FIFO_DATA"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."TX_CCA_FIFO_DATA.VALUE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."WATCHDOG_CONTROL"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."WATCHDOG_CONTROL.INIT_ARGUMENT_1"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."WATCHDOG_CONTROL.INIT_ARGUMENT_0"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."WATCHDOG_CONTROL.BIT_31_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "S31_MMIO_DECLARED_201020DC"]
+completeness = "complete"
+
+[review.entity."WATCHDOG_CONTROL.BITS_0_12_OPAQUE"]
+sources = ["S31_MMIO_USE_201020DC", "S31_MMIO_DECLARED_201020DC"]
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_0"]
+sources = ["BLOB_LIBBTBB_GAUSSIAN_COEFFICIENTS"]
+completeness = "partial"
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_0.BITS_2_9_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020E0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_0.BITS_10_16_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020E0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_0.BITS_17_22_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020E0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_0.BITS_23_27_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020E0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_0.BITS_28_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020E0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_1"]
+sources = ["BLOB_LIBBTBB_GAUSSIAN_COEFFICIENTS"]
+completeness = "partial"
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_1.BITS_2_12_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020E4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_1.BITS_13_22_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020E4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_1.BITS_23_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020E4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_2"]
+sources = ["BLOB_LIBBTBB_GAUSSIAN_COEFFICIENTS"]
+completeness = "partial"
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_2.BITS_10_20_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020E8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_2.BITS_21_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020E8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_3"]
+sources = ["BLOB_LIBBTBB_GAUSSIAN_COEFFICIENTS"]
+completeness = "partial"
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_3.BITS_10_20_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020EC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."GAUSSIAN_1M_COEFFICIENT_3.BITS_21_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020EC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."GAUSSIAN_2M_COEFFICIENT_AND_TX_CONFIG"]
+sources = ["BLOB_LIBBTBB_GAUSSIAN_COEFFICIENTS", "BLOB_LIBBTBB_BT_TX_SET"]
+
+[review.entity."GAUSSIAN_2M_COEFFICIENT_AND_TX_CONFIG.TX_SET_LOW_BYTE"]
+sources = ["BLOB_LIBBTBB_BT_TX_SET"]
+
+[review.entity."GAUSSIAN_2M_COEFFICIENT_AND_TX_CONFIG.GAUSSIAN_BITS_8_16"]
+sources = ["BLOB_LIBBTBB_GAUSSIAN_COEFFICIENTS"]
+
+[review.entity."GAUSSIAN_2M_COEFFICIENT_AND_TX_CONFIG.GAUSSIAN_BITS_17_24"]
+sources = ["BLOB_LIBBTBB_GAUSSIAN_COEFFICIENTS"]
+
+[review.entity."GAUSSIAN_2M_COEFFICIENT_AND_TX_CONFIG.GAUSSIAN_BITS_25_31"]
+sources = ["BLOB_LIBBTBB_GAUSSIAN_COEFFICIENTS"]
+
+[review.entity."GAUSSIAN_2M_COEFFICIENT_1"]
+sources = ["BLOB_LIBBTBB_GAUSSIAN_COEFFICIENTS"]
+
+[review.entity."GAUSSIAN_2M_COEFFICIENT_1.BITS_0_10_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020F4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."GAUSSIAN_2M_COEFFICIENT_1.BITS_11_21_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020F4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."GAUSSIAN_2M_COEFFICIENT_1.BITS_22_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201020F4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."LE_CORRELATION_THRESHOLD_2"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."LE_CORRELATION_THRESHOLD_2.ARGUMENT_1_COPY_0"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."LE_CORRELATION_THRESHOLD_2.ARGUMENT_1_COPY_1"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."LE_CORRELATION_THRESHOLD_2.BITS_0_4_OPAQUE"]
+sources = ["S31_MMIO_USE_201020F8", "S31_MMIO_DECLARED_201020F8"]
+
+[review.entity."LE_CORRELATION_THRESHOLD_2.BITS_11_18_OPAQUE"]
+sources = ["S31_MMIO_USE_201020F8", "S31_MMIO_DECLARED_201020F8"]
+
+[review.entity."LE_CORRELATION_THRESHOLD_2.BITS_25_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201020F8", "S31_MMIO_DECLARED_201020F8"]
+
+[review.entity."RX_FILTER_SELECT"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."RX_FILTER_SELECT.SELECT_0"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."RX_FILTER_SELECT.SELECT_1"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."RX_FILTER_SELECT.SELECT_2"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."RX_FILTER_SELECT.SELECT_3"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."RX_FILTER_SELECT.SELECT_4"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."RX_FILTER_SELECT.SELECT_5"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."AGC_RESTART_CONTROL"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET"]
+completeness = "partial"
+
+[review.entity."AGC_RESTART_CONTROL.BIT_6_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
+completeness = "complete"
+
+[review.entity."AGC_RESTART_CONTROL.BIT_7_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
+completeness = "complete"
+
+[review.entity."AGC_RESTART_CONTROL.BIT_8_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
+completeness = "complete"
+
+[review.entity."AGC_RESTART_CONTROL.BIT_9_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
+completeness = "complete"
+
+[review.entity."AGC_RESTART_CONTROL.BIT_10_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
+completeness = "complete"
+
+[review.entity."AGC_RESTART_CONTROL.BIT_19_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
+completeness = "complete"
+
+[review.entity."AGC_RESTART_CONTROL.BIT_20_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
+completeness = "complete"
+
+[review.entity."AGC_RESTART_CONTROL.BIT_21_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
+completeness = "complete"
+
+[review.entity."BLE_DIAGNOSTIC"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."BLE_DIAGNOSTIC.ARGUMENT_1"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."BLE_DIAGNOSTIC.ARGUMENT_3"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."BLE_DIAGNOSTIC.ARGUMENT_2"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."CONTROL"]
+completeness = "partial"
+
+[review.entity."CONTROL.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_USE_20102124", "S31_MMIO_DECLARED_20102124"]
+
+[review.entity."ANTENNA_MAP_ENTRY%s"]
+completeness = "partial"
+
+[review.entity."SAMPLE_LIMIT"]
+completeness = "partial"
+
+[review.entity."SAMPLE_LIMIT.BITS_0_14_OPAQUE"]
+sources = ["S31_MMIO_USE_20102150", "S31_MMIO_DECLARED_20102150"]
+
+[review.entity."FREQUENCY_STEP_CONTROL"]
+completeness = "partial"
+
+[review.entity."FREQUENCY_STEP_CONTROL.BITS_0_2_OPAQUE"]
+sources = ["S31_MMIO_USE_2010215C", "S31_MMIO_DECLARED_2010215C"]
+
+[review.entity."FREQUENCY_STEP_CONTROL.BITS_10_11_OPAQUE"]
+sources = ["S31_MMIO_USE_2010215C", "S31_MMIO_DECLARED_2010215C"]
+
+[review.entity."SQI_CONTROL"]
+completeness = "partial"
+
+[review.entity."SQI_CONTROL.BITS_4_13_OPAQUE"]
+sources = ["S31_MMIO_USE_20102164", "S31_MMIO_DECLARED_20102164"]
+
+[review.entity."SQI_CONTROL.BITS_20_25_OPAQUE"]
+sources = ["S31_MMIO_USE_20102164", "S31_MMIO_DECLARED_20102164"]
+
+[review.entity."SQI_DPHI"]
+completeness = "partial"
+
+[review.entity."SQI_DPHI.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_USE_20102168", "S31_MMIO_DECLARED_20102168"]
+
+[review.entity."RX_SETUP_ARGUMENT"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+completeness = "partial"
+
+[review.entity."RX_SETUP_ARGUMENT.ARGUMENT_0"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+
+[review.entity."RX_SETUP_ARGUMENT.TX_ARGUMENT_0"]
+sources = ["BLOB_LIBBTBB_BT_TX_SET"]
+
+[review.entity."RX_SETUP_ARGUMENT.BITS_12_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20102170", "S31_MMIO_DECLARED_20102170"]
+
+[review.entity."COEX_CONFIG"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."COEX_CONFIG.BIT_18_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "S31_MMIO_DECLARED_20102184"]
+completeness = "complete"
+
+[review.entity."COEX_CONFIG.BIT_20_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "S31_MMIO_DECLARED_20102184"]
+completeness = "complete"
+
+[review.entity."WORD_01B0_OPAQUE"]
+sources = ["S31_MMIO_USE_201021B0"]
+
+[review.entity."WORD_01B0_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201021B0", "S31_MMIO_DECLARED_201021B0"]
+
+[review.entity."RX_DPO_CONTROL"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."RX_DPO_CONTROL.BIT_19_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "S31_MMIO_DECLARED_201021C4"]
+completeness = "complete"
+
+[review.entity."RX_DPO_CONTROL.CONFIG_VALUE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."DATE_AND_CLOCK"]
+completeness = "partial"
+
+[review.entity."WORD_0454_OPAQUE"]
+sources = ["S31_MMIO_USE_20102454"]
+
+[review.entity."WORD_0454_OPAQUE.BITS_2_27_OPAQUE"]
+sources = ["S31_MMIO_USE_20102454", "S31_MMIO_DECLARED_20102454"]
+
+[review.entity."WORD_0454_OPAQUE.BIT_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20102454", "S31_MMIO_DECLARED_20102454"]
+
+[review.entity."WORD_0454_OPAQUE.BITS_28_30_OPAQUE"]
+sources = ["S31_MMIO_USE_20102454_TWO_DOMAIN"]
+
+[review.entity."WORD_0458_OPAQUE"]
+sources = ["S31_MMIO_USE_20102458"]
+
+[review.entity."WORD_0458_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20102458", "S31_MMIO_DECLARED_20102458"]
+
+[review.entity."WORD_0460_OPAQUE"]
+sources = ["S31_MMIO_USE_20102460"]
+
+[review.entity."WORD_0460_OPAQUE.BIT_16_OPAQUE"]
+sources = ["S31_MMIO_USE_20102460", "S31_MMIO_DECLARED_20102460"]
+
+[review.entity."WORD_0460_OPAQUE.BITS_23_30_OPAQUE"]
+sources = ["S31_MMIO_USE_20102460", "S31_MMIO_DECLARED_20102460"]
+
+[review.entity."WORD_0464_OPAQUE"]
+sources = ["S31_MMIO_USE_20102464"]
+
+[review.entity."WORD_0464_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20102464", "S31_MMIO_DECLARED_20102464"]
+
+[review.entity."CTE_DC_SHIFT"]
+completeness = "partial"
+
+[review.entity."CTE_DC_SHIFT.RX_CONFIG_VALUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+
+[review.entity."CTE_DC_SHIFT.BITS_0_9_OPAQUE"]
+sources = ["S31_MMIO_USE_20102800", "S31_MMIO_DECLARED_20102800"]
+
+[review.entity."CTE_DC_SHIFT.BITS_13_16_OPAQUE"]
+sources = ["S31_MMIO_USE_20102800", "S31_MMIO_DECLARED_20102800"]
+
+[review.entity."CTE_DC_SHIFT.BITS_20_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20102800", "S31_MMIO_DECLARED_20102800"]
+
+[review.entity."CTE_RE_GAIN"]
+sources = ["BLOB_LIBBTBB_BT_CTE_ACCESSORS", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+completeness = "partial"
+
+[review.entity."CTE_RE_GAIN.BIT_3_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_20102820"]
+completeness = "complete"
+
+[review.entity."RX_GAIN_FORCE"]
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+completeness = "partial"
+naming = "vendor"
+
+[review.entity."RX_GAIN_FORCE.DYNAMIC_BITS_0_6"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+
+[review.entity."RX_GAIN_FORCE.AGC_TARGET"]
+sources = ["BLOB_LIBBTBB_BLE_BB_AGC_TARGET_VALUE", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+naming = "vendor"
+
+[review.entity."RX_GAIN_FORCE.FORCE_ENABLE"]
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS", "BLOB_LIBRFTEST_FORCE_RX_GAIN"]
+naming = "vendor"
+
+[review.entity."RX_GAIN_FORCE.FORCE_GAIN"]
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS", "BLOB_LIBRFTEST_FORCE_RX_GAIN"]
+naming = "vendor"
+
+[review.entity."RX_GAIN_FORCE.BITS_7_12_OPAQUE"]
+sources = ["S31_MMIO_USE_20102840", "S31_MMIO_DECLARED_20102840"]
+
+[review.entity."RX_GAIN_FORCE.BIT_22_OPAQUE"]
+sources = ["S31_MMIO_USE_20102840", "S31_MMIO_DECLARED_20102840"]
+
+[review.entity."RX_COMP_CONTROL"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+completeness = "partial"
+
+[review.entity."RX_COMP_CONTROL.DYNAMIC_BITS_0_6"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+
+[review.entity."RX_COMP_CONTROL.DYNAMIC_BITS_7_13"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+
+[review.entity."RX_COMP_CONTROL.FINITE_BITS_14_18"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+
+[review.entity."RX_COMP_CONTROL.FINITE_BITS_19_23"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+
+[review.entity."RX_COMP_CONTROL.FINITE_BITS_24_28"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+
+[review.entity."WORD_0848_OPAQUE"]
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+
+[review.entity."WORD_0848_OPAQUE.BITS_0_4_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102848"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0848_OPAQUE.BITS_5_9_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102848"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0848_OPAQUE.GAIN_OFFSET_0"]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "S31_MMIO_DECLARED_20102848"]
+
+[review.entity."WORD_0848_OPAQUE.GAIN_OFFSET_1"]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "S31_MMIO_DECLARED_20102848"]
+
+[review.entity."WORD_084C_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+
+[review.entity."WORD_084C_OPAQUE.SAT_GAIN_BITS_0_18"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_2010284C"]
+
+[review.entity."WORD_084C_OPAQUE.BIT_19_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_2010284C"]
+completeness = "complete"
+
+[review.entity."WORD_084C_OPAQUE.BIT_24_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_2010284C"]
+completeness = "complete"
+
+[review.entity."WORD_084C_OPAQUE.BIT_26_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_2010284C"]
+completeness = "complete"
+
+[review.entity."WORD_084C_OPAQUE.BIT_28_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_2010284C"]
+completeness = "complete"
+
+[review.entity."WORD_084C_OPAQUE.BIT_30_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_2010284C"]
+completeness = "complete"
+
+[review.entity."WORD_084C_OPAQUE.BIT_31_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_2010284C"]
+completeness = "complete"
+
+[review.entity."AGC_GAIN_MAX_CONTROL"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+completeness = "partial"
+
+[review.entity."AGC_GAIN_MAX_CONTROL.AGC_GAIN_MAX"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+naming = "vendor"
+
+[review.entity."AGC_GAIN_IMAGE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+
+[review.entity."AGC_GAIN_IMAGE.DYNAMIC_BITS_2_8"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+
+[review.entity."AGC_SAT_GAIN_IMAGE_0"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+
+[review.entity."AGC_SAT_GAIN_IMAGE_0.VALUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+
+[review.entity."AGC_SAT_GAIN_IMAGE_1"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+
+[review.entity."AGC_SAT_GAIN_IMAGE_1.VALUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+
+[review.entity."AGC_SAT_GAIN_CONFIG"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+
+[review.entity."AGC_SAT_GAIN_CONFIG.VALUE"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+
+[review.entity."WORD_0868_OPAQUE"]
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+
+[review.entity."WORD_0868_OPAQUE.BITS_0_4_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102868"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0868_OPAQUE.BIT_5_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102868"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0868_OPAQUE.BITS_6_10_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102868"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0868_OPAQUE.BITS_11_12_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102868"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0868_OPAQUE.BIT_13_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102868"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0868_OPAQUE.GAIN_OFFSET_0"]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "S31_MMIO_DECLARED_20102868"]
+
+[review.entity."WORD_0868_OPAQUE.GAIN_OFFSET_1"]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "S31_MMIO_DECLARED_20102868"]
+
+[review.entity."WORD_0868_OPAQUE.BITS_14_15_OPAQUE"]
+sources = ["S31_MMIO_USE_20102868", "S31_MMIO_DECLARED_20102868"]
+
+[review.entity."WORD_086C_OPAQUE.FINITE_BITS_24_31"]
+sources = ["S31_MMIO_DECLARED_2010286C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0884_OPAQUE.FINITE_BITS_24_31"]
+sources = ["S31_MMIO_DECLARED_20102884"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0888_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+
+[review.entity."WORD_0888_OPAQUE.BIT_18_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_20102888"]
+completeness = "complete"
+
+[review.entity."WORD_0888_OPAQUE.BIT_29_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_20102888"]
+completeness = "complete"
+
+[review.entity."WORD_0888_OPAQUE.BIT_30_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_20102888"]
+completeness = "complete"
+
+[review.entity."WORD_088C_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+
+[review.entity."WORD_088C_OPAQUE.BIT_29_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_2010288C"]
+completeness = "complete"
+
+[review.entity."WORD_088C_OPAQUE.TARGET_BITS_0_8"]
+sources = ["S31_MMIO_DECLARED_2010288C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_088C_OPAQUE.TARGET_BITS_9_17"]
+sources = ["S31_MMIO_DECLARED_2010288C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."CCA_CONFIG"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."CCA_CONFIG.CONFIG_VALUE_0"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."CCA_CONFIG.CONFIG_VALUE_1"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+
+[review.entity."CCA_CONFIG.BIT_23_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "S31_MMIO_DECLARED_20102894"]
+completeness = "complete"
+
+[review.entity."CCA_CONFIG.TARGET_BITS_14_22"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+
+[review.entity."CTE_AGC_TARGET"]
+completeness = "partial"
+
+[review.entity."CTE_AGC_TARGET.BASEBAND_TARGET_VALUE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+
+[review.entity."CTE_AGC_TARGET.BITS_9_20_OPAQUE"]
+sources = ["S31_MMIO_USE_20102898", "S31_MMIO_DECLARED_20102898"]
+
+[review.entity."CTE_AGC_TARGET.BITS_30_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20102898", "S31_MMIO_DECLARED_20102898"]
+
+[review.entity."WORD_08A0_OPAQUE"]
+completeness = "complete"
+
+[review.entity."WORD_08A0_OPAQUE.BITS_16_23_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028A0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08A0_OPAQUE.BITS_24_27_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028A0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08A0_OPAQUE.BITS_28_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201028A0", "S31_MMIO_DECLARED_201028A0"]
+
+[review.entity."WORD_08A8_OPAQUE"]
+completeness = "complete"
+
+[review.entity."WORD_08A8_OPAQUE.BITS_0_3_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028A8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08A8_OPAQUE.BITS_4_11_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028A8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08A8_OPAQUE.BITS_12_16_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028A8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08A8_OPAQUE.BITS_17_24_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028A8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08A8_OPAQUE.BITS_25_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201028A8", "S31_MMIO_DECLARED_201028A8"]
+
+[review.entity."WORD_08B0_OPAQUE.RECORRECT_BITS_13_17"]
+sources = ["S31_MMIO_DECLARED_201028B0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08B0_OPAQUE.RECORRECT_BITS_18_22"]
+sources = ["S31_MMIO_DECLARED_201028B0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08B0_OPAQUE.TARGET_BITS_23_31"]
+sources = ["S31_MMIO_DECLARED_201028B0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08B4_OPAQUE.RECORRECT_BIT_8"]
+sources = ["S31_MMIO_DECLARED_201028B4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08B4_OPAQUE.RECORRECT_BITS_9_13"]
+sources = ["S31_MMIO_DECLARED_201028B4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08B4_OPAQUE.TARGET_BITS_23_31"]
+sources = ["S31_MMIO_DECLARED_201028B4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08B8_OPAQUE"]
+completeness = "complete"
+
+[review.entity."WORD_08B8_OPAQUE.BITS_8_11_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028B8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08B8_OPAQUE.BITS_12_19_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028B8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08B8_OPAQUE.BITS_20_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201028B8", "S31_MMIO_DECLARED_201028B8"]
+
+[review.entity."WORD_08BC_OPAQUE.RECORRECT_BIT_5"]
+sources = ["S31_MMIO_DECLARED_201028BC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08BC_OPAQUE.RECORRECT_BIT_6"]
+sources = ["S31_MMIO_DECLARED_201028BC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08BC_OPAQUE.RECORRECT_BIT_7"]
+sources = ["S31_MMIO_DECLARED_201028BC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08BC_OPAQUE.RECORRECT_BIT_8"]
+sources = ["S31_MMIO_DECLARED_201028BC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08BC_OPAQUE.RESTART_BIT_31"]
+sources = ["S31_MMIO_DECLARED_201028BC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08C0_OPAQUE.BITS_5_9_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028C0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08C0_OPAQUE.BITS_10_14_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028C0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08C0_OPAQUE.BITS_15_19_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028C0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08C0_OPAQUE.BITS_20_23_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028C0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08C0_OPAQUE.BITS_24_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028C0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08C0_OPAQUE.BITS_0_4_OPAQUE"]
+sources = ["S31_MMIO_USE_201028C0", "S31_MMIO_DECLARED_201028C0"]
+
+[review.entity."WORD_08C4_OPAQUE.BITS_10_14_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028C4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08C4_OPAQUE.BITS_15_19_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028C4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08C4_OPAQUE.BITS_20_23_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028C4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08C4_OPAQUE.BITS_24_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028C4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08D0_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+
+[review.entity."WORD_08D0_OPAQUE.CONFIG_VALUE_LOW"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_201028D0"]
+
+[review.entity."WORD_08D0_OPAQUE.CONFIG_VALUE_HIGH"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_201028D0"]
+
+[review.entity."WORD_08D4_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+
+[review.entity."WORD_08D4_OPAQUE.CONFIG_VALUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_201028D4"]
+
+[review.entity."WORD_08DC_OPAQUE.RESTART_BIT_27"]
+sources = ["S31_MMIO_DECLARED_201028DC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08DC_OPAQUE.RESTART_BIT_28"]
+sources = ["S31_MMIO_DECLARED_201028DC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08DC_OPAQUE.RESTART_BIT_29"]
+sources = ["S31_MMIO_DECLARED_201028DC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08DC_OPAQUE.RESTART_BIT_30"]
+sources = ["S31_MMIO_DECLARED_201028DC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08DC_OPAQUE.RESTART_BIT_31"]
+sources = ["S31_MMIO_DECLARED_201028DC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08E0_OPAQUE"]
+completeness = "complete"
+
+[review.entity."WORD_08E0_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028E0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08E0_OPAQUE.BITS_8_15_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028E0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08E0_OPAQUE.BITS_16_23_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028E0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08E0_OPAQUE.BITS_24_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028E0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08E4_OPAQUE"]
+completeness = "complete"
+
+[review.entity."WORD_08E4_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028E4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08E4_OPAQUE.BITS_8_15_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028E4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08E4_OPAQUE.BITS_16_23_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028E4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08E4_OPAQUE.BITS_24_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028E4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08E8_OPAQUE.BITS_10_15_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028E8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08E8_OPAQUE.BITS_16_23_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028E8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08E8_OPAQUE.BITS_24_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028E8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08EC_OPAQUE"]
+completeness = "complete"
+
+[review.entity."WORD_08EC_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028EC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08EC_OPAQUE.BITS_8_15_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028EC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08EC_OPAQUE.BITS_16_23_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028EC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08EC_OPAQUE.BITS_24_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028EC"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08F0_OPAQUE.BITS_16_23_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028F0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08F0_OPAQUE.BITS_24_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028F0"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08F8_OPAQUE.BITS_2_7_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028F8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08F8_OPAQUE.BITS_8_13_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028F8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08F8_OPAQUE.BITS_14_19_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028F8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08F8_OPAQUE.BITS_20_25_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028F8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08F8_OPAQUE.BITS_26_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201028F8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_08F8_OPAQUE.BITS_0_1_OPAQUE"]
+sources = ["S31_MMIO_USE_201028F8", "S31_MMIO_DECLARED_201028F8"]
+
+[review.entity."WORD_0900_OPAQUE.BITS_12_15_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102900"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0900_OPAQUE.BITS_16_19_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102900"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0900_OPAQUE.BITS_20_23_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102900"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0900_OPAQUE.BITS_24_27_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102900"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0900_OPAQUE.BITS_28_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102900"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."RX_SETUP_IMAGE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_BT_BB_V2_INIT"]
+completeness = "partial"
+
+[review.entity."RX_SETUP_IMAGE.BITS_12_31_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_BT_BB_V2_INIT", "S31_MMIO_DECLARED_20102C00"]
+completeness = "complete"
+
+[review.entity."RX_SETUP_CONTROL"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_SHARED_RX_INIT"]
+completeness = "partial"
+
+[review.entity."RX_SETUP_CONTROL.BITS_0_1_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_20102C0C"]
+completeness = "complete"
+
+[review.entity."RX_SETUP_CONTROL.BIT_8_OPAQUE"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_20102C0C"]
+completeness = "complete"
+
+[review.entity."RX_SETUP_CONTROL.BITS_10_20_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102C0C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SHARED_RX_INIT_IMAGE_0"]
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+completeness = "partial"
+
+[review.entity."SHARED_RX_INIT_IMAGE_0.BITS_13_20_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102C10"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SHARED_RX_INIT_IMAGE_0.BITS_21_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102C10"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SHARED_RX_INIT_CONTROL_0"]
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+completeness = "partial"
+
+[review.entity."SHARED_RX_INIT_CONTROL_0.BIT_1_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102C14"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SHARED_RX_INIT_IMAGE_1"]
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+completeness = "partial"
+
+[review.entity."SHARED_RX_INIT_IMAGE_1.BITS_0_10_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102C18"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SHARED_RX_INIT_CONTROL_1"]
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+completeness = "partial"
+
+[review.entity."SHARED_RX_INIT_CONTROL_1.BIT_30_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102C28"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SHARED_RX_INIT_IMAGE_2"]
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+completeness = "partial"
+
+[review.entity."SHARED_RX_INIT_IMAGE_2.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102C2C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SHARED_RX_INIT_IMAGE_2.BITS_8_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102C2C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SHARED_RX_INIT_IMAGE_3"]
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+completeness = "partial"
+
+[review.entity."SHARED_RX_INIT_IMAGE_3.BITS_8_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102C30"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SHARED_RX_INIT_IMAGE_4"]
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+completeness = "partial"
+
+[review.entity."SHARED_RX_INIT_IMAGE_4.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102C34"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SHARED_RX_INIT_IMAGE_4.BITS_9_19_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102C34"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SHARED_RX_INIT_IMAGE_4.BITS_20_30_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20102C34"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."ZBBB_RADIO_CONTROL_SOFTWARE_RESET_IDLE_STATUS"]
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+completeness = "partial"
+
+[review.entity."ZBBB_RADIO_CONTROL_SOFTWARE_RESET_IDLE_STATUS.LOW_3_REQUIRED_IMAGE"]
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+
+[[registers]]
+name = "RX_SETUP_CONTROL_0"
+offset = 0x0
+description = "Complete bt_bb_rx_set sets positional bit 0 through a fresh-read RMW. Its independent hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "plain"
+description = "Complete bt_bb_rx_set sets this positional bit. No enable semantic is proven."
+
+[[registers]]
+name = "CHANNEL_POWER_CONTROL"
+offset = 0x4
+description = "The named channel-power set/unset leaves set or clear this aggregate two-bit field through fresh-read RMW operations; individual bit meanings remain unknown."
+
+[[registers.fields]]
+name = "CHANNEL_POWER_BITS_8_9"
+bits = "9:8"
+class = "plain"
+description = "bt_get_channel_pwr_set replaces the field with 3 and bt_get_channel_pwr_unset replaces it with 0."
+
+[[registers.fields]]
+name = "BITS_10_11_OPAQUE"
+bits = "11:10"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "RX_SETUP_IMAGE_0"
+offset = 0xc
+description = "The bounded TX setup clears bits 8:11; the subsequent RX setup preserves the low 12 bits and replaces bits 31:12 with the finite image 0x0199A."
+
+[[registers.fields]]
+name = "CONFIG_IMAGE"
+bits = "31:12"
+class = "plain"
+write-range = { min = 0x0, max = 0xfffff }
+
+[[registers.fields]]
+name = "TX_SETUP_IMAGE"
+bits = "11:8"
+class = "plain"
+description = "bt_bb_v2_tx_set replaces this positional field with zero."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers]]
+name = "AUXILIARY_TX_ON_DELAY"
+offset = 0x10
+description = "The complete named setter replaces bits 16:26 with an encoded argument image and preserves every other bit."
+
+[[registers.fields]]
+name = "ENCODED_IMAGE"
+bits = "26:16"
+class = "plain"
+description = "The setter stores ((argument - 10) << 3) in this eleven-bit field; its low three bits therefore become zero."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers]]
+name = "LE_TX_ON_DELAY"
+offset = 0x14
+description = "Bluetooth LE transmit-on delay. The public API exposes the decoded value; the register stores value minus 10."
+
+[[registers.fields]]
+name = "BITS_16_18_OPAQUE"
+bits = "18:16"
+class = "plain"
+description = "bt_bb_set_le_tx_on_delay clears these three low positional bits in the same RMW that writes the encoded delay. Their hardware meaning remains unknown."
+write-range = { min = 0x0, max = 0x7 }
+
+[[registers.fields]]
+name = "ENCODED_VALUE_MINUS_10"
+bits = "26:19"
+class = "plain"
+description = "bt_bb_set_le_tx_on_delay stores argument 0 minus 10; bt_bb_get_le_tx_on_delay returns this field plus 10."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_11_15_OPAQUE"
+bits = "15:11"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0018_OPAQUE"
+offset = 0x18
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_16_26_OPAQUE"
+bits = "26:16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "TX_CONFIG_CHECK_VALUE"
+offset = 0x1c
+description = "Read-only baseband timing word. ble_tx_config_check reads only its TX ramp-up delay."
+
+[[registers.fields]]
+name = "TX_RAMPUP_DELAY"
+bits = "31:27"
+class = "read-only"
+description = "TX ramp-up delay. ble_tx_config_check prints this field as tx_rampup_delay and subtracts it, with bb_tx_on_delay and tx_ramp_delay, from lc_tx_on_delay to report constant_DC_time; the time unit is not established."
+
+[[registers]]
+name = "RX_SETUP_CONTROL_1"
+offset = 0x4c
+description = "Complete bt_bb_rx_set sets positional bit 2 through a fresh-read RMW. Its independent hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "BIT_2_OPAQUE"
+bits = "2"
+class = "plain"
+description = "Complete bt_bb_rx_set sets this positional bit. No enable semantic is proven."
+
+[[registers]]
+name = "LE_CORRELATION_THRESHOLD_0"
+offset = 0x60
+description = "Bluetooth LE correlation-threshold control. Only independently observed fields are assigned."
+
+[[registers.fields]]
+name = "AA_LC_ENABLE"
+bits = "6"
+class = "plain"
+description = "bt_bb_corr_thresh_aa_lc_en replaces this bit with the Boolean image of argument 0."
+
+[[registers.fields]]
+name = "ARGUMENT_2"
+bits = "31:26"
+class = "plain"
+description = "bt_bb_set_corr_thresh_le copies its six-bit argument 2 image into this field."
+
+[[registers]]
+name = "LE_CORRELATION_THRESHOLD_1"
+offset = 0x64
+description = "Two independently replaced six-bit Bluetooth LE correlation-threshold images."
+
+[[registers.fields]]
+name = "ARGUMENT_1"
+bits = "19:14"
+class = "plain"
+description = "bt_bb_set_corr_thresh_le copies its six-bit argument 1 image into this field."
+
+[[registers.fields]]
+name = "ARGUMENT_0"
+bits = "25:20"
+class = "plain"
+description = "bt_bb_set_corr_thresh_le copies its six-bit argument 0 image into this field."
+
+[[registers]]
+name = "RX_CORRELATOR_CONTROL"
+offset = 0x68
+description = "Bluetooth receive-correlator control. The finite initializer sets a low control bit and later replaces the independently observed six-bit configuration value."
+
+[[registers.fields]]
+name = "CONFIG_VALUE"
+bits = "25:20"
+class = "plain"
+description = "bt_bb_rx_correlator_set replaces this field with the finite value 8."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "RX_SETUP_ENABLE"
+bits = "0"
+class = "plain"
+description = "bt_agc_restart_set sets this independently observed low control bit."
+
+[[registers.fields]]
+name = "BIT_13_OPAQUE"
+bits = "13"
+class = "plain"
+description = "bt_bb_v2_rx_set clears this independently observed control bit after the receive leaf sequence."
+
+[[registers]]
+name = "BT_V3_2_BASEBAND_SOFTWARE_RESET_IDLE_STATUS"
+offset = 0x7c
+description = "bbmac_idle_for_swrst requires both independently tested status fields to be zero before reporting idle."
+
+[[registers.fields]]
+name = "BITS_15_16_OPAQUE"
+bits = "16:15"
+class = "read-only"
+description = "The reset-idle predicate fails when this exact two-bit field is nonzero."
+
+[[registers.fields]]
+name = "BITS_20_23_OPAQUE"
+bits = "23:20"
+class = "read-only"
+description = "The reset-idle predicate fails when this exact four-bit field is nonzero."
+
+[[registers.fields]]
+name = "BITS_18_19_OPAQUE"
+bits = "19:18"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0084_OPAQUE"
+offset = 0x84
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_11_OPAQUE"
+bits = "11"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_17_OPAQUE"
+bits = "17"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0088_OPAQUE"
+offset = 0x88
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_19_OPAQUE"
+bits = "19:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0090_OPAQUE"
+offset = 0x90
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_11_OPAQUE"
+bits = "11"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_17_OPAQUE"
+bits = "17"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_19_OPAQUE"
+bits = "19"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "LC_8M_CONTROL"
+offset = 0x94
+description = "Bluetooth CTE LC 8-Mbit enable control."
+
+[[registers.fields]]
+name = "LC_8M_ENABLE"
+bits = "0"
+class = "plain"
+description = "The matched getter/setter pair reads and replaces bit 0."
+
+[[registers]]
+name = "WORD_00AC_OPAQUE"
+offset = 0xac
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_29_31_OPAQUE"
+bits = "31:29"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "CURRENT_RX_INFO"
+offset = 0xb0
+description = "Current baseband receive information returned complete by bt_bb_get_cur_rx_info. The low byte is the signed RSSI of the most recent baseband reception, of whichever protocol received it; bits 31:8 remain unknown. Read side effects are unproven."
+
+[[registers.fields]]
+name = "RSSI"
+bits = "7:0"
+class = "read-only"
+description = "Signed two's-complement RSSI in dBm of the most recent baseband reception, as ESP-IDF's ieee802154_get_recent_rssi truncates the complete image to int8_t."
+
+[[registers.fields]]
+name = "BITS_8_31_OPAQUE"
+bits = "31:8"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_00B4_OPAQUE"
+offset = 0xb4
+description = "One path of the selector jump table of complete adctrig clears bit 0 before programming the dump source; the analysis does not resolve which selector values take that path."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "plain"
+description = "Cleared by one selector path of complete adctrig."
+
+[[registers]]
+name = "TX_CCA_CONTROL_0"
+offset = 0xb8
+description = "First Bluetooth transmit-CCA control word, including the period transform and fields supplied by bt_bb_tx_cca_set."
+
+[[registers.fields]]
+name = "APPLY"
+bits = "0"
+class = "plain"
+description = "bt_bb_tx_cca_set unconditionally sets this bit after updating argument fields. No wider trigger semantics are claimed."
+
+[[registers.fields]]
+name = "SET_ARGUMENT_1"
+bits = "8:1"
+class = "plain"
+description = "Eight-bit image of bt_bb_tx_cca_set argument 1."
+
+[[registers.fields]]
+name = "PERIOD_ARGUMENT_0_IMAGE"
+bits = "19:9"
+class = "plain"
+description = "Eleven-bit image produced by bt_bb_tx_cca_period from argument 0 using the exact vendor arithmetic."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers.fields]]
+name = "BITS_20_22_OPAQUE"
+bits = "22:20"
+class = "plain"
+description = "bt_bb_tx_cca_period explicitly clears bits 20:22 in the same fresh-read update that replaces bits 23:30."
+write-range = { min = 0x0, max = 0x7 }
+
+[[registers.fields]]
+name = "PERIOD_ARGUMENT_0_MINUS_ARGUMENT_1_IMAGE"
+bits = "30:23"
+class = "plain"
+description = "Eight-bit image produced by bt_bb_tx_cca_period from arguments 0 and 1 using the exact vendor arithmetic."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "SET_ARGUMENT_0"
+bits = "31"
+class = "plain"
+description = "Boolean image of bt_bb_tx_cca_set argument 0."
+
+[[registers]]
+name = "TX_CCA_CONTROL_1"
+offset = 0xbc
+description = "Second Bluetooth transmit-CCA control word. Argument meaning is not available from the stripped C signature."
+
+[[registers.fields]]
+name = "SET_ARGUMENT_4"
+bits = "24:20"
+class = "plain"
+
+[[registers.fields]]
+name = "SET_ARGUMENT_3"
+bits = "29:25"
+class = "plain"
+
+[[registers.fields]]
+name = "SET_ARGUMENT_2"
+bits = "30"
+class = "plain"
+
+[[registers.fields]]
+name = "DEFAULT_CONFIG_VALUE"
+bits = "19:15"
+class = "plain"
+description = "bt_bb_cca_config replaces this field with the finite value 5."
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "RX_SETUP_ENABLE"
+bits = "31"
+class = "plain"
+description = "bt_bb_rx_set sets this independently observed bit."
+
+[[registers]]
+name = "TX_CCA_CONTROL_2"
+offset = 0xc0
+description = "Third Bluetooth transmit-CCA control word. Argument meaning is not available from the stripped C signature."
+
+[[registers.fields]]
+name = "SET_ARGUMENT_9"
+bits = "6:2"
+class = "plain"
+
+[[registers.fields]]
+name = "SET_ARGUMENT_8"
+bits = "11:7"
+class = "plain"
+
+[[registers.fields]]
+name = "SET_ARGUMENT_7"
+bits = "12"
+class = "plain"
+
+[[registers.fields]]
+name = "SET_ARGUMENT_6"
+bits = "20:13"
+class = "plain"
+
+[[registers.fields]]
+name = "SET_ARGUMENT_5"
+bits = "21"
+class = "plain"
+
+[[registers.fields]]
+name = "RX_SETUP_ENABLE"
+bits = "0"
+class = "plain"
+description = "bt_bb_rx_set sets this bit after clearing RX_SETUP_DISABLE."
+
+[[registers.fields]]
+name = "RX_SETUP_DISABLE"
+bits = "1"
+class = "plain"
+description = "bt_bb_rx_set clears this bit before setting RX_SETUP_ENABLE."
+
+[[registers]]
+name = "TX_CCA_FIFO_STATUS"
+offset = 0xd4
+description = "Bluetooth transmit-CCA FIFO reset and status word recovered from five dedicated accessors."
+
+[[registers.fields]]
+name = "RESET"
+bits = "20"
+class = "plain"
+description = "bt_bb_tx_cca_fifo_reset sets this bit."
+
+[[registers.fields]]
+name = "COUNT"
+bits = "28:25"
+class = "read-only"
+description = "Four-bit value returned by bt_bb_tx_cca_fifo_count."
+
+[[registers.fields]]
+name = "EMPTY"
+bits = "29"
+class = "read-only"
+description = "Boolean returned by bt_bb_tx_cca_fifo_empty."
+
+[[registers.fields]]
+name = "FULL"
+bits = "30"
+class = "read-only"
+description = "Boolean returned by bt_bb_tx_cca_fifo_full."
+
+[[registers.fields]]
+name = "BITS_21_24_OPAQUE"
+bits = "24:21"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "TX_CCA_FIFO_DATA"
+offset = 0xd8
+description = "Complete 32-bit FIFO word returned by bt_bb_tx_cca_fifo_read; inner encoding remains unknown."
+fifo = { sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"] }
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "WATCHDOG_CONTROL"
+offset = 0xdc
+description = "Bluetooth baseband watchdog initialization word. Only the exact bt_bb_wdt_init writes are assigned."
+
+[[registers.fields]]
+name = "INIT_ARGUMENT_1"
+bits = "14:13"
+class = "plain"
+description = "Two-bit image of bt_bb_wdt_init argument 1."
+
+[[registers.fields]]
+name = "INIT_ARGUMENT_0"
+bits = "30:15"
+class = "plain"
+description = "Sixteen-bit image of bt_bb_wdt_init argument 0."
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+description = "bt_bb_wdt_init sets this bit before writing both argument fields."
+
+[[registers.fields]]
+name = "BITS_0_12_OPAQUE"
+bits = "12:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "GAUSSIAN_1M_COEFFICIENT_0"
+offset = 0xe0
+description = "First word configured by the complete set_gauss_coeff_1m leaf; names retain positional fields because individual coefficient semantics are unknown."
+
+[[registers.fields]]
+name = "BITS_2_9_OPAQUE"
+bits = "9:2"
+class = "plain"
+description = "The leaf replaces this field with 0x13."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_10_16_OPAQUE"
+bits = "16:10"
+class = "plain"
+description = "The leaf replaces this field with 3."
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers.fields]]
+name = "BITS_17_22_OPAQUE"
+bits = "22:17"
+class = "plain"
+description = "The leaf replaces this field with 0."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "BITS_23_27_OPAQUE"
+bits = "27:23"
+class = "plain"
+description = "The leaf replaces this field with 0."
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "BITS_28_31_OPAQUE"
+bits = "31:28"
+class = "plain"
+description = "The leaf replaces this field with 0."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers]]
+name = "GAUSSIAN_1M_COEFFICIENT_1"
+offset = 0xe4
+description = "Second word configured by the complete set_gauss_coeff_1m leaf."
+
+[[registers.fields]]
+name = "BITS_2_12_OPAQUE"
+bits = "12:2"
+class = "plain"
+description = "The leaf replaces this field with 0x2f2."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers.fields]]
+name = "BITS_13_22_OPAQUE"
+bits = "22:13"
+class = "plain"
+description = "The leaf replaces this field with 0x140."
+write-range = { min = 0x0, max = 0x3ff }
+
+[[registers.fields]]
+name = "BITS_23_31_OPAQUE"
+bits = "31:23"
+class = "plain"
+description = "The leaf replaces this field with 0x5f."
+write-range = { min = 0x0, max = 0x1ff }
+
+[[registers]]
+name = "GAUSSIAN_1M_COEFFICIENT_2"
+offset = 0xe8
+description = "Third word configured by the complete set_gauss_coeff_1m leaf."
+
+[[registers.fields]]
+name = "BITS_10_20_OPAQUE"
+bits = "20:10"
+class = "plain"
+description = "The leaf replaces this field with 0x6bf."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers.fields]]
+name = "BITS_21_31_OPAQUE"
+bits = "31:21"
+class = "plain"
+description = "The leaf replaces this field with 0x50d."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers]]
+name = "GAUSSIAN_1M_COEFFICIENT_3"
+offset = 0xec
+description = "Fourth word configured by the complete set_gauss_coeff_1m leaf."
+
+[[registers.fields]]
+name = "BITS_10_20_OPAQUE"
+bits = "20:10"
+class = "plain"
+description = "The leaf replaces this field with 0x7e9."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers.fields]]
+name = "BITS_21_31_OPAQUE"
+bits = "31:21"
+class = "plain"
+description = "The leaf replaces this field with 0x7a0."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers]]
+name = "GAUSSIAN_2M_COEFFICIENT_AND_TX_CONFIG"
+offset = 0xf0
+description = "The complete 2M Gaussian-coefficient leaf owns bits 31:8 while bt_bb_v2_tx_set independently owns the low-byte image of this same physical word."
+
+[[registers.fields]]
+name = "TX_SET_LOW_BYTE"
+bits = "7:0"
+class = "plain"
+description = "bt_bb_v2_tx_set replaces this field with 0xf5."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "GAUSSIAN_BITS_8_16"
+bits = "16:8"
+class = "plain"
+description = "set_gauss_coeff_2m replaces this field with 0x67."
+write-range = { min = 0x0, max = 0x1ff }
+
+[[registers.fields]]
+name = "GAUSSIAN_BITS_17_24"
+bits = "24:17"
+class = "plain"
+description = "set_gauss_coeff_2m replaces this field with 7."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "GAUSSIAN_BITS_25_31"
+bits = "31:25"
+class = "plain"
+description = "set_gauss_coeff_2m replaces this field with 0."
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers]]
+name = "GAUSSIAN_2M_COEFFICIENT_1"
+offset = 0xf4
+description = "Second word configured by the complete set_gauss_coeff_2m leaf; its three observed fields cover the complete physical word."
+
+[[registers.fields]]
+name = "BITS_0_10_OPAQUE"
+bits = "10:0"
+class = "plain"
+description = "The leaf replaces this field with 0x76d."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers.fields]]
+name = "BITS_11_21_OPAQUE"
+bits = "21:11"
+class = "plain"
+description = "The leaf replaces this field with 0x58e."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers.fields]]
+name = "BITS_22_31_OPAQUE"
+bits = "31:22"
+class = "plain"
+description = "The leaf replaces this field with 0x24d."
+write-range = { min = 0x0, max = 0x3ff }
+
+[[registers]]
+name = "LE_CORRELATION_THRESHOLD_2"
+offset = 0xf8
+description = "Two copies of bt_bb_set_corr_thresh_le argument 1 in independently replaced six-bit fields."
+
+[[registers.fields]]
+name = "ARGUMENT_1_COPY_0"
+bits = "10:5"
+class = "plain"
+
+[[registers.fields]]
+name = "ARGUMENT_1_COPY_1"
+bits = "24:19"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_4_OPAQUE"
+bits = "4:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_11_18_OPAQUE"
+bits = "18:11"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_25_31_OPAQUE"
+bits = "31:25"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "RX_FILTER_SELECT"
+offset = 0xfc
+description = "Six independent two-bit Bluetooth receive-filter selections configured by bt_bb_rx_filter_sel. Individual path meanings remain unknown."
+
+[[registers.fields]]
+name = "SELECT_0"
+bits = "14:13"
+class = "plain"
+description = "Configured to the finite value 2."
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers.fields]]
+name = "SELECT_1"
+bits = "16:15"
+class = "plain"
+description = "Configured to the finite value 2."
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers.fields]]
+name = "SELECT_2"
+bits = "18:17"
+class = "plain"
+description = "Configured to the finite value 0."
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers.fields]]
+name = "SELECT_3"
+bits = "20:19"
+class = "plain"
+description = "Configured to the finite value 0."
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers.fields]]
+name = "SELECT_4"
+bits = "22:21"
+class = "plain"
+description = "Configured to the finite value 2."
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers.fields]]
+name = "SELECT_5"
+bits = "24:23"
+class = "plain"
+description = "Configured to the finite value 1."
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers]]
+name = "AGC_RESTART_CONTROL"
+offset = 0x100
+description = "bt_agc_restart_set independently sets eight observed bits through separate fresh-read RMW operations; individual bit meanings remain unknown."
+
+[[registers.fields]]
+name = "BIT_6_OPAQUE"
+bits = "6"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_7_OPAQUE"
+bits = "7"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_8_OPAQUE"
+bits = "8"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_9_OPAQUE"
+bits = "9"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_10_OPAQUE"
+bits = "10"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_19_OPAQUE"
+bits = "19"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_20_OPAQUE"
+bits = "20"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_21_OPAQUE"
+bits = "21"
+class = "plain"
+
+[[registers]]
+name = "BLE_DIAGNOSTIC"
+offset = 0x10c
+description = "Three independently replaced Bluetooth diagnostic selector images."
+
+[[registers.fields]]
+name = "ARGUMENT_1"
+bits = "15:13"
+class = "plain"
+
+[[registers.fields]]
+name = "ARGUMENT_3"
+bits = "19:16"
+class = "plain"
+
+[[registers.fields]]
+name = "ARGUMENT_2"
+bits = "23:20"
+class = "plain"
+
+[[registers]]
+name = "CONTROL"
+offset = 0x124
+description = "CTE antenna selection, receive-delay, IQ-selection and enable control. Bit 0 remains unassigned."
+
+[[registers.fields]]
+name = "ANTENNA_ONEHOT_ENABLE"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "IQ_SELECT_2US"
+bits = "3:2"
+class = "plain"
+
+[[registers.fields]]
+name = "IQ_SELECT_1US"
+bits = "5:4"
+class = "plain"
+
+[[registers.fields]]
+name = "DELAY_RX_AOD"
+bits = "13:6"
+class = "plain"
+
+[[registers.fields]]
+name = "DELAY_RX_AOA"
+bits = "21:14"
+class = "plain"
+
+[[registers.fields]]
+name = "ANTENNA_FORCE"
+bits = "29:22"
+class = "plain"
+
+[[registers.fields]]
+name = "ANTENNA_FORCE_ON"
+bits = "30"
+class = "plain"
+
+[[registers.fields]]
+name = "CTE_ENABLE"
+bits = "31"
+class = "plain"
+description = "Complete ble_bb_cte_set_cte_en replaces bit 31 with the caller's Boolean image."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "ANTENNA_DELAY"
+offset = 0x128
+description = "Four independent eight-bit antenna delays selected by CTE direction and slot duration."
+
+[[registers.fields]]
+name = "RX_AOA_2US"
+bits = "7:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "RX_AOA_1US"
+bits = "15:8"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "TX_AOD_2US"
+bits = "23:16"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "TX_AOD_1US"
+bits = "31:24"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "ANTENNA_SWITCH_DELAY_1M"
+offset = 0x12c
+description = "Four independent antenna-switch delays used by the ordinary CTE accessors."
+
+[[registers.fields]]
+name = "RX_AOA_2US"
+bits = "7:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "RX_AOA_1US"
+bits = "15:8"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "RX_AOD_2US"
+bits = "23:16"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "RX_AOD_1US"
+bits = "31:24"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "ANTENNA_MAP_ENTRY%s"
+offset = 0x130
+width = 16
+dim = { count = 16, stride = 0x2 }
+description = "First sixteen halfword slots of the indexed antenna-map window. The complete setter copies caller-provided halfwords from index zero up to its input count; sixteen slots are the exact finite effects recovered under the current analysis bound, not a claim that the hardware window ends here."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "15:0"
+class = "write-only"
+description = "Complete 16-bit antenna-map element; the encoding remains unknown."
+write-range = { min = 0x0, max = 0xffff }
+
+[[registers]]
+name = "SAMPLE_LIMIT"
+offset = 0x150
+description = "Three independently readable and writable CTE sampling-limit fields."
+
+[[registers.fields]]
+name = "SAMPLE"
+bits = "19:15"
+class = "plain"
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "SWITCH"
+bits = "24:20"
+class = "plain"
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "REFERENCE"
+bits = "31:25"
+class = "plain"
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers.fields]]
+name = "BITS_0_14_OPAQUE"
+bits = "14:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "DELAY_TAIL_1US"
+offset = 0x154
+description = "Four independent receive-tail delays for ordinary and 2-Mbit CTE operation with 1-microsecond slots."
+
+[[registers.fields]]
+name = "RX_AOD_2M"
+bits = "7:0"
+class = "plain"
+
+[[registers.fields]]
+name = "RX_AOA_2M"
+bits = "15:8"
+class = "plain"
+
+[[registers.fields]]
+name = "RX_AOD"
+bits = "23:16"
+class = "plain"
+
+[[registers.fields]]
+name = "RX_AOA"
+bits = "31:24"
+class = "plain"
+
+[[registers]]
+name = "ANTENNA_SWITCH_DELAY_2M"
+offset = 0x158
+description = "Four independent antenna-switch delays used by the explicit 2-Mbit CTE accessors."
+
+[[registers.fields]]
+name = "RX_AOA_2US"
+bits = "7:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "RX_AOA_1US"
+bits = "15:8"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "RX_AOD_2US"
+bits = "23:16"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "RX_AOD_1US"
+bits = "31:24"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "FREQUENCY_STEP_CONTROL"
+offset = 0x15c
+description = "CTE frequency-step enable, count and 20-bit step image. Bits 0:2 and 10:11 remain unassigned."
+
+[[registers.fields]]
+name = "FSTEP_CTE_ENABLE"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "NFSTEP_CTE"
+bits = "9:4"
+class = "plain"
+
+[[registers.fields]]
+name = "FSTEP_CTE"
+bits = "31:12"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_2_OPAQUE"
+bits = "2:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_10_11_OPAQUE"
+bits = "11:10"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "DELAY_TAIL_2US"
+offset = 0x160
+description = "Four independent receive-tail delays for ordinary and 2-Mbit CTE operation with 2-microsecond slots."
+
+[[registers.fields]]
+name = "RX_AOD_2M"
+bits = "7:0"
+class = "plain"
+
+[[registers.fields]]
+name = "RX_AOA_2M"
+bits = "15:8"
+class = "plain"
+
+[[registers.fields]]
+name = "RX_AOD"
+bits = "23:16"
+class = "plain"
+
+[[registers.fields]]
+name = "RX_AOA"
+bits = "31:24"
+class = "plain"
+
+[[registers]]
+name = "SQI_CONTROL"
+offset = 0x164
+description = "CTE signal-quality-indicator enable, selector and per-rate delay fields."
+
+[[registers.fields]]
+name = "SQI_ENABLE"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "SQI_SELECT"
+bits = "3:1"
+class = "plain"
+
+[[registers.fields]]
+name = "SQI_DELAY_2M"
+bits = "19:14"
+class = "plain"
+
+[[registers.fields]]
+name = "SQI_DELAY"
+bits = "31:26"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_4_13_OPAQUE"
+bits = "13:4"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_20_25_OPAQUE"
+bits = "25:20"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "SQI_DPHI"
+offset = 0x168
+description = "CTE SQI phase-difference thresholds/status. The byte at bits 15:8 is exposed both as SQI_DPHI_DB and, independently, bit 14 as SQI_READY; the non-overlapping model preserves that exact alias in one combined field."
+
+[[registers.fields]]
+name = "SQI_DPHI_DB_OR_READY"
+bits = "15:8"
+class = "plain"
+description = "Eight-bit SQI_DPHI_DB image; bit 6 of this field is also the independently addressable SQI_READY bit."
+
+[[registers.fields]]
+name = "SQI_DPHI_MAX"
+bits = "23:16"
+class = "plain"
+
+[[registers.fields]]
+name = "SQI_DPHI_MIN"
+bits = "31:24"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "SQI_LIMITS"
+offset = 0x16c
+description = "Four independent eight-bit in-band and RSSI thresholds used by the CTE SQI logic."
+
+[[registers.fields]]
+name = "INBAND_MAX"
+bits = "7:0"
+class = "plain"
+
+[[registers.fields]]
+name = "RSSI_MAX"
+bits = "15:8"
+class = "plain"
+
+[[registers.fields]]
+name = "INBAND_MIN"
+bits = "23:16"
+class = "plain"
+
+[[registers.fields]]
+name = "RSSI_MIN"
+bits = "31:24"
+class = "plain"
+
+[[registers]]
+name = "RX_SETUP_ARGUMENT"
+offset = 0x170
+description = "The bounded TX and RX setup leaves update two adjacent positional argument fields through separate fresh reads."
+
+[[registers.fields]]
+name = "ARGUMENT_0"
+bits = "11:6"
+class = "plain"
+description = "bt_bb_rx_set copies its six-bit argument 0 image into this positional field."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "TX_ARGUMENT_0"
+bits = "5:0"
+class = "plain"
+description = "bt_bb_v2_tx_set copies its six-bit argument 0 image into this positional field."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "BITS_12_31_OPAQUE"
+bits = "31:12"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "COEX_CONFIG"
+offset = 0x184
+description = "Bluetooth baseband coexistence configuration written by bt_bb_coex_config. Only two finite one-bits are assigned."
+
+[[registers.fields]]
+name = "BIT_18_OPAQUE"
+bits = "18"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_20_OPAQUE"
+bits = "20"
+class = "plain"
+
+[[registers]]
+name = "WORD_01B0_OPAQUE"
+offset = 0x1b0
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "RX_DPO_CONTROL"
+offset = 0x1c4
+description = "Bluetooth receive-DPO configuration written by bt_bb_rx_dpo_set. Inner DPO meaning remains unknown."
+
+[[registers.fields]]
+name = "BIT_19_OPAQUE"
+bits = "19"
+class = "plain"
+
+[[registers.fields]]
+name = "CONFIG_VALUE"
+bits = "25:20"
+class = "plain"
+description = "bt_bb_rx_dpo_set replaces this field with the finite value 6."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers]]
+name = "DATE_AND_CLOCK"
+offset = 0x1fc
+description = "Bluetooth baseband date image and CTE clock gates. Bits 31:30 remain unassigned."
+
+[[registers.fields]]
+name = "BT_BB_DATE"
+bits = "27:0"
+class = "read-only"
+
+[[registers.fields]]
+name = "CLOCK_ENABLE"
+bits = "28"
+class = "plain"
+
+[[registers.fields]]
+name = "CLOCK_FORCE_ON"
+bits = "29"
+class = "plain"
+
+[[registers]]
+name = "WORD_0454_OPAQUE"
+offset = 0x454
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_2_27_OPAQUE"
+bits = "27:2"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_28_30_OPAQUE"
+bits = "30:28"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0458_OPAQUE"
+offset = 0x458
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0460_OPAQUE"
+offset = 0x460
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_16_OPAQUE"
+bits = "16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_23_30_OPAQUE"
+bits = "30:23"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0464_OPAQUE"
+offset = 0x464
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "CTE_DC_SHIFT"
+offset = 0x800
+description = "Bluetooth CTE DC-shift limit control; only the independently named three-bit maximum field is assigned."
+
+[[registers.fields]]
+name = "DC_SHIFT_MAX"
+bits = "12:10"
+class = "plain"
+write-range = { min = 0x0, max = 0x7 }
+
+[[registers.fields]]
+name = "RX_CONFIG_VALUE"
+bits = "19:17"
+class = "plain"
+description = "bt_bb_rx_set replaces this field with the finite value 7. No narrower hardware meaning is claimed."
+write-range = { min = 0x0, max = 0x7 }
+
+[[registers.fields]]
+name = "BITS_0_9_OPAQUE"
+bits = "9:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_13_16_OPAQUE"
+bits = "16:13"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_20_31_OPAQUE"
+bits = "31:20"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "CTE_RE_GAIN"
+offset = 0x820
+description = "Bluetooth CTE receive-gain control; the setter unconditionally sets the exposed enable bit."
+
+[[registers.fields]]
+name = "RE_GAIN_ENABLE"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_3_OPAQUE"
+bits = "3"
+class = "plain"
+description = "bt_agc_sat_gain, tail-called by bt_bb_v2_rx_set, clears this positional bit in one fresh-read RMW; its hardware meaning remains unknown."
+
+[[registers]]
+name = "RX_GAIN_FORCE"
+offset = 0x840
+description = "Bluetooth receive gain force word. Complete ROM phy_rx_gain_force forces the gain through FORCE_GAIN and FORCE_ENABLE; ble_bb_set_agc_target_value and bt_agc_target_set write AGC_TARGET."
+
+[[registers.fields]]
+name = "DYNAMIC_BITS_0_6"
+bits = "6:0"
+class = "plain"
+description = "bt_agc_gain_set replaces this field with the low seven bits of the byte read from the linked phy_param image at offset 0x120."
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers.fields]]
+name = "AGC_TARGET"
+bits = "21:13"
+class = "plain"
+description = "Complete ble_bb_set_agc_target_value replaces this field with its argument and ble_bb_get_agc_target_value reads it back; bt_agc_target_set writes the finite image 0x1d4."
+write-range = { min = 0x0, max = 0x1ff }
+
+[[registers.fields]]
+name = "FORCE_ENABLE"
+bits = "23"
+class = "plain"
+description = "Complete ROM phy_rx_gain_force and librftest force_rx_gain write the low bit of the caller's flags here after the forced gain."
+
+[[registers.fields]]
+name = "FORCE_GAIN"
+bits = "31:24"
+class = "plain"
+description = "Complete ROM phy_rx_gain_force and librftest force_rx_gain replace this byte with the caller's gain."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_7_12_OPAQUE"
+bits = "12:7"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_22_OPAQUE"
+bits = "22"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "RX_COMP_CONTROL"
+offset = 0x844
+description = "Complete bt_set_rx_comp updates five non-overlapping fields; the two low fields are dynamic and the three higher fields receive finite images."
+
+[[registers.fields]]
+name = "DYNAMIC_BITS_0_6"
+bits = "6:0"
+class = "plain"
+description = "The leaf replaces this exact field with a dynamic image."
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers.fields]]
+name = "DYNAMIC_BITS_7_13"
+bits = "13:7"
+class = "plain"
+description = "The leaf replaces this exact field with a dynamic image."
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers.fields]]
+name = "FINITE_BITS_14_18"
+bits = "18:14"
+class = "plain"
+description = "The leaf replaces this field with 8."
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "FINITE_BITS_19_23"
+bits = "23:19"
+class = "plain"
+description = "The leaf replaces this field with 0."
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "FINITE_BITS_24_28"
+bits = "28:24"
+class = "plain"
+description = "The leaf replaces this field with 6."
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers]]
+name = "WORD_0848_OPAQUE"
+offset = 0x848
+description = "Complete bt_set_rx_comp and bt_agc_gain_offset read-modify-write four positional fields; individual hardware meanings remain unnamed."
+
+[[registers.fields]]
+name = "BITS_0_4_OPAQUE"
+bits = "4:0"
+class = "plain"
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "BITS_5_9_OPAQUE"
+bits = "9:5"
+class = "plain"
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "GAIN_OFFSET_0"
+bits = "23:16"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "GAIN_OFFSET_1"
+bits = "31:24"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "WORD_084C_OPAQUE"
+offset = 0x84c
+description = "Bluetooth receive setup clears bit 26. bt_agc_sat_gain, tail-called by bt_bb_v2_rx_set, later replaces bits 18:0 and sets bits 19, 24, 26, 28, 30 and 31 in two fresh-read RMW operations."
+
+[[registers.fields]]
+name = "SAT_GAIN_BITS_0_18"
+bits = "18:0"
+class = "plain"
+description = "bt_agc_sat_gain replaces these positional bits with the finite image 0x1770 in one fresh-read RMW; their hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "BIT_19_OPAQUE"
+bits = "19"
+class = "plain"
+description = "bt_agc_sat_gain, tail-called by bt_bb_v2_rx_set, sets this positional bit in one fresh-read RMW; its hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "BIT_24_OPAQUE"
+bits = "24"
+class = "plain"
+description = "bt_agc_sat_gain, tail-called by bt_bb_v2_rx_set, sets this positional bit in one fresh-read RMW; its hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "BIT_26_OPAQUE"
+bits = "26"
+class = "plain"
+description = "Bluetooth receive setup clears this positional bit; bt_agc_sat_gain sets it again. Its hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "BIT_28_OPAQUE"
+bits = "28"
+class = "plain"
+description = "bt_agc_sat_gain, tail-called by bt_bb_v2_rx_set, sets this positional bit in one fresh-read RMW; its hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "BIT_30_OPAQUE"
+bits = "30"
+class = "plain"
+description = "bt_agc_sat_gain, tail-called by bt_bb_v2_rx_set, sets this positional bit in one fresh-read RMW; its hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+description = "bt_agc_sat_gain, tail-called by bt_bb_v2_rx_set, sets this positional bit in one fresh-read RMW; its hardware meaning remains unknown."
+
+[[registers]]
+name = "AGC_GAIN_MAX_CONTROL"
+offset = 0x850
+description = "Complete bt_agc_gain_max replaces bits 20:14 with one dynamic image while preserving all other bits."
+
+[[registers.fields]]
+name = "AGC_GAIN_MAX"
+bits = "20:14"
+class = "plain"
+description = "Complete bt_agc_gain_max replaces this field with its argument."
+
+[[registers]]
+name = "AGC_GAIN_IMAGE"
+offset = 0x854
+description = "Complete bt_agc_gain_set replaces one seven-bit field derived from the linked phy_param byte at offset 0x120 and preserves every other bit."
+
+[[registers.fields]]
+name = "DYNAMIC_BITS_2_8"
+bits = "8:2"
+class = "plain"
+description = "Exact seven-bit image produced by subtracting five from the linked phy_param byte and retaining the low seven bits."
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers]]
+name = "AGC_SAT_GAIN_IMAGE_0"
+offset = 0x858
+description = "Complete bt_agc_sat_gain writes argument 0 as the complete register image. The dynamic image remains register-level evidence."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "AGC_SAT_GAIN_IMAGE_1"
+offset = 0x85c
+description = "Complete bt_agc_sat_gain writes argument 0 as the complete register image. The dynamic image remains register-level evidence."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "AGC_SAT_GAIN_CONFIG"
+offset = 0x864
+description = "Complete bt_agc_sat_gain writes the complete finite image 0x00000404."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0868_OPAQUE"
+offset = 0x868
+description = "Complete bt_agc_gain_offset and bt_agc_recorrect_set read-modify-write seven positional fields; individual hardware meanings remain unnamed."
+
+[[registers.fields]]
+name = "BITS_0_4_OPAQUE"
+bits = "4:0"
+class = "plain"
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "BIT_5_OPAQUE"
+bits = "5"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_6_10_OPAQUE"
+bits = "10:6"
+class = "plain"
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "BITS_11_12_OPAQUE"
+bits = "12:11"
+class = "plain"
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers.fields]]
+name = "BIT_13_OPAQUE"
+bits = "13"
+class = "plain"
+
+[[registers.fields]]
+name = "GAIN_OFFSET_0"
+bits = "23:16"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "GAIN_OFFSET_1"
+bits = "31:24"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_14_15_OPAQUE"
+bits = "15:14"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_086C_OPAQUE"
+offset = 0x86c
+description = "Complete bt_agc_recorrect_set replaces the high byte with one finite image."
+
+[[registers.fields]]
+name = "FINITE_BITS_24_31"
+bits = "31:24"
+class = "plain"
+description = "The leaf replaces this field with 0x0f."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "WORD_0884_OPAQUE"
+offset = 0x884
+description = "Complete bt_agc_restart_set replaces the high byte with one finite image."
+
+[[registers.fields]]
+name = "FINITE_BITS_24_31"
+bits = "31:24"
+class = "plain"
+description = "The leaf replaces this field with 0xf4."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "WORD_0888_OPAQUE"
+offset = 0x888
+description = "Bluetooth receive setup clears bit 29 and sets bit 18 through separate fresh-read operations. bt_agc_restart_set clears bit 30 and bt_agc_sat_gain sets it again."
+
+[[registers.fields]]
+name = "BIT_18_OPAQUE"
+bits = "18"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_29_OPAQUE"
+bits = "29"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_30_OPAQUE"
+bits = "30"
+class = "plain"
+
+[[registers]]
+name = "WORD_088C_OPAQUE"
+offset = 0x88c
+description = "Bluetooth receive setup and target configuration update three disjoint positional fields and clear one independently observed control bit."
+
+[[registers.fields]]
+name = "BIT_29_OPAQUE"
+bits = "29"
+class = "plain"
+
+[[registers.fields]]
+name = "TARGET_BITS_0_8"
+bits = "8:0"
+class = "plain"
+description = "bt_agc_target_set replaces this positional field with the finite image 0x1d4."
+write-range = { min = 0x0, max = 0x1ff }
+
+[[registers.fields]]
+name = "TARGET_BITS_9_17"
+bits = "17:9"
+class = "plain"
+description = "bt_agc_target_set replaces this positional field with the finite image 0x1dc."
+write-range = { min = 0x0, max = 0x1ff }
+
+[[registers]]
+name = "CCA_CONFIG"
+offset = 0x894
+description = "Finite Bluetooth clear-channel-assessment defaults written by bt_bb_cca_config. Untouched fields remain unassigned."
+
+[[registers.fields]]
+name = "CONFIG_VALUE_0"
+bits = "8:0"
+class = "plain"
+description = "Nine-bit finite value 0x1CE."
+write-range = { min = 0x0, max = 0x1ff }
+
+[[registers.fields]]
+name = "CONFIG_VALUE_1"
+bits = "13:9"
+class = "plain"
+description = "Five-bit finite value 0x1E."
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "BIT_23_OPAQUE"
+bits = "23"
+class = "plain"
+
+[[registers.fields]]
+name = "TARGET_BITS_14_22"
+bits = "22:14"
+class = "plain"
+description = "bt_agc_target_set replaces this positional field with the finite image 0x1ce."
+write-range = { min = 0x0, max = 0x1ff }
+
+[[registers]]
+name = "CTE_AGC_TARGET"
+offset = 0x898
+description = "Bluetooth CTE AGC target word; only the independently named nine-bit target field is assigned."
+
+[[registers.fields]]
+name = "AGC_TARGET_VALUE"
+bits = "29:21"
+class = "plain"
+
+[[registers.fields]]
+name = "BASEBAND_TARGET_VALUE"
+bits = "8:0"
+class = "plain"
+description = "bt_agc_target_set replaces this disjoint low field with the finite image 0x1d4."
+write-range = { min = 0x0, max = 0x1ff }
+
+[[registers.fields]]
+name = "BITS_9_20_OPAQUE"
+bits = "20:9"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_30_31_OPAQUE"
+bits = "31:30"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_08A0_OPAQUE"
+offset = 0x8a0
+description = "Complete bt_bb_set_rx_sense publishes a complete dynamic image. Independent finite RMWs replace two positional fields used by the bounded baseband initializer."
+
+[[registers.fields]]
+name = "BITS_16_23_OPAQUE"
+bits = "23:16"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_24_27_OPAQUE"
+bits = "27:24"
+class = "plain"
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BITS_28_31_OPAQUE"
+bits = "31:28"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_08A8_OPAQUE"
+offset = 0x8a8
+description = "Complete bt_bb_set_rx_sense publishes a complete dynamic image. Independent finite RMWs replace four positional fields used by the bounded baseband initializer."
+
+[[registers.fields]]
+name = "BITS_0_3_OPAQUE"
+bits = "3:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BITS_4_11_OPAQUE"
+bits = "11:4"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_12_16_OPAQUE"
+bits = "16:12"
+class = "plain"
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "BITS_17_24_OPAQUE"
+bits = "24:17"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_25_31_OPAQUE"
+bits = "31:25"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_08B0_OPAQUE"
+offset = 0x8b0
+description = "Finite images written by complete bt_agc_recorrect_set and bt_agc_target_set leaves."
+
+[[registers.fields]]
+name = "RECORRECT_BITS_13_17"
+bits = "17:13"
+class = "plain"
+description = "bt_agc_recorrect_set replaces this field with 0x18."
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "RECORRECT_BITS_18_22"
+bits = "22:18"
+class = "plain"
+description = "bt_agc_recorrect_set replaces this field with 0x18."
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "TARGET_BITS_23_31"
+bits = "31:23"
+class = "plain"
+description = "bt_agc_target_set replaces this field with 0x1d4."
+write-range = { min = 0x0, max = 0x1ff }
+
+[[registers]]
+name = "WORD_08B4_OPAQUE"
+offset = 0x8b4
+description = "Finite images written by complete bt_agc_recorrect_set and bt_agc_target_set leaves."
+
+[[registers.fields]]
+name = "RECORRECT_BIT_8"
+bits = "8"
+class = "plain"
+description = "bt_agc_recorrect_set sets this bit."
+
+[[registers.fields]]
+name = "RECORRECT_BITS_9_13"
+bits = "13:9"
+class = "plain"
+description = "bt_agc_recorrect_set replaces this field with 0x0a."
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "TARGET_BITS_23_31"
+bits = "31:23"
+class = "plain"
+description = "bt_agc_target_set replaces this field with 0x1ce."
+write-range = { min = 0x0, max = 0x1ff }
+
+[[registers]]
+name = "WORD_08B8_OPAQUE"
+offset = 0x8b8
+description = "Complete bt_bb_set_rx_sense publishes a complete dynamic image. Independent finite RMWs replace two positional fields used by the bounded baseband initializer."
+
+[[registers.fields]]
+name = "BITS_8_11_OPAQUE"
+bits = "11:8"
+class = "plain"
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BITS_12_19_OPAQUE"
+bits = "19:12"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_20_31_OPAQUE"
+bits = "31:20"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_08BC_OPAQUE"
+offset = 0x8bc
+description = "Complete recorrect and restart leaves independently update five observed control bits."
+
+[[registers.fields]]
+name = "RECORRECT_BIT_5"
+bits = "5"
+class = "plain"
+description = "bt_agc_recorrect_set sets this bit."
+
+[[registers.fields]]
+name = "RECORRECT_BIT_6"
+bits = "6"
+class = "plain"
+description = "bt_agc_recorrect_set clears this bit."
+
+[[registers.fields]]
+name = "RECORRECT_BIT_7"
+bits = "7"
+class = "plain"
+description = "bt_agc_recorrect_set sets this bit."
+
+[[registers.fields]]
+name = "RECORRECT_BIT_8"
+bits = "8"
+class = "plain"
+description = "bt_agc_recorrect_set clears this bit."
+
+[[registers.fields]]
+name = "RESTART_BIT_31"
+bits = "31"
+class = "plain"
+description = "bt_agc_restart_set sets this bit."
+
+[[registers]]
+name = "WORD_08C0_OPAQUE"
+offset = 0x8c0
+description = "Complete bt_agc_detect_set replaces five positional fields with finite images."
+
+[[registers.fields]]
+name = "BITS_5_9_OPAQUE"
+bits = "9:5"
+class = "plain"
+description = "The leaf replaces this field with 0x0a."
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "BITS_10_14_OPAQUE"
+bits = "14:10"
+class = "plain"
+description = "The leaf replaces this field with 0x0a."
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "BITS_15_19_OPAQUE"
+bits = "19:15"
+class = "plain"
+description = "The leaf replaces this field with 0x0a."
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "BITS_20_23_OPAQUE"
+bits = "23:20"
+class = "plain"
+description = "The leaf replaces this field with 7."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+description = "The leaf replaces this field with 0x9c."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_0_4_OPAQUE"
+bits = "4:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_08C4_OPAQUE"
+offset = 0x8c4
+description = "Complete bt_agc_detect_set replaces four positional fields with finite images."
+
+[[registers.fields]]
+name = "BITS_10_14_OPAQUE"
+bits = "14:10"
+class = "plain"
+description = "The leaf replaces this field with 0x0f."
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "BITS_15_19_OPAQUE"
+bits = "19:15"
+class = "plain"
+description = "The leaf replaces this field with 0x0f."
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "BITS_20_23_OPAQUE"
+bits = "23:20"
+class = "plain"
+description = "The leaf replaces this field with 0x0a."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+description = "The leaf replaces this field with 0x9c."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "WORD_08D0_OPAQUE"
+offset = 0x8d0
+description = "bt_agc_v2_set replaces two seven-bit fields with the finite value 20."
+
+[[registers.fields]]
+name = "CONFIG_VALUE_LOW"
+bits = "17:11"
+class = "plain"
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers.fields]]
+name = "CONFIG_VALUE_HIGH"
+bits = "24:18"
+class = "plain"
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers]]
+name = "WORD_08D4_OPAQUE"
+offset = 0x8d4
+description = "bt_agc_v2_set replaces bits 24:6 with the finite image 0x003C0."
+
+[[registers.fields]]
+name = "CONFIG_VALUE"
+bits = "24:6"
+class = "plain"
+write-range = { min = 0x0, max = 0x7ffff }
+
+[[registers]]
+name = "WORD_08DC_OPAQUE"
+offset = 0x8dc
+description = "Complete bt_agc_restart_set sets five independently observed high control bits through separate fresh-read RMW operations."
+
+[[registers.fields]]
+name = "RESTART_BIT_27"
+bits = "27"
+class = "plain"
+description = "The leaf sets this bit."
+
+[[registers.fields]]
+name = "RESTART_BIT_28"
+bits = "28"
+class = "plain"
+description = "The leaf sets this bit."
+
+[[registers.fields]]
+name = "RESTART_BIT_29"
+bits = "29"
+class = "plain"
+description = "The leaf sets this bit."
+
+[[registers.fields]]
+name = "RESTART_BIT_30"
+bits = "30"
+class = "plain"
+description = "The leaf sets this bit."
+
+[[registers.fields]]
+name = "RESTART_BIT_31"
+bits = "31"
+class = "plain"
+description = "The leaf sets this bit."
+
+[[registers]]
+name = "WORD_08E0_OPAQUE"
+offset = 0x8e0
+description = "Four positional byte images written by complete bt_agc_restart_set."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+description = "The leaf replaces this field with 0x0f."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_8_15_OPAQUE"
+bits = "15:8"
+class = "plain"
+description = "The leaf replaces this field with 0x0e."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_16_23_OPAQUE"
+bits = "23:16"
+class = "plain"
+description = "The leaf replaces this field with 0x0e."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+description = "The leaf replaces this field with 0x14."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "WORD_08E4_OPAQUE"
+offset = 0x8e4
+description = "Four positional byte images written by complete bt_agc_restart_set."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+description = "The leaf replaces this field with 0xf2."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_8_15_OPAQUE"
+bits = "15:8"
+class = "plain"
+description = "The leaf replaces this field with 0xf2."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_16_23_OPAQUE"
+bits = "23:16"
+class = "plain"
+description = "The leaf replaces this field with 0xec."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+description = "The leaf replaces this field with 0x1e."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "WORD_08E8_OPAQUE"
+offset = 0x8e8
+description = "Three positional finite images written by complete bt_agc_restart_set; bits 9:0 remain unassigned."
+
+[[registers.fields]]
+name = "BITS_10_15_OPAQUE"
+bits = "15:10"
+class = "plain"
+description = "The leaf replaces this field with 3."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "BITS_16_23_OPAQUE"
+bits = "23:16"
+class = "plain"
+description = "The leaf replaces this field with 0xe2."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+description = "The leaf replaces this field with 0xf1."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "WORD_08EC_OPAQUE"
+offset = 0x8ec
+description = "Four positional byte images written by complete bt_agc_restart_set."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+description = "The leaf replaces this field with 0xd8."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_8_15_OPAQUE"
+bits = "15:8"
+class = "plain"
+description = "The leaf replaces this field with 0xd3."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_16_23_OPAQUE"
+bits = "23:16"
+class = "plain"
+description = "The leaf replaces this field with 0x28."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+description = "The leaf replaces this field with 0x2d."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "WORD_08F0_OPAQUE"
+offset = 0x8f0
+description = "Two positional high-byte images written by complete bt_agc_restart_set; bits 15:0 remain unassigned."
+
+[[registers.fields]]
+name = "BITS_16_23_OPAQUE"
+bits = "23:16"
+class = "plain"
+description = "The leaf replaces this field with 0xa6."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+description = "The leaf replaces this field with 0xa6."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "WORD_08F8_OPAQUE"
+offset = 0x8f8
+description = "Five positional six-bit images written by complete bt_agc_restart_set; bits 1:0 remain unassigned."
+
+[[registers.fields]]
+name = "BITS_2_7_OPAQUE"
+bits = "7:2"
+class = "plain"
+description = "The leaf replaces this field with 0x0c."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "BITS_8_13_OPAQUE"
+bits = "13:8"
+class = "plain"
+description = "The leaf replaces this field with 0x0c."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "BITS_14_19_OPAQUE"
+bits = "19:14"
+class = "plain"
+description = "The leaf replaces this field with 0x20."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "BITS_20_25_OPAQUE"
+bits = "25:20"
+class = "plain"
+description = "The leaf replaces this field with 5."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "BITS_26_31_OPAQUE"
+bits = "31:26"
+class = "plain"
+description = "The leaf replaces this field with 0x0c."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "BITS_0_1_OPAQUE"
+bits = "1:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0900_OPAQUE"
+offset = 0x900
+description = "Five positional high-nibble images written by complete bt_agc_restart_set; bits 11:0 remain unassigned."
+
+[[registers.fields]]
+name = "BITS_12_15_OPAQUE"
+bits = "15:12"
+class = "plain"
+description = "The leaf replaces this field with 0x0a."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BITS_16_19_OPAQUE"
+bits = "19:16"
+class = "plain"
+description = "The leaf replaces this field with 8."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BITS_20_23_OPAQUE"
+bits = "23:20"
+class = "plain"
+description = "The leaf replaces this field with 6."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BITS_24_27_OPAQUE"
+bits = "27:24"
+class = "plain"
+description = "The leaf replaces this field with 6."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BITS_28_31_OPAQUE"
+bits = "31:28"
+class = "plain"
+description = "The leaf replaces this field with 6."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers]]
+name = "RX_SETUP_IMAGE"
+offset = 0xc00
+description = "bt_bb_rx_set preserves the low 12 bits and replaces bits 31:12 with the finite image 0x001CB; after the shared receive prefix, bt_bb_v2_init_cmplx(1) independently replaces the same field with 0x0019F."
+
+[[registers.fields]]
+name = "BITS_12_31_OPAQUE"
+bits = "31:12"
+class = "plain"
+write-range = { min = 0x0, max = 0xfffff }
+
+[[registers]]
+name = "RX_SETUP_CONTROL"
+offset = 0xc0c
+description = "bt_bb_rx_set clears bit 8 and the low two-bit field through separate fresh-read RMW operations; the complete shared receive initializer independently replaces bits 10:20."
+
+[[registers.fields]]
+name = "BITS_0_1_OPAQUE"
+bits = "1:0"
+class = "plain"
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers.fields]]
+name = "BIT_8_OPAQUE"
+bits = "8"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_10_20_OPAQUE"
+bits = "20:10"
+class = "plain"
+description = "The complete shared receive initializer replaces bits 10:20 with the finite image 0x79C."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers]]
+name = "SHARED_RX_INIT_IMAGE_0"
+offset = 0xc10
+description = "The complete shared receive initializer replaces two disjoint positional fields with finite images while preserving every other bit."
+
+[[registers.fields]]
+name = "BITS_13_20_OPAQUE"
+bits = "20:13"
+class = "plain"
+description = "The complete initializer replaces bits 13:20 with the finite image 0xA6."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_21_31_OPAQUE"
+bits = "31:21"
+class = "plain"
+description = "The complete initializer replaces bits 21:31 with the finite image 0x792."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers]]
+name = "SHARED_RX_INIT_CONTROL_0"
+offset = 0xc14
+description = "The complete shared receive initializer clears one positional control bit and preserves the remainder of the word."
+
+[[registers.fields]]
+name = "BIT_1_OPAQUE"
+bits = "1"
+class = "plain"
+description = "The complete initializer clears bit 1."
+
+[[registers]]
+name = "SHARED_RX_INIT_IMAGE_1"
+offset = 0xc18
+description = "The complete shared receive initializer replaces the low eleven bits with one finite image."
+
+[[registers.fields]]
+name = "BITS_0_10_OPAQUE"
+bits = "10:0"
+class = "plain"
+description = "The complete initializer replaces bits 0:10 with the finite image 0x7A6."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers]]
+name = "SHARED_RX_INIT_CONTROL_1"
+offset = 0xc28
+description = "The complete shared receive initializer sets one positional control bit and preserves the remainder of the word."
+
+[[registers.fields]]
+name = "BIT_30_OPAQUE"
+bits = "30"
+class = "plain"
+description = "The complete initializer sets bit 30."
+
+[[registers]]
+name = "SHARED_RX_INIT_IMAGE_2"
+offset = 0xc2c
+description = "The complete shared receive initializer replaces the high twenty-four bits and low byte through two disjoint fresh-read updates."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+description = "The complete initializer replaces bits 0:7 with the finite image 0xF1."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_8_31_OPAQUE"
+bits = "31:8"
+class = "plain"
+description = "The complete initializer replaces bits 8:31 with the finite image 0x07A120."
+write-range = { min = 0x0, max = 0xffffff }
+
+[[registers]]
+name = "SHARED_RX_INIT_IMAGE_3"
+offset = 0xc30
+description = "The complete shared receive initializer replaces the high twenty-four bits with one finite image."
+
+[[registers.fields]]
+name = "BITS_8_31_OPAQUE"
+bits = "31:8"
+class = "plain"
+description = "The complete initializer replaces bits 8:31 with the finite image 0xF85EDF."
+write-range = { min = 0x0, max = 0xffffff }
+
+[[registers]]
+name = "SHARED_RX_INIT_IMAGE_4"
+offset = 0xc34
+description = "The complete shared receive initializer replaces three disjoint positional fields with finite images."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "plain"
+description = "The complete initializer sets bit 0."
+
+[[registers.fields]]
+name = "BITS_9_19_OPAQUE"
+bits = "19:9"
+class = "plain"
+description = "The complete initializer replaces bits 9:19 with the finite image 0x7ED."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers.fields]]
+name = "BITS_20_30_OPAQUE"
+bits = "30:20"
+class = "plain"
+description = "The complete initializer replaces bits 20:30 with the finite image 0x7E1."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers]]
+name = "ZBBB_RADIO_CONTROL_SOFTWARE_RESET_IDLE_STATUS"
+offset = 0xc38
+description = "bbmac_idle_for_swrst reports idle only when the observed low three-bit image equals one."
+
+[[registers.fields]]
+name = "LOW_3_REQUIRED_IMAGE"
+bits = "2:0"
+class = "read-only"
+description = "The reset-idle predicate compares this exact field with the finite image 1."

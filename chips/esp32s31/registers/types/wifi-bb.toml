@@ -1,0 +1,2607 @@
+# A block type of the curated ESP32-S31 register model: no vendor header
+# or SVD describes this block.
+schema = 3
+
+[type]
+name = "WIFI_BB"
+description = "The Wi-Fi baseband at DR_REG_WIFI_BB_BASE: AGC, NRX and BB words. Known only from vendor binaries.\n\nWords 0x10-0x438: Sparse AGC words absent from the public platform PAC.\n\nWords 0x18-0xcd0: PHY/baseband configuration registers recovered from complete rev0 ROM bodies and complete pinned libphy leaves. Operation-derived fields keep UNKNOWN where neither public documentation nor an independent symbol establishes the electrical meaning.\n\nWords 0x2c-0xd4c: OPAQUE PHY AGC, PBus-pulse, antenna, RX-compensation, DC-memory, post-initialization and 11b-control registers recovered from complete, finite rev0 ROM/blob bodies. One physical register has one identity even when independent bodies prove different fields. Names describe their proven operation role, not an unevidenced electrical identity.\n\nWord 0x8c: Wi-Fi-owned PHY words: the noise-floor measurement read by Wi-Fi link policy and the low-rate receive gate of Wi-Fi rate control and 11b long-range RX. Only Wi-Fi touches these words: no PHY registration, calibration or tracking body and no Bluetooth or IEEE 802.15.4 body accesses them, so they belong to the Wi-Fi partition rather than the shared radio PHY. They share the radio-core base with the PHY oracles.\n\nWord 0xb8: Receive sample-dump words programmed by complete librftest adctrig and set_dump_mode. Dumped words are read back from 0x2f060000 as signed ten-bit components in bits 9:0 and 19:10 (complete print_dump_data and sampledeal); that aperture is not radio MMIO.\n\nWords 0xdc-0xc2c: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown.\n\nWords 0x800-0x904: Sparse NRX words absent from the public platform PAC.\n\nWords 0x848-0xce4: Frequency-memory, hardware channel-switch, NRX and channel-bandwidth registers recovered from complete finite ROM/blob bodies. Names retain UNKNOWN where the instructions prove a field but not its electrical meaning. One physical word has one identity even when a bit has different mode-dependent roles.\n\nWords 0xc14-0xcec: Sparse BB words absent from the public platform PAC.\n\nWord 0xc80: OPAQUE PHY clock-gate registers recovered from complete no-call ROM/blob leaves."
+sources = ["ESP_IDF_25FE69F_S31_PHY_RETENTION", "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK", "ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_POWER_DETECTOR", "ROM_REV0_PHY_IQ_COEFFICIENTS", "BLOB_LIBPHY_PHY_BASEBAND_CONFIG", "ROM_REV0_PHY_AGC", "ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_ANT_INIT", "BLOB_LIBPHY_PHY_DC_MEM_CLR", "BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE", "BLOB_LIBPHY_PHY_SET_RX_COMP_NEW", "ROM_REV0_PHY_READ_NOISE_FLOOR", "ROM_REV0_PHY_LOW_RATE", "ROM_REV0_PHY_RX11BLR_CFG", "BLOB_LIBRFTEST_ADCTRIG", "BLOB_LIBRFTEST_SET_DUMP_MODE", "BLOB_LIBRFTEST_PRINT_DUMP_DATA", "S31_MMIO_MODEM_RADIO_CORE_LOW", "ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_LIBPHY_PHY_BB_INIT", "BLOB_LIBPHY_REGISTER_CHIPV7_PHY", "ROM_REV0_PHY_OPEN_FE_BB_CLK", "ROM_REV0_PHY_FE_REG_INIT", "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK"]
+
+[review]
+sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[review.opaque]
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0010_OPAQUE.RX_SENSE"]
+sources = ["S31_MMIO_DECLARED_20107010"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0010_OPAQUE.BITS_0_22_OPAQUE"]
+sources = ["S31_MMIO_USE_20107010", "S31_MMIO_DECLARED_20107010"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0014_OPAQUE.RX_SENSE"]
+sources = ["S31_MMIO_DECLARED_20107014"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0014_OPAQUE.BITS_0_22_OPAQUE"]
+sources = ["S31_MMIO_USE_20107014", "S31_MMIO_DECLARED_20107014"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."NOISE_FLOOR_CONTROL"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+
+[review.entity."NOISE_FLOOR_CONTROL.BIT_23_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107018"]
+
+[review.entity."NOISE_FLOOR_CONTROL.BIT_28_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107018"]
+
+[review.entity."NOISE_FLOOR_CONTROL.BITS_0_22_OPAQUE"]
+sources = ["S31_MMIO_USE_20107018", "S31_MMIO_DECLARED_20107018"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."NOISE_FLOOR_CONTROL.BITS_24_27_OPAQUE"]
+sources = ["S31_MMIO_USE_20107018", "S31_MMIO_DECLARED_20107018"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."NOISE_FLOOR_CONTROL.BITS_29_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107018", "S31_MMIO_DECLARED_20107018"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_001C_OPAQUE.CCA_THRESHOLD"]
+sources = ["S31_MMIO_DECLARED_2010701C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_001C_OPAQUE.BITS_8_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010701C", "S31_MMIO_DECLARED_2010701C"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."AGC_SHARED_CONTROL"]
+sources = ["ROM_REV0_PHY_AGC", "ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_FORCE_RX_GAIN", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE", "BLOB_LIBPHY_PHY_SET_RX_COMP_NEW"]
+completeness = "unknown"
+
+[review.entity."AGC_SHARED_CONTROL.BITS_0_7_OPAQUE"]
+sources = ["BLOB_LIBPHY_PHY_SET_RX_COMP_NEW", "S31_MMIO_DECLARED_2010702C"]
+accuracy = "exact"
+
+[review.entity."AGC_SHARED_CONTROL.WIFI_MAX_GAIN_INDEX"]
+sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE", "BLOB_LIBRFTEST_RX_MAX_GAIN"]
+completeness = "unknown"
+
+[review.entity."AGC_SHARED_CONTROL.FORCED_GAIN_ENABLE"]
+sources = ["ROM_REV0_PHY_AGC", "ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_FORCE_RX_GAIN", "BLOB_LIBRFTEST_FORCE_RX_GAIN"]
+completeness = "unknown"
+
+[review.entity."AGC_SHARED_CONTROL.FORCED_GAIN_INDEX"]
+sources = ["ROM_REV0_PHY_AGC", "ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_FORCE_RX_GAIN", "BLOB_LIBRFTEST_FORCE_RX_GAIN"]
+completeness = "unknown"
+
+[review.entity."AGC_SHARED_CONTROL.BITS_15_22_OPAQUE"]
+sources = ["S31_MMIO_USE_2010702C", "S31_MMIO_DECLARED_2010702C"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."AGC_ANTENNA_CONTROL"]
+sources = ["ROM_REV0_PHY_AGC", "ROM_REV0_PHY_ANT_INIT", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+completeness = "unknown"
+
+[review.entity."AGC_ANTENNA_CONTROL.FREQUENCY_BAND_INVERSE"]
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+
+[review.entity."AGC_ANTENNA_CONTROL.BITS_11_17_OPAQUE"]
+sources = ["ROM_REV0_PHY_ANT_INIT", "S31_MMIO_DECLARED_20107030"]
+accuracy = "exact"
+
+[review.entity."AGC_ANTENNA_CONTROL.BIT_29_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107030"]
+
+[review.entity."AGC_ANTENNA_CONTROL.BITS_6_10_OPAQUE"]
+sources = ["S31_MMIO_USE_20107030", "S31_MMIO_DECLARED_20107030"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."AGC_ANTENNA_CONTROL.BITS_18_28_OPAQUE"]
+sources = ["S31_MMIO_USE_20107030", "S31_MMIO_DECLARED_20107030"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."AGC_ANTENNA_CONTROL.BITS_30_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107030", "S31_MMIO_DECLARED_20107030"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."DC_MEMORY_CONTROL"]
+sources = ["BLOB_LIBPHY_PHY_DC_MEM_CLR"]
+completeness = "unknown"
+
+[review.entity."DC_MEMORY_CONTROL.BIT_20_OPAQUE"]
+sources = ["BLOB_LIBPHY_PHY_DC_MEM_CLR", "S31_MMIO_DECLARED_2010703C"]
+accuracy = "exact"
+
+[review.entity."RX_11B_PATH_CONTROL_0"]
+sources = ["ROM_REV0_PHY_AGC"]
+completeness = "unknown"
+
+[review.entity."RX_11B_PATH_CONTROL_0.RX_SENSE"]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
+completeness = "partial"
+
+[review.entity."RX_11B_PATH_CONTROL_0.BITS_8_13_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107044"]
+
+[review.entity."RX_11B_PATH_CONTROL_0.BITS_16_21_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107044"]
+
+[review.entity."RX_11B_PATH_CONTROL_0.BITS_14_15_OPAQUE"]
+sources = ["S31_MMIO_USE_20107044", "S31_MMIO_DECLARED_20107044"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."RX_11B_PATH_CONTROL_0.BITS_22_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107044", "S31_MMIO_DECLARED_20107044"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0048_OPAQUE"]
+sources = ["ROM_REV0_PHY_AGC"]
+accuracy = "exact"
+
+[review.entity."WORD_0048_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["ROM_REV0_PHY_AGC"]
+accuracy = "exact"
+
+[review.entity."WORD_0050_OPAQUE.NOISE_FLOOR"]
+sources = ["S31_MMIO_DECLARED_20107050"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."AGC_SATURATION_CONTROL"]
+sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
+completeness = "unknown"
+
+[review.entity."AGC_SATURATION_CONTROL.BITS_0_18_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010705C"]
+
+[review.entity."AGC_SATURATION_CONTROL.BIT_19_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010705C"]
+
+[review.entity."AGC_SATURATION_CONTROL.BIT_24_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010705C"]
+
+[review.entity."AGC_SATURATION_CONTROL.BIT_26_OPAQUE"]
+sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "S31_MMIO_DECLARED_2010705C"]
+accuracy = "exact"
+
+[review.entity."AGC_SATURATION_CONTROL.BIT_28_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010705C"]
+
+[review.entity."AGC_SATURATION_CONTROL.BITS_30_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010705C"]
+
+[review.entity."SATURATION_GAIN_LOW"]
+sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
+
+[review.entity."SATURATION_GAIN_LOW.VALUE"]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."RF_RX_SATURATION_CONFIG"]
+sources = ["ROM_REV0_PHY_AGC"]
+completeness = "unknown"
+
+[review.entity."RF_RX_SATURATION_CONFIG.VALUE"]
+sources = ["ROM_REV0_PHY_AGC"]
+completeness = "unknown"
+
+[review.entity."WORD_006C_OPAQUE.RSSI_ABOVE_NOISE_FLOOR"]
+sources = ["S31_MMIO_DECLARED_2010706C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0074_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107074", "S31_MMIO_DECLARED_20107074"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."NOISE_FLOOR_MEASUREMENT"]
+sources = ["ROM_REV0_PHY_READ_NOISE_FLOOR", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30", "BLOB_LIBRFTEST_RF_RX_SATURATION_PROBES"]
+provenance = "reviewed"
+
+[review.entity."NOISE_FLOOR_MEASUREMENT.SIGNED_SIXTEENTH_DB_CODE"]
+sources = ["ROM_REV0_PHY_READ_NOISE_FLOOR", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
+provenance = "reviewed"
+
+[review.entity."NOISE_FLOOR_MEASUREMENT.BITS_12_18_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010708C"]
+
+[review.entity."AGC_GAIN_LIMIT_LOW"]
+sources = ["ROM_REV0_PHY_AGC"]
+completeness = "unknown"
+
+[review.entity."AGC_GAIN_LIMIT_LOW.INITIAL_GAIN_INDEX"]
+sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBRFTEST_RX_INIT_GAIN"]
+completeness = "unknown"
+
+[review.entity."AGC_GAIN_LIMIT_LOW.BITS_0_1_OPAQUE"]
+sources = ["S31_MMIO_USE_20107094", "S31_MMIO_DECLARED_20107094"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."AGC_GAIN_LIMIT_LOW.BITS_9_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107094", "S31_MMIO_DECLARED_20107094"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."RX_COMPENSATION_HIGH_CONTROL"]
+sources = ["BLOB_LIBPHY_PHY_SET_RX_COMP_NEW"]
+completeness = "unknown"
+
+[review.entity."RX_COMPENSATION_HIGH_CONTROL.BITS_24_31_OPAQUE"]
+sources = ["BLOB_LIBPHY_PHY_SET_RX_COMP_NEW", "S31_MMIO_DECLARED_201070A0"]
+accuracy = "exact"
+
+[review.entity."CSI_DUMP_FORCE_CONTROL"]
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+
+[review.entity."CSI_DUMP_FORCE_CONTROL.FORCE_LLTF"]
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."CSI_DUMP_FORCE_CONTROL.BITS_0_14_OPAQUE"]
+sources = ["S31_MMIO_USE_201070A4", "S31_MMIO_DECLARED_201070A4"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."CSI_DUMP_FORCE_CONTROL.BITS_16_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201070A4", "S31_MMIO_DECLARED_201070A4"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_00B8_OPAQUE"]
+sources = ["BLOB_LIBRFTEST_SET_DUMP_MODE"]
+accuracy = "exact"
+
+[review.entity."WORD_00B8_OPAQUE.BITS_0_2_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_201070B8"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_00CC_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201070CC", "S31_MMIO_DECLARED_201070CC"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_00DC_OPAQUE"]
+sources = ["S31_MMIO_USE_201070DC"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_00DC_OPAQUE.BIT_16_OPAQUE"]
+sources = ["S31_MMIO_USE_201070DC", "S31_MMIO_DECLARED_201070DC"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_00F4_OPAQUE.RIFS_MODE_ENABLE"]
+sources = ["S31_MMIO_DECLARED_201070F4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."RX_11B_WINDOW_CONTROL"]
+sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
+completeness = "unknown"
+
+[review.entity."RX_11B_WINDOW_CONTROL.BITS_0_8_OPAQUE"]
+sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "S31_MMIO_DECLARED_20107104"]
+accuracy = "exact"
+
+[review.entity."WORD_0108_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107108", "S31_MMIO_DECLARED_20107108"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."SATURATION_GAIN_HIGH"]
+sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
+
+[review.entity."SATURATION_GAIN_HIGH.VALUE"]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."ANTENNA_CONTROL_0"]
+sources = ["ROM_REV0_PHY_ANT_INIT", "ROM_REV0_PHY_ANT_DFT_CFG"]
+completeness = "unknown"
+
+[review.entity."ANTENNA_CONTROL_0.BITS_0_10_OPAQUE"]
+sources = ["ROM_REV0_PHY_ANT_INIT", "S31_MMIO_DECLARED_2010711C"]
+accuracy = "exact"
+
+[review.entity."ANTENNA_CONTROL_0.BIT_11_OPAQUE"]
+sources = ["ROM_REV0_PHY_ANT_DFT_CFG", "S31_MMIO_DECLARED_2010711C"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."ANTENNA_CONTROL_0.BIT_12_OPAQUE"]
+sources = ["ROM_REV0_PHY_ANT_INIT", "S31_MMIO_DECLARED_2010711C"]
+accuracy = "exact"
+
+[review.entity."ANTENNA_CONTROL_0.BITS_13_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010711C", "S31_MMIO_DECLARED_2010711C"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."ANTENNA_CONTROL_2"]
+sources = ["ROM_REV0_PHY_ANT_INIT"]
+completeness = "unknown"
+
+[review.entity."ANTENNA_CONTROL_2.BITS_8_15_OPAQUE"]
+sources = ["ROM_REV0_PHY_ANT_INIT", "S31_MMIO_DECLARED_20107120"]
+accuracy = "exact"
+
+[review.entity."ANTENNA_CONTROL_2.BITS_24_31_OPAQUE"]
+sources = ["ROM_REV0_PHY_ANT_INIT", "S31_MMIO_DECLARED_20107120"]
+accuracy = "exact"
+
+[review.entity."RX_11B_PATH_CONTROL_1"]
+sources = ["ROM_REV0_PHY_AGC"]
+completeness = "unknown"
+
+[review.entity."RX_11B_PATH_CONTROL_1.BITS_0_3_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107124"]
+
+[review.entity."RX_11B_PATH_CONTROL_1.BITS_10_15_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107124"]
+
+[review.entity."RX_11B_PATH_CONTROL_1.BITS_4_9_OPAQUE"]
+sources = ["S31_MMIO_USE_20107124", "S31_MMIO_DECLARED_20107124"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."RX_11B_PATH_CONTROL_1.BITS_16_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107124", "S31_MMIO_DECLARED_20107124"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."AGC_INIT_HIGH_CONTROL"]
+sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPP_HAL_HE_INIT_PREFIX"]
+completeness = "unknown"
+
+[review.entity."AGC_INIT_HIGH_CONTROL.BITS_24_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107128"]
+
+[review.entity."RX_GAIN_LIMIT_CONTROL"]
+sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE"]
+completeness = "unknown"
+
+[review.entity."RX_GAIN_LIMIT_CONTROL.INITIAL_GAIN_INDEX"]
+sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE", "BLOB_LIBRFTEST_RX_INIT_GAIN"]
+completeness = "unknown"
+
+[review.entity."RX_GAIN_LIMIT_CONTROL.BIT_25_OPAQUE"]
+sources = ["S31_MMIO_USE_2010713C", "S31_MMIO_DECLARED_2010713C"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_01D4_OPAQUE"]
+sources = ["S31_MMIO_USE_201071D4"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_01D4_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201071D4", "S31_MMIO_DECLARED_201071D4"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0400_OPAQUE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+accuracy = "exact"
+
+[review.entity."WORD_0400_OPAQUE.BITS_13_14_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107400"]
+
+[review.entity."WORD_0400_OPAQUE.BITS_0_12_OPAQUE"]
+sources = ["S31_MMIO_USE_20107400", "S31_MMIO_DECLARED_20107400"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0400_OPAQUE.BITS_15_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107400", "S31_MMIO_DECLARED_20107400"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0414_OPAQUE"]
+sources = ["S31_MMIO_USE_20107414"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0414_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107414", "S31_MMIO_DECLARED_20107414"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0418_OPAQUE"]
+sources = ["S31_MMIO_USE_20107418"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0418_OPAQUE.BITS_8_20_OPAQUE"]
+sources = ["S31_MMIO_USE_20107418", "S31_MMIO_DECLARED_20107418"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0428_OPAQUE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+accuracy = "exact"
+
+[review.entity."WORD_0428_OPAQUE.BITS_8_13_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107428"]
+
+[review.entity."WORD_0428_OPAQUE.BIT_14_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107428"]
+
+[review.entity."WORD_0430_OPAQUE"]
+sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
+
+[review.entity."WORD_0430_OPAQUE.BIT_27_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107430"]
+
+[review.entity."WORD_0430_OPAQUE.BITS_0_26_OPAQUE"]
+sources = ["S31_MMIO_USE_20107430_TWO_DOMAIN"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0434_OPAQUE"]
+sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
+
+[review.entity."WORD_0434_OPAQUE.BITS_0_26_OPAQUE"]
+sources = ["S31_MMIO_USE_20107434_TWO_DOMAIN"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0438_OPAQUE"]
+sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
+
+[review.entity."WORD_0438_OPAQUE.BITS_0_11_OPAQUE"]
+sources = ["S31_MMIO_USE_20107438_TWO_DOMAIN"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_043C_OPAQUE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+accuracy = "exact"
+
+[review.entity."WORD_043C_OPAQUE.BITS_6_7_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010743C"]
+
+[review.entity."WORD_043C_OPAQUE.BIT_8_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010743C"]
+
+[review.entity."TX_OUTPUT_FILTER_CONTROL"]
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+
+[review.entity."TX_OUTPUT_FILTER_CONTROL.FILTER_INPUT_2"]
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."TX_OUTPUT_FILTER_CONTROL.FILTER_INPUT_0"]
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."TX_OUTPUT_FILTER_CONTROL.FILTER_INPUT_1"]
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."TX_OUTPUT_FILTER_CONTROL.BITS_0_3_OPAQUE"]
+sources = ["S31_MMIO_USE_20107440", "S31_MMIO_DECLARED_20107440"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."TX_OUTPUT_FILTER_CONTROL.BITS_7_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107440", "S31_MMIO_DECLARED_20107440"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."TX_POWER_TRACK_CONTROL_0"]
+sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_0.TRACK_ENABLE"]
+sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."TX_POWER_TRACK_CONTROL_0.BITS_1_4_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107454"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_0.BITS_5_9_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107454"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_1"]
+sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_1.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107458"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_1.BIT_1_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107458"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_1.BITS_7_14_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107458"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_1.BITS_15_22_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107458"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_1.BITS_23_30_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107458"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_2"]
+sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_2.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010745C"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_2.BITS_8_15_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010745C"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_2.BITS_16_23_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010745C"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_2.BITS_24_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010745C"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_3"]
+sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_3.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107460"]
+
+[review.entity."TX_POWER_TRACK_CONTROL_3.BITS_8_15_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107460"]
+
+[review.entity."HCCFR_CONTROL.BITS_0_21_OPAQUE"]
+sources = ["S31_MMIO_USE_20107468", "S31_MMIO_DECLARED_20107468"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."HCCFR_CONTROL.BITS_23_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107468", "S31_MMIO_DECLARED_20107468"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."HCCFR_VALUE.BITS_12_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010746C", "S31_MMIO_DECLARED_2010746C"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."ICCFR_FORCE_CONTROL.FORCE_MODE_LOW"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."ICCFR_FORCE_CONTROL.FORCE_MODE_HIGH"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."ICCFR_FORCE_CONTROL.FORCE_TRIGGER"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0800_OPAQUE.FFT_SCALE_FORCE"]
+sources = ["S31_MMIO_DECLARED_20107800"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0800_OPAQUE.FFT_SCALE"]
+sources = ["S31_MMIO_DECLARED_20107800"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0800_OPAQUE.BITS_0_18_OPAQUE"]
+sources = ["S31_MMIO_USE_20107800", "S31_MMIO_DECLARED_20107800"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0800_OPAQUE.BITS_28_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107800", "S31_MMIO_DECLARED_20107800"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0808_OPAQUE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+accuracy = "exact"
+
+[review.entity."WORD_0808_OPAQUE.BITS_7_13_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107808"]
+
+[review.entity."WORD_080C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010780C", "S31_MMIO_DECLARED_2010780C"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0830_OPAQUE"]
+sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
+
+[review.entity."WORD_0830_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107830", "S31_MMIO_DECLARED_20107830"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."NRX_FREQUENCY_CONTROL"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+completeness = "partial"
+
+[review.entity."NRX_FREQUENCY_CONTROL.BITS_0_23_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107848"]
+
+[review.entity."NRX_FREQUENCY_CONTROL.BITS_24_28_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107848"]
+
+[review.entity."NRX_FREQUENCY_CONTROL.BITS_29_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107848"]
+
+[review.entity."WORD_0890_OPAQUE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."WORD_0890_OPAQUE.HE_RU26_GOOD_RESPONSE_ENABLE"]
+sources = ["S31_MMIO_DECLARED_20107890"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0890_OPAQUE.HE_RU26_GOOD_RESPONSE_DISABLE"]
+sources = ["S31_MMIO_DECLARED_20107890"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0898_OPAQUE.BITS_0_9_OPAQUE"]
+sources = ["S31_MMIO_USE_20107898", "S31_MMIO_DECLARED_20107898"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_08A4_OPAQUE"]
+sources = ["ROM_REV0_PHY_AGC"]
+accuracy = "exact"
+
+[review.entity."WORD_08A4_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["ROM_REV0_PHY_AGC"]
+accuracy = "exact"
+
+[review.entity."WORD_08B8_OPAQUE"]
+sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
+
+[review.entity."WORD_08B8_OPAQUE.BITS_29_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201078B8"]
+
+[review.entity."POST_INIT_RX_CONTROL"]
+sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
+completeness = "unknown"
+
+[review.entity."POST_INIT_RX_CONTROL.BITS_0_6_OPAQUE"]
+sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "S31_MMIO_DECLARED_201078C8"]
+accuracy = "exact"
+
+[review.entity."POST_INIT_RX_CONTROL.BITS_7_13_OPAQUE"]
+sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "S31_MMIO_DECLARED_201078C8"]
+accuracy = "exact"
+
+[review.entity."WORD_08DC_OPAQUE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+accuracy = "exact"
+
+[review.entity."WORD_08DC_OPAQUE.BITS_7_13_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201078DC"]
+
+[review.entity."WORD_08E4_OPAQUE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+accuracy = "exact"
+
+[review.entity."WORD_08E4_OPAQUE.BIT_22_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_201078E4"]
+
+[review.entity."WORD_0904_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107904", "S31_MMIO_DECLARED_20107904"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_090C_OPAQUE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG", "ROM_REV0_PHY_CHAN_DUMP_CFG"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_090C_OPAQUE.BITS_4_7_OPAQUE"]
+sources = ["ROM_REV0_PHY_CHAN_DUMP_CFG", "S31_MMIO_DECLARED_2010790C"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."WORD_090C_OPAQUE.BIT_11_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010790C"]
+
+[review.entity."WORD_090C_OPAQUE.LLTF_MASK_INPUT_1"]
+sources = ["S31_MMIO_DECLARED_2010790C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_090C_OPAQUE.LLTF_MASK_INPUT_0"]
+sources = ["S31_MMIO_DECLARED_2010790C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_090C_OPAQUE.BITS_0_3_OPAQUE"]
+sources = ["S31_MMIO_USE_2010790C", "S31_MMIO_DECLARED_2010790C"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_090C_OPAQUE.BITS_8_10_OPAQUE"]
+sources = ["S31_MMIO_USE_2010790C", "S31_MMIO_DECLARED_2010790C"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_090C_OPAQUE.BITS_14_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010790C", "S31_MMIO_DECLARED_2010790C"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0980_OPAQUE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+accuracy = "exact"
+
+[review.entity."WORD_0980_OPAQUE.BIT_25_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107980"]
+
+[review.entity."WORD_0A28_OPAQUE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+accuracy = "exact"
+
+[review.entity."WORD_0A28_OPAQUE.BIT_22_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107A28"]
+
+[review.entity."BASEBAND_TX_PA_CONTROL"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CHAN_DUMP_CFG"]
+completeness = "partial"
+
+[review.entity."BASEBAND_TX_PA_CONTROL.BIT_9_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107C00"]
+
+[review.entity."BASEBAND_TX_PA_CONTROL.BITS_11_20_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107C00"]
+
+[review.entity."BASEBAND_TX_PA_CONTROL.BIT_30_OPAQUE"]
+sources = ["ROM_REV0_PHY_CHAN_DUMP_CFG", "S31_MMIO_DECLARED_20107C00"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."BASEBAND_TX_PA_CONTROL.BITS_0_8_OPAQUE"]
+sources = ["S31_MMIO_USE_20107C00", "S31_MMIO_DECLARED_20107C00"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."BASEBAND_TX_PA_CONTROL.BIT_10_OPAQUE"]
+sources = ["S31_MMIO_USE_20107C00", "S31_MMIO_DECLARED_20107C00"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."BASEBAND_TX_PA_CONTROL.BITS_21_29_OPAQUE"]
+sources = ["S31_MMIO_USE_20107C00", "S31_MMIO_DECLARED_20107C00"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."BASEBAND_TX_PA_CONTROL.BIT_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107C00", "S31_MMIO_DECLARED_20107C00"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."BASEBAND_WATCHDOG_STATUS"]
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+completeness = "unknown"
+
+[review.entity."BASEBAND_WATCHDOG_STATUS.STATUS"]
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+
+[review.entity."WORD_0C14_OPAQUE"]
+sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
+provenance = "derived"
+
+[review.entity."WORD_0C14_OPAQUE.BIT_13_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107C14"]
+provenance = "derived"
+
+[review.entity."WORD_0C14_OPAQUE.BITS_0_12_OPAQUE"]
+sources = ["S31_MMIO_USE_20107C14", "S31_MMIO_DECLARED_20107C14"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0C14_OPAQUE.BITS_14_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107C14", "S31_MMIO_DECLARED_20107C14"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0C2C_OPAQUE"]
+sources = ["S31_MMIO_USE_20107C2C"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0C2C_OPAQUE.BITS_7_9_OPAQUE"]
+sources = ["S31_MMIO_USE_20107C2C", "S31_MMIO_DECLARED_20107C2C"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."BASEBAND_TX_PA_TIMING"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+completeness = "partial"
+
+[review.entity."BASEBAND_TX_PA_TIMING.BITS_0_9_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107C30"]
+
+[review.entity."BASEBAND_TX_PA_TIMING.BITS_12_19_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107C30"]
+
+[review.entity."BASEBAND_WATCHDOG_CONTROL"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+
+[review.entity."BASEBAND_WATCHDOG_CONTROL.BITS_0_15_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107C3C"]
+
+[review.entity."BASEBAND_WATCHDOG_CONTROL.BIT_30_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107C3C"]
+
+[review.entity."BASEBAND_WATCHDOG_CONTROL.BITS_16_29_OPAQUE"]
+sources = ["S31_MMIO_USE_20107C3C", "S31_MMIO_DECLARED_20107C3C"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."BASEBAND_WATCHDOG_CONTROL.BIT_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107C3C", "S31_MMIO_DECLARED_20107C3C"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."BASEBAND_WATCHDOG_ENABLE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+
+[review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_TIMEOUT_CLEAR"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_INTERRUPT_ENABLE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_ENABLE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."BASEBAND_WATCHDOG_ENABLE.BITS_0_28_OPAQUE"]
+sources = ["S31_MMIO_USE_20107C40", "S31_MMIO_DECLARED_20107C40"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."NOISE_FLOOR_ENABLE_0"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+
+[review.entity."NOISE_FLOOR_ENABLE_0.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107C44"]
+
+[review.entity."NOISE_FLOOR_ENABLE_1"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+
+[review.entity."NOISE_FLOOR_ENABLE_1.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107C50"]
+
+[review.entity."CCA_COUNTER_CONTROL"]
+sources = ["ROM_REV0_PHY_CCA_COUNTER"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."CCA_COUNTER_CONTROL.WINDOW"]
+sources = ["ROM_REV0_PHY_CCA_COUNTER"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."CCA_COUNTER_CONTROL.CONTROL"]
+sources = ["ROM_REV0_PHY_CCA_COUNTER"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."CCA_COUNTER_RESULT_0"]
+sources = ["ROM_REV0_PHY_CCA_COUNTER"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."CCA_COUNTER_RESULT_0.RESULT"]
+sources = ["ROM_REV0_PHY_CCA_COUNTER"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."CCA_COUNTER_RESULT_0.FLAG"]
+sources = ["ROM_REV0_PHY_CCA_COUNTER"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."CCA_COUNTER_RESULT_1"]
+sources = ["ROM_REV0_PHY_CCA_COUNTER"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."CCA_COUNTER_RESULT_1.RESULT"]
+sources = ["ROM_REV0_PHY_CCA_COUNTER"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0C6C_OPAQUE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+accuracy = "exact"
+
+[review.entity."WORD_0C6C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+accuracy = "exact"
+
+[review.entity."WORD_0C80_OPAQUE"]
+sources = ["ROM_REV0_PHY_OPEN_FE_BB_CLK", "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK"]
+accuracy = "exact"
+
+[review.entity."WORD_0C80_OPAQUE.STATE"]
+sources = ["S31_MMIO_MANUAL_20107C80"]
+completeness = "partial"
+
+[review.entity."WORD_0CA8_OPAQUE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+accuracy = "exact"
+
+[review.entity."WORD_0CA8_OPAQUE.BIT_20_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107CA8"]
+
+[review.entity."WORD_0CD0_OPAQUE"]
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_BTBB_WIFI_BB_CFG2"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."WORD_0CD0_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107CD0"]
+
+[review.entity."WORD_0CD0_OPAQUE.BIT_1_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107CD0"]
+
+[review.entity."WORD_0CD0_OPAQUE.BIT_2_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107CD0"]
+
+[review.entity."WORD_0CD0_OPAQUE.BIT_3_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107CD0"]
+
+[review.entity."WORD_0CD0_OPAQUE.BITS_16_19_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107CD0"]
+
+[review.entity."CHANNEL_CBW_CONTROL_0"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+
+[review.entity."CHANNEL_CBW_CONTROL_0.BITS_0_1_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20107CE0"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."CHANNEL_CBW_CONTROL_1"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+
+[review.entity."CHANNEL_CBW_CONTROL_1.BITS_0_1_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107CE4"]
+
+[review.entity."CHANNEL_CBW_CONTROL_1.BITS_2_4_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107CE4"]
+
+[review.entity."CHANNEL_CBW_CONTROL_1.VHT_SUPPORT"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."CHANNEL_CBW_CONTROL_1.BITS_6_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107CE4", "S31_MMIO_DECLARED_20107CE4"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0CE8_OPAQUE"]
+sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
+provenance = "derived"
+
+[review.entity."WORD_0CE8_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20107CE8", "S31_MMIO_DECLARED_20107CE8"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0CEC_OPAQUE"]
+sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
+provenance = "derived"
+
+[review.entity."WORD_0CEC_OPAQUE.BIT_12_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20107CEC"]
+provenance = "derived"
+
+[review.entity."WORD_0CEC_OPAQUE.BITS_0_11_OPAQUE"]
+sources = ["S31_MMIO_USE_20107CEC_TWO_DOMAIN"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."FTM_CONTROL"]
+sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
+
+[review.entity."FTM_CONTROL.ENABLE"]
+sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
+
+[[registers]]
+name = "WORD_0010_OPAQUE"
+offset = 0x10
+description = "Read-modify-written by complete phy_rx_sense_set and saved/restored by complete phy_dig_reg_backup."
+
+[[registers.fields]]
+name = "RX_SENSE"
+bits = "31:23"
+class = "plain"
+description = "Receive-sensitivity setting complete phy_rx_sense_set publishes."
+
+[[registers.fields]]
+name = "BITS_0_22_OPAQUE"
+bits = "22:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0014_OPAQUE"
+offset = 0x14
+description = "Read-modify-written by complete phy_rx_sense_set and saved/restored by complete phy_dig_reg_backup."
+
+[[registers.fields]]
+name = "RX_SENSE"
+bits = "31:23"
+class = "plain"
+description = "Receive-sensitivity setting complete phy_rx_sense_set publishes."
+
+[[registers.fields]]
+name = "BITS_0_22_OPAQUE"
+bits = "22:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "NOISE_FLOOR_CONTROL"
+offset = 0x18
+description = "Complete phy_noise_floor_auto_set sets both control bits."
+
+[[registers.fields]]
+name = "BIT_23_OPAQUE"
+bits = "23"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_28_OPAQUE"
+bits = "28"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_22_OPAQUE"
+bits = "22:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_24_27_OPAQUE"
+bits = "27:24"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_29_31_OPAQUE"
+bits = "31:29"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_001C_OPAQUE"
+offset = 0x1c
+description = "Read and written by complete CCA accessors and saved/restored by complete phy_dig_reg_backup."
+
+[[registers.fields]]
+name = "CCA_THRESHOLD"
+bits = "7:0"
+class = "plain"
+description = "Signed clear-channel-assessment threshold that complete phy_set_cca publishes (0xbf, -65, by default) and complete phy_get_cca returns."
+
+[[registers.fields]]
+name = "BITS_8_31_OPAQUE"
+bits = "31:8"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "AGC_SHARED_CONTROL"
+offset = 0x2c
+description = "Shared word updated by complete phy_agc_reg_init, phy_enable_agc, phy_pbus_force_mode, phy_force_rx_gain, phy_set_rx_comp_new, and the final limit tail of phy_set_rx_gain_table."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+description = "Complete phy_set_rx_comp_new writes 0xed into bits 7:0."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "WIFI_MAX_GAIN_INDEX"
+bits = "14:8"
+class = "plain"
+description = "Highest Wi-Fi receive-gain table index: librftest rx_max_gain returns these bits for its Wi-Fi path. Complete phy_agc_reg_init writes parameter byte 0x121 and phy_set_rx_gain_table the final Wi-Fi RX gain index after table publication."
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers.fields]]
+name = "FORCED_GAIN_ENABLE"
+bits = "23"
+class = "plain"
+description = "Enables the forced receive-gain index in FORCED_GAIN_INDEX. Complete phy_force_rx_gain and the Wi-Fi path of librftest force_rx_gain replace it with the low bit of their enable argument; librftest clears it and waits 5 us after writing the index before setting it. Complete phy_enable_agc and the delayed tail of phy_pbus_force_mode pulse it."
+
+[[registers.fields]]
+name = "FORCED_GAIN_INDEX"
+bits = "31:24"
+class = "plain"
+description = "Receive-gain table index applied while FORCED_GAIN_ENABLE is set. Complete phy_force_rx_gain and the Wi-Fi path of librftest force_rx_gain write their gain argument here before the enable bit; complete phy_agc_reg_init and the delayed phy_pbus_force_mode tail write 0x32 into bits 31:24 before pulsing bit 23, so a PBus work-mode transition replaces any previously forced index."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_15_22_OPAQUE"
+bits = "22:15"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "AGC_ANTENNA_CONTROL"
+offset = 0x30
+description = "Shared word updated independently by complete AGC enable/disable, antenna initialization and frequency-band selection bodies."
+
+[[registers.fields]]
+name = "FREQUENCY_BAND_INVERSE"
+bits = "5"
+class = "plain"
+description = "Complete phy_freq_band_reg_set writes the inverse of the caller low bit."
+
+[[registers.fields]]
+name = "BITS_11_17_OPAQUE"
+bits = "17:11"
+class = "plain"
+description = "Complete phy_ant_init writes 0x34 into bits 17:11."
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers.fields]]
+name = "BIT_29_OPAQUE"
+bits = "29"
+class = "plain"
+description = "Instruction-exact AGC disable/enable gate."
+
+[[registers.fields]]
+name = "BITS_6_10_OPAQUE"
+bits = "10:6"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_18_28_OPAQUE"
+bits = "28:18"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_30_31_OPAQUE"
+bits = "31:30"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "DC_MEMORY_CONTROL"
+offset = 0x3c
+description = "Complete phy_dc_mem_clr sets then clears bit 20 using a fresh read before each write."
+
+[[registers.fields]]
+name = "BIT_20_OPAQUE"
+bits = "20"
+class = "plain"
+description = "Instruction-exact set/clear pulse; the vendor symbol qualifies the operation while the electrical effect remains unknown."
+
+[[registers]]
+name = "RX_11B_PATH_CONTROL_0"
+offset = 0x44
+description = "Complete phy_bb_agc_reg_update writes the full word; complete phy_rx_11b_opt later replaces two six-bit fields and complete phy_rx_sense_set the low byte."
+
+[[registers.fields]]
+name = "RX_SENSE"
+bits = "7:0"
+class = "plain"
+description = "Receive-sensitivity setting complete phy_rx_sense_set publishes."
+
+[[registers.fields]]
+name = "BITS_8_13_OPAQUE"
+bits = "13:8"
+class = "plain"
+description = "Complete phy_rx_11b_opt replaces bits 13:8."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "BITS_16_21_OPAQUE"
+bits = "21:16"
+class = "plain"
+description = "Complete phy_rx_11b_opt replaces bits 21:16."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "BITS_14_15_OPAQUE"
+bits = "15:14"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_22_31_OPAQUE"
+bits = "31:22"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0048_OPAQUE"
+offset = 0x48
+description = "Complete phy_bb_agc_reg_update writes 0xff7da4f3."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0050_OPAQUE"
+offset = 0x50
+description = "Complete phy_get_noise_floor reads this word; hardware access semantics remain unknown."
+
+[[registers.fields]]
+name = "NOISE_FLOOR"
+bits = "9:0"
+class = "read-only"
+description = "Ten-bit noise floor that complete phy_get_noise_floor returns sign-extended as a negative value."
+
+[[registers]]
+name = "AGC_SATURATION_CONTROL"
+offset = 0x5c
+description = "Shared word updated by complete phy_agc_reg_init, both phy_rfrx_sat_rst branches, and phy_reg_update_new."
+
+[[registers.fields]]
+name = "BITS_0_18_OPAQUE"
+bits = "18:0"
+class = "plain"
+description = "Bits 18:0 receive 0xbb8 during AGC initialization and 0x400 or 0x800 in the two RF RX saturation phases."
+write-range = { min = 0x0, max = 0x7ffff }
+
+[[registers.fields]]
+name = "BIT_19_OPAQUE"
+bits = "19"
+class = "plain"
+description = "One member of the discontiguous 0xd1080000 mask set or cleared by phy_rfrx_sat_rst."
+
+[[registers.fields]]
+name = "BIT_24_OPAQUE"
+bits = "24"
+class = "plain"
+description = "One member of the discontiguous 0xd1080000 mask set or cleared by phy_rfrx_sat_rst."
+
+[[registers.fields]]
+name = "BIT_26_OPAQUE"
+bits = "26"
+class = "plain"
+description = "Complete phy_reg_update_new sets bit 26."
+
+[[registers.fields]]
+name = "BIT_28_OPAQUE"
+bits = "28"
+class = "plain"
+description = "One member of the discontiguous 0xd1080000 mask set or cleared by phy_rfrx_sat_rst."
+
+[[registers.fields]]
+name = "BITS_30_31_OPAQUE"
+bits = "31:30"
+class = "plain"
+description = "Bits 31:30 are the adjacent high pair in the discontiguous 0xd1080000 mask set or cleared by phy_rfrx_sat_rst."
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers]]
+name = "SATURATION_GAIN_LOW"
+offset = 0x64
+description = "Complete rev0 ROM phy_wifi_agc_sat_gain writes its argument here first."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "RF_RX_SATURATION_CONFIG"
+offset = 0x68
+description = "Complete phy_rfrx_sat_rst writes the full value 0x00000404 before either branch."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_006C_OPAQUE"
+offset = 0x6c
+description = "Complete phy_get_rssi reads this word; hardware access semantics remain unknown."
+
+[[registers.fields]]
+name = "RSSI_ABOVE_NOISE_FLOOR"
+bits = "15:8"
+class = "read-only"
+description = "Received signal strength above the noise floor: complete phy_get_rssi adds it to the noise floor shifted right by two."
+
+[[registers]]
+name = "WORD_0074_OPAQUE"
+offset = 0x74
+description = "Complete phy_chan_filt_set read-modify-writes this word and complete phy_dig_reg_backup saves/restores it."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "NOISE_FLOOR_MEASUREMENT"
+offset = 0x8c
+description = "Complete phy_read_hw_noisefloor reads this word once, sign-extends the low twelve-bit two's-complement value and divides it arithmetically by four to produce its quarter-dB result; it consumes no higher bits. The librftest saturation probes read bits 18:12. Open rev0 HIL read a stable -92 dBm whole-unit result through the complete ROM plus wDev transform."
+
+[[registers.fields]]
+name = "SIGNED_SIXTEENTH_DB_CODE"
+bits = "11:0"
+class = "read-only"
+description = "Signed twelve-bit noise-floor measurement in sixteenth-dB units. The complete ROM arithmetic shift produces quarter-dB and libpp[wdev.o]::wDev_GetNoiseFloor applies rounded division by four once more before retaining a signed byte; open rev0 HIL observed -92 dBm."
+
+[[registers.fields]]
+name = "BITS_12_18_OPAQUE"
+bits = "18:12"
+class = "read-only"
+description = "Seven-bit receive status field. Complete librftest get_rfrx_sat counts how many of one hundred reads have the value 49 and returns that count as its RF receive saturation result; phy_rx_sat_test samples it after forcing receive gain. Neither body assigns a unit to the value."
+
+[[registers]]
+name = "AGC_GAIN_LIMIT_LOW"
+offset = 0x94
+description = "Holds the seven-bit AGC initial receive-gain index INITIAL_GAIN_INDEX, which complete phy_agc_reg_init derives from a parameter byte and librftest rx_init_gain sets with RX_GAIN_LIMIT_CONTROL."
+
+[[registers.fields]]
+name = "INITIAL_GAIN_INDEX"
+bits = "8:2"
+class = "plain"
+description = "AGC initial receive-gain index: librftest rx_init_gain writes its gain argument here and into RX_GAIN_LIMIT_CONTROL.INITIAL_GAIN_INDEX. Complete phy_agc_reg_init writes the low seven bits of parameter byte 0x121 minus one."
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers.fields]]
+name = "BITS_0_1_OPAQUE"
+bits = "1:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_9_31_OPAQUE"
+bits = "31:9"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "RX_COMPENSATION_HIGH_CONTROL"
+offset = 0xa0
+description = "Complete phy_set_rx_comp_new performs its second fresh-read update here."
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+description = "Complete phy_set_rx_comp_new writes 0xed into bits 31:24."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "CSI_DUMP_FORCE_CONTROL"
+offset = 0xa4
+description = "Complete phy_csidump_force_lltf_cfg replaces bit fifteen from the caller low bit."
+
+[[registers.fields]]
+name = "FORCE_LLTF"
+bits = "15"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_14_OPAQUE"
+bits = "14:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_16_31_OPAQUE"
+bits = "31:16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_00B8_OPAQUE"
+offset = 0xb8
+description = "Complete set_dump_mode replaces bits 2:0 in one fresh-read RMW."
+
+[[registers.fields]]
+name = "BITS_0_2_OPAQUE"
+bits = "2:0"
+class = "plain"
+description = "Complete set_dump_mode writes one for mode zero and zero for every other mode."
+write-range = { min = 0x0, max = 0x7 }
+
+[[registers]]
+name = "WORD_00CC_OPAQUE"
+offset = 0xcc
+description = "Complete phy_dig_reg_backup saves and restores this word; all field semantics remain unknown."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_00DC_OPAQUE"
+offset = 0xdc
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_16_OPAQUE"
+bits = "16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_00F4_OPAQUE"
+offset = 0xf4
+description = "Complete phy_wifi_rifs_mode_en read-modify-writes bit zero; all other fields remain unknown."
+
+[[registers.fields]]
+name = "RIFS_MODE_ENABLE"
+bits = "0"
+class = "plain"
+description = "Reduced-interframe-space receive mode enable that complete phy_wifi_rifs_mode_en publishes."
+
+[[registers]]
+name = "RX_11B_WINDOW_CONTROL"
+offset = 0x104
+description = "Complete phy_bb_agc_reg_update writes the full word; phy_rx_11b_opt and phy_reg_update_new replace the same low nine-bit field with independently evidenced values."
+
+[[registers.fields]]
+name = "BITS_0_8_OPAQUE"
+bits = "8:0"
+class = "plain"
+description = "Complete phy_rx_11b_opt writes 0x1c8 and complete phy_reg_update_new writes 0x1c0 into bits 8:0."
+write-range = { min = 0x0, max = 0x1ff }
+
+[[registers]]
+name = "WORD_0108_OPAQUE"
+offset = 0x108
+description = "Complete phy_rx_sense_set sets bit nine when the requested sensitivity is zero and clears it otherwise; complete phy_dig_reg_backup saves and restores the word. Field semantics remain unknown."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "SATURATION_GAIN_HIGH"
+offset = 0x114
+description = "Complete rev0 ROM phy_wifi_agc_sat_gain writes its argument here second."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "ANTENNA_CONTROL_0"
+offset = 0x11c
+description = "First fresh-read update of complete phy_ant_init clears two independently evidenced field groups; complete phy_ant_dft_cfg replaces bit 11 with its caller low bit."
+
+[[registers.fields]]
+name = "BITS_0_10_OPAQUE"
+bits = "10:0"
+class = "plain"
+description = "Complete phy_ant_init clears bits 10:0."
+write-range = { min = 0x0, max = 0x7ff }
+
+[[registers.fields]]
+name = "BIT_11_OPAQUE"
+bits = "11"
+class = "plain"
+description = "Complete phy_ant_dft_cfg writes zero to disable antenna diversity and one to enable it."
+values = [{ name = "DISABLED", value = 0, description = "Disable the recovered antenna-diversity path." }, { name = "ENABLED", value = 1, description = "Enable the recovered antenna-diversity path." }]
+write-values-only = true
+
+[[registers.fields]]
+name = "BIT_12_OPAQUE"
+bits = "12"
+class = "plain"
+description = "Complete phy_ant_init independently clears bit 12."
+
+[[registers.fields]]
+name = "BITS_13_31_OPAQUE"
+bits = "31:13"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "ANTENNA_CONTROL_2"
+offset = 0x120
+description = "Third fresh-read update of complete phy_ant_init writes the same value into two separated bytes."
+
+[[registers.fields]]
+name = "BITS_8_15_OPAQUE"
+bits = "15:8"
+class = "plain"
+description = "Complete phy_ant_init writes 0x1e into bits 15:8."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+description = "Complete phy_ant_init writes 0x1e into bits 31:24."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "RX_11B_PATH_CONTROL_1"
+offset = 0x124
+description = "Complete phy_bb_agc_reg_update writes the full word; complete phy_rx_11b_opt later replaces two fields."
+
+[[registers.fields]]
+name = "BITS_0_3_OPAQUE"
+bits = "3:0"
+class = "plain"
+description = "Complete phy_rx_11b_opt replaces bits 3:0."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BITS_10_15_OPAQUE"
+bits = "15:10"
+class = "plain"
+description = "Complete phy_rx_11b_opt replaces bits 15:10."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "BITS_4_9_OPAQUE"
+bits = "9:4"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_16_31_OPAQUE"
+bits = "31:16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "AGC_INIT_HIGH_CONTROL"
+offset = 0x128
+description = "Canonical multifunction word. Complete phy_agc_reg_init replaces the high byte with 0xd2; complete hal_init_bf later performs one volatile full-word synchronization/status read whose value is unused."
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+description = "Instruction-exact 0xd2 value in bits 31:24."
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "RX_GAIN_LIMIT_CONTROL"
+offset = 0x13c
+description = "Holds the seven-bit AGC initial receive-gain index INITIAL_GAIN_INDEX, written by phy_agc_reg_init, the final phy_set_rx_gain_table tail and librftest rx_init_gain together with AGC_GAIN_LIMIT_LOW."
+
+[[registers.fields]]
+name = "INITIAL_GAIN_INDEX"
+bits = "24:18"
+class = "plain"
+description = "AGC initial receive-gain index: librftest rx_init_gain writes its gain argument here and into AGC_GAIN_LIMIT_LOW.INITIAL_GAIN_INDEX. Bits 24:18 receive parameter byte 0x121 minus one during initialization and the final Wi-Fi index capped at 0x4c after table publication."
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers.fields]]
+name = "BIT_25_OPAQUE"
+bits = "25"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_01D4_OPAQUE"
+offset = 0x1d4
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0400_OPAQUE"
+offset = 0x400
+description = "Complete phy_bb_reg_init sets bits 14:13."
+
+[[registers.fields]]
+name = "BITS_13_14_OPAQUE"
+bits = "14:13"
+class = "plain"
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers.fields]]
+name = "BITS_0_12_OPAQUE"
+bits = "12:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_15_31_OPAQUE"
+bits = "31:15"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0414_OPAQUE"
+offset = 0x414
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0418_OPAQUE"
+offset = 0x418
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_8_20_OPAQUE"
+bits = "20:8"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0428_OPAQUE"
+offset = 0x428
+description = "Complete phy_bb_reg_init sets bit 14 and replaces bits 13:8 with 0x15."
+
+[[registers.fields]]
+name = "BITS_8_13_OPAQUE"
+bits = "13:8"
+class = "plain"
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "BIT_14_OPAQUE"
+bits = "14"
+class = "plain"
+
+[[registers]]
+name = "WORD_0430_OPAQUE"
+offset = 0x430
+description = "Complete phy_bb_cfo_cfg replaces this word and independently read-modify-writes bit 27; the hardware field meaning remains unknown."
+
+[[registers.fields]]
+name = "BIT_27_OPAQUE"
+bits = "27"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_26_OPAQUE"
+bits = "26:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0434_OPAQUE"
+offset = 0x434
+description = "Complete phy_bb_cfo_cfg reads and replaces this word; individual hardware fields remain unnamed."
+
+[[registers.fields]]
+name = "BITS_0_26_OPAQUE"
+bits = "26:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0438_OPAQUE"
+offset = 0x438
+description = "Complete phy_bb_cfo_cfg reads and replaces this word; individual hardware fields remain unnamed."
+
+[[registers.fields]]
+name = "BITS_0_11_OPAQUE"
+bits = "11:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_043C_OPAQUE"
+offset = 0x43c
+description = "Complete phy_bb_reg_init clears bits 8:6 through two fresh-read updates."
+
+[[registers.fields]]
+name = "BITS_6_7_OPAQUE"
+bits = "7:6"
+class = "plain"
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers.fields]]
+name = "BIT_8_OPAQUE"
+bits = "8"
+class = "plain"
+
+[[registers]]
+name = "TX_OUTPUT_FILTER_CONTROL"
+offset = 0x440
+description = "Complete phy_bbtx_outfilter replaces bits five, six and four through three independent fresh-read RMWs."
+
+[[registers.fields]]
+name = "FILTER_INPUT_2"
+bits = "4"
+class = "plain"
+
+[[registers.fields]]
+name = "FILTER_INPUT_0"
+bits = "5"
+class = "plain"
+
+[[registers.fields]]
+name = "FILTER_INPUT_1"
+bits = "6"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_3_OPAQUE"
+bits = "3:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_7_31_OPAQUE"
+bits = "31:7"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "TX_POWER_TRACK_CONTROL_0"
+offset = 0x454
+description = "Complete phy_bb_txpwr_track publishes enable plus two initialization fields."
+
+[[registers.fields]]
+name = "TRACK_ENABLE"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_1_4_OPAQUE"
+bits = "4:1"
+class = "plain"
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BITS_5_9_OPAQUE"
+bits = "9:5"
+class = "plain"
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers]]
+name = "TX_POWER_TRACK_CONTROL_1"
+offset = 0x458
+description = "Complete phy_bb_txpwr_track clears bits 1:0 and publishes three eight-bit tracking values."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_1_OPAQUE"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_7_14_OPAQUE"
+bits = "14:7"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_15_22_OPAQUE"
+bits = "22:15"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_23_30_OPAQUE"
+bits = "30:23"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "TX_POWER_TRACK_CONTROL_2"
+offset = 0x45c
+description = "Complete phy_bb_txpwr_track publishes four byte-wide tracking values."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_8_15_OPAQUE"
+bits = "15:8"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_16_23_OPAQUE"
+bits = "23:16"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "TX_POWER_TRACK_CONTROL_3"
+offset = 0x460
+description = "Complete phy_bb_txpwr_track publishes two byte-wide tracking values."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_8_15_OPAQUE"
+bits = "15:8"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "HCCFR_CONTROL"
+offset = 0x468
+description = "Complete phy_config_hccfr replaces bit 22 with the low bit of its first argument."
+
+[[registers.fields]]
+name = "ENABLE"
+bits = "22"
+class = "plain"
+description = "Complete phy_config_hccfr writes zero to disable HCCFR and one to enable it."
+values = [{ name = "DISABLED", value = 0, description = "Disable HCCFR processing." }, { name = "ENABLED", value = 1, description = "Enable HCCFR processing." }]
+write-values-only = true
+
+[[registers.fields]]
+name = "BITS_0_21_OPAQUE"
+bits = "21:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_23_31_OPAQUE"
+bits = "31:23"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "HCCFR_VALUE"
+offset = 0x46c
+description = "Complete phy_config_hccfr replaces the low twelve bits with its second argument."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "11:0"
+class = "plain"
+description = "Complete phy_config_hccfr retains the caller value to this twelve-bit field; every representable field image is accepted by the recovered leaf."
+write-range = { min = 0x0, max = 0xfff }
+
+[[registers.fields]]
+name = "BITS_12_31_OPAQUE"
+bits = "31:12"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "ICCFR_FORCE_CONTROL"
+offset = 0x478
+description = "Complete phy_force_iccfr publishes five fields through five separately ordered fresh-read RMWs."
+
+[[registers.fields]]
+name = "FORCE_ENABLE"
+bits = "0"
+class = "plain"
+description = "Complete phy_force_iccfr writes zero to disable the forced ICCFR value and one to enable it."
+values = [{ name = "DISABLED", value = 0, description = "Use the ordinary ICCFR value path." }, { name = "ENABLED", value = 1, description = "Use the forced ICCFR value." }]
+write-values-only = true
+
+[[registers.fields]]
+name = "FORCE_VALUE"
+bits = "12:1"
+class = "plain"
+description = "Complete phy_force_iccfr retains the caller value to this twelve-bit field; every representable field image is accepted by the recovered leaf."
+write-range = { min = 0x0, max = 0xfff }
+
+[[registers.fields]]
+name = "FORCE_MODE_LOW"
+bits = "13"
+class = "plain"
+
+[[registers.fields]]
+name = "FORCE_MODE_HIGH"
+bits = "14"
+class = "plain"
+
+[[registers.fields]]
+name = "FORCE_TRIGGER"
+bits = "15"
+class = "plain"
+
+[[registers]]
+name = "ICCFR_ENABLE_CONTROL"
+offset = 0x47c
+description = "Complete phy_iccfr_en writes three to bits 26:25 for a zero argument and clears them for a nonzero argument."
+
+[[registers.fields]]
+name = "GATE"
+bits = "26:25"
+class = "plain"
+description = "Complete phy_iccfr_en writes zero for a nonzero enable input and three for a zero input; the other two encodings are not evidenced."
+values = [{ name = "ENABLED", value = 0, description = "Enable ICCFR through the recovered zero gate image." }, { name = "DISABLED", value = 3, description = "Disable ICCFR through the recovered all-ones gate image." }]
+write-values-only = true
+
+[[registers]]
+name = "WORD_0800_OPAQUE"
+offset = 0x800
+description = "Complete phy_fft_scale_force read-modify-writes this word."
+
+[[registers.fields]]
+name = "FFT_SCALE_FORCE"
+bits = "19"
+class = "plain"
+description = "Force the FFT scale to FFT_SCALE; complete phy_fft_scale_force publishes its first argument here."
+
+[[registers.fields]]
+name = "FFT_SCALE"
+bits = "27:20"
+class = "plain"
+description = "FFT scale complete phy_fft_scale_force publishes from its second argument."
+
+[[registers.fields]]
+name = "BITS_0_18_OPAQUE"
+bits = "18:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_28_31_OPAQUE"
+bits = "31:28"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0808_OPAQUE"
+offset = 0x808
+description = "Complete phy_bb_reg_init replaces bits 13:7 with 0x60."
+
+[[registers.fields]]
+name = "BITS_7_13_OPAQUE"
+bits = "13:7"
+class = "plain"
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers]]
+name = "WORD_080C_OPAQUE"
+offset = 0x80c
+description = "Complete phy_dig_reg_backup saves and restores this word; all field semantics remain unknown."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0830_OPAQUE"
+offset = 0x830
+description = "Complete phy_spur_reg_write_one_tone reads and replaces this word on three control-flow paths; individual hardware fields remain unnamed."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "NRX_FREQUENCY_CONTROL"
+offset = 0x848
+description = "NRX initialization and frequency quotient word. Complete phy_nrx_freq_set samples and preserves the high byte and writes a twenty-four-bit quotient. Initialization writes the same complete low twenty-four-bit region with its own image."
+
+[[registers.fields]]
+name = "BITS_0_23_OPAQUE"
+bits = "23:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xffffff }
+
+[[registers.fields]]
+name = "BITS_24_28_OPAQUE"
+bits = "28:24"
+class = "plain"
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "BITS_29_31_OPAQUE"
+bits = "31:29"
+class = "plain"
+write-range = { min = 0x0, max = 0x7 }
+
+[[registers]]
+name = "WORD_0890_OPAQUE"
+offset = 0x890
+description = "Complete phy_bb_reg_init and phy_hemu_ru26_good_res both clear bit 25 then set bit 24 through separate fresh-read RMWs."
+
+[[registers.fields]]
+name = "HE_RU26_GOOD_RESPONSE_ENABLE"
+bits = "24"
+class = "plain"
+
+[[registers.fields]]
+name = "HE_RU26_GOOD_RESPONSE_DISABLE"
+bits = "25"
+class = "plain"
+
+[[registers]]
+name = "WORD_0898_OPAQUE"
+offset = 0x898
+description = "Complete phy_freq_correct read-modify-writes this word; individual fields remain unnamed."
+
+[[registers.fields]]
+name = "BITS_0_9_OPAQUE"
+bits = "9:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_08A4_OPAQUE"
+offset = 0x8a4
+description = "Complete phy_bb_agc_reg_update writes 0x0001721f."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_08B8_OPAQUE"
+offset = 0x8b8
+description = "Complete phy_bb_cfo_cfg replaces bits 31:29 with the observed constant pattern while preserving bits 28:0; the hardware field meaning remains unknown."
+
+[[registers.fields]]
+name = "BITS_29_31_OPAQUE"
+bits = "31:29"
+class = "plain"
+
+[[registers]]
+name = "POST_INIT_RX_CONTROL"
+offset = 0x8c8
+description = "Complete phy_reg_update_new performs two fresh-read field replacements in this order."
+
+[[registers.fields]]
+name = "BITS_0_6_OPAQUE"
+bits = "6:0"
+class = "plain"
+description = "First fresh-read update replaces bits 6:0 with 0x17."
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers.fields]]
+name = "BITS_7_13_OPAQUE"
+bits = "13:7"
+class = "plain"
+description = "Second fresh-read update replaces bits 13:7 with 0x17."
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers]]
+name = "WORD_08DC_OPAQUE"
+offset = 0x8dc
+description = "Complete phy_bb_reg_init replaces bits 13:7 with two."
+
+[[registers.fields]]
+name = "BITS_7_13_OPAQUE"
+bits = "13:7"
+class = "plain"
+write-range = { min = 0x0, max = 0x7f }
+
+[[registers]]
+name = "WORD_08E4_OPAQUE"
+offset = 0x8e4
+description = "Complete phy_bb_reg_init clears bit 22."
+
+[[registers.fields]]
+name = "BIT_22_OPAQUE"
+bits = "22"
+class = "plain"
+
+[[registers]]
+name = "WORD_0904_OPAQUE"
+offset = 0x904
+description = "Complete phy_chan_filt_set read-modify-writes this word and complete phy_dig_reg_backup saves/restores it."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_090C_OPAQUE"
+offset = 0x90c
+description = "Complete phy_bb_reg_init clears bit 11; complete phy_lltf_mask_en independently replaces bits thirteen and twelve; complete phy_chan_dump_cfg replaces bits 7:4 and bit 11 through separate fresh-read RMWs."
+
+[[registers.fields]]
+name = "BITS_4_7_OPAQUE"
+bits = "7:4"
+class = "plain"
+description = "Complete phy_chan_dump_cfg replaces bits 7:4 with the low nibble of its first argument."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BIT_11_OPAQUE"
+bits = "11"
+class = "plain"
+
+[[registers.fields]]
+name = "LLTF_MASK_INPUT_1"
+bits = "12"
+class = "plain"
+
+[[registers.fields]]
+name = "LLTF_MASK_INPUT_0"
+bits = "13"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_3_OPAQUE"
+bits = "3:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_8_10_OPAQUE"
+bits = "10:8"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_14_31_OPAQUE"
+bits = "31:14"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0980_OPAQUE"
+offset = 0x980
+description = "Complete phy_bb_reg_init clears bit 25."
+
+[[registers.fields]]
+name = "BIT_25_OPAQUE"
+bits = "25"
+class = "plain"
+
+[[registers]]
+name = "WORD_0A28_OPAQUE"
+offset = 0xa28
+description = "Complete phy_bb_reg_init clears bit 22."
+
+[[registers.fields]]
+name = "BIT_22_OPAQUE"
+bits = "22"
+class = "plain"
+
+[[registers]]
+name = "BASEBAND_TX_PA_CONTROL"
+offset = 0xc00
+description = "Complete phy_bb_reg_init sets bit 9; complete phy_tx_paon_set replaces bits 20:11; complete phy_chan_dump_cfg replaces bit 30 with the low bit of its second argument."
+
+[[registers.fields]]
+name = "BIT_9_OPAQUE"
+bits = "9"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_11_20_OPAQUE"
+bits = "20:11"
+class = "plain"
+write-range = { min = 0x0, max = 0x3ff }
+
+[[registers.fields]]
+name = "BIT_30_OPAQUE"
+bits = "30"
+class = "plain"
+description = "Complete phy_chan_dump_cfg replaces bit 30 with the low bit of its second argument."
+
+[[registers.fields]]
+name = "BITS_0_8_OPAQUE"
+bits = "8:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_10_OPAQUE"
+bits = "10"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_21_29_OPAQUE"
+bits = "29:21"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "BASEBAND_WATCHDOG_STATUS"
+offset = 0xc08
+description = "Complete phy_bb_wdt_get_status returns one unrestricted full-word read."
+
+[[registers.fields]]
+name = "STATUS"
+bits = "31:0"
+class = "read-only"
+description = "Complete unrestricted watchdog status value returned by phy_bb_wdt_get_status."
+
+[[registers]]
+name = "WORD_0C14_OPAQUE"
+offset = 0xc14
+description = "Complete phy_spur_coef_cfg clears bit 13 through two read-modify-write paths; all hardware field names remain unknown."
+
+[[registers.fields]]
+name = "BIT_13_OPAQUE"
+bits = "13"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_12_OPAQUE"
+bits = "12:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_14_31_OPAQUE"
+bits = "31:14"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0C2C_OPAQUE"
+offset = 0xc2c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_7_9_OPAQUE"
+bits = "9:7"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "BASEBAND_TX_PA_TIMING"
+offset = 0xc30
+description = "Complete phy_bb_reg_init clears bits 19:12; complete phy_tx_paon_set replaces bits 9:0 with 0x1e."
+
+[[registers.fields]]
+name = "BITS_0_9_OPAQUE"
+bits = "9:0"
+class = "plain"
+write-range = { min = 0x0, max = 0x3ff }
+
+[[registers.fields]]
+name = "BITS_12_19_OPAQUE"
+bits = "19:12"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "BASEBAND_WATCHDOG_CONTROL"
+offset = 0xc3c
+description = "Complete phy_bb_wdg_cfg publishes low configuration 0x00aa and sets bit 30."
+
+[[registers.fields]]
+name = "BITS_0_15_OPAQUE"
+bits = "15:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xffff }
+
+[[registers.fields]]
+name = "BIT_30_OPAQUE"
+bits = "30"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_16_29_OPAQUE"
+bits = "29:16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "BASEBAND_WATCHDOG_ENABLE"
+offset = 0xc40
+description = "Complete phy_bb_wdg_cfg sets bit 31. The standalone watchdog leaves replace bits 31 and 30 and set timeout-clear bit 29."
+
+[[registers.fields]]
+name = "WATCHDOG_TIMEOUT_CLEAR"
+bits = "29"
+class = "plain"
+
+[[registers.fields]]
+name = "WATCHDOG_INTERRUPT_ENABLE"
+bits = "30"
+class = "plain"
+
+[[registers.fields]]
+name = "WATCHDOG_ENABLE"
+bits = "31"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_28_OPAQUE"
+bits = "28:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "NOISE_FLOOR_ENABLE_0"
+offset = 0xc44
+description = "Complete phy_noise_floor_auto_set sets bit zero."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "plain"
+
+[[registers]]
+name = "NOISE_FLOOR_ENABLE_1"
+offset = 0xc50
+description = "Complete phy_noise_floor_auto_set sets bit zero."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "plain"
+
+[[registers]]
+name = "CCA_COUNTER_CONTROL"
+offset = 0xc58
+description = "CCA measurement window and control. SOURCE: complete rev0 ROM phy_set_cca_cnt replaces the low 27 bits and optionally sets bits 28:27."
+
+[[registers.fields]]
+name = "WINDOW"
+bits = "26:0"
+class = "plain"
+description = "Measurement window length; physical units unknown. SOURCE: complete rev0 ROM phy_set_cca_cnt arg0."
+
+[[registers.fields]]
+name = "CONTROL"
+bits = "28:27"
+class = "plain"
+description = "Counter control; individual bit roles unknown. SOURCE: complete rev0 ROM phy_set_cca_cnt sets both bits when arg1 is nonzero."
+
+[[registers]]
+name = "CCA_COUNTER_RESULT_0"
+offset = 0xc5c
+description = "First CCA window result and flag. SOURCE: complete rev0 ROM phy_get_cca_cnt copies bits 26:0 to out[0] and returns bit 27."
+
+[[registers.fields]]
+name = "RESULT"
+bits = "26:0"
+class = "read-only"
+description = "First window measurement result. SOURCE: complete rev0 ROM phy_get_cca_cnt out[0]."
+
+[[registers.fields]]
+name = "FLAG"
+bits = "27"
+class = "read-only"
+description = "Counter flag returned as 0/1; physical meaning unknown. SOURCE: complete rev0 ROM phy_get_cca_cnt return value."
+
+[[registers]]
+name = "CCA_COUNTER_RESULT_1"
+offset = 0xc60
+description = "Second CCA window result. SOURCE: complete rev0 ROM phy_get_cca_cnt copies bits 26:0 to out[1]."
+
+[[registers.fields]]
+name = "RESULT"
+bits = "26:0"
+class = "read-only"
+description = "Second window measurement result. SOURCE: complete rev0 ROM phy_get_cca_cnt out[1]."
+
+[[registers]]
+name = "WORD_0C6C_OPAQUE"
+offset = 0xc6c
+description = "Complete phy_tx_paon_set writes 0x0661a45f."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0C80_OPAQUE"
+offset = 0xc80
+description = "ROM writes all ones to open and the blob writes zero to close."
+
+[[registers.fields]]
+name = "STATE"
+bits = "31:0"
+class = "write-only"
+description = "Complete observed baseband clock-gate images; constituent gate meanings remain unknown."
+values = [{ name = "CLOSED", value = 0 }, { name = "OPEN", value = 4294967295 }]
+write-values-only = true
+
+[[registers]]
+name = "WORD_0CA8_OPAQUE"
+offset = 0xca8
+description = "Complete phy_bb_reg_init sets bit 20."
+
+[[registers.fields]]
+name = "BIT_20_OPAQUE"
+bits = "20"
+class = "plain"
+
+[[registers]]
+name = "WORD_0CD0_OPAQUE"
+offset = 0xcd0
+description = "Complete phy_bb_reg_init sets both nibbles to 0xf; complete phy_btbb_wifi_bb_cfg2 preserves low bit two, sets the other low bits and sets the high nibble."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_1_OPAQUE"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_2_OPAQUE"
+bits = "2"
+class = "plain"
+description = "Complete phy_btbb_wifi_bb_cfg2 preserves this bit while setting the other low-nibble bits."
+
+[[registers.fields]]
+name = "BIT_3_OPAQUE"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_16_19_OPAQUE"
+bits = "19:16"
+class = "plain"
+write-range = { min = 0x0, max = 0xf }
+
+[[registers]]
+name = "CHANNEL_CBW_CONTROL_0"
+offset = 0xce0
+description = "Complete phy_bb_cbw_chan_cfg replaces the low two-bit CBW-derived field."
+
+[[registers.fields]]
+name = "BITS_0_1_OPAQUE"
+bits = "1:0"
+class = "plain"
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers]]
+name = "CHANNEL_CBW_CONTROL_1"
+offset = 0xce4
+description = "Complete phy_bb_cbw_chan_cfg performs two fresh-read CBW-derived replacements; complete phy_vht_support independently replaces bit five."
+
+[[registers.fields]]
+name = "BITS_0_1_OPAQUE"
+bits = "1:0"
+class = "plain"
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers.fields]]
+name = "BITS_2_4_OPAQUE"
+bits = "4:2"
+class = "plain"
+write-range = { min = 0x0, max = 0x7 }
+
+[[registers.fields]]
+name = "VHT_SUPPORT"
+bits = "5"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_6_31_OPAQUE"
+bits = "31:6"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0CE8_OPAQUE"
+offset = 0xce8
+description = "Complete phy_bb_cfo_cfg reads and replaces this word; individual hardware fields remain unnamed."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0CEC_OPAQUE"
+offset = 0xcec
+description = "Complete phy_bb_cfo_cfg replaces this word and independently read-modify-writes bit 12; the hardware field meaning remains unknown."
+
+[[registers.fields]]
+name = "BIT_12_OPAQUE"
+bits = "12"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_11_OPAQUE"
+bits = "11:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "FTM_CONTROL"
+offset = 0xd4c
+description = "Complete phy_set_ftm_en replaces bit zero with its one-bit argument."
+
+[[registers.fields]]
+name = "ENABLE"
+bits = "0"
+class = "plain"
+description = "One-bit FTM enable argument."

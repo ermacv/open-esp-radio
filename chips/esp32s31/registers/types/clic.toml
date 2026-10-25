@@ -1,0 +1,81 @@
+# A block type of the curated ESP32-S31 register model: no vendor header
+# or SVD describes this block.
+schema = 3
+
+[type]
+name = "CLIC"
+description = "The core-local interrupt controller (CLIC) of the hart that accesses it.\n\nWords 0x0-0x1000: The core-local interrupt controller of the hart that accesses it, as 32-bit words: each line's word holds its pending, enable, attribute and control bytes. Invariant: every vectored line is level-triggered, so a write of the word that changes its enable or control writes back the pending bit read without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). INT_CONFIG holds the number of level bits of each line's control byte."
+sources = ["ESP_IDF_4D59230D_S31_CLIC"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_S31_CLIC"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[registers]]
+name = "INT_CONFIG"
+offset = 0x0
+description = "The controller's configuration: how many bits of a line's control byte are its level."
+
+[[registers.fields]]
+name = "NVBITS"
+bits = "0"
+class = "read-only"
+description = "Set: the controller implements hardware vectoring."
+
+[[registers.fields]]
+name = "MNLBITS"
+bits = "4:1"
+class = "plain"
+description = "Machine mode: the number of high bits of a line's control byte that are its level, at most 8."
+
+[[registers.fields]]
+name = "NMBITS"
+bits = "6:5"
+class = "read-only"
+description = "The number of privilege-mode bits of a line's attribute."
+
+[[registers]]
+name = "CTRL%s"
+offset = 0x1000
+dim = { count = 48, stride = 0x4 }
+description = "Line %s: pending, enable, attribute and level control."
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "IP"
+bits = "0"
+class = "plain"
+description = "The line's pending bit; for a level-triggered line it follows the source."
+
+[[registers.fields]]
+name = "IE"
+bits = "8"
+class = "plain"
+description = "Enables the line."
+
+[[registers.fields]]
+name = "ATTR_SHV"
+bits = "16"
+class = "plain"
+description = "Selects hardware vectoring for the line."
+
+[[registers.fields]]
+name = "ATTR_TRIG"
+bits = "18:17"
+class = "plain"
+description = "Trigger: bit 0 clear is level, set is edge; bit 1 selects the negative polarity."
+
+[[registers.fields]]
+name = "ATTR_MODE"
+bits = "23:22"
+class = "plain"
+description = "Privilege mode of the line."
+
+[[registers.fields]]
+name = "CTL"
+bits = "31:24"
+class = "plain"
+description = "Level and priority control; with three level bits a level-n line holds 0x1f | (n - 1) << 5."

@@ -1,0 +1,395 @@
+# A block type of the curated ESP32-S31 register model: no vendor header
+# or SVD describes this block.
+schema = 3
+
+[type]
+name = "BLE_ACCELERATOR"
+description = "The BLE hardware accelerator: encryption and resolving-list engines. Known only from vendor binaries.\n\nWords 0x0-0xd0: Sparse ESP32-S31 BLE hardware-accelerator view. Complete ble_hw.c operations independently prove encryption and resolving-list engines in this physical block; complete BLE PHY initialization proves three additional initialization words. Cross-chip objects provide function identities only. Addresses, field geometry, values, ordering and predicates all come from ESP32-S31 bytes.\n\nWords 0x30-0xc0: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown."
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBLE_HW_ENCRYPT_BLOCK", "BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH", "S31_MMIO_MODEM_RADIO_CORE_LOW"]
+
+[review]
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[review.opaque]
+sources = ["S31_MMIO_USE_20109830"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."INIT_CONFIG"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+completeness = "partial"
+
+[review.entity."INIT_CONFIG.VALUE"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+[review.entity."ENCRYPT_START"]
+completeness = "partial"
+
+[review.entity."ENCRYPT_CONFIG"]
+completeness = "partial"
+
+[review.entity."ENCRYPT_BLOCK_LENGTH"]
+completeness = "partial"
+
+[review.entity."ENCRYPT_KEY_WORD_0"]
+completeness = "partial"
+
+[review.entity."ENCRYPT_KEY_WORD_1"]
+completeness = "partial"
+
+[review.entity."ENCRYPT_KEY_WORD_2"]
+completeness = "partial"
+
+[review.entity."ENCRYPT_KEY_WORD_3"]
+completeness = "partial"
+
+[review.entity."ENCRYPT_INPUT_BUFFER_ADDRESS"]
+completeness = "partial"
+
+[review.entity."ENCRYPT_OUTPUT_BUFFER_ADDRESS"]
+completeness = "partial"
+
+[review.entity."WORD_0030_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_USE_20109830", "S31_MMIO_DECLARED_20109830"]
+
+[review.entity."WORD_0034_OPAQUE"]
+sources = ["S31_MMIO_USE_20109834"]
+
+[review.entity."WORD_0034_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20109834", "S31_MMIO_DECLARED_20109834"]
+
+[review.entity."RESOLV_SEARCH_START"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+completeness = "partial"
+
+[review.entity."RESOLV_SEARCH_START.COMMAND"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+
+[review.entity."RESOLV_LIST_ARGUMENT"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+completeness = "partial"
+
+[review.entity."RESOLV_LIST_ARGUMENT.VALUE"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+
+[review.entity."RESOLV_SEARCH_ARGUMENT"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+completeness = "partial"
+
+[review.entity."RESOLV_SEARCH_ARGUMENT.ARGUMENT_LOW_28"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+
+[review.entity."RESOLV_SEARCH_ARGUMENT.MODE"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+
+[review.entity."RESOLV_RESULT_METADATA"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+completeness = "partial"
+
+[review.entity."RESOLV_RESULT_METADATA.RESULT_BYTE"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+
+[review.entity."RESOLV_RESULT_POINTER_OFFSET"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+completeness = "partial"
+
+[review.entity."RESOLV_RESULT_POINTER_OFFSET.VALUE"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+
+[review.entity."RESOLV_RESULT_PRESENT"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+
+[review.entity."RESOLV_RESULT_PRESENT.VALUE"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+
+[review.entity."ENGINE_CONTROL"]
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK", "BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+completeness = "partial"
+
+[review.entity."ENGINE_CONTROL.RESOLV_CONFIG_BIT"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+
+[review.entity."RESOLV_STATUS"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+completeness = "partial"
+
+[review.entity."RESOLV_STATUS.COMPLETE"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+
+[review.entity."WORD_00C0_OPAQUE"]
+sources = ["S31_MMIO_USE_201098C0"]
+
+[review.entity."WORD_00C0_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_USE_201098C0", "S31_MMIO_DECLARED_201098C0"]
+
+[review.entity."INIT_SRAM_REGION_0"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+completeness = "partial"
+
+[review.entity."INIT_SRAM_REGION_0.VALUE"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+[review.entity."INIT_SRAM_REGION_1"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+completeness = "partial"
+
+[review.entity."INIT_SRAM_REGION_1.VALUE"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+[[registers]]
+name = "INIT_CONFIG"
+offset = 0x0
+description = "BLE PHY initialization writes the complete finite image 0x000002F0. Inner semantics remain unknown."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "ENCRYPT_START"
+offset = 0x4
+description = "r_ble_hw_encrypt_block writes the complete value 1 after publishing all encryption parameters."
+
+[[registers.fields]]
+name = "COMMAND"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "ENCRYPT_CONFIG"
+offset = 0x8
+description = "r_ble_hw_encrypt_block writes the finite complete image 1 before publishing buffer pointers."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "ENCRYPT_BLOCK_LENGTH"
+offset = 0xc
+description = "r_ble_hw_encrypt_block writes the finite complete image 16."
+
+[[registers.fields]]
+name = "BYTES"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "ENCRYPT_KEY_WORD_0"
+offset = 0x10
+description = "Little-endian word assembled from encryption-key argument bytes 0 through 3."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "ENCRYPT_KEY_WORD_1"
+offset = 0x14
+description = "Little-endian word assembled from encryption-key argument bytes 4 through 7."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "ENCRYPT_KEY_WORD_2"
+offset = 0x18
+description = "Little-endian word assembled from encryption-key argument bytes 8 through 11."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "ENCRYPT_KEY_WORD_3"
+offset = 0x1c
+description = "Little-endian word assembled from encryption-key argument bytes 12 through 15."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "ENCRYPT_INPUT_BUFFER_ADDRESS"
+offset = 0x20
+description = "Complete pointer image equal to the r_ble_hw_encrypt_block argument base plus 16."
+
+[[registers.fields]]
+name = "ADDRESS"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "ENCRYPT_OUTPUT_BUFFER_ADDRESS"
+offset = 0x24
+description = "Complete pointer image equal to the r_ble_hw_encrypt_block argument base plus 32."
+
+[[registers.fields]]
+name = "ADDRESS"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0030_OPAQUE"
+offset = 0x30
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0034_OPAQUE"
+offset = 0x34
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "RESOLV_SEARCH_START"
+offset = 0x80
+description = "r_ble_hw_resolv_list_search writes the complete finite image 1 after publishing its inputs."
+
+[[registers.fields]]
+name = "COMMAND"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "RESOLV_LIST_ARGUMENT"
+offset = 0x88
+description = "Complete first argument published by r_ble_hw_resolv_list_search."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "RESOLV_SEARCH_ARGUMENT"
+offset = 0x8c
+description = "Second search argument in bits 0..27 and a Boolean third-argument mode in bit 28."
+
+[[registers.fields]]
+name = "ARGUMENT_LOW_28"
+bits = "27:0"
+class = "write-only"
+
+[[registers.fields]]
+name = "MODE"
+bits = "28"
+class = "write-only"
+
+[[registers]]
+name = "RESOLV_RESULT_METADATA"
+offset = 0xa0
+description = "Search result word; r_ble_hw_resolv_list_search returns bits 8..15 through its fourth argument. Other bits remain unknown."
+
+[[registers.fields]]
+name = "RESULT_BYTE"
+bits = "15:8"
+class = "read-only"
+
+[[registers]]
+name = "RESOLV_RESULT_POINTER_OFFSET"
+offset = 0xa4
+description = "Search result combined with SRAM prefix 0x2F000000 to form the returned pointer. The exact encoded width remains unknown."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "RESOLV_RESULT_PRESENT"
+offset = 0xa8
+description = "Complete word tested for zero before the result pointer and metadata are consumed."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "ENGINE_CONTROL"
+offset = 0xb8
+description = "Shared control word: encryption sets bits 0..1 through RMW; resolving-list search writes the finite complete image 0x400."
+
+[[registers.fields]]
+name = "ENCRYPT_CONFIG_BITS"
+bits = "1:0"
+class = "plain"
+
+[[registers.fields]]
+name = "RESOLV_CONFIG_BIT"
+bits = "10"
+class = "plain"
+
+[[registers]]
+name = "RESOLV_STATUS"
+offset = 0xbc
+description = "r_ble_hw_resolv_list_search polls bit 2 with a finite software timeout."
+
+[[registers.fields]]
+name = "COMPLETE"
+bits = "2"
+class = "read-only"
+
+[[registers]]
+name = "WORD_00C0_OPAQUE"
+offset = 0xc0
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "ENCRYPT_COMPLETION_STATUS"
+offset = 0xc4
+description = "r_ble_hw_encrypt_block polls the complete word until nonzero, with a finite software timeout. Inner encoding remains unknown."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "INIT_SRAM_REGION_0"
+offset = 0xcc
+description = "BLE PHY initialization writes the complete finite image 0x2F080000. Inner semantics remain unknown."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "INIT_SRAM_REGION_1"
+offset = 0xd0
+description = "BLE PHY initialization writes the complete finite image 0x2F000000. Inner semantics remain unknown."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "plain"

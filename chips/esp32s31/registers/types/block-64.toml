@@ -1,0 +1,8 @@
+# An analog-I2C block type of the curated ESP32-S31 register model.
+schema = 3
+
+[type]
+name = "BLOCK_64"
+description = "The BLOCK_64 analog-I2C block (code 0x64)."
+space = "analog-i2c"
+sources = ["BLOB_LIBPHY_PHY_I2C"]

@@ -1,11 +1,12 @@
 # Imported by `cargo registers import` from the pinned vendor SVD and
-# ESP-IDF headers (registers/import.toml).
+# ESP-IDF headers (registers/import.toml), with the curated refinements
+# merged into it; this file, not the import, is the source of truth.
 schema = 3
 
 [type]
 name = "HP_SYSTEM"
 description = "The HP system registers: software interrupts between the cores, core stall status, pad and memory controls."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL", "ESP_IDF_4D59230D_S31_FROM_CPU"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
@@ -13,6 +14,39 @@ provenance = "imported"
 accuracy = "exact"
 completeness = "complete"
 naming = "vendor"
+
+[review.entity."HP_CPU_CORESTALLED_ST"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."HP_CPU_CORESTALLED_ST.HP_REG_CORE0_CORESTALLED_ST"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."HP_CPU_CORESTALLED_ST.HP_REG_CORE1_CORESTALLED_ST"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."HP_CPU_INT_FROM_CPU_0"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_FROM_CPU"]
+
+[review.entity."HP_CPU_INT_FROM_CPU_0.HP_CPU_INT_FROM_CPU_0"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_FROM_CPU"]
+
+[review.entity."HP_CPU_INT_FROM_CPU_1"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_FROM_CPU"]
+
+[review.entity."HP_CPU_INT_FROM_CPU_1.HP_CPU_INT_FROM_CPU_1"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_FROM_CPU"]
+
+[review.entity."HP_CPU_INT_FROM_CPU_2"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_FROM_CPU"]
+
+[review.entity."HP_CPU_INT_FROM_CPU_2.HP_CPU_INT_FROM_CPU_2"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_FROM_CPU"]
+
+[review.entity."HP_CPU_INT_FROM_CPU_3"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_FROM_CPU"]
+
+[review.entity."HP_CPU_INT_FROM_CPU_3.HP_CPU_INT_FROM_CPU_3"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_FROM_CPU"]
 
 [[registers]]
 name = "VER_DATE"
@@ -42,7 +76,7 @@ description = "NA"
 [[registers]]
 name = "HP_CPU_INT_FROM_CPU_0"
 offset = 0x10
-description = "NA"
+description = "The level of software interrupt line 0."
 reset = { value = 0x0 }
 reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
 
@@ -50,12 +84,12 @@ reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "HP_CPU_INT_FROM_CPU_0"
 bits = "0"
 class = "plain"
-description = "set 1 will triger a interrupt"
+description = "set 1 will triger a interrupt One raises the line's interrupt; zero lowers it."
 
 [[registers]]
 name = "HP_CPU_INT_FROM_CPU_1"
 offset = 0x14
-description = "NA"
+description = "The level of software interrupt line 1."
 reset = { value = 0x0 }
 reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
 
@@ -63,12 +97,12 @@ reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "HP_CPU_INT_FROM_CPU_1"
 bits = "0"
 class = "plain"
-description = "set 1 will triger a interrupt"
+description = "set 1 will triger a interrupt One raises the line's interrupt; zero lowers it."
 
 [[registers]]
 name = "HP_CPU_INT_FROM_CPU_2"
 offset = 0x18
-description = "NA"
+description = "The level of software interrupt line 2."
 reset = { value = 0x0 }
 reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
 
@@ -76,12 +110,12 @@ reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "HP_CPU_INT_FROM_CPU_2"
 bits = "0"
 class = "plain"
-description = "set 1 will triger a interrupt"
+description = "set 1 will triger a interrupt One raises the line's interrupt; zero lowers it."
 
 [[registers]]
 name = "HP_CPU_INT_FROM_CPU_3"
 offset = 0x1c
-description = "NA"
+description = "The level of software interrupt line 3."
 reset = { value = 0x0 }
 reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
 
@@ -89,7 +123,7 @@ reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "HP_CPU_INT_FROM_CPU_3"
 bits = "0"
 class = "plain"
-description = "set 1 will triger a interrupt"
+description = "set 1 will triger a interrupt One raises the line's interrupt; zero lowers it."
 
 [[registers]]
 name = "HP_MODEM_DIAG_EN"
@@ -206,21 +240,21 @@ description = "NA"
 [[registers]]
 name = "HP_CPU_CORESTALLED_ST"
 offset = 0x64
-description = "NA"
+description = "The hardware's corestalled status of each HP core, separate from the stall request."
 reset = { value = 0x0 }
-reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_IDF_4D59230D_S31_CORE_CONTROL"] }
 
 [[registers.fields]]
 name = "HP_REG_CORE0_CORESTALLED_ST"
 bits = "0"
 class = "read-only"
-description = "hp core0 corestalled status"
+description = "hp core0 corestalled status HP core 0 is stalled."
 
 [[registers.fields]]
 name = "HP_REG_CORE1_CORESTALLED_ST"
 bits = "1"
 class = "read-only"
-description = "hp core1 corestalled status"
+description = "hp core1 corestalled status HP core 1 is stalled."
 
 [[registers]]
 name = "HP_CRYPTO_CTRL"

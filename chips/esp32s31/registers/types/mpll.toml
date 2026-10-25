@@ -1,0 +1,45 @@
+# An analog-I2C block type of the curated ESP32-S31 register model.
+schema = 3
+
+[type]
+name = "MPLL"
+description = "The MPLL analog-I2C block (code 0x0b)."
+space = "analog-i2c"
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_MPLL"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_MPLL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "vendor"
+
+[[registers]]
+name = "I2C_MPLL_IR_CAL_EXT_CAP"
+offset = 0x1
+width = 8
+
+[[registers.fields]]
+name = "I2C_MPLL_IR_CAL_EXT_CAP"
+bits = "1:0"
+class = "unknown"
+
+[[registers.fields]]
+name = "I2C_MPLL_IR_CAL_ENX_CAP"
+bits = "2"
+class = "unknown"
+
+[[registers.fields]]
+name = "I2C_MPLL_IR_CAL_RSTB"
+bits = "5"
+class = "unknown"
+
+[[registers]]
+name = "I2C_MPLL_DHREF"
+offset = 0x3
+width = 8
+
+[[registers.fields]]
+name = "I2C_MPLL_DHREF"
+bits = "5:4"
+class = "unknown"

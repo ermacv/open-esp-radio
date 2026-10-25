@@ -1,11 +1,12 @@
 # Imported by `cargo registers import` from the pinned vendor SVD and
-# ESP-IDF headers (registers/import.toml).
+# ESP-IDF headers (registers/import.toml), with the curated refinements
+# merged into it; this file, not the import, is the source of truth.
 schema = 3
 
 [type]
 name = "SYSTIMER"
 description = "The system timer: two counter units and three comparators."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
@@ -14,10 +15,181 @@ accuracy = "exact"
 completeness = "complete"
 naming = "vendor"
 
+[review.entity."CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."CONF.ETM_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."CONF.TARGET2_WORK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."CONF.TARGET1_WORK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."CONF.TARGET0_WORK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."CONF.TIMER_UNIT1_CORE1_STALL_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."CONF.TIMER_UNIT1_CORE0_STALL_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."CONF.TIMER_UNIT0_CORE1_STALL_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."CONF.TIMER_UNIT0_CORE0_STALL_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."CONF.TIMER_UNIT1_WORK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."CONF.TIMER_UNIT0_WORK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."CONF.CLK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET0_HI"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET0_HI.TIMER_TARGET0_HI"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET1_HI"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET1_HI.TIMER_TARGET1_HI"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET2_HI"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET2_HI.TIMER_TARGET2_HI"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET0_LO"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET0_LO.TIMER_TARGET0_LO"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET1_LO"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET1_LO.TIMER_TARGET1_LO"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET2_LO"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET2_LO.TIMER_TARGET2_LO"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET0_CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET0_CONF.TARGET0_PERIOD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET0_CONF.TARGET0_PERIOD_MODE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET0_CONF.TARGET0_TIMER_UNIT_SEL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET1_CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET1_CONF.TARGET1_PERIOD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET1_CONF.TARGET1_PERIOD_MODE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET1_CONF.TARGET1_TIMER_UNIT_SEL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET2_CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET2_CONF.TARGET2_PERIOD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET2_CONF.TARGET2_PERIOD_MODE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET2_CONF.TARGET2_TIMER_UNIT_SEL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."COMP0_LOAD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."COMP0_LOAD.TIMER_COMP0_LOAD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."COMP1_LOAD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."COMP1_LOAD.TIMER_COMP1_LOAD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."COMP2_LOAD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."COMP2_LOAD.TIMER_COMP2_LOAD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."INT_ENA"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."INT_ENA.TARGET0_INT_ENA"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."INT_ENA.TARGET1_INT_ENA"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."INT_ENA.TARGET2_INT_ENA"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."UNIT0_OP"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."UNIT0_OP.TIMER_UNIT0_VALUE_VALID"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."UNIT0_OP.TIMER_UNIT0_UPDATE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."UNIT0_VALUE_HI"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."UNIT0_VALUE_HI.TIMER_UNIT0_VALUE_HI"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."UNIT0_VALUE_LO"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."UNIT0_VALUE_LO.TIMER_UNIT0_VALUE_LO"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."INT_CLR"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."INT_CLR.TARGET0_INT_CLR"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."INT_CLR.TARGET1_INT_CLR"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."INT_CLR.TARGET2_INT_CLR"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
 [[registers]]
 name = "CONF"
 offset = 0x0
-description = "Configure system timer clock"
+description = "Configure system timer clock Clock, unit and comparator enables."
 reset = { value = 0x46000000 }
 reserved = { mask = 0x3ffffd, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
 
@@ -25,72 +197,72 @@ reserved = { mask = 0x3ffffd, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER
 name = "ETM_EN"
 bits = "1"
 class = "plain"
-description = "Configures whether or not to enable generation of ETM events.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+description = "Configures whether or not to enable generation of ETM events.\\\\ 0: Disable\\\\ 1: Enable\\\\ Enables the generation of ETM events."
 
 [[registers.fields]]
 name = "TARGET2_WORK_EN"
 bits = "22"
 class = "plain"
-description = "Configures whether or not to enable COMP2.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+description = "Configures whether or not to enable COMP2.\\\\ 0: Disable\\\\ 1: Enable\\\\ Enables comparator 2."
 
 [[registers.fields]]
 name = "TARGET1_WORK_EN"
 bits = "23"
 class = "plain"
-description = "Configures whether or not to enable COMP1. See details in SYSTIMER_TARGET2_WORK_EN."
+description = "Configures whether or not to enable COMP1. See details in SYSTIMER_TARGET2_WORK_EN. Enables comparator 1."
 
 [[registers.fields]]
 name = "TARGET0_WORK_EN"
 bits = "24"
 class = "plain"
-description = "Configures whether or not to enable COMP0. See details in SYSTIMER_TARGET2_WORK_EN."
+description = "Configures whether or not to enable COMP0. See details in SYSTIMER_TARGET2_WORK_EN. Enables comparator 0."
 
 [[registers.fields]]
 name = "TIMER_UNIT1_CORE1_STALL_EN"
 bits = "25"
 class = "plain"
-description = "Configures whether or not UNIT1 is stalled when CORE1 is stalled. \\\\ 0: UNIT1 is not stalled. \\\\ 1: UNIT1 is stalled.\\\\"
+description = "Configures whether or not UNIT1 is stalled when CORE1 is stalled. \\\\ 0: UNIT1 is not stalled. \\\\ 1: UNIT1 is stalled.\\\\ Stalls unit 1 while core 1 is stalled."
 
 [[registers.fields]]
 name = "TIMER_UNIT1_CORE0_STALL_EN"
 bits = "26"
 class = "plain"
-description = "Configures whether or not UNIT1 is stalled when CORE0 is stalled. See details in SYSTIMER_TIMER_UNIT1_CORE1_STALL_EN."
+description = "Configures whether or not UNIT1 is stalled when CORE0 is stalled. See details in SYSTIMER_TIMER_UNIT1_CORE1_STALL_EN. Stalls unit 1 while core 0 is stalled."
 
 [[registers.fields]]
 name = "TIMER_UNIT0_CORE1_STALL_EN"
 bits = "27"
 class = "plain"
-description = "Configures whether or not UNIT0 is stalled when CORE1 is stalled. See details in SYSTIMER_TIMER_UNIT1_CORE1_STALL_EN."
+description = "Configures whether or not UNIT0 is stalled when CORE1 is stalled. See details in SYSTIMER_TIMER_UNIT1_CORE1_STALL_EN. Stalls unit 0 while core 1 is stalled."
 
 [[registers.fields]]
 name = "TIMER_UNIT0_CORE0_STALL_EN"
 bits = "28"
 class = "plain"
-description = "Configures whether or not UNIT0 is stalled when CORE0 is stalled. See details in SYSTIMER_TIMER_UNIT1_CORE1_STALL_EN."
+description = "Configures whether or not UNIT0 is stalled when CORE0 is stalled. See details in SYSTIMER_TIMER_UNIT1_CORE1_STALL_EN. Stalls unit 0 while core 0 is stalled."
 
 [[registers.fields]]
 name = "TIMER_UNIT1_WORK_EN"
 bits = "29"
 class = "plain"
-description = "Configures whether or not to enable UNIT1. \\\\ 0: Disable\\\\ 1: Enable\\\\"
+description = "Configures whether or not to enable UNIT1. \\\\ 0: Disable\\\\ 1: Enable\\\\ Enables unit 1."
 
 [[registers.fields]]
 name = "TIMER_UNIT0_WORK_EN"
 bits = "30"
 class = "plain"
-description = "Configures whether or not to enable UNIT0. \\\\ 0: Disable\\\\ 1: Enable\\\\"
+description = "Configures whether or not to enable UNIT0. \\\\ 0: Disable\\\\ 1: Enable\\\\ Enables unit 0."
 
 [[registers.fields]]
 name = "CLK_EN"
 bits = "31"
 class = "plain"
-description = "Configures register clock gating. \\\\ 0: Only enable needed clock for register read or write operations. \\\\ 1: Register clock is always enabled for read and write operations. \\\\"
+description = "Configures register clock gating. \\\\ 0: Only enable needed clock for register read or write operations. \\\\ 1: Register clock is always enabled for read and write operations. \\\\ Keeps the register clock enabled for every access."
 
 [[registers]]
 name = "UNIT0_OP"
 offset = 0x4
-description = "Read UNIT0 value to registers"
+description = "Read UNIT0 value to registers Unit zero's latch strobe and its done flag."
 reset = { value = 0x0 }
 reserved = { mask = 0x9fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
 
@@ -98,13 +270,13 @@ reserved = { mask = 0x9fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "TIMER_UNIT0_VALUE_VALID"
 bits = "29"
 class = "write-one-to-clear"
-description = "Represents UNIT0 value is synchronized and valid."
+description = "Represents UNIT0 value is synchronized and valid. Set when the latched value is synchronized and valid (R/SS/WTC: a written one clears it, so the strobe writes zero here)."
 
 [[registers.fields]]
 name = "TIMER_UNIT0_UPDATE"
 bits = "30"
 class = "write-trigger"
-description = "Configures whether or not to update timer UNIT0, i.e., reads the UNIT0 count value to SYSTIMER_TIMER_UNIT0_VALUE_HI and SYSTIMER_TIMER_UNIT0_VALUE_LO. \\\\ 0: No effect\\\\ 1: Update timer UNIT0 \\\\"
+description = "Configures whether or not to update timer UNIT0, i.e., reads the UNIT0 count value to SYSTIMER_TIMER_UNIT0_VALUE_HI and SYSTIMER_TIMER_UNIT0_VALUE_LO. \\\\ 0: No effect\\\\ 1: Update timer UNIT0 \\\\ Writing one latches unit zero's count into VALUE_HI and VALUE_LO."
 
 [[registers]]
 name = "UNIT1_OP"
@@ -328,7 +500,7 @@ description = "Chooses the counter value for comparison with COMP2. See details 
 [[registers]]
 name = "UNIT0_VALUE_HI"
 offset = 0x40
-description = "UNIT0 value, high 20 bits"
+description = "UNIT0 value, high 20 bits High 20 bits of unit zero's latched count."
 reset = { value = 0x0 }
 reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
 
@@ -336,19 +508,19 @@ reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "TIMER_UNIT0_VALUE_HI"
 bits = "19:0"
 class = "read-only"
-description = "Represents UNIT0 read value, high 20 bits."
+description = "Represents UNIT0 read value, high 20 bits. Count bits 51:32."
 
 [[registers]]
 name = "UNIT0_VALUE_LO"
 offset = 0x44
-description = "UNIT0 value, low 32 bits"
+description = "UNIT0 value, low 32 bits Low 32 bits of unit zero's latched count."
 reset = { value = 0x0 }
 
 [[registers.fields]]
 name = "TIMER_UNIT0_VALUE_LO"
 bits = "31:0"
 class = "read-only"
-description = "Represents UNIT0 read value, low 32 bits."
+description = "Represents UNIT0 read value, low 32 bits. Count bits 31:0."
 
 [[registers]]
 name = "UNIT1_VALUE_HI"
@@ -443,7 +615,7 @@ description = "Configures whether or not to reload the value of UNIT1, i.e., rel
 [[registers]]
 name = "INT_ENA"
 offset = 0x64
-description = "Interrupt enable register of system timer"
+description = "Interrupt enable register of system timer Comparator interrupt enables."
 reset = { value = 0x0 }
 reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
 
@@ -451,19 +623,19 @@ reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "TARGET0_INT_ENA"
 bits = "0"
 class = "plain"
-description = "Write 1 to enable SYSTIMER_TARGET0_INT."
+description = "Write 1 to enable SYSTIMER_TARGET0_INT. Enables comparator 0's interrupt."
 
 [[registers.fields]]
 name = "TARGET1_INT_ENA"
 bits = "1"
 class = "plain"
-description = "Write 1 to enable SYSTIMER_TARGET1_INT."
+description = "Write 1 to enable SYSTIMER_TARGET1_INT. Enables comparator 1's interrupt."
 
 [[registers.fields]]
 name = "TARGET2_INT_ENA"
 bits = "2"
 class = "plain"
-description = "Write 1 to enable SYSTIMER_TARGET2_INT."
+description = "Write 1 to enable SYSTIMER_TARGET2_INT. Enables comparator 2's interrupt."
 
 [[registers]]
 name = "INT_RAW"
@@ -493,7 +665,7 @@ description = "The raw interrupt status of SYSTIMER_TARGET2_INT."
 [[registers]]
 name = "INT_CLR"
 offset = 0x6c
-description = "Interrupt clear register of system timer"
+description = "Interrupt clear register of system timer Comparator interrupt acknowledgements: a written one clears the raw bit."
 reset = { value = 0x0 }
 reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
 
@@ -501,19 +673,19 @@ reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "TARGET0_INT_CLR"
 bits = "0"
 class = "write-trigger"
-description = "Write 1 to clear SYSTIMER_TARGET0_INT."
+description = "Write 1 to clear SYSTIMER_TARGET0_INT. Clears comparator 0's interrupt."
 
 [[registers.fields]]
 name = "TARGET1_INT_CLR"
 bits = "1"
 class = "write-trigger"
-description = "Write 1 to clear SYSTIMER_TARGET1_INT."
+description = "Write 1 to clear SYSTIMER_TARGET1_INT. Clears comparator 1's interrupt."
 
 [[registers.fields]]
 name = "TARGET2_INT_CLR"
 bits = "2"
 class = "write-trigger"
-description = "Write 1 to clear SYSTIMER_TARGET2_INT."
+description = "Write 1 to clear SYSTIMER_TARGET2_INT. Clears comparator 2's interrupt."
 
 [[registers]]
 name = "INT_ST"

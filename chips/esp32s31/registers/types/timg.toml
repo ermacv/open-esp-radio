@@ -1,11 +1,12 @@
 # Imported by `cargo registers import` from the pinned vendor SVD and
-# ESP-IDF headers (registers/import.toml).
+# ESP-IDF headers (registers/import.toml), with the curated refinements
+# merged into it; this file, not the import, is the source of truth.
 schema = 3
 
 [type]
 name = "TIMG"
 description = "A timer group: two general-purpose timers, the main watchdog and the RTC slow clock calibration."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
@@ -13,6 +14,69 @@ provenance = "imported"
 accuracy = "exact"
 completeness = "complete"
 naming = "vendor"
+
+[review.entity."WDTCONFIG0"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG0.WDT_APPCPU_RESET_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG0.WDT_PROCPU_RESET_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG0.WDT_FLASHBOOT_MOD_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG0.WDT_SYS_RESET_LENGTH"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG0.WDT_CPU_RESET_LENGTH"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG0.WDT_CONF_UPDATE_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG0.WDT_STG3"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG0.WDT_STG2"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG0.WDT_STG1"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG0.WDT_STG0"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG0.WDT_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG1"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG1.WDT_DIVCNT_RST"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG1.WDT_CLK_PRESCALE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG2"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTCONFIG2.WDT_STG0_HOLD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTFEED"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTFEED.WDT_FEED"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTWPROTECT"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[review.entity."WDTWPROTECT.WDT_WKEY"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_TIMG_WDT"]
 
 [[registers]]
 name = "T0CONFIG"
@@ -303,106 +367,106 @@ description = "Write any value to trigger a timer 1 time-base counter reload."
 [[registers]]
 name = "WDTCONFIG0"
 offset = 0x48
-description = "Watchdog timer configuration register"
+description = "Watchdog timer configuration register Main watchdog enable, stage actions, reset lengths and the configuration latch; written only while unlocked."
 reset = { value = 0x4c000 }
-reserved = { mask = 0x200fff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+reserved = { mask = 0x200fff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_IDF_4D59230D_S31_TIMG_WDT"] }
 
 [[registers.fields]]
 name = "WDT_APPCPU_RESET_EN"
 bits = "12"
 class = "plain"
-description = "Configures whether to mask the CPU reset generated by MWDT. Valid only when write protection is disabled. \\\\ 0: Mask \\\\ 1: Unmask \\\\"
+description = "Configures whether to mask the CPU reset generated by MWDT. Valid only when write protection is disabled. \\\\ 0: Mask \\\\ 1: Unmask \\\\ Unmasks the CPU reset of the application core."
 
 [[registers.fields]]
 name = "WDT_PROCPU_RESET_EN"
 bits = "13"
 class = "plain"
-description = "Configures whether to mask the CPU reset generated by MWDT. Valid only when write protection is disabled. \\\\ 0: Mask \\\\ 1: Unmask \\\\"
+description = "Configures whether to mask the CPU reset generated by MWDT. Valid only when write protection is disabled. \\\\ 0: Mask \\\\ 1: Unmask \\\\ Unmasks the CPU reset of the protocol core."
 
 [[registers.fields]]
 name = "WDT_FLASHBOOT_MOD_EN"
 bits = "14"
 class = "plain"
-description = "Configures whether to enable flash boot protection.\\\\ 0: Disable \\\\ 1: Enable \\\\"
+description = "Configures whether to enable flash boot protection.\\\\ 0: Disable \\\\ 1: Enable \\\\ Flash boot protection: the ROM arms it; a timeout resets the system even while WDT_EN is clear."
 
 [[registers.fields]]
 name = "WDT_SYS_RESET_LENGTH"
 bits = "17:15"
 class = "plain"
-description = "Configures the system reset signal length. Valid only when write protection is disabled. \\\\ Measurement unit: mwdt_clk \\begin{multicols}{2} 0: 8 \\\\ 1: 16 \\\\ 2: 24 \\\\ 3: 32 \\\\ 4: 40 \\\\ 5: 64 \\\\ 6: 128 \\\\ 7: 256 \\\\ \\end{multicols}"
+description = "Configures the system reset signal length. Valid only when write protection is disabled. \\\\ Measurement unit: mwdt_clk \\begin{multicols}{2} 0: 8 \\\\ 1: 16 \\\\ 2: 24 \\\\ 3: 32 \\\\ 4: 40 \\\\ 5: 64 \\\\ 6: 128 \\\\ 7: 256 \\\\ \\end{multicols} System reset signal length: 0..7 select 8, 16, 24, 32, 40, 64, 128 or 256 watchdog clock cycles."
 
 [[registers.fields]]
 name = "WDT_CPU_RESET_LENGTH"
 bits = "20:18"
 class = "plain"
-description = "Configures the CPU reset signal length. Valid only when write protection is disabled.\\\\ Measurement unit: mwdt_clk \\\\ \\begin{multicols}{2} 0: 8 \\\\ 1: 16 \\\\ 2: 24 \\\\ 3: 32 \\\\ 4: 40 \\\\ 5: 64 \\\\ 6: 128 \\\\ 7: 256 \\\\ \\end{multicols}"
+description = "Configures the CPU reset signal length. Valid only when write protection is disabled.\\\\ Measurement unit: mwdt_clk \\\\ \\begin{multicols}{2} 0: 8 \\\\ 1: 16 \\\\ 2: 24 \\\\ 3: 32 \\\\ 4: 40 \\\\ 5: 64 \\\\ 6: 128 \\\\ 7: 256 \\\\ \\end{multicols} CPU reset signal length: 0..7 select 8, 16, 24, 32, 40, 64, 128 or 256 watchdog clock cycles."
 
 [[registers.fields]]
 name = "WDT_CONF_UPDATE_EN"
 bits = "22"
 class = "write-trigger"
-description = "Configures to update the WDT configuration registers.\\\\ 0: No effect \\\\ 1: Update \\\\"
+description = "Configures to update the WDT configuration registers.\\\\ 0: No effect \\\\ 1: Update \\\\ Writing one latches the watchdog configuration words into the watchdog clock domain; reads zero."
 
 [[registers.fields]]
 name = "WDT_STG3"
 bits = "24:23"
 class = "plain"
-description = "Configures the timeout action of stage 3. See details in TIMG_WDT_STG0. Valid only when write protection is disabled."
+description = "Configures the timeout action of stage 3. See details in TIMG_WDT_STG0. Valid only when write protection is disabled. Timeout action of stage 3: 0 none, 1 interrupt, 2 CPU reset, 3 system reset."
 
 [[registers.fields]]
 name = "WDT_STG2"
 bits = "26:25"
 class = "plain"
-description = "Configures the timeout action of stage 2. See details in TIMG_WDT_STG0. Valid only when write protection is disabled."
+description = "Configures the timeout action of stage 2. See details in TIMG_WDT_STG0. Valid only when write protection is disabled. Timeout action of stage 2: 0 none, 1 interrupt, 2 CPU reset, 3 system reset."
 
 [[registers.fields]]
 name = "WDT_STG1"
 bits = "28:27"
 class = "plain"
-description = "Configures the timeout action of stage 1. See details in TIMG_WDT_STG0. Valid only when write protection is disabled."
+description = "Configures the timeout action of stage 1. See details in TIMG_WDT_STG0. Valid only when write protection is disabled. Timeout action of stage 1: 0 none, 1 interrupt, 2 CPU reset, 3 system reset."
 
 [[registers.fields]]
 name = "WDT_STG0"
 bits = "30:29"
 class = "plain"
-description = "Configures the timeout action of stage 0. Valid only when write protection is disabled. \\\\ 0: No effect \\\\ 1: Interrupt \\\\ 2: Reset CPU \\\\ 3: Reset system \\\\"
+description = "Configures the timeout action of stage 0. Valid only when write protection is disabled. \\\\ 0: No effect \\\\ 1: Interrupt \\\\ 2: Reset CPU \\\\ 3: Reset system \\\\ Timeout action of stage 0: 0 none, 1 interrupt, 2 CPU reset, 3 system reset."
 
 [[registers.fields]]
 name = "WDT_EN"
 bits = "31"
 class = "plain"
-description = "Configures whether or not to enable the MWDT. Valid only when write protection is disabled. \\\\ 0: Disable \\\\ 1: Enable \\\\"
+description = "Configures whether or not to enable the MWDT. Valid only when write protection is disabled. \\\\ 0: Disable \\\\ 1: Enable \\\\ Main watchdog enable."
 
 [[registers]]
 name = "WDTCONFIG1"
 offset = 0x4c
-description = "Watchdog timer prescaler register"
+description = "Watchdog timer prescaler register Main watchdog clock prescaler and divider reset; written only while unlocked."
 reset = { value = 0x10000 }
-reserved = { mask = 0xfffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H"] }
+reserved = { mask = 0xfffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_IDF_4D59230D_S31_TIMG_WDT"] }
 
 [[registers.fields]]
 name = "WDT_DIVCNT_RST"
 bits = "0"
 class = "write-trigger"
-description = "Configures whether to reset WDT 's clock divider counter. \\\\ 0: No effect \\\\ 1: Reset \\\\"
+description = "Configures whether to reset WDT 's clock divider counter. \\\\ 0: No effect \\\\ 1: Reset \\\\ Writing one resets the prescaler's divider counter; reads zero."
 
 [[registers.fields]]
 name = "WDT_CLK_PRESCALE"
 bits = "31:16"
 class = "plain"
-description = "Configures MWDT clock prescaler value. Valid only when write protection is disabled. \\\\ MWDT clock period = MWDT's clock source period * TIMG_WDT_CLK_PRESCALE. \\\\"
+description = "Configures MWDT clock prescaler value. Valid only when write protection is disabled. \\\\ MWDT clock period = MWDT's clock source period * TIMG_WDT_CLK_PRESCALE. \\\\ Watchdog tick = source clock period times this prescaler."
 
 [[registers]]
 name = "WDTCONFIG2"
 offset = 0x50
-description = "Watchdog timer stage 0 timeout value"
+description = "Watchdog timer stage 0 timeout value Stage 0 timeout; written only while unlocked."
 reset = { value = 0x18cba80 }
 
 [[registers.fields]]
 name = "WDT_STG0_HOLD"
 bits = "31:0"
 class = "plain"
-description = "Configures the stage 0 timeout value. Valid only when write protection is disabled. \\\\ Measurement unit: mwdt_clk \\\\"
+description = "Configures the stage 0 timeout value. Valid only when write protection is disabled. \\\\ Measurement unit: mwdt_clk \\\\ Stage 0 timeout in watchdog ticks."
 
 [[registers]]
 name = "WDTCONFIG3"
@@ -443,26 +507,26 @@ description = "Configures the stage 3 timeout value. Valid only when write prote
 [[registers]]
 name = "WDTFEED"
 offset = 0x60
-description = "Write to feed the watchdog timer"
+description = "Write to feed the watchdog timer Writing any value feeds the main watchdog while unlocked."
 reset = { value = 0x0 }
 
 [[registers.fields]]
 name = "WDT_FEED"
 bits = "31:0"
 class = "write-trigger"
-description = "Write any value to feed the MWDT. Valid only when write protection is disabled."
+description = "Write any value to feed the MWDT. Valid only when write protection is disabled. Any written value restarts the watchdog from stage 0."
 
 [[registers]]
 name = "WDTWPROTECT"
 offset = 0x64
-description = "Watchdog write protect register"
+description = "Watchdog write protect register Main watchdog write protection: the key unlocks the watchdog words, any other value locks them."
 reset = { value = 0x50d83aa1 }
 
 [[registers.fields]]
 name = "WDT_WKEY"
 bits = "31:0"
 class = "plain"
-description = "Configures a different value than its reset value to enable write protection."
+description = "Configures a different value than its reset value to enable write protection. Write key; 0x50D83AA1 unlocks."
 
 [[registers]]
 name = "RTCCALICFG"

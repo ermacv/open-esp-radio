@@ -1,0 +1,235 @@
+# A block type of the curated ESP32-S31 register model: no vendor header
+# or SVD describes this block.
+schema = 3
+
+[type]
+name = "WIFI_BB_BRX"
+description = "The Wi-Fi baseband receive block at DR_REG_WIFI_BB_BRX_BASE. Known only from vendor binaries.\n\nWords 0x4-0x78: OPAQUE PHY AGC, PBus-pulse, antenna, RX-compensation, DC-memory, post-initialization and 11b-control registers recovered from complete, finite rev0 ROM/blob bodies. One physical register has one identity even when independent bodies prove different fields. Names describe their proven operation role, not an unevidenced electrical identity.\n\nWord 0x50: Sparse BRX words absent from the public platform PAC.\n\nWords 0x60-0x7c: Wi-Fi-owned PHY words: the noise-floor measurement read by Wi-Fi link policy and the low-rate receive gate of Wi-Fi rate control and 11b long-range RX. Only Wi-Fi touches these words: no PHY registration, calibration or tracking body and no Bluetooth or IEEE 802.15.4 body accesses them, so they belong to the Wi-Fi partition rather than the shared radio PHY. They share the radio-core base with the PHY oracles."
+sources = ["ROM_REV0_PHY_AGC", "ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_ANT_INIT", "BLOB_LIBPHY_PHY_DC_MEM_CLR", "BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE", "BLOB_LIBPHY_PHY_SET_RX_COMP_NEW", "ESP_IDF_25FE69F_S31_PHY_RETENTION", "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK", "ROM_REV0_PHY_READ_NOISE_FLOOR", "ROM_REV0_PHY_LOW_RATE", "ROM_REV0_PHY_RX11BLR_CFG"]
+
+[review]
+sources = ["ROM_REV0_PHY_LOW_RATE"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[review.opaque]
+sources = ["ROM_REV0_PHY_AGC"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[review.entity."RX_11B_MODE_CONTROL"]
+sources = ["ROM_REV0_PHY_AGC"]
+completeness = "unknown"
+
+[review.entity."RX_11B_MODE_CONTROL.BITS_12_15_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20108004"]
+completeness = "partial"
+
+[review.entity."RX_11B_MODE_CONTROL.BIT_26_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20108004"]
+accuracy = "unknown"
+
+[review.entity."WORD_0050_OPAQUE"]
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+provenance = "derived"
+accuracy = "unknown"
+
+[review.entity."WORD_0050_OPAQUE.BITS_0_14_OPAQUE"]
+sources = ["S31_MMIO_USE_20108050", "S31_MMIO_DECLARED_20108050"]
+completeness = "partial"
+
+[review.entity."LOW_RATE_PRIMARY_CONTROL"]
+sources = ["ROM_REV0_PHY_LOW_RATE", "ROM_REV0_PHY_RX11BLR_CFG"]
+
+[review.entity."LOW_RATE_PRIMARY_CONTROL.BITS_0_9_OPAQUE"]
+sources = ["S31_MMIO_USE_20108060", "S31_MMIO_DECLARED_20108060"]
+completeness = "partial"
+
+[review.entity."LOW_RATE_PRIMARY_CONTROL.BITS_12_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20108060", "S31_MMIO_DECLARED_20108060"]
+completeness = "partial"
+
+[review.entity."AGC_UPDATE_8078_CONTROL"]
+sources = ["ROM_REV0_PHY_AGC"]
+completeness = "unknown"
+
+[review.entity."AGC_UPDATE_8078_CONTROL.BITS_20_22_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20108078"]
+accuracy = "unknown"
+
+[review.entity."LOW_RATE_SECONDARY_CONTROL"]
+sources = ["ROM_REV0_PHY_LOW_RATE", "ROM_REV0_PHY_RX11BLR_CFG"]
+
+[review.entity."LOW_RATE_SECONDARY_CONTROL.BITS_0_10_OPAQUE"]
+sources = ["S31_MMIO_USE_2010807C", "S31_MMIO_DECLARED_2010807C"]
+completeness = "partial"
+
+[review.entity."LOW_RATE_SECONDARY_CONTROL.BITS_12_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010807C", "S31_MMIO_DECLARED_2010807C"]
+completeness = "partial"
+
+[[registers]]
+name = "RX_11B_MODE_CONTROL"
+offset = 0x4
+description = "Complete phy_bb_agc_reg_update clears bit 26; complete phy_rx_11b_opt replaces bits 15:12."
+
+[[registers.fields]]
+name = "BITS_12_15_OPAQUE"
+bits = "15:12"
+class = "plain"
+description = "Complete phy_rx_11b_opt replaces bits 15:12."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BIT_26_OPAQUE"
+bits = "26"
+class = "plain"
+description = "Complete phy_bb_agc_reg_update clears bit 26."
+
+[[registers]]
+name = "WORD_0010_OPAQUE"
+offset = 0x10
+description = "Complete phy_bb_agc_reg_update writes 0x000852a1."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0018_OPAQUE"
+offset = 0x18
+description = "Complete phy_bb_agc_reg_update writes 0x00600030."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_001C_OPAQUE"
+offset = 0x1c
+description = "Complete phy_bb_agc_reg_update writes 0x010000a0."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0020_OPAQUE"
+offset = 0x20
+description = "Complete phy_bb_agc_reg_update writes 0x00000180."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0028_OPAQUE"
+offset = 0x28
+description = "Complete phy_bb_agc_reg_update writes 0xc0403020."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_002C_OPAQUE"
+offset = 0x2c
+description = "Complete phy_bb_agc_reg_update writes 0x01000080."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0050_OPAQUE"
+offset = 0x50
+description = "Complete phy_freq_correct read-modify-writes this word; individual fields remain unnamed."
+
+[[registers.fields]]
+name = "BITS_0_14_OPAQUE"
+bits = "14:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "LOW_RATE_PRIMARY_CONTROL"
+offset = 0x60
+description = "Complete phy_enable_low_rate sets bits 10 and 11 through separate fresh-read RMW edges; complete phy_disable_low_rate clears them in the same order; complete phy_rx11blr_cfg replaces both with its caller low bit."
+
+[[registers.fields]]
+name = "LOW_RATE_ENABLE_FIRST"
+bits = "10"
+class = "plain"
+description = "First independently updated low-rate enable bit."
+
+[[registers.fields]]
+name = "LOW_RATE_ENABLE_SECOND"
+bits = "11"
+class = "plain"
+description = "Second independently updated low-rate enable bit."
+
+[[registers.fields]]
+name = "BITS_0_9_OPAQUE"
+bits = "9:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_12_31_OPAQUE"
+bits = "31:12"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0070_OPAQUE"
+offset = 0x70
+description = "Complete phy_bb_agc_reg_update writes 0x000008c7."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "AGC_UPDATE_8078_CONTROL"
+offset = 0x78
+description = "Complete phy_bb_agc_reg_update sets bits 22:20."
+
+[[registers.fields]]
+name = "BITS_20_22_OPAQUE"
+bits = "22:20"
+class = "plain"
+description = "Complete phy_bb_agc_reg_update sets all three bits."
+write-range = { min = 0x0, max = 0x7 }
+
+[[registers]]
+name = "LOW_RATE_SECONDARY_CONTROL"
+offset = 0x7c
+description = "Third and final fresh-read RMW in the complete low-rate leaves and phy_rx11blr_cfg."
+
+[[registers.fields]]
+name = "LOW_RATE_ENABLE"
+bits = "11"
+class = "plain"
+description = "Set by complete phy_enable_low_rate and cleared by complete phy_disable_low_rate."
+
+[[registers.fields]]
+name = "BITS_0_10_OPAQUE"
+bits = "10:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_12_31_OPAQUE"
+bits = "31:12"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."

@@ -1,0 +1,1815 @@
+# A block type of the curated ESP32-S31 register model: no vendor header
+# or SVD describes this block.
+schema = 3
+
+[type]
+name = "BTDM"
+description = "The Bluetooth dual-mode block: BR/EDR MAC defaults and the scheduler hardware-list table. Known only from vendor binaries.\n\nWords 0x8-0xffc: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown.\n\nWord 0x1000: Sixteen-entry scheduler hardware-list table. Complete current insertion-begin, insertion-end and lifecycle bodies prove the finite entry count, 0x10-byte stride and low-20-bit compressed SRAM head. Same-chip public named header accessors independently establish the hardware-list role. The upper twelve bits and the unobserved words inside each stride remain unknown."
+sources = ["S31_MMIO_MODEM_RADIO_CORE_MID", "BLOB_LIBBTDM_SCHEDULER_LIFECYCLE", "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
+
+[review]
+sources = ["BLOB_LIBBTDM_SCHEDULER_LIFECYCLE", "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[review.opaque]
+sources = ["S31_MMIO_USE_2010A83C", "S31_MMIO_DECLARED_2010A83C"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_0008_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A008"]
+
+[review.entity."WORD_0008_OPAQUE.BITS_0_29_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A008", "S31_MMIO_DECLARED_2010A008"]
+
+[review.entity."WORD_0008_OPAQUE.BITS_30_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A008_RUN", "S31_MMIO_DECLARED_2010A008"]
+
+[review.entity."WORD_000C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A00C"]
+
+[review.entity."WORD_000C_OPAQUE.BITS_0_29_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A00C", "S31_MMIO_DECLARED_2010A00C"]
+
+[review.entity."WORD_000C_OPAQUE.BITS_30_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A00C_RUN", "S31_MMIO_DECLARED_2010A00C"]
+
+[review.entity."WORD_0010_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A010"]
+
+[review.entity."WORD_0010_OPAQUE.BITS_0_29_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A010", "S31_MMIO_DECLARED_2010A010"]
+
+[review.entity."WORD_0010_OPAQUE.BITS_30_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A010_RUN", "S31_MMIO_DECLARED_2010A010"]
+
+[review.entity."WORD_0014_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A014"]
+
+[review.entity."WORD_0014_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A014", "S31_MMIO_DECLARED_2010A014"]
+
+[review.entity."WORD_0018_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A018"]
+
+[review.entity."WORD_0018_OPAQUE.BITS_0_27_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A018", "S31_MMIO_DECLARED_2010A018"]
+
+[review.entity."WORD_0018_OPAQUE.BITS_29_30_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A018", "S31_MMIO_DECLARED_2010A018"]
+
+[review.entity."WORD_0018_OPAQUE.BIT_28_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A018_RUN", "S31_MMIO_DECLARED_2010A018"]
+
+[review.entity."WORD_0018_OPAQUE.BIT_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A018_RUN", "S31_MMIO_DECLARED_2010A018"]
+
+[review.entity."WORD_001C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A01C"]
+
+[review.entity."WORD_001C_OPAQUE.BITS_12_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A01C", "S31_MMIO_DECLARED_2010A01C"]
+
+[review.entity."WORD_001C_OPAQUE.BITS_0_11_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A01C_RUN", "S31_MMIO_DECLARED_2010A01C"]
+
+[review.entity."WORD_0020_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A020"]
+
+[review.entity."WORD_0020_OPAQUE.BITS_0_15_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A020", "S31_MMIO_DECLARED_2010A020"]
+
+[review.entity."WORD_0020_OPAQUE.BITS_17_26_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A020", "S31_MMIO_DECLARED_2010A020"]
+
+[review.entity."WORD_0020_OPAQUE.BIT_16_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A020_RUN", "S31_MMIO_DECLARED_2010A020"]
+
+[review.entity."WORD_0020_OPAQUE.BITS_27_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A020_RUN", "S31_MMIO_DECLARED_2010A020"]
+
+[review.entity."WORD_0024_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A024"]
+
+[review.entity."WORD_0024_OPAQUE.BITS_0_15_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A024", "S31_MMIO_DECLARED_2010A024"]
+
+[review.entity."WORD_0024_OPAQUE.BITS_17_26_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A024", "S31_MMIO_DECLARED_2010A024"]
+
+[review.entity."WORD_0024_OPAQUE.BIT_16_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A024_RUN", "S31_MMIO_DECLARED_2010A024"]
+
+[review.entity."WORD_0024_OPAQUE.BITS_27_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A024_RUN", "S31_MMIO_DECLARED_2010A024"]
+
+[review.entity."WORD_0028_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A028"]
+
+[review.entity."WORD_0028_OPAQUE.BITS_0_27_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A028", "S31_MMIO_DECLARED_2010A028"]
+
+[review.entity."WORD_0028_OPAQUE.BITS_28_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A028_RUN", "S31_MMIO_DECLARED_2010A028"]
+
+[review.entity."WORD_002C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A02C"]
+
+[review.entity."WORD_002C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A02C", "S31_MMIO_DECLARED_2010A02C"]
+
+[review.entity."WORD_0030_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A030"]
+
+[review.entity."WORD_0030_OPAQUE.BITS_0_20_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A030", "S31_MMIO_DECLARED_2010A030"]
+
+[review.entity."WORD_0030_OPAQUE.BITS_21_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A030_RUN", "S31_MMIO_DECLARED_2010A030"]
+
+[review.entity."WORD_0034_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A034"]
+
+[review.entity."WORD_0034_OPAQUE.BITS_0_8_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A034", "S31_MMIO_DECLARED_2010A034"]
+
+[review.entity."WORD_0034_OPAQUE.BITS_9_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A034_RUN", "S31_MMIO_DECLARED_2010A034"]
+
+[review.entity."WORD_0038_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A038"]
+
+[review.entity."WORD_0038_OPAQUE.BITS_0_15_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A038", "S31_MMIO_DECLARED_2010A038"]
+
+[review.entity."WORD_0038_OPAQUE.BITS_17_26_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A038", "S31_MMIO_DECLARED_2010A038"]
+
+[review.entity."WORD_0038_OPAQUE.BIT_16_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A038_RUN", "S31_MMIO_DECLARED_2010A038"]
+
+[review.entity."WORD_0038_OPAQUE.BITS_27_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A038_RUN", "S31_MMIO_DECLARED_2010A038"]
+
+[review.entity."WORD_003C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A03C"]
+
+[review.entity."WORD_003C_OPAQUE.BITS_0_15_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A03C", "S31_MMIO_DECLARED_2010A03C"]
+
+[review.entity."WORD_003C_OPAQUE.BITS_17_26_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A03C", "S31_MMIO_DECLARED_2010A03C"]
+
+[review.entity."WORD_003C_OPAQUE.BIT_16_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A03C_RUN", "S31_MMIO_DECLARED_2010A03C"]
+
+[review.entity."WORD_003C_OPAQUE.BITS_27_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A03C_RUN", "S31_MMIO_DECLARED_2010A03C"]
+
+[review.entity."WORD_0040_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A040"]
+
+[review.entity."WORD_0040_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A040", "S31_MMIO_DECLARED_2010A040"]
+
+[review.entity."WORD_0044_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A044"]
+
+[review.entity."WORD_0044_OPAQUE.BITS_0_15_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A044", "S31_MMIO_DECLARED_2010A044"]
+
+[review.entity."WORD_0044_OPAQUE.BITS_17_26_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A044", "S31_MMIO_DECLARED_2010A044"]
+
+[review.entity."WORD_0044_OPAQUE.BIT_16_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A044_RUN", "S31_MMIO_DECLARED_2010A044"]
+
+[review.entity."WORD_0044_OPAQUE.BITS_27_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A044_RUN", "S31_MMIO_DECLARED_2010A044"]
+
+[review.entity."WORD_0048_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A048"]
+
+[review.entity."WORD_0048_OPAQUE.BITS_0_16_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A048", "S31_MMIO_DECLARED_2010A048"]
+
+[review.entity."WORD_0048_OPAQUE.BITS_17_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A048_RUN", "S31_MMIO_DECLARED_2010A048"]
+
+[review.entity."WORD_004C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A04C"]
+
+[review.entity."WORD_004C_OPAQUE.BITS_0_16_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A04C", "S31_MMIO_DECLARED_2010A04C"]
+
+[review.entity."WORD_004C_OPAQUE.BITS_29_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A04C", "S31_MMIO_DECLARED_2010A04C"]
+
+[review.entity."WORD_004C_OPAQUE.BITS_17_28_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A04C_RUN", "S31_MMIO_DECLARED_2010A04C"]
+
+[review.entity."WORD_0050_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A050"]
+
+[review.entity."WORD_0050_OPAQUE.BITS_0_3_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A050", "S31_MMIO_DECLARED_2010A050"]
+
+[review.entity."WORD_0050_OPAQUE.BITS_4_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A050_RUN", "S31_MMIO_DECLARED_2010A050"]
+
+[review.entity."WORD_0054_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A054"]
+
+[review.entity."WORD_0054_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A054", "S31_MMIO_DECLARED_2010A054"]
+
+[review.entity."WORD_0054_OPAQUE.BIT_9_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A054", "S31_MMIO_DECLARED_2010A054"]
+
+[review.entity."WORD_0054_OPAQUE.BIT_8_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A054_RUN", "S31_MMIO_DECLARED_2010A054"]
+
+[review.entity."WORD_0054_OPAQUE.BITS_10_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A054_RUN", "S31_MMIO_DECLARED_2010A054"]
+
+[review.entity."WORD_0058_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A058"]
+
+[review.entity."WORD_0058_OPAQUE.BITS_0_25_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A058", "S31_MMIO_DECLARED_2010A058"]
+
+[review.entity."WORD_0058_OPAQUE.BIT_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A058", "S31_MMIO_DECLARED_2010A058"]
+
+[review.entity."WORD_0058_OPAQUE.BITS_26_30_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A058_RUN", "S31_MMIO_DECLARED_2010A058"]
+
+[review.entity."WORD_005C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A05C"]
+
+[review.entity."WORD_005C_OPAQUE.BITS_0_30_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A05C", "S31_MMIO_DECLARED_2010A05C"]
+
+[review.entity."WORD_005C_OPAQUE.BIT_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A05C_RUN", "S31_MMIO_DECLARED_2010A05C"]
+
+[review.entity."WORD_0060_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A060"]
+
+[review.entity."WORD_0060_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A060", "S31_MMIO_DECLARED_2010A060"]
+
+[review.entity."WORD_0064_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A064"]
+
+[review.entity."WORD_0064_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A064", "S31_MMIO_DECLARED_2010A064"]
+
+[review.entity."WORD_0068_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A068"]
+
+[review.entity."WORD_0068_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A068", "S31_MMIO_DECLARED_2010A068"]
+
+[review.entity."WORD_006C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A06C"]
+
+[review.entity."WORD_006C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A06C", "S31_MMIO_DECLARED_2010A06C"]
+
+[review.entity."WORD_0070_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A070"]
+
+[review.entity."WORD_0070_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A070", "S31_MMIO_DECLARED_2010A070"]
+
+[review.entity."WORD_0074_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A074"]
+
+[review.entity."WORD_0074_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A074", "S31_MMIO_DECLARED_2010A074"]
+
+[review.entity."WORD_0074_OPAQUE.BITS_1_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A074_RUN", "S31_MMIO_DECLARED_2010A074"]
+
+[review.entity."WORD_0078_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A078"]
+
+[review.entity."WORD_0078_OPAQUE.BITS_0_16_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A078", "S31_MMIO_DECLARED_2010A078"]
+
+[review.entity."WORD_0078_OPAQUE.BITS_17_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A078_RUN", "S31_MMIO_DECLARED_2010A078"]
+
+[review.entity."WORD_007C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A07C"]
+
+[review.entity."WORD_007C_OPAQUE.BITS_12_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A07C", "S31_MMIO_DECLARED_2010A07C"]
+
+[review.entity."WORD_007C_OPAQUE.BITS_0_11_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A07C_RUN", "S31_MMIO_DECLARED_2010A07C"]
+
+[review.entity."WORD_0080_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A080"]
+
+[review.entity."WORD_0080_OPAQUE.BITS_0_25_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A080", "S31_MMIO_DECLARED_2010A080"]
+
+[review.entity."WORD_0080_OPAQUE.BITS_26_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A080_RUN", "S31_MMIO_DECLARED_2010A080"]
+
+[review.entity."WORD_0084_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A084"]
+
+[review.entity."WORD_0084_OPAQUE.BITS_0_1_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A084", "S31_MMIO_DECLARED_2010A084"]
+
+[review.entity."WORD_0084_OPAQUE.BITS_2_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A084_RUN", "S31_MMIO_DECLARED_2010A084"]
+
+[review.entity."WORD_00F4_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A0F4"]
+
+[review.entity."WORD_00F4_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A0F4", "S31_MMIO_DECLARED_2010A0F4"]
+
+[review.entity."WORD_01F8_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A1F8"]
+
+[review.entity."WORD_01F8_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A1F8", "S31_MMIO_DECLARED_2010A1F8"]
+
+[review.entity."WORD_07FC_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A7FC"]
+
+[review.entity."WORD_07FC_OPAQUE.BITS_0_27_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A7FC", "S31_MMIO_DECLARED_2010A7FC"]
+
+[review.entity."WORD_0804_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A804"]
+
+[review.entity."WORD_0804_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A804", "S31_MMIO_DECLARED_2010A804"]
+
+[review.entity."WORD_0808_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A808"]
+
+[review.entity."WORD_0808_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A808", "S31_MMIO_DECLARED_2010A808"]
+
+[review.entity."WORD_080C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A80C"]
+
+[review.entity."WORD_080C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A80C", "S31_MMIO_DECLARED_2010A80C"]
+
+[review.entity."WORD_0810_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A810"]
+
+[review.entity."WORD_0810_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A810", "S31_MMIO_DECLARED_2010A810"]
+
+[review.entity."WORD_0814_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A814"]
+
+[review.entity."WORD_0814_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A814", "S31_MMIO_DECLARED_2010A814"]
+
+[review.entity."WORD_0818_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A818"]
+
+[review.entity."WORD_0818_OPAQUE.BITS_0_15_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A818", "S31_MMIO_DECLARED_2010A818"]
+
+[review.entity."WORD_081C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A81C"]
+
+[review.entity."WORD_081C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A81C", "S31_MMIO_DECLARED_2010A81C"]
+
+[review.entity."WORD_0824_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A824"]
+
+[review.entity."WORD_0824_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A824", "S31_MMIO_DECLARED_2010A824"]
+
+[review.entity."WORD_0828_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A828"]
+
+[review.entity."WORD_0828_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A828", "S31_MMIO_DECLARED_2010A828"]
+
+[review.entity."WORD_082C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A82C"]
+
+[review.entity."WORD_082C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A82C", "S31_MMIO_DECLARED_2010A82C"]
+
+[review.entity."WORD_0830_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A830"]
+
+[review.entity."WORD_0830_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A830", "S31_MMIO_DECLARED_2010A830"]
+
+[review.entity."WORD_0834_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A834"]
+
+[review.entity."WORD_0834_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A834", "S31_MMIO_DECLARED_2010A834"]
+
+[review.entity."WORD_0838_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A838"]
+
+[review.entity."WORD_0838_OPAQUE.BITS_0_15_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A838", "S31_MMIO_DECLARED_2010A838"]
+
+[review.entity."WORD_083C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A83C"]
+
+[review.entity."WORD_083C_OPAQUE.BIT_15_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A83C_TWO_DOMAIN"]
+
+[review.entity."WORD_083C_OPAQUE.BITS_29_30_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A83C_TWO_DOMAIN"]
+
+[review.entity."WORD_0844_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A844"]
+
+[review.entity."WORD_0844_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A844", "S31_MMIO_DECLARED_2010A844"]
+
+[review.entity."WORD_0848_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A848"]
+
+[review.entity."WORD_0848_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A848", "S31_MMIO_DECLARED_2010A848"]
+
+[review.entity."WORD_084C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A84C"]
+
+[review.entity."WORD_084C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A84C", "S31_MMIO_DECLARED_2010A84C"]
+
+[review.entity."WORD_0850_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A850"]
+
+[review.entity."WORD_0850_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A850", "S31_MMIO_DECLARED_2010A850"]
+
+[review.entity."WORD_0854_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A854"]
+
+[review.entity."WORD_0854_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A854", "S31_MMIO_DECLARED_2010A854"]
+
+[review.entity."WORD_0858_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A858"]
+
+[review.entity."WORD_0858_OPAQUE.BITS_0_15_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A858", "S31_MMIO_DECLARED_2010A858"]
+
+[review.entity."WORD_085C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A85C"]
+
+[review.entity."WORD_085C_OPAQUE.BITS_0_14_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A85C", "S31_MMIO_DECLARED_2010A85C"]
+
+[review.entity."WORD_085C_OPAQUE.BITS_16_28_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A85C", "S31_MMIO_DECLARED_2010A85C"]
+
+[review.entity."WORD_085C_OPAQUE.BIT_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A85C", "S31_MMIO_DECLARED_2010A85C"]
+
+[review.entity."WORD_085C_OPAQUE.BIT_15_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A85C_TWO_DOMAIN"]
+
+[review.entity."WORD_085C_OPAQUE.BITS_29_30_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A85C_TWO_DOMAIN"]
+
+[review.entity."WORD_0860_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A860"]
+
+[review.entity."WORD_0860_OPAQUE.BITS_0_23_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A860", "S31_MMIO_DECLARED_2010A860"]
+
+[review.entity."WORD_0864_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A864"]
+
+[review.entity."WORD_0864_OPAQUE.BITS_0_11_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A864", "S31_MMIO_DECLARED_2010A864"]
+
+[review.entity."WORD_0868_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A868"]
+
+[review.entity."WORD_0868_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A868", "S31_MMIO_DECLARED_2010A868"]
+
+[review.entity."WORD_086C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A86C"]
+
+[review.entity."WORD_086C_OPAQUE.BITS_0_2_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A86C", "S31_MMIO_DECLARED_2010A86C"]
+
+[review.entity."WORD_086C_OPAQUE.BIT_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A86C", "S31_MMIO_DECLARED_2010A86C"]
+
+[review.entity."WORD_086C_OPAQUE.BITS_3_7_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A86C_TWO_DOMAIN"]
+
+[review.entity."WORD_0870_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A870"]
+
+[review.entity."WORD_0870_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A870", "S31_MMIO_DECLARED_2010A870"]
+
+[review.entity."WORD_0874_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A874"]
+
+[review.entity."WORD_0874_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A874", "S31_MMIO_DECLARED_2010A874"]
+
+[review.entity."WORD_0874_OPAQUE.BIT_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A874", "S31_MMIO_DECLARED_2010A874"]
+
+[review.entity."WORD_0878_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A878"]
+
+[review.entity."WORD_0878_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A878", "S31_MMIO_DECLARED_2010A878"]
+
+[review.entity."WORD_087C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A87C"]
+
+[review.entity."WORD_087C_OPAQUE.BITS_0_14_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A87C", "S31_MMIO_DECLARED_2010A87C"]
+
+[review.entity."WORD_0880_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A880"]
+
+[review.entity."WORD_0880_OPAQUE.BITS_0_15_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A880", "S31_MMIO_DECLARED_2010A880"]
+
+[review.entity."WORD_0884_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A884"]
+
+[review.entity."WORD_0884_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A884", "S31_MMIO_DECLARED_2010A884"]
+
+[review.entity."WORD_0888_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A888"]
+
+[review.entity."WORD_0888_OPAQUE.BITS_0_14_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A888", "S31_MMIO_DECLARED_2010A888"]
+
+[review.entity."WORD_088C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A88C"]
+
+[review.entity."WORD_088C_OPAQUE.BITS_0_14_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A88C", "S31_MMIO_DECLARED_2010A88C"]
+
+[review.entity."WORD_0890_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A890"]
+
+[review.entity."WORD_0890_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A890", "S31_MMIO_DECLARED_2010A890"]
+
+[review.entity."WORD_0894_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A894"]
+
+[review.entity."WORD_0894_OPAQUE.BITS_0_14_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A894", "S31_MMIO_DECLARED_2010A894"]
+
+[review.entity."WORD_0898_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A898"]
+
+[review.entity."WORD_0898_OPAQUE.BITS_0_3_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A898", "S31_MMIO_DECLARED_2010A898"]
+
+[review.entity."WORD_089C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A89C"]
+
+[review.entity."WORD_089C_OPAQUE.BITS_0_3_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A89C", "S31_MMIO_DECLARED_2010A89C"]
+
+[review.entity."WORD_08A0_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A8A0"]
+
+[review.entity."WORD_08A0_OPAQUE.BITS_0_21_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A8A0", "S31_MMIO_DECLARED_2010A8A0"]
+
+[review.entity."WORD_08A0_OPAQUE.BIT_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A8A0", "S31_MMIO_DECLARED_2010A8A0"]
+
+[review.entity."WORD_08A4_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A8A4"]
+
+[review.entity."WORD_08A4_OPAQUE.BITS_0_21_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A8A4", "S31_MMIO_DECLARED_2010A8A4"]
+
+[review.entity."WORD_08A4_OPAQUE.BIT_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A8A4", "S31_MMIO_DECLARED_2010A8A4"]
+
+[review.entity."WORD_08A8_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A8A8"]
+
+[review.entity."WORD_08A8_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010A8A8", "S31_MMIO_DECLARED_2010A8A8"]
+
+[review.entity."WORD_0FF8_OPAQUE"]
+sources = ["S31_MMIO_USE_2010AFF8"]
+
+[review.entity."WORD_0FF8_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_USE_2010AFF8", "S31_MMIO_DECLARED_2010AFF8"]
+
+[review.entity."WORD_0FFC_OPAQUE"]
+sources = ["S31_MMIO_USE_2010AFFC"]
+
+[review.entity."WORD_0FFC_OPAQUE.BITS_0_27_OPAQUE"]
+sources = ["S31_MMIO_USE_2010AFFC", "S31_MMIO_DECLARED_2010AFFC"]
+
+[review.entity."ENTRY%s.HEAD_POINTER"]
+provenance = "derived"
+completeness = "complete"
+
+[[registers]]
+name = "WORD_0008_OPAQUE"
+offset = 0x8
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_29_OPAQUE"
+bits = "29:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_30_31_OPAQUE"
+bits = "31:30"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_000C_OPAQUE"
+offset = 0xc
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_29_OPAQUE"
+bits = "29:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_30_31_OPAQUE"
+bits = "31:30"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0010_OPAQUE"
+offset = 0x10
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_29_OPAQUE"
+bits = "29:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_30_31_OPAQUE"
+bits = "31:30"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0014_OPAQUE"
+offset = 0x14
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0018_OPAQUE"
+offset = 0x18
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_27_OPAQUE"
+bits = "27:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_29_30_OPAQUE"
+bits = "30:29"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_28_OPAQUE"
+bits = "28"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_001C_OPAQUE"
+offset = 0x1c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_12_31_OPAQUE"
+bits = "31:12"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_0_11_OPAQUE"
+bits = "11:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0020_OPAQUE"
+offset = 0x20
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_15_OPAQUE"
+bits = "15:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_17_26_OPAQUE"
+bits = "26:17"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_16_OPAQUE"
+bits = "16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_27_31_OPAQUE"
+bits = "31:27"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0024_OPAQUE"
+offset = 0x24
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_15_OPAQUE"
+bits = "15:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_17_26_OPAQUE"
+bits = "26:17"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_16_OPAQUE"
+bits = "16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_27_31_OPAQUE"
+bits = "31:27"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0028_OPAQUE"
+offset = 0x28
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_27_OPAQUE"
+bits = "27:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_28_31_OPAQUE"
+bits = "31:28"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_002C_OPAQUE"
+offset = 0x2c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0030_OPAQUE"
+offset = 0x30
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_20_OPAQUE"
+bits = "20:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_21_31_OPAQUE"
+bits = "31:21"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0034_OPAQUE"
+offset = 0x34
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_8_OPAQUE"
+bits = "8:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_9_31_OPAQUE"
+bits = "31:9"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0038_OPAQUE"
+offset = 0x38
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_15_OPAQUE"
+bits = "15:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_17_26_OPAQUE"
+bits = "26:17"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_16_OPAQUE"
+bits = "16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_27_31_OPAQUE"
+bits = "31:27"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_003C_OPAQUE"
+offset = 0x3c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_15_OPAQUE"
+bits = "15:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_17_26_OPAQUE"
+bits = "26:17"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_16_OPAQUE"
+bits = "16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_27_31_OPAQUE"
+bits = "31:27"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0040_OPAQUE"
+offset = 0x40
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0044_OPAQUE"
+offset = 0x44
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_15_OPAQUE"
+bits = "15:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_17_26_OPAQUE"
+bits = "26:17"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_16_OPAQUE"
+bits = "16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_27_31_OPAQUE"
+bits = "31:27"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0048_OPAQUE"
+offset = 0x48
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_16_OPAQUE"
+bits = "16:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_17_31_OPAQUE"
+bits = "31:17"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_004C_OPAQUE"
+offset = 0x4c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_16_OPAQUE"
+bits = "16:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_29_31_OPAQUE"
+bits = "31:29"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_17_28_OPAQUE"
+bits = "28:17"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0050_OPAQUE"
+offset = 0x50
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_3_OPAQUE"
+bits = "3:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_4_31_OPAQUE"
+bits = "31:4"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0054_OPAQUE"
+offset = 0x54
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_9_OPAQUE"
+bits = "9"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_8_OPAQUE"
+bits = "8"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_10_31_OPAQUE"
+bits = "31:10"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0058_OPAQUE"
+offset = 0x58
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_25_OPAQUE"
+bits = "25:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_26_30_OPAQUE"
+bits = "30:26"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_005C_OPAQUE"
+offset = 0x5c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_30_OPAQUE"
+bits = "30:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0060_OPAQUE"
+offset = 0x60
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0064_OPAQUE"
+offset = 0x64
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0068_OPAQUE"
+offset = 0x68
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_006C_OPAQUE"
+offset = 0x6c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0070_OPAQUE"
+offset = 0x70
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0074_OPAQUE"
+offset = 0x74
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_1_31_OPAQUE"
+bits = "31:1"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0078_OPAQUE"
+offset = 0x78
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_16_OPAQUE"
+bits = "16:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_17_31_OPAQUE"
+bits = "31:17"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_007C_OPAQUE"
+offset = 0x7c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_12_31_OPAQUE"
+bits = "31:12"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_0_11_OPAQUE"
+bits = "11:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0080_OPAQUE"
+offset = 0x80
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_25_OPAQUE"
+bits = "25:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_26_31_OPAQUE"
+bits = "31:26"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0084_OPAQUE"
+offset = 0x84
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_1_OPAQUE"
+bits = "1:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_2_31_OPAQUE"
+bits = "31:2"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_00F4_OPAQUE"
+offset = 0xf4
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_01F8_OPAQUE"
+offset = 0x1f8
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_07FC_OPAQUE"
+offset = 0x7fc
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_27_OPAQUE"
+bits = "27:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0804_OPAQUE"
+offset = 0x804
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0808_OPAQUE"
+offset = 0x808
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_080C_OPAQUE"
+offset = 0x80c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0810_OPAQUE"
+offset = 0x810
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0814_OPAQUE"
+offset = 0x814
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0818_OPAQUE"
+offset = 0x818
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_15_OPAQUE"
+bits = "15:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_081C_OPAQUE"
+offset = 0x81c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0824_OPAQUE"
+offset = 0x824
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0828_OPAQUE"
+offset = 0x828
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_082C_OPAQUE"
+offset = 0x82c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0830_OPAQUE"
+offset = 0x830
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0834_OPAQUE"
+offset = 0x834
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0838_OPAQUE"
+offset = 0x838
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_15_OPAQUE"
+bits = "15:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_083C_OPAQUE"
+offset = 0x83c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_14_OPAQUE"
+bits = "14:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_16_28_OPAQUE"
+bits = "28:16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_15_OPAQUE"
+bits = "15"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_29_30_OPAQUE"
+bits = "30:29"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0844_OPAQUE"
+offset = 0x844
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0848_OPAQUE"
+offset = 0x848
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_084C_OPAQUE"
+offset = 0x84c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0850_OPAQUE"
+offset = 0x850
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0854_OPAQUE"
+offset = 0x854
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0858_OPAQUE"
+offset = 0x858
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_15_OPAQUE"
+bits = "15:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_085C_OPAQUE"
+offset = 0x85c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_14_OPAQUE"
+bits = "14:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_16_28_OPAQUE"
+bits = "28:16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_15_OPAQUE"
+bits = "15"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_29_30_OPAQUE"
+bits = "30:29"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0860_OPAQUE"
+offset = 0x860
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_23_OPAQUE"
+bits = "23:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0864_OPAQUE"
+offset = 0x864
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_11_OPAQUE"
+bits = "11:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0868_OPAQUE"
+offset = 0x868
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_086C_OPAQUE"
+offset = 0x86c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_2_OPAQUE"
+bits = "2:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_3_7_OPAQUE"
+bits = "7:3"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0870_OPAQUE"
+offset = 0x870
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0874_OPAQUE"
+offset = 0x874
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0878_OPAQUE"
+offset = 0x878
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_087C_OPAQUE"
+offset = 0x87c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_14_OPAQUE"
+bits = "14:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0880_OPAQUE"
+offset = 0x880
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_15_OPAQUE"
+bits = "15:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0884_OPAQUE"
+offset = 0x884
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0888_OPAQUE"
+offset = 0x888
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_14_OPAQUE"
+bits = "14:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_088C_OPAQUE"
+offset = 0x88c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_14_OPAQUE"
+bits = "14:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0890_OPAQUE"
+offset = 0x890
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0894_OPAQUE"
+offset = 0x894
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_14_OPAQUE"
+bits = "14:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0898_OPAQUE"
+offset = 0x898
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_3_OPAQUE"
+bits = "3:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_089C_OPAQUE"
+offset = 0x89c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_3_OPAQUE"
+bits = "3:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_08A0_OPAQUE"
+offset = 0x8a0
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_21_OPAQUE"
+bits = "21:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_08A4_OPAQUE"
+offset = 0x8a4
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_21_OPAQUE"
+bits = "21:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_08A8_OPAQUE"
+offset = 0x8a8
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0FF8_OPAQUE"
+offset = 0xff8
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0FFC_OPAQUE"
+offset = 0xffc
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_27_OPAQUE"
+bits = "27:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "ENTRY%s"
+offset = 0x1000
+dim = { count = 16, stride = 0x10 }
+description = "Scheduler hardware-list entry. Bits 0..19 hold a compressed SRAM head and bits 20..31 remain unassigned."
+
+[[registers.fields]]
+name = "HEAD_POINTER"
+bits = "19:0"
+class = "plain"
+description = "Compressed four-byte-aligned 0x2f-prefixed SRAM hardware-list head. Zero denotes no published head."
+write-range = { min = 0x0, max = 0xfffff }

@@ -1,0 +1,167 @@
+# A block type of the curated ESP32-S31 register model: no vendor header
+# or SVD describes this block.
+schema = 3
+
+[type]
+name = "MODEM_DATADUMP"
+description = "The modem data-dump block at DR_REG_MODEM_DATADUMP_BASE. Known only from vendor binaries.\n\nWords 0x4-0x18: Receive sample-dump words programmed by complete librftest adctrig and set_dump_mode. Dumped words are read back from 0x2f060000 as signed ten-bit components in bits 9:0 and 19:10 (complete print_dump_data and sampledeal); that aperture is not radio MMIO."
+sources = ["BLOB_LIBRFTEST_ADCTRIG", "BLOB_LIBRFTEST_SET_DUMP_MODE", "BLOB_LIBRFTEST_PRINT_DUMP_DATA"]
+
+[review]
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[review.opaque]
+sources = ["S31_MMIO_DECLARED_20109004"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."DUMP_CONTROL"]
+completeness = "unknown"
+
+[review.entity."DUMP_CONFIG"]
+completeness = "unknown"
+
+[review.entity."DUMP_CONFIG.BITS_0_15_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20109008"]
+
+[review.entity."DUMP_CONFIG.BITS_21_24_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20109008"]
+
+[review.entity."DUMP_CONFIG.BIT_16_OPAQUE"]
+sources = ["S31_MMIO_USE_20109008", "S31_MMIO_DECLARED_20109008"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."DUMP_CONFIG.BITS_25_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20109008", "S31_MMIO_DECLARED_20109008"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."DUMP_LANE_SELECT"]
+completeness = "unknown"
+
+[review.entity."DUMP_LANE_SELECT.BIT_24_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20109018"]
+
+[[registers]]
+name = "DUMP_CONTROL"
+offset = 0x4
+description = "Sample-dump length, start and completion word. Complete adctrig programs LENGTH, clears bits 17 and 21:20, sets ENABLE, pulses TRIGGER for selector zero, polls DONE with a bounded wait and finally clears ENABLE."
+
+[[registers.fields]]
+name = "LENGTH"
+bits = "16:0"
+class = "plain"
+description = "Number of dump words: complete adctrig writes its first argument plus one."
+write-range = { min = 0x0, max = 0x1ffff }
+
+[[registers.fields]]
+name = "BIT_17_OPAQUE"
+bits = "17"
+class = "plain"
+description = "Cleared by complete adctrig after LENGTH is written."
+
+[[registers.fields]]
+name = "DONE"
+bits = "18"
+class = "plain"
+description = "Dump completion: complete adctrig polls this bit after starting the dump and stops waiting once it is set or its 1,000,000-count bound of WIFI_MAC_LOCAL_TIME.COUNTER elapses."
+
+[[registers.fields]]
+name = "TRIGGER"
+bits = "19"
+class = "plain"
+description = "Software dump start: complete adctrig sets and then clears this bit for selector zero after setting ENABLE; selector twelve starts Bluetooth reception instead."
+
+[[registers.fields]]
+name = "BITS_20_21_OPAQUE"
+bits = "21:20"
+class = "plain"
+description = "Cleared by complete adctrig before the dump starts."
+
+[[registers.fields]]
+name = "ENABLE"
+bits = "31"
+class = "plain"
+description = "Dump enable: complete adctrig sets this bit before starting the dump and clears it after the completion wait."
+
+[[registers]]
+name = "DUMP_CONFIG"
+offset = 0x8
+description = "Sample-dump source and rate word. Complete adctrig replaces bits 24:21 at entry, replaces SOURCE_SELECT on one selector path and reads the whole word after the completion wait."
+
+[[registers.fields]]
+name = "BITS_0_15_OPAQUE"
+bits = "15:0"
+class = "plain"
+description = "Read by complete adctrig after the completion wait; it prints the low sixteen bits."
+
+[[registers.fields]]
+name = "SOURCE_SELECT"
+bits = "20:17"
+class = "plain"
+description = "Dump source: one selector path of complete adctrig replaces these bits with its selector argument."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BITS_21_24_OPAQUE"
+bits = "24:21"
+class = "plain"
+description = "Complete adctrig writes half its fourth argument, or zero when that argument is below two."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BIT_16_OPAQUE"
+bits = "16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_25_31_OPAQUE"
+bits = "31:25"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "DUMP_LANE_SELECT"
+offset = 0x18
+description = "Four six-bit dump lane selectors and an enable bit, programmed by complete adctrig: 24, 25, 26 and 27 by default, with other values for selector arguments 11 and 12."
+
+[[registers.fields]]
+name = "LANE_0"
+bits = "5:0"
+class = "plain"
+description = "First lane selector; complete adctrig writes 24 by default."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "LANE_1"
+bits = "11:6"
+class = "plain"
+description = "Second lane selector; complete adctrig writes 25 by default."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "LANE_2"
+bits = "17:12"
+class = "plain"
+description = "Third lane selector; complete adctrig writes 26 by default."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "LANE_3"
+bits = "23:18"
+class = "plain"
+description = "Fourth lane selector; complete adctrig writes 27 by default."
+write-range = { min = 0x0, max = 0x3f }
+
+[[registers.fields]]
+name = "BIT_24_OPAQUE"
+bits = "24"
+class = "plain"
+description = "Set by complete adctrig after the lane selectors."

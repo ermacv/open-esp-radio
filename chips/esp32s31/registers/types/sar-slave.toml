@@ -1,0 +1,8 @@
+# An analog-I2C block type of the curated ESP32-S31 register model.
+schema = 3
+
+[type]
+name = "SAR_SLAVE"
+description = "The SAR_SLAVE analog-I2C block (code 0x11)."
+space = "analog-i2c"
+sources = ["ESP_IDF_4D59230D_S31_ANALOG_SLAVE_SELECTION"]

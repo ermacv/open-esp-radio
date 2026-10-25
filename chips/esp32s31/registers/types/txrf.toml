@@ -1,0 +1,233 @@
+# An analog-I2C block type of the curated ESP32-S31 register model.
+schema = 3
+
+[type]
+name = "TXRF"
+description = "The TXRF analog-I2C block (code 0x6b)."
+space = "analog-i2c"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[review]
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[review.opaque]
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+
+[[registers]]
+name = "TX_CAPACITOR_LOW"
+offset = 0x2
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "TX_CAPACITOR_LOW"
+bits = "3:0"
+class = "plain"
+description = "Low transmit-capacitor bank field."
+
+[[registers.fields]]
+name = "TX_CAPACITOR_HIGH"
+bits = "7:4"
+class = "plain"
+description = "High transmit-capacitor bank field."
+
+[[registers]]
+name = "WIFI_TX_TEMPERATURE_TRACKING_0"
+offset = 0x3
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xf, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "WIFI_TX_TEMPERATURE_TRACKING_0"
+bits = "3:0"
+class = "plain"
+description = "First Wi-Fi transmit temperature-tracking field."
+
+[[registers]]
+name = "WIFI_TX_TEMPERATURE_TRACKING_1"
+offset = 0x7
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xf, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "WIFI_TX_TEMPERATURE_TRACKING_1"
+bits = "3:0"
+class = "plain"
+description = "Second Wi-Fi transmit temperature-tracking field."
+
+[[registers]]
+name = "RC_CONFIGURATION_1"
+offset = 0xf
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xf8, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RC_CONFIGURATION_1"
+bits = "7:3"
+class = "plain"
+description = "Second RC-calibration setup field."
+
+[[registers]]
+name = "RC_CONFIGURATION_0"
+offset = 0x11
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x30, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RC_CONFIGURATION_0"
+bits = "5:4"
+class = "plain"
+description = "First RC-calibration setup field."
+
+[[registers]]
+name = "RC_CALIBRATION_ENABLE"
+offset = 0x13
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x3f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RC_CALIBRATION_ENABLE"
+bits = "0"
+class = "plain"
+description = "RC-calibration enable bit."
+
+[[registers.fields]]
+name = "RC_CALIBRATION_PULSE"
+bits = "1"
+class = "plain"
+description = "RC-calibration pulse bit."
+
+[[registers.fields]]
+name = "RC_CONFIGURATION_2"
+bits = "5:2"
+class = "plain"
+description = "Third RC-calibration setup field."
+
+[[registers]]
+name = "RC_CALIBRATION_RESULT"
+offset = 0x14
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x3f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RC_CALIBRATION_RESULT"
+bits = "5:0"
+class = "plain"
+description = "RC-calibration result field."
+
+[[registers]]
+name = "BYTE_01_OPAQUE"
+offset = 0x1
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "unknown"
+
+[[registers]]
+name = "BYTE_04_OPAQUE"
+offset = 0x4
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "unknown"
+
+[[registers]]
+name = "BYTE_05_OPAQUE"
+offset = 0x5
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "unknown"
+
+[[registers]]
+name = "BYTE_06_OPAQUE"
+offset = 0x6
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "unknown"
+
+[[registers]]
+name = "BYTE_08_OPAQUE"
+offset = 0x8
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "unknown"
+
+[[registers]]
+name = "BYTE_09_OPAQUE"
+offset = 0x9
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "unknown"
+
+[[registers]]
+name = "BYTE_0A_OPAQUE"
+offset = 0xa
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "unknown"
+
+[[registers]]
+name = "BYTE_0B_OPAQUE"
+offset = 0xb
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "unknown"
+
+[[registers]]
+name = "BYTE_0C_OPAQUE"
+offset = 0xc
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "unknown"
+
+[[registers]]
+name = "BYTE_0D_OPAQUE"
+offset = 0xd
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "unknown"
+
+[[registers]]
+name = "BYTE_0E_OPAQUE"
+offset = 0xe
+width = 8
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "unknown"

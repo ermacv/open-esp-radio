@@ -1,11 +1,12 @@
 # Imported by `cargo registers import` from the pinned vendor SVD and
-# ESP-IDF headers (registers/import.toml).
+# ESP-IDF headers (registers/import.toml), with the curated refinements
+# merged into it; this file, not the import, is the source of truth.
 schema = 3
 
 [type]
 name = "PMU"
 description = "The power management unit: power states of the HP and LP domains, the modem power domain and the cores' stall requests."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW", "ROM_REV0_PHY_OPEN_FE_BB_CLK", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
@@ -15,7 +16,7 @@ completeness = "complete"
 naming = "vendor"
 
 [review.entity."HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_CPLL_I2C"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "S31_PMU_HEADERS"]
 
 [review.entity."HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_BBPLL_I2C"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
@@ -24,10 +25,10 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
 
 [review.entity."HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_MPLL_I2C"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "S31_PMU_HEADERS"]
 
 [review.entity."HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_CPLL"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "S31_PMU_HEADERS"]
 
 [review.entity."HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_BBPLL"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
@@ -36,7 +37,7 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
 
 [review.entity."HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_MPLL"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "S31_PMU_HEADERS"]
 
 [review.entity."HP_MODEM_HP_CK_POWER.HP_MODEM_XPD_CPLL_I2C"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"]
@@ -97,6 +98,69 @@ sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 
 [review.entity."LP_SLEEP_LP_BIAS_RESERVE.PMU_LP_SLEEP_LP_BIAS_RESERVE"]
 sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review.entity."HP_ACTIVE_ICG_MODEM"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
+
+[review.entity."HP_ACTIVE_ICG_MODEM.HP_ACTIVE_DIG_ICG_MODEM_CODE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
+
+[review.entity."HP_ACTIVE_HP_CK_POWER"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ROM_REV0_PHY_OPEN_FE_BB_CLK"]
+
+[review.entity."HP_ACTIVE_HP_CK_POWER.BITS_0_3_OPAQUE"]
+sources = ["S31_PMU_HEADERS", "ROM_REV0_PHY_OPEN_FE_BB_CLK", "S31_MMIO_DECLARED_2070401C"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_BB_I2C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ROM_REV0_PHY_OPEN_FE_BB_CLK"]
+
+[review.entity."IMM_HP_CK_POWER_0"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW", "BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907"]
+
+[review.entity."IMM_SLEEP_SYSCLK"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
+
+[review.entity."IMM_SLEEP_SYSCLK.UPDATE_DIG_ICG_SWITCH"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
+
+[review.entity."IMM_MODEM_ICG"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
+
+[review.entity."IMM_MODEM_ICG.UPDATE_DIG_ICG_MODEM_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
+
+[review.entity."RF_PWC"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907"]
+
+[review.entity."RF_PWC.XPD_RF_CIRCUIT"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907"]
+
+[review.entity."ANA_PERI_PWR_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW"]
+
+[review.entity."ANA_PERI_PWR_CTRL.XPD_PERIF_I2C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW"]
+
+[review.entity."ANA_PERI_PWR_CTRL.RSTB_PERIF_I2C"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW"]
+
+[review.entity."ANA_PERI_PWR_CTRL.BITS_0_29_OPAQUE"]
+sources = ["S31_MMIO_USE_20704208", "S31_MMIO_DECLARED_20704208"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."CPU_STALL_SW"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."CPU_STALL_SW.HPCORE1_SW_STALL_CODE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."CPU_STALL_SW.HPCORE0_SW_STALL_CODE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
 
 [[registers]]
 name = "HP_ACTIVE_DIG_POWER"
@@ -210,7 +274,7 @@ description = "need_des"
 [[registers]]
 name = "HP_ACTIVE_ICG_MODEM"
 offset = 0x14
-description = "need_des"
+description = "Active-state modem clock-gating selection."
 reset = { value = 0x0 }
 reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
 
@@ -218,7 +282,9 @@ reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "HP_ACTIVE_DIG_ICG_MODEM_CODE"
 bits = "31:30"
 class = "plain"
-description = "need_des"
+description = "Two-bit active-state modem clock-gating code; official ESP-HAL publishes code two for the active configuration."
+values = [{ name = "ACTIVE", value = 2, description = "Active-state modem clock-gating code published by official ESP-HAL." }]
+write-values-only = true
 
 [[registers]]
 name = "HP_ACTIVE_HP_SYS_CNTL"
@@ -272,9 +338,17 @@ description = "need_des"
 [[registers]]
 name = "HP_ACTIVE_HP_CK_POWER"
 offset = 0x1c
-description = "need_des"
+description = "Active-state high-power clock and analog-I2C power control. The public struct calls low4 reserved, but the pinned complete ROM clock leaf explicitly sets them; its direct use overrides that reserved claim on low4 only."
 reset = { value = 0x0 }
-reserved = { mask = 0x8007ffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+reserved = { mask = 0x8007fff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "S31_PMU_HEADERS"] }
+
+[[registers.fields]]
+name = "BITS_0_3_OPAQUE"
+bits = "3:0"
+class = "plain"
+description = "Low-nibble image set by complete rev0 ROM phy_open_fe_bb_clk; individual bit semantics remain unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
+values = [{ name = "ROM_REQUIRED", value = 15, description = "Complete low-nibble image published by the rev0 ROM front-end/baseband clock leaf." }]
+write-values-only = true
 
 [[registers.fields]]
 name = "HP_ACTIVE_XPD_XTALX2"
@@ -298,13 +372,13 @@ description = "need_des"
 name = "HP_ACTIVE_XPD_BB_I2C"
 bits = "22"
 class = "plain"
-description = "need_des"
+description = "Active-state baseband analog-I2C power control."
 
 [[registers.fields]]
 name = "HP_ACTIVE_XPD_CPLL_I2C"
 bits = "23"
 class = "plain"
-description = "need_des"
+description = "Active-state CPLL analog-I2C power control. The bootstrap powers it before it programs the CPLL; the radio does not write it."
 
 [[registers.fields]]
 name = "HP_ACTIVE_XPD_BBPLL_I2C"
@@ -322,13 +396,13 @@ description = "need_des"
 name = "HP_ACTIVE_XPD_MPLL_I2C"
 bits = "26"
 class = "plain"
-description = "need_des"
+description = "Active-state MPLL analog-I2C power control. The bootstrap powers it before it programs the MPLL that clocks the PSRAM; the radio does not write it."
 
 [[registers.fields]]
 name = "HP_ACTIVE_XPD_CPLL"
 bits = "27"
 class = "plain"
-description = "need_des"
+description = "Active-state CPLL power. The bootstrap powers it for the CPU clock; the radio does not write it."
 
 [[registers.fields]]
 name = "HP_ACTIVE_XPD_BBPLL"
@@ -346,7 +420,7 @@ description = "need_des"
 name = "HP_ACTIVE_XPD_MPLL"
 bits = "30"
 class = "plain"
-description = "need_des"
+description = "Active-state MPLL power. The bootstrap powers it for the PSRAM clock; the radio does not write it."
 
 [[registers]]
 name = "HP_ACTIVE_BIAS"
@@ -1821,7 +1895,7 @@ description = "need_des"
 [[registers]]
 name = "IMM_HP_CK_POWER_0"
 offset = 0xf0
-description = "need_des"
+description = "Immediate high-power clock ties. The ESP-IDF header classes TIE_HIGH_XPD_BB_I2C, TIE_HIGH_XPD_XTALX2 and TIE_HIGH_XPD_XTAL write-trigger. The complete libphy bodies phy_open_i2c_xpd_new and phy_xpd_rf_new set or clear bit 28 in one read-modify-write of this word; what a read of these bits returns is not established."
 reset = { value = 0x0 }
 reserved = { mask = 0x21ffff90, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
 
@@ -1883,19 +1957,19 @@ description = "need_des"
 name = "TIE_HIGH_XPD_BB_I2C"
 bits = "28"
 class = "write-trigger"
-description = "need_des"
+description = "Force the baseband analog-I2C power control high."
 
 [[registers.fields]]
 name = "TIE_HIGH_XPD_XTALX2"
 bits = "30"
 class = "write-trigger"
-description = "need_des"
+description = "Force the doubled-crystal power control high."
 
 [[registers.fields]]
 name = "TIE_HIGH_XPD_XTAL"
 bits = "31"
 class = "write-trigger"
-description = "need_des"
+description = "Force the crystal power control high."
 
 [[registers]]
 name = "IMM_HP_CK_POWER_1"
@@ -1943,7 +2017,7 @@ description = "need_des"
 [[registers]]
 name = "IMM_SLEEP_SYSCLK"
 offset = 0xf8
-description = "need_des"
+description = "Immediate sleep/system-clock update commands."
 reset = { value = 0x0 }
 reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
 
@@ -1951,7 +2025,7 @@ reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTE
 name = "UPDATE_DIG_ICG_SWITCH"
 bits = "28"
 class = "write-trigger"
-description = "need_des"
+description = "Publish the selected digital clock-gating switch state."
 
 [[registers.fields]]
 name = "TIE_LOW_ICG_SLP_SEL"
@@ -2000,7 +2074,7 @@ description = "need_des"
 [[registers]]
 name = "IMM_MODEM_ICG"
 offset = 0x104
-description = "need_des"
+description = "Immediate modem clock-gating update command."
 reset = { value = 0x0 }
 reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
 
@@ -2008,7 +2082,7 @@ reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "UPDATE_DIG_ICG_MODEM_EN"
 bits = "31"
 class = "write-trigger"
-description = "need_des"
+description = "Publish the selected digital modem clock-gating state."
 
 [[registers]]
 name = "IMM_LP_ICG"
@@ -2872,7 +2946,7 @@ description = "need_des"
 [[registers]]
 name = "RF_PWC"
 offset = 0x184
-description = "need_des"
+description = "RF circuit power control."
 reset = { value = 0x0 }
 reserved = { mask = 0xffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
 
@@ -2880,7 +2954,9 @@ reserved = { mask = 0xffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_S
 name = "XPD_RF_CIRCUIT"
 bits = "31:16"
 class = "plain"
-description = "need_des"
+description = "Sixteen RF circuit power-control bits."
+values = [{ name = "POWERED_OFF", value = 0, description = "Clear every reviewed RF circuit power-control bit." }, { name = "POWERED_ON", value = 65535, description = "Set every reviewed RF circuit power-control bit." }]
+write-values-only = true
 
 [[registers]]
 name = "BACKUP_CFG"
@@ -3782,21 +3858,21 @@ description = "need_des"
 [[registers]]
 name = "CPU_STALL_SW"
 offset = 0x1ec
-description = "need_des"
+description = "Software stall request codes of the two HP cores: 0x86 requests a stall, 0xFF lets the core run."
 reset = { value = 0x0 }
-reserved = { mask = 0xffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+reserved = { mask = 0xffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_IDF_4D59230D_S31_CORE_CONTROL"] }
 
 [[registers.fields]]
 name = "HPCORE1_SW_STALL_CODE"
 bits = "23:16"
 class = "plain"
-description = "need_des"
+description = "Stall request code of HP core 1."
 
 [[registers.fields]]
 name = "HPCORE0_SW_STALL_CODE"
 bits = "31:24"
 class = "plain"
-description = "need_des"
+description = "Stall request code of HP core 0."
 
 [[registers]]
 name = "EXT_WAKEUP_LV"
@@ -3903,21 +3979,26 @@ description = "need_des"
 [[registers]]
 name = "ANA_PERI_PWR_CTRL"
 offset = 0x208
-description = "need_des"
+description = "Analog peripheral I2C power and active-low reset control."
 reset = { value = 0x40000000 }
-reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H"] }
+
+[[registers.fields]]
+name = "BITS_0_29_OPAQUE"
+bits = "29:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
 
 [[registers.fields]]
 name = "XPD_PERIF_I2C"
 bits = "30"
 class = "plain"
-description = "need_des"
+description = "Analog peripheral I2C power control."
 
 [[registers.fields]]
 name = "RSTB_PERIF_I2C"
 bits = "31"
 class = "plain"
-description = "need_des"
+description = "Analog peripheral I2C active-low reset release."
 
 [[registers]]
 name = "RDN_ECO"

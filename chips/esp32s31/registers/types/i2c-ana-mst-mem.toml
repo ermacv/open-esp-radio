@@ -1,0 +1,50 @@
+# A block type of the curated ESP32-S31 register model: no vendor header
+# or SVD describes this block.
+schema = 3
+
+[type]
+name = "I2C_ANA_MST_MEM"
+description = "The analog-I2C master's command memory at DR_REG_I2C_ANA_MST_MEM_BASE.\n\nWord 0x0: Official S31 reg_base.h names this aperture DR_REG_I2C_ANA_MST_MEM_BASE. The complete blob establishes its forty-five-entry command layout and the population order in phy_i2c_master_cmd_mem_init. Complete phy_i2c_check independently names ten logical banks, their block IDs, selected host and finite register-index ranges."
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE", "BLOB_LIBPHY_PHY_I2C", "BLOB_LIBPHY_PHY_DEBUG_I2C"]
+
+[review]
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE", "BLOB_LIBPHY_PHY_I2C"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "unknown"
+naming = "descriptive"
+
+[review.entity."COMMAND_MEMORY%s"]
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."COMMAND_MEMORY%s.BLOCK"]
+sources = ["BLOB_LIBPHY_PHY_DEBUG_I2C"]
+accuracy = "exact"
+completeness = "complete"
+
+[[registers]]
+name = "COMMAND_MEMORY%s"
+offset = 0x0
+dim = { count = 45, stride = 0x4 }
+description = "One PHY-I2C master command-memory entry; the public header proves the containing memory aperture while the complete blob proves this word layout."
+
+[[registers.fields]]
+name = "BLOCK"
+bits = "7:0"
+class = "write-only"
+description = "Logical PHY-I2C block ID. The bank host and valid half-open register-index ranges are: SAR1 host 0 [0,7), ULP host 1 [0,11), RFPLL host 1 [0,22), RFPLL_SDM host 1 [0,7), BBPLL host 0 [0,11), BBTOP host 1 [0,57), PERIF host 0 [0,13), BIAS host 1 [0,4), TXRF host 1 [1,22), DIG_REG host 0 [0,15)."
+values = [{ name = "SAR1", value = 16 }, { name = "ULP", value = 97 }, { name = "RFPLL", value = 98 }, { name = "RFPLL_SDM", value = 99 }, { name = "BBPLL", value = 102 }, { name = "BBTOP", value = 103 }, { name = "PERIF", value = 105 }, { name = "BIAS", value = 106 }, { name = "TXRF", value = 107 }, { name = "DIG_REG", value = 109 }]
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "REGISTER"
+bits = "15:8"
+class = "write-only"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "DATA"
+bits = "23:16"
+class = "write-only"
+write-range = { min = 0x0, max = 0xff }

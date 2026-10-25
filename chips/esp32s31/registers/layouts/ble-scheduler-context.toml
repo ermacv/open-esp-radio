@@ -1,0 +1,164 @@
+schema = 1
+
+[layout]
+name = "BLE_SCHEDULER_CONTEXT"
+description = "Opaque separate scheduler context retained by every role graph and referenced by item CONTEXT. Only allocation, zero initialization and the positional link are established."
+size = 72
+align = 4
+
+[layout.review]
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[layout.review.opaque]
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[layout.words]]
+fields = []
+name = "WORD_0000_OPAQUE"
+opaque = true
+offset = 0x00
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_0004_OPAQUE"
+opaque = true
+offset = 0x04
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_0008_OPAQUE"
+opaque = true
+offset = 0x08
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_000C_OPAQUE"
+opaque = true
+offset = 0x0c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_0010_OPAQUE"
+opaque = true
+offset = 0x10
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_0014_OPAQUE"
+opaque = true
+offset = 0x14
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_0018_OPAQUE"
+opaque = true
+offset = 0x18
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_001C_OPAQUE"
+opaque = true
+offset = 0x1c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_0020_OPAQUE"
+opaque = true
+offset = 0x20
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_0024_OPAQUE"
+opaque = true
+offset = 0x24
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_0028_OPAQUE"
+opaque = true
+offset = 0x28
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_002C_OPAQUE"
+opaque = true
+offset = 0x2c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_0030_OPAQUE"
+opaque = true
+offset = 0x30
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_0034_OPAQUE"
+opaque = true
+offset = 0x34
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_0038_OPAQUE"
+opaque = true
+offset = 0x38
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_003C_OPAQUE"
+opaque = true
+offset = 0x3c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_0040_OPAQUE"
+opaque = true
+offset = 0x40
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words]]
+fields = []
+name = "WORD_0044_OPAQUE"
+opaque = true
+offset = 0x44
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."

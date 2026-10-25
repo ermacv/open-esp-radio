@@ -1,0 +1,98 @@
+# An analog-I2C block type of the curated ESP32-S31 register model.
+schema = 3
+
+[type]
+name = "ULP_BOD"
+description = "The ULP_BOD analog-I2C block (code 0x61)."
+space = "analog-i2c"
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_BROWNOUT"]
+
+[review]
+sources = ["BLOB_LIBPHY_PHY_XTAL_DUTY_CAL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[review.opaque]
+sources = ["HIL_S31_R1_ANALOG_CAPTURE"]
+provenance = "observed"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."I2C_BOD_THRESHOLD.I2C_BOD_THRESHOLD"]
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_BROWNOUT"]
+naming = "vendor"
+
+[review.entity."I2C_BOD_THRESHOLD"]
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_BROWNOUT"]
+naming = "vendor"
+
+[review.entity."RC_CALIBRATION_DOUT_PATH_ENABLE.RC_CALIBRATION_DOUT_PATH_ENABLE"]
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[review.entity."RC_CALIBRATION_DOUT_PATH_ENABLE"]
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[registers]]
+name = "I2C_BOD_THRESHOLD"
+offset = 0x5
+width = 8
+
+[[registers.fields]]
+name = "I2C_BOD_THRESHOLD"
+bits = "2:0"
+class = "unknown"
+
+[[registers]]
+name = "XTAL_DUTY_CALIBRATION_PATH_ENABLE"
+offset = 0x7
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x20, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "XTAL_DUTY_CALIBRATION_PATH_ENABLE"
+bits = "5"
+class = "plain"
+description = "Crystal-duty calibration path enable bit."
+
+[[registers]]
+name = "RC_CALIBRATION_DOUT_PATH_ENABLE"
+offset = 0x8
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x4, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "RC_CALIBRATION_DOUT_PATH_ENABLE"
+bits = "2"
+class = "plain"
+description = "RC-calibration digital-output path enable bit."
+
+[[registers]]
+name = "XTAL_DUTY_INITIAL"
+offset = 0x9
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "XTAL_DUTY_INITIAL"
+bits = "5:0"
+class = "plain"
+description = "Initial crystal-duty calibration field."
+
+[[registers.fields]]
+name = "BITS_6_7_OPAQUE"
+bits = "7:6"
+class = "plain"
+description = "Compared by the qualified calibrated-radio capture; meaning not established."
+
+[[registers]]
+name = "XTAL_DUTY_CANDIDATE"
+offset = 0xa
+width = 8
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[registers.fields]]
+name = "VALUE"
+bits = "7:0"
+class = "plain"

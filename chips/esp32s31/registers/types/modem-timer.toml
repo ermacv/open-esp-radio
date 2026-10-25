@@ -1,0 +1,28 @@
+# A block type of the curated ESP32-S31 register model: no vendor header
+# or SVD describes this block.
+schema = 3
+
+[type]
+name = "MODEM_TIMER"
+description = "The modem timer at DR_REG_MODEM_TIMER_BASE. Known only from vendor binaries.\n\nWord 0x17c: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown."
+sources = ["S31_MMIO_MODEM_RADIO_CORE_LOW"]
+
+[review.opaque]
+sources = ["S31_MMIO_USE_2010857C"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."WORD_017C_OPAQUE.BIT_17_OPAQUE"]
+sources = ["S31_MMIO_USE_2010857C", "S31_MMIO_DECLARED_2010857C"]
+
+[[registers]]
+name = "WORD_017C_OPAQUE"
+offset = 0x17c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_17_OPAQUE"
+bits = "17"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."

@@ -1,0 +1,4433 @@
+# A block type of the curated ESP32-S31 register model: no vendor header
+# or SVD describes this block.
+schema = 3
+
+[type]
+name = "BT_MAC"
+description = "The Bluetooth MAC (BTMAC): controller core, scheduler, interrupt bank, BLE PHY initialization and BLE hardware runtime words. Known only from vendor binaries.\n\nWords 0x0-0x36c: Bluetooth controller-core register view grouped by runtime responsibility rather than vendor object boundaries. It owns task-side scheduler, sleep-timer, controller initialization, memory-list, scan-snapshot and ISO-coexistence state reached through the 0x20101000 physical block. Interrupt programming, enable/status, acknowledgement and fault diagnostics belong exclusively to BLUETOOTH_INTERRUPT_BANK; the two scheduler words accessed by the hard handler belong exclusively to BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.\n\nWords 0xc-0x348: Bluetooth controller interrupt programming, enable, status, acknowledgement, snapshot and diagnostic registers. This physical view is independent from the controller task lifecycle so ownership can transfer to the hard ISR without also exposing scheduler, sleep or memory-management state.\n\nWords 0x18-0xffc: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown.\n\nWords 0x78-0x1ec: Scheduler words and the MAC diagnostic-signal pair transferred with BLUETOOTH_INTERRUPT_BANK to the primary hard handler. The source-124 reference gate samples scheduler BUSY through the diagnostic pair and can write a complete zero image to SCHEDULER_REFERENCE; the later deferred-work observation reads SCHEDULER_STATE. Task-side scheduler transactions borrow this owner for their own BUSY samples, which serializes every selector write with its value reads. Keeping this sparse physical view outside the task-side controller partition prevents either owner from manufacturing an MMIO alias.\n\nWord 0x424: Narrow late-feature owner for the command written by two complete ISO-path functions. A positional capability is intentional: the observed write strobe is exact, while the undocumented hardware action is not inferred from the software queue context.\n\nWords 0x474-0x95c: ESP32-S31 BTMAC words initialized by the complete BLE PHY register-init function. The function identity is supported by the matching ble_phy.c object layout from the ESP32-C61 ecosystem library, while every address, mask and value below comes only from the ESP32-S31 artifact. Neutral INIT names retain the exact operation without promoting the cross-chip hint to hardware truth.\n\nWord 0x550: One independently bounded Bluetooth baseband reset-idle status word. The complete bbmac_idle_for_swrst leaf proves the exact predicate but neither address adjacency nor the function name proves a wider physical block.\n\nWords 0x80c-0x810: Three positional six-byte controller address slots. A complete ESP32-S31 ble_phy.c leaf proves the selector range, pair stride, byte packing and write order. Named callers identify public-address use of slot zero and random-address use of slot one; slot two remains intentionally unnamed.\n\nWords 0x878-0x87c: Two positional write-only words used by one ble_lll_sync.c path. The source identity records software context only; the register names deliberately do not turn that context into an undocumented hardware meaning.\n\nWord 0x880: Narrow owner for the standalone BLE resolving-list base publication. The complete ESP32-S31 ble_hw.c leaf proves one compressed SRAM pointer word but does not prove that adjacent BTMAC addresses belong to the same logical block.\n\nWords 0x970-0x978: Scan-backoff state of the Link Layer scanner (Core Specification Vol 6, Part B, 4.4.3.2). Scanner start publishes the maximum upper limit and initializes the two hardware-maintained backoff words to one; a vendor test command reads those two words back as nine-bit values. Which word is the backoff count and which the upper limit is not established.\n\nWords 0x99c-0x9a4: Direction-finding ring state recovered from complete ESP32-S31 ble_hw_cte.c leaves. Ordinary advertising, scanning and connection link states retain a controller-global disabled-CTE descriptor even when IQ sampling is not requested, so the baseline pointer and ownership fields are part of the minimum standalone BLE controller.\n\nWords 0xb30-0xb94: Sparse BLE hardware status/clear and runtime-configuration view. Complete ESP32-S31 functions prove the array geometry, access directions and exact configuration images. Positional names retain unknown source and field semantics instead of promoting diagnostic strings to hardware truth.\n\nWord 0xff0: Narrow owner for the otherwise unbounded word at 0x20101FF0. Complete ESP32-S31 BLE PHY initialization writes complete image zero followed by complete image one before touching any other radio register. The same ordered writes appear at the same block offset in the named ESP32-C61 counterpart, but neither artifact proves this word's hardware action or membership in the adjacent BTMAC dump range. No wider peripheral extent is claimed."
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_LIFECYCLE", "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "BLOB_LIBBTDM_HAL_CONTROLLER_INIT", "BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS", "BLOB_LIBBLE_MMGMT_HW_LISTS", "BLOB_LIBBLE_ISO_COEX_REGISTERS", "BLOB_LIBBLE_SCAN_HW_SNAPSHOT", "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES", "BLOB_LIBBTDM_SCHEDULER_WAIT_TAIL", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_CONTROLLER_IRQ", "S31_MMIO_MODEM_RADIO_CORE_LOW", "BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP", "BLOB_LIBBTDM_SCHEDULER_EXECUTION_MODIFY", "BLOB_LIBBLE_ISO_SCHEDULER_NOTIFY", "BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST", "BLOB_LIBBLE_CONTROLLER_ADDRESS_SLOTS", "BLOB_LIBBLE_SYNC_PUBLICATION", "BLOB_LIBBLE_HW_RESOLV_LIST_SET", "BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK", "BLOB_LIBBLE_HW_CTE_RING_CONTROL", "BLOB_LIBBLE_HW_STATUS_CLEAR", "BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
+
+[[interrupt-outputs]]
+name = "PRIMARY"
+description = "The primary route: it samples the masked interrupt status."
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[[interrupt-outputs]]
+name = "NRT"
+description = "The second route: it samples a dedicated status snapshot; both routes acknowledge through the same clear banks."
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review]
+sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[review.opaque]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."SCHEDULER_CONTROL"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
+provenance = "derived"
+
+[review.entity."SCHEDULER_CONTROL.COMMAND"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
+provenance = "derived"
+
+[review.entity."SCHEDULER_LIFECYCLE_REQUEST"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_LIFECYCLE"]
+
+[review.entity."SCHEDULER_LIFECYCLE_REQUEST.VALUE"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_LIFECYCLE"]
+
+[review.entity."IRQ_CONTROL_0"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+completeness = "partial"
+
+[review.entity."IRQ_CONTROL_0.COMMAND"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_CONTROL_1"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+completeness = "partial"
+
+[review.entity."IRQ_CONTROL_1.COMMAND"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_CONTROL_2"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+completeness = "partial"
+
+[review.entity."IRQ_CONTROL_2.COMMAND"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."WORD_0018_OPAQUE"]
+sources = ["S31_MMIO_USE_20101018"]
+
+[review.entity."WORD_0018_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_USE_20101018", "S31_MMIO_DECLARED_20101018"]
+
+[review.entity."WORD_0038_OPAQUE"]
+sources = ["S31_MMIO_USE_20101038"]
+
+[review.entity."WORD_0038_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_USE_20101038", "S31_MMIO_DECLARED_20101038"]
+
+[review.entity."WORD_0048_OPAQUE"]
+sources = ["S31_MMIO_USE_20101048"]
+
+[review.entity."WORD_0048_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_USE_20101048", "S31_MMIO_DECLARED_20101048"]
+
+[review.entity."IRQ_ENABLE_0"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+completeness = "partial"
+
+[review.entity."IRQ_ENABLE_0.SOURCE_0"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."IRQ_ENABLE_0.SOURCE_1"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."IRQ_ENABLE_0.SOURCE_8"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."IRQ_ENABLE_0.SOURCE_13"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."IRQ_ENABLE_0.SOURCE_15"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_ENABLE_0.SOURCE_16"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."IRQ_ENABLE_0.SOURCE_21"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_ENABLE_0.SOURCES_27_28"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_ENABLE_0.BITS_2_7_OPAQUE"]
+sources = ["S31_MMIO_USE_20101054", "S31_MMIO_DECLARED_20101054"]
+
+[review.entity."IRQ_ENABLE_0.BITS_9_12_OPAQUE"]
+sources = ["S31_MMIO_USE_20101054", "S31_MMIO_DECLARED_20101054"]
+
+[review.entity."IRQ_ENABLE_0.BIT_14_OPAQUE"]
+sources = ["S31_MMIO_USE_20101054", "S31_MMIO_DECLARED_20101054"]
+
+[review.entity."IRQ_ENABLE_0.BITS_17_20_OPAQUE"]
+sources = ["S31_MMIO_USE_20101054", "S31_MMIO_DECLARED_20101054"]
+
+[review.entity."IRQ_ENABLE_0.BITS_22_26_OPAQUE"]
+sources = ["S31_MMIO_USE_20101054", "S31_MMIO_DECLARED_20101054"]
+
+[review.entity."IRQ_ENABLE_0.BITS_29_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101054", "S31_MMIO_DECLARED_20101054"]
+
+[review.entity."IRQ_CLEAR_0"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_CLEAR_0.BITS_0_6_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101058"]
+
+[review.entity."IRQ_CLEAR_0.SOURCE_7"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
+completeness = "partial"
+
+[review.entity."IRQ_CLEAR_0.BITS_8_14_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101058"]
+
+[review.entity."IRQ_CLEAR_0.SOURCE_15"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_CLEAR_0.BITS_16_20_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101058"]
+
+[review.entity."IRQ_CLEAR_0.SOURCE_21"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_CLEAR_0.BITS_22_26_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101058"]
+
+[review.entity."IRQ_CLEAR_0.SOURCES_27_28"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_CLEAR_0.BITS_29_31_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101058"]
+
+[review.entity."IRQ_STATUS_0"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+completeness = "partial"
+
+[review.entity."IRQ_STATUS_0.BITS_0_14_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010105C"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."IRQ_STATUS_0.SOURCE_15"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_STATUS_0.BITS_16_20_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010105C"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."IRQ_STATUS_0.SOURCE_21"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_STATUS_0.BITS_22_26_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010105C"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."IRQ_STATUS_0.SOURCES_27_28"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_STATUS_0.BITS_29_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010105C"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."IRQ_ENABLE_1"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+completeness = "partial"
+
+[review.entity."IRQ_ENABLE_1.SOURCE_3"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_ENABLE_1.SOURCE_4"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_ENABLE_1.SOURCE_5"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_ENABLE_1.SOURCE_6"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_ENABLE_1.SOURCE_8"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_ENABLE_1.SOURCE_9"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_ENABLE_1.SOURCE_12"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_ENABLE_1.SOURCE_13"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."IRQ_ENABLE_1.BITS_0_2_OPAQUE"]
+sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
+
+[review.entity."IRQ_ENABLE_1.BIT_7_OPAQUE"]
+sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
+
+[review.entity."IRQ_ENABLE_1.BITS_10_11_OPAQUE"]
+sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
+
+[review.entity."IRQ_ENABLE_1.BITS_14_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
+
+[review.entity."IRQ_CLEAR_1"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_CLEAR_1.BITS_0_2_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101064"]
+
+[review.entity."IRQ_CLEAR_1.SOURCE_3"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_CLEAR_1.BITS_4_7_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101064"]
+
+[review.entity."IRQ_CLEAR_1.SOURCE_8"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_CLEAR_1.SOURCE_9"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_CLEAR_1.BITS_10_11_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101064"]
+
+[review.entity."IRQ_CLEAR_1.SOURCE_12"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_CLEAR_1.BITS_13_31_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101064"]
+
+[review.entity."IRQ_STATUS_1"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+completeness = "partial"
+
+[review.entity."IRQ_STATUS_1.BITS_0_2_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20101068"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."IRQ_STATUS_1.SOURCE_3"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_STATUS_1.BITS_4_7_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20101068"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."IRQ_STATUS_1.SOURCE_8"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_STATUS_1.SOURCE_9"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_STATUS_1.BITS_10_11_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20101068"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."IRQ_STATUS_1.SOURCE_12"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_STATUS_1.BITS_13_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20101068"]
+provenance = "derived"
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_006C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010106C"]
+
+[review.entity."WORD_006C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010106C", "S31_MMIO_DECLARED_2010106C"]
+
+[review.entity."IRQ_DIAGNOSTIC_STATE"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+completeness = "partial"
+
+[review.entity."IRQ_DIAGNOSTIC_STATE.VALUE"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."SCHEDULER_SRAM_POINTER_PREFIX"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+completeness = "partial"
+
+[review.entity."SCHEDULER_SRAM_POINTER_PREFIX.BITS_0_21_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20101074"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SCHEDULER_SRAM_POINTER_PREFIX.ADDRESS_PREFIX"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+
+[review.entity."SCHEDULER_REFERENCE"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+completeness = "partial"
+
+[review.entity."SCHEDULER_REFERENCE.VALUE_LOW_20"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+
+[review.entity."SCHEDULER_STATE"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+completeness = "partial"
+
+[review.entity."SCHEDULER_STATE.VALUE_LOW_20"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+
+[review.entity."SCHEDULER_STATE.CURRENT_LINK_INDEX"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
+
+[review.entity."SCHEDULER_STATE.BITS_24_28_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010107C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SCHEDULER_STATE.STATE_29"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+completeness = "partial"
+
+[review.entity."SCHEDULER_STATE.BIT_30_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010107C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SCHEDULER_STATE.BUSY"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+
+[review.entity."CONTROLLER_AUXILIARY_POINTER"]
+sources = ["BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS"]
+completeness = "partial"
+
+[review.entity."CONTROLLER_AUXILIARY_POINTER.COMPRESSED_SRAM_POINTER"]
+sources = ["BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS"]
+
+[review.entity."HAL_INIT_BYTES"]
+completeness = "partial"
+
+[review.entity."WORD_0088_OPAQUE"]
+sources = ["S31_MMIO_USE_20101088"]
+
+[review.entity."WORD_0088_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_USE_20101088", "S31_MMIO_DECLARED_20101088"]
+
+[review.entity."BTLC_TIMER_CC_0"]
+sources = ["BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+
+[review.entity."BTLC_TIMER_CC_0.VALUE"]
+sources = ["BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS"]
+
+[review.entity."BTLC_TIMER_CONTROL"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."BTLC_TIMER_CONTROL.CLOCK_SHIFT"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS"]
+
+[review.entity."BTLC_TIMER_CONTROL.CONFIG_24"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS"]
+
+[review.entity."BTLC_TIMER_CONTROL.BIT_25_OPAQUE"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "S31_MMIO_DECLARED_20101090"]
+completeness = "complete"
+
+[review.entity."BTLC_TIMER_CONTROL.LATCH_REQUEST"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES"]
+
+[review.entity."BTLC_TIMER_CONTROL.BITS_27_30_OPAQUE"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "S31_MMIO_DECLARED_20101090"]
+completeness = "complete"
+
+[review.entity."BTLC_TIMER_CONTROL.TIMER_ARM"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS"]
+
+[review.entity."BTLC_TIMER_CONTROL.BITS_3_23_OPAQUE"]
+sources = ["S31_MMIO_USE_20101090", "S31_MMIO_DECLARED_20101090"]
+
+[review.entity."BTLC_TIMER_VALUE_0"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."BTLC_TIMER_VALUE_0.VALUE"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS"]
+
+[review.entity."BTLC_TIMER_VALUE_1"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."BTLC_TIMER_VALUE_1.VALUE"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS"]
+
+[review.entity."BTLC_TIMER_VALUE_2"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."BTLC_TIMER_VALUE_2.VALUE"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS"]
+
+[review.entity."BTLC_TIMER_CAPTURE_0"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+
+[review.entity."BTLC_TIMER_CAPTURE_0.VALUE"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "PUBLIC_ESP32S31_BT_TIME_ROLES"]
+
+[review.entity."BTLC_TIMER_CAPTURE_1"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+
+[review.entity."BTLC_TIMER_CAPTURE_1.VALUE"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT"]
+
+[review.entity."BTLC_TIMER_CAPTURE_2"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+
+[review.entity."BTLC_TIMER_CAPTURE_2.VALUE"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT"]
+
+[review.entity."BTLC_TIMER_CC_1"]
+sources = ["BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+
+[review.entity."BTLC_TIMER_CC_1.VALUE"]
+sources = ["BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS"]
+
+[review.entity."CONTROLLER_TRANSACTION_0"]
+sources = ["BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS"]
+completeness = "partial"
+
+[review.entity."CONTROLLER_TRANSACTION_0.DYNAMIC_LOW_20"]
+sources = ["BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS"]
+
+[review.entity."CONTROLLER_TRANSACTION_0.ZERO_IMAGE_20_29"]
+sources = ["BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS"]
+
+[review.entity."CONTROLLER_TRANSACTION_0.STATUS_30"]
+sources = ["BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS"]
+
+[review.entity."CONTROLLER_TRANSACTION_0.PUBLISH_31"]
+sources = ["BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS"]
+
+[review.entity."CURRENT_TX_LINK_POINTER"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."CURRENT_TX_LINK_POINTER.COMPRESSED_SRAM_POINTER"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+
+[review.entity."CURRENT_TX_LINK_POINTER.BIT_20_OPAQUE"]
+sources = ["S31_MMIO_USE_201010C8", "S31_MMIO_DECLARED_201010C8"]
+
+[review.entity."CURRENT_RX_LINK_POINTER"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."CURRENT_RX_LINK_POINTER.COMPRESSED_SRAM_POINTER"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+
+[review.entity."CURRENT_RX_LINK_POINTER.BIT_20_OPAQUE"]
+sources = ["S31_MMIO_USE_201010CC", "S31_MMIO_DECLARED_201010CC"]
+
+[review.entity."WORD_00D0_OPAQUE"]
+sources = ["S31_MMIO_USE_201010D0"]
+
+[review.entity."WORD_00D0_OPAQUE.BITS_0_20_OPAQUE"]
+sources = ["S31_MMIO_USE_201010D0", "S31_MMIO_DECLARED_201010D0"]
+
+[review.entity."WORD_00D4_OPAQUE"]
+sources = ["S31_MMIO_USE_201010D4"]
+
+[review.entity."WORD_00D4_OPAQUE.BITS_0_20_OPAQUE"]
+sources = ["S31_MMIO_USE_201010D4", "S31_MMIO_DECLARED_201010D4"]
+
+[review.entity."CONTROLLER_TRANSACTION_1"]
+sources = ["BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS"]
+completeness = "partial"
+
+[review.entity."CONTROLLER_TRANSACTION_1.DYNAMIC_LOW_20"]
+sources = ["BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS"]
+
+[review.entity."CONTROLLER_TRANSACTION_1.ZERO_IMAGE_20_29"]
+sources = ["BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS"]
+
+[review.entity."CONTROLLER_TRANSACTION_1.STATUS_30"]
+sources = ["BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS"]
+
+[review.entity."CONTROLLER_TRANSACTION_1.PUBLISH_31"]
+sources = ["BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS"]
+
+[review.entity."WDT_CONFIG_0"]
+sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."WDT_CONFIG_0.BITS_0_25_OPAQUE"]
+sources = ["S31_MMIO_USE_201010DC", "S31_MMIO_DECLARED_201010DC"]
+
+[review.entity."WDT_CONFIG_1"]
+sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."SCHEDULER_SKIP_REQUEST"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
+completeness = "partial"
+
+[review.entity."SCHEDULER_SKIP_REQUEST.COMPRESSED_SRAM_POINTER"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
+
+[review.entity."SCHEDULER_SKIP_REQUEST.HARDWARE_LIST_INDEX"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
+
+[review.entity."SCHEDULER_SKIP_REQUEST.RESULT"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
+completeness = "partial"
+
+[review.entity."SCHEDULER_SKIP_REQUEST.START"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
+
+[review.entity."SCHEDULER_SKIP_REQUEST.BITS_24_27_OPAQUE"]
+sources = ["S31_MMIO_USE_201010EC", "S31_MMIO_DECLARED_201010EC"]
+
+[review.entity."SCHEDULER_SKIP_REQUEST.BIT_30_OPAQUE"]
+sources = ["S31_MMIO_USE_201010EC", "S31_MMIO_DECLARED_201010EC"]
+
+[review.entity."HAL_INIT_LATCH"]
+completeness = "partial"
+
+[review.entity."HAL_INIT_LOW_20"]
+completeness = "partial"
+
+[review.entity."IRQ_DIAGNOSTIC_DETAIL_0"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+completeness = "partial"
+
+[review.entity."IRQ_DIAGNOSTIC_DETAIL_0.VALUE"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_DIAGNOSTIC_DETAIL_1"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+completeness = "partial"
+
+[review.entity."IRQ_DIAGNOSTIC_DETAIL_1.VALUE"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."DIAGNOSTIC_SELECT"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP", "BLOB_LIBBTDM_SCHEDULER_EXECUTION_MODIFY"]
+completeness = "partial"
+
+[review.entity."DIAGNOSTIC_SELECT.SELECTION"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP", "BLOB_LIBBTDM_SCHEDULER_EXECUTION_MODIFY"]
+completeness = "partial"
+
+[review.entity."DIAGNOSTIC_VALUE"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
+completeness = "partial"
+
+[review.entity."DIAGNOSTIC_VALUE.VALUE_0_LOW_7"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
+completeness = "partial"
+
+[review.entity."DIAGNOSTIC_VALUE.VALUE_0_BIT_7"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
+completeness = "partial"
+
+[review.entity."DIAGNOSTIC_VALUE.VALUE_1"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
+completeness = "partial"
+
+[review.entity."DIAGNOSTIC_VALUE.VALUE_2"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
+completeness = "partial"
+
+[review.entity."DIAGNOSTIC_VALUE.VALUE_3"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
+completeness = "partial"
+
+[review.entity."GPIO_DIAG_ARGUMENT_1"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."GPIO_DIAG_ARGUMENT_1.VALUE"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+[review.entity."ISO_COEX_ENABLE"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+completeness = "partial"
+
+[review.entity."ISO_COEX_ENABLE.ENABLE"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."ISO_COEX_CONTROL_0"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+completeness = "partial"
+
+[review.entity."ISO_COEX_CONTROL_0.ENABLE_0"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."ISO_COEX_THRESHOLD"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+completeness = "partial"
+
+[review.entity."ISO_COEX_THRESHOLD.VALUE_LOW_10"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."ISO_COEX_THRESHOLD.ENABLE"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."ISO_COEX_CONTROL_1"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+completeness = "partial"
+
+[review.entity."ISO_COEX_CONTROL_1.ENABLE_0"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."ISO_COEX_CONTROL_1.BITS_1_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101200", "S31_MMIO_DECLARED_20101200"]
+
+[review.entity."WORD_0204_OPAQUE"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
+
+[review.entity."WORD_0204_OPAQUE.CONTROL_0"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES", "S31_MMIO_DECLARED_20101204"]
+
+[review.entity."WORD_0208_OPAQUE"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_WAIT_TAIL"]
+
+[review.entity."WORD_0208_OPAQUE.STATUS_0"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_WAIT_TAIL", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES", "S31_MMIO_DECLARED_20101208"]
+
+[review.entity."ISO_COEX_STATE_0"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+completeness = "partial"
+
+[review.entity."ISO_COEX_STATE_0.VALUE"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."ISO_COEX_STATE_1"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+completeness = "partial"
+
+[review.entity."ISO_COEX_STATE_1.VALUE"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."ISO_COEX_TIMING_0"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+completeness = "partial"
+
+[review.entity."ISO_COEX_TIMING_0.VALUE_LOW_24"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."ISO_COEX_TIMING_0.ENABLE"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."SCHEDULER_LOCK_MODIFY_REQUEST"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
+
+[review.entity."SCHEDULER_LOCK_MODIFY_REQUEST.COMPRESSED_SRAM_POINTER"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
+
+[review.entity."SCHEDULER_LOCK_MODIFY_REQUEST.ZERO_IMAGE_20_26"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS"]
+
+[review.entity."SCHEDULER_LOCK_MODIFY_REQUEST.RESULT"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
+
+[review.entity."SCHEDULER_LOCK_MODIFY_REQUEST.START"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
+
+[review.entity."WORD_022C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010122C"]
+
+[review.entity."WORD_022C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010122C", "S31_MMIO_DECLARED_2010122C"]
+
+[review.entity."WORD_0230_OPAQUE"]
+sources = ["S31_MMIO_USE_20101230"]
+
+[review.entity."WORD_0230_OPAQUE.BITS_0_19_OPAQUE"]
+sources = ["S31_MMIO_USE_20101230", "S31_MMIO_DECLARED_20101230"]
+
+[review.entity."ISO_COEX_TIMING_1"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+completeness = "partial"
+
+[review.entity."ISO_COEX_TIMING_1.VALUE_LOW_20"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."ISO_COEX_TIMING_1.ENABLE"]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+
+[review.entity."ISO_COEX_TIMING_1.BITS_20_30_OPAQUE"]
+sources = ["S31_MMIO_USE_20101234", "S31_MMIO_DECLARED_20101234"]
+
+[review.entity."GPIO_DIAG_CONTROL"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."GPIO_DIAG_CONTROL.VALUE"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+[review.entity."PHY_ENVIRONMENT_TAIL_POINTER"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+completeness = "partial"
+
+[review.entity."HAL_INIT_SCHEDULER_CONTROL"]
+completeness = "partial"
+
+[review.entity."SCHEDULER_COMMAND_0"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+completeness = "partial"
+
+[review.entity."SCHEDULER_COMMAND_0.COMPRESSED_SRAM_POINTER"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS"]
+
+[review.entity."SCHEDULER_COMMAND_0.HARDWARE_LIST_INDEX"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS"]
+
+[review.entity."SCHEDULER_COMMAND_0.STATUS_24"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+
+[review.entity."SCHEDULER_COMMAND_0.BIT_25_OPAQUE"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS", "S31_MMIO_DECLARED_20101254"]
+
+[review.entity."SCHEDULER_COMMAND_0.STATUS_26"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+
+[review.entity."SCHEDULER_COMMAND_0.EXECUTION_LOCK_RESULT"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS"]
+
+[review.entity."SCHEDULER_COMMAND_0.BIT_30_OPAQUE"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS", "S31_MMIO_DECLARED_20101254"]
+
+[review.entity."SCHEDULER_COMMAND_0.START"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+
+[review.entity."SCHEDULER_COMMAND_1"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+completeness = "partial"
+
+[review.entity."SCHEDULER_COMMAND_1.HARDWARE_LIST_MASK"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS"]
+
+[review.entity."SCHEDULER_COMMAND_1.BIT_16_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101258"]
+
+[review.entity."SCHEDULER_COMMAND_1.STATUS_17"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+
+[review.entity."SCHEDULER_COMMAND_1.STATUS_18"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+
+[review.entity."SCHEDULER_COMMAND_1.STATUS_19"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+
+[review.entity."SCHEDULER_COMMAND_1.PAYLOAD_HIGH_20_30"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+completeness = "partial"
+
+[review.entity."SCHEDULER_COMMAND_1.START"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+
+[review.entity."SCHEDULER_FINISHED_LIST_STATUS"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS", "PUBLIC_ESP32S31_BLE_COMPLETION_ROLES"]
+completeness = "partial"
+
+[review.entity."SCHEDULER_FINISHED_LIST_STATUS.FINISHED_LIST_MASK"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS", "PUBLIC_ESP32S31_BLE_COMPLETION_ROLES"]
+
+[review.entity."SCHEDULER_FINISHED_LIST_REPORT"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS", "PUBLIC_ESP32S31_BLE_COMPLETION_ROLES"]
+completeness = "partial"
+
+[review.entity."SCHEDULER_FINISHED_LIST_REPORT.FINISHED_LIST_MASK"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS", "PUBLIC_ESP32S31_BLE_COMPLETION_ROLES"]
+
+[review.entity."WORD_026C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010126C"]
+
+[review.entity."WORD_026C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010126C", "S31_MMIO_DECLARED_2010126C"]
+
+[review.entity."WORD_0270_OPAQUE"]
+sources = ["S31_MMIO_USE_20101270"]
+
+[review.entity."WORD_0270_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101270", "S31_MMIO_DECLARED_20101270"]
+
+[review.entity."WORD_0274_OPAQUE"]
+sources = ["S31_MMIO_USE_20101274"]
+
+[review.entity."WORD_0274_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101274", "S31_MMIO_DECLARED_20101274"]
+
+[review.entity."WORD_0278_OPAQUE"]
+sources = ["S31_MMIO_USE_20101278"]
+
+[review.entity."WORD_0278_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101278", "S31_MMIO_DECLARED_20101278"]
+
+[review.entity."HAL_INIT_LOW_HALF"]
+completeness = "partial"
+
+[review.entity."HAL_INIT_LOW_HALF.BITS_16_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010127C_RUN", "S31_MMIO_DECLARED_2010127C"]
+
+[review.entity."GLOBAL_RXLINK_1_CURRENT"]
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."GLOBAL_RXLINK_1_CURRENT.COMPRESSED_SRAM_POINTER"]
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
+
+[review.entity."GLOBAL_RXLINK_1_CURRENT.RX_VALID"]
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
+completeness = "partial"
+
+[review.entity."GLOBAL_RXLINK_1_CURRENT.BITS_21_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101280", "S31_MMIO_DECLARED_20101280"]
+
+[review.entity."GLOBAL_RXLINK_1_NEXT"]
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."GLOBAL_RXLINK_1_NEXT.COMPRESSED_SRAM_POINTER"]
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
+
+[review.entity."GLOBAL_RXLINK_1_NEXT.BITS_20_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101284", "S31_MMIO_DECLARED_20101284"]
+
+[review.entity."GLOBAL_RXLINK_2_CURRENT"]
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."GLOBAL_RXLINK_2_CURRENT.COMPRESSED_SRAM_POINTER"]
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
+
+[review.entity."GLOBAL_RXLINK_2_CURRENT.RX_VALID"]
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
+completeness = "partial"
+
+[review.entity."GLOBAL_RXLINK_2_CURRENT.BITS_21_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101288", "S31_MMIO_DECLARED_20101288"]
+
+[review.entity."GLOBAL_RXLINK_2_NEXT"]
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."GLOBAL_RXLINK_2_NEXT.COMPRESSED_SRAM_POINTER"]
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
+
+[review.entity."GLOBAL_RXLINK_2_NEXT.BITS_20_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010128C", "S31_MMIO_DECLARED_2010128C"]
+
+[review.entity."GLOBAL_RXLINK_3_CURRENT"]
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."GLOBAL_RXLINK_3_CURRENT.COMPRESSED_SRAM_POINTER"]
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
+
+[review.entity."GLOBAL_RXLINK_3_CURRENT.RX_VALID"]
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
+completeness = "partial"
+
+[review.entity."GLOBAL_RXLINK_3_CURRENT.BITS_21_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101290", "S31_MMIO_DECLARED_20101290"]
+
+[review.entity."GLOBAL_RXLINK_3_NEXT"]
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+completeness = "partial"
+
+[review.entity."GLOBAL_RXLINK_3_NEXT.COMPRESSED_SRAM_POINTER"]
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
+
+[review.entity."GLOBAL_RXLINK_3_NEXT.BITS_20_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101294", "S31_MMIO_DECLARED_20101294"]
+
+[review.entity."WORD_0298_OPAQUE"]
+sources = ["S31_MMIO_USE_20101298"]
+
+[review.entity."WORD_0298_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101298", "S31_MMIO_DECLARED_20101298"]
+
+[review.entity."SCAN_HW_SNAPSHOT"]
+sources = ["BLOB_LIBBLE_SCAN_HW_SNAPSHOT"]
+completeness = "partial"
+
+[review.entity."SCAN_HW_SNAPSHOT.VALUE"]
+sources = ["BLOB_LIBBLE_SCAN_HW_SNAPSHOT"]
+
+[review.entity."WORD_02AC_OPAQUE"]
+sources = ["S31_MMIO_USE_201012AC"]
+
+[review.entity."WORD_02AC_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201012AC", "S31_MMIO_DECLARED_201012AC"]
+
+[review.entity."WORD_02B0_OPAQUE"]
+sources = ["S31_MMIO_USE_201012B0"]
+
+[review.entity."WORD_02B0_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201012B0", "S31_MMIO_DECLARED_201012B0"]
+
+[review.entity."WORD_02B4_OPAQUE"]
+sources = ["S31_MMIO_USE_201012B4"]
+
+[review.entity."WORD_02B4_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201012B4", "S31_MMIO_DECLARED_201012B4"]
+
+[review.entity."WORD_02B8_OPAQUE"]
+sources = ["S31_MMIO_USE_201012B8"]
+
+[review.entity."WORD_02B8_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201012B8", "S31_MMIO_DECLARED_201012B8"]
+
+[review.entity."WORD_02BC_OPAQUE"]
+sources = ["S31_MMIO_USE_201012BC"]
+
+[review.entity."WORD_02BC_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201012BC", "S31_MMIO_DECLARED_201012BC"]
+
+[review.entity."WORD_02C0_OPAQUE"]
+sources = ["S31_MMIO_USE_201012C0"]
+
+[review.entity."WORD_02C0_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201012C0", "S31_MMIO_DECLARED_201012C0"]
+
+[review.entity."WORD_0324_OPAQUE"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS"]
+completeness = "complete"
+
+[review.entity."WORD_0324_OPAQUE.STATUS_0"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES", "S31_MMIO_DECLARED_20101324"]
+
+[review.entity."IRQ_STATUS_SNAPSHOT_0"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_STATUS_SNAPSHOT_0.PENDING_BITS"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_STATUS_SNAPSHOT_1"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."IRQ_STATUS_SNAPSHOT_1.PENDING_BITS"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."HAL_INIT_SLOT_MAP%s"]
+completeness = "partial"
+
+[review.entity."HAL_INIT_SLOT_MAP%s.BIT_3_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010134C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."HAL_INIT_SLOT_MAP%s.BIT_7_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010134C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."HAL_INIT_SLOT_MAP%s.BIT_11_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010134C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."HAL_INIT_SLOT_MAP%s.BIT_15_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010134C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."HAL_INIT_SLOT_MAP%s.BIT_19_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010134C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."HAL_INIT_SLOT_MAP%s.BIT_23_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010134C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."HAL_INIT_SLOT_MAP%s.BIT_27_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010134C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."HAL_INIT_SLOT_MAP%s.BIT_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010134C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_036C_OPAQUE"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
+completeness = "complete"
+
+[review.entity."WORD_036C_OPAQUE.LOCK_MODIFY_HARDWARE_LIST_INDEX"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "PUBLIC_ESP32S31_BT_SCHEDULER_LIST_INDEX", "S31_MMIO_DECLARED_2010136C"]
+
+[review.entity."WORD_036C_OPAQUE.CANCELLATION_HARDWARE_LIST_INDEX"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES", "S31_MMIO_DECLARED_2010136C"]
+
+[review.entity."WORD_0380_OPAQUE"]
+sources = ["S31_MMIO_USE_20101380"]
+
+[review.entity."WORD_0380_OPAQUE.BITS_0_10_OPAQUE"]
+sources = ["S31_MMIO_USE_20101380", "S31_MMIO_DECLARED_20101380"]
+
+[review.entity."WORD_0380_OPAQUE.BIT_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101380", "S31_MMIO_DECLARED_20101380"]
+
+[review.entity."WORD_03D8_OPAQUE"]
+sources = ["S31_MMIO_USE_201013D8"]
+
+[review.entity."WORD_03D8_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201013D8", "S31_MMIO_DECLARED_201013D8"]
+
+[review.entity."WORD_03DC_OPAQUE"]
+sources = ["S31_MMIO_USE_201013DC"]
+
+[review.entity."WORD_03DC_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201013DC", "S31_MMIO_DECLARED_201013DC"]
+
+[review.entity."WORD_03E0_OPAQUE"]
+sources = ["S31_MMIO_USE_201013E0"]
+
+[review.entity."WORD_03E0_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201013E0", "S31_MMIO_DECLARED_201013E0"]
+
+[review.entity."WORD_03E4_OPAQUE"]
+sources = ["S31_MMIO_USE_201013E4"]
+
+[review.entity."WORD_03E4_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201013E4", "S31_MMIO_DECLARED_201013E4"]
+
+[review.entity."WORD_03F4_OPAQUE"]
+sources = ["S31_MMIO_USE_201013F4"]
+
+[review.entity."WORD_03F4_OPAQUE.BIT_1_OPAQUE"]
+sources = ["S31_MMIO_USE_201013F4", "S31_MMIO_DECLARED_201013F4"]
+
+[review.entity."WORD_03FC_OPAQUE"]
+sources = ["S31_MMIO_USE_201013FC"]
+
+[review.entity."WORD_03FC_OPAQUE.BITS_0_27_OPAQUE"]
+sources = ["S31_MMIO_USE_201013FC", "S31_MMIO_DECLARED_201013FC"]
+
+[review.entity."COMMAND"]
+sources = ["BLOB_LIBBLE_ISO_SCHEDULER_NOTIFY"]
+completeness = "partial"
+
+[review.entity."COMMAND.TRIGGER"]
+sources = ["BLOB_LIBBLE_ISO_SCHEDULER_NOTIFY"]
+
+[review.entity."WORD_0430_OPAQUE"]
+sources = ["S31_MMIO_USE_20101430"]
+
+[review.entity."WORD_0430_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101430", "S31_MMIO_DECLARED_20101430"]
+
+[review.entity."WORD_0434_OPAQUE"]
+sources = ["S31_MMIO_USE_20101434"]
+
+[review.entity."WORD_0434_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101434", "S31_MMIO_DECLARED_20101434"]
+
+[review.entity."WORD_0438_OPAQUE"]
+sources = ["S31_MMIO_USE_20101438"]
+
+[review.entity."WORD_0438_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101438", "S31_MMIO_DECLARED_20101438"]
+
+[review.entity."WORD_043C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010143C"]
+
+[review.entity."WORD_043C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010143C", "S31_MMIO_DECLARED_2010143C"]
+
+[review.entity."WORD_0450_OPAQUE"]
+sources = ["S31_MMIO_USE_20101450"]
+
+[review.entity."WORD_0450_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101450", "S31_MMIO_DECLARED_20101450"]
+
+[review.entity."WORD_045C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010145C"]
+
+[review.entity."WORD_045C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010145C", "S31_MMIO_DECLARED_2010145C"]
+
+[review.entity."WORD_0470_OPAQUE"]
+sources = ["S31_MMIO_USE_20101470"]
+
+[review.entity."WORD_0470_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101470", "S31_MMIO_DECLARED_20101470"]
+
+[review.entity."WORD_0474_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_DECLARED_20101474"]
+completeness = "complete"
+
+[review.entity."WORD_047C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010147C"]
+
+[review.entity."WORD_047C_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_USE_2010147C", "S31_MMIO_DECLARED_2010147C"]
+
+[review.entity."WORD_04B0_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B0"]
+
+[review.entity."WORD_04B0_OPAQUE.BIT_1_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B0", "S31_MMIO_DECLARED_201014B0"]
+
+[review.entity."WORD_04B0_OPAQUE.BIT_4_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B0", "S31_MMIO_DECLARED_201014B0"]
+
+[review.entity."WORD_04B0_OPAQUE.BIT_7_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B0", "S31_MMIO_DECLARED_201014B0"]
+
+[review.entity."INTERRUPT_ENABLE"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"]
+completeness = "partial"
+
+[review.entity."INTERRUPT_ENABLE.SCHEDULER_RUN"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"]
+
+[review.entity."INTERRUPT_ENABLE.SOURCE_17"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+[review.entity."INTERRUPT_ENABLE.BITS_0_13_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B4", "S31_MMIO_DECLARED_201014B4"]
+
+[review.entity."INTERRUPT_ENABLE.BITS_15_16_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B4", "S31_MMIO_DECLARED_201014B4"]
+
+[review.entity."INTERRUPT_ENABLE.BITS_18_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B4", "S31_MMIO_DECLARED_201014B4"]
+
+[review.entity."INTERRUPT_CLEAR"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"]
+completeness = "partial"
+
+[review.entity."INTERRUPT_CLEAR.SCHEDULER_RUN"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"]
+
+[review.entity."INTERRUPT_CLEAR.BITS_0_13_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8"]
+
+[review.entity."INTERRUPT_CLEAR.BITS_15_31_OPAQUE"]
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8"]
+
+[review.entity."WORD_04BC_OPAQUE"]
+sources = ["S31_MMIO_USE_201014BC"]
+
+[review.entity."WORD_04BC_OPAQUE.BITS_0_21_OPAQUE"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC"]
+
+[review.entity."WORD_04BC_OPAQUE.BIT_24_OPAQUE"]
+sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC"]
+
+[review.entity."WORD_04C4_OPAQUE"]
+sources = ["S31_MMIO_USE_201014C4"]
+
+[review.entity."WORD_04C4_OPAQUE.BIT_10_OPAQUE"]
+sources = ["S31_MMIO_USE_201014C4", "S31_MMIO_DECLARED_201014C4"]
+
+[review.entity."WORD_04C8_OPAQUE"]
+sources = ["S31_MMIO_USE_201014C8"]
+
+[review.entity."WORD_04C8_OPAQUE.BIT_10_OPAQUE"]
+sources = ["S31_MMIO_USE_201014C8", "S31_MMIO_DECLARED_201014C8"]
+
+[review.entity."WORD_04CC_OPAQUE"]
+sources = ["S31_MMIO_USE_201014CC"]
+
+[review.entity."WORD_04CC_OPAQUE.BITS_9_10_OPAQUE"]
+sources = ["S31_MMIO_USE_201014CC", "S31_MMIO_DECLARED_201014CC"]
+
+[review.entity."WORD_0508_OPAQUE"]
+sources = ["S31_MMIO_USE_20101508"]
+
+[review.entity."WORD_0508_OPAQUE.BITS_0_6_OPAQUE"]
+sources = ["S31_MMIO_USE_20101508", "S31_MMIO_DECLARED_20101508"]
+
+[review.entity."WORD_0510_OPAQUE"]
+sources = ["S31_MMIO_USE_20101510"]
+
+[review.entity."WORD_0510_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101510", "S31_MMIO_DECLARED_20101510"]
+
+[review.entity."WORD_0514_OPAQUE"]
+sources = ["S31_MMIO_USE_20101514"]
+
+[review.entity."WORD_0514_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101514", "S31_MMIO_DECLARED_20101514"]
+
+[review.entity."WORD_0518_OPAQUE"]
+sources = ["S31_MMIO_USE_20101518"]
+
+[review.entity."WORD_0518_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101518", "S31_MMIO_DECLARED_20101518"]
+
+[review.entity."WORD_0524_OPAQUE"]
+sources = ["S31_MMIO_USE_20101524"]
+
+[review.entity."WORD_0524_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101524", "S31_MMIO_DECLARED_20101524"]
+
+[review.entity."WORD_0528_OPAQUE"]
+sources = ["S31_MMIO_USE_20101528"]
+
+[review.entity."WORD_0528_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101528", "S31_MMIO_DECLARED_20101528"]
+
+[review.entity."WORD_0538_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101538"]
+
+[review.entity."WORD_0548_OPAQUE"]
+sources = ["S31_MMIO_USE_20101548"]
+
+[review.entity."WORD_0548_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_USE_20101548", "S31_MMIO_DECLARED_20101548"]
+
+[review.entity."STATUS"]
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+completeness = "partial"
+
+[review.entity."STATUS.BITS_0_3_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_20101550"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."STATUS.BITS_4_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101550", "S31_MMIO_DECLARED_20101550"]
+
+[review.entity."LC_TX_ON_DELAY_CONFIG"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+completeness = "partial"
+
+[review.entity."LC_TX_ON_DELAY_CONFIG.LC_TX_ON_DELAY"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+[review.entity."LC_TX_ON_DELAY_CONFIG.INIT_DUPLICATE_BYTE"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+[review.entity."LC_TX_ON_DELAY_CONFIG.BITS_8_15_OPAQUE"]
+sources = ["S31_MMIO_USE_20101650", "S31_MMIO_DECLARED_20101650"]
+
+[review.entity."LC_TX_ON_DELAY_CONFIG.BITS_24_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101650", "S31_MMIO_DECLARED_20101650"]
+
+[review.entity."WORD_0654_OPAQUE.INIT_BYTE_0"]
+sources = ["S31_MMIO_DECLARED_20101654"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0654_OPAQUE.INIT_BYTE_1"]
+sources = ["S31_MMIO_DECLARED_20101654"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0654_OPAQUE.INIT_BYTE_2_LOW_7"]
+sources = ["S31_MMIO_DECLARED_20101654"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0654_OPAQUE.INIT_BYTE_2_HIGH"]
+sources = ["S31_MMIO_DECLARED_20101654"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0800_OPAQUE.INIT_ENABLE_22"]
+sources = ["S31_MMIO_DECLARED_20101800"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0800_OPAQUE.INIT_ENABLE_31"]
+sources = ["S31_MMIO_DECLARED_20101800"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0800_OPAQUE.BIT_21_OPAQUE"]
+sources = ["S31_MMIO_USE_20101800", "S31_MMIO_DECLARED_20101800"]
+
+[review.entity."SLOT%s_LOW"]
+sources = ["BLOB_LIBBLE_CONTROLLER_ADDRESS_SLOTS"]
+
+[review.entity."SLOT%s_LOW.OCTETS_0_TO_3"]
+sources = ["BLOB_LIBBLE_CONTROLLER_ADDRESS_SLOTS"]
+
+[review.entity."SLOT%s_HIGH"]
+sources = ["BLOB_LIBBLE_CONTROLLER_ADDRESS_SLOTS"]
+completeness = "partial"
+
+[review.entity."SLOT%s_HIGH.OCTETS_4_TO_5"]
+sources = ["BLOB_LIBBLE_CONTROLLER_ADDRESS_SLOTS"]
+
+[review.entity."WORD_0858_OPAQUE.INIT_HIGH_HALF"]
+sources = ["S31_MMIO_DECLARED_20101858"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_085C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_DECLARED_2010185C"]
+completeness = "complete"
+
+[review.entity."DEVICE_TABLE_CONTROL"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBLE_DEVICE_TABLE", "HIL_VENDOR_ACCEPT_LIST_2026_09_29"]
+completeness = "partial"
+
+[review.entity."DEVICE_TABLE_CONTROL.ENTRY_COUNT"]
+sources = ["BLOB_LIBBLE_DEVICE_TABLE", "HIL_VENDOR_ACCEPT_LIST_2026_09_29"]
+
+[review.entity."DEVICE_TABLE_CONTROL.BIT_18_OPAQUE"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_DECLARED_20101870"]
+completeness = "complete"
+
+[review.entity."DEVICE_TABLE_CONTROL.BITS_19_20_OPAQUE"]
+sources = ["S31_MMIO_USE_20101870", "S31_MMIO_DECLARED_20101870"]
+
+[review.entity."DEVICE_TABLE_FIRST_ENTRY"]
+sources = ["BLOB_LIBBLE_DEVICE_TABLE", "HIL_VENDOR_ACCEPT_LIST_2026_09_29"]
+
+[review.entity."DEVICE_TABLE_FIRST_ENTRY.COMPRESSED_ADDRESS"]
+sources = ["BLOB_LIBBLE_DEVICE_TABLE", "HIL_VENDOR_ACCEPT_LIST_2026_09_29"]
+
+[review.entity."VALUE_0"]
+sources = ["BLOB_LIBBLE_SYNC_PUBLICATION"]
+completeness = "partial"
+
+[review.entity."VALUE_0.VALUE"]
+sources = ["BLOB_LIBBLE_SYNC_PUBLICATION"]
+
+[review.entity."VALUE_1"]
+sources = ["BLOB_LIBBLE_SYNC_PUBLICATION"]
+completeness = "partial"
+
+[review.entity."VALUE_1.IMAGE_LOW_24"]
+sources = ["BLOB_LIBBLE_SYNC_PUBLICATION"]
+
+[review.entity."BASE_POINTER"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SET"]
+completeness = "partial"
+
+[review.entity."BASE_POINTER.COMPRESSED_SRAM_POINTER"]
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SET"]
+
+[review.entity."PHY_ENVIRONMENT_MEMBER_POINTER"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"]
+completeness = "partial"
+
+[review.entity."PHY_ENVIRONMENT_MEMBER_POINTER.ADDRESS"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+[review.entity."WORD_08A4_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_201018A4"]
+
+[review.entity."WORD_08A4_OPAQUE.BITS_8_15_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_201018A4"]
+
+[review.entity."WORD_08A4_OPAQUE.BITS_16_23_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_201018A4"]
+
+[review.entity."WORD_08A4_OPAQUE.BITS_24_31_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_201018A4"]
+
+[review.entity."WORD_08A8_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_201018A8"]
+
+[review.entity."WORD_08A8_OPAQUE.BITS_8_15_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_201018A8"]
+
+[review.entity."WORD_08A8_OPAQUE.BITS_16_23_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_201018A8"]
+
+[review.entity."WORD_08A8_OPAQUE.BITS_24_31_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_201018A8"]
+
+[review.entity."CONNECTION_ABORT_CONTROL"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBLE_CONNECTION_ABORT_CONTROL"]
+completeness = "partial"
+
+[review.entity."CONNECTION_ABORT_CONTROL.CUSTOM_OPCODE_ENABLED"]
+sources = ["BLOB_LIBBLE_CONNECTION_ABORT_CONTROL"]
+
+[review.entity."CONNECTION_ABORT_CONTROL.LINK_STATE_CONTROL"]
+sources = ["BLOB_LIBBLE_CONNECTION_ABORT_CONTROL", "HIL_S31_SOFTWARE_CCM_OPCODE_ABORT"]
+
+[review.entity."WORD_094C_OPAQUE.INIT_LOW_5"]
+sources = ["S31_MMIO_DECLARED_2010194C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0950_OPAQUE.INIT_BYTE_0"]
+sources = ["S31_MMIO_DECLARED_20101950"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0950_OPAQUE.INIT_BYTE_1"]
+sources = ["S31_MMIO_DECLARED_20101950"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0950_OPAQUE.INIT_BYTE_2"]
+sources = ["S31_MMIO_DECLARED_20101950"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0954_OPAQUE.INIT_BYTE_0"]
+sources = ["S31_MMIO_DECLARED_20101954"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0954_OPAQUE.INIT_BYTE_1"]
+sources = ["S31_MMIO_DECLARED_20101954"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0954_OPAQUE.INIT_BYTE_2"]
+sources = ["S31_MMIO_DECLARED_20101954"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0954_OPAQUE.INIT_BYTE_3"]
+sources = ["S31_MMIO_DECLARED_20101954"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0958_OPAQUE.INIT_BYTE_0"]
+sources = ["S31_MMIO_DECLARED_20101958"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0958_OPAQUE.INIT_BYTE_1"]
+sources = ["S31_MMIO_DECLARED_20101958"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0958_OPAQUE.INIT_BYTE_2"]
+sources = ["S31_MMIO_DECLARED_20101958"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0958_OPAQUE.INIT_BYTE_3"]
+sources = ["S31_MMIO_DECLARED_20101958"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_095C_OPAQUE.INIT_BYTE_0"]
+sources = ["S31_MMIO_DECLARED_2010195C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_095C_OPAQUE.INIT_BYTE_1"]
+sources = ["S31_MMIO_DECLARED_2010195C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_095C_OPAQUE.INIT_BYTE_2"]
+sources = ["S31_MMIO_DECLARED_2010195C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_095C_OPAQUE.INIT_BYTE_3"]
+sources = ["S31_MMIO_DECLARED_2010195C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."UPPER_LIMIT_MAX"]
+sources = ["BLOB_LIBBLE_SCAN_BACKOFF"]
+completeness = "partial"
+
+[review.entity."UPPER_LIMIT_MAX.VALUE"]
+sources = ["BLOB_LIBBLE_SCAN_BACKOFF"]
+completeness = "partial"
+
+[review.entity."BACKOFF_STATE_0"]
+sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
+completeness = "partial"
+
+[review.entity."BACKOFF_STATE_0.VALUE"]
+sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
+completeness = "partial"
+
+[review.entity."BACKOFF_STATE_1"]
+sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
+completeness = "partial"
+
+[review.entity."BACKOFF_STATE_1.VALUE"]
+sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
+completeness = "partial"
+
+[review.entity."WORD_0980_OPAQUE"]
+sources = ["S31_MMIO_USE_20101980"]
+
+[review.entity."WORD_0980_OPAQUE.BITS_0_19_OPAQUE"]
+sources = ["S31_MMIO_USE_20101980", "S31_MMIO_DECLARED_20101980"]
+
+[review.entity."WORD_0980_OPAQUE.BITS_23_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101980", "S31_MMIO_DECLARED_20101980"]
+
+[review.entity."WORD_098C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010198C"]
+
+[review.entity."WORD_098C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010198C", "S31_MMIO_DECLARED_2010198C"]
+
+[review.entity."WORD_0994_OPAQUE"]
+sources = ["S31_MMIO_USE_20101994"]
+
+[review.entity."WORD_0994_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101994", "S31_MMIO_DECLARED_20101994"]
+
+[review.entity."RING_CONTROL"]
+sources = ["BLOB_LIBBLE_HW_CTE_RING_CONTROL"]
+completeness = "partial"
+
+[review.entity."RING_CONTROL.MAX_BUFFER_NUMBER"]
+sources = ["BLOB_LIBBLE_HW_CTE_RING_CONTROL"]
+
+[review.entity."RING_CONTROL.RING_BUFFER_INDEX_CLEAR"]
+sources = ["BLOB_LIBBLE_HW_CTE_RING_CONTROL"]
+
+[review.entity."BUFFER_POINTER%s"]
+sources = ["BLOB_LIBBLE_HW_CTE_RING_CONTROL"]
+completeness = "partial"
+
+[review.entity."BUFFER_POINTER%s.COMPRESSED_DESCRIPTOR_POINTER"]
+sources = ["BLOB_LIBBLE_HW_CTE_RING_CONTROL"]
+
+[review.entity."BUFFER_STATE%s"]
+sources = ["BLOB_LIBBLE_HW_CTE_RING_CONTROL"]
+completeness = "partial"
+
+[review.entity."BUFFER_STATE%s.SOFTWARE_OWNED"]
+sources = ["BLOB_LIBBLE_HW_CTE_RING_CONTROL"]
+
+[review.entity."STATUS%s"]
+sources = ["BLOB_LIBBLE_HW_STATUS_CLEAR"]
+
+[review.entity."STATUS%s.PENDING_BITS"]
+sources = ["BLOB_LIBBLE_HW_STATUS_CLEAR"]
+
+[review.entity."CLEAR%s"]
+sources = ["BLOB_LIBBLE_HW_STATUS_CLEAR"]
+
+[review.entity."CLEAR%s.PENDING_BITS"]
+sources = ["BLOB_LIBBLE_HW_STATUS_CLEAR"]
+
+[review.entity."PHY_INIT_CONFIGURATION"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+completeness = "partial"
+
+[review.entity."PHY_INIT_CONFIGURATION.VALUE_LOW_8"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+[review.entity."PHY_INIT_CONFIGURATION.CONFIG_8"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+[review.entity."PHY_INIT_CONFIGURATION_FOLLOWUP"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+completeness = "partial"
+
+[review.entity."PHY_INIT_CONFIGURATION_FOLLOWUP.VALUE"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+[review.entity."WORD_0B88_OPAQUE"]
+sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
+
+[review.entity."WORD_0B88_OPAQUE.BITS_0_4_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101B88"]
+
+[review.entity."WORD_0B90_OPAQUE"]
+sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
+
+[review.entity."WORD_0B90_OPAQUE.BITS_0_4_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101B90"]
+
+[review.entity."WORD_0B90_OPAQUE.BITS_8_12_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101B90"]
+
+[review.entity."WORD_0B94_OPAQUE"]
+sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
+
+[review.entity."WORD_0B94_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101B94"]
+
+[review.entity."VALUE"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+[review.entity."VALUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101FF0"]
+
+[review.entity."VALUE.BIT_3_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_20101FF0", "S31_MMIO_DECLARED_20101FF0"]
+
+[review.entity."WORD_0FFC_OPAQUE"]
+sources = ["S31_MMIO_USE_20101FFC"]
+
+[review.entity."WORD_0FFC_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20101FFC", "S31_MMIO_DECLARED_20101FFC"]
+
+[[registers]]
+name = "SCHEDULER_CONTROL"
+offset = 0x0
+description = "Final hardware command of scheduler run. The complete current run prologue always returns zero after dynamic IRQ preparation and synchronous broker publication, so the following complete leaf writes finite image 1; the same-chip named predecessor identifies the composed operation as r_btdm_sched_run."
+
+[[registers.fields]]
+name = "COMMAND"
+bits = "31:0"
+class = "write-only"
+description = "Complete final scheduler hardware-run command image."
+values = [{ name = "RUN", value = 1, description = "Request scheduler execution after a hardware-list head publication." }]
+write-values-only = true
+
+[[registers]]
+name = "SCHEDULER_LIFECYCLE_REQUEST"
+offset = 0x4
+description = "The scheduler lifecycle function reached from both BTDM task disable and shutdown writes complete image 1 only after its initial BUSY gate, dynamic interrupt masking, synchronous scheduler-run source disable and command-readiness wait. It then waits for scheduler BUSY to clear. The hardware meaning of this request remains unknown."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+description = "Complete lifecycle-request image."
+
+[[registers]]
+name = "IRQ_CONTROL_0"
+offset = 0xc
+description = "BTDM interrupt setup and the complete reset leaf write the finite complete image 1. Inner action remains unknown."
+
+[[registers.fields]]
+name = "COMMAND"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "IRQ_CONTROL_1"
+offset = 0x10
+description = "BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown."
+
+[[registers.fields]]
+name = "COMMAND"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "IRQ_CONTROL_2"
+offset = 0x14
+description = "BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown."
+
+[[registers.fields]]
+name = "COMMAND"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0018_OPAQUE"
+offset = 0x18
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0038_OPAQUE"
+offset = 0x38
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0048_OPAQUE"
+offset = 0x48
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "IRQ_ENABLE_0"
+offset = 0x54
+description = "First controller interrupt-enable bank. Primary setup clears stale image 0x00008000 then ORs that baseline into this word; another complete helper independently controls 0x18200000."
+
+[[registers.fields]]
+name = "SOURCE_0"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "SOURCE_1"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "SOURCE_8"
+bits = "8"
+class = "plain"
+
+[[registers.fields]]
+name = "SOURCE_13"
+bits = "13"
+class = "plain"
+
+[[registers.fields]]
+name = "SOURCE_15"
+bits = "15"
+class = "plain"
+
+[[registers.fields]]
+name = "SOURCE_16"
+bits = "16"
+class = "plain"
+
+[[registers.fields]]
+name = "SOURCE_21"
+bits = "21"
+class = "plain"
+
+[[registers.fields]]
+name = "SOURCES_27_28"
+bits = "28:27"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_2_7_OPAQUE"
+bits = "7:2"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_9_12_OPAQUE"
+bits = "12:9"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_14_OPAQUE"
+bits = "14"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_17_20_OPAQUE"
+bits = "20:17"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_22_26_OPAQUE"
+bits = "26:22"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_29_31_OPAQUE"
+bits = "31:29"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "IRQ_CLEAR_0"
+offset = 0x58
+description = "First controller interrupt-clear bank. Primary and NRT handlers copy their respective first-bank status images here as complete words."
+
+[[registers.fields]]
+name = "BITS_0_6_OPAQUE"
+bits = "6:0"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "SOURCE_7"
+bits = "7"
+class = "write-trigger"
+description = "Acknowledged with complete image 0x80 by the scheduler cancellation path before it sets BLUETOOTH_CONTROLLER_CORE.WORD_0204_OPAQUE bit zero."
+
+[[registers.fields]]
+name = "BITS_8_14_OPAQUE"
+bits = "14:8"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "SOURCE_15"
+bits = "15"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "BITS_16_20_OPAQUE"
+bits = "20:16"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "SOURCE_21"
+bits = "21"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "BITS_22_26_OPAQUE"
+bits = "26:22"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "SOURCES_27_28"
+bits = "28:27"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "BITS_29_31_OPAQUE"
+bits = "31:29"
+class = "write-trigger"
+
+[[registers]]
+name = "IRQ_STATUS_0"
+offset = 0x5c
+description = "First masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement."
+
+[[registers.fields]]
+name = "BITS_0_14_OPAQUE"
+bits = "14:0"
+class = "read-only"
+
+[[registers.fields]]
+name = "SOURCE_15"
+bits = "15"
+class = "read-only"
+
+[[registers.fields]]
+name = "BITS_16_20_OPAQUE"
+bits = "20:16"
+class = "read-only"
+
+[[registers.fields]]
+name = "SOURCE_21"
+bits = "21"
+class = "read-only"
+
+[[registers.fields]]
+name = "BITS_22_26_OPAQUE"
+bits = "26:22"
+class = "read-only"
+
+[[registers.fields]]
+name = "SOURCES_27_28"
+bits = "28:27"
+class = "read-only"
+
+[[registers.fields]]
+name = "BITS_29_31_OPAQUE"
+bits = "31:29"
+class = "read-only"
+
+[[registers]]
+name = "IRQ_ENABLE_1"
+offset = 0x60
+description = "Second controller interrupt-enable bank. Primary setup clears stale image 0x00001300 then ORs that baseline into this word; another complete helper independently controls bit 3."
+
+[[registers.fields]]
+name = "SOURCE_3"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "SOURCE_4"
+bits = "4"
+class = "plain"
+
+[[registers.fields]]
+name = "SOURCE_5"
+bits = "5"
+class = "plain"
+
+[[registers.fields]]
+name = "SOURCE_6"
+bits = "6"
+class = "plain"
+
+[[registers.fields]]
+name = "SOURCE_8"
+bits = "8"
+class = "plain"
+
+[[registers.fields]]
+name = "SOURCE_9"
+bits = "9"
+class = "plain"
+
+[[registers.fields]]
+name = "SOURCE_12"
+bits = "12"
+class = "plain"
+
+[[registers.fields]]
+name = "SOURCE_13"
+bits = "13"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_2_OPAQUE"
+bits = "2:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_7_OPAQUE"
+bits = "7"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_10_11_OPAQUE"
+bits = "11:10"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_14_31_OPAQUE"
+bits = "31:14"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "IRQ_CLEAR_1"
+offset = 0x64
+description = "Second controller interrupt-clear bank. Primary and NRT handlers copy their respective second-bank status images here as complete words."
+
+[[registers.fields]]
+name = "BITS_0_2_OPAQUE"
+bits = "2:0"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "SOURCE_3"
+bits = "3"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "BITS_4_7_OPAQUE"
+bits = "7:4"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "SOURCE_8"
+bits = "8"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "SOURCE_9"
+bits = "9"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "BITS_10_11_OPAQUE"
+bits = "11:10"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "SOURCE_12"
+bits = "12"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "BITS_13_31_OPAQUE"
+bits = "31:13"
+class = "write-trigger"
+
+[[registers]]
+name = "IRQ_STATUS_1"
+offset = 0x68
+description = "Second masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement."
+
+[[registers.fields]]
+name = "BITS_0_2_OPAQUE"
+bits = "2:0"
+class = "read-only"
+
+[[registers.fields]]
+name = "SOURCE_3"
+bits = "3"
+class = "read-only"
+
+[[registers.fields]]
+name = "BITS_4_7_OPAQUE"
+bits = "7:4"
+class = "read-only"
+
+[[registers.fields]]
+name = "SOURCE_8"
+bits = "8"
+class = "read-only"
+
+[[registers.fields]]
+name = "SOURCE_9"
+bits = "9"
+class = "read-only"
+
+[[registers.fields]]
+name = "BITS_10_11_OPAQUE"
+bits = "11:10"
+class = "read-only"
+
+[[registers.fields]]
+name = "SOURCE_12"
+bits = "12"
+class = "read-only"
+
+[[registers.fields]]
+name = "BITS_13_31_OPAQUE"
+bits = "31:13"
+class = "read-only"
+
+[[registers]]
+name = "WORD_006C_OPAQUE"
+offset = 0x6c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "IRQ_DIAGNOSTIC_STATE"
+offset = 0x70
+description = "Complete word read by the primary source-124 fault prefix when masked bank-one source 12 is pending. Inner state encoding remains unknown."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "SCHEDULER_SRAM_POINTER_PREFIX"
+offset = 0x74
+description = "Hardware initialization publishes bits 22..31 from an SRAM configuration address. The pinned scheduler list users reconstruct pointers with the constant 0x2F000000 instead; the source-124 deferred-work snapshot and the recycle dequeue path still OR this prefix with compressed 20-bit pointer values shifted left by two."
+
+[[registers.fields]]
+name = "BITS_0_21_OPAQUE"
+bits = "21:0"
+class = "plain"
+description = "Full HAL initialization writes zero to the low 22 unassigned positions."
+write-range = { min = 0x0, max = 0x3fffff }
+
+[[registers.fields]]
+name = "ADDRESS_PREFIX"
+bits = "31:22"
+class = "plain"
+write-range = { min = 0x0, max = 0x3ff }
+
+[[registers]]
+name = "SCHEDULER_REFERENCE"
+offset = 0x78
+description = "The source-124 handler can publish the complete zero image when bank-one source 3 observes an idle scheduler through the diagnostic BUSY sample. Other scheduler users compare bits 0..19 or publish complete images; upper encoding remains unknown."
+
+[[registers.fields]]
+name = "VALUE_LOW_20"
+bits = "19:0"
+class = "plain"
+
+[[registers]]
+name = "SCHEDULER_STATE"
+offset = 0x7c
+description = "The source-124 handler reads this shared scheduler state before publishing deferred work. Its deferred-work predicate requires both STATE_29 and BUSY. The complete current-link-index leaf returns bits 23:20. Command transactions and the reference gate sample BUSY through DIAGNOSTIC_VALUE instead; other complete users consume or publish the low 20 and low 30 bits."
+
+[[registers.fields]]
+name = "VALUE_LOW_20"
+bits = "19:0"
+class = "plain"
+
+[[registers.fields]]
+name = "CURRENT_LINK_INDEX"
+bits = "23:20"
+class = "plain"
+description = "Zero-based current scheduler hardware-list index returned by the complete current-link-index leaf."
+
+[[registers.fields]]
+name = "BITS_24_28_OPAQUE"
+bits = "28:24"
+class = "plain"
+
+[[registers.fields]]
+name = "STATE_29"
+bits = "29"
+class = "plain"
+description = "Positional state sampled together with BUSY by the complete source-124 deferred-work predicate. Its independent hardware meaning remains unqualified."
+
+[[registers.fields]]
+name = "BIT_30_OPAQUE"
+bits = "30"
+class = "plain"
+
+[[registers.fields]]
+name = "BUSY"
+bits = "31"
+class = "plain"
+
+[[registers]]
+name = "CONTROLLER_AUXILIARY_POINTER"
+offset = 0x80
+description = "Three observed controller paths read the low twenty bits after consulting SCHEDULER_STATE and reconstruct an SRAM address as 0x2F000000 | (value << 2). The relationship between the two pointer sources remains unknown."
+
+[[registers.fields]]
+name = "COMPRESSED_SRAM_POINTER"
+bits = "19:0"
+class = "read-only"
+
+[[registers]]
+name = "HAL_INIT_BYTES"
+offset = 0x84
+description = "Complete BTDM HAL initialization replaces bytes zero and one with two independently runtime-derived values while preserving bits 16..31. Their inner meanings remain unknown."
+
+[[registers.fields]]
+name = "VALUE_0"
+bits = "7:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "VALUE_1"
+bits = "15:8"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers]]
+name = "WORD_0088_OPAQUE"
+offset = 0x88
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "BTLC_TIMER_CC_0"
+offset = 0x8c
+description = "Timer compare slot 0 of r_obh_link_btlc_timer_cc_set; controller initialization writes zero."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "BTLC_TIMER_CONTROL"
+offset = 0x90
+description = "BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31."
+
+[[registers.fields]]
+name = "CLOCK_SHIFT"
+bits = "2:0"
+class = "plain"
+write-range = { min = 0x0, max = 0x7 }
+
+[[registers.fields]]
+name = "CONFIG_24"
+bits = "24"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_25_OPAQUE"
+bits = "25"
+class = "plain"
+description = "HAL initialization clears this unassigned position together with the complete high-byte reset."
+
+[[registers.fields]]
+name = "LATCH_REQUEST"
+bits = "26"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_27_30_OPAQUE"
+bits = "30:27"
+class = "plain"
+description = "HAL initialization clears these unassigned positions together with the complete high-byte reset."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "TIMER_ARM"
+bits = "31"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_3_23_OPAQUE"
+bits = "23:3"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "BTLC_TIMER_VALUE_0"
+offset = 0x94
+description = "First of the three words r_obd_update_btlc_timer writes before BTLC_TIMER_CONTROL.TIMER_ARM."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "BTLC_TIMER_VALUE_1"
+offset = 0x98
+description = "Second of the three words r_obd_update_btlc_timer writes before BTLC_TIMER_CONTROL.TIMER_ARM."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "BTLC_TIMER_VALUE_2"
+offset = 0x9c
+description = "Third of the three words r_obd_update_btlc_timer writes before BTLC_TIMER_CONTROL.TIMER_ARM."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "BTLC_TIMER_CAPTURE_0"
+offset = 0xac
+description = "First word of the timer capture r_obd_capture_btlc_timer reads after BTLC_TIMER_CONTROL.LATCH_REQUEST clears."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "BTLC_TIMER_CAPTURE_1"
+offset = 0xb0
+description = "Second word of the same timer capture."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "BTLC_TIMER_CAPTURE_2"
+offset = 0xb4
+description = "Third word of the same timer capture."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "BTLC_TIMER_CC_1"
+offset = 0xb8
+description = "Timer compare slot 1 of r_obh_link_btlc_timer_cc_set; controller initialization writes zero."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "CONTROLLER_TRANSACTION_0"
+offset = 0xc4
+description = "First positional controller transaction word. The observed instruction sequence publishes bit 31 together with a dynamic low-twenty-bit value, waits for bit 30, then republishes while bit 31 remains clear. The hardware operation remains unknown."
+
+[[registers.fields]]
+name = "DYNAMIC_LOW_20"
+bits = "19:0"
+class = "plain"
+
+[[registers.fields]]
+name = "ZERO_IMAGE_20_29"
+bits = "29:20"
+class = "plain"
+description = "Every observed complete publication writes these positions as zero; no hardware-field semantics are assigned."
+
+[[registers.fields]]
+name = "STATUS_30"
+bits = "30"
+class = "plain"
+
+[[registers.fields]]
+name = "PUBLISH_31"
+bits = "31"
+class = "plain"
+
+[[registers]]
+name = "CURRENT_TX_LINK_POINTER"
+offset = 0xc8
+description = "Current transmit link pointer (r_obh_link_current_txlinkptr_get); software reconstructs the SRAM address as SCHEDULER_SRAM_POINTER_PREFIX | (value << 2)."
+
+[[registers.fields]]
+name = "COMPRESSED_SRAM_POINTER"
+bits = "19:0"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_20_OPAQUE"
+bits = "20"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "CURRENT_RX_LINK_POINTER"
+offset = 0xcc
+description = "Current receive link pointer (r_obh_link_current_rxlinkptr_get); software reconstructs the SRAM address as SCHEDULER_SRAM_POINTER_PREFIX | (value << 2)."
+
+[[registers.fields]]
+name = "COMPRESSED_SRAM_POINTER"
+bits = "19:0"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_20_OPAQUE"
+bits = "20"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_00D0_OPAQUE"
+offset = 0xd0
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_20_OPAQUE"
+bits = "20:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_00D4_OPAQUE"
+offset = 0xd4
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_20_OPAQUE"
+bits = "20:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "CONTROLLER_TRANSACTION_1"
+offset = 0xd8
+description = "Second positional controller transaction word. Observed instruction sequences publish bit 31 with either a dynamic low-twenty-bit value or zero, wait for bit 30, then republish while bit 31 remains clear. The hardware operation remains unknown."
+
+[[registers.fields]]
+name = "DYNAMIC_LOW_20"
+bits = "19:0"
+class = "plain"
+
+[[registers.fields]]
+name = "ZERO_IMAGE_20_29"
+bits = "29:20"
+class = "plain"
+description = "Every observed complete publication writes these positions as zero; no hardware-field semantics are assigned."
+
+[[registers.fields]]
+name = "STATUS_30"
+bits = "30"
+class = "plain"
+
+[[registers.fields]]
+name = "PUBLISH_31"
+bits = "31"
+class = "plain"
+
+[[registers]]
+name = "WDT_CONFIG_0"
+offset = 0xdc
+description = "First watchdog configuration word of r_obh_link_wdt_config; bit 31 is its enable. BTDM HAL initialization sets it through a fresh-read RMW."
+
+[[registers.fields]]
+name = "ENABLE"
+bits = "31"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_25_OPAQUE"
+bits = "25:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WDT_CONFIG_1"
+offset = 0xe0
+description = "Second watchdog configuration word of r_obh_link_wdt_config, which packs four arguments into it. BTDM HAL initialization replaces and sets positions 3, 6, 7, 15, 18 and 19; positional groups keep the exact masks."
+
+[[registers.fields]]
+name = "CONFIG_3"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "CONFIG_6_7"
+bits = "7:6"
+class = "plain"
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers.fields]]
+name = "CONFIG_15"
+bits = "15"
+class = "plain"
+
+[[registers.fields]]
+name = "CONFIG_18_19"
+bits = "19:18"
+class = "plain"
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers]]
+name = "SCHEDULER_SKIP_REQUEST"
+offset = 0xec
+description = "Scheduler skip request for one listed item. The cancellation path publishes START with a zero-based hardware-list index in bits 23:20 and a compressed item pointer in bits 19:0, waits while both START and the diagnostic scheduler BUSY sample are set, takes the two-bit RESULT, and then writes zero to the complete word. The effect on the item and the meaning of each RESULT value are not established."
+
+[[registers.fields]]
+name = "COMPRESSED_SRAM_POINTER"
+bits = "19:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xfffff }
+
+[[registers.fields]]
+name = "HARDWARE_LIST_INDEX"
+bits = "23:20"
+class = "plain"
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "RESULT"
+bits = "29:28"
+class = "plain"
+
+[[registers.fields]]
+name = "START"
+bits = "31"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_24_27_OPAQUE"
+bits = "27:24"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_30_OPAQUE"
+bits = "30"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "HAL_INIT_LATCH"
+offset = 0x1c0
+description = "BTDM HAL initialization writes the finite complete image 0x40 and then sets bit 31 through a fresh-read RMW. Inner semantics remain unknown."
+
+[[registers.fields]]
+name = "CONFIG_6"
+bits = "6"
+class = "plain"
+
+[[registers.fields]]
+name = "ENABLE_31"
+bits = "31"
+class = "plain"
+
+[[registers]]
+name = "HAL_INIT_LOW_20"
+offset = 0x1c4
+description = "BTDM HAL initialization writes the finite complete image 0x000FFFFF. Inner semantics remain unknown."
+
+[[registers.fields]]
+name = "CONFIG_LOW_20"
+bits = "19:0"
+class = "write-only"
+write-range = { min = 0x0, max = 0xfffff }
+
+[[registers]]
+name = "IRQ_DIAGNOSTIC_DETAIL_0"
+offset = 0x1c8
+description = "First complete detail word read by the primary source-124 fault prefix when masked bank-one source 9 is pending. Inner encoding remains unknown."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "IRQ_DIAGNOSTIC_DETAIL_1"
+offset = 0x1cc
+description = "Second complete detail word read by the primary source-124 fault prefix when masked bank-one source 9 is pending. Inner encoding remains unknown."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "DIAGNOSTIC_SELECT"
+offset = 0x1e8
+description = "Bluetooth MAC diagnostic-signal selector. Each byte lane selects one eight-bit diagnostic signal returned in the same lane of DIAGNOSTIC_VALUE. Scheduler command paths and the source-124 reference gate publish the complete SCHEDULER_STATUS image before sampling scheduler BUSY."
+
+[[registers.fields]]
+name = "SELECTION"
+bits = "31:0"
+class = "write-only"
+description = "Complete observed selector images; only the images used by reviewed scheduler transactions are named."
+values = [{ name = "SCHEDULER_STATUS", value = 56, description = "Lane zero selects the scheduler status signal; lanes one to three select signal zero." }, { name = "EXECUTION_MODIFY_PROGRESS", value = 3073, description = "Lane zero selects signal 1 and lane one signal 12. Execution modify repeats its request while lane-zero bits 2:0 hold 2, or hold 3 with lane-one bits 5:4 equal to 1." }, { name = "EXECUTION_MODIFY_SETTLE", value = 7, description = "Lane zero selects signal 7; lanes one to three select signal zero. Execution modify completes once the complete value differs from 9." }]
+write-values-only = true
+
+[[registers]]
+name = "DIAGNOSTIC_VALUE"
+offset = 0x1ec
+description = "Diagnostic-signal values for the four DIAGNOSTIC_SELECT lanes. The value crosses from the MAC clock domain: readers accept a sample only when two consecutive complete reads are equal."
+
+[[registers.fields]]
+name = "VALUE_0_LOW_7"
+bits = "6:0"
+class = "read-only"
+
+[[registers.fields]]
+name = "VALUE_0_BIT_7"
+bits = "7"
+class = "read-only"
+description = "Bit 7 of the lane-zero signal. With SCHEDULER_STATUS selected it is scheduler BUSY, with the polarity of SCHEDULER_STATE.BUSY."
+
+[[registers.fields]]
+name = "VALUE_1"
+bits = "15:8"
+class = "read-only"
+
+[[registers.fields]]
+name = "VALUE_2"
+bits = "23:16"
+class = "read-only"
+
+[[registers.fields]]
+name = "VALUE_3"
+bits = "31:24"
+class = "read-only"
+
+[[registers]]
+name = "GPIO_DIAG_ARGUMENT_1"
+offset = 0x1f0
+description = "Second argument of r_obh_link_gpio_diag_set. Complete BLE PHY initialization writes the whole-word image 0x55."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "ISO_COEX_ENABLE"
+offset = 0x1f4
+description = "ISO coexistence initialization sets bit 0; deinitialization clears it."
+
+[[registers.fields]]
+name = "ENABLE"
+bits = "0"
+class = "plain"
+
+[[registers]]
+name = "ISO_COEX_CONTROL_0"
+offset = 0x1f8
+description = "ISO coexistence initialization sets bit 0. Inner control semantics remain unknown."
+
+[[registers.fields]]
+name = "ENABLE_0"
+bits = "0"
+class = "plain"
+
+[[registers]]
+name = "ISO_COEX_THRESHOLD"
+offset = 0x1fc
+description = "ISO coexistence initialization writes low ten-bit value 100 and then sets bit 31."
+
+[[registers.fields]]
+name = "VALUE_LOW_10"
+bits = "9:0"
+class = "plain"
+
+[[registers.fields]]
+name = "ENABLE"
+bits = "31"
+class = "plain"
+
+[[registers]]
+name = "ISO_COEX_CONTROL_1"
+offset = 0x200
+description = "ISO coexistence initialization sets bit 0. Inner control semantics remain unknown."
+
+[[registers.fields]]
+name = "ENABLE_0"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_1_31_OPAQUE"
+bits = "31:1"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0204_OPAQUE"
+offset = 0x204
+description = "Complete operational functions independently set and clear bit zero through fresh-read RMW operations. The scheduler cancellation path sets bit zero after publishing its hardware-list index in WORD_036C_OPAQUE bits 7:4 and acknowledging interrupt source 7, waits on WORD_0324_OPAQUE and WORD_0208_OPAQUE, and clears bit zero after its skip requests. The hardware effect of bit zero is not established."
+
+[[registers.fields]]
+name = "CONTROL_0"
+bits = "0"
+class = "plain"
+
+[[registers]]
+name = "WORD_0208_OPAQUE"
+offset = 0x208
+description = "Two complete operational functions, the scheduler cancellation paths, consume bit zero as the second wait predicate after setting WORD_0204_OPAQUE bit zero. They continue waiting while this bit is one and the diagnostic scheduler BUSY sample is set. The remaining bits and the hardware meaning of bit zero are unknown."
+
+[[registers.fields]]
+name = "STATUS_0"
+bits = "0"
+class = "read-only"
+
+[[registers]]
+name = "ISO_COEX_STATE_0"
+offset = 0x20c
+description = "ISO coexistence initialization and deinitialization write the complete zero image."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "ISO_COEX_STATE_1"
+offset = 0x210
+description = "ISO coexistence initialization and deinitialization write the complete zero image."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "ISO_COEX_TIMING_0"
+offset = 0x214
+description = "ISO coexistence initialization publishes a runtime-derived low 24-bit value and then sets bit 31."
+
+[[registers.fields]]
+name = "VALUE_LOW_24"
+bits = "23:0"
+class = "plain"
+
+[[registers.fields]]
+name = "ENABLE"
+bits = "31"
+class = "plain"
+
+[[registers]]
+name = "SCHEDULER_LOCK_MODIFY_REQUEST"
+offset = 0x218
+description = "The scheduler insert-with-lock-modify path publishes START with a compressed SRAM pointer. Before and after publication it may progress whenever either START or the diagnostic scheduler BUSY sample is clear. When that publication wait ends it reports zero when BUSY is clear, otherwise the positional four-bit RESULT image returned in bits 30:27; this is not radio-item completion."
+
+[[registers.fields]]
+name = "COMPRESSED_SRAM_POINTER"
+bits = "19:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xfffff }
+
+[[registers.fields]]
+name = "ZERO_IMAGE_20_26"
+bits = "26:20"
+class = "plain"
+
+[[registers.fields]]
+name = "RESULT"
+bits = "30:27"
+class = "plain"
+
+[[registers.fields]]
+name = "START"
+bits = "31"
+class = "plain"
+
+[[registers]]
+name = "WORD_022C_OPAQUE"
+offset = 0x22c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0230_OPAQUE"
+offset = 0x230
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_19_OPAQUE"
+bits = "19:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "ISO_COEX_TIMING_1"
+offset = 0x234
+description = "ISO coexistence initialization publishes a runtime-derived low 20-bit value and then sets bit 31."
+
+[[registers.fields]]
+name = "VALUE_LOW_20"
+bits = "19:0"
+class = "plain"
+
+[[registers.fields]]
+name = "ENABLE"
+bits = "31"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_20_30_OPAQUE"
+bits = "30:20"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0244_OPAQUE"
+offset = 0x244
+description = "Complete BLE PHY initialization writes the finite whole-word zero image. Inner hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "GPIO_DIAG_CONTROL"
+offset = 0x248
+description = "GPIO diagnostic control of r_obh_link_gpio_diag_set, whose first argument replaces bits 7:4. Complete BLE PHY initialization writes the whole-word image 0x00000FFF."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "PHY_ENVIRONMENT_TAIL_POINTER"
+offset = 0x24c
+description = "Complete BLE PHY initialization writes a runtime-derived complete image formed from a linked global address plus 0x40. The destination's inner hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "ADDRESS"
+bits = "31:0"
+class = "write-only"
+description = "CPU address published for the BLE PHY environment member at +0x4d."
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "HAL_INIT_SCHEDULER_CONTROL"
+offset = 0x250
+description = "BTDM HAL initialization configures byte one to 0x20, bits 16..20 to 0x10 and sets bit 31. Names remain positional because the controller meaning is not recovered."
+
+[[registers.fields]]
+name = "CONFIG_BYTE_1"
+bits = "15:8"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "CONFIG_16_20"
+bits = "20:16"
+class = "plain"
+write-range = { min = 0x0, max = 0x1f }
+
+[[registers.fields]]
+name = "ENABLE_31"
+bits = "31"
+class = "plain"
+
+[[registers]]
+name = "SCHEDULER_COMMAND_0"
+offset = 0x254
+description = "First scheduler command/status transaction. The insertion execution-lock request publishes a compressed item pointer, hardware-list index and START; its finite wait observes positional status 24 and a three-bit result. Other complete paths inspect positional status 26."
+
+[[registers.fields]]
+name = "COMPRESSED_SRAM_POINTER"
+bits = "19:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xfffff }
+
+[[registers.fields]]
+name = "HARDWARE_LIST_INDEX"
+bits = "23:20"
+class = "plain"
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "STATUS_24"
+bits = "24"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_25_OPAQUE"
+bits = "25"
+class = "plain"
+
+[[registers.fields]]
+name = "STATUS_26"
+bits = "26"
+class = "plain"
+
+[[registers.fields]]
+name = "EXECUTION_LOCK_RESULT"
+bits = "29:27"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_30_OPAQUE"
+bits = "30"
+class = "plain"
+
+[[registers.fields]]
+name = "START"
+bits = "31"
+class = "plain"
+
+[[registers]]
+name = "SCHEDULER_COMMAND_1"
+offset = 0x258
+description = "Second scheduler command/status transaction. The insertion execution-modify request publishes a sixteen-list selection mask and START; its finite wait observes positional status bits 17 and 19. Other complete paths inspect positional status 18."
+
+[[registers.fields]]
+name = "HARDWARE_LIST_MASK"
+bits = "15:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xffff }
+
+[[registers.fields]]
+name = "BIT_16_OPAQUE"
+bits = "16"
+class = "plain"
+description = "Mode bit published with the list mask and START. Insertion publishes zero; deletion of a whole running list publishes one. Its hardware effect is not established."
+
+[[registers.fields]]
+name = "STATUS_17"
+bits = "17"
+class = "plain"
+
+[[registers.fields]]
+name = "STATUS_18"
+bits = "18"
+class = "plain"
+
+[[registers.fields]]
+name = "STATUS_19"
+bits = "19"
+class = "plain"
+
+[[registers.fields]]
+name = "PAYLOAD_HIGH_20_30"
+bits = "30:20"
+class = "plain"
+
+[[registers.fields]]
+name = "START"
+bits = "31"
+class = "plain"
+
+[[registers]]
+name = "SCHEDULER_FINISHED_LIST_STATUS"
+offset = 0x25c
+description = "The scheduler worker reads the low 16 bits as the finished hardware-list mask, copies that image to SCHEDULER_FINISHED_LIST_REPORT and dispatches the mask to the BLE finished-item selector."
+
+[[registers.fields]]
+name = "FINISHED_LIST_MASK"
+bits = "15:0"
+class = "read-only"
+
+[[registers]]
+name = "SCHEDULER_FINISHED_LIST_REPORT"
+offset = 0x260
+description = "Before software finished-item dispatch, the scheduler worker writes the observed 16-bit SCHEDULER_FINISHED_LIST_STATUS mask as a complete zero-high image. The hardware effect of this report remains positional; other reviewed paths can clear the complete word."
+
+[[registers.fields]]
+name = "FINISHED_LIST_MASK"
+bits = "15:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xffff }
+
+[[registers]]
+name = "WORD_026C_OPAQUE"
+offset = 0x26c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0270_OPAQUE"
+offset = 0x270
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0274_OPAQUE"
+offset = 0x274
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0278_OPAQUE"
+offset = 0x278
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "HAL_INIT_LOW_HALF"
+offset = 0x27c
+description = "BTDM HAL initialization first clears and then sets all bits in the low halfword through two fresh-read RMW operations. Inner semantics remain unknown."
+
+[[registers.fields]]
+name = "CONFIG_LOW_16"
+bits = "15:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xffff }
+
+[[registers.fields]]
+name = "BITS_16_31_OPAQUE"
+bits = "31:16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "GLOBAL_RXLINK_1_CURRENT"
+offset = 0x280
+description = "Current pointer of global RX link 1 (r_obh_link_global_rxlink_curr_ptr_set) in bits 19:0 and its valid flag (r_obh_link_global_rxvalid_set) in bit 20."
+
+[[registers.fields]]
+name = "COMPRESSED_SRAM_POINTER"
+bits = "19:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xfffff }
+
+[[registers.fields]]
+name = "RX_VALID"
+bits = "20"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_21_31_OPAQUE"
+bits = "31:21"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "GLOBAL_RXLINK_1_NEXT"
+offset = 0x284
+description = "Next pointer of global RX link 1 (r_obh_link_global_rxlink_next_ptr_set)."
+
+[[registers.fields]]
+name = "COMPRESSED_SRAM_POINTER"
+bits = "19:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xfffff }
+
+[[registers.fields]]
+name = "BITS_20_31_OPAQUE"
+bits = "31:20"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "GLOBAL_RXLINK_2_CURRENT"
+offset = 0x288
+description = "Current pointer of global RX link 2 (r_obh_link_global_rxlink_curr_ptr_set) in bits 19:0 and its valid flag (r_obh_link_global_rxvalid_set) in bit 20."
+
+[[registers.fields]]
+name = "COMPRESSED_SRAM_POINTER"
+bits = "19:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xfffff }
+
+[[registers.fields]]
+name = "RX_VALID"
+bits = "20"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_21_31_OPAQUE"
+bits = "31:21"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "GLOBAL_RXLINK_2_NEXT"
+offset = 0x28c
+description = "Next pointer of global RX link 2 (r_obh_link_global_rxlink_next_ptr_set)."
+
+[[registers.fields]]
+name = "COMPRESSED_SRAM_POINTER"
+bits = "19:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xfffff }
+
+[[registers.fields]]
+name = "BITS_20_31_OPAQUE"
+bits = "31:20"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "GLOBAL_RXLINK_3_CURRENT"
+offset = 0x290
+description = "Current pointer of global RX link 3 (r_obh_link_global_rxlink_curr_ptr_set) in bits 19:0 and its valid flag (r_obh_link_global_rxvalid_set) in bit 20."
+
+[[registers.fields]]
+name = "COMPRESSED_SRAM_POINTER"
+bits = "19:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xfffff }
+
+[[registers.fields]]
+name = "RX_VALID"
+bits = "20"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_21_31_OPAQUE"
+bits = "31:21"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "GLOBAL_RXLINK_3_NEXT"
+offset = 0x294
+description = "Next pointer of global RX link 3 (r_obh_link_global_rxlink_next_ptr_set)."
+
+[[registers.fields]]
+name = "COMPRESSED_SRAM_POINTER"
+bits = "19:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xfffff }
+
+[[registers.fields]]
+name = "BITS_20_31_OPAQUE"
+bits = "31:20"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0298_OPAQUE"
+offset = 0x298
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "SCAN_HW_SNAPSHOT"
+offset = 0x2a0
+description = "BLE scan code reads this complete word twice until stable, converts it and stores the result in scan state. Inner hardware encoding remains unknown."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "WORD_02AC_OPAQUE"
+offset = 0x2ac
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_02B0_OPAQUE"
+offset = 0x2b0
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_02B4_OPAQUE"
+offset = 0x2b4
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_02B8_OPAQUE"
+offset = 0x2b8
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_02BC_OPAQUE"
+offset = 0x2bc
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_02C0_OPAQUE"
+offset = 0x2c0
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0324_OPAQUE"
+offset = 0x324
+description = "The two scheduler cancellation paths read this word after setting WORD_0204_OPAQUE bit zero and wait while bit zero is clear and the diagnostic scheduler BUSY sample is set. The remaining bits and the hardware meaning of bit zero are unknown."
+
+[[registers.fields]]
+name = "STATUS_0"
+bits = "0"
+class = "read-only"
+
+[[registers]]
+name = "IRQ_STATUS_SNAPSHOT_0"
+offset = 0x340
+description = "Raw first-bank status snapshot read by the NRT ISR and copied to IRQ_CLEAR_0."
+
+[[registers.fields]]
+name = "PENDING_BITS"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "IRQ_STATUS_SNAPSHOT_1"
+offset = 0x348
+description = "Raw second-bank status snapshot read by the NRT ISR and copied to IRQ_CLEAR_1."
+
+[[registers.fields]]
+name = "PENDING_BITS"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "HAL_INIT_SLOT_MAP%s"
+offset = 0x34c
+dim = { count = 2, stride = 0x4 }
+description = "The adjacent words at 0x2010134c and 0x20101350 each hold eight independently initialized four-bit lanes. For every lane, the complete BTDM HAL loop first clears bits 3:2, then sets bit 0, conditionally sets but never clears bit 1, and publishes the global-index high bit into bit 2. The hardware meaning of the words and values remains unknown."
+
+[[registers.fields]]
+name = "LANE_0_ENABLE"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_0_RETAINED_INDEX_LOW"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_0_INDEX_HIGH"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_3_OPAQUE"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_1_ENABLE"
+bits = "4"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_1_RETAINED_INDEX_LOW"
+bits = "5"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_1_INDEX_HIGH"
+bits = "6"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_7_OPAQUE"
+bits = "7"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_2_ENABLE"
+bits = "8"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_2_RETAINED_INDEX_LOW"
+bits = "9"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_2_INDEX_HIGH"
+bits = "10"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_11_OPAQUE"
+bits = "11"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_3_ENABLE"
+bits = "12"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_3_RETAINED_INDEX_LOW"
+bits = "13"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_3_INDEX_HIGH"
+bits = "14"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_15_OPAQUE"
+bits = "15"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_4_ENABLE"
+bits = "16"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_4_RETAINED_INDEX_LOW"
+bits = "17"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_4_INDEX_HIGH"
+bits = "18"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_19_OPAQUE"
+bits = "19"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_5_ENABLE"
+bits = "20"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_5_RETAINED_INDEX_LOW"
+bits = "21"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_5_INDEX_HIGH"
+bits = "22"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_23_OPAQUE"
+bits = "23"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_6_ENABLE"
+bits = "24"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_6_RETAINED_INDEX_LOW"
+bits = "25"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_6_INDEX_HIGH"
+bits = "26"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_27_OPAQUE"
+bits = "27"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_7_ENABLE"
+bits = "28"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_7_RETAINED_INDEX_LOW"
+bits = "29"
+class = "plain"
+
+[[registers.fields]]
+name = "LANE_7_INDEX_HIGH"
+bits = "30"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+
+[[registers]]
+name = "WORD_036C_OPAQUE"
+offset = 0x36c
+description = "Scheduler operational word shared by several controller paths. The scheduler insert-with-lock-modify path clears, then publishes, the zero-based hardware-list index in bits 3:0 through two distinct fresh-read field updates before publishing SCHEDULER_LOCK_MODIFY_REQUEST. The scheduler cancellation path does the same for bits 7:4 before setting WORD_0204_OPAQUE bit zero. Other fields remain unassigned."
+
+[[registers.fields]]
+name = "LOCK_MODIFY_HARDWARE_LIST_INDEX"
+bits = "3:0"
+class = "plain"
+description = "Zero-based hardware-list index cleared and then published by scheduler insert-with-lock-modify."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "CANCELLATION_HARDWARE_LIST_INDEX"
+bits = "7:4"
+class = "plain"
+description = "Zero-based hardware-list index cleared and then published by the scheduler cancellation path before it sets WORD_0204_OPAQUE bit zero."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers]]
+name = "WORD_0380_OPAQUE"
+offset = 0x380
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_10_OPAQUE"
+bits = "10:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_31_OPAQUE"
+bits = "31"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_03D8_OPAQUE"
+offset = 0x3d8
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_03DC_OPAQUE"
+offset = 0x3dc
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_03E0_OPAQUE"
+offset = 0x3e0
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_03E4_OPAQUE"
+offset = 0x3e4
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_03F4_OPAQUE"
+offset = 0x3f4
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_1_OPAQUE"
+bits = "1"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_03FC_OPAQUE"
+offset = 0x3fc
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_27_OPAQUE"
+bits = "27:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "COMMAND"
+offset = 0x424
+description = "Both observed ISO-path publications write the complete value one."
+
+[[registers.fields]]
+name = "TRIGGER"
+bits = "0"
+class = "write-only"
+description = "Observed command image is one; hardware self-clear and command meaning remain unknown."
+
+[[registers]]
+name = "WORD_0430_OPAQUE"
+offset = 0x430
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0434_OPAQUE"
+offset = 0x434
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0438_OPAQUE"
+offset = 0x438
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_043C_OPAQUE"
+offset = 0x43c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0450_OPAQUE"
+offset = 0x450
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_045C_OPAQUE"
+offset = 0x45c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0470_OPAQUE"
+offset = 0x470
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0474_OPAQUE"
+offset = 0x474
+description = "BLE PHY register initialization writes the complete zero image. Inner hardware semantics remain unknown."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "WORD_047C_OPAQUE"
+offset = 0x47c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_04B0_OPAQUE"
+offset = 0x4b0
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_1_OPAQUE"
+bits = "1"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_4_OPAQUE"
+bits = "4"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_7_OPAQUE"
+bits = "7"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "INTERRUPT_ENABLE"
+offset = 0x4b4
+description = "BLE base-stack interrupt enable bank. BLE PHY initialization preserves only source 17. The synchronous scheduler-run subscriber clears stale source 14 before enabling it here. All omitted source identities remain unknown."
+
+[[registers.fields]]
+name = "SCHEDULER_RUN"
+bits = "14"
+class = "plain"
+description = "The synchronous base-stack subscriber enables source 14 immediately before the scheduler RUN command."
+
+[[registers.fields]]
+name = "SOURCE_17"
+bits = "17"
+class = "plain"
+description = "BLE PHY initialization preserves source 17 while disabling every other interrupt source. Its feature identity remains unknown."
+
+[[registers.fields]]
+name = "BITS_0_13_OPAQUE"
+bits = "13:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_15_16_OPAQUE"
+bits = "16:15"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_18_31_OPAQUE"
+bits = "31:18"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "INTERRUPT_CLEAR"
+offset = 0x4b8
+description = "Write-one-to-clear BLE base-stack interrupt bank. Initialization acknowledges every source with an all-ones image; the synchronous scheduler-run subscriber acknowledges source 14 before enabling it."
+
+[[registers.fields]]
+name = "SCHEDULER_RUN"
+bits = "14"
+class = "write-trigger"
+description = "A one acknowledges stale scheduler-run source 14 before that source is enabled."
+
+[[registers.fields]]
+name = "BITS_0_13_OPAQUE"
+bits = "13:0"
+class = "write-trigger"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_15_31_OPAQUE"
+bits = "31:15"
+class = "write-trigger"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_04BC_OPAQUE"
+offset = 0x4bc
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_21_OPAQUE"
+bits = "21:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_24_OPAQUE"
+bits = "24"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_04C4_OPAQUE"
+offset = 0x4c4
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_10_OPAQUE"
+bits = "10"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_04C8_OPAQUE"
+offset = 0x4c8
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BIT_10_OPAQUE"
+bits = "10"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_04CC_OPAQUE"
+offset = 0x4cc
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_9_10_OPAQUE"
+bits = "10:9"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0508_OPAQUE"
+offset = 0x508
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_6_OPAQUE"
+bits = "6:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0510_OPAQUE"
+offset = 0x510
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0514_OPAQUE"
+offset = 0x514
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0518_OPAQUE"
+offset = 0x518
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0524_OPAQUE"
+offset = 0x524
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0528_OPAQUE"
+offset = 0x528
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0538_OPAQUE"
+offset = 0x538
+description = "BLE PHY register initialization writes the finite complete image 0x0000065B."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "WORD_0548_OPAQUE"
+offset = 0x548
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "STATUS"
+offset = 0x550
+description = "bbmac_idle_for_swrst requires the observed low four-bit field to be zero before reporting idle."
+
+[[registers.fields]]
+name = "BITS_0_3_OPAQUE"
+bits = "3:0"
+class = "read-only"
+description = "The reset-idle predicate fails when this exact field is nonzero."
+
+[[registers.fields]]
+name = "BITS_4_31_OPAQUE"
+bits = "31:4"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "LC_TX_ON_DELAY_CONFIG"
+offset = 0x650
+description = "BLE transmit timing configuration. ble_tx_config_check independently prints byte zero as lc_tx_on_delay; BLE PHY initialization writes the same runtime-derived byte image into bytes zero and two."
+
+[[registers.fields]]
+name = "LC_TX_ON_DELAY"
+bits = "7:0"
+class = "plain"
+description = "Low byte printed as lc_tx_on_delay by complete ble_tx_config_check. BLE PHY initialization stores a configuration byte minus one."
+
+[[registers.fields]]
+name = "INIT_DUPLICATE_BYTE"
+bits = "23:16"
+class = "plain"
+description = "BLE PHY initialization receives the same configuration-byte-minus-one image as LC_TX_ON_DELAY. No independent semantic name is claimed."
+
+[[registers.fields]]
+name = "BITS_8_15_OPAQUE"
+bits = "15:8"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0654_OPAQUE"
+offset = 0x654
+description = "BLE PHY initialization replaces the first three bytes with the exact images 0x01, 0x01 and 0xB2."
+
+[[registers.fields]]
+name = "INIT_BYTE_0"
+bits = "7:0"
+class = "plain"
+
+[[registers.fields]]
+name = "INIT_BYTE_1"
+bits = "15:8"
+class = "plain"
+
+[[registers.fields]]
+name = "INIT_BYTE_2_LOW_7"
+bits = "22:16"
+class = "plain"
+
+[[registers.fields]]
+name = "INIT_BYTE_2_HIGH"
+bits = "23"
+class = "plain"
+description = "The first byte-two clear preserves this bit and the following OR forces it to one."
+
+[[registers]]
+name = "WORD_0800_OPAQUE"
+offset = 0x800
+description = "BLE PHY initialization first writes bit 31 as a complete image and then sets bit 22 through a fresh-read RMW."
+
+[[registers.fields]]
+name = "INIT_ENABLE_22"
+bits = "22"
+class = "plain"
+
+[[registers.fields]]
+name = "INIT_ENABLE_31"
+bits = "31"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_21_OPAQUE"
+bits = "21"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "SLOT%s_LOW"
+offset = 0x80c
+dim = { count = 3, stride = 0x8 }
+description = "Bytes zero through three of the selected six-byte value, packed in little-endian order and written before the paired high word."
+
+[[registers.fields]]
+name = "OCTETS_0_TO_3"
+bits = "31:0"
+class = "write-only"
+description = "The complete low word assembled from input bytes zero through three."
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "SLOT%s_HIGH"
+offset = 0x810
+dim = { count = 3, stride = 0x8 }
+description = "Bytes four and five of the selected six-byte value in bits 0..15; the complete write clears bits 16..31."
+
+[[registers.fields]]
+name = "OCTETS_4_TO_5"
+bits = "15:0"
+class = "write-only"
+description = "Input bytes four and five packed in little-endian order."
+write-range = { min = 0x0, max = 0xffff }
+
+[[registers]]
+name = "WORD_0858_OPAQUE"
+offset = 0x858
+description = "BLE PHY initialization replaces the upper halfword with the finite image 0x000F."
+
+[[registers.fields]]
+name = "INIT_HIGH_HALF"
+bits = "31:16"
+class = "plain"
+
+[[registers]]
+name = "WORD_085C_OPAQUE"
+offset = 0x85c
+description = "BLE PHY register initialization writes the finite complete image 8."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "DEVICE_TABLE_CONTROL"
+offset = 0x870
+description = "Device-table control word. Every device-table change rewrites the entry count in the low byte; one complete BLE PHY initialization branch sets bit 18. Both writers preserve the other bits, whose meaning remains unknown."
+
+[[registers.fields]]
+name = "ENTRY_COUNT"
+bits = "7:0"
+class = "plain"
+description = "Number of entries of the Controller-SRAM device table the filter accept list and the resolving list share, valid or not; hardware walks this many entries."
+
+[[registers.fields]]
+name = "BIT_18_OPAQUE"
+bits = "18"
+class = "plain"
+description = "The complete BLE PHY initialization body's selected branch sets this positional bit. No independent enable, allowlist, or directed-advertising hardware meaning is proven."
+
+[[registers.fields]]
+name = "BITS_19_20_OPAQUE"
+bits = "20:19"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "DEVICE_TABLE_FIRST_ENTRY"
+offset = 0x874
+description = "Compressed word address of the first device-table entry. Every device-table change writes it completely with zero in bits 20..31."
+
+[[registers.fields]]
+name = "COMPRESSED_ADDRESS"
+bits = "19:0"
+class = "write-only"
+description = "Controller-SRAM byte address of the first entry shifted right by two, in the twenty-bit compressed link encoding."
+write-range = { min = 0x0, max = 0xfffff }
+
+[[registers]]
+name = "VALUE_0"
+offset = 0x878
+description = "One runtime-derived complete 32-bit image."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "VALUE_1"
+offset = 0x87c
+description = "One runtime-derived low-24-bit image; the complete publication writes bits 24..31 as zero."
+
+[[registers.fields]]
+name = "IMAGE_LOW_24"
+bits = "23:0"
+class = "write-only"
+
+[[registers]]
+name = "BASE_POINTER"
+offset = 0x880
+description = "Complete image equal to the caller-provided SRAM address shifted right by two and truncated to twenty bits."
+
+[[registers.fields]]
+name = "COMPRESSED_SRAM_POINTER"
+bits = "19:0"
+class = "write-only"
+description = "Bits 0..19 contain address >> 2; bits 20..31 are written as zero."
+write-range = { min = 0x0, max = 0xfffff }
+
+[[registers]]
+name = "PHY_ENVIRONMENT_MEMBER_POINTER"
+offset = 0x8a0
+description = "BLE PHY initialization writes a runtime-derived complete image formed from a linked global address. The destination's hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "ADDRESS"
+bits = "31:0"
+class = "plain"
+description = "CPU address published for the BLE PHY environment member at +0x2c."
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "WORD_08A4_OPAQUE"
+offset = 0x8a4
+description = "BLE PHY register initialization writes four byte images equal to 2."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_8_15_OPAQUE"
+bits = "15:8"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_16_23_OPAQUE"
+bits = "23:16"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+
+[[registers]]
+name = "WORD_08A8_OPAQUE"
+offset = 0x8a8
+description = "BLE PHY register initialization writes four byte images equal to 2."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_8_15_OPAQUE"
+bits = "15:8"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_16_23_OPAQUE"
+bits = "23:16"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+
+[[registers]]
+name = "CONNECTION_ABORT_CONTROL"
+offset = 0x8ac
+description = "Connection aborted-opcode control. BLE PHY initialization and the default aborted-opcode path write 0x00FF0002, while the custom-opcode path writes 0x00FF0003. Connection link-state refresh independently replaces bit 1 from its two private control flags."
+
+[[registers.fields]]
+name = "CUSTOM_OPCODE_ENABLED"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "LINK_STATE_CONTROL"
+bits = "1"
+class = "plain"
+description = "The complete connection link-state refresh clears this bit when its second private control flag is set, independently of the first flag, and sets it otherwise. The field selects the connection opcode-abort path; software-authenticated control PDUs require it cleared before RX publication."
+
+[[registers]]
+name = "WORD_0940_OPAQUE"
+offset = 0x940
+description = "BLE PHY register initialization writes the complete controller-configuration word at offset 0x40, which the pinned configuration defaults to 2000."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "WORD_094C_OPAQUE"
+offset = 0x94c
+description = "BLE PHY initialization replaces the low five bits with the finite image 0x12."
+
+[[registers.fields]]
+name = "INIT_LOW_5"
+bits = "4:0"
+class = "plain"
+
+[[registers]]
+name = "WORD_0950_OPAQUE"
+offset = 0x950
+description = "BLE PHY initialization replaces the low three bytes with 0x03, 0x03 and 0x44."
+
+[[registers.fields]]
+name = "INIT_BYTE_0"
+bits = "7:0"
+class = "plain"
+
+[[registers.fields]]
+name = "INIT_BYTE_1"
+bits = "15:8"
+class = "plain"
+
+[[registers.fields]]
+name = "INIT_BYTE_2"
+bits = "23:16"
+class = "plain"
+
+[[registers]]
+name = "WORD_0954_OPAQUE"
+offset = 0x954
+description = "BLE PHY initialization replaces all four bytes with 0x10, 0x10, 0x3C and 0x28."
+
+[[registers.fields]]
+name = "INIT_BYTE_0"
+bits = "7:0"
+class = "plain"
+
+[[registers.fields]]
+name = "INIT_BYTE_1"
+bits = "15:8"
+class = "plain"
+
+[[registers.fields]]
+name = "INIT_BYTE_2"
+bits = "23:16"
+class = "plain"
+
+[[registers.fields]]
+name = "INIT_BYTE_3"
+bits = "31:24"
+class = "plain"
+
+[[registers]]
+name = "WORD_0958_OPAQUE"
+offset = 0x958
+description = "BLE PHY initialization replaces all four bytes with 0x0C, 0x08, 0x0C and 0x0C."
+
+[[registers.fields]]
+name = "INIT_BYTE_0"
+bits = "7:0"
+class = "plain"
+
+[[registers.fields]]
+name = "INIT_BYTE_1"
+bits = "15:8"
+class = "plain"
+
+[[registers.fields]]
+name = "INIT_BYTE_2"
+bits = "23:16"
+class = "plain"
+
+[[registers.fields]]
+name = "INIT_BYTE_3"
+bits = "31:24"
+class = "plain"
+
+[[registers]]
+name = "WORD_095C_OPAQUE"
+offset = 0x95c
+description = "BLE PHY initialization replaces all four bytes with 0x08."
+
+[[registers.fields]]
+name = "INIT_BYTE_0"
+bits = "7:0"
+class = "plain"
+
+[[registers.fields]]
+name = "INIT_BYTE_1"
+bits = "15:8"
+class = "plain"
+
+[[registers.fields]]
+name = "INIT_BYTE_2"
+bits = "23:16"
+class = "plain"
+
+[[registers.fields]]
+name = "INIT_BYTE_3"
+bits = "31:24"
+class = "plain"
+
+[[registers]]
+name = "UPPER_LIMIT_MAX"
+offset = 0x970
+description = "Maximum scan-backoff upper limit. Scanner start writes the Controller configuration's nine-bit upper limit, 32 in the S31 build, or 1 when backoff is disabled."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "8:0"
+class = "write-only"
+
+[[registers]]
+name = "BACKOFF_STATE_0"
+offset = 0x974
+description = "One of the two hardware-maintained backoff words (upper limit or backoff count); scanner start writes one."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "8:0"
+class = "plain"
+
+[[registers]]
+name = "BACKOFF_STATE_1"
+offset = 0x978
+description = "The other hardware-maintained backoff word; scanner start writes one."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "8:0"
+class = "plain"
+
+[[registers]]
+name = "WORD_0980_OPAQUE"
+offset = 0x980
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_19_OPAQUE"
+bits = "19:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_23_31_OPAQUE"
+bits = "31:23"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_098C_OPAQUE"
+offset = 0x98c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0994_OPAQUE"
+offset = 0x994
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "RING_CONTROL"
+offset = 0x99c
+description = "Reset writes the complete word as zero; independent accessors update the ring index and maximum-buffer fields through halfword RMW operations."
+
+[[registers.fields]]
+name = "MAX_BUFFER_NUMBER"
+bits = "14:12"
+class = "plain"
+description = "The setter truncates its argument to three bits and replaces bits 12..14; the getter returns the same field."
+
+[[registers.fields]]
+name = "RING_BUFFER_INDEX_CLEAR"
+bits = "15"
+class = "plain"
+description = "The named clear accessor sets bit 15. The active level and any hardware self-clear behavior remain unproven."
+
+[[registers]]
+name = "BUFFER_POINTER%s"
+offset = 0x9a0
+dim = { count = 6, stride = 0x8 }
+description = "Compressed controller-SRAM address of one CTE sample-ring descriptor. The setter replaces bits 0..19 and preserves the upper twelve bits."
+
+[[registers.fields]]
+name = "COMPRESSED_DESCRIPTOR_POINTER"
+bits = "19:0"
+class = "plain"
+description = "Low-twenty-bit controller-SRAM pointer reconstructed with the fixed 0x2f prefix and four-byte alignment."
+
+[[registers]]
+name = "BUFFER_STATE%s"
+offset = 0x9a4
+dim = { count = 6, stride = 0x8 }
+description = "Hardware state paired with one CTE sample-ring descriptor. Only the software-ownership flag is currently assigned."
+
+[[registers.fields]]
+name = "SOFTWARE_OWNED"
+bits = "31"
+class = "plain"
+description = "The named owner-clear/set leaves respectively clear and set bit 31; the paired query returns that bit."
+
+[[registers]]
+name = "STATUS%s"
+offset = 0xb30
+dim = { count = 8, stride = 0x4 }
+description = "Complete status word read once for each of eight sources before optional diagnostic reporting."
+
+[[registers.fields]]
+name = "PENDING_BITS"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "CLEAR%s"
+offset = 0xb50
+dim = { count = 8, stride = 0x4 }
+description = "Paired clear word receiving the complete image 0xFFFFFFFF for each of eight sources."
+
+[[registers.fields]]
+name = "PENDING_BITS"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "PHY_INIT_CONFIGURATION"
+offset = 0xb74
+description = "Complete BLE PHY initialization publishes one runtime-derived low byte together with finite bit 8 as a whole-word image. The byte encoding remains unknown."
+
+[[registers.fields]]
+name = "VALUE_LOW_8"
+bits = "7:0"
+class = "write-only"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "CONFIG_8"
+bits = "8"
+class = "write-only"
+
+[[registers]]
+name = "PHY_INIT_CONFIGURATION_FOLLOWUP"
+offset = 0xb78
+description = "Complete BLE PHY initialization writes the finite complete image one immediately after PHY_INIT_CONFIGURATION. The hardware meaning of this ordered follow-up write remains unknown."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0B88_OPAQUE"
+offset = 0xb88
+description = "Complete image formed from the low five bits of one controller configuration byte."
+
+[[registers.fields]]
+name = "BITS_0_4_OPAQUE"
+bits = "4:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0B90_OPAQUE"
+offset = 0xb90
+description = "Complete image formed from two low-five-bit controller values in bits 0..4 and 8..12 plus finite one bits at positions 5 and 13."
+
+[[registers.fields]]
+name = "BITS_0_4_OPAQUE"
+bits = "4:0"
+class = "write-only"
+
+[[registers.fields]]
+name = "BITS_8_12_OPAQUE"
+bits = "12:8"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0B94_OPAQUE"
+offset = 0xb94
+description = "Complete image formed from one controller configuration byte."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "write-only"
+
+[[registers]]
+name = "VALUE"
+offset = 0xff0
+description = "Complete ordered images zero then one at BLE PHY register-initialization entry; their hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "write-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_3_OPAQUE"
+bits = "3"
+class = "write-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0FFC_OPAQUE"
+offset = 0xffc
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."

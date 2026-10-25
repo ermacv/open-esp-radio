@@ -1,0 +1,2175 @@
+# A block type of the curated ESP32-S31 register model: no vendor header
+# or SVD describes this block.
+schema = 3
+
+[type]
+name = "MODEM_PWR"
+description = "The modem power-domain block at MODEM_PWR_BASE: the modem low-power timer and the Wi-Fi MAC's TSF, RTC timer, power interrupt, REGDMA and coexistence runtime words. Known only from vendor binaries.\n\nWords 0x0-0x78: Sparse BTDM low-level runtime and sleep-control window. Complete ESP32-S31 functions prove only the recorded access directions, finite images, low-24-bit publications and four isolated RMW controls. The independently role-mapped runtime-timer start command is named; all other positional names deliberately avoid assigning undocumented peripheral semantics.\n\nWord 0x800: Free-running Wi-Fi MAC local-time counter, read-only and without read side effects. Complete libpp[lmac.o]::lmacAdjustTimestamp subtracts the receive timestamp a received frame carries from this word as the frame's age and, while the station slept, rewrites that timestamp as this word minus a TU-scaled sleep interval; libpp[pm_twt.o]::pm_twt_set_target_wdev_time, libpp[pm_coex.o]::pm_get_null_max_tx_time and libpp[pm_coex.o]::pm_coex_recalculate_wifi_time_slice read it as the MAC's current time. The PHY SDM deadline samples the same word. Its unit and rate against the system timer are not established.\n\nWords 0x80c-0x810: Station TSF activity status recovered from the complete no-call hal_is_sta_tsf_active leaf. The instruction body proves the address and bit geometry but not the hardware transition rules.\n\nWords 0x814-0x828: Shared TSF load and coherent station/SoftAP snapshot transaction.\n\nWord 0x82c: Station TBTT target word recovered from complete hal_set_sta_tbtt. The low 26-bit packing from the supplied 64-bit TSF value is exact; the hardware counter unit remains unnamed.\n\nWords 0x830-0x878: Complete enabled path of hal_timer_update_by_rtc, reached from complete hal_init with enable one and the OS-adapter slow-clock calibration value.\n\nWord 0x83c: Shared WDEVPWR control word. The channel-change leaf proves the REGDMA selector, while complete modem-power leaves prove the wake-protect lead time and TBTT auto-period fields. Hardware interactions between these fields remain unqualified.\n\nWords 0x848-0x8d0: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown.\n\nWords 0x860-0x870: SoftAP, NAN and broadcast-TWT TSF control words. Complete public leaves prove their addresses and exact enable/mode masks; unrelated bits and hardware transition rules remain unnamed.\n\nWords 0x87c-0x880: Four-entry TSF timer bank recovered from all complete target, wakeup and enable/disable leaves. Each entry consists of one control word followed by its 32-bit target. The public index is guarded to zero through three by the target and timer-enable leaves; the dedicated wakeup leaves do not contain their own range check.\n\nWords 0x89c-0x8ac: Runtime receive-beacon and individual-TWT COEX/PTI words recovered from five complete hal_coex.o leaves. Register addresses, masks and RMW order are exact; fields whose electrical meaning is not established retain UNKNOWN names.\n\nWords 0x8b4-0x8c0: WDEVPWR interrupt bank named by complete print_isr_regs. Complete hal_pwr_interrupt_get_event and hal_pwr_interrupt_clr_event independently prove the masked STATUS read and full-width CLEAR acknowledgement transaction. Complete TSF timer enable/disable leaves update the timer interrupt masks in ENABLE and clear stale events through CLEAR."
+sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS", "BLOB_LIBPP_MAC_LOCAL_TIME", "BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_LIBPP_HAL_TSF", "ROM_REV0_HAL_GET_STA_TSF", "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015", "BLOB_LIBPP_HAL_INIT_TAIL", "BLOB_LIBPP_MAC_CHANNEL_SWITCH", "BLOB_LIBPP_HAL_PWR", "HIL_OPEN_REGDMA_LINK4_2026_07_29", "S31_MMIO_MODEM_RADIO_CORE_MID", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_COEX_RUNTIME", "BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+
+[[interrupt-outputs]]
+name = "WIFI_PWR"
+description = "The Wi-Fi power interrupt: the status bank at offset 0x8b4."
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT"]
+
+[[interrupt-outputs]]
+name = "LP_TIMER"
+description = "The modem low-power timer interrupt."
+sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ"]
+
+[review]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[review.opaque]
+sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."RUNTIME_TIMER_START_COMMAND"]
+sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE"]
+
+[review.entity."RUNTIME_TIMER_START_COMMAND.COMMAND"]
+sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE"]
+
+[review.entity."WORD_0010_OPAQUE.BIT_1_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_2010D010"]
+completeness = "partial"
+
+[review.entity."WORD_0010_OPAQUE.BIT_18_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_2010D010"]
+completeness = "partial"
+
+[review.entity."WORD_0014_OPAQUE.BITS_0_17_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_2010D014"]
+completeness = "partial"
+
+[review.entity."WORD_0014_OPAQUE.BITS_19_31_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_2010D014"]
+completeness = "partial"
+
+[review.entity."WORD_001C_OPAQUE"]
+sources = ["BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS"]
+
+[review.entity."WORD_001C_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_AUDIT_2010D01C", "S31_MMIO_DECLARED_2010D01C"]
+completeness = "partial"
+
+[review.entity."WORD_0020_OPAQUE.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_AUDIT_2010D020", "S31_MMIO_DECLARED_2010D020"]
+completeness = "partial"
+
+[review.entity."WORD_0024_OPAQUE.LOW_BYTE"]
+sources = ["S31_MMIO_DECLARED_2010D024"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_002C_OPAQUE.LOW_BYTE"]
+sources = ["S31_MMIO_DECLARED_2010D02C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0038_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D038"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0040_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_2010D040"]
+completeness = "partial"
+
+[review.entity."WORD_0040_OPAQUE.BITS_16_17_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_2010D040"]
+completeness = "partial"
+
+[review.entity."WORD_0044_OPAQUE.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_2010D044"]
+completeness = "partial"
+
+[review.entity."WORD_0044_OPAQUE.BITS_16_17_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_2010D044"]
+completeness = "partial"
+
+[review.entity."WORD_0048_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D048"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0058_OPAQUE"]
+sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ"]
+completeness = "partial"
+
+[review.entity."WORD_0058_OPAQUE.CONTROL_0"]
+sources = ["S31_MMIO_DECLARED_2010D058"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0058_OPAQUE.CONTROL_1"]
+sources = ["S31_MMIO_DECLARED_2010D058"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0058_OPAQUE.CONTROL_2"]
+sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ", "S31_MMIO_DECLARED_2010D058"]
+
+[review.entity."WORD_0058_OPAQUE.CONTROL_4"]
+sources = ["S31_MMIO_DECLARED_2010D058"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0058_OPAQUE.BIT_3_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D058", "S31_MMIO_DECLARED_2010D058"]
+completeness = "partial"
+
+[review.entity."WORD_0058_OPAQUE.BITS_5_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D058", "S31_MMIO_DECLARED_2010D058"]
+completeness = "partial"
+
+[review.entity."WORD_0064_OPAQUE"]
+sources = ["BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS"]
+
+[review.entity."WORD_0064_OPAQUE.BITS_0_23_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D064", "S31_MMIO_DECLARED_2010D064"]
+completeness = "partial"
+
+[review.entity."WORD_0068_OPAQUE"]
+completeness = "partial"
+
+[review.entity."WORD_0068_OPAQUE.BITS_0_23_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_2010D068"]
+completeness = "partial"
+
+[review.entity."WORD_006C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D06C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0078_OPAQUE"]
+completeness = "partial"
+
+[review.entity."WORD_0078_OPAQUE.CONTROL_25"]
+sources = ["S31_MMIO_DECLARED_2010D078"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0078_OPAQUE.BITS_0_23_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D078", "S31_MMIO_DECLARED_2010D078"]
+completeness = "partial"
+
+[review.entity."WORD_0078_OPAQUE.BIT_26_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D078", "S31_MMIO_DECLARED_2010D078"]
+completeness = "partial"
+
+[review.entity."COUNTER"]
+sources = ["ROM_REV0_PHY_WAIT_I2C_SDM_STABLE"]
+completeness = "unknown"
+
+[review.entity."COUNTER.VALUE"]
+sources = ["ROM_REV0_PHY_WAIT_I2C_SDM_STABLE", "BLOB_LIBPP_MAC_LOCAL_TIME", "HIL_OPEN_MAC_LOCAL_TIME_RATE_2026_10_03"]
+completeness = "unknown"
+
+[review.entity."TSF_STATUS"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+completeness = "unknown"
+
+[review.entity."TSF_STATUS.STATION_ACTIVE"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WAKEUP_SIGNAL_CLEAR"]
+sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
+completeness = "unknown"
+
+[review.entity."WAKEUP_SIGNAL_CLEAR.CLEAR"]
+sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WAKEUP_SIGNAL_CLEAR.BITS_1_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D810_RUN", "S31_MMIO_DECLARED_2010D810"]
+completeness = "partial"
+
+[review.entity."TSF_LOAD_CONTROL"]
+sources = ["BLOB_LIBPP_HAL_TSF", "ROM_REV0_HAL_GET_STA_TSF", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015"]
+
+[review.entity."TSF_LOAD_CONTROL.SNAPSHOT_STATION_TSF"]
+sources = ["ROM_REV0_HAL_GET_STA_TSF"]
+
+[review.entity."TSF_LOAD_CONTROL.SNAPSHOT_SOFTAP_TSF"]
+sources = ["BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015", "BLOB_LIBNET80211_AP_TSF_TIMESTAMP_TIM_20261015"]
+
+[review.entity."TSF_LOAD_CONTROL.LOAD_STATION_TSF"]
+sources = ["BLOB_LIBPP_HAL_TSF"]
+
+[review.entity."TSF_LOAD_CONTROL.LOAD_SOFTAP_TSF"]
+sources = ["BLOB_LIBPP_HAL_TSF"]
+
+[review.entity."TSF_LOAD_CONTROL.BITS_2_3_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D814", "S31_MMIO_DECLARED_2010D814"]
+completeness = "partial"
+
+[review.entity."TSF_LOAD_CONTROL.BITS_6_7_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D814", "S31_MMIO_DECLARED_2010D814"]
+completeness = "partial"
+
+[review.entity."TSF_LOAD_CONTROL.BITS_9_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D814", "S31_MMIO_DECLARED_2010D814"]
+completeness = "partial"
+
+[review.entity."VALUE_LOW"]
+sources = ["BLOB_LIBPP_HAL_TSF"]
+
+[review.entity."VALUE_LOW.VALUE"]
+sources = ["BLOB_LIBPP_HAL_TSF"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."VALUE_HIGH"]
+sources = ["BLOB_LIBPP_HAL_TSF"]
+
+[review.entity."VALUE_HIGH.VALUE"]
+sources = ["BLOB_LIBPP_HAL_TSF"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SNAPSHOT_LOW"]
+sources = ["ROM_REV0_HAL_GET_STA_TSF", "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015"]
+
+[review.entity."SNAPSHOT_LOW.VALUE"]
+sources = ["ROM_REV0_HAL_GET_STA_TSF", "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SNAPSHOT_HIGH"]
+sources = ["ROM_REV0_HAL_GET_STA_TSF", "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015"]
+
+[review.entity."SNAPSHOT_HIGH.VALUE"]
+sources = ["ROM_REV0_HAL_GET_STA_TSF", "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."TSF_DEVIATION_CONTROL"]
+sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
+completeness = "unknown"
+
+[review.entity."TSF_DEVIATION_CONTROL.DEVIATION"]
+sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
+
+[review.entity."TSF_DEVIATION_CONTROL.RX_BEACON_ABORT_SYNC_ENABLE"]
+sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
+
+[review.entity."TSF_DEVIATION_CONTROL.DEVIATION_SYNC_ENABLE"]
+sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
+
+[review.entity."TSF_DEVIATION_CONTROL.BITS_17_18_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D828", "S31_MMIO_DECLARED_2010D828"]
+completeness = "partial"
+
+[review.entity."TSF_DEVIATION_CONTROL.BITS_20_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D828_RUN", "S31_MMIO_DECLARED_2010D828"]
+completeness = "partial"
+
+[review.entity."TARGET"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+completeness = "unknown"
+
+[review.entity."TARGET.TSF_BITS_35_10"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."TARGET.BITS_26_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D82C", "S31_MMIO_DECLARED_2010D82C"]
+completeness = "partial"
+
+[review.entity."RTC_TIMER_UPDATE_CONTROL"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "BLOB_LIBPP_HAL_TSF"]
+
+[review.entity."RTC_TIMER_UPDATE_CONTROL.STA_TSF_WAKEUP_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF"]
+
+[review.entity."RTC_TIMER_UPDATE_CONTROL.LP_CLOCK_SYNC_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "BLOB_LIBPP_HAL_PWR_LPCLK_SYNC"]
+
+[review.entity."RTC_TIMER_UPDATE_CONTROL.BITS_0_20_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D830", "S31_MMIO_DECLARED_2010D830"]
+completeness = "partial"
+
+[review.entity."RTC_TIMER_UPDATE_CONTROL.BITS_22_26_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D830", "S31_MMIO_DECLARED_2010D830"]
+completeness = "partial"
+
+[review.entity."RTC_TIMER_UPDATE_CONTROL.BITS_28_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D830", "S31_MMIO_DECLARED_2010D830"]
+completeness = "partial"
+
+[review.entity."SOC_WAKEUP_CLEAR"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_LIBPP_HAL_PWR"]
+completeness = "unknown"
+
+[review.entity."SOC_WAKEUP_CLEAR.BEACON_FILTER_FORCE_SYNC_LIMIT"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+completeness = "unknown"
+
+[review.entity."SOC_WAKEUP_CLEAR.BEACON_FILTER_FORCE_SYNC_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+completeness = "unknown"
+
+[review.entity."SOC_WAKEUP_CLEAR.BEACON_FILTER_FORCE_DUMP_LIMIT"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+completeness = "unknown"
+
+[review.entity."SOC_WAKEUP_CLEAR.BEACON_FILTER_FORCE_DUMP_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+completeness = "unknown"
+
+[review.entity."SOC_WAKEUP_CLEAR.CLEAR_BEACON_SLEEP_COUNTER"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+completeness = "unknown"
+
+[review.entity."SOC_WAKEUP_CLEAR.CLEAR_BEACON_MISS_COUNTER"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+completeness = "unknown"
+
+[review.entity."SOC_WAKEUP_CLEAR.CLEAR_REQUEST"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_LIBPP_HAL_PWR"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SOC_WAKEUP_CLEAR.CLEAR_BEACON_INFO"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+completeness = "unknown"
+
+[review.entity."SOC_WAKEUP_CLEAR.BITS_18_20_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D834", "S31_MMIO_DECLARED_2010D834"]
+completeness = "partial"
+
+[review.entity."SOC_WAKEUP_CLEAR.BITS_22_27_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D834", "S31_MMIO_DECLARED_2010D834"]
+completeness = "partial"
+
+[review.entity."MODEM_SLEEP_LIMIT_CONTROL"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+completeness = "unknown"
+
+[review.entity."MODEM_SLEEP_LIMIT_CONTROL.BEACON_MISS_LIMIT"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+
+[review.entity."MODEM_SLEEP_LIMIT_CONTROL.BEACON_MISS_LIMIT_WAKEUP_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+completeness = "unknown"
+
+[review.entity."MODEM_SLEEP_LIMIT_CONTROL.MODEM_STATE_SLEEP_LIMIT"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+
+[review.entity."MODEM_SLEEP_LIMIT_CONTROL.MODEM_STATE_SLEEP_LIMIT_WAKEUP_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+completeness = "unknown"
+
+[review.entity."MODEM_SLEEP_LIMIT_CONTROL.BITS_16_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D838", "S31_MMIO_DECLARED_2010D838"]
+completeness = "partial"
+
+[review.entity."REGDMA_CONTROL"]
+sources = ["BLOB_LIBPP_MAC_CHANNEL_SWITCH", "BLOB_LIBPP_HAL_PWR", "HIL_OPEN_REGDMA_LINK4_2026_07_29"]
+completeness = "partial"
+
+[review.entity."REGDMA_CONTROL.MODEM_WAKEUP_PROTECT_EARLY_TIME"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+
+[review.entity."REGDMA_CONTROL.BIT_16_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D83C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."REGDMA_CONTROL.ACTIVE_LINK"]
+sources = ["BLOB_LIBPP_MAC_CHANNEL_SWITCH", "HIL_OPEN_REGDMA_LINK4_2026_07_29"]
+provenance = "reviewed"
+
+[review.entity."REGDMA_CONTROL.MODEM_TBTT_AUTO_PERIOD_INTERVAL"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+completeness = "unknown"
+
+[review.entity."REGDMA_CONTROL.MODEM_TBTT_AUTO_PERIOD_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+completeness = "unknown"
+
+[review.entity."STA_LIGHT_SLEEP_WAKE_AHEAD"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+
+[review.entity."STA_LIGHT_SLEEP_WAKE_AHEAD.TIME"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."STA_LIGHT_SLEEP_WAKE_AHEAD.BITS_0_15_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D840", "S31_MMIO_DECLARED_2010D840"]
+completeness = "partial"
+
+[review.entity."TBTT_RF_CONTROL_WAIT_CYCLES"]
+sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
+completeness = "unknown"
+
+[review.entity."TBTT_RF_CONTROL_WAIT_CYCLES.WAIT_CYCLES"]
+sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."WORD_0848_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D848"]
+completeness = "partial"
+
+[review.entity."WORD_0848_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D848", "S31_MMIO_DECLARED_2010D848"]
+completeness = "partial"
+
+[review.entity."WORD_0850_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D850"]
+completeness = "partial"
+
+[review.entity."WORD_0850_OPAQUE.BITS_0_1_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D850", "S31_MMIO_DECLARED_2010D850"]
+completeness = "partial"
+
+[review.entity."WORD_0850_OPAQUE.BITS_2_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D850_RUN", "S31_MMIO_DECLARED_2010D850"]
+completeness = "partial"
+
+[review.entity."RX_BEACON_TIME_LOW"]
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME", "BLOB_LIBPP_HAL_PWR"]
+completeness = "partial"
+
+[review.entity."RX_BEACON_TIME_LOW.VALUE"]
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME", "BLOB_LIBPP_HAL_PWR"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."RX_BEACON_TIME_LOW.BITS_16_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D854", "S31_MMIO_DECLARED_2010D854"]
+completeness = "partial"
+
+[review.entity."STA_TSF_CONTROL"]
+sources = ["BLOB_LIBPP_HAL_TSF", "BLOB_LIBPP_HAL_PWR", "BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+
+[review.entity."STA_TSF_CONTROL.STA_TSF_MODE"]
+sources = ["BLOB_LIBPP_HAL_TSF"]
+
+[review.entity."STA_TSF_CONTROL.MODEM_STATE_WAKEUP_PROTECT_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+
+[review.entity."STA_TSF_CONTROL.STA_TSF_ENABLE_LOW"]
+sources = ["BLOB_LIBPP_HAL_TSF"]
+
+[review.entity."STA_TSF_CONTROL.STA_TSF_WAKEUP_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF"]
+
+[review.entity."STA_TSF_CONTROL.STA_TSF_ENABLE_HIGH"]
+sources = ["BLOB_LIBPP_HAL_TSF"]
+
+[review.entity."STA_TSF_CONTROL.BITS_16_18_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D858", "S31_MMIO_DECLARED_2010D858"]
+completeness = "partial"
+
+[review.entity."STA_TSF_CONTROL.BIT_23_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D858", "S31_MMIO_DECLARED_2010D858"]
+completeness = "partial"
+
+[review.entity."STA_TSF_CONTROL.BIT_25_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D858", "S31_MMIO_DECLARED_2010D858"]
+completeness = "partial"
+
+[review.entity."STA_TSF_CONTROL.BIT_28_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D858", "S31_MMIO_DECLARED_2010D858"]
+completeness = "partial"
+
+[review.entity."STA_TSF_CONTROL.BIT_30_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D858", "S31_MMIO_DECLARED_2010D858"]
+completeness = "partial"
+
+[review.entity."STA_TBTT_INTERVAL"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+completeness = "unknown"
+
+[review.entity."STA_TBTT_INTERVAL.BITS_30_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D85C_RUN", "S31_MMIO_DECLARED_2010D85C"]
+completeness = "partial"
+
+[review.entity."SOFTAP_CONTROL"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+completeness = "unknown"
+
+[review.entity."SOFTAP_CONTROL.BIT_30_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D860"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SOFTAP_CONTROL.TSF_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SOFTAP_CONTROL.BITS_0_29_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D860", "S31_MMIO_DECLARED_2010D860"]
+completeness = "partial"
+
+[review.entity."WORD_0864_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D864"]
+completeness = "partial"
+
+[review.entity."WORD_0864_OPAQUE.BITS_0_21_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D864", "S31_MMIO_DECLARED_2010D864"]
+completeness = "partial"
+
+[review.entity."WORD_0864_OPAQUE.BITS_30_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D864_RUN", "S31_MMIO_DECLARED_2010D864"]
+completeness = "partial"
+
+[review.entity."WORD_0864_OPAQUE.BITS_22_25_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D864_TWO_DOMAIN"]
+completeness = "partial"
+
+[review.entity."NAN_CONTROL"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+completeness = "unknown"
+
+[review.entity."NAN_CONTROL.TSF_MODE"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."NAN_CONTROL.TSF_ENABLE_LOW"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."NAN_CONTROL.TSF_ENABLE_HIGH"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."NAN_CONTROL.BITS_0_18_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868"]
+completeness = "partial"
+
+[review.entity."NAN_CONTROL.BITS_23_26_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868"]
+completeness = "partial"
+
+[review.entity."NAN_CONTROL.BITS_28_30_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D868", "S31_MMIO_DECLARED_2010D868"]
+completeness = "partial"
+
+[review.entity."WORD_086C_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D86C"]
+completeness = "partial"
+
+[review.entity."WORD_086C_OPAQUE.BITS_0_21_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D86C", "S31_MMIO_DECLARED_2010D86C"]
+completeness = "partial"
+
+[review.entity."WORD_086C_OPAQUE.BITS_30_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D86C_RUN", "S31_MMIO_DECLARED_2010D86C"]
+completeness = "partial"
+
+[review.entity."WORD_086C_OPAQUE.BITS_22_25_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D86C_TWO_DOMAIN"]
+completeness = "partial"
+
+[review.entity."BTWT_CONTROL"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+completeness = "unknown"
+
+[review.entity."BTWT_CONTROL.TSF_MODE"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."BTWT_CONTROL.TSF_ENABLE_LOW"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."BTWT_CONTROL.TSF_ENABLE_HIGH"]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."BTWT_CONTROL.BITS_0_18_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870"]
+completeness = "partial"
+
+[review.entity."BTWT_CONTROL.BITS_23_26_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870"]
+completeness = "partial"
+
+[review.entity."BTWT_CONTROL.BITS_28_30_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D870", "S31_MMIO_DECLARED_2010D870"]
+completeness = "partial"
+
+[review.entity."WORD_0874_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D874"]
+completeness = "partial"
+
+[review.entity."WORD_0874_OPAQUE.BITS_0_21_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D874", "S31_MMIO_DECLARED_2010D874"]
+completeness = "partial"
+
+[review.entity."WORD_0874_OPAQUE.BITS_30_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D874_RUN", "S31_MMIO_DECLARED_2010D874"]
+completeness = "partial"
+
+[review.entity."WORD_0874_OPAQUE.BITS_22_25_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D874_TWO_DOMAIN"]
+completeness = "partial"
+
+[review.entity."SLOW_CLOCK_CALIBRATION"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+
+[review.entity."SLOW_CLOCK_CALIBRATION.VALUE"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+
+[review.entity."SLOW_CLOCK_CALIBRATION.BITS_18_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D878", "S31_MMIO_DECLARED_2010D878"]
+completeness = "partial"
+
+[review.entity."CONTROL%s"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+completeness = "unknown"
+
+[review.entity."CONTROL%s.TARGET_HIGH"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_PM_TWT_TSF_TARGET"]
+completeness = "unknown"
+
+[review.entity."CONTROL%s.WAKEUP_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."CONTROL%s.TIMER_ENABLE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."CONTROL%s.BITS_28_29_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D87C_TWO_DOMAIN", "S31_MMIO_USE_2010D884_TWO_DOMAIN", "S31_MMIO_USE_2010D88C_TWO_DOMAIN", "S31_MMIO_USE_2010D894_TWO_DOMAIN"]
+completeness = "partial"
+
+[review.entity."TARGET%s"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."TARGET%s.VALUE"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."CLEAR_REQUEST"]
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+completeness = "unknown"
+
+[review.entity."CLEAR_REQUEST.BITS_0_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D89C"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."RX_BEACON_TIME_HIGH"]
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+
+[review.entity."RX_BEACON_TIME_HIGH.VALUE"]
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."RX_BEACON_TIME_HIGH.BITS_8_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D8A0", "S31_MMIO_DECLARED_2010D8A0"]
+completeness = "partial"
+
+[review.entity."ITWT_CONTROL"]
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+completeness = "unknown"
+
+[review.entity."ITWT_CONTROL.BITS_0_7_OPAQUE"]
+sources = ["S31_MMIO_MANUAL_2010D8A4", "S31_MMIO_DECLARED_2010D8A4"]
+completeness = "partial"
+
+[review.entity."ITWT_CONTROL.BITS_8_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D8A4", "S31_MMIO_DECLARED_2010D8A4"]
+completeness = "partial"
+
+[review.entity."SHARED_RX_PTI"]
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+
+[review.entity."SHARED_RX_PTI.PTI"]
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."SHARED_RX_PTI.BITS_4_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D8A8", "S31_MMIO_DECLARED_2010D8A8"]
+completeness = "partial"
+
+[review.entity."RX_BEACON_PTI"]
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+
+[review.entity."RX_BEACON_PTI.PTI"]
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."RX_BEACON_PTI.BITS_0_11_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D8AC", "S31_MMIO_DECLARED_2010D8AC"]
+completeness = "partial"
+
+[review.entity."RX_BEACON_PTI.BITS_16_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D8AC", "S31_MMIO_DECLARED_2010D8AC"]
+completeness = "partial"
+
+[review.entity."ENABLE"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+
+[review.entity."ENABLE.TSF_TIMER_3"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."ENABLE.TSF_TIMER_2"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."ENABLE.TSF_TIMER_1"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."ENABLE.TSF_TIMER_0"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."ENABLE.BITS_8_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D8B4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."RAW"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+
+[review.entity."RAW.TSF_TIMER_3"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."RAW.TSF_TIMER_2"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."RAW.TSF_TIMER_1"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."RAW.TSF_TIMER_0"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."RAW.BITS_8_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D8B8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."POWER_INTERRUPT_STATUS"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+
+[review.entity."POWER_INTERRUPT_STATUS.TSF_TIMER_3"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."POWER_INTERRUPT_STATUS.TSF_TIMER_2"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."POWER_INTERRUPT_STATUS.TSF_TIMER_1"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."POWER_INTERRUPT_STATUS.TSF_TIMER_0"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."POWER_INTERRUPT_STATUS.BITS_8_31_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8BC"]
+completeness = "unknown"
+
+[review.entity."CLEAR"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+
+[review.entity."CLEAR.TSF_TIMER_3"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."CLEAR.TSF_TIMER_2"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."CLEAR.TSF_TIMER_1"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."CLEAR.TSF_TIMER_0"]
+sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
+
+[review.entity."CLEAR.BITS_8_31_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0"]
+completeness = "unknown"
+
+[review.entity."WORD_08D0_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D8D0"]
+completeness = "partial"
+
+[review.entity."WORD_08D0_OPAQUE.BITS_0_25_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D8D0", "S31_MMIO_DECLARED_2010D8D0"]
+completeness = "partial"
+
+[review.entity."WORD_08D0_OPAQUE.BITS_30_31_OPAQUE"]
+sources = ["S31_MMIO_USE_2010D8D0", "S31_MMIO_DECLARED_2010D8D0"]
+completeness = "partial"
+
+[[registers]]
+name = "RUNTIME_TIMER_START_COMMAND"
+offset = 0x0
+description = "Complete current leaf writes finite image 1; an instruction-identical public same-chip predecessor identifies the operation as r_btdm_hal_rtc_start."
+
+[[registers.fields]]
+name = "COMMAND"
+bits = "31:0"
+class = "write-only"
+description = "Complete command image that starts the BTDM runtime timer."
+values = [{ name = "START", value = 1, description = "Start the runtime timer during controller hardware enable." }]
+write-values-only = true
+
+[[registers]]
+name = "WORD_0004_OPAQUE"
+offset = 0x4
+description = "Complete runtime functions write the finite image 1."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0008_OPAQUE"
+offset = 0x8
+description = "Complete initialization writes the finite image 1."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0010_OPAQUE"
+offset = 0x10
+description = "Complete runtime functions write the independently observed finite images 2 and 0x00040000."
+
+[[registers.fields]]
+name = "BIT_1_OPAQUE"
+bits = "1"
+class = "write-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_18_OPAQUE"
+bits = "18"
+class = "write-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0014_OPAQUE"
+offset = 0x14
+description = "Complete runtime functions write the independently observed finite images 0xFFFFFFFF and 0x00040000."
+
+[[registers.fields]]
+name = "BITS_0_17_OPAQUE"
+bits = "17:0"
+class = "write-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_19_31_OPAQUE"
+bits = "31:19"
+class = "write-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_001C_OPAQUE"
+offset = 0x1c
+description = "One complete runtime function reads the complete word and writes the finite zero image. Inner state encoding remains unknown."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0020_OPAQUE"
+offset = 0x20
+description = "Complete state word read by runtime functions and cleared by two complete paths."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0024_OPAQUE"
+offset = 0x24
+description = "State word whose low byte is sampled independently; complete writes publish the finite images zero and one."
+
+[[registers.fields]]
+name = "LOW_BYTE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "WORD_002C_OPAQUE"
+offset = 0x2c
+description = "State word whose low byte is sampled independently; complete runtime paths clear the word."
+
+[[registers.fields]]
+name = "LOW_BYTE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "WORD_0034_OPAQUE"
+offset = 0x34
+description = "Complete initialization writes the finite image 0xFFFFFFFF."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0038_OPAQUE"
+offset = 0x38
+description = "Complete word read by a runtime status path."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "WORD_0040_OPAQUE"
+offset = 0x40
+description = "Complete runtime functions write finite images with independently observed bits 0, 16 and 17."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "write-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_16_17_OPAQUE"
+bits = "17:16"
+class = "write-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0044_OPAQUE"
+offset = 0x44
+description = "Complete runtime functions write finite images with independently observed bits 0, 16 and 17."
+
+[[registers.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "write-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_16_17_OPAQUE"
+bits = "17:16"
+class = "write-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0048_OPAQUE"
+offset = 0x48
+description = "Complete word read by multiple runtime functions."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "WORD_004C_OPAQUE"
+offset = 0x4c
+description = "Complete initialization writes the finite zero image."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_0058_OPAQUE"
+offset = 0x58
+description = "Shared runtime control word with independently observed RMW operations over bits 0, 1, 2 and 4. Other bits are preserved."
+
+[[registers.fields]]
+name = "CONTROL_0"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "CONTROL_1"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "CONTROL_2"
+bits = "2"
+class = "read-only"
+
+[[registers.fields]]
+name = "CONTROL_4"
+bits = "4"
+class = "plain"
+
+[[registers.fields]]
+name = "BIT_3_OPAQUE"
+bits = "3"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_5_31_OPAQUE"
+bits = "31:5"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0064_OPAQUE"
+offset = 0x64
+description = "One complete runtime function reads the complete word and publishes complete dynamic images. The image remains a register-level fact."
+
+[[registers.fields]]
+name = "BITS_0_23_OPAQUE"
+bits = "23:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0068_OPAQUE"
+offset = 0x68
+description = "Complete publication replaces bits 0..23 with a runtime-derived value and clears bits 24..31."
+
+[[registers.fields]]
+name = "BITS_0_23_OPAQUE"
+bits = "23:0"
+class = "write-only"
+
+[[registers]]
+name = "WORD_006C_OPAQUE"
+offset = 0x6c
+description = "Complete word is read by one runtime path and receives either a complete runtime-derived image or a runtime-derived low-24-bit image."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "WORD_0078_OPAQUE"
+offset = 0x78
+description = "Initialization sets bit 25 through a fresh-read RMW. Other bits are preserved."
+
+[[registers.fields]]
+name = "CONTROL_25"
+bits = "25"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_23_OPAQUE"
+bits = "23:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_26_OPAQUE"
+bits = "26"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "COUNTER"
+offset = 0x800
+description = "The MAC local-time counter. Complete phy_wait_i2c_sdm_stable samples it before and after each independently completed PHY-I2C read."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+description = "Full-width wrapping counter value in microseconds, at the system timer's rate; receive timestamps are readings of it."
+
+[[registers]]
+name = "TSF_STATUS"
+offset = 0x80c
+description = "Complete hal_is_sta_tsf_active returns bit zero."
+
+[[registers.fields]]
+name = "STATION_ACTIVE"
+bits = "0"
+class = "read-only"
+
+[[registers]]
+name = "WAKEUP_SIGNAL_CLEAR"
+offset = 0x810
+description = "Complete libpp[pm.o]::pm_clear_wakeup_signal sets bit zero before invoking two externally supplied synchronization callbacks; hardware clear behavior remains unknown."
+
+[[registers.fields]]
+name = "CLEAR"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_1_31_OPAQUE"
+bits = "31:1"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "TSF_LOAD_CONTROL"
+offset = 0x814
+description = "Complete hal_set_sta_tsf asserts bit four after writing both station TSF value words; the SoftAP path of complete hal_mac_tsf_reset asserts bit five after clearing both shared TSF value words; complete libpp[hal_tsf.o]::hal_get_sta_tsf sets then clears bit zero around its snapshot reads. Complete libpp[hal_mac.o]::hal_get_tsf_time selects station with bit zero or SoftAP with bit one, reads the shared snapshot words, then clears that selector through a fresh-read RMW. The whole select/read/release transaction must be serialized across TSF domains."
+
+[[registers.fields]]
+name = "SNAPSHOT_STATION_TSF"
+bits = "0"
+class = "plain"
+description = "Complete libpp[hal_tsf.o]::hal_get_sta_tsf sets this bit before either station TSF word is sampled and clears it after the optional reads."
+
+[[registers.fields]]
+name = "SNAPSHOT_SOFTAP_TSF"
+bits = "1"
+class = "plain"
+description = "SoftAP TSF-1 snapshot selector. Complete libpp[hal_mac.o]::hal_get_tsf_time with a nonzero argument sets this bit, reads SNAPSHOT_HIGH then SNAPSHOT_LOW, and clears this bit through a fresh-read RMW. Both readback words are shared with the station snapshot; this selector does not establish on-air beacon or probe-response timestamp insertion."
+
+[[registers.fields]]
+name = "LOAD_STATION_TSF"
+bits = "4"
+class = "plain"
+description = "Station TSF load request asserted by the final fresh-read RMW in hal_set_sta_tsf."
+
+[[registers.fields]]
+name = "LOAD_SOFTAP_TSF"
+bits = "5"
+class = "plain"
+description = "SoftAP TSF load request asserted after the two zero-value writes by the arg0=0 path of complete hal_mac_tsf_reset."
+
+[[registers.fields]]
+name = "LOAD_STATION_TBTT_TARGET"
+bits = "8"
+class = "plain"
+description = "Complete hal_set_sta_tbtt and the index-0 TBTT start-time leaf set this bit after writing the station TBTT target."
+
+[[registers.fields]]
+name = "BITS_2_3_OPAQUE"
+bits = "3:2"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_6_7_OPAQUE"
+bits = "7:6"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_9_31_OPAQUE"
+bits = "31:9"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "VALUE_LOW"
+offset = 0x818
+description = "Low 32 bits written first by complete hal_set_sta_tsf."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "VALUE_HIGH"
+offset = 0x81c
+description = "High 32 bits written second by complete hal_set_sta_tsf."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "write-only"
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "SNAPSHOT_LOW"
+offset = 0x820
+description = "Shared coherently latched low 32 bits: conditionally read by complete libpp[hal_tsf.o]::hal_get_sta_tsf for station and read by complete libpp[hal_mac.o]::hal_get_tsf_time for the selected station/SoftAP domain."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "SNAPSHOT_HIGH"
+offset = 0x824
+description = "Shared coherently latched high 32 bits: conditionally read by complete libpp[hal_tsf.o]::hal_get_sta_tsf for station and read by complete libpp[hal_mac.o]::hal_get_tsf_time for the selected station/SoftAP domain."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "TSF_DEVIATION_CONTROL"
+offset = 0x828
+description = "Complete ROM leaves independently replace the TSF deviation value and set two synchronization controls; omitted bits remain semantically unknown."
+
+[[registers.fields]]
+name = "DEVIATION"
+bits = "15:0"
+class = "plain"
+
+[[registers.fields]]
+name = "RX_BEACON_ABORT_SYNC_ENABLE"
+bits = "16"
+class = "plain"
+
+[[registers.fields]]
+name = "DEVIATION_SYNC_ENABLE"
+bits = "19"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_17_18_OPAQUE"
+bits = "18:17"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_20_31_OPAQUE"
+bits = "31:20"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "TARGET"
+offset = 0x82c
+description = "Complete hal_set_sta_tbtt replaces bits 25:0 with bits 35:10 of the supplied station TSF value and preserves the high six bits."
+
+[[registers.fields]]
+name = "TSF_BITS_35_10"
+bits = "25:0"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_26_31_OPAQUE"
+bits = "31:26"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "RTC_TIMER_UPDATE_CONTROL"
+offset = 0x830
+description = "Enabled hal_timer_update_by_rtc sets bit 27. hal_set_sta_tsf_wakeup sets or clears bit 21 together with the STA TSF wakeup bit at 0x2010d858."
+
+[[registers.fields]]
+name = "STA_TSF_WAKEUP_ENABLE"
+bits = "21"
+class = "plain"
+description = "hal_set_sta_tsf_wakeup sets or clears this bit in the same branch as STA_TSF_CONTROL.STA_TSF_WAKEUP_ENABLE."
+
+[[registers.fields]]
+name = "LP_CLOCK_SYNC_ENABLE"
+bits = "27"
+class = "plain"
+description = "Low-power clock synchronization enable. The dedicated pwr_hal_set_lpclk_sync_enable and pwr_hal_set_lpclk_sync_disable leaves set and clear only this bit; hal_timer_update_by_rtc sets it when its enable argument is nonzero and clears it otherwise."
+
+[[registers.fields]]
+name = "BITS_0_20_OPAQUE"
+bits = "20:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_22_26_OPAQUE"
+bits = "26:22"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_28_31_OPAQUE"
+bits = "31:28"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "SOC_WAKEUP_CLEAR"
+offset = 0x834
+description = "Complete libpp[hal_tsf.o]::hal_tsf_clear_soc_wakeup_request sets bit 30. Complete modem-power leaves independently expose status bits and clear pulses in this shared word; hardware transition behavior is not inferred."
+
+[[registers.fields]]
+name = "BEACON_FILTER_FORCE_SYNC_LIMIT"
+bits = "9:0"
+class = "plain"
+description = "The dedicated setter replaces bits 9:0."
+
+[[registers.fields]]
+name = "BEACON_FILTER_FORCE_SYNC_ENABLE"
+bits = "10"
+class = "plain"
+description = "Dedicated enable/disable leaves set or clear bit 10."
+
+[[registers.fields]]
+name = "BEACON_FILTER_FORCE_DUMP_LIMIT"
+bits = "17:11"
+class = "plain"
+description = "The dedicated setter replaces bits 17:11."
+
+[[registers.fields]]
+name = "BEACON_FILTER_FORCE_DUMP_ENABLE"
+bits = "21"
+class = "plain"
+description = "Dedicated enable/disable leaves set or clear bit 21."
+
+[[registers.fields]]
+name = "CLEAR_BEACON_SLEEP_COUNTER"
+bits = "28"
+class = "plain"
+description = "Dedicated clear leaf sets bit 28."
+
+[[registers.fields]]
+name = "CLEAR_BEACON_MISS_COUNTER"
+bits = "29"
+class = "plain"
+description = "Dedicated clear leaf sets bit 29."
+
+[[registers.fields]]
+name = "CLEAR_REQUEST"
+bits = "30"
+class = "plain"
+
+[[registers.fields]]
+name = "CLEAR_BEACON_INFO"
+bits = "31"
+class = "plain"
+description = "Dedicated clear leaf sets bit 31."
+
+[[registers.fields]]
+name = "BITS_18_20_OPAQUE"
+bits = "20:18"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_22_27_OPAQUE"
+bits = "27:22"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "MODEM_SLEEP_LIMIT_CONTROL"
+offset = 0x838
+description = "Complete no-call setters prove two bounded modem counters and their independent limit-exceeded wake gates. Units and hardware transition behavior remain unknown."
+
+[[registers.fields]]
+name = "BEACON_MISS_LIMIT"
+bits = "3:0"
+class = "plain"
+description = "Low four argument bits published by libpp[hal_pwr.o]::pwr_hal_set_mac_modem_beacon_miss_limit."
+write-range = { min = 0x0, max = 0xf }
+
+[[registers.fields]]
+name = "BEACON_MISS_LIMIT_WAKEUP_ENABLE"
+bits = "4"
+class = "plain"
+description = "Dedicated enable/disable leaves set or clear bit four."
+
+[[registers.fields]]
+name = "MODEM_STATE_SLEEP_LIMIT"
+bits = "14:5"
+class = "plain"
+description = "Low ten argument bits published in bits 14:5 by libpp[hal_pwr.o]::pwr_hal_set_mac_modem_state_sleep_limit."
+write-range = { min = 0x0, max = 0x3ff }
+
+[[registers.fields]]
+name = "MODEM_STATE_SLEEP_LIMIT_WAKEUP_ENABLE"
+bits = "15"
+class = "plain"
+description = "Dedicated enable/disable leaves set or clear bit fifteen."
+
+[[registers.fields]]
+name = "BITS_16_31_OPAQUE"
+bits = "31:16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "REGDMA_CONTROL"
+offset = 0x83c
+description = "Shared REGDMA and modem wakeup configuration word. Every promoted field has a complete independent setter; their combined hardware lifecycle is not inferred."
+
+[[registers.fields]]
+name = "MODEM_WAKEUP_PROTECT_EARLY_TIME"
+bits = "15:0"
+class = "plain"
+description = "libpp[hal_pwr.o]::pwr_hal_set_mac_modem_state_wakeup_protect_early_time replaces the low sixteen bits."
+write-range = { min = 0x0, max = 0xffff }
+
+[[registers.fields]]
+name = "BIT_16_OPAQUE"
+bits = "16"
+class = "plain"
+
+[[registers.fields]]
+name = "ACTIVE_LINK"
+bits = "20:17"
+class = "plain"
+description = "Four-bit Wi-Fi MAC REGDMA link selector; the active no-power-save channel restart writes four. Leaving zero after retuning caused intermittent authentication ACK timeouts."
+values = [{ name = "WIFI_NO_POWER_SAVE", value = 4, description = "REGDMA link selected by the qualified Wi-Fi no-power-save restart." }]
+write-values-only = true
+
+[[registers.fields]]
+name = "MODEM_TBTT_AUTO_PERIOD_INTERVAL"
+bits = "30:21"
+class = "plain"
+description = "libpp[hal_pwr.o]::pwr_hal_set_mac_modem_tbtt_auto_period_interval replaces bits 30:21 from the low ten argument bits."
+write-range = { min = 0x0, max = 0x3ff }
+
+[[registers.fields]]
+name = "MODEM_TBTT_AUTO_PERIOD_ENABLE"
+bits = "31"
+class = "plain"
+description = "The dedicated enable and disable leaves set or clear bit 31."
+
+[[registers]]
+name = "STA_LIGHT_SLEEP_WAKE_AHEAD"
+offset = 0x840
+description = "Complete hal_set_sta_light_sleep_wake_ahead_time replaces the high sixteen bits. Complete hal_set_sta_tbtt independently publishes its fifth argument to the same field."
+
+[[registers.fields]]
+name = "TIME"
+bits = "31:16"
+class = "plain"
+write-range = { min = 0x0, max = 0xffff }
+
+[[registers.fields]]
+name = "BITS_0_15_OPAQUE"
+bits = "15:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "TBTT_RF_CONTROL_WAIT_CYCLES"
+offset = 0x844
+description = "Complete libpp[hal_tsf.o]::tsf_hal_set_tbtt_rf_ctrl_wait_cycles replaces the low twenty-four bits; units and hardware transition behavior remain unknown."
+
+[[registers.fields]]
+name = "WAIT_CYCLES"
+bits = "23:0"
+class = "plain"
+
+[[registers]]
+name = "WORD_0848_OPAQUE"
+offset = 0x848
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0850_OPAQUE"
+offset = 0x850
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_1_OPAQUE"
+bits = "1:0"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_2_31_OPAQUE"
+bits = "31:2"
+class = "read-only"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "RX_BEACON_TIME_LOW"
+offset = 0x854
+description = "Complete hal_set_rx_beacon_time and libpp[hal_pwr.o]::pwr_hal_set_mac_modem_beacon_miss_timeout independently replace the same low sixteen bits. The mode-dependent hardware interpretation is not inferred."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "15:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xffff }
+
+[[registers.fields]]
+name = "BITS_16_31_OPAQUE"
+bits = "31:16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "STA_TSF_CONTROL"
+offset = 0x858
+description = "Shared STA TSF scheduler, TBTT and modem-state wakeup control word used by hal_enable_sta_tsf, hal_disable_sta_tsf, hal_enable_sta_tbtt, hal_disable_sta_tbtt, hal_set_sta_tbtt_ahead_time, hal_set_sta_tsf_wakeup, and the wakeup-protect enable/disable leaves."
+
+[[registers.fields]]
+name = "STA_TBTT_AHEAD_TIME"
+bits = "15:0"
+class = "plain"
+description = "hal_set_sta_tbtt_ahead_time and the index-0 TBTT early-time leaf replace bits 15:0 with their argument's low sixteen bits. The hardware unit remains unnamed."
+write-range = { min = 0x0, max = 0xffff }
+
+[[registers.fields]]
+name = "STA_TSF_MODE"
+bits = "22:19"
+class = "plain"
+description = "hal_enable_sta_tsf replaces bits 22:19 with one; hal_disable_sta_tsf clears them."
+values = [{ name = "DISABLED", value = 0 }, { name = "ENABLED", value = 1 }]
+write-values-only = true
+
+[[registers.fields]]
+name = "MODEM_STATE_WAKEUP_PROTECT_ENABLE"
+bits = "24"
+class = "plain"
+description = "libpp[hal_pwr.o]::pwr_hal_set_mac_modem_state_wakeup_protect_enable sets this bit and the corresponding disable leaf clears it."
+
+[[registers.fields]]
+name = "STA_TBTT_ENABLE"
+bits = "26"
+class = "plain"
+description = "hal_enable_sta_tbtt sets bit 26 and hal_disable_sta_tbtt clears only this bit."
+
+[[registers.fields]]
+name = "STA_TSF_ENABLE_LOW"
+bits = "27"
+class = "plain"
+description = "hal_enable_sta_tsf sets this bit and hal_disable_sta_tsf clears it."
+
+[[registers.fields]]
+name = "STA_TSF_WAKEUP_ENABLE"
+bits = "29"
+class = "plain"
+description = "hal_set_sta_tsf_wakeup sets or clears this bit together with WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.STA_TSF_WAKEUP_ENABLE."
+
+[[registers.fields]]
+name = "STA_TSF_ENABLE_HIGH"
+bits = "31"
+class = "plain"
+description = "hal_enable_sta_tsf sets this bit and hal_disable_sta_tsf clears it."
+
+[[registers.fields]]
+name = "BITS_16_18_OPAQUE"
+bits = "18:16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_23_OPAQUE"
+bits = "23"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_25_OPAQUE"
+bits = "25"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_28_OPAQUE"
+bits = "28"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_30_OPAQUE"
+bits = "30"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "STA_TBTT_INTERVAL"
+offset = 0x85c
+description = "Complete hal_set_sta_tbtt_interval replaces bits 25:0 with its 32-bit argument shifted right by ten and preserves bits 31:26. Complete hal_set_sta_tbtt performs the same update from its third argument, and tsf_hal_get_tbtt_interval reads the interval back as this field shifted left by ten."
+
+[[registers.fields]]
+name = "INTERVAL_TSF_BITS_35_10"
+bits = "25:0"
+class = "plain"
+description = "The TBTT interval in station TSF units of 1024 µs."
+write-range = { min = 0x0, max = 0x3ffffff }
+
+[[registers.fields]]
+name = "BITS_30_31_OPAQUE"
+bits = "31:30"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "SOFTAP_CONTROL"
+offset = 0x860
+description = "Complete hal_disable_softap_tsf clears bits 31:30. Generic TSF enable/disable leaves independently identify bit 31 as the domain enable; bit 30 remains unknown."
+
+[[registers.fields]]
+name = "BIT_30_OPAQUE"
+bits = "30"
+class = "plain"
+
+[[registers.fields]]
+name = "TSF_ENABLE"
+bits = "31"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_29_OPAQUE"
+bits = "29:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0864_OPAQUE"
+offset = 0x864
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_21_OPAQUE"
+bits = "21:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_30_31_OPAQUE"
+bits = "31:30"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_22_25_OPAQUE"
+bits = "25:22"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "NAN_CONTROL"
+offset = 0x868
+description = "Complete NAN enable/disable leaves use the same two-stage gate and mode transaction as station TSF at this distinct word."
+
+[[registers.fields]]
+name = "TSF_MODE"
+bits = "22:19"
+class = "plain"
+
+[[registers.fields]]
+name = "TSF_ENABLE_LOW"
+bits = "27"
+class = "plain"
+
+[[registers.fields]]
+name = "TSF_ENABLE_HIGH"
+bits = "31"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_18_OPAQUE"
+bits = "18:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_23_26_OPAQUE"
+bits = "26:23"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_28_30_OPAQUE"
+bits = "30:28"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_086C_OPAQUE"
+offset = 0x86c
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_21_OPAQUE"
+bits = "21:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_30_31_OPAQUE"
+bits = "31:30"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_22_25_OPAQUE"
+bits = "25:22"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "BTWT_CONTROL"
+offset = 0x870
+description = "Complete hal_enable_sta_btwt_tsf enables or disables the broadcast-TWT TSF domain using the same gate and mode masks as station TSF."
+
+[[registers.fields]]
+name = "TSF_MODE"
+bits = "22:19"
+class = "plain"
+
+[[registers.fields]]
+name = "TSF_ENABLE_LOW"
+bits = "27"
+class = "plain"
+
+[[registers.fields]]
+name = "TSF_ENABLE_HIGH"
+bits = "31"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_18_OPAQUE"
+bits = "18:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_23_26_OPAQUE"
+bits = "26:23"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_28_30_OPAQUE"
+bits = "30:28"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "WORD_0874_OPAQUE"
+offset = 0x874
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_21_OPAQUE"
+bits = "21:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_30_31_OPAQUE"
+bits = "31:30"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_22_25_OPAQUE"
+bits = "25:22"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "SLOW_CLOCK_CALIBRATION"
+offset = 0x878
+description = "Enabled hal_timer_update_by_rtc replaces bits 17:0 with the low eighteen bits returned by g_wifi_osi_funcs._slowclk_cal_get."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "17:0"
+class = "plain"
+description = "Any eighteen-bit value returned by the OS-adapter calibration callback is published without interpretation."
+write-range = { min = 0x0, max = 0x3ffff }
+
+[[registers.fields]]
+name = "BITS_18_31_OPAQUE"
+bits = "31:18"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "CONTROL%s"
+offset = 0x87c
+dim = { count = 4, stride = 0x8 }
+description = "Per-timer control word at 0x2010d87c + index*8. Complete target accessors replace and return the low three bits, bits 34:32 of the 64-bit TSF target. Dedicated leaves set or clear wakeup bit 30, while the timer enable/disable leaves set or clear bit 31."
+
+[[registers.fields]]
+name = "TARGET_HIGH"
+bits = "2:0"
+class = "plain"
+description = "Bits 34:32 of the 64-bit TSF target. Complete libpp[hal_tsf.o]::hal_tsf_timer_set_target replaces them from its third argument and hal_tsf_timer_get_target returns them through its second output pointer; libpp[pm_twt.o]::pm_on_isr_twt_wake passes the high word of the stored 64-bit wake TSF there, and libpp[pm_twt.o]::pm_twt_set_target_tsf parks a timer with an all-ones low word and seven."
+
+[[registers.fields]]
+name = "WAKEUP_ENABLE"
+bits = "30"
+class = "plain"
+description = "Set by hal_enable_tsf_timer_wakeup and cleared by hal_disable_tsf_timer_wakeup."
+
+[[registers.fields]]
+name = "TIMER_ENABLE"
+bits = "31"
+class = "plain"
+description = "Set by libpp[hal_tsf.o]::hal_enable_tsf_timer and cleared by hal_disable_tsf_timer."
+
+[[registers.fields]]
+name = "BITS_28_29_OPAQUE"
+bits = "29:28"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "TARGET%s"
+offset = 0x880
+dim = { count = 4, stride = 0x8 }
+description = "Full 32-bit timer target written by libpp[hal_tsf.o]::hal_tsf_timer_set_target and returned through the first output pointer by hal_tsf_timer_get_target."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "CLEAR_REQUEST"
+offset = 0x89c
+description = "Complete hal_clear_rx_beacon_pti sets bit zero through a fresh-read RMW. Complete hal_clr_itwt_pti sets the input-selected bit through the same word; the accepted index domain and remaining bit identities are not inferred."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xffffffff }
+
+[[registers]]
+name = "RX_BEACON_TIME_HIGH"
+offset = 0x8a0
+description = "Complete hal_set_rx_beacon_time replaces the low byte from bits 15:8 of its second argument after updating WIFI_MAC_RTC_TIMER_UPDATE.RX_BEACON_TIME_LOW."
+
+[[registers.fields]]
+name = "VALUE"
+bits = "7:0"
+class = "plain"
+write-range = { min = 0x0, max = 0xff }
+
+[[registers.fields]]
+name = "BITS_8_31_OPAQUE"
+bits = "31:8"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "ITWT_CONTROL"
+offset = 0x8a4
+description = "Complete hal_set_itwt_pti clears the low byte and then writes seqz(argument zero) into bit zero. The remaining low-byte semantics are unknown."
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_8_31_OPAQUE"
+bits = "31:8"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "SHARED_RX_PTI"
+offset = 0x8a8
+description = "Shared receive PTI word updated from the second argument by complete hal_set_rx_beacon_pti and hal_set_itwt_pti. Both leaves preserve bits 31:4 and replace only bits 3:0."
+
+[[registers.fields]]
+name = "PTI"
+bits = "3:0"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_4_31_OPAQUE"
+bits = "31:4"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "RX_BEACON_PTI"
+offset = 0x8ac
+description = "Complete hal_set_rx_beacon_pti replaces bits 15:12 from the low nibble of its first argument."
+
+[[registers.fields]]
+name = "PTI"
+bits = "15:12"
+class = "plain"
+
+[[registers.fields]]
+name = "BITS_0_11_OPAQUE"
+bits = "11:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_16_31_OPAQUE"
+bits = "31:16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers]]
+name = "ENABLE"
+offset = 0x8b4
+description = "WDEVPWR_ENABLE diagnostic snapshot and writable event mask. Complete guarded TSF-timer leaves independently identify bits 7 through 4, and complete TBTT interrupt leaves bits 3 through 0."
+
+[[registers.fields]]
+name = "TBTT_3"
+bits = "0"
+class = "plain"
+description = "Enable the TSF-3 TBTT event."
+
+[[registers.fields]]
+name = "TBTT_2"
+bits = "1"
+class = "plain"
+description = "Enable the TSF-2 TBTT event."
+
+[[registers.fields]]
+name = "TBTT_1"
+bits = "2"
+class = "plain"
+description = "Enable the TSF-1 TBTT event."
+
+[[registers.fields]]
+name = "TBTT_0"
+bits = "3"
+class = "plain"
+description = "Enable the TSF-0 TBTT event. TSF 0 is the station TSF."
+
+[[registers.fields]]
+name = "TSF_TIMER_3"
+bits = "4"
+class = "plain"
+description = "Enable the guarded TSF timer-three event."
+
+[[registers.fields]]
+name = "TSF_TIMER_2"
+bits = "5"
+class = "plain"
+description = "Enable the guarded TSF timer-two event."
+
+[[registers.fields]]
+name = "TSF_TIMER_1"
+bits = "6"
+class = "plain"
+description = "Enable the guarded TSF timer-one event."
+
+[[registers.fields]]
+name = "TSF_TIMER_0"
+bits = "7"
+class = "plain"
+description = "Enable the guarded TSF timer-zero event."
+
+[[registers.fields]]
+name = "BITS_8_31_OPAQUE"
+bits = "31:8"
+class = "plain"
+description = "Enable bits whose event identities remain unknown."
+write-range = { min = 0x0, max = 0xffffff }
+
+[[registers]]
+name = "RAW"
+offset = 0x8b8
+description = "WDEVPWR_RAW diagnostic snapshot with the same event geometry as ENABLE, STATUS and CLEAR."
+
+[[registers.fields]]
+name = "TBTT_3"
+bits = "0"
+class = "read-only"
+description = "Raw TSF-3 TBTT event."
+
+[[registers.fields]]
+name = "TBTT_2"
+bits = "1"
+class = "read-only"
+description = "Raw TSF-2 TBTT event."
+
+[[registers.fields]]
+name = "TBTT_1"
+bits = "2"
+class = "read-only"
+description = "Raw TSF-1 TBTT event."
+
+[[registers.fields]]
+name = "TBTT_0"
+bits = "3"
+class = "read-only"
+description = "Raw TSF-0 TBTT event. TSF 0 is the station TSF."
+
+[[registers.fields]]
+name = "TSF_TIMER_3"
+bits = "4"
+class = "read-only"
+description = "Raw guarded TSF timer-three event."
+
+[[registers.fields]]
+name = "TSF_TIMER_2"
+bits = "5"
+class = "read-only"
+description = "Raw guarded TSF timer-two event."
+
+[[registers.fields]]
+name = "TSF_TIMER_1"
+bits = "6"
+class = "read-only"
+description = "Raw guarded TSF timer-one event."
+
+[[registers.fields]]
+name = "TSF_TIMER_0"
+bits = "7"
+class = "read-only"
+description = "Raw guarded TSF timer-zero event."
+
+[[registers.fields]]
+name = "BITS_8_31_OPAQUE"
+bits = "31:8"
+class = "read-only"
+description = "Raw event bits whose identities remain unknown."
+
+[[registers]]
+name = "POWER_INTERRUPT_STATUS"
+offset = 0x8bc
+description = "Masked WDEVPWR event image returned by complete hal_pwr_interrupt_get_event, with TSF timer causes identified by the guarded timer leaves."
+
+[[registers.fields]]
+name = "TBTT_3"
+bits = "0"
+class = "read-only"
+description = "Masked TSF-3 TBTT event."
+
+[[registers.fields]]
+name = "TBTT_2"
+bits = "1"
+class = "read-only"
+description = "Masked TSF-2 TBTT event."
+
+[[registers.fields]]
+name = "TBTT_1"
+bits = "2"
+class = "read-only"
+description = "Masked TSF-1 TBTT event."
+
+[[registers.fields]]
+name = "TBTT_0"
+bits = "3"
+class = "read-only"
+description = "Masked TSF-0 TBTT event. TSF 0 is the station TSF."
+
+[[registers.fields]]
+name = "TSF_TIMER_3"
+bits = "4"
+class = "read-only"
+description = "Masked guarded TSF timer-three event."
+
+[[registers.fields]]
+name = "TSF_TIMER_2"
+bits = "5"
+class = "read-only"
+description = "Masked guarded TSF timer-two event."
+
+[[registers.fields]]
+name = "TSF_TIMER_1"
+bits = "6"
+class = "read-only"
+description = "Masked guarded TSF timer-one event."
+
+[[registers.fields]]
+name = "TSF_TIMER_0"
+bits = "7"
+class = "read-only"
+description = "Masked guarded TSF timer-zero event."
+
+[[registers.fields]]
+name = "BITS_8_31_OPAQUE"
+bits = "31:8"
+class = "read-only"
+description = "Masked event bits whose identities remain unknown."
+
+[[registers]]
+name = "CLEAR"
+offset = 0x8c0
+description = "Write-one-to-clear event bank used by complete hal_pwr_interrupt_clr_event. Complete guarded TSF-timer leaves independently identify bits 7 through 4."
+
+[[registers.fields]]
+name = "TBTT_3"
+bits = "0"
+class = "write-one-to-clear"
+description = "Acknowledge the TSF-3 TBTT event."
+
+[[registers.fields]]
+name = "TBTT_2"
+bits = "1"
+class = "write-one-to-clear"
+description = "Acknowledge the TSF-2 TBTT event."
+
+[[registers.fields]]
+name = "TBTT_1"
+bits = "2"
+class = "write-one-to-clear"
+description = "Acknowledge the TSF-1 TBTT event."
+
+[[registers.fields]]
+name = "TBTT_0"
+bits = "3"
+class = "write-one-to-clear"
+description = "Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF."
+
+[[registers.fields]]
+name = "TSF_TIMER_3"
+bits = "4"
+class = "write-one-to-clear"
+description = "Acknowledge the guarded TSF timer-three event."
+
+[[registers.fields]]
+name = "TSF_TIMER_2"
+bits = "5"
+class = "write-one-to-clear"
+description = "Acknowledge the guarded TSF timer-two event."
+
+[[registers.fields]]
+name = "TSF_TIMER_1"
+bits = "6"
+class = "write-one-to-clear"
+description = "Acknowledge the guarded TSF timer-one event."
+
+[[registers.fields]]
+name = "TSF_TIMER_0"
+bits = "7"
+class = "write-one-to-clear"
+description = "Acknowledge the guarded TSF timer-zero event."
+
+[[registers.fields]]
+name = "BITS_8_31_OPAQUE"
+bits = "31:8"
+class = "write-one-to-clear"
+description = "Acknowledge event bits whose identities remain unknown."
+write-range = { min = 0x0, max = 0xffffff }
+
+[[registers]]
+name = "WORD_08D0_OPAQUE"
+offset = 0x8d0
+description = "Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."
+
+[[registers.fields]]
+name = "BITS_0_25_OPAQUE"
+bits = "25:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BITS_30_31_OPAQUE"
+bits = "31:30"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."

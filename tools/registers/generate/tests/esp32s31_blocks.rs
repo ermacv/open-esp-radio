@@ -1,33 +1,46 @@
-//! The ESP32-S31 block types and chip root `cargo registers import` wrote
-//! (`chips/esp32s31/registers/{chip.toml,types/}`) load through the
-//! block-type loader with the evidence catalog written beside them, and
-//! hold every block the import spec names.
+//! The ESP32-S31 chip root and its block types (`chips/esp32s31/registers/
+//! {chip.toml,types/,layouts/}`) load through the block-type loader with
+//! every evidence catalog beside them: the vendor blocks the import spec
+//! names, the curated blocks no vendor header describes, the analog-I2C
+//! space and the placed memory layouts.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use oer_registers_model::{RegisterEvidenceSet, chip_import::ImportSpec, chip_model::ChipModel};
+use oer_registers_model::{
+    RegisterEvidenceSet,
+    chip_import::ImportSpec,
+    chip_model::{ChipModel, Location},
+};
+
+fn registers() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/esp32s31/registers")
+}
+
+fn model() -> ChipModel {
+    let registers = registers();
+    let mut catalogs = std::fs::read_dir(registers.join("evidence"))
+        .expect("the evidence directory reads")
+        .map(|entry| entry.expect("an evidence entry reads").path())
+        .collect::<Vec<_>>();
+    catalogs.sort();
+    let evidence = RegisterEvidenceSet::load_all(&catalogs).expect("the evidence catalogs load");
+    ChipModel::load(&registers.join("chip.toml"), &evidence).expect("the chip root loads")
+}
 
 #[test]
-fn the_imported_esp32s31_root_loads_with_every_spec_block() {
-    let registers = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/esp32s31/registers");
+fn the_esp32s31_root_loads_with_every_spec_block() {
+    let registers = registers();
     let spec = ImportSpec::parse(
         &std::fs::read_to_string(registers.join("import.toml")).expect("the import spec reads"),
     )
     .expect("the import spec parses");
-    let evidence = RegisterEvidenceSet::load_all(&[registers.join(&spec.evidence)])
-        .expect("the imported evidence catalog loads");
-    let model = ChipModel::load(&registers.join(&spec.root), &evidence)
-        .expect("the imported chip root loads");
-
-    let types = model.types().keys().cloned().collect::<Vec<_>>();
-    let mut expected = spec
-        .types
-        .iter()
-        .map(|block| block.name.clone())
-        .collect::<Vec<_>>();
-    expected.sort();
-    assert_eq!(types, expected);
+    let model = model();
     for block in &spec.types {
+        assert!(
+            model.types().contains_key(&block.name),
+            "type {}",
+            block.name
+        );
         for instance in &block.instances {
             let placed = model
                 .instances()
@@ -37,7 +50,6 @@ fn the_imported_esp32s31_root_loads_with_every_spec_block() {
             assert_eq!(placed.block_type, block.name);
         }
     }
-    assert!(!model.interrupts().is_empty());
     let mut covered = model
         .interrupts()
         .iter()
@@ -64,11 +76,7 @@ fn the_imported_esp32s31_root_loads_with_every_spec_block() {
 
 #[test]
 fn the_existing_uart0_contract_consumer_has_an_imported_interrupt_owner() {
-    let registers = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/esp32s31/registers");
-    let evidence = RegisterEvidenceSet::load_all(&[registers.join("evidence/imported.toml")])
-        .expect("the imported evidence catalog loads");
-    let model = ChipModel::load(&registers.join("chip.toml"), &evidence)
-        .expect("the imported chip root loads");
+    let model = model();
     let uart = model
         .instances()
         .iter()
@@ -81,4 +89,141 @@ fn the_existing_uart0_contract_consumer_has_an_imported_interrupt_owner() {
             .iter()
             .any(|source| source.name == "UART0" && source.instance == uart.name)
     );
+}
+
+#[test]
+fn the_curated_radio_blocks_are_placed_and_own_their_interrupts() {
+    let model = model();
+    for (name, base) in [
+        ("FE", 0x2010_0000),
+        ("BT_MAC", 0x2010_1000),
+        ("BT_BB", 0x2010_2000),
+        ("IEEE802154", 0x2010_3000),
+        ("WIFI_MAC", 0x2010_4000),
+        ("WIFI_BB", 0x2010_7000),
+        ("MODEM_PWR", 0x2010_D000),
+        ("COEX", 0x2010_F400),
+        ("CLIC", 0x1080_0000),
+    ] {
+        let instance = model
+            .instances()
+            .iter()
+            .find(|instance| instance.name == name)
+            .unwrap_or_else(|| panic!("the root places {name}"));
+        assert_eq!(instance.base, base, "{name}");
+        assert!(instance.extent.partial, "{name} is known only in part");
+    }
+    for (source, instance, output) in [
+        (120, "WIFI_MAC", Some("PRIMARY")),
+        (122, "MODEM_PWR", Some("WIFI_PWR")),
+        (124, "BT_MAC", Some("PRIMARY")),
+        (133, "BT_MAC", Some("NRT")),
+        (132, "IEEE802154", None),
+    ] {
+        let bound = model
+            .interrupts()
+            .iter()
+            .find(|interrupt| interrupt.source == source)
+            .unwrap_or_else(|| panic!("source {source} is bound"));
+        assert_eq!(bound.instance, instance);
+        assert_eq!(bound.output.as_deref(), output);
+    }
+}
+
+#[test]
+fn curated_registers_keep_their_absolute_words() {
+    let model = model();
+    let address = |identity: &str| {
+        model
+            .registers()
+            .iter()
+            .find(|register| register.identity == identity)
+            .map(|register| register.location)
+            .unwrap_or_else(|| panic!("{identity} is expanded"))
+    };
+    // A curated slice merged into its vendor block keeps the vendor name.
+    assert_eq!(
+        address("PMU.HP_ACTIVE_HP_CK_POWER"),
+        Location::Mmio {
+            address: 0x2070_401C
+        }
+    );
+    // A positional opaque name takes its offset from the block's base.
+    assert_eq!(
+        address("WIFI_BB_BRX.WORD_0010_OPAQUE"),
+        Location::Mmio {
+            address: 0x2010_8010
+        }
+    );
+    assert!(
+        model
+            .analog_instances()
+            .iter()
+            .any(|instance| instance.name == "BBPLL")
+    );
+}
+
+#[test]
+fn unestablished_facts_stay_unestablished() {
+    use oer_registers_contracts::{FactAccuracy, FactCompleteness, FactProvenance, NameOrigin};
+    use oer_registers_model::chip_model::FieldClass;
+
+    let model = model();
+    // A curated name without its own source cites the record that found the
+    // entity, its register's or its slice's; its behavior and name are
+    // reconstructed, so accuracy and completeness stay unknown.
+    let found_by = |identity: &str, source: &str| {
+        let review = model
+            .register(identity)
+            .map(|register| &register.review)
+            .or_else(|| model.field(identity).map(|field| &field.review))
+            .expect("the entity exists");
+        assert!(review.sources.iter().any(|s| s == source), "{identity}");
+        assert_eq!(
+            review.provenance,
+            Some(FactProvenance::Observed),
+            "{identity}"
+        );
+        assert_eq!(review.accuracy, Some(FactAccuracy::Unknown), "{identity}");
+        assert_eq!(
+            review.completeness,
+            Some(FactCompleteness::Unknown),
+            "{identity}"
+        );
+        assert_eq!(review.naming, Some(NameOrigin::Descriptive), "{identity}");
+    };
+    found_by(
+        "WIFI_MAC.CTS_INTERRUPT.VALUE",
+        "BLOB_LIBPP_PP_DEBUG_HW_STATISTICS",
+    );
+    found_by("WIFI_MAC.BITMAP_HIGH", "BLOB_LIBPP_DBG_READ_INTERNAL_TXBA");
+    found_by(
+        "WIFI_MAC.BITMAP_HIGH.BITMAP",
+        "BLOB_LIBPP_DBG_READ_INTERNAL_TXBA",
+    );
+    let class = |identity: &str| model.field(identity).expect("the field exists").class;
+    // No source states the access of this analog field.
+    assert_eq!(
+        class("MPLL.I2C_MPLL_IR_CAL_EXT_CAP.I2C_MPLL_IR_CAL_EXT_CAP"),
+        FieldClass::Unknown
+    );
+    // The header's class stands against an observed read-modify-write.
+    for field in [
+        "TIE_HIGH_XPD_BB_I2C",
+        "TIE_HIGH_XPD_XTALX2",
+        "TIE_HIGH_XPD_XTAL",
+    ] {
+        assert_eq!(
+            class(&format!("PMU.IMM_HP_CK_POWER_0.{field}")),
+            FieldClass::WriteTrigger
+        );
+    }
+    // A header-reserved bit the ROM writes and never reads.
+    for host in ["I2C0_CTRL", "I2C1_CTRL"] {
+        let field = model
+            .field(&format!("I2C_ANA_MST.{host}.START_OR_RESET"))
+            .expect("the reset bit exists");
+        assert_eq!(field.class, FieldClass::WriteOnly);
+        assert_eq!(field.review.sources, ["ROM_REV0_PHY_I2C"]);
+    }
 }

@@ -1,11 +1,12 @@
 # Imported by `cargo registers import` from the pinned vendor SVD and
-# ESP-IDF headers (registers/import.toml).
+# ESP-IDF headers (registers/import.toml), with the curated refinements
+# merged into it; this file, not the import, is the source of truth.
 schema = 3
 
 [type]
 name = "TSENS"
 description = "The temperature sensor."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
@@ -35,66 +36,137 @@ sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 [review.entity."RND_ECO_CS.RND_ECO_RESULT"]
 sources = ["ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 
+[review.entity."CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS"]
+
+[review.entity."CTRL.OUT"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS"]
+
+[review.entity."CTRL.READY"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."CTRL.SAMPLE_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."CTRL.WAKEUP_MASK"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."CTRL.INT_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."CTRL.IN_INV"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."CTRL.CLK_DIV"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."CTRL.POWER_UP"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS"]
+
+[review.entity."CTRL.POWER_UP_FORCE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."CTRL.BIT_11_OPAQUE"]
+sources = ["S31_MMIO_USE_20818000", "S31_MMIO_DECLARED_20818000"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."CTRL.BITS_24_31_OPAQUE"]
+sources = ["S31_MMIO_USE_20818000", "S31_MMIO_DECLARED_20818000"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."CLK_CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+
+[review.entity."CLK_CONF.CLK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+
+[review.entity."CLK_CONF.BIT_9_OPAQUE"]
+sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "S31_MMIO_DECLARED_20818018"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."CLK_CONF.BIT_23_OPAQUE"]
+sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "S31_MMIO_DECLARED_20818018"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
 [[registers]]
 name = "CTRL"
 offset = 0x0
-description = "Tsens configuration."
+description = "Tsens configuration. Temperature-sensor sample and power control."
 reset = { value = 0x19400 }
-reserved = { mask = 0xff000800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H"] }
 
 [[registers.fields]]
 name = "OUT"
 bits = "7:0"
 class = "read-only"
-description = "Temperature sensor data out."
+description = "Temperature sensor data out. Unsigned temperature-sensor code sampled once by the complete ROM read leaves."
 
 [[registers.fields]]
 name = "READY"
 bits = "8"
 class = "read-only"
-description = "Indicate temperature sensor out ready."
+description = "Indicate temperature sensor out ready. Temperature-sensor ready observation; not consumed by this slice."
 
 [[registers.fields]]
 name = "SAMPLE_EN"
 bits = "9"
 class = "plain"
-description = "Enable sample signal for wakeup module."
+description = "Enable sample signal for wakeup module. Temperature sample enable; modeled for exact geometry but not written by this slice."
 
 [[registers.fields]]
 name = "WAKEUP_MASK"
 bits = "10"
 class = "plain"
-description = "Wake up signal mask."
+description = "Wake up signal mask. Temperature wakeup mask; modeled for exact geometry but not written by this slice."
+
+[[registers.fields]]
+name = "BIT_11_OPAQUE"
+bits = "11"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
 
 [[registers.fields]]
 name = "INT_EN"
 bits = "12"
 class = "plain"
-description = "Enable temperature sensor to send out interrupt."
+description = "Enable temperature sensor to send out interrupt. Temperature interrupt enable; modeled for exact geometry but not written by this slice."
 
 [[registers.fields]]
 name = "IN_INV"
 bits = "13"
 class = "plain"
-description = "Invert temperature sensor data."
+description = "Invert temperature sensor data. Input inversion control; modeled for exact geometry but not written by this slice."
 
 [[registers.fields]]
 name = "CLK_DIV"
 bits = "21:14"
 class = "plain"
-description = "Temperature sensor clock divider."
+description = "Temperature sensor clock divider. Temperature-sensor clock divider; modeled for exact geometry but not written by this slice."
 
 [[registers.fields]]
 name = "POWER_UP"
 bits = "22"
 class = "plain"
-description = "Temperature sensor power up."
+description = "Temperature sensor power up. Temperature-sensor power control set by complete ROM phy_set_tsens_power_."
 
 [[registers.fields]]
 name = "POWER_UP_FORCE"
 bits = "23"
 class = "plain"
-description = "1: dump out & power up controlled by SW, 0: by FSM."
+description = "1: dump out & power up controlled by SW, 0: by FSM. Forced power control; modeled for exact geometry but not written by this slice."
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
 
 [[registers]]
 name = "INT_RAW"
@@ -151,15 +223,27 @@ description = "Tsens wakeup interrupt clear."
 [[registers]]
 name = "CLK_CONF"
 offset = 0x18
-description = "Tsens regbank configuration registers."
+description = "Tsens regbank configuration registers. Temperature-sensor register-bank and PHY read-path control. The public struct calls bits9/23 reserved, but pinned phy_tsens_read_init explicitly sets both; those observed bits remain opaque and override the reserved claim."
 reset = { value = 0x0 }
-reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H"] }
+reserved = { mask = 0xff7ffdfe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TSENS_REG_H", "ESP_IDF_4D59230D_S31_TSENS_STRUCT"] }
 
 [[registers.fields]]
 name = "CLK_EN"
 bits = "0"
 class = "plain"
-description = "Tsens regbank clock gating enable."
+description = "Tsens regbank clock gating enable. Temperature-sensor register-bank clock enable."
+
+[[registers.fields]]
+name = "BIT_9_OPAQUE"
+bits = "9"
+class = "plain"
+description = "Blob-evidenced conversion-path enable; the individual hardware meaning remains unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
+
+[[registers.fields]]
+name = "BIT_23_OPAQUE"
+bits = "23"
+class = "plain"
+description = "Blob-evidenced readout-path enable; the individual hardware meaning remains unknown. The ESP-IDF header marks these bits reserved; the cited sources use them."
 
 [[registers]]
 name = "INT_ENA_W1TS"

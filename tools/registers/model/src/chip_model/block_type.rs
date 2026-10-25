@@ -501,10 +501,10 @@ fn check_ports(context: Context<'_>, entity: &str, register: &Register) -> Resul
     if register.fifo.is_some()
         && (register.dim.is_some()
             || !matches!(register.fields.as_slice(),
-                [field] if field.class != FieldClass::WriteOneToClear))
+                [field] if !matches!(field.class, FieldClass::WriteOneToClear | FieldClass::Unknown)))
     {
         return Err(fail(
-            "a FIFO port is one register, no dim, with one field that is not write-one-to-clear",
+            "a FIFO port is one register, no dim, with one field that is neither write-one-to-clear nor unknown",
         ));
     }
     if register.data_port.is_some()
@@ -802,8 +802,8 @@ fn check_group_spans(
 }
 
 /// A command register's commands, qualifiers and held bits are each one
-/// self-clearing bit of it, together every one; it holds no write trigger
-/// and no field a read clears, and is no port.
+/// self-clearing bit of it, together every one; it holds no write trigger,
+/// no field a read clears and no field of unknown class, and is no port.
 fn check_commands(
     context: Context<'_>,
     name: &str,
@@ -869,7 +869,7 @@ fn check_commands(
             }
             if matches!(
                 field.class,
-                FieldClass::WriteTrigger | FieldClass::ReadClears
+                FieldClass::WriteTrigger | FieldClass::ReadClears | FieldClass::Unknown
             ) {
                 return Err(fail(format!(
                     "holds the {} field {}",

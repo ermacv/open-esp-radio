@@ -1494,7 +1494,7 @@ class = "plain"
 
 #[test]
 fn read_safe_requires_readable_comparison_bits() -> TestResult {
-    for class in ["write-only", "write-trigger"] {
+    for class in ["write-only", "write-trigger", "unknown"] {
         for explicit_mask in [false, true] {
             let fixture = Fixture::new()?;
             fixture.edit(
@@ -1562,6 +1562,54 @@ rejects!(
     "accuracy = \"bounded\"",
     "accuracy = \"bounded\"\nprovenance = \"hint\"",
     ErrorKind::ReviewHint
+);
+
+#[test]
+fn unknown_class_is_neither_read_nor_written() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/ble.toml",
+        "class = \"read-only\"",
+        "class = \"unknown\"",
+    )?;
+    let model = fixture.load()?;
+    let pending = model
+        .field("BLE.EVENT_STATUS.PENDING")
+        .ok_or("no PENDING")?;
+    assert_eq!(pending.class, FieldClass::Unknown);
+    assert!(!pending.class.readable() && !pending.class.written());
+    assert_eq!(pending.class.label(), "unknown");
+    Ok(())
+}
+
+// A class is required wherever a construct reads or writes the field.
+rejects!(
+    unknown_class_in_a_command_register,
+    "types/timg.toml",
+    "name = \"STATE\"\nbits = \"7:4\"\nclass = \"read-only\"",
+    "name = \"STATE\"\nbits = \"7:4\"\nclass = \"unknown\"",
+    ErrorKind::Command(_)
+);
+rejects!(
+    unknown_class_as_a_fifo,
+    "types/timg.toml",
+    "fifo = { sources = [\"SRC_HEADER\"] }\n\n[[registers.fields]]\nname = \"DATA\"\nbits = \"7:0\"\nclass = \"plain\"",
+    "fifo = { sources = [\"SRC_HEADER\"] }\n\n[[registers.fields]]\nname = \"DATA\"\nbits = \"7:0\"\nclass = \"unknown\"",
+    ErrorKind::Port(_)
+);
+rejects!(
+    unknown_class_as_a_data_port,
+    "types/timg.toml",
+    "class = \"hardware-written\"",
+    "class = \"unknown\"",
+    ErrorKind::Port(_)
+);
+rejects!(
+    unknown_class_with_a_write_constraint,
+    "types/timg.toml",
+    "class = \"plain\"\nwrite-range",
+    "class = \"unknown\"\nwrite-range",
+    ErrorKind::Values(_)
 );
 
 #[test]

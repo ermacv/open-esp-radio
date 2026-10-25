@@ -1,11 +1,12 @@
 # Imported by `cargo registers import` from the pinned vendor SVD and
-# ESP-IDF headers (registers/import.toml).
+# ESP-IDF headers (registers/import.toml), with the curated refinements
+# merged into it; this file, not the import, is the source of truth.
 schema = 3
 
 [type]
 name = "HP_SYS_CLKRST"
 description = "The HP clock and reset controller: the root clock, the clock gates, dividers and resets of the HP peripherals and cores."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD", "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_TIMG1", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
@@ -13,6 +14,81 @@ provenance = "imported"
 accuracy = "exact"
 completeness = "complete"
 naming = "vendor"
+
+[review.entity."MODEM_CTRL0"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_CTRL0.REG_MODEM_CLK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_CONF.MODEM_APB_CLK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_CONF.MODEM_RST_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_CONF.MODEM_CLK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_CONF.MODEM_CLK_SOURCE_SEL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_CONF.MODEM_PLL_CLK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."MODEM_CONF.MODEM_XTAL_CLK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "S31_ESP_PACS_SVD"]
+
+[review.entity."TIMERGRP1_CTRL0"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_TIMG1"]
+
+[review.entity."TIMERGRP1_CTRL0.REG_TIMERGRP1_APB_CLK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_TIMG1"]
+
+[review.entity."TIMERGRP1_CTRL0.REG_TIMERGRP1_RST_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_TIMG1"]
+
+[review.entity."TIMERGRP1_CTRL0.REG_TIMERGRP1_WDT_SRC_SEL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_TIMG1"]
+
+[review.entity."TIMERGRP1_CTRL0.REG_TIMERGRP1_WDT_CLK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_TIMG1"]
+
+[review.entity."HPCORE1_CTRL0"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."HPCORE1_CTRL0.REG_CORE1_CLIC_CLK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."HPCORE1_CTRL0.REG_CORE1_CPU_CLK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."HPCORE1_CTRL0.REG_CORE1_GLOBAL_RST_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."HPCORE1_CTRL0.REG_CORE1_FORCE_NORST"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."UART0_CTRL0"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."UART0_CTRL0.REG_UART0_CLK_SRC_SEL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."UART0_CTRL0.REG_UART0_CLK_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."UART0_CTRL0.REG_UART0_SCLK_DIV_NUM"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."UART0_CTRL0.REG_UART0_SCLK_DIV_NUMERATOR"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+
+[review.entity."UART0_CTRL0.REG_UART0_SCLK_DIV_DENOMINATOR"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
 
 [[registers]]
 name = "SOC_CLK_SEL"
@@ -175,33 +251,33 @@ description = "need_des"
 [[registers]]
 name = "HPCORE1_CTRL0"
 offset = 0x20
-description = "need_des"
+description = "HP core 1's CLIC and CPU clock enables and its global reset."
 reset = { value = 0x4 }
-reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_IDF_4D59230D_S31_CORE_CONTROL"] }
 
 [[registers.fields]]
 name = "REG_CORE1_CLIC_CLK_EN"
 bits = "0"
 class = "plain"
-description = "need_des"
+description = "HP core 1's CLIC clock enable."
 
 [[registers.fields]]
 name = "REG_CORE1_CPU_CLK_EN"
 bits = "1"
 class = "plain"
-description = "need_des"
+description = "HP core 1's CPU clock enable."
 
 [[registers.fields]]
 name = "REG_CORE1_GLOBAL_RST_EN"
 bits = "2"
 class = "plain"
-description = "need_des"
+description = "Holds HP core 1 in its global reset while set."
 
 [[registers.fields]]
 name = "REG_CORE1_FORCE_NORST"
 bits = "3"
 class = "plain"
-description = "need_des"
+description = "Keeps HP core 1 out of reset."
 
 [[registers]]
 name = "TRACE_CTRL0"
@@ -519,7 +595,7 @@ description = "need_des"
 [[registers]]
 name = "MODEM_CTRL0"
 offset = 0x40
-description = "need_des"
+description = "Modem control/register-bus clock gate."
 reset = { value = 0x1 }
 reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
 
@@ -527,7 +603,7 @@ reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "REG_MODEM_CLK_EN"
 bits = "0"
 class = "plain"
-description = "need_des"
+description = "Modem control/register-bus clock enable."
 
 [[registers]]
 name = "MISC_CTRL0"
@@ -1269,7 +1345,7 @@ description = "need_des"
 [[registers]]
 name = "UART0_CTRL0"
 offset = 0x88
-description = "need_des"
+description = "UART0's function clock: source, enable and divider. Its bus clock and reset bits are not described."
 reset = { value = 0x83 }
 
 [[registers.fields]]
@@ -1306,31 +1382,31 @@ description = "need_des"
 name = "REG_UART0_CLK_SRC_SEL"
 bits = "6:5"
 class = "plain"
-description = "need_des"
+description = "Function clock source: 0 XTAL, 1 RC_FAST, 2 PLL_F80M."
 
 [[registers.fields]]
 name = "REG_UART0_CLK_EN"
 bits = "7"
 class = "plain"
-description = "need_des"
+description = "Function clock enable."
 
 [[registers.fields]]
 name = "REG_UART0_SCLK_DIV_NUM"
 bits = "15:8"
 class = "plain"
-description = "need_des"
+description = "Integral part of the function clock divider; zero divides by one."
 
 [[registers.fields]]
 name = "REG_UART0_SCLK_DIV_NUMERATOR"
 bits = "23:16"
 class = "plain"
-description = "need_des"
+description = "Numerator of the function clock divider's fractional part."
 
 [[registers.fields]]
 name = "REG_UART0_SCLK_DIV_DENOMINATOR"
 bits = "31:24"
 class = "plain"
-description = "need_des"
+description = "Denominator of the function clock divider's fractional part."
 
 [[registers]]
 name = "UART1_CTRL0"
@@ -2658,7 +2734,7 @@ description = "need_des"
 [[registers]]
 name = "TIMERGRP1_CTRL0"
 offset = 0x11c
-description = "need_des"
+description = "Timer group 1 bus clock, reset and timer and watchdog clock sources and enables."
 reset = { value = 0x921 }
 reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
 
@@ -2666,13 +2742,13 @@ reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "REG_TIMERGRP1_APB_CLK_EN"
 bits = "0"
 class = "plain"
-description = "need_des"
+description = "Timer group 1 bus clock enable."
 
 [[registers.fields]]
 name = "REG_TIMERGRP1_RST_EN"
 bits = "1"
 class = "plain"
-description = "need_des"
+description = "Holds timer group 1 in reset while set."
 
 [[registers.fields]]
 name = "REG_TIMERGRP1_FORCE_NORST"
@@ -2708,13 +2784,13 @@ description = "need_des"
 name = "REG_TIMERGRP1_WDT_SRC_SEL"
 bits = "10:9"
 class = "plain"
-description = "need_des"
+description = "Watchdog clock source: 0 XTAL, 1 RC_FAST, 2 PLL_F80M."
 
 [[registers.fields]]
 name = "REG_TIMERGRP1_WDT_CLK_EN"
 bits = "11"
 class = "plain"
-description = "need_des"
+description = "Watchdog clock enable."
 
 [[registers]]
 name = "SYSTIMER_CTRL0"
@@ -4064,7 +4140,7 @@ description = "hp alive_sysreg clk en"
 [[registers]]
 name = "MODEM_CONF"
 offset = 0x1e0
-description = "MODEM_APB configuration register"
+description = "MODEM_APB configuration register Modem APB, reset and source-clock configuration."
 reset = { value = 0x25 }
 reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
 
@@ -4072,37 +4148,37 @@ reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "MODEM_APB_CLK_EN"
 bits = "0"
 class = "plain"
-description = "This field indicates if modem_apb clock is enable. 0: disable, 1: enable(default)."
+description = "This field indicates if modem_apb clock is enable. 0: disable, 1: enable(default). Modem APB clock enable."
 
 [[registers.fields]]
 name = "MODEM_RST_EN"
 bits = "1"
 class = "plain"
-description = "Set this file as 1 to reset modem-subsystem."
+description = "Set this file as 1 to reset modem-subsystem. Modem subsystem reset assertion."
 
 [[registers.fields]]
 name = "MODEM_CLK_EN"
 bits = "2"
 class = "plain"
-description = "This field indicates if modem source clock is enable. 0: disable, 1: enable(default)."
+description = "This field indicates if modem source clock is enable. 0: disable, 1: enable(default). Modem source-clock enable."
 
 [[registers.fields]]
 name = "MODEM_CLK_SOURCE_SEL"
 bits = "3"
 class = "plain"
-description = "modem clk source sel"
+description = "modem clk source sel Modem source-clock selector."
 
 [[registers.fields]]
 name = "MODEM_PLL_CLK_EN"
 bits = "4"
 class = "plain"
-description = "modem clk source pll on"
+description = "modem clk source pll on Modem PLL clock enable."
 
 [[registers.fields]]
 name = "MODEM_XTAL_CLK_EN"
 bits = "5"
 class = "plain"
-description = "modem clk source xtal on"
+description = "modem clk source xtal on Modem crystal clock enable."
 
 [[registers]]
 name = "CLK_EN0"

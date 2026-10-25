@@ -1,24 +1,55 @@
-# The esp32s31 chip root of the imported register blocks, written by
-# `cargo registers import` (registers/import.toml).
+# The esp32s31 chip root: the block types, their instances, the interrupt
+# sources, the analog-I2C space, the RAM regions and the placement of the
+# memory layouts. `cargo registers import` wrote its first version; this
+# file, not the import, is the source of truth.
 schema = 4
 chip = "esp32s31"
 interrupt-sources = { count = 169, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L100", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L101", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L102", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L103", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L104", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L105", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L106", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L107", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L108", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L109", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L110", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L111", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L112", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L113", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L114", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L115", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L116", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L117", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L118", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L119", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L120", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L121", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L122", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L123", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L124", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L125", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L126", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L127", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L128", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L129", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L130", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L131", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L132", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L133", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L134", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L135", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L136", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L137", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L138", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L139", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L140", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L141", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L142", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L143", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L144", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L145", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L146", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L147", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L148", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L149", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L150", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L151", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L152", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L153", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L154", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L155", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L156", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L157", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L158", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L159", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L160", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L161", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L162", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L163", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L164", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L165", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L166", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L167", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L168", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L169", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L170", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L171", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L172", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L173", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L174", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L175", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L176", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L177", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L178", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L179", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L180", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L181", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L182", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L183", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L184", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L185", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L186", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L187", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L188", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L19", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L20", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L21", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L22", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L23", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L24", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L25", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L26", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L27", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L28", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L29", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L30", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L31", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L32", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L33", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L34", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L35", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L36", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L37", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L38", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L39", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L40", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L41", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L42", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L43", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L44", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L45", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L46", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L47", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L48", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L49", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L50", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L51", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L52", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L53", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L54", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L55", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L56", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L57", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L58", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L59", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L60", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L61", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L62", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L63", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L64", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L65", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L66", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L67", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L68", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L69", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L70", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L71", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L72", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L73", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L74", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L75", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L76", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L77", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L78", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L79", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L80", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L81", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L82", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L83", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L84", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L85", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L86", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L87", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L88", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L89", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L90", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L91", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L92", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L93", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L94", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L95", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L96", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L97", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L98", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L99"] }
 types = [
+    "types/apll.toml",
+    "types/bbpll.toml",
+    "types/bbtop.toml",
+    "types/bias.toml",
+    "types/ble-accelerator.toml",
+    "types/block-64.toml",
+    "types/block-65.toml",
+    "types/block-68.toml",
+    "types/block-6c.toml",
+    "types/bt-bb.toml",
+    "types/bt-mac.toml",
+    "types/btdm.toml",
     "types/cache.toml",
+    "types/clic.toml",
+    "types/coex.toml",
+    "types/cpll.toml",
+    "types/dig-reg.toml",
     "types/efuse.toml",
+    "types/fe.toml",
     "types/hp-alive-sys.toml",
     "types/hp-sys-clkrst.toml",
     "types/hp-system.toml",
+    "types/i2c-ana-mst-mem.toml",
     "types/i2c-ana-mst.toml",
+    "types/ieee802154.toml",
     "types/interrupt-core.toml",
     "types/iomux-mspi-pin.toml",
     "types/lp-ana.toml",
     "types/lp-aonclkrst.toml",
     "types/lp-peri-clkrst.toml",
+    "types/modem-datadump.toml",
+    "types/modem-etm.toml",
     "types/modem-lpcon.toml",
+    "types/modem-pwr.toml",
     "types/modem-syscon.toml",
+    "types/modem-timer.toml",
+    "types/mpll.toml",
     "types/pmu.toml",
+    "types/rfpll.toml",
     "types/rtc-wdt.toml",
+    "types/sar-master.toml",
+    "types/sar-slave.toml",
+    "types/saradc.toml",
+    "types/sdm.toml",
     "types/soc-etm.toml",
     "types/spi-mem-c.toml",
     "types/spi-mem-s.toml",
@@ -28,86 +59,192 @@ types = [
     "types/timg.toml",
     "types/trng.toml",
     "types/tsens.toml",
+    "types/txrf.toml",
     "types/uart.toml",
+    "types/ulp-bod.toml",
     "types/usb-serial-jtag.toml",
+    "types/wifi-bb-brx.toml",
+    "types/wifi-bb.toml",
+    "types/wifi-mac.toml",
+]
+layouts = [
+    "layouts/wifi-rx-rate-control-flags.toml",
+    "layouts/wifi-tx-descriptor-prefix.toml",
+    "layouts/phy-frequency-memory-word.toml",
+    "layouts/phy-frequency-i2c-command.toml",
+    "layouts/phy-frequency-memory-record.toml",
+    "layouts/phy-rfpll-capacitor-code.toml",
+    "layouts/phy-rfpll-sdm-code.toml",
+    "layouts/wifi-rx-dma-descriptor.toml",
+    "layouts/wifi-tx-dma-descriptor.toml",
+    "layouts/wifi-rx-control-prefix.toml",
+    "layouts/wifi-rx-control-tail.toml",
+    "layouts/wifi-tx-metadata-head.toml",
+    "layouts/ble-buffer-header.toml",
+    "layouts/ble-rx-packet-prefix.toml",
+    "layouts/ble-tx-packet-prefix.toml",
+    "layouts/ble-scheduler-item.toml",
+    "layouts/ble-link-state.toml",
+    "layouts/ble-scheduler-context.toml",
+    "layouts/ble-phy-environment.toml",
+    "layouts/ble-phy-channel-frequency-offset.toml",
+    "layouts/ble-phy-channel-frequency-offsets.toml",
+    "layouts/ble-phy-packet-start-offsets.toml",
+    "layouts/ble-phy-rx-address-delays.toml",
+    "layouts/ble-resolving-list.toml",
+    "layouts/ble-device-table-entry.toml",
+    "layouts/ble-device-table.toml",
+    "layouts/ble-direction-finding-configuration.toml",
+    "layouts/ble-direction-finding-descriptor.toml",
+    "layouts/ble-direction-finding-workspace.toml",
 ]
 
 [[instances]]
-name = "CACHE"
-type = "CACHE"
-base = 0x2c000000
-extent = { size = 0x400 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L114", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+name = "CLIC"
+type = "CLIC"
+base = 0x10800000
+extent = { size = 0x10c0, partial = true, sources = ["ESP_IDF_4D59230D_S31_CLIC"] }
+sources = ["ESP_IDF_4D59230D_S31_CLIC"]
 
 [[instances]]
-name = "EFUSE"
-type = "EFUSE"
-base = 0x20715000
-extent = { size = 0x710 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L96", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+name = "FE"
+type = "FE"
+base = 0x20100000
+extent = { size = 0xc24, partial = true, sources = ["ROM_REV0_PHY_FE_REG_INIT"] }
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE"]
 
 [[instances]]
-name = "HP_ALIVE_SYS"
-type = "HP_ALIVE_SYS"
-base = 0x20589000
-extent = { size = 0x400 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L81", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+name = "BT_MAC"
+type = "BT_MAC"
+base = 0x20101000
+extent = { size = 0x1000, partial = true, sources = ["S31_MMIO_USE_20101FFC"] }
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_LIFECYCLE", "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "BLOB_LIBBTDM_HAL_CONTROLLER_INIT", "BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS", "BLOB_LIBBLE_MMGMT_HW_LISTS", "BLOB_LIBBLE_ISO_COEX_REGISTERS", "BLOB_LIBBLE_SCAN_HW_SNAPSHOT", "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES", "BLOB_LIBBTDM_SCHEDULER_WAIT_TAIL", "BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_CONTROLLER_IRQ", "S31_MMIO_MODEM_RADIO_CORE_LOW", "BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP", "BLOB_LIBBTDM_SCHEDULER_EXECUTION_MODIFY", "BLOB_LIBBLE_ISO_SCHEDULER_NOTIFY", "BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST", "BLOB_LIBBLE_CONTROLLER_ADDRESS_SLOTS", "BLOB_LIBBLE_SYNC_PUBLICATION", "BLOB_LIBBLE_HW_RESOLV_LIST_SET", "BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK", "BLOB_LIBBLE_HW_CTE_RING_CONTROL", "BLOB_LIBBLE_HW_STATUS_CLEAR", "BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
 
 [[instances]]
-name = "HP_SYS"
-type = "HP_SYSTEM"
-base = 0x20586000
-extent = { size = 0x33c }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L78", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+name = "BT_BB"
+type = "BT_BB"
+base = 0x20102000
+extent = { size = 0xc3c, partial = true, sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"] }
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "BLOB_LIBBTBB_BLE_TX_CONFIG_CHECK", "BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST", "BLOB_LIBBTBB_CHANNEL_POWER_CONTROL", "BLOB_LIBBTBB_GAUSSIAN_COEFFICIENTS", "BLOB_LIBBTBB_BT_TX_SET", "BLOB_LIBBTBB_BT_AGC_RESTART_SET", "BLOB_LIBBTBB_SHARED_TX_TIMING_INIT", "S31_MMIO_MODEM_RADIO_CORE_LOW", "BLOB_LIBBTBB_BT_CTE_ACCESSORS", "BLOB_LIBRFTEST_ADCTRIG", "BLOB_LIBRFTEST_SET_DUMP_MODE", "BLOB_LIBRFTEST_PRINT_DUMP_DATA", "ESP_IDF_25FE69F_S31_PHY_RETENTION", "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_SHARED_RX_INIT", "BLOB_LIBBTBB_BT_BB_V2_INIT"]
 
 [[instances]]
-name = "HP_SYS_CLKRST"
-type = "HP_SYS_CLKRST"
-base = 0x20587000
-extent = { size = 0x200 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L79", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+name = "IEEE802154"
+type = "IEEE802154"
+base = 0x20103000
+extent = { size = 0x184, partial = true, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll"] }
+sources = ["S31_REG_BASE"]
 
 [[instances]]
-name = "IOMUX_MSPI_PIN"
-type = "IOMUX_MSPI_PIN"
-base = 0x20584000
-extent = { size = 0x48 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L76", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+name = "WIFI_MAC"
+type = "WIFI_MAC"
+base = 0x20104000
+extent = { size = 0x2004, partial = true, sources = ["S31_MMIO_USE_20106000"] }
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE"]
 
 [[instances]]
-name = "LP_ANA_PERI"
-type = "LP_ANA"
-base = 0x20702000
-extent = { size = 0x400 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L85", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+name = "WIFI_BB"
+type = "WIFI_BB"
+base = 0x20107000
+extent = { size = 0xd50, partial = true, sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"] }
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE"]
 
 [[instances]]
-name = "LP_AON_CLKRST"
-type = "LP_AONCLKRST"
-base = 0x20701000
-extent = { size = 0x400 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L84", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+name = "WIFI_BB_BRX"
+type = "WIFI_BB_BRX"
+base = 0x20108000
+extent = { size = 0x80, partial = true, sources = ["ROM_REV0_PHY_LOW_RATE", "ROM_REV0_PHY_RX11BLR_CFG"] }
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE"]
 
 [[instances]]
-name = "LP_PERICLKRST"
-type = "LP_PERI_CLKRST"
-base = 0x20710000
-extent = { size = 0x400 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L92", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+name = "MODEM_TIMER"
+type = "MODEM_TIMER"
+base = 0x20108400
+extent = { size = 0x180, partial = true, sources = ["S31_MMIO_USE_2010857C"] }
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE"]
 
 [[instances]]
-name = "PMU"
-type = "PMU"
-base = 0x20704000
-extent = { size = 0x400 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L87", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+name = "MODEM_ETM"
+type = "MODEM_ETM"
+base = 0x20108800
+extent = { size = 0x148, partial = true, sources = ["S31_MMIO_USE_20108944"] }
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE"]
 
 [[instances]]
-name = "LP_WDT"
-type = "RTC_WDT"
-base = 0x20801000
-extent = { size = 0x400 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L98", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+name = "MODEM_DATADUMP"
+type = "MODEM_DATADUMP"
+base = 0x20109000
+extent = { size = 0x1c, partial = true, sources = ["BLOB_LIBRFTEST_ADCTRIG"] }
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE"]
+
+[[instances]]
+name = "BLE_ACCELERATOR"
+type = "BLE_ACCELERATOR"
+base = 0x20109800
+extent = { size = 0xd4, partial = true, sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"] }
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBLE_HW_ENCRYPT_BLOCK", "BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH", "S31_MMIO_MODEM_RADIO_CORE_LOW"]
+
+[[instances]]
+name = "MODEM_SYSCON"
+type = "MODEM_SYSCON"
+base = 0x20109c00
+extent = { size = 0x34 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_REG_BASE_H_L20"]
+
+[[instances]]
+name = "BTDM"
+type = "BTDM"
+base = 0x2010a000
+extent = { size = 0x10f4, partial = true, sources = ["BLOB_LIBBTDM_SCHEDULER_LIFECYCLE", "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"] }
+sources = ["S31_MMIO_MODEM_RADIO_CORE_MID", "BLOB_LIBBTDM_SCHEDULER_LIFECYCLE", "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
+
+[[instances]]
+name = "MODEM_PWR"
+type = "MODEM_PWR"
+base = 0x2010d000
+extent = { size = 0x8d4, partial = true, sources = ["S31_MMIO_USE_2010D8D0"] }
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE"]
+
+[[instances]]
+name = "MODEM_LPCON"
+type = "MODEM_LPCON"
+base = 0x2010f000
+extent = { size = 0x5c }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_REG_BASE_H_L22"]
+
+[[instances]]
+name = "COEX"
+type = "COEX"
+base = 0x2010f400
+extent = { size = 0xdc, partial = true, sources = ["BLOB_LIBCOEX_EXTERNAL"] }
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT", "BLOB_LIBCOEX_EXTERNAL", "S31_MMIO_COEX_EXTERNAL"]
+
+[[instances]]
+name = "I2C_ANA_MST"
+type = "I2C_ANA_MST"
+base = 0x2010f800
+extent = { size = 0x40 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_REG_BASE_H_L24"]
+
+[[instances]]
+name = "I2C_ANA_MST_MEM"
+type = "I2C_ANA_MST_MEM"
+base = 0x2010fc00
+extent = { size = 0xb4, partial = true, sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE", "BLOB_LIBPHY_PHY_I2C"] }
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE"]
+
+[[instances]]
+name = "UART0"
+type = "UART"
+base = 0x2038a000
+extent = { size = 0xa0 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L31", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "USB_DEVICE"
+type = "USB_SERIAL_JTAG"
+base = 0x20391000
+extent = { size = 0x84 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L38", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 
 [[instances]]
 name = "SOC_ETM"
@@ -115,6 +252,13 @@ type = "SOC_ETM"
 base = 0x20393000
 extent = { size = 0x278 }
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L40", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "SYSTIMER"
+type = "SYSTIMER"
+base = 0x20399000
+extent = { size = 0x100 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L45", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 
 [[instances]]
 name = "SPI0"
@@ -145,13 +289,6 @@ extent = { size = 0x1000 }
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L53", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 
 [[instances]]
-name = "SYSTIMER"
-type = "SYSTIMER"
-base = 0x20399000
-extent = { size = 0x100 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L45", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
-
-[[instances]]
 name = "TIMG0"
 type = "TIMG"
 base = 0x20580000
@@ -166,32 +303,11 @@ extent = { size = 0x100 }
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L72", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 
 [[instances]]
-name = "TRNG"
-type = "TRNG"
-base = 0x20814000
-extent = { size = 0x100 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L107", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
-
-[[instances]]
-name = "LP_TSENS"
-type = "TSENS"
-base = 0x20818000
-extent = { size = 0x38 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L111", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
-
-[[instances]]
-name = "UART0"
-type = "UART"
-base = 0x2038a000
-extent = { size = 0xa0 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L31", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
-
-[[instances]]
-name = "USB_DEVICE"
-type = "USB_SERIAL_JTAG"
-base = 0x20391000
-extent = { size = 0x84 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L38", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+name = "IOMUX_MSPI_PIN"
+type = "IOMUX_MSPI_PIN"
+base = 0x20584000
+extent = { size = 0x48 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L76", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 
 [[instances]]
 name = "INTERRUPT_CORE0"
@@ -208,25 +324,88 @@ extent = { size = 0x800 }
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L138"]
 
 [[instances]]
-name = "MODEM_SYSCON"
-type = "MODEM_SYSCON"
-base = 0x20109c00
-extent = { size = 0x34 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_REG_BASE_H_L20"]
+name = "HP_SYS"
+type = "HP_SYSTEM"
+base = 0x20586000
+extent = { size = 0x33c }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L78", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 
 [[instances]]
-name = "MODEM_LPCON"
-type = "MODEM_LPCON"
-base = 0x2010f000
-extent = { size = 0x5c }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_REG_BASE_H_L22"]
+name = "HP_SYS_CLKRST"
+type = "HP_SYS_CLKRST"
+base = 0x20587000
+extent = { size = 0x200 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L79", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 
 [[instances]]
-name = "I2C_ANA_MST"
-type = "I2C_ANA_MST"
-base = 0x2010f800
-extent = { size = 0x40 }
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_REG_BASE_H_L24"]
+name = "HP_ALIVE_SYS"
+type = "HP_ALIVE_SYS"
+base = 0x20589000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L81", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "LP_AON_CLKRST"
+type = "LP_AONCLKRST"
+base = 0x20701000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L84", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "LP_ANA_PERI"
+type = "LP_ANA"
+base = 0x20702000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L85", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "PMU"
+type = "PMU"
+base = 0x20704000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L87", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "LP_PERICLKRST"
+type = "LP_PERI_CLKRST"
+base = 0x20710000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L92", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "EFUSE"
+type = "EFUSE"
+base = 0x20715000
+extent = { size = 0x710 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L96", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "LP_WDT"
+type = "RTC_WDT"
+base = 0x20801000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L98", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "TRNG"
+type = "TRNG"
+base = 0x20814000
+extent = { size = 0x100 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L107", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "LP_TSENS"
+type = "TSENS"
+base = 0x20818000
+extent = { size = 0x38 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L111", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "CACHE"
+type = "CACHE"
+base = 0x2c000000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L114", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 
 [[interrupts]]
 name = "USB_SERIAL_JTAG"
@@ -295,6 +474,30 @@ instance = "SYSTIMER"
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L54", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
 
 [[interrupts]]
+name = "CPU_INTR_FROM_CPU_0"
+source = 65
+instance = "HP_SYS"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L84", "ESP_IDF_S31_INTERRUPT_SOURCES"]
+
+[[interrupts]]
+name = "CPU_INTR_FROM_CPU_1"
+source = 66
+instance = "HP_SYS"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L85", "ESP_IDF_S31_INTERRUPT_SOURCES"]
+
+[[interrupts]]
+name = "CPU_INTR_FROM_CPU_2"
+source = 67
+instance = "HP_SYS"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L86", "ESP_IDF_S31_INTERRUPT_SOURCES"]
+
+[[interrupts]]
+name = "CPU_INTR_FROM_CPU_3"
+source = 68
+instance = "HP_SYS"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L87", "ESP_IDF_S31_INTERRUPT_SOURCES"]
+
+[[interrupts]]
 name = "CACHE"
 source = 69
 instance = "CACHE"
@@ -305,6 +508,86 @@ name = "HP_SYSREG"
 source = 113
 instance = "HP_SYS"
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L132", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "MODEM_WIFI_MAC"
+source = 120
+instance = "WIFI_MAC"
+output = "PRIMARY"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L139", "BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT"]
+
+[[interrupts]]
+name = "MODEM_WIFI_MAC_NMI"
+source = 121
+instance = "WIFI_MAC"
+output = "NMI"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L140"]
+
+[[interrupts]]
+name = "MODEM_WIFI_PWR"
+source = 122
+instance = "MODEM_PWR"
+output = "WIFI_PWR"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L141", "BLOB_LIBPP_HAL_PWR_INTERRUPT"]
+
+[[interrupts]]
+name = "MODEM_WIFI_BB"
+source = 123
+instance = "WIFI_BB"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L142"]
+
+[[interrupts]]
+name = "MODEM_BT_MAC"
+source = 124
+instance = "BT_MAC"
+output = "PRIMARY"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L143", "ESP_IDF_S31_INTERRUPT_SOURCES", "BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[[interrupts]]
+name = "MODEM_BT_BB"
+source = 125
+instance = "BT_BB"
+output = "PRIMARY"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L144"]
+
+[[interrupts]]
+name = "MODEM_BT_BB_NMI"
+source = 126
+instance = "BT_BB"
+output = "NMI"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L145"]
+
+[[interrupts]]
+name = "MODEM_LP_TIMER"
+source = 127
+instance = "MODEM_PWR"
+output = "LP_TIMER"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L146", "BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ"]
+
+[[interrupts]]
+name = "MODEM_COEX"
+source = 128
+instance = "COEX"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L147"]
+
+[[interrupts]]
+name = "MODEM_I2C_MST"
+source = 131
+instance = "I2C_ANA_MST"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L150"]
+
+[[interrupts]]
+name = "MODEM_ZB_MAC"
+source = 132
+instance = "IEEE802154"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L151", "ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX", "ESP_IDF_4D59230D_S31_INTERRUPT_ZB_MAC_MAP"]
+
+[[interrupts]]
+name = "MODEM_BT_MAC_INT1"
+source = 133
+instance = "BT_MAC"
+output = "NRT"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L152", "BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[interrupts]]
 name = "LP_WDT"
@@ -667,30 +950,6 @@ reason = "No binding to an imported instance and output is established."
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L83"]
 
 [[unbound-interrupts]]
-source = 65
-name = "CPU_INTR_FROM_CPU_0"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L84"]
-
-[[unbound-interrupts]]
-source = 66
-name = "CPU_INTR_FROM_CPU_1"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L85"]
-
-[[unbound-interrupts]]
-source = 67
-name = "CPU_INTR_FROM_CPU_2"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L86"]
-
-[[unbound-interrupts]]
-source = 68
-name = "CPU_INTR_FROM_CPU_3"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L87"]
-
-[[unbound-interrupts]]
 source = 70
 name = "CPU_APM_M0"
 reason = "No binding to an imported instance and output is established."
@@ -985,60 +1244,6 @@ reason = "No binding to an imported instance and output is established."
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L138"]
 
 [[unbound-interrupts]]
-source = 120
-name = "MODEM_WIFI_MAC"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L139"]
-
-[[unbound-interrupts]]
-source = 121
-name = "MODEM_WIFI_MAC_NMI"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L140"]
-
-[[unbound-interrupts]]
-source = 122
-name = "MODEM_WIFI_PWR"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L141"]
-
-[[unbound-interrupts]]
-source = 123
-name = "MODEM_WIFI_BB"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L142"]
-
-[[unbound-interrupts]]
-source = 124
-name = "MODEM_BT_MAC"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L143"]
-
-[[unbound-interrupts]]
-source = 125
-name = "MODEM_BT_BB"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L144"]
-
-[[unbound-interrupts]]
-source = 126
-name = "MODEM_BT_BB_NMI"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L145"]
-
-[[unbound-interrupts]]
-source = 127
-name = "MODEM_LP_TIMER"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L146"]
-
-[[unbound-interrupts]]
-source = 128
-name = "MODEM_COEX"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L147"]
-
-[[unbound-interrupts]]
 source = 129
 name = "MODEM_BLE_TIMER"
 reason = "No binding to an imported instance and output is established."
@@ -1049,24 +1254,6 @@ source = 130
 name = "MODEM_BLE_SEC"
 reason = "No binding to an imported instance and output is established."
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L149"]
-
-[[unbound-interrupts]]
-source = 131
-name = "MODEM_I2C_MST"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L150"]
-
-[[unbound-interrupts]]
-source = 132
-name = "MODEM_ZB_MAC"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L151"]
-
-[[unbound-interrupts]]
-source = 133
-name = "MODEM_BT_MAC_INT1"
-reason = "No binding to an imported instance and output is established."
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L152"]
 
 [[unbound-interrupts]]
 source = 134
@@ -1241,3 +1428,273 @@ source = 168
 name = "LP_SW_INVALID_SLEEP"
 reason = "No binding to an imported instance and output is established."
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L187"]
+
+[[analog-i2c.instances]]
+name = "CPLL"
+type = "CPLL"
+code = 0x0a
+sources = ["ESP_IDF_4D59230D_S31_ANALOG_SLAVE_SELECTION"]
+
+[[analog-i2c.instances]]
+name = "MPLL"
+type = "MPLL"
+code = 0x0b
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_MPLL"]
+
+[[analog-i2c.instances]]
+name = "APLL"
+type = "APLL"
+code = 0x0c
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_APLL"]
+
+[[analog-i2c.instances]]
+name = "SAR_MASTER"
+type = "SAR_MASTER"
+code = 0x10
+sources = ["ESP_IDF_4D59230D_S31_ANALOG_SLAVE_SELECTION"]
+
+[[analog-i2c.instances]]
+name = "SAR_SLAVE"
+type = "SAR_SLAVE"
+code = 0x11
+sources = ["ESP_IDF_4D59230D_S31_ANALOG_SLAVE_SELECTION"]
+
+[[analog-i2c.instances]]
+name = "ULP_BOD"
+type = "ULP_BOD"
+code = 0x61
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_BROWNOUT"]
+
+[[analog-i2c.instances.routes]]
+profile = "libphy-normal"
+request-code = 0x61
+host = 1
+read-select = 256
+read-mask-bits = 24
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances]]
+name = "RFPLL"
+type = "RFPLL"
+code = 0x62
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances.routes]]
+profile = "libphy-normal"
+request-code = 0x62
+host = 1
+read-select = 32
+read-mask-bits = 24
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances]]
+name = "SDM"
+type = "SDM"
+code = 0x63
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances.routes]]
+profile = "libphy-normal"
+request-code = 0x63
+host = 1
+read-select = 16
+read-mask-bits = 24
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances]]
+name = "BLOCK_64"
+type = "BLOCK_64"
+code = 0x64
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances.routes]]
+profile = "libphy-normal"
+request-code = 0x64
+host = 0
+read-select = 0
+read-mask-bits = 24
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances]]
+name = "BLOCK_65"
+type = "BLOCK_65"
+code = 0x65
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances.routes]]
+profile = "libphy-normal"
+request-code = 0x65
+host = 0
+read-select = 0
+read-mask-bits = 24
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances]]
+name = "BBPLL"
+type = "BBPLL"
+code = 0x66
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_BBPLL"]
+
+[[analog-i2c.instances.routes]]
+profile = "libphy-normal"
+request-code = 0x66
+host = 0
+read-select = 128
+read-mask-bits = 24
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances]]
+name = "BBTOP"
+type = "BBTOP"
+code = 0x67
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances.routes]]
+profile = "libphy-normal"
+request-code = 0x67
+host = 1
+read-select = 4
+read-mask-bits = 24
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances]]
+name = "BLOCK_68"
+type = "BLOCK_68"
+code = 0x68
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances.routes]]
+profile = "libphy-normal"
+request-code = 0x68
+host = 0
+read-select = 0
+read-mask-bits = 24
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances]]
+name = "SARADC"
+type = "SARADC"
+code = 0x69
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_SARADC"]
+
+[[analog-i2c.instances.routes]]
+profile = "libphy-normal"
+request-code = 0x69
+host = 0
+read-select = 2048
+read-mask-bits = 24
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances]]
+name = "BIAS"
+type = "BIAS"
+code = 0x6a
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_BIAS"]
+
+[[analog-i2c.instances.routes]]
+profile = "libphy-normal"
+request-code = 0x6a
+host = 1
+read-select = 64
+read-mask-bits = 24
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances]]
+name = "TXRF"
+type = "TXRF"
+code = 0x6b
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances.routes]]
+profile = "libphy-normal"
+request-code = 0x6b
+host = 1
+read-select = 8
+read-mask-bits = 24
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances]]
+name = "BLOCK_6C"
+type = "BLOCK_6C"
+code = 0x6c
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances.routes]]
+profile = "libphy-normal"
+request-code = 0x6c
+host = 0
+read-select = 0
+read-mask-bits = 24
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[analog-i2c.instances]]
+name = "DIG_REG"
+type = "DIG_REG"
+code = 0x6d
+sources = ["ESP_IDF_4D59230D_S31_REGI2C_DIG_REG"]
+
+[[analog-i2c.instances.routes]]
+profile = "libphy-normal"
+request-code = 0x6d
+host = 0
+read-select = 32768
+read-mask-bits = 24
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+
+[[ram-regions]]
+name = "dma-window"
+base = 0x2f000000
+size = 0x80000
+sources = ["ESP_IDF_4D59230D_S31_SOC_DMA_WINDOW"]
+
+[[layout-placements]]
+layout = "WIFI_RX_DMA_DESCRIPTOR"
+regions = ["dma-window"]
+
+[[layout-placements]]
+layout = "WIFI_TX_DMA_DESCRIPTOR"
+regions = ["dma-window"]
+
+[[layout-placements]]
+layout = "BLE_BUFFER_HEADER"
+regions = ["dma-window"]
+
+[[layout-placements]]
+layout = "BLE_SCHEDULER_ITEM"
+regions = ["dma-window"]
+
+[[layout-placements]]
+layout = "BLE_LINK_STATE"
+regions = ["dma-window"]
+
+[[layout-placements]]
+layout = "BLE_SCHEDULER_CONTEXT"
+regions = ["dma-window"]
+
+[[layout-placements]]
+layout = "BLE_PHY_ENVIRONMENT"
+regions = ["dma-window"]
+
+[[layout-placements]]
+layout = "BLE_RESOLVING_LIST"
+regions = ["dma-window"]
+
+[[layout-placements]]
+layout = "BLE_DEVICE_TABLE_ENTRY"
+regions = ["dma-window"]
+
+[[layout-placements]]
+layout = "BLE_DEVICE_TABLE"
+regions = ["dma-window"]
+
+[[layout-placements]]
+layout = "BLE_DIRECTION_FINDING_CONFIGURATION"
+regions = ["dma-window"]
+
+[[layout-placements]]
+layout = "BLE_DIRECTION_FINDING_DESCRIPTOR"
+regions = ["dma-window"]
+
+[[layout-placements]]
+layout = "BLE_DIRECTION_FINDING_WORKSPACE"
+regions = ["dma-window"]
