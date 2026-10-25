@@ -663,7 +663,7 @@ What a transaction may reach follows the field class and the word:
 | read | not `write-only`, `write-trigger` or `read-clears` | reads without a side effect: no FIFO, read side effect or `read-clears` field |
 | write from zero (full, zero-based, sampled bit, pointer, zero register) | `plain`, `write-only`, `write-trigger`; a data port's `hardware-written` field by a full-register write (a pointer: `plain` or `write-only`; a sampled bit: one `plain` bit) | no FIFO or command register, no `self-clearing`, `set-only` or `write-one-to-clear` field, no `hardware-written` field outside a data port; a data port only by a full-register write; at least one field a write gives a value |
 | read-modify-write | `plain` | reads without a side effect; no command register, data port, `write-only`, `write-one-to-clear`, `self-clearing`, `set-only` or `hardware-written` field |
-| fixed image or sequence step | sets bits of `plain`, `write-only`, `write-trigger`, `set-only`, `self-clearing`, `hardware-written`; with `whole-word` also undeclared bits and `read-only` fields | no FIFO or command register |
+| fixed image or sequence step | sets bits of `plain`, `write-only`, `write-trigger`, `set-only`, `self-clearing`, `hardware-written`; with `whole-word` also undeclared bits and `read-only` fields | no FIFO or command register; at least one writable field even for zero or `whole-word`; W1C only by a paired image with a proof, never a sequence step |
 
 The shapes and inputs:
 
@@ -704,7 +704,10 @@ field are the same field.
 
 A field's `write-range` or `write-values-only` bounds every transaction:
 every lane of a fixed image or step, and the zero a write from zero
-leaves in its other fields, is a value its field takes; a
+leaves in its other fields, is a value its field takes. A snapshot's
+acknowledgement may write any subset of its sampled mask, including zero
+for retained events and lanes outside the mask; these possible clear-field
+values must all satisfy the field's constraints. A
 `full-register-write` takes a bounded domain inside the range or an enum
 of taken values, and a `field-replace-modify` a fixed value or, from input
 bit zero of its one projection and untransformed, such a domain; a
@@ -715,8 +718,8 @@ fails.
 A `write-one-to-clear` field is written only by its snapshot's
 acknowledgement. A snapshot's status word reads without a side effect, its
 clear word is one element of `write-one-to-clear` fields that acknowledge
-whole status fields; the part holding the clear word takes the snapshot
-and holds or observes the status word. No other transaction writes a
+whole readable status fields; the part holding the clear word takes the
+snapshot and holds or observes the status word. No other transaction writes a
 clear word except a fixed image naming one proof, `masks` (an enable word
 of `plain` fields of the same part, holding a field for every bit the
 image acknowledges, cleared first) or `consumed-event`. A sequence step

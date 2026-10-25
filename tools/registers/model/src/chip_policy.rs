@@ -365,6 +365,21 @@ impl Constraint<'_> {
                         .saturating_add(1)
             })
     }
+
+    /// Every subset of `mask` is admitted, including zero. Named values
+    /// are distinct, so counting the subsets they contain proves coverage
+    /// without enumerating the mask's (up to 2^32) possible values.
+    fn admits_bits(&self, mask: u32) -> bool {
+        self.range
+            .is_none_or(|range| range.min == 0 && mask <= range.max)
+            && self.values.is_none_or(|values| {
+                let inside = values
+                    .iter()
+                    .filter(|named| named.value & !mask == 0)
+                    .count();
+                u64::try_from(inside).unwrap_or(u64::MAX) == 1u64 << mask.count_ones()
+            })
+    }
 }
 
 /// The ones of a `width`-bit value.

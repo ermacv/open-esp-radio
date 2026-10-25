@@ -1789,6 +1789,183 @@ fn zero_write_leaves_write_one_to_clear_words_alone() -> TestResult {
 }
 
 #[test]
+fn snapshot_samples_only_readable_status_fields() -> TestResult {
+    for class in ["write-only", "write-trigger"] {
+        let fixture = Fixture::new()?;
+        fixture.edit(
+            "types/timer.toml",
+            "name = \"INT_RAW\"\noffset = 0x08\n\n[[registers.fields]]\nname = \"T0\"\nbits = \"0\"\nclass = \"read-only\"",
+            &format!("name = \"INT_RAW\"\noffset = 0x08\n\n[[registers.fields]]\nname = \"T0\"\nbits = \"0\"\nclass = \"{class}\""),
+        )?;
+        let error = fixture.rejection()?;
+        assert_eq!(error.entity, "timer0_interrupt");
+        assert!(matches!(error.kind, ErrorKind::Snapshot(_)), "{error}");
+    }
+    Ok(())
+}
+
+#[test]
+fn every_fixed_write_needs_a_writable_word() -> TestResult {
+    for (value, whole_word) in [(0u32, false), (0, true), (0xdeadbeef, true)] {
+        for sequence in [false, true] {
+            let fixture = Fixture::new()?;
+            let operation = if sequence {
+                format!(
+                    "[[fixed-register-sequences]]\nname = \"write_counter\"\nsteps = [{{ register = \"TIMER0.VALUE\", value = {value}, whole-word = {whole_word} }}]"
+                )
+            } else {
+                format!(
+                    "[[fixed-register-images]]\nname = \"write_counter\"\nregister = \"TIMER0.VALUE\"\nvalue = {value}\nwhole-word = {whole_word}"
+                )
+            };
+            fixture.append(&format!("\n{operation}\nsources = [\"SRC_DRIVER\"]\n"))?;
+            let error = fixture.rejection()?;
+            assert_eq!(error.entity, "write_counter");
+            assert!(matches!(error.kind, ErrorKind::Register(_)), "{error}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn every_fixed_write_checks_w1c_without_a_snapshot() -> TestResult {
+    for sequence in [false, true] {
+        let fixture = Fixture::new()?;
+        fixture
+            .remove("interrupt-snapshots", "timer0_interrupt")?
+            .remove("fixed-register-images", "acknowledge_timer0_masked")?
+            .remove("fixed-register-images", "acknowledge_timer0_consumed")?;
+        let operation = if sequence {
+            "[[fixed-register-sequences]]\nname = \"write_clear\"\nsteps = [{ register = \"TIMER0.INT_CLR\", value = 0 }]"
+        } else {
+            "[[fixed-register-images]]\nname = \"write_clear\"\nregister = \"TIMER0.INT_CLR\"\nvalue = 0"
+        };
+        fixture.append(&format!("\n{operation}\nsources = [\"SRC_DRIVER\"]\n"))?;
+        let error = fixture.rejection()?;
+        assert_eq!(error.entity, "write_clear");
+        assert!(
+            matches!(error.kind, ErrorKind::WriteOneToClear(_)),
+            "{error}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn snapshot_acknowledgement_checks_every_possible_clear_value() -> TestResult {
+    for constraint in [
+        "write-range = { min = 1, max = 1 }",
+        "write-range = { min = 0, max = 0 }",
+        "write-values-only = true\nvalues = [{ name = \"NONE\", value = 0 }]",
+        "write-values-only = true\nvalues = [{ name = \"EVENT\", value = 1 }]",
+    ] {
+        let fixture = Fixture::new()?;
+        fixture
+            .edit(
+                "types/timer.toml",
+                "name = \"T0\"\nbits = \"0\"\nclass = \"write-one-to-clear\"",
+                &format!(
+                    "name = \"T0\"\nbits = \"0\"\nclass = \"write-one-to-clear\"\n{constraint}"
+                ),
+            )?
+            .remove("fixed-register-images", "acknowledge_timer0_masked")?
+            .remove("fixed-register-images", "acknowledge_timer0_consumed")?;
+        let error = fixture.rejection()?;
+        assert_eq!(error.entity, "timer0_interrupt");
+        assert!(
+            matches!(error.kind, ErrorKind::WriteConstraint(_)),
+            "{error}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn snapshot_acknowledgement_checks_unsampled_zero_lanes() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture
+        .edit(
+            "types/timer.toml",
+            "name = \"T1\"\nbits = \"1\"\nclass = \"write-one-to-clear\"",
+            "name = \"T1\"\nbits = \"2\"\nclass = \"write-one-to-clear\"\nwrite-range = { min = 1, max = 1 }",
+        )?
+        .remove("fixed-register-images", "acknowledge_timer0_masked")?
+        .remove("fixed-register-images", "acknowledge_timer0_consumed")?;
+    let error = fixture.rejection()?;
+    assert_eq!(error.entity, "timer0_interrupt");
+    assert!(
+        matches!(error.kind, ErrorKind::WriteConstraint(_)),
+        "{error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn snapshot_acknowledgement_checks_sparse_clear_values() -> TestResult {
+    for (constraint, admitted) in [
+        ("write-range = { min = 0, max = 5 }", true),
+        ("write-range = { min = 0, max = 4 }", false),
+        (
+            "write-values-only = true\nvalues = [{ name = \"NONE\", value = 0 }, { name = \"FIRST\", value = 1 }, { name = \"SECOND\", value = 4 }, { name = \"BOTH\", value = 5 }]",
+            true,
+        ),
+        (
+            "write-values-only = true\nvalues = [{ name = \"NONE\", value = 0 }, { name = \"FIRST\", value = 1 }, { name = \"BOTH\", value = 5 }]",
+            false,
+        ),
+    ] {
+        let fixture = Fixture::new()?;
+        fixture
+            .edit(
+                "types/timer.toml",
+                "name = \"T1\"\nbits = \"1\"\nclass = \"read-only\"",
+                "name = \"T1\"\nbits = \"2\"\nclass = \"read-only\"",
+            )?
+            .edit(
+                "types/timer.toml",
+                "name = \"T0\"\nbits = \"0\"\nclass = \"write-one-to-clear\"\n\n[[registers.fields]]\nname = \"T1\"\nbits = \"1\"\nclass = \"write-one-to-clear\"",
+                &format!("name = \"EVENTS\"\nbits = \"2:0\"\nclass = \"write-one-to-clear\"\n{constraint}"),
+            )?
+            .remove("fixed-register-images", "acknowledge_timer0_masked")?
+            .remove("fixed-register-images", "acknowledge_timer0_consumed")?;
+        if admitted {
+            fixture.load()?;
+        } else {
+            let error = fixture.rejection()?;
+            assert_eq!(error.entity, "timer0_interrupt");
+            assert!(
+                matches!(error.kind, ErrorKind::WriteConstraint(_)),
+                "{error}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn fixed_writes_keep_whole_word_and_field_class_exceptions() -> TestResult {
+    for class in ["set-only", "self-clearing", "hardware-written"] {
+        let fixture = Fixture::new()?;
+        fixture
+            .edit(
+                "types/timer.toml",
+                "name = \"LOAD\"\nbits = \"0\"\nclass = \"write-trigger\"",
+                &format!("name = \"LOAD\"\nbits = \"0\"\nclass = \"{class}\""),
+            )?
+            .edit(
+                "types/timer.toml",
+                "name = \"KEY\"\nbits = \"7:0\"\nclass = \"write-only\"",
+                "name = \"KEY\"\nbits = \"7:0\"\nclass = \"write-only\"\n\n[[registers.fields]]\nname = \"STATUS\"\nbits = \"8\"\nclass = \"read-only\"",
+            )?
+            .append(
+                "\n[[fixed-register-images]]\nname = \"store_load\"\nregister = \"TIMER0.LOAD\"\nvalue = 1\nsources = [\"SRC_DRIVER\"]\n\n[[fixed-register-images]]\nname = \"store_key_whole\"\nregister = \"TIMER0.WO\"\nvalue = 256\nwhole-word = true\nsources = [\"SRC_DRIVER\"]\n\n[[fixed-register-sequences]]\nname = \"sequence_load\"\nsteps = [{ register = \"TIMER0.LOAD\", value = 0 }, { register = \"TIMER0.WO\", value = 256, whole-word = true }]\nsources = [\"SRC_DRIVER\"]\n",
+            )?;
+        fixture.load()?;
+    }
+    Ok(())
+}
+
+#[test]
 fn whole_word_image_keeps_to_its_trigger_fields() -> TestResult {
     let fixture = Fixture::new()?;
     fixture.append(

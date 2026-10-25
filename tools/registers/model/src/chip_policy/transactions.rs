@@ -58,6 +58,8 @@ enum Values<'a> {
     Fixed(u32),
     Range(u32, u32),
     List(&'a [DomainValue]),
+    /// Any subset of these bits, including zero for unacknowledged events.
+    Bits(u32),
     /// Unknown to the loader: a combination of flags, an opaque or composed
     /// word, an address or a transformed input.
     Any,
@@ -73,9 +75,21 @@ impl Values<'_> {
             Self::Fixed(value) => constraint.admits(value),
             Self::Range(min, max) => constraint.admits_range(min, max),
             Self::List(values) => values.iter().all(|value| constraint.admits(value.value)),
+            Self::Bits(mask) => constraint.admits_bits(mask),
             Self::Any => false,
         }
     }
+}
+
+/// Every whole-word write uses the same class, W1C and constraint checks.
+/// Fixed writes have a sourced whole-word exception; only images may
+/// carry an acknowledgement proof. A sequence never acknowledges events.
+#[derive(Clone, Copy)]
+enum WordWrite {
+    Store { written: u32, whole: bool },
+    Image { value: u32, whole_word: bool },
+    Sequence { value: u32, whole_word: bool },
+    Acknowledge { mask: u32 },
 }
 
 /// The ones from bit zero through the highest one of `value`.
@@ -431,23 +445,6 @@ impl<'a> Checker<'a, '_> {
         Ok(())
     }
 
-    /// Every lane a write from zero leaves zero admits zero.
-    fn zero_lanes(&self, entity: &str, word: &Word<'_>, written: u32) -> Result<(), Error> {
-        for field in word.fields() {
-            if field_mask(field) & written == 0 && !Values::Fixed(0).within(word.constraint(field))
-            {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::WriteConstraint(format!(
-                        "{} takes no zero, which the write gives it",
-                        field.identity
-                    )),
-                ));
-            }
-        }
-        Ok(())
-    }
-
     /// `values` written to `field` are ones its write constraint admits.
     fn constrained(
         &self,
@@ -649,20 +646,6 @@ impl<'a> Checker<'a, '_> {
                     ),
                 ));
             }
-            if !clear_word.storable()
-                || clear_word.fields().is_empty()
-                || clear_word
-                    .fields()
-                    .iter()
-                    .any(|field| field.class != FieldClass::WriteOneToClear)
-            {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Snapshot(
-                        "its clear word holds only write-one-to-clear fields".to_owned(),
-                    ),
-                ));
-            }
             let mask = status_word.declared() & clear_word.declared();
             if mask == 0 {
                 return Err(self.error(
@@ -670,19 +653,31 @@ impl<'a> Checker<'a, '_> {
                     ErrorKind::Snapshot("its clear word acknowledges no status field".to_owned()),
                 ));
             }
-            if let Some(field) = status_word
+            for field in status_word
                 .fields()
                 .iter()
-                .find(|field| field_mask(field) & mask != 0 && field_mask(field) & !mask != 0)
+                .filter(|field| field_mask(field) & mask != 0)
             {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Snapshot(format!(
-                        "status field {} is acknowledged only in part",
-                        field.identity
-                    )),
-                ));
+                if !read(field.class) {
+                    return Err(self.error(
+                        entity,
+                        ErrorKind::Snapshot(format!(
+                            "status field {} has no side-effect-free readable value",
+                            field.identity
+                        )),
+                    ));
+                }
+                if field_mask(field) & !mask != 0 {
+                    return Err(self.error(
+                        entity,
+                        ErrorKind::Snapshot(format!(
+                            "status field {} is acknowledged only in part",
+                            field.identity
+                        )),
+                    ));
+                }
             }
+            self.write_word(entity, Target::Word(clear), WordWrite::Acknowledge { mask })?;
             // The part holding the clear word acknowledges; it reads the
             // status word as its own or an observed one.
             let owner = self.owner(entity, Target::Word(clear), None)?;
@@ -817,8 +812,35 @@ impl<'a> Checker<'a, '_> {
         written: u32,
         whole: bool,
     ) -> Result<(), Error> {
+        self.write_word(entity, target, WordWrite::Store { written, whole })?;
+        let owner = self.owner(entity, target, Some(written))?;
+        self.take(entity, &[owner], true)
+    }
+
+    /// Qualify the word independently of set bits, then check every lane
+    /// the write gives a value. A store's selected fields are checked by
+    /// its input-specific validation; its remaining fields receive zero.
+    fn write_word(&self, entity: &str, target: Target, write: WordWrite) -> Result<(), Error> {
         let word = self.word(entity, target)?;
-        if self.on_clear(target) || word.has(FieldClass::WriteOneToClear) {
+        let on_clear = self.on_clear(target);
+        let acknowledges = matches!(write, WordWrite::Acknowledge { .. })
+            || (matches!(write, WordWrite::Image { .. }) && on_clear);
+        if matches!(write, WordWrite::Acknowledge { .. })
+            && (!word.storable()
+                || word.fields().is_empty()
+                || word
+                    .fields()
+                    .iter()
+                    .any(|field| field.class != FieldClass::WriteOneToClear))
+        {
+            return Err(self.error(
+                entity,
+                ErrorKind::Snapshot(
+                    "its clear word holds only write-one-to-clear fields".to_owned(),
+                ),
+            ));
+        }
+        if (on_clear || word.has(FieldClass::WriteOneToClear)) && !acknowledges {
             return Err(self.error(
                 entity,
                 ErrorKind::WriteOneToClear(
@@ -827,20 +849,74 @@ impl<'a> Checker<'a, '_> {
                 ),
             ));
         }
-        if let Some(reason) = word.unstorable() {
-            return Err(self.error(entity, ErrorKind::Register(reason.to_owned())));
-        }
-        if word.template.data_port.is_some() && !whole {
+        if !word.storable() {
             return Err(self.error(
                 entity,
                 ErrorKind::Register(
-                    "a data port's word is written only whole by a full-register write".to_owned(),
+                    "a FIFO port or command register is not written by a transaction".to_owned(),
                 ),
             ));
         }
-        self.zero_lanes(entity, word, written)?;
-        let owner = self.owner(entity, target, Some(written))?;
-        self.take(entity, &[owner], true)
+        if let WordWrite::Store { whole, .. } = write {
+            if let Some(reason) = word.unstorable() {
+                return Err(self.error(entity, ErrorKind::Register(reason.to_owned())));
+            }
+            if word.template.data_port.is_some() && !whole {
+                return Err(self.error(
+                    entity,
+                    ErrorKind::Register(
+                        "a data port's word is written only whole by a full-register write"
+                            .to_owned(),
+                    ),
+                ));
+            }
+        }
+        let fixed = match write {
+            WordWrite::Image { value, whole_word } | WordWrite::Sequence { value, whole_word } => {
+                Some((value, whole_word))
+            }
+            _ => None,
+        };
+        for field in word.fields() {
+            let mask = field_mask(field);
+            if let Some((value, whole_word)) = fixed
+                && value & mask != 0
+            {
+                let allowed = imaged(field.class)
+                    || (field.class == FieldClass::WriteOneToClear && acknowledges)
+                    || (field.class == FieldClass::ReadOnly && whole_word);
+                self.class(entity, field, allowed, "a fixed write")?;
+            }
+            let values = match write {
+                WordWrite::Store { written, .. } if mask & written != 0 => continue,
+                WordWrite::Store { .. } => Values::Fixed(0),
+                WordWrite::Image { value, .. } | WordWrite::Sequence { value, .. } => {
+                    Values::Fixed((value & mask).checked_shr(field.low).unwrap_or(0))
+                }
+                WordWrite::Acknowledge { mask: sampled } => {
+                    Values::Bits((sampled & mask).checked_shr(field.low).unwrap_or(0))
+                }
+            };
+            self.constrained(entity, word, field, values)?;
+        }
+        if !word.fields().iter().any(|field| field.class.written()) {
+            return Err(self.error(
+                entity,
+                ErrorKind::Register("the word has no field a write gives a value".to_owned()),
+            ));
+        }
+        if let Some((value, whole_word)) = fixed {
+            if value & !word.declared() != 0 && !whole_word {
+                return Err(self.error(
+                    entity,
+                    ErrorKind::Register(
+                        "sets bits no field declares; only a whole-word image does".to_owned(),
+                    ),
+                ));
+            }
+            self.no_dma(entity, target, value)?;
+        }
+        Ok(())
     }
 
     /// The lanes of the full-register writes of a DMA reference or buffer
@@ -1133,60 +1209,20 @@ impl<'a> Checker<'a, '_> {
         }
     }
 
-    /// `value` may be written whole to `target` by a fixed image: the bits
-    /// it sets are ones their classes allow, it sets no DMA address field
-    /// and every field's lane is a value the field admits.
-    fn image(
-        &self,
-        entity: &str,
-        target: Target,
-        value: u32,
-        whole_word: bool,
-    ) -> Result<(), Error> {
-        let word = self.word(entity, target)?;
-        if !word.storable() {
-            return Err(self.error(
-                entity,
-                ErrorKind::Register(
-                    "a FIFO port or command register is not written by an image".to_owned(),
-                ),
-            ));
-        }
-        let on_clear = self.on_clear(target);
-        for field in word.fields() {
-            if value & field_mask(field) == 0 {
-                continue;
-            }
-            let allowed = imaged(field.class)
-                || (field.class == FieldClass::WriteOneToClear && on_clear)
-                || (field.class == FieldClass::ReadOnly && whole_word);
-            self.class(entity, field, allowed, "an image")?;
-        }
-        if value & !word.declared() != 0 && !whole_word {
-            return Err(self.error(
-                entity,
-                ErrorKind::Register(
-                    "sets bits no field declares; only a whole-word image does".to_owned(),
-                ),
-            ));
-        }
-        self.no_dma(entity, target, value)?;
-        for field in word.fields() {
-            let lane = (value & field_mask(field))
-                .checked_shr(field.low)
-                .unwrap_or(0);
-            self.constrained(entity, word, field, Values::Fixed(lane))?;
-        }
-        Ok(())
-    }
-
     fn images(&mut self) -> Result<(), Error> {
         let file = self.file;
         for image in &file.fixed_register_images {
             let entity = image.name.as_str();
             self.begin(entity, &image.sources)?;
             let target = self.register(entity, &image.register)?;
-            self.image(entity, target, image.value, image.whole_word)?;
+            self.write_word(
+                entity,
+                target,
+                WordWrite::Image {
+                    value: image.value,
+                    whole_word: image.whole_word,
+                },
+            )?;
             let mut owners = vec![self.owner(entity, target, Some(image.value))?];
             match (self.on_clear(target), &image.masks, &image.consumed_event) {
                 (true, Some(masks), None) => {
@@ -1260,16 +1296,14 @@ impl<'a> Checker<'a, '_> {
             let mut owners = Vec::new();
             for step in &sequence.steps {
                 let word = self.element(entity, &step.register)?;
-                if self.clears.contains(&word) {
-                    return Err(self.error(
-                        entity,
-                        ErrorKind::WriteOneToClear(
-                            "a snapshot's clear word is written only by its acknowledgement"
-                                .to_owned(),
-                        ),
-                    ));
-                }
-                self.image(entity, Target::Word(word), step.value, step.whole_word)?;
+                self.write_word(
+                    entity,
+                    Target::Word(word),
+                    WordWrite::Sequence {
+                        value: step.value,
+                        whole_word: step.whole_word,
+                    },
+                )?;
                 owners.push(self.owner(entity, Target::Word(word), Some(step.value))?);
             }
             self.take(entity, &owners, true)?;
