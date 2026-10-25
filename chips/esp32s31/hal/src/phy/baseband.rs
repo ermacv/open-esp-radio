@@ -7,7 +7,11 @@
 #![forbid(unsafe_code)]
 
 #[cfg(target_arch = "riscv32")]
-use crate::{owner::SharedPhyAccess, phy_pac_mut, types::CfrValue};
+use crate::{owner::SharedPhyAccess, phy_blocks_mut, types::CfrValue};
+
+pub mod ops;
+
+pub use ops::{TxDcPwdetFields, TxIqToneControlFields};
 
 /// Enable the two IQ-correction modes selected by PHY initialization.
 ///
@@ -15,8 +19,7 @@ use crate::{owner::SharedPhyAccess, phy_pac_mut, types::CfrValue};
 /// sets RX- and TX-IQ mode fields with two independent fresh-read updates.
 #[cfg(target_arch = "riscv32")]
 pub fn enable_iq_correction(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.enable_iq_correction_modes();
+    ops::enable_iq_correction_modes(&mut phy_blocks_mut(registers).phy_baseband_config_oracle);
 }
 
 /// Preserve the two fresh status publications at RXIQ root entry.
@@ -26,8 +29,7 @@ pub fn enable_iq_correction(registers: &mut impl SharedPhyAccess) {
 /// independent reads.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_rxiq_root_status(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_rxiq_root_status();
+    crate::phy::pbus::ops::configure_rxiq_root_status(&mut phy_blocks_mut(registers).phy_pbus);
 }
 
 /// Apply one complete RXIQ root correction-mode prefix or suffix.
@@ -36,8 +38,12 @@ pub fn configure_rxiq_root_status(registers: &mut impl SharedPhyAccess) {
 /// fresh-read field updates.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_rxiq_root_correction(registers: &mut impl SharedPhyAccess, begin: bool) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_rxiq_root_correction(begin);
+    let blocks = phy_blocks_mut(registers);
+    ops::configure_rxiq_root_correction(
+        &mut blocks.phy_baseband_config_oracle,
+        &mut blocks.phy_pbus,
+        begin,
+    );
 }
 
 /// Configure the fourteen-edge baseband TX-power tracking leaf.
@@ -46,22 +52,29 @@ pub fn configure_rxiq_root_correction(registers: &mut impl SharedPhyAccess, begi
 /// `libphy.a[phy_reg.o]::phy_bb_txpwr_track`, size `0xf4`.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_tx_power_tracking(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_tx_power_tracking(enabled);
+    ops::configure_tx_power_tracking(
+        &mut phy_blocks_mut(registers).phy_baseband_config_oracle,
+        enabled,
+    );
 }
 
 /// Apply complete pinned `libphy.a[phy_reg.o]::phy_config_hccfr`.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_hccfr(registers: &mut impl SharedPhyAccess, enabled: bool, value: CfrValue) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_hccfr(enabled, value);
+    ops::configure_hccfr(
+        &mut phy_blocks_mut(registers).phy_baseband_config_oracle,
+        enabled,
+        value,
+    );
 }
 
 /// Apply either complete branch of pinned `libphy.a[phy_reg.o]::phy_iccfr_en`.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_iccfr_gate(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_iccfr_gate(enabled);
+    ops::configure_iccfr_gate(
+        &mut phy_blocks_mut(registers).phy_baseband_config_oracle,
+        enabled,
+    );
 }
 
 /// Apply complete pinned `libphy.a[phy_reg.o]::phy_force_iccfr`.
@@ -72,9 +85,19 @@ pub fn configure_forced_iccfr(
     enabled: bool,
     value: CfrValue,
 ) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_forced_iccfr(mode, enabled, value);
+    ops::configure_forced_iccfr(
+        &mut phy_blocks_mut(registers).phy_baseband_config_oracle,
+        mode,
+        enabled,
+        value,
+    );
 }
+
+/// Complete rev0 ROM `phy_fe_reg_init`'s table-memory base index.
+///
+/// SOURCE: ROM_REV0_PHY_FE_REG_INIT.
+#[cfg(target_arch = "riscv32")]
+const FRONT_END_TABLE_MEMORY_BASE_INDEX: u8 = 0xa0;
 
 /// Apply complete rev0 ROM `phy_fe_reg_init`.
 ///
@@ -82,23 +105,25 @@ pub fn configure_forced_iccfr(
 /// memory base-index update retained between its prefix and suffix.
 #[cfg(target_arch = "riscv32")]
 pub fn initialize_front_end(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.initialize_front_end_prefix();
-    registers.configure_table_memory_base_index(0xa0);
-    registers.initialize_front_end_suffix();
+    let blocks = phy_blocks_mut(registers);
+    ops::initialize_front_end_prefix(&mut blocks.phy_baseband_config_oracle, &mut blocks.phy_pbus);
+    crate::phy::memory::ops::configure_table_memory_base_index(
+        &mut blocks.phy_clock_oracle,
+        FRONT_END_TABLE_MEMORY_BASE_INDEX,
+    );
+    ops::initialize_front_end_suffix(&mut blocks.phy_baseband_config_oracle);
 }
 
 /// Apply both fresh-read updates of complete rev0 ROM `phy_fe_txrx_reset`.
 #[cfg(target_arch = "riscv32")]
 pub fn reset_frontend_txrx(registers: &mut impl SharedPhyAccess) {
-    phy_pac_mut(registers).reset_frontend_txrx();
+    ops::reset_frontend_txrx(&mut phy_blocks_mut(registers).phy_fedata_recovered);
 }
 
 /// Apply complete pinned `libphy.a[phy_reg.o]::phy_fe_reg_update`.
 #[cfg(target_arch = "riscv32")]
 pub fn update_front_end(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.update_front_end();
+    ops::update_front_end(&mut phy_blocks_mut(registers).phy_baseband_config_oracle);
 }
 
 /// Configure PHY I²C TX-rate fields and TX-gain compensation bytes.
@@ -108,16 +133,14 @@ pub fn update_front_end(registers: &mut impl SharedPhyAccess) {
 /// `phy_txgain_comp_pacfg_new(1)` for four ordered byte updates.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_i2c_tx_rate(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_i2c_tx_rate();
+    ops::configure_i2c_tx_rate(&mut phy_blocks_mut(registers).phy_baseband_config_oracle);
 }
 
 /// Apply complete pinned `phy_txgain_comp_pacfg_new(1)` without coupling it
 /// to calibration-tone setup.
 #[cfg(target_arch = "riscv32")]
 pub fn restore_tx_gain_compensation(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.restore_tx_gain_compensation();
+    ops::restore_tx_gain_compensation(&mut phy_blocks_mut(registers).phy_baseband_config_oracle);
 }
 
 /// Configure the complete baseband watchdog leaf.
@@ -125,8 +148,7 @@ pub fn restore_tx_gain_compensation(registers: &mut impl SharedPhyAccess) {
 /// Basis: complete rev0 ROM `phy_bb_wdg_cfg` at `0x2f82_7860`, size `0x2c`.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_watchdog(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_baseband_watchdog();
+    ops::configure_watchdog(&mut phy_blocks_mut(registers).phy_baseband_config_oracle);
 }
 
 /// Enable the four recovered automatic noise-floor controls.
@@ -135,8 +157,7 @@ pub fn configure_watchdog(registers: &mut impl SharedPhyAccess) {
 /// size `0x36`.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_noise_floor_auto(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_noise_floor_auto();
+    ops::configure_noise_floor_auto(&mut phy_blocks_mut(registers).phy_baseband_config_oracle);
 }
 
 /// Apply the complete baseband register initialization leaf.
@@ -148,11 +169,11 @@ pub fn configure_noise_floor_auto(registers: &mut impl SharedPhyAccess) {
 pub fn initialize_baseband(registers: &mut impl SharedPhyAccess) {
     use crate::phy::frequency;
 
-    phy_pac_mut(registers).initialize_baseband_prefix();
+    ops::initialize_baseband_prefix(&mut phy_blocks_mut(registers).phy_baseband_config_oracle);
     frequency::initialize_nrx_baseband(registers);
-    phy_pac_mut(registers).initialize_baseband_middle();
+    ops::initialize_baseband_middle(&mut phy_blocks_mut(registers).phy_baseband_config_oracle);
     frequency::set_baseband_init_control(registers);
-    phy_pac_mut(registers).initialize_baseband_tail();
+    ops::initialize_baseband_tail(&mut phy_blocks_mut(registers).phy_baseband_config_oracle);
 }
 
 /// Apply the complete six-edge PA-on configuration leaf.
@@ -160,8 +181,7 @@ pub fn initialize_baseband(registers: &mut impl SharedPhyAccess) {
 /// Basis: complete rev0 ROM `phy_tx_paon_set` at `0x2f82_764c`, size `0x78`.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_tx_pa_on(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_tx_pa_on();
+    ops::configure_tx_pa_on(&mut phy_blocks_mut(registers).phy_baseband_config_oracle);
 }
 
 /// Publish both signed digital gains through the shared PHY owner.
@@ -172,5 +192,10 @@ pub fn configure_forced_digital_gain(
     gain_0: i8,
     gain_1: i8,
 ) {
-    phy_pac_mut(registers).configure_forced_digital_gain(enabled, gain_0, gain_1);
+    ops::configure_forced_digital_gain(
+        &mut phy_blocks_mut(registers).phy_clock_oracle,
+        enabled,
+        gain_0,
+        gain_1,
+    );
 }

@@ -1014,7 +1014,6 @@ fn pmu_immediate_clock_power_renders_every_sourced_lane_as_a_trigger() {
     for method in [
         "enable_baseband_i2c_power_tie",
         "disable_baseband_i2c_power_tie",
-        "clear_phy_rf_immediate_clock_power",
     ] {
         let body = rust
             .split(&format!("pub fn {method}("))

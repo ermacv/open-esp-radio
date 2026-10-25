@@ -1155,7 +1155,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// Registers of the radio-PHY partition image [`Self::phy_register_image`]
     /// reads.
     pub const PHY_REGISTER_IMAGE_LEN: usize =
-        oer_esp32s31_pac::RadioPhyRegisters::REGISTER_IMAGE_LEN;
+        oer_esp32s31_pac::RadioPhyPeripherals::RADIO_PHY_REGISTER_IMAGE_LEN;
 
     /// Registers of the radio-PHY partition image.
     pub const fn phy_register_image_len(&self) -> usize {
@@ -1168,7 +1168,10 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// may not answer, so a caller reads only indices known to be readable
     /// in the current radio state.
     pub fn phy_register_image(&self, index: usize) -> Option<u32> {
-        self.registers().radio_phy().register_image(index)
+        self.registers()
+            .radio_phy()
+            .peripherals
+            .radio_phy_register_image(index)
     }
 
     pub(crate) fn registers(&self) -> &SharedRadioRegisters {

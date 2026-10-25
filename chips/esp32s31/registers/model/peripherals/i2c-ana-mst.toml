@@ -217,6 +217,11 @@ bitWidth = 14
 name = "REVIEWED_RADIO_MAP"
 value = 0x3FA0
 
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "PARALLEL_STAGE_TWO_MAP"
+description = "SOURCE: BLOB_LIBPHY_PHY_I2C_INIT2_20260907 selects this map for the retained-wake parallel stage."
+value = 0x0A
+
 
 [[peripherals.registers.register.fields]]
 name = "BITS_0_3_OPAQUE"

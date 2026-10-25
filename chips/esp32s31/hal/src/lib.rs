@@ -45,7 +45,9 @@ pub mod types;
 
 pub mod owner;
 
-pub(crate) use owner::{phy_pac, phy_pac_mut, sealed};
+pub(crate) use owner::{phy_blocks, phy_blocks_mut, sealed};
+#[cfg(target_arch = "riscv32")]
+pub(crate) use owner::{phy_pac, phy_pac_mut};
 
 pub mod ieee80211;
 pub mod ieee802154;

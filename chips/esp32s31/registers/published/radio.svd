@@ -7080,6 +7080,11 @@
                   <name>REVIEWED_RADIO_MAP</name>
                   <value>16288</value>
                 </enumeratedValue>
+                <enumeratedValue>
+                  <name>PARALLEL_STAGE_TWO_MAP</name>
+                  <description>SOURCE: BLOB_LIBPHY_PHY_I2C_INIT2_20260907 selects this map for the retained-wake parallel stage.</description>
+                  <value>10</value>
+                </enumeratedValue>
               </enumeratedValues>
             </field>
             <field>

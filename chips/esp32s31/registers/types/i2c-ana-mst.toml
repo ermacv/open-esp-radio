@@ -448,7 +448,7 @@ name = "PHY_HOST_MAP"
 bits = "17:4"
 class = "plain"
 description = "Complete host-selection field replaced by phy_get_i2c_hostid_new while unrelated bits are preserved."
-values = [{ name = "REVIEWED_RADIO_MAP", value = 16288 }]
+values = [{ name = "REVIEWED_RADIO_MAP", value = 16288 }, { name = "PARALLEL_STAGE_TWO_MAP", value = 10 }]
 
 [[registers.fields]]
 name = "BITS_18_23_OPAQUE"

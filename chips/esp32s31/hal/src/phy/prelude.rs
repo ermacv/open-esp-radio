@@ -25,6 +25,5 @@ pub fn configure_fixed_xtal_40mhz(registers: &mut impl SharedPhyAccess) {
 /// read; deadline arithmetic and retry ownership stay in the transition.
 #[cfg(target_arch = "riscv32")]
 pub fn sample_sdm_deadline_counter(registers: &mut impl SharedPhyAccess) -> u32 {
-    let registers = phy_pac_mut(registers);
-    registers.sample_sdm_deadline_counter()
+    phy_pac_mut(registers).mac_local_time().now()
 }

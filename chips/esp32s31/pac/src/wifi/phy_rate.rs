@@ -79,10 +79,7 @@ impl WifiRadioRegisters {
         let raw = crate::svd::field_read::observe_phy_noise_floor_sixteenth_db_code(
             &self.peripherals.wifi_mac.wifi_phy_rate_oracle,
         );
-        (
-            raw,
-            decode_noise_floor_quarter_db(raw),
-        )
+        (raw, decode_noise_floor_quarter_db(raw))
     }
 }
 

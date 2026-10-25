@@ -98,9 +98,13 @@ pub(super) fn execute_rf_close_with_hal<D: PhyShortDelay, C: oer_time::Clock + ?
             PhyRfCloseOperation::PowerOffRfCircuits => {
                 oer_esp32s31_hal::phy::analog_i2c::power_off_rf_circuits(registers);
             }
-            PhyRfCloseOperation::ClearImmediateClockPower => {
-                oer_esp32s31_hal::phy::clock::clear_rf_immediate_clock_power(registers);
-            }
+            // SOURCE: BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907, S31_PMU_HEADERS.
+            // The vendor clears bit 28 (`TIE_HIGH_XPD_BB_I2C`) of
+            // `IMM_HP_CK_POWER_0` with a read-modify-write. Every field of
+            // that word is a write trigger (WT in the PMU header): a zero
+            // written to a trigger starts no action, so the step writes
+            // nothing.
+            PhyRfCloseOperation::ClearImmediateClockPower => {}
             PhyRfCloseOperation::CloseFrontendBasebandClocks => {
                 oer_esp32s31_hal::phy::clock::close_frontend_baseband(registers);
             }

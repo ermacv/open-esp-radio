@@ -25,7 +25,7 @@ transactions, including sourced whole-word images and snapshot
 acknowledgements. The `soc` pass retains the vendor's field prefixes;
 API-policy blocks use the field names declared in the reviewed model.
 
-The PAC exports the handwritten domain modules `bluetooth`, `wifi`, `phy`,
+The PAC exports the handwritten domain modules `bluetooth`, `wifi`,
 `modem`, `boot`, `platform`, `watchdog` and `pll_power`. They assemble owned
 register parts and provide the register-local operations and straight-line
 transactions described below. IEEE 802.15.4 has no domain module: its
@@ -33,10 +33,19 @@ partition (`Ieee802154Partition`) holds the generated parts, the MAC block,
 the modem ETM's channels zero and one and the baseband's receive-information
 read, from the public `ieee802154_mac`, `modem_etm` and `bt_v3_2_baseband`
 modules, and the HAL performs every IEEE 802.15.4 operation over their field
-accessors. The analog-host operations
-are in `phy/i2c.rs`. Sequencing with phases, polling, retries, interrupt
-routing and lifecycle policy belongs to the HAL; a PAC domain operation
-keeps no in-flight state between calls.
+accessors. Sequencing with phases, polling, retries, interrupt routing and
+lifecycle policy belongs to the HAL; a PAC domain operation keeps no
+in-flight state between calls.
+
+The radio PHY has no handwritten module either: `RadioPhyRegisters` holds
+the partition's generated blocks as a public field, and the HAL drives them
+through their field accessors. For the analog-I2C space the PAC renders only
+the vocabulary (`analog_i2c`: block and register identities, fields, routes,
+read-safe bytes); the I2C master and its command memory are ordinary
+generated blocks, and the bus driver is the HAL's. The PHY word operations
+that remain are sourced whole-word images with undeclared bits, a word
+without fields, and the master's command, reset and read-mask words, which
+have no class accessor.
 
 ## Radio partitions
 

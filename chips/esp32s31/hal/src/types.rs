@@ -31,9 +31,7 @@ pub use oer_esp32s31_pac::{
     MacStaPolicyMode, MacStaReceivePolicySnapshot, MacTxCompletionObservation, MacTxControlFrame,
     MacTxDetachOutcome, MacTxDetachReason, MacTxPowerPair, MacTxPowerTable, MacTxProtection,
     MacTxPtiCount, MacTxPtiProgram, MacTxQueueDetached, MacTxQueueIndex, MacTxStatisticsSnapshot,
-    PbusMemoryGroupBoundary, PhyAdcRate, PhyForcedPowerIndex, PhyFtmEnableVendorArgument,
-    PhyGainMemoryEntry, PhyMemoryError, RxBlockAckEntrySnapshot, StaTbttSchedule,
-    TxBlockAckPayload,
+    PhyForcedPowerIndex, RxBlockAckEntrySnapshot, StaTbttSchedule, TxBlockAckPayload,
 };
 
 pub use crate::phy::restore::{
@@ -44,6 +42,10 @@ pub use crate::phy::restore::{
 };
 
 pub use crate::ieee80211::station_wake::StaTbttScheduleError;
+pub use crate::phy::{
+    i2c::PhyAdcRate,
+    memory::{PbusMemoryGroupBoundary, PhyGainMemoryEntry, PhyMemoryError},
+};
 pub use oer_esp32s31_pac::WifiRxCsiControlMask;
 
 pub(crate) use oer_esp32s31_pac::{

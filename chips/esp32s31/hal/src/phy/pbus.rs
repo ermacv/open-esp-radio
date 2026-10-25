@@ -3,8 +3,10 @@
 #[cfg(target_arch = "riscv32")]
 use crate::{
     owner::{SharedPhyAccess, SharedPhyContext},
-    phy_pac_mut,
+    phy_blocks_mut,
 };
+
+pub mod ops;
 
 /// A PBus command could not be published or completed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -21,8 +23,7 @@ pub enum PbusError {
 /// replacement; the Rust transition owns phase order and both timers.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_force_txrx(registers: &mut impl SharedPhyAccess, enabled: bool, phase: u8) {
-    let registers = phy_pac_mut(registers);
-    registers.set_pbus_force_txrx_mode(enabled, phase == 0);
+    ops::set_force_txrx_mode(&mut phy_blocks_mut(registers).phy_pbus, enabled, phase == 0);
 }
 
 /// Enter the PBus debug mode used before force-test transactions.
@@ -32,9 +33,9 @@ pub fn configure_force_txrx(registers: &mut impl SharedPhyAccess, enabled: bool,
 /// `COMMAND.DEBUG_MODE_ENABLE`, with one fresh read before each write.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_debug_mode(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.set_pbus_work_mode(false);
-    registers.set_pbus_debug_mode(true);
+    let pbus = &mut phy_blocks_mut(registers).phy_pbus;
+    ops::set_work_mode(pbus, false);
+    ops::set_debug_mode(pbus, true);
 }
 
 /// Enter PBus work mode and sample the optional settle-pulse condition once.
@@ -47,9 +48,9 @@ pub fn configure_debug_mode(registers: &mut impl SharedPhyAccess) {
 #[cfg(target_arch = "riscv32")]
 pub fn configure_work_mode(registers: &mut impl SharedPhyContext) -> bool {
     {
-        let registers = phy_pac_mut(registers);
-        registers.set_pbus_debug_mode(false);
-        registers.set_pbus_work_mode(true);
+        let pbus = &mut phy_blocks_mut(registers).phy_pbus;
+        ops::set_debug_mode(pbus, false);
+        ops::set_work_mode(pbus, true);
     }
     // The ROM samples this condition after both mode writes. Preserve that
     // observation boundary instead of using a pre-transition snapshot.
@@ -72,8 +73,12 @@ pub fn start_force_test(
     path: u8,
     test_value: u16,
 ) {
-    let registers = phy_pac_mut(registers);
-    registers.publish_pbus_force_test(selector, path, test_value);
+    ops::publish_force_test(
+        &mut phy_blocks_mut(registers).phy_pbus,
+        selector,
+        path,
+        test_value,
+    );
 }
 
 /// Observe one force-test completion edge and clear its transaction bit.
@@ -84,11 +89,11 @@ pub fn start_force_test(
 /// Rust async owner controls retries and timeout.
 #[cfg(target_arch = "riscv32")]
 pub fn try_finish_force_test(registers: &mut impl SharedPhyAccess) -> Result<(), PbusError> {
-    let registers = phy_pac_mut(registers);
-    if registers.pbus_is_busy() {
+    let pbus = &mut phy_blocks_mut(registers).phy_pbus;
+    if ops::is_busy(pbus) {
         return Err(PbusError::Busy);
     }
-    registers.clear_pbus_transaction();
+    ops::clear_transaction(pbus);
     Ok(())
 }
 
@@ -100,8 +105,11 @@ pub fn try_finish_force_test(registers: &mut impl SharedPhyAccess) -> Result<(),
 /// intentionally unknown.
 #[cfg(target_arch = "riscv32")]
 pub fn read_result(registers: &mut impl SharedPhyAccess, selector: u8, path: u8) -> Option<u16> {
-    let registers = phy_pac_mut(registers);
-    registers.read_pbus_result(selector, path)
+    Some(ops::read_result(
+        &phy_blocks_mut(registers).phy_pbus,
+        selector,
+        path,
+    ))
 }
 
 /// Enable or disable both recovered RX clock bits as one indivisible pair.
@@ -111,8 +119,7 @@ pub fn read_result(registers: &mut impl SharedPhyAccess, selector: u8, path: u8)
 /// PAC and HAL retain pair-level semantics.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_rx_clock(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    let registers = phy_pac_mut(registers);
-    registers.set_pbus_rx_clock_pair(enabled);
+    ops::set_rx_clock_pair(&mut phy_blocks_mut(registers).phy_pbus, enabled);
 }
 
 /// Enable or disable both recovered TX clock bits as one indivisible pair.
@@ -122,6 +129,5 @@ pub fn configure_rx_clock(registers: &mut impl SharedPhyAccess, enabled: bool) {
 /// PAC and HAL retain pair-level semantics.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_tx_clock(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    let registers = phy_pac_mut(registers);
-    registers.set_pbus_tx_clock_pair(enabled);
+    ops::set_tx_clock_pair(&mut phy_blocks_mut(registers).phy_pbus, enabled);
 }

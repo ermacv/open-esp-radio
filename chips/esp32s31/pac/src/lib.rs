@@ -77,6 +77,14 @@ pub use generated::{
 /// [`RadioPhyRegisters`] holds them.
 pub use generated::peripheral_ownership::RadioPhyPeripherals;
 
+/// The analog-I2C master's complemented read selection, the argument of its
+/// read-mask word operation (`i2c_ana_mst::I2cAnaMst::publish_phy_i2c_read_mask`).
+pub use generated::PhyI2cReadMask;
+
+/// Value domains of PHY operations the HAL takes from its callers: an HCCFR
+/// or ICCFR value and a forced RX gain index.
+pub use generated::{CfrValue, ForcedRxGain};
+
 /// A field of at most eight bits read back, as the byte the shared
 /// IEEE 802.15.4 value types take.
 pub(crate) const fn field_byte<const WIDTH: u32>(bits: oer_mmio::Bits<WIDTH>) -> u8 {
@@ -90,7 +98,6 @@ pub(crate) const fn field_halfword<const WIDTH: u32>(bits: oer_mmio::Bits<WIDTH>
     let [low, high, _, _] = bits.get().to_le_bytes();
     u16::from_le_bytes([low, high])
 }
-
 
 /// Reviewed writable MAC interrupt mask.
 ///
@@ -108,7 +115,6 @@ pub use generated::WifiRxCsiControlMask;
 /// descriptors, RX-control metadata and BLE controller structures, generated from the register
 /// model's `layouts/` (`docs/hardware-memory.md`).
 pub use generated::layouts;
-
 
 pub use bluetooth::{
     controller::{
@@ -195,7 +201,7 @@ pub use generated::{
     MacHePacketPaddingDuration, MacItwtClearIndex, MacKeyEntryIndex, MacMinimumMpduStartSpacing,
     MacPti, MacRxBlockAckEntryIndex, MacRxBlockAckStartingSequence, MacRxBlockAckTid,
     MacRxBlockAckWindow, MacTxPtiCount, MacTxQueueIndex, ModemLowPowerClockDivider,
-    PhyForcedPowerIndex, PhyFtmEnableVendorArgument,
+    PhyForcedPowerIndex,
 };
 
 pub use modem::{

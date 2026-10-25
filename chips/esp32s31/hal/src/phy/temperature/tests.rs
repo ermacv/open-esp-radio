@@ -234,7 +234,7 @@ fn a_pending_calibration_cannot_lose_its_resource_or_saved_restore_fields() {
         .resources_mut()
         .acquire_with(&mut port, || settle(&clock), false)
         .expect("acquire");
-    let fields = oer_esp32s31_pac::RxDcoControlField::for_host_test(2);
+    let fields = crate::phy::rx_dco::RxDcoControlField::for_host_test(2);
     route.prepare_rx_dco_with(|| fields).expect("prepare");
     port.edges.clear();
     assert_eq!(

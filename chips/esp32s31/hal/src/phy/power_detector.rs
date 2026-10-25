@@ -7,8 +7,11 @@
 #[cfg(target_arch = "riscv32")]
 use crate::{
     owner::{SharedPhyAccess, phy_parts_mut},
-    phy::restore::{TxDcPwdetLifecycleError, TxDcPwdetPrepareError, TxDcPwdetRestoreError},
-    phy_pac_mut,
+    phy::{
+        baseband::ops,
+        restore::{TxDcPwdetLifecycleError, TxDcPwdetPrepareError, TxDcPwdetRestoreError},
+    },
+    phy_blocks_mut,
 };
 
 /// Apply the complete power-detector register initialization leaf.
@@ -24,7 +27,7 @@ pub fn initialize_registers(
     if restore.txdc_pending() {
         return Err(TxDcPwdetLifecycleError::RestorePending);
     }
-    phy.initialize_power_detector_registers();
+    ops::initialize_power_detector_registers(&mut phy.peripherals.phy_baseband_config_oracle);
     crate::phy::power_detector::platform::select_initialization_mode(registers);
     Ok(())
 }
@@ -39,7 +42,9 @@ pub fn initialize_registers(
 #[cfg(target_arch = "riscv32")]
 pub fn configure_background(registers: &mut impl SharedPhyAccess) {
     configure_enabled(registers);
-    phy_pac_mut(registers).enable_power_detector_background_control();
+    ops::enable_power_detector_background_control(
+        &mut phy_blocks_mut(registers).phy_baseband_config_oracle,
+    );
 }
 
 /// Configure the power-detector/SAR path without enabling background control.
@@ -49,7 +54,9 @@ pub fn configure_background(registers: &mut impl SharedPhyAccess) {
 /// supply the eight ordered operations.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_enabled(registers: &mut impl SharedPhyAccess) {
-    phy_pac_mut(registers).configure_power_detector_enabled();
+    ops::configure_power_detector_enabled(
+        &mut phy_blocks_mut(registers).phy_baseband_config_oracle,
+    );
     crate::phy::power_detector::platform::select_enabled_mode(registers);
 }
 
@@ -76,9 +83,9 @@ pub fn prepare_txdc_calibration(
 ) -> Result<(), TxDcPwdetPrepareError> {
     let (phy, restore) = phy_parts_mut(registers);
     restore.prepare_txdc_with(
-        phy,
-        |phy| phy.capture_txdc_power_detector(),
-        |phy| phy.apply_txdc_power_detector_calibration(),
+        &mut phy.peripherals.phy_baseband_config_oracle,
+        |bb| ops::capture_txdc_power_detector(bb),
+        |bb| ops::apply_txdc_power_detector_calibration(bb),
     )
 }
 
@@ -88,8 +95,9 @@ pub fn prepare_txdc_calibration(
 /// `0x232`, replaces the two-bit PAC SAR-mode field with one at this point.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_txdc_sar(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_txdc_power_detector_sar();
+    ops::configure_txdc_power_detector_sar(
+        &mut phy_blocks_mut(registers).phy_baseband_config_oracle,
+    );
 }
 
 /// Restore the saved TX-DC fields and select the final SAR mode.
@@ -104,7 +112,9 @@ pub fn restore_txdc_calibration(
     registers: &mut impl SharedPhyAccess,
 ) -> Result<(), TxDcPwdetRestoreError> {
     let (phy, restore) = phy_parts_mut(registers);
-    restore.restore_txdc_with(|fields| phy.restore_txdc_power_detector(fields))
+    restore.restore_txdc_with(|fields| {
+        ops::restore_txdc_power_detector(&mut phy.peripherals.phy_baseband_config_oracle, fields)
+    })
 }
 
 /// Publish one power-detector reference word.
@@ -116,8 +126,10 @@ pub fn restore_txdc_calibration(
 /// store.
 #[cfg(target_arch = "riscv32")]
 pub fn write_reference(registers: &mut impl SharedPhyAccess, value: u16) {
-    let registers = phy_pac_mut(registers);
-    registers.write_power_detector_reference(value);
+    ops::write_power_detector_reference(
+        &mut phy_blocks_mut(registers).phy_baseband_config_oracle,
+        value,
+    );
 }
 
 /// Pulse the power-detector SAR trigger.
@@ -127,8 +139,7 @@ pub fn write_reference(registers: &mut impl SharedPhyAccess, value: u16) {
 /// one-microsecond delay remaining in the caller.
 #[cfg(target_arch = "riscv32")]
 pub fn trigger_sar(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.trigger_power_detector_sar();
+    ops::trigger_power_detector_sar(&mut phy_blocks_mut(registers).phy_baseband_config_oracle);
 }
 
 /// Read the power-detector readiness state through its SVD field.
@@ -138,8 +149,7 @@ pub fn trigger_sar(registers: &mut impl SharedPhyAccess) {
 /// ownership remain in the Rust async state machine.
 #[cfg(target_arch = "riscv32")]
 pub fn sample_ready(registers: &mut impl SharedPhyAccess) -> bool {
-    let registers = phy_pac_mut(registers);
-    registers.power_detector_ready()
+    ops::power_detector_ready(&phy_blocks_mut(registers).phy_baseband_config_oracle)
 }
 
 /// Read one power-detector SAR sample through its SVD field.
@@ -148,8 +158,7 @@ pub fn sample_ready(registers: &mut impl SharedPhyAccess) -> bool {
 /// consumes the upper thirteen-bit sample from `POWER_DETECTOR_SAR_RESULT`.
 #[cfg(target_arch = "riscv32")]
 pub fn sample_sar(registers: &mut impl SharedPhyAccess) -> u16 {
-    let registers = phy_pac_mut(registers);
-    registers.power_detector_sar_sample()
+    ops::power_detector_sar_sample(&phy_blocks_mut(registers).phy_baseband_config_oracle)
 }
 
 pub mod platform;

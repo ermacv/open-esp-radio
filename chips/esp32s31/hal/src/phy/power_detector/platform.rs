@@ -3,6 +3,34 @@
 //! `LP_AON_CLKRST` belongs to the shared route-owned PHY PAC partition. This
 //! module exposes only the two encodings evidenced by complete ROM code.
 
+use oer_esp32s31_pac::lp_aon_clkrst::LpAonClkrst;
+use oer_mmio::{Bits, Placement};
+
+/// Complete power-detector initialization and enable bodies select circuit
+/// mode four.
+///
+/// SOURCE: ROM_REV0_PHY_POWER_DETECTOR.
+const POWER_DETECTOR_INITIALIZATION_MODE: Bits<3> = Bits::constant::<4>();
+
+/// Complete TX-calibration debug mode selects circuit mode two.
+///
+/// SOURCE: ROM_REV0_PHY_POWER_DETECTOR.
+const POWER_DETECTOR_CALIBRATION_MODE: Bits<3> = Bits::constant::<2>();
+
+/// Select the power-detector circuit mode of initialization and enable.
+pub fn select_circuit_initialization_mode<P: Placement>(aon: &mut LpAonClkrst<P>) {
+    aon.modify_rtc_sar2_pwdet_cct(|w| {
+        w.set_rtc_sar2_pwdet_cct(POWER_DETECTOR_INITIALIZATION_MODE);
+    });
+}
+
+/// Select the power-detector circuit mode of TX-calibration debug mode.
+pub fn select_circuit_calibration_mode<P: Placement>(aon: &mut LpAonClkrst<P>) {
+    aon.modify_rtc_sar2_pwdet_cct(|w| {
+        w.set_rtc_sar2_pwdet_cct(POWER_DETECTOR_CALIBRATION_MODE);
+    });
+}
+
 /// Platform capability for `LP_AON_CLKRST.RTC_SAR2_PWDET_CCT`.
 pub trait PhyPowerDetectorPlatformControl {
     /// Select encoding four, used by PWDET register initialization and enable.
@@ -14,11 +42,11 @@ pub trait PhyPowerDetectorPlatformControl {
 
 impl<T: crate::owner::SharedPhyAccess> PhyPowerDetectorPlatformControl for T {
     fn select_power_detector_initialization_mode(&mut self) {
-        crate::phy_pac_mut(self).select_power_detector_initialization_mode();
+        select_circuit_initialization_mode(&mut crate::phy_blocks_mut(self).lp_aon_clkrst);
     }
 
     fn select_power_detector_calibration_mode(&mut self) {
-        crate::phy_pac_mut(self).select_power_detector_calibration_mode();
+        select_circuit_calibration_mode(&mut crate::phy_blocks_mut(self).lp_aon_clkrst);
     }
 }
 

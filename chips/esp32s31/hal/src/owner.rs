@@ -7,13 +7,14 @@ use crate::{
     ieee80211::{
         channel, dma::rx_dma::WifiRxDmaEngine, mac as wifi_mac, station_wake::StationWakeState,
     },
-    types::{MacInterruptMask, MacInterruptSnapshot, MacPowerInterruptSnapshot, PhyAdcRate},
+    phy::i2c::PhyAdcRate,
+    types::{MacInterruptMask, MacInterruptSnapshot, MacPowerInterruptSnapshot},
 };
 
 use super::*;
 
-use crate::phy::restore::PhyRouteState;
-use oer_esp32s31_pac::WifiRadioRegisters;
+use crate::phy::{baseband::ops as bb_ops, restore::PhyRouteState};
+use oer_esp32s31_pac::{RadioPhyPeripherals, WifiRadioRegisters};
 
 pub mod maintenance;
 
@@ -126,23 +127,41 @@ pub trait SharedPhyAccess: sealed::SharedPhyAccess {
     }
 
     fn set_phy_calibration_clock(&mut self, enabled: bool) {
-        phy_pac_mut(self).set_phy_calibration_clock(enabled);
+        crate::phy::clock::ops::set_calibration_clock(
+            &mut phy_blocks_mut(self).phy_clock_oracle,
+            enabled,
+        );
     }
 
     fn set_rx_gain_dc_calibration(&mut self, enabled: bool) {
-        phy_pac_mut(self).set_rx_gain_dc_calibration(enabled);
+        bb_ops::set_rx_gain_dc_calibration(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            enabled,
+        );
     }
 
     fn configure_power_control_tone(&mut self, selector: u16, step: u8) {
-        phy_pac_mut(self).configure_power_control_tone(selector, step);
+        bb_ops::configure_power_control_tone(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            selector,
+            step,
+        );
     }
 
     fn configure_calibration_tone(&mut self, enabled: bool, selector: u16, step: u8) {
-        phy_pac_mut(self).configure_calibration_tone(enabled, selector, step);
+        bb_ops::configure_calibration_tone(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            enabled,
+            selector,
+            step,
+        );
     }
 
     fn configure_tx_iq_correction(&mut self, begin: bool) {
-        phy_pac_mut(self).configure_tx_iq_correction(begin);
+        bb_ops::configure_tx_iq_correction(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            begin,
+        );
     }
 
     /// Capture the first-path TX-IQ tone-control state into the route slot.
@@ -153,7 +172,11 @@ pub trait SharedPhyAccess: sealed::SharedPhyAccess {
         &mut self,
     ) -> Result<(), crate::phy::restore::TxIqToneControlPrepareError> {
         let (phy, restore) = sealed::SharedPhyAccess::parts_mut(self);
-        restore.prepare_txiq_with(|| phy.capture_txiq_tone_control())
+        restore.prepare_txiq_with(|| {
+            crate::phy::baseband::ops::TxIqToneControlFields::capture(
+                &phy.peripherals.phy_baseband_config_oracle,
+            )
+        })
     }
 
     /// Restore and consume the saved TX-IQ tone-control state.
@@ -164,7 +187,9 @@ pub trait SharedPhyAccess: sealed::SharedPhyAccess {
         &mut self,
     ) -> Result<(), crate::phy::restore::TxIqToneControlRestoreError> {
         let (phy, restore) = sealed::SharedPhyAccess::parts_mut(self);
-        restore.restore_txiq_with(|fields| phy.restore_txiq_tone_control(fields))
+        restore.restore_txiq_with(|fields| {
+            fields.restore(&mut phy.peripherals.phy_baseband_config_oracle)
+        })
     }
 
     fn configure_txiq_mismatch_power(
@@ -174,59 +199,84 @@ pub trait SharedPhyAccess: sealed::SharedPhyAccess {
         attenuation: u8,
         selector: u16,
     ) {
-        phy_pac_mut(self).configure_txiq_mismatch_power(first, polarity, attenuation, selector);
+        bb_ops::configure_txiq_mismatch_power(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            first,
+            polarity,
+            attenuation,
+            selector,
+        );
     }
 
     fn set_tx_iq_gain_coefficient(&mut self, coefficient: i8) {
-        phy_pac_mut(self).set_tx_iq_gain_coefficient(coefficient);
+        bb_ops::set_tx_iq_gain_coefficient(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            coefficient,
+        );
     }
 
     fn set_tx_iq_phase_coefficient(&mut self, coefficient: i8) {
-        phy_pac_mut(self).set_tx_iq_phase_coefficient(coefficient);
+        bb_ops::set_tx_iq_phase_coefficient(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            coefficient,
+        );
     }
 
     fn set_rx_iq_gain_coefficient(&mut self, coefficient: i8) {
-        phy_pac_mut(self).set_rx_iq_gain_coefficient(coefficient);
+        bb_ops::set_rx_iq_gain_coefficient(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            coefficient,
+        );
     }
 
     fn set_rx_iq_phase_coefficient(&mut self, coefficient: i8) {
-        phy_pac_mut(self).set_rx_iq_phase_coefficient(coefficient);
+        bb_ops::set_rx_iq_phase_coefficient(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            coefficient,
+        );
     }
 
     fn configure_rx_iq_calibration_mode(&mut self) {
-        phy_pac_mut(self).configure_rx_iq_calibration_mode();
+        bb_ops::configure_rx_iq_calibration_mode(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+        );
     }
 
     fn configure_adc_rate(&mut self, rate: PhyAdcRate) {
-        phy_pac_mut(self).configure_adc_rate(rate);
+        bb_ops::configure_adc_rate(&mut phy_blocks_mut(self).phy_baseband_config_oracle, rate);
     }
 
     fn set_power_detector_tone_armed(&mut self, armed: bool) {
-        phy_pac_mut(self).set_power_detector_tone_armed(armed);
+        bb_ops::set_power_detector_tone_armed(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            armed,
+        );
     }
 
     fn stop_power_detector_tone(&mut self) {
-        phy_pac_mut(self).stop_power_detector_tone();
+        bb_ops::stop_power_detector_tone(&mut phy_blocks_mut(self).phy_baseband_config_oracle);
     }
 
     fn trigger_tx_dc_measurement(&mut self) {
-        phy_pac_mut(self).trigger_tx_dc_measurement();
+        bb_ops::trigger_tx_dc_measurement(&mut phy_blocks_mut(self).phy_baseband_config_oracle);
     }
 
     fn tx_dc_measurement_is_ready(&mut self) -> bool {
-        phy_pac_mut(self).tx_dc_measurement_is_ready()
+        bb_ops::tx_dc_measurement_is_ready(&phy_blocks(self).phy_baseband_config_oracle)
     }
 
     fn sample_tx_dc_comparators(&mut self) -> [bool; 2] {
-        phy_pac_mut(self).sample_tx_dc_comparators()
+        bb_ops::sample_tx_dc_comparators(&phy_blocks(self).phy_baseband_config_oracle)
     }
 
     fn clear_tx_dc_measurement(&mut self) {
-        phy_pac_mut(self).clear_tx_dc_measurement();
+        bb_ops::clear_tx_dc_measurement(&mut phy_blocks_mut(self).phy_baseband_config_oracle);
     }
 
     fn open_frontend_baseband_internal_clocks(&mut self) {
-        phy_pac_mut(self).open_frontend_baseband_internal_clocks();
+        crate::phy::clock::ops::open_frontend_baseband_internal_clocks(
+            &mut phy_blocks_mut(self).phy_clock_oracle,
+        );
     }
 
     fn set_rf_circuit_power(&mut self, enabled: bool) {
@@ -373,6 +423,18 @@ pub(crate) fn phy_pac(access: &(impl SharedPhyAccess + ?Sized)) -> &RadioPhyRegi
 
 pub(crate) fn phy_pac_mut(access: &mut (impl SharedPhyAccess + ?Sized)) -> &mut RadioPhyRegisters {
     sealed::SharedPhyAccess::parts_mut(access).0
+}
+
+/// The generated blocks of the radio-PHY partition the access holds.
+pub(crate) fn phy_blocks(access: &(impl SharedPhyAccess + ?Sized)) -> &RadioPhyPeripherals {
+    &phy_pac(access).peripherals
+}
+
+/// The generated blocks of the radio-PHY partition the access holds.
+pub(crate) fn phy_blocks_mut(
+    access: &mut (impl SharedPhyAccess + ?Sized),
+) -> &mut RadioPhyPeripherals {
+    &mut phy_pac_mut(access).peripherals
 }
 
 pub(crate) fn phy_parts_mut(
