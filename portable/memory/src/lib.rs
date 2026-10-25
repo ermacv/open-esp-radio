@@ -1,5 +1,6 @@
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![deny(clippy::unwrap_used, clippy::todo, clippy::unimplemented)]
 
 //! Audited storage primitives for radio pipelines.
 //!

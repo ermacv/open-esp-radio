@@ -93,6 +93,10 @@ impl<Id: SlotIdentity + 'static, S: SlotOwner<Id> + 'static> StaticPortSlot<Id, 
     unsafe_code,
     reason = "the declaration establishes unique static placement"
 )]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the unique static claim constructs only invariant PhantomData in a zero-sized SlotClaim"
+)]
 pub unsafe fn static_claim<Declaration>() -> SlotClaim<StaticId<Declaration>> {
     // SAFETY: SlotClaim is repr(C) with only invariant PhantomData, hence its
     // representation is zero sized and contains no invalid bit patterns. The

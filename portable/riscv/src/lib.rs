@@ -1,5 +1,15 @@
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
 
 //! Architectural RISC-V constants that firmware and analysis share: CSR
 //! numbers and the fields of the CSRs this repository programs or decodes.

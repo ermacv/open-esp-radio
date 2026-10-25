@@ -1,5 +1,11 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing
+)]
 
 //! The ESP32-S31 radio system: one actor that owns the shared RF front-end.
 //!

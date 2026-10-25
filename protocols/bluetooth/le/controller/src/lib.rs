@@ -1,5 +1,11 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented
+)]
 
 //! Portable Bluetooth LE Controller services and pure protocol pieces.
 //! No transport, executor, clock implementation, scheduler or hardware is owned here.

@@ -1,3 +1,10 @@
+#![deny(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented
+)]
 //! Chip-neutral shared modem clock reference-count planner.
 //!
 //! Ported from ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`

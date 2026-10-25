@@ -1,5 +1,13 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing
+)]
 
 //! The ESP32-S31 binding of the Espressif coexistence policy.
 //!

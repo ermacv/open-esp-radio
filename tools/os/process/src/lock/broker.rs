@@ -335,6 +335,10 @@ unsafe fn serve(descriptors: [i32; 5], token: &[u8; TOKEN_BYTES], owner_pid: i32
                     tv_sec: 0,
                     tv_nsec: 100_000_000,
                 };
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "the libc output structure accepts all-zero initialization before the syscall"
+                )]
                 let mut remaining: libc::timespec = std::mem::zeroed();
                 while libc::nanosleep(&delay, &mut remaining) != 0
                     && *libc::__errno_location() == libc::EINTR
@@ -359,6 +363,10 @@ unsafe fn serve(descriptors: [i32; 5], token: &[u8; TOKEN_BYTES], owner_pid: i32
                 owner_alive = false;
                 libc::close(5);
             }
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "the libc output structure accepts all-zero initialization before the syscall"
+            )]
             let mut clock: libc::timespec = std::mem::zeroed();
             libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut clock);
             let now = clock.tv_sec * 1000 + clock.tv_nsec / 1_000_000;
@@ -513,6 +521,10 @@ unsafe fn serve(descriptors: [i32; 5], token: &[u8; TOKEN_BYTES], owner_pid: i32
                     libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
                 );
                 if fd >= 0 {
+                    #[expect(
+                        clippy::disallowed_methods,
+                        reason = "the libc output structure accepts all-zero initialization before the syscall"
+                    )]
                     let mut peer: libc::ucred = std::mem::zeroed();
                     let mut length = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
                     if libc::getsockopt(

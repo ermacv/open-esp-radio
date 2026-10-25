@@ -381,6 +381,10 @@ fn run_step(step: Step, last_rx: &mut Option<usize>) {
                 record::set_input(TX_ABORT, u64::from(tx_abort));
                 let (handler, argument) = record::interrupt_handler()
                     .expect("the driver must allocate its interrupt before one is delivered");
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "the pinned C driver registers this exact interrupt callback ABI"
+                )]
                 let handler = core::mem::transmute::<usize, extern "C" fn(*mut c_void)>(handler);
                 handler(argument as *mut c_void);
             }

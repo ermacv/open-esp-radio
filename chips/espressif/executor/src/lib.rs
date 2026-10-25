@@ -1,6 +1,12 @@
 #![no_std]
 #![cfg_attr(test, feature(type_alias_impl_trait))]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented
+)]
 
 //! Scheduler-free static task executor and time driver for Espressif
 //! staged-boot applications. The reset root supplies owned HAL blocks;

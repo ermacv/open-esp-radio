@@ -1,5 +1,13 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing
+)]
 
 //! Which channels a country permits, and at what power.
 //!

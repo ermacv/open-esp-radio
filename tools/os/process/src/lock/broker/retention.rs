@@ -158,6 +158,10 @@ impl Cleanup {
             // SAFETY: received descriptors are live; identity is valid stack
             // storage. Framework pins send their own pidfd and /proc directory.
             let accepted = unsafe {
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "the libc output structure accepts all-zero initialization before the syscall"
+                )]
                 let mut identity: libc::stat = std::mem::zeroed();
                 let valid = owner_alive
                     && libc::fstat(message.descriptors[1], &mut identity) == 0
@@ -207,6 +211,10 @@ impl Cleanup {
                 );
             }
         }
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "the libc output structure accepts all-zero initialization before the syscall"
+        )]
         // SAFETY: stat's fields accept zero and owner_identity is the retained
         // /proc directory of the original owner, even after its PID is recycled.
         let mut owner: libc::stat = unsafe { std::mem::zeroed() };
@@ -230,6 +238,10 @@ impl Cleanup {
             let Some(process) = Directory::open(directory, name) else {
                 continue;
             };
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "the libc output structure accepts all-zero initialization before the syscall"
+            )]
             // SAFETY: stat's integer fields accept zero; fstat writes only
             // valid local storage for the live process directory descriptor.
             let mut identity: libc::stat = unsafe { std::mem::zeroed() };
@@ -300,6 +312,10 @@ fn holder_pidfd(directory: i32, name: &CStr, pid: i32, identity: &libc::stat) ->
     let matches = Directory::open(directory, name).is_some_and(|current| {
         // SAFETY: stat accepts zero and fstat writes only valid stack storage.
         unsafe {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "the libc output structure accepts all-zero initialization before the syscall"
+            )]
             let mut stat: libc::stat = std::mem::zeroed();
             libc::fstat(current.fd, &mut stat) == 0
                 && stat.st_dev == identity.st_dev

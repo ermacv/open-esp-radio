@@ -1,5 +1,11 @@
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented
+)]
 
 //! Staged-boot layout contract of the Espressif chips.
 //!

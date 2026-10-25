@@ -1,5 +1,11 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::todo,
+    clippy::unimplemented
+)]
 
 //! Hardware-independent Bluetooth Low Energy Link Layer building blocks.
 //!

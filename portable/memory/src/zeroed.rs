@@ -26,6 +26,10 @@ pub use bytemuck::Zeroable;
     unsafe_code,
     reason = "Zeroable guarantees the zero bit pattern is valid"
 )]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "Zeroable proves all-zero bytes valid for this const initializer"
+)]
 pub const fn zeroed<T: Zeroable>() -> T {
     // SAFETY: `T: Zeroable` guarantees that all-zero bytes are a valid `T`.
     unsafe { core::mem::zeroed() }

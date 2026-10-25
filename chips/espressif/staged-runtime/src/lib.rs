@@ -7,6 +7,14 @@
     )
 )]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing
+)]
 //! Stage-two entry, relocation, traps and interrupt-stack ownership of the
 //! Espressif staged boot.
 //!

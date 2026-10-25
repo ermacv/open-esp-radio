@@ -1,3 +1,11 @@
+#![deny(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing
+)]
 //! Each image's static table of its interrupt bindings: for every bound
 //! peripheral interrupt part its source, CPU line, level, hart, handler and
 //! handler class, declared once with [`interrupt_table!`].

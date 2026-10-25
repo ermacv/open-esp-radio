@@ -1,5 +1,14 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing
+)]
 
 //! Typed boot diagnostics: a transport-independent record codec and an
 //! optional synchronous line frame. HIL puts the codec bytes in its own

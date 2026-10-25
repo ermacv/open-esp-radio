@@ -1,3 +1,11 @@
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing
+)]
 //! Chip-neutral analog register bus of the Espressif PHY.
 //!
 //! The PHY reaches its analog blocks (PLLs, bias, regulators, the RF front

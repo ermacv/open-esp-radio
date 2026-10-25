@@ -1,3 +1,12 @@
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing
+)]
 //! Espressif bootstrap sequences over a chip's typed register traits.
 //!
 //! Before an executor exists there is nothing to yield to: hardware

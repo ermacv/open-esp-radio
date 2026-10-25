@@ -1,5 +1,14 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing
+)]
 
 //! The USB Serial/JTAG console of Espressif chips, over the registers the
 //! chip HAL lends ([`EndpointRegisters`], [`InterruptRegisters`]).
