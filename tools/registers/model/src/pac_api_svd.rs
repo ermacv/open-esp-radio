@@ -496,10 +496,11 @@ impl PacApiPack {
                 source_mask |= field_mask << projection.source_bit_offset;
             }
             let maximum_input = operation.value.unwrap_or_else(|| {
-                let domain_name = operation
-                    .domain
-                    .as_deref()
-                    .expect("pack validation requires a field-or value or domain");
+                // Without a domain the input is a pointer field's image,
+                // which holds only the field's bits.
+                let Some(domain_name) = operation.domain.as_deref() else {
+                    return source_mask;
+                };
                 self.bounded_domains
                     .iter()
                     .find(|candidate| candidate.name == domain_name)
@@ -557,10 +558,11 @@ impl PacApiPack {
                 transform.retain_mask
             } else {
                 operation.value.unwrap_or_else(|| {
-                    let domain_name = operation
-                        .domain
-                        .as_deref()
-                        .expect("pack validation requires a field-replace value or domain");
+                    // Without a domain the input is a pointer field's image,
+                    // which holds only the field's bits.
+                    let Some(domain_name) = operation.domain.as_deref() else {
+                        return source_mask;
+                    };
                     self.bounded_domains
                     .iter()
                     .find(|candidate| candidate.name == domain_name)

@@ -1234,9 +1234,21 @@ impl<'a> TypedBlock<'a> {
                 "typed peripheral {name} has no register"
             )));
         }
-        if let Some((operation, register)) = policy
-            .typed_register_operations(name)
-            .find(|(_, register)| cleared.contains(register))
+        // A reviewed fixed image is the one other store of a clear register:
+        // the vendor's acknowledgement of named sources, never a writer of
+        // arbitrary bits.
+        let fixed_images = policy
+            .fixed_register_images
+            .iter()
+            .filter(|image| image.peripheral == name)
+            .map(|image| image.name.as_str())
+            .collect::<BTreeSet<_>>();
+        if let Some((operation, register)) =
+            policy
+                .typed_register_operations(name)
+                .find(|(operation, register)| {
+                    cleared.contains(register) && !fixed_images.contains(operation)
+                })
         {
             return Err(Error::message(format!(
                 "PAC API {operation:?} writes {name}.{register}, which only its snapshot's acknowledgement writes"
@@ -2528,7 +2540,8 @@ impl<'a> TypedBlock<'a> {
             .filter(|(_, operation)| operation.peripheral == name && view.owns(&operation.register))
         {
             let register = reached(&operation.register)?;
-            let (parameter, input, image) = projected_image(&register, operation, &flag_or_enum)?;
+            let (parameter, input, image) =
+                projected_image(&register, operation, &flag_or_enum, !clear)?;
             let update = if clear {
                 format!("bits & !({image})")
             } else {
@@ -2574,7 +2587,8 @@ impl<'a> TypedBlock<'a> {
                 exposure: operation.exposure,
                 sources: operation.sources.clone(),
             };
-            let (parameter, input, image) = projected_image(&register, &projection, &flag_or_enum)?;
+            let (parameter, input, image) =
+                projected_image(&register, &projection, &flag_or_enum, true)?;
             let mask = operation
                 .fields
                 .iter()
@@ -2659,6 +2673,9 @@ impl<'a> TypedBlock<'a> {
                 let _ = write!(parameters, "{argument}: {parameter}, ");
                 image.push(if selected.offset == 0 {
                     bits
+                } else if operation.fields.len() == 1 {
+                    // The one term is the whole argument: no parentheses.
+                    format!("{bits} << {}", selected.offset)
                 } else {
                     format!("({bits} << {})", selected.offset)
                 });
@@ -2729,10 +2746,33 @@ fn projected_image(
     register: &TypedRegister<'_>,
     operation: &FieldOrModify,
     flag_or_enum: &BTreeSet<&str>,
+    takes_image: bool,
 ) -> Result<(String, String, String)> {
+    // A policy pointer field is set only from its image of a typed DMA
+    // reference, which the transaction then takes, or to zero.
+    if let ([projection], None, None) = (
+        operation.fields.as_slice(),
+        &operation.domain,
+        operation.value,
+    ) {
+        let selected = field(register, &projection.field)?;
+        if takes_image && selected.image.is_some() && projection.source_bit_offset == 0 {
+            let bits = if selected.offset == 0 {
+                "value.0".to_owned()
+            } else {
+                format!("(value.0 << {})", selected.offset)
+            };
+            return Ok((
+                format!("value: {}::{}", register.method, selected.image_type()),
+                String::new(),
+                bits,
+            ));
+        }
+    }
     for projection in &operation.fields {
         let selected = field(register, &projection.field)?;
-        if selected.pointer || selected.image.is_some() || selected.zero {
+        let cleared = selected.image.is_some() && operation.value == Some(0);
+        if !cleared && (selected.pointer || selected.image.is_some() || selected.zero) {
             return Err(Error::message(format!(
                 "typed field transaction {:?} changes {}, which only a typed DMA reference or zero sets",
                 operation.name, projection.field

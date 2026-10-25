@@ -1048,6 +1048,66 @@ fn only_a_typed_reference_changes_a_pointer_field() {
     refused(&pack, &pointed(), "only a typed DMA reference or zero sets");
 }
 
+fn pointer_projection(name: &str, value: Option<u32>) -> crate::FieldOrModify {
+    crate::FieldOrModify {
+        name: name.to_owned(),
+        peripheral: "RADIO".to_owned(),
+        register: "HEAD".to_owned(),
+        fields: vec![crate::pac_api::FieldOrProjection {
+            field: "ADDRESS_LOW".to_owned(),
+            source_bit_offset: 0,
+        }],
+        domain: None,
+        value,
+        exposure: crate::PacApiExposure::Facade,
+        sources: vec!["SOURCE".to_owned()],
+    }
+}
+
+#[test]
+fn a_pointer_field_transaction_takes_the_image_or_zero() {
+    let mut pack = pointer_pack(Some(crate::RegisterPointerEncoding::BleCompressed));
+    pack.field_or_modifies
+        .push(pointer_projection("or_head", None));
+    pack.field_clear_modifies
+        .push(pointer_projection("clear_head", Some(0xf_ffff)));
+    pack.field_replace_modifies
+        .push(crate::pac_api::FieldReplaceModify {
+            name: "replace_head".to_owned(),
+            peripheral: "RADIO".to_owned(),
+            register: "HEAD".to_owned(),
+            fields: vec![crate::pac_api::FieldOrProjection {
+                field: "ADDRESS_LOW".to_owned(),
+                source_bit_offset: 0,
+            }],
+            domain: None,
+            value: None,
+            input_transform: None,
+            exposure: crate::PacApiExposure::Facade,
+            sources: vec!["SOURCE".to_owned()],
+        });
+    // A clear by AND-NOT of the field's bits is no zero the image grants.
+    refused(&pack, &pointed(), "only a typed DMA reference or zero sets");
+
+    pack.field_clear_modifies.clear();
+    let mut zero = pack.field_replace_modifies[0].clone();
+    zero.name = "zero_head".to_owned();
+    zero.value = Some(0);
+    pack.field_replace_modifies.push(zero);
+    let rust = pack
+        .render_typed_rust(&svd(&pointed()), &Default::default())
+        .expect("the image and zero transactions render");
+    assert!(
+        rust.contains("pub fn or_head(&mut self, value: head::AddressLowImage)"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("pub fn replace_head(&mut self, value: head::AddressLowImage)"),
+        "{rust}"
+    );
+    assert!(rust.contains("pub fn zero_head(&mut self"), "{rust}");
+}
+
 /// `STATUS` (read-only) and its write-only, write-one-to-clear `CLEAR`.
 fn events(status_fields: &str) -> String {
     register("STATUS", 0, "read-only", "", status_fields)
@@ -1090,19 +1150,38 @@ fn a_snapshot_acknowledges_through_its_clear_register_alone() {
     assert!(!rust.contains("pub fn write_clear("), "{rust}");
 
     let mut pack = snapshot_pack();
-    pack.fixed_register_images.push(FixedRegisterImage {
-        whole_word: false,
-        name: "clear_everything".to_owned(),
-        peripheral: "RADIO".to_owned(),
-        register: "CLEAR".to_owned(),
-        value: 0x3,
-        sources: vec!["SOURCE".to_owned()],
-    });
+    pack.zero_based_field_writes
+        .push(crate::ZeroBasedFieldWrite {
+            name: "clear_done".to_owned(),
+            peripheral: "RADIO".to_owned(),
+            register: "CLEAR".to_owned(),
+            fields: vec!["DONE".to_owned()],
+            sources: vec!["SOURCE".to_owned()],
+        });
     refused(
         &pack,
         &events(&field("DONE", 0, 1, "")),
         "only its snapshot's acknowledgement writes",
     );
+}
+
+#[test]
+fn a_reviewed_fixed_image_is_the_one_other_store_of_a_clear_register() {
+    let mut pack = snapshot_pack();
+    pack.fixed_register_images.push(FixedRegisterImage {
+        whole_word: false,
+        name: "clear_stale_done".to_owned(),
+        peripheral: "RADIO".to_owned(),
+        register: "CLEAR".to_owned(),
+        value: 0x1,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    let rust = pack
+        .render_typed_rust(&svd(&events(&field("DONE", 0, 1, ""))), &Default::default())
+        .expect("the fixed image on the clear register renders");
+    assert!(rust.contains("pub fn clear_stale_done(&mut self"), "{rust}");
+    assert!(rust.contains("pub fn acknowledge_events("), "{rust}");
+    assert!(!rust.contains("pub fn write_clear("), "{rust}");
 }
 
 #[test]
