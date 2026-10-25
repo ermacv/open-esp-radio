@@ -1,11 +1,15 @@
 //! Owned access to the shared ESP32-S31 PHY table-memory aperture.
 
-pub use crate::types::{
-    PbusMemoryGroupBoundary, PhyForcedPowerIndex, PhyGainMemoryEntry, PhyMemoryError,
-};
+pub use crate::types::PhyForcedPowerIndex;
 #[cfg(target_arch = "riscv32")]
-use crate::{owner::SharedPhyAccess, phy_pac, phy_pac_mut};
-pub use oer_esp32s31_pac::{pbus_memory_parameter_002_data, pbus_memory_parameter_014_data};
+use crate::{owner::SharedPhyAccess, phy_blocks, phy_blocks_mut};
+
+pub mod ops;
+
+pub use ops::{
+    PbusMemoryGroupBoundary, PhyGainMemoryEntry, PhyMemoryError, pbus_memory_parameter_002_data,
+    pbus_memory_parameter_014_data,
+};
 
 /// Publish one entry of the PBUS-memory table.
 ///
@@ -20,8 +24,12 @@ pub fn program_pbus_memory_entry(
     data: u32,
     command: u16,
 ) -> Result<(), PhyMemoryError> {
-    let registers = phy_pac_mut(registers);
-    registers.program_pbus_memory_entry(boundary, data, command)
+    ops::program_pbus_memory_entry(
+        &mut phy_blocks_mut(registers).phy_memory,
+        boundary,
+        data,
+        command,
+    )
 }
 
 /// Restore one retained PBUS-memory group boundary without rewriting the
@@ -36,8 +44,7 @@ pub fn configure_pbus_memory_group_boundary(
     registers: &mut impl SharedPhyAccess,
     boundary: PbusMemoryGroupBoundary,
 ) -> Result<(), PhyMemoryError> {
-    let registers = phy_pac_mut(registers);
-    registers.configure_pbus_memory_group_boundary(boundary)
+    ops::configure_pbus_memory_group_boundary(&mut phy_blocks_mut(registers).phy_memory, boundary)
 }
 
 /// Sample the shared CFR/gain-memory base index once.
@@ -48,8 +55,7 @@ pub fn configure_pbus_memory_group_boundary(
 /// publishing any table entry.
 #[cfg(target_arch = "riscv32")]
 pub fn read_table_memory_base_index(registers: &impl SharedPhyAccess) -> u8 {
-    let registers = phy_pac(registers);
-    registers.read_table_memory_base_index()
+    ops::read_table_memory_base_index(&phy_blocks(registers).phy_clock_oracle)
 }
 
 /// Configure the shared CFR/gain-memory base index.
@@ -59,8 +65,7 @@ pub fn read_table_memory_base_index(registers: &impl SharedPhyAccess) -> u8 {
 /// `0xa0`. Complete S31 CFR and gain publishers later sample that same byte.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_table_memory_base_index(registers: &mut impl SharedPhyAccess, index: u8) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_table_memory_base_index(index);
+    ops::configure_table_memory_base_index(&mut phy_blocks_mut(registers).phy_clock_oracle, index);
 }
 
 /// Publish one TX-CFR memory entry and its complete commit pulse.
@@ -70,8 +75,7 @@ pub fn configure_table_memory_base_index(registers: &mut impl SharedPhyAccess, i
 /// fresh-read set and clear RMW operations on the commit bit.
 #[cfg(target_arch = "riscv32")]
 pub fn program_tx_cfr_entry(registers: &mut impl SharedPhyAccess, data: u32, index: u8) {
-    let registers = phy_pac_mut(registers);
-    registers.program_tx_cfr_entry(data, index);
+    ops::program_tx_cfr_entry(&mut phy_blocks_mut(registers).phy_memory, data, index);
 }
 
 /// Publish one opaque PAC-encoded gain-memory entry.
@@ -82,6 +86,5 @@ pub fn program_tx_cfr_entry(registers: &mut impl SharedPhyAccess, data: u32, ind
 /// upper fields in one final RMW.
 #[cfg(target_arch = "riscv32")]
 pub fn program_gain_memory_entry(registers: &mut impl SharedPhyAccess, entry: PhyGainMemoryEntry) {
-    let registers = phy_pac_mut(registers);
-    registers.program_gain_memory_entry(entry);
+    ops::program_gain_memory_entry(&mut phy_blocks_mut(registers).phy_memory, entry);
 }

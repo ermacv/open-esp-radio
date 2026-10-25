@@ -9,7 +9,10 @@
 //! slot is occupied.
 
 use super::registration::{PhyRegistration, PhyRegistrationEpoch};
-use oer_esp32s31_pac::{RxDcoControlField, TxDcPwdetFields, TxIqToneControlFields};
+use crate::phy::{
+    baseband::{TxDcPwdetFields, TxIqToneControlFields},
+    rx_dco::RxDcoControlField,
+};
 
 /// Preparing TX-DC PWDET was rejected before any register access.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

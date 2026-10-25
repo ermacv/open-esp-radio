@@ -13,7 +13,7 @@
 
 use crate::{
     analog::{
-        i2c::{Address, Field, fields, registers},
+        i2c::{Address, Field, analog_i2c},
         pbus::PhyPbusForceTest,
         rfpll::{
             RfpllFrequencyAction, RfpllFrequencyCompletion, RfpllFrequencyFailure,
@@ -30,8 +30,10 @@ use crate::{
     },
 };
 
-const EXTERNAL_DCODE_0: Address = fields::RFPLL_EXTERNAL_DCODE_0.address();
-const EXTERNAL_DCODE_1: Address = fields::RFPLL_EXTERNAL_DCODE_1.address();
+const EXTERNAL_DCODE_0: Address =
+    analog_i2c::rfpll::dcode_0_source_select::EXTERNAL_DCODE_0.address();
+const EXTERNAL_DCODE_1: Address =
+    analog_i2c::rfpll::dcode_1_source_select::EXTERNAL_DCODE_1.address();
 
 const fn channel_to_frequency(channel: u16) -> u16 {
     if channel > 14 {
@@ -528,17 +530,17 @@ impl PhyRxIqAdjustedTxTransition {
 
     const fn field(external: bool, second: bool) -> Field {
         match (external, second) {
-            (false, false) => fields::RFPLL_INTERNAL_DCODE_0,
-            (false, true) => fields::RFPLL_INTERNAL_DCODE_1,
-            (true, false) => fields::RFPLL_EXTERNAL_DCODE_0,
-            (true, true) => fields::RFPLL_EXTERNAL_DCODE_1,
+            (false, false) => analog_i2c::rfpll::internal_dcode_0::INTERNAL_DCODE_0,
+            (false, true) => analog_i2c::rfpll::internal_dcode_1::INTERNAL_DCODE_1,
+            (true, false) => analog_i2c::rfpll::dcode_0_source_select::EXTERNAL_DCODE_0,
+            (true, true) => analog_i2c::rfpll::dcode_1_source_select::EXTERNAL_DCODE_1,
         }
     }
 
     pub fn action(self) -> PhyRxIqAdjustedTxAction {
         match self.step {
             AdjustedTxStep::ReadMode => PhyRxIqAdjustedTxAction::ReadI2cMasked {
-                field: fields::RFPLL_DCODE_0_SOURCE_SELECT,
+                field: analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
             },
             AdjustedTxStep::ReadFirst { external } => PhyRxIqAdjustedTxAction::ReadI2cMasked {
                 field: Self::field(external, false),
@@ -564,7 +566,7 @@ impl PhyRxIqAdjustedTxTransition {
             (
                 AdjustedTxStep::ReadMode,
                 PhyRxIqAdjustedTxCompletion::I2cMaskedRead {
-                    field: fields::RFPLL_DCODE_0_SOURCE_SELECT,
+                    field: analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
                     value,
                 },
             ) => {
@@ -1795,7 +1797,7 @@ enum InitStep {
     Failed(PhyRxIqInitFailure),
 }
 
-const RXIQ_TX_CAP_ADDRESS: Address = registers::TXRF_TX_CAPACITOR_LOW;
+const RXIQ_TX_CAP_ADDRESS: Address = analog_i2c::txrf::tx_capacitor_low::ADDRESS;
 
 const fn root_rx_on(index: u8, pbus_rx_path_value: u8) -> PhyPbusForceTest {
     match index {

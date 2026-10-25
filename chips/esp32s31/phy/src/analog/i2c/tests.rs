@@ -1,3 +1,5 @@
+use crate::analog::i2c::analog_i2c;
+
 use super::{
     AdcRateAction, AdcRateCompletion, FilterDcapAction, FilterDcapCompletion, FilterDcapParameters,
     FilterDcapTransition, FilterDcapTransitionError, I2cInit1Action, I2cInit1Completion,
@@ -163,9 +165,9 @@ fn complete_rfpll(
             RfpllFrequencyCompletion::ByteWrite { address }
         }
         RfpllFrequencyAction::ReadMasked { field } => {
-            let value = if field == fields::RFPLL_LOCK_STATUS {
+            let value = if field == analog_i2c::rfpll::lock_status::LOCK_STATUS {
                 1
-            } else if field == fields::RFPLL_CAPACITOR_SEARCH_STATUS {
+            } else if field == analog_i2c::rfpll::capacitor_search_status::CAPACITOR_SEARCH_STATUS {
                 let value = if (*cap_status_reads).is_multiple_of(3) {
                     0
                 } else {
@@ -179,7 +181,8 @@ fn complete_rfpll(
             RfpllFrequencyCompletion::MaskedRead { field, value }
         }
         RfpllFrequencyAction::ReadByte { address } => {
-            let value = if address == crate::analog::i2c::registers::RFPLL_CALIBRATED_CAPACITOR_LOW
+            let value = if address
+                == crate::analog::i2c::analog_i2c::rfpll::calibrated_capacitor_low::ADDRESS
             {
                 100
             } else {
@@ -433,9 +436,13 @@ fn drive_warm_channel_frequency(transition: &mut PhyRfInitPrefixTransition) {
                         PhyFrequencyI2cCompletion::MaskedWrite { field }
                     }
                     PhyFrequencyI2cAction::ReadByte { address } => {
-                        let value = if address == fields::RFPLL_CAPACITOR_SEARCH_ENABLE.address() {
+                        let value = if address
+                            == analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE
+                                .address()
+                        {
                             0x5a
-                        } else if address == fields::SDM_RFPLL_SDM_UPDATE_ENABLE.address() {
+                        } else if address == analog_i2c::sdm::update_enable::UPDATE_ENABLE.address()
+                        {
                             0x8f
                         } else {
                             0x10
@@ -609,7 +616,7 @@ fn rc_calibration_plan_has_only_explicit_async_edges() {
     assert!(matches!(
         transition.action(),
         RcCalibrationAction::ReadMasked {
-            field: fields::TXRF_RC_CALIBRATION_RESULT,
+            field: analog_i2c::txrf::rc_calibration_result::RC_CALIBRATION_RESULT,
         }
     ));
     transition
@@ -630,7 +637,7 @@ fn rc_calibration_plan_has_only_explicit_async_edges() {
 
 #[test]
 fn masked_i2c_write_owns_read_transform_and_write_edges() {
-    let field = fields::TXRF_WIFI_TX_TEMPERATURE_TRACKING_0;
+    let field = analog_i2c::txrf::wifi_tx_temperature_tracking_0::WIFI_TX_TEMPERATURE_TRACKING_0;
     let address = field.address();
     let mut transition = crate::analog::i2c::field_write(field, 3);
     assert_eq!(
@@ -696,9 +703,18 @@ fn i2c_init1_exposes_one_semantic_operation() {
 
 fn complete_rfpll_initial_writes(transition: &mut RfpllChargePumpTransition) {
     for (field, value) in [
-        (fields::RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE, 0),
-        (fields::RFPLL_CHARGE_PUMP_CALIBRATION_PULSE, 0),
-        (fields::RFPLL_CHARGE_PUMP_CALIBRATION_PULSE, 1),
+        (
+            analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_ENABLE,
+            0,
+        ),
+        (
+            analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_PULSE,
+            0,
+        ),
+        (
+            analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_PULSE,
+            1,
+        ),
     ] {
         assert_eq!(
             transition.action(),
@@ -721,7 +737,7 @@ fn rfpll_charge_pump_lock_path_uses_async_delay_and_owned_result() {
     assert_eq!(
         transition.action(),
         RfpllChargePumpAction::ReadMasked {
-            field: fields::RFPLL_CHARGE_PUMP_LOCK_STATUS,
+            field: analog_i2c::rfpll::charge_pump_lock_status::CHARGE_PUMP_LOCK_STATUS,
         }
     );
     transition
@@ -730,7 +746,7 @@ fn rfpll_charge_pump_lock_path_uses_async_delay_and_owned_result() {
     assert_eq!(
         transition.action(),
         RfpllChargePumpAction::ReadMasked {
-            field: fields::RFPLL_CHARGE_PUMP_RESULT,
+            field: analog_i2c::rfpll::charge_pump_lock_status::CHARGE_PUMP_RESULT,
         }
     );
     transition
@@ -739,7 +755,8 @@ fn rfpll_charge_pump_lock_path_uses_async_delay_and_owned_result() {
     assert_eq!(
         transition.action(),
         RfpllChargePumpAction::WriteMasked {
-            field: fields::RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE,
+            field:
+                analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_ENABLE,
             value: 1,
         }
     );
@@ -749,14 +766,15 @@ fn rfpll_charge_pump_lock_path_uses_async_delay_and_owned_result() {
     assert_eq!(
         transition.action(),
         RfpllChargePumpAction::WriteMasked {
-            field: fields::RFPLL_CHARGE_PUMP_VALUE,
+            field: analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE,
             value: 23,
         }
     );
     transition
         .advance(RfpllChargePumpCompletion::Write)
         .unwrap();
-    let final_address = fields::RFPLL_CHARGE_PUMP_VALUE.address();
+    let final_address =
+        analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE.address();
     assert_eq!(
         transition.action(),
         RfpllChargePumpAction::ReadByte {
@@ -797,7 +815,7 @@ fn rfpll_charge_pump_final_miss_is_data_not_a_blocking_print() {
     assert_eq!(
         transition.action(),
         RfpllChargePumpAction::ReadMasked {
-            field: fields::RFPLL_CHARGE_PUMP_RESULT,
+            field: analog_i2c::rfpll::charge_pump_lock_status::CHARGE_PUMP_RESULT,
         }
     );
     transition
@@ -809,7 +827,8 @@ fn rfpll_charge_pump_final_miss_is_data_not_a_blocking_print() {
     transition
         .advance(RfpllChargePumpCompletion::Write)
         .unwrap();
-    let final_address = fields::RFPLL_CHARGE_PUMP_VALUE.address();
+    let final_address =
+        analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE.address();
     transition
         .advance(RfpllChargePumpCompletion::ReadByte {
             address: final_address,
@@ -1033,19 +1052,19 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
         .unwrap();
     for expected in [
         RcCalibrationAction::WriteMasked {
-            field: fields::ULP_BOD_RC_CALIBRATION_DOUT_PATH_ENABLE,
+            field: analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE,
             value: 1,
         },
         RcCalibrationAction::WriteMasked {
-            field: fields::TXRF_RC_CALIBRATION_ENABLE,
+            field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
             value: 1,
         },
         RcCalibrationAction::WriteMasked {
-            field: fields::TXRF_RC_CALIBRATION_PULSE,
+            field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE,
             value: 0,
         },
         RcCalibrationAction::WriteMasked {
-            field: fields::TXRF_RC_CALIBRATION_PULSE,
+            field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE,
             value: 1,
         },
     ] {
@@ -1071,7 +1090,7 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
     assert_eq!(
         transition.action(),
         PhyRfInitPrefixAction::RcCalibration(RcCalibrationAction::ReadMasked {
-            field: fields::TXRF_RC_CALIBRATION_RESULT,
+            field: analog_i2c::txrf::rc_calibration_result::RC_CALIBRATION_RESULT,
         })
     );
     transition
@@ -1081,11 +1100,11 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
         .unwrap();
     for expected in [
         RcCalibrationAction::WriteMasked {
-            field: fields::ULP_BOD_RC_CALIBRATION_DOUT_PATH_ENABLE,
+            field: analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE,
             value: 0,
         },
         RcCalibrationAction::WriteMasked {
-            field: fields::TXRF_RC_CALIBRATION_ENABLE,
+            field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
             value: 0,
         },
     ] {
@@ -1127,7 +1146,8 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
             FilterDcapCompletion::Configured,
         ))
         .unwrap();
-    let parameter_18e_address = fields::RFPLL_CHARGE_PUMP_VALUE.address();
+    let parameter_18e_address =
+        analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE.address();
     assert_eq!(
         transition.action(),
         PhyRfInitPrefixAction::ReadParameter18e {
@@ -1136,7 +1156,7 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
     );
     assert_eq!(
         transition.advance(PhyRfInitPrefixCompletion::Parameter18eRead {
-            address: fields::RFPLL_CHARGE_PUMP_RESULT.address(),
+            address: analog_i2c::rfpll::charge_pump_lock_status::CHARGE_PUMP_RESULT.address(),
             value: 0x55,
         }),
         Err(PhyRfInitPrefixTransitionError::WrongCompletion)
@@ -1212,7 +1232,8 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
     assert_eq!(
         transition.action(),
         PhyRfInitPrefixAction::ReadMasked69 {
-            field: fields::SARADC_ADC_SAR2_INITIAL_CODE_HIGH_ADDR,
+            field:
+                analog_i2c::saradc::adc_sar2_initial_code_high_addr::ADC_SAR2_INITIAL_CODE_HIGH_ADDR,
         }
     );
     let mut already_initialized = transition;
@@ -1388,7 +1409,7 @@ fn open_i2c_xpd_samples_only_after_deadline_and_i2c_edges() {
     assert_eq!(
         transition.action(),
         OpenI2cXpdAction::ReadSdmSample {
-            address: fields::SDM_RFPLL_SDM_UPDATE_ENABLE.address()
+            address: analog_i2c::sdm::update_enable::UPDATE_ENABLE.address()
         }
     );
 

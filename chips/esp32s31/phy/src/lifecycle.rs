@@ -4,7 +4,7 @@
 //! may execute it only after the last client has been released and every
 //! protocol hardware engine has crossed its stopped boundary.
 
-use crate::analog::i2c::{Address, registers};
+use crate::analog::i2c::{Address, analog_i2c};
 
 /// One complete child call or finite hardware edge in current-vendor
 /// `phy_wakeup_init`.
@@ -188,7 +188,7 @@ pub(crate) const PHY_RF_CLOSE_OPERATIONS: [PhyRfCloseOperation; 13] = [
     PhyRfCloseOperation::ClearBasebandControl,
     PhyRfCloseOperation::SettleOneMicrosecond,
     PhyRfCloseOperation::WriteI2c {
-        address: registers::BBTOP_RF_CLOSE_CONTROL,
+        address: analog_i2c::bbtop::rf_close_control::ADDRESS,
         value: 0x07,
     },
     PhyRfCloseOperation::PowerOffRfCircuits,
@@ -196,11 +196,11 @@ pub(crate) const PHY_RF_CLOSE_OPERATIONS: [PhyRfCloseOperation; 13] = [
     PhyRfCloseOperation::CloseFrontendBasebandClocks,
     PhyRfCloseOperation::EnableBbpllCalibration,
     PhyRfCloseOperation::WriteI2c {
-        address: registers::BIAS_I2C_BIAS_DREG_1P6,
+        address: analog_i2c::bias::i2c_bias_dreg_1p6::ADDRESS,
         value: 0x77,
     },
     PhyRfCloseOperation::WriteI2c {
-        address: registers::BIAS_I2C_BIAS_DREG_1P1_PVT,
+        address: analog_i2c::bias::i2c_bias_dreg_1p1_pvt::ADDRESS,
         value: 0x77,
     },
     PhyRfCloseOperation::ExitCritical,

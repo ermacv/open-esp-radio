@@ -1,3 +1,5 @@
+use crate::analog::i2c::analog_i2c;
+
 use super::*;
 
 const POWER_REQUEST: PhyRxIqEstimatorRequest = PhyRxIqEstimatorRequest {
@@ -114,9 +116,9 @@ fn rfpll_completion(
             RfpllFrequencyCompletion::ByteWrite { address }
         }
         RfpllFrequencyAction::ReadMasked { field } => {
-            let value = if field == fields::RFPLL_LOCK_STATUS {
+            let value = if field == analog_i2c::rfpll::lock_status::LOCK_STATUS {
                 1
-            } else if field == fields::RFPLL_CAPACITOR_SEARCH_STATUS {
+            } else if field == analog_i2c::rfpll::capacitor_search_status::CAPACITOR_SEARCH_STATUS {
                 // Accept the first candidate of each direction, then end the
                 // direction with its two boundary statuses.
                 let status = CAP_STATUSES[usize::from(*cap_status_reads)];
@@ -128,7 +130,7 @@ fn rfpll_completion(
             RfpllFrequencyCompletion::MaskedRead { field, value }
         }
         RfpllFrequencyAction::ReadByte { address } => {
-            let value = if address == registers::RFPLL_CALIBRATED_CAPACITOR_LOW {
+            let value = if address == analog_i2c::rfpll::calibrated_capacitor_low::ADDRESS {
                 0xc8
             } else {
                 4
@@ -590,7 +592,7 @@ fn external_lowering_covers_every_rxiq_operation_layer() {
     ));
     assert!(matches!(
         PhyRxIqGainExternalBinding::lower(PhyRxIqGainAction::WriteI2c {
-            address: fields::RFPLL_INTERNAL_DCODE_0.address(),
+            address: analog_i2c::rfpll::internal_dcode_0::INTERNAL_DCODE_0.address(),
             value: 1,
         }),
         Ok(PhyRxIqGainExternalBinding::I2c(_))
@@ -598,7 +600,7 @@ fn external_lowering_covers_every_rxiq_operation_layer() {
     assert!(matches!(
         PhyRxIqGainExternalBinding::lower(PhyRxIqGainAction::AdjustTx(
             PhyRxIqAdjustedTxAction::ReadI2cMasked {
-                field: fields::RFPLL_INTERNAL_DCODE_0,
+                field: analog_i2c::rfpll::internal_dcode_0::INTERNAL_DCODE_0,
             }
         )),
         Ok(PhyRxIqGainExternalBinding::AdjustTx(_))
@@ -617,7 +619,7 @@ fn external_lowering_covers_every_rxiq_operation_layer() {
     ));
     assert!(matches!(
         PhyRxIqInitExternalBinding::lower(PhyRxIqInitAction::WriteTxCap {
-            address: fields::RFPLL_INTERNAL_DCODE_0.address(),
+            address: analog_i2c::rfpll::internal_dcode_0::INTERNAL_DCODE_0.address(),
             value: 1,
         }),
         Ok(PhyRxIqInitExternalBinding::I2c(_))

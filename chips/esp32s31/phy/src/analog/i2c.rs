@@ -34,9 +34,9 @@ use oer_esp32s31_hal::owner::SharedPhyAccess;
 
 use oer_esp32s31_hal::phy::i2c::PhyAdcRate;
 
-pub(crate) use oer_esp32s31_hal::phy::i2c::{Address, Field, fields, registers};
+pub(crate) use oer_esp32s31_hal::phy::i2c::{Address, Field, analog_i2c};
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::phy::{analog_i2c, i2c as hal_phy_i2c};
+use oer_esp32s31_hal::phy::{analog_i2c as analog_i2c_power, i2c as hal_phy_i2c};
 
 const PHY_I2C_SDM_STABLE_VALUE: u8 = 0x5b;
 const PHY_I2C_SDM_DEADLINE_CYCLES: u32 = 9_999;
@@ -66,16 +66,19 @@ pub fn configure_i2c_master_command_memory(
 
 /// Execute the current-vendor 22-pair retained-wake analog initialization.
 #[cfg(target_arch = "riscv32")]
-pub fn configure_i2c_initialization_stage_two(
+pub async fn configure_i2c_initialization_stage_two(
     registers: &mut impl SharedPhyAccess,
     parameter: PhyRfInitParameterSnapshot,
     maximum_observations: u32,
+    wait: impl AsyncFnMut(),
 ) -> Result<(), hal_phy_i2c::PhyI2cInitializationStageTwoError> {
     hal_phy_i2c::configure_initialization_stage_two(
         registers,
         parameter.pac_command_memory_inputs(),
         maximum_observations,
+        wait,
     )
+    .await
 }
 
 /// Publish one complete-register PHY-I2C read without waiting for completion.
@@ -162,7 +165,7 @@ pub(crate) fn try_finish_write(
 /// offsets `0x2e..0x4e`; field identities remain private to the custom PAC.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_open_i2c_pre_delay(registers: &mut impl SharedPhyAccess) {
-    analog_i2c::prepare_open_i2c_pre_delay(registers);
+    analog_i2c_power::prepare_open_i2c_pre_delay(registers);
 }
 
 /// Execute the finite common register suffix of `phy_open_i2c_xpd_new`.
@@ -172,7 +175,7 @@ pub fn configure_open_i2c_pre_delay(registers: &mut impl SharedPhyAccess) {
 /// identities remain private to the custom PAC.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_open_i2c_power_and_pulse(registers: &mut impl SharedPhyAccess) {
-    analog_i2c::complete_open_i2c_power_and_reset(registers);
+    analog_i2c_power::complete_open_i2c_power_and_reset(registers);
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -248,7 +251,7 @@ impl OpenI2cXpdTransition {
     }
 
     pub const fn action(self) -> OpenI2cXpdAction {
-        const SDM_SAMPLE: Address = fields::SDM_RFPLL_SDM_UPDATE_ENABLE.address();
+        const SDM_SAMPLE: Address = analog_i2c::sdm::update_enable::UPDATE_ENABLE.address();
 
         match self.step {
             OpenI2cXpdStep::PreDelayConfiguration => OpenI2cXpdAction::ConfigurePreDelay,
@@ -807,9 +810,18 @@ impl RfpllChargePumpTransition {
 
     const fn initial_write(index: u8) -> RfpllChargePumpAction {
         let (field, value) = match index {
-            0 => (fields::RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE, 0),
-            1 => (fields::RFPLL_CHARGE_PUMP_CALIBRATION_PULSE, 0),
-            _ => (fields::RFPLL_CHARGE_PUMP_CALIBRATION_PULSE, 1),
+            0 => (
+                analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_ENABLE,
+                0,
+            ),
+            1 => (
+                analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_PULSE,
+                0,
+            ),
+            _ => (
+                analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_PULSE,
+                1,
+            ),
         };
         RfpllChargePumpAction::WriteMasked { field, value }
     }
@@ -819,23 +831,23 @@ impl RfpllChargePumpTransition {
             RfpllChargePumpStep::InitialWrite(index) => Self::initial_write(index),
             RfpllChargePumpStep::Delay { .. } => RfpllChargePumpAction::DelayMicros(20),
             RfpllChargePumpStep::LockRead { .. } => RfpllChargePumpAction::ReadMasked {
-                field: fields::RFPLL_CHARGE_PUMP_LOCK_STATUS,
+                field: analog_i2c::rfpll::charge_pump_lock_status::CHARGE_PUMP_LOCK_STATUS,
             },
             RfpllChargePumpStep::CapRead { .. } => RfpllChargePumpAction::ReadMasked {
-                field: fields::RFPLL_CHARGE_PUMP_RESULT,
+                field: analog_i2c::rfpll::charge_pump_lock_status::CHARGE_PUMP_RESULT,
             },
             RfpllChargePumpStep::EnableAdjustedValue { .. } => RfpllChargePumpAction::WriteMasked {
-                field: fields::RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE,
+                field: analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_ENABLE,
                 value: 1,
             },
             RfpllChargePumpStep::WriteAdjustedValue { value, .. } => {
                 RfpllChargePumpAction::WriteMasked {
-                    field: fields::RFPLL_CHARGE_PUMP_VALUE,
+                    field: analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE,
                     value,
                 }
             }
             RfpllChargePumpStep::FinalRead { .. } => RfpllChargePumpAction::ReadByte {
-                address: fields::RFPLL_CHARGE_PUMP_VALUE.address(),
+                address: analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE.address(),
             },
             RfpllChargePumpStep::Complete(outcome) => RfpllChargePumpAction::Complete(outcome),
         }
@@ -901,7 +913,10 @@ impl RfpllChargePumpTransition {
             (
                 RfpllChargePumpStep::FinalRead { lock_observed },
                 RfpllChargePumpCompletion::ReadByte { address, value },
-            ) if address == fields::RFPLL_CHARGE_PUMP_VALUE.address() => {
+            ) if address
+                == analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE
+                    .address() =>
+            {
                 RfpllChargePumpStep::Complete(RfpllChargePumpOutcome {
                     parameter_18e: value,
                     lock_observed,
@@ -1183,13 +1198,13 @@ impl PhyRfInitPrefixTransition {
             }
             PhyRfInitPrefixStep::FilterDcap(transition) => match transition.action() {
                 FilterDcapAction::Complete => PhyRfInitPrefixAction::ReadParameter18e {
-                    address: fields::RFPLL_CHARGE_PUMP_VALUE.address(),
+                    address: analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE.address(),
                 },
                 action => PhyRfInitPrefixAction::FilterDcap(action),
             },
             PhyRfInitPrefixStep::Parameter18eRead { .. } => {
                 PhyRfInitPrefixAction::ReadParameter18e {
-                    address: fields::RFPLL_CHARGE_PUMP_VALUE.address(),
+                    address: analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE.address(),
                 }
             }
             PhyRfInitPrefixStep::I2cInit1 {
@@ -1216,7 +1231,7 @@ impl PhyRfInitPrefixTransition {
                 PhyRfInitPrefixAction::ConfigureI2cMasterCommandMemory { parameter }
             }
             PhyRfInitPrefixStep::Masked69Read { .. } => PhyRfInitPrefixAction::ReadMasked69 {
-                field: fields::SARADC_ADC_SAR2_INITIAL_CODE_HIGH_ADDR,
+                field: analog_i2c::saradc::adc_sar2_initial_code_high_addr::ADC_SAR2_INITIAL_CODE_HIGH_ADDR,
             },
             PhyRfInitPrefixStep::Sar2Configuration { .. } => PhyRfInitPrefixAction::ConfigureSar2,
             PhyRfInitPrefixStep::XtalDutyParameters { .. } => {
@@ -1388,7 +1403,10 @@ impl PhyRfInitPrefixTransition {
             (
                 PhyRfInitPrefixStep::Parameter18eRead { filter_dcap },
                 PhyRfInitPrefixCompletion::Parameter18eRead { address, value },
-            ) if address == fields::RFPLL_CHARGE_PUMP_VALUE.address() => {
+            ) if address
+                == analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE
+                    .address() =>
+            {
                 let parameter = PhyRfInitParameterSnapshot::new(filter_dcap, value);
                 PhyRfInitPrefixStep::I2cInit1 {
                     transition: I2cInit1Transition::new(parameter),
@@ -1664,11 +1682,11 @@ impl RcCalibrationTransition {
     pub const fn action(self) -> RcCalibrationAction {
         match self.step {
             0 => RcCalibrationAction::WriteMasked {
-                field: fields::ULP_BOD_RC_CALIBRATION_DOUT_PATH_ENABLE,
+                field: analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE,
                 value: 1,
             },
             1 => RcCalibrationAction::WriteMasked {
-                field: fields::TXRF_RC_CALIBRATION_ENABLE,
+                field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
                 // ROM `phy_get_rc_dout` asserts the RC-calibration enable
                 // before pulsing bit 1. Leaving this clear makes the result
                 // register stay at zero and poisons every derived RX filter
@@ -1676,23 +1694,23 @@ impl RcCalibrationTransition {
                 value: 1,
             },
             2 => RcCalibrationAction::WriteMasked {
-                field: fields::TXRF_RC_CALIBRATION_PULSE,
+                field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE,
                 value: 0,
             },
             3 => RcCalibrationAction::WriteMasked {
-                field: fields::TXRF_RC_CALIBRATION_PULSE,
+                field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE,
                 value: 1,
             },
             4 => RcCalibrationAction::DelayMicros(100),
             5 => RcCalibrationAction::ReadMasked {
-                field: fields::TXRF_RC_CALIBRATION_RESULT,
+                field: analog_i2c::txrf::rc_calibration_result::RC_CALIBRATION_RESULT,
             },
             6 => RcCalibrationAction::WriteMasked {
-                field: fields::ULP_BOD_RC_CALIBRATION_DOUT_PATH_ENABLE,
+                field: analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE,
                 value: 0,
             },
             7 => RcCalibrationAction::WriteMasked {
-                field: fields::TXRF_RC_CALIBRATION_ENABLE,
+                field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
                 value: 0,
             },
             8 => RcCalibrationAction::ApplyResult(self.result),

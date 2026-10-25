@@ -7,7 +7,7 @@
 //! transaction. The accessor order is the engine's; nothing here adds,
 //! merges or reorders register transactions.
 
-use oer_esp32s31_pac::ieee802154_mac::command::Opcode;
+use oer_esp32s31_pac::ieee802154::command::Opcode;
 pub use oer_espressif_ieee802154_engine::ll::{
     Ieee802154LlCommand, Ieee802154LowLevel, Ieee802154RecentRssi, Ieee802154Timer,
     event_end_process, mac_init_registers, sec_clear, set_txrx_pti, timer_fire_at,

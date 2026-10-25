@@ -7,7 +7,7 @@
 
 use crate::{
     analog::{
-        i2c::fields,
+        i2c::analog_i2c,
         pbus::PhyPbusForceTest,
         rfpll::{
             RfpllFrequencyAction, RfpllFrequencyCompletion, RfpllFrequencyFailure,
@@ -859,9 +859,9 @@ enum TxCapSearchStep {
 
 const fn tx_cap_field(bank: u8) -> crate::analog::i2c::Field {
     if bank == 0 {
-        fields::TXRF_TX_CAPACITOR_LOW
+        analog_i2c::txrf::tx_capacitor_low::TX_CAPACITOR_LOW
     } else {
-        fields::TXRF_TX_CAPACITOR_HIGH
+        analog_i2c::txrf::tx_capacitor_low::TX_CAPACITOR_HIGH
     }
 }
 
@@ -1185,7 +1185,7 @@ impl PhyTxCapTransition {
                 match transition.action() {
                     RfpllFrequencyAction::Complete(_) => {
                         self.step = TxCapStep::SetLow(crate::analog::i2c::field_write(
-                            fields::TXRF_TX_CAPACITOR_LOW,
+                            analog_i2c::txrf::tx_capacitor_low::TX_CAPACITOR_LOW,
                             7,
                         ));
                     }
@@ -1201,7 +1201,7 @@ impl PhyTxCapTransition {
                     .map_err(|_| PhyTxCapTransitionError::WrongCompletion)?;
                 self.step = if transition.action() == oer_espressif_analog::Action::Complete(()) {
                     TxCapStep::SetHigh(crate::analog::i2c::field_write(
-                        fields::TXRF_TX_CAPACITOR_HIGH,
+                        analog_i2c::txrf::tx_capacitor_low::TX_CAPACITOR_HIGH,
                         13,
                     ))
                 } else {

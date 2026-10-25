@@ -23,7 +23,7 @@ use crate::{
             OpenI2cXpdCompletion, PhyI2cError, PhyRfInitPrefixAction, PhyRfInitPrefixCompletion,
             PhyRfInitPrefixOutcome, PhyRfInitPrefixTransition, PhyRfInitPrefixTransitionError,
             RcCalibrationAction, RcCalibrationCompletion, RfpllChargePumpAction,
-            RfpllChargePumpCompletion,
+            RfpllChargePumpCompletion, analog_i2c,
         },
         pbus::{PhyPbusClearAction, PhyPbusClearCompletion, PhyPbusForceTest},
         rfpll::{RfpllFrequencyAction, RfpllFrequencyCompletion},

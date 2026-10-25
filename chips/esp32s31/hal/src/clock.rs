@@ -8,9 +8,11 @@
 //! Every value here is route-scoped: a route gives back its references and
 //! restores the baseline before the neutral root is reconstructed.
 
-use oer_esp32s31_pac::{
-    RadioPhyRegisters, RtcSlowClockSource, WifiLowPowerClockSource, WifiPowerBaseline,
-    WifiPowerRestoreReadback,
+use crate::{
+    modem::{
+        RtcSlowClockSource, WifiLowPowerClockSource, WifiPowerBaseline, WifiPowerRestoreReadback,
+    },
+    phy::registers::RadioPhyRegisters,
 };
 
 use crate::power::{

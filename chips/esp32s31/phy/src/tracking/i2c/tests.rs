@@ -1,3 +1,5 @@
+use crate::analog::i2c::analog_i2c;
+
 use super::*;
 use crate::analog::i2c::Address;
 
@@ -52,13 +54,13 @@ fn hot_transition_owns_both_masked_writes_before_commit() {
     });
     complete_write(
         &mut transition,
-        fields::TXRF_WIFI_TX_TEMPERATURE_TRACKING_0.address(),
+        analog_i2c::txrf::wifi_tx_temperature_tracking_0::WIFI_TX_TEMPERATURE_TRACKING_0.address(),
         0xa0,
         0xa6,
     );
     complete_write(
         &mut transition,
-        fields::TXRF_WIFI_TX_TEMPERATURE_TRACKING_1.address(),
+        analog_i2c::txrf::wifi_tx_temperature_tracking_1::WIFI_TX_TEMPERATURE_TRACKING_1.address(),
         0x40,
         0x4f,
     );

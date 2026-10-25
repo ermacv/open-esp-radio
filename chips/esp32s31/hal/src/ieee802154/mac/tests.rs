@@ -4,8 +4,7 @@
 use std::{vec, vec::Vec};
 
 use oer_esp32s31_pac::{
-    RadioPartitions,
-    ieee802154_mac::command::Opcode,
+    ieee802154::command::Opcode,
     modem_etm::{ch_event, ch_task},
 };
 use oer_espressif_ieee802154_engine::types::{
@@ -14,7 +13,6 @@ use oer_espressif_ieee802154_engine::types::{
     Ieee802154MultipanIndex, Ieee802154RxAbortEnableSet, Ieee802154RxAbortReasonObservation,
     Ieee802154TxAbortEnableSet,
 };
-use oer_mmio::Index;
 
 use super::{
     Ieee802154Pti,
@@ -35,10 +33,15 @@ fn mask(events: &[Ieee802154Event]) -> Ieee802154EventMask {
 }
 
 #[test]
-fn the_partition_splits_and_rejoins_without_register_access() {
-    let RadioPartitions { ieee802154, .. } = RadioPartitions::for_host_test();
-    let (task, interrupts) = super::split(ieee802154);
-    let _partition = super::reunite(task, interrupts);
+fn assembling_host_owners_performs_no_register_access() {
+    let mut memory = HostMemory::filled(0xa5a5_a5a5);
+    let before = (
+        memory.mac.clone(),
+        memory.etm.clone(),
+        memory.baseband.clone(),
+    );
+    let _ = memory.owners();
+    assert_eq!((memory.mac, memory.etm, memory.baseband), before);
 }
 
 #[test]
@@ -364,29 +367,27 @@ fn the_etm_routes_program_their_own_channel() {
     let (mut task, _setup) = memory.owners();
     task.set_etm_route(Ieee802154EtmRoute::Timer0ToTxStart);
     task.set_etm_route(Ieee802154EtmRoute::Timer1ToRxStart);
-    let channel0 = Index::constant::<0>();
-    let channel1 = Index::constant::<1>();
     let etm = task.etm_part();
     assert_eq!(
-        etm.read_ch_event(channel0).id_variant(),
+        etm.read_ch0_event().id_variant(),
         Some(ch_event::Id::Ieee802154Timer0Overflow)
     );
     assert_eq!(
-        etm.read_ch_task(channel0).id_variant(),
+        etm.read_ch0_task().id_variant(),
         Some(ch_task::Id::Ieee802154TxStart)
     );
     assert_eq!(
-        etm.read_ch_event(channel1).id_variant(),
+        etm.read_ch1_event().id_variant(),
         Some(ch_event::Id::Ieee802154Timer1Overflow)
     );
     assert_eq!(
-        etm.read_ch_task(channel1).id_variant(),
+        etm.read_ch1_task().id_variant(),
         Some(ch_task::Id::Ieee802154RxStart)
     );
 
     task.set_etm_route(Ieee802154EtmRoute::Timer0ToCcaTx);
     assert_eq!(
-        task.etm_part().read_ch_task(channel0).id_variant(),
+        task.etm_part().read_ch0_task().id_variant(),
         Some(ch_task::Id::Ieee802154EdTrigTx)
     );
 }

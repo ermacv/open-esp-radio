@@ -1,4 +1,4 @@
-use crate::analog::i2c::{fields, registers};
+use crate::analog::i2c::analog_i2c;
 
 use super::{
     PHY_FREQUENCY_TABLE_ENTRY_COUNT, PhyChannelFrequencyInitAction,
@@ -297,26 +297,27 @@ fn complete_i2c_snapshot(
     assert_eq!(
         transition.action(),
         PhyFrequencyI2cAction::WriteMasked {
-            field: fields::RFPLL_CAPACITOR_SEARCH_ENABLE,
+            field: analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
             value: 1,
         }
     );
     transition
         .advance(PhyFrequencyI2cCompletion::MaskedWrite {
-            field: fields::RFPLL_CAPACITOR_SEARCH_ENABLE,
+            field: analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
         })
         .unwrap();
     for (address, value) in [
         (
-            fields::RFPLL_CAPACITOR_SEARCH_ENABLE.address(),
+            analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE.address(),
             rfpll_register_0b,
         ),
         (
-            fields::SDM_RFPLL_SDM_UPDATE_ENABLE.address(),
+            analog_i2c::sdm::update_enable::UPDATE_ENABLE.address(),
             sdm_register_0,
         ),
         (
-            fields::BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE.address(),
+            analog_i2c::bbtop::shared_rx_gain_calibration_enable::SHARED_RX_GAIN_CALIBRATION_ENABLE
+                .address(),
             front_end_register_3,
         ),
     ] {
@@ -444,7 +445,7 @@ fn i2c_transition_rejects_a_completion_for_another_snapshot_register() {
     let mut transition = PhyFrequencyI2cTransition::new(PhyFrequencyI2cRequest::cold(false));
     assert_eq!(
         transition.advance(PhyFrequencyI2cCompletion::MaskedWrite {
-            field: fields::RFPLL_CAPACITOR_HIGH,
+            field: analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH,
         }),
         Err(PhyFrequencyI2cTransitionError::WrongCompletion)
     );
@@ -482,9 +483,9 @@ fn rfpll_completion(
             RfpllFrequencyCompletion::ByteWrite { address }
         }
         RfpllFrequencyAction::ReadMasked { field } => {
-            let value = if field == crate::analog::i2c::fields::RFPLL_LOCK_STATUS {
+            let value = if field == crate::analog::i2c::analog_i2c::rfpll::lock_status::LOCK_STATUS {
                 1
-            } else if field == crate::analog::i2c::fields::RFPLL_CAPACITOR_SEARCH_STATUS {
+            } else if field == crate::analog::i2c::analog_i2c::rfpll::capacitor_search_status::CAPACITOR_SEARCH_STATUS {
                 let index = point_index(point);
                 // Accept the first candidate of each direction, then end the
                 // direction with its two boundary statuses.
@@ -497,7 +498,7 @@ fn rfpll_completion(
             RfpllFrequencyCompletion::MaskedRead { field, value }
         }
         RfpllFrequencyAction::ReadByte { address }
-            if address == registers::RFPLL_CALIBRATED_CAPACITOR_LOW =>
+            if address == analog_i2c::rfpll::calibrated_capacitor_low::ADDRESS =>
         {
             RfpllFrequencyCompletion::ByteRead {
                 address,
@@ -522,9 +523,11 @@ fn i2c_completion(action: PhyFrequencyI2cAction) -> PhyFrequencyI2cCompletion {
             PhyFrequencyI2cCompletion::MaskedWrite { field }
         }
         PhyFrequencyI2cAction::ReadByte { address } => {
-            let value = if address == fields::RFPLL_CAPACITOR_SEARCH_ENABLE.address() {
+            let value = if address
+                == analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE.address()
+            {
                 0x5a
-            } else if address == fields::SDM_RFPLL_SDM_UPDATE_ENABLE.address() {
+            } else if address == analog_i2c::sdm::update_enable::UPDATE_ENABLE.address() {
                 0x8f
             } else {
                 0x10
@@ -572,7 +575,7 @@ fn channel_frequency_init_composes_the_complete_cold_graph() {
                 PhyChannelFrequencyInitCompletion::ByteWrite { address }
             }
             PhyChannelFrequencyInitAction::ReadByte { address } => {
-                assert_eq!(address, fields::SDM_RFPLL_SDM_LOW.address());
+                assert_eq!(address, analog_i2c::sdm::low::LOW.address());
                 PhyChannelFrequencyInitCompletion::ByteRead {
                     address,
                     value: 0xab,

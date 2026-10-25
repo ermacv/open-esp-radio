@@ -18,7 +18,7 @@
 //! commits only after accepting the terminal child completion.
 
 use crate::analog::{
-    i2c::{Field, fields},
+    i2c::{Field, analog_i2c},
     rfpll::{
         RfpllFrequencyAction, RfpllFrequencyCompletion, RfpllFrequencyFailure,
         RfpllFrequencyRequest, RfpllFrequencyTransition,
@@ -28,10 +28,16 @@ use crate::analog::{
 const CHANNELS: [u8; 4] = [1, 5, 10, 14];
 
 const CKGEN_WRITES: [(Field, u8); 4] = [
-    (fields::RFPLL_DCODE_0_SOURCE_SELECT, 0),
-    (fields::RFPLL_DCODE_1_SOURCE_SELECT, 0),
-    (fields::RFPLL_DCODE_CKGEN_RESET, 0),
-    (fields::RFPLL_DCODE_CKGEN_RESET, 1),
+    (
+        analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
+        0,
+    ),
+    (
+        analog_i2c::rfpll::dcode_1_source_select::DCODE_1_SOURCE_SELECT,
+        0,
+    ),
+    (analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 0),
+    (analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 1),
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -129,10 +135,10 @@ impl PhyDcodeTransition {
                 PhyDcodeAction::WriteMasked { field, value }
             }
             PhyDcodeStep::ReadLow { .. } => PhyDcodeAction::ReadMasked {
-                field: fields::RFPLL_INTERNAL_DCODE_0,
+                field: analog_i2c::rfpll::internal_dcode_0::INTERNAL_DCODE_0,
             },
             PhyDcodeStep::ReadHigh { .. } => PhyDcodeAction::ReadMasked {
-                field: fields::RFPLL_INTERNAL_DCODE_1,
+                field: analog_i2c::rfpll::internal_dcode_1::INTERNAL_DCODE_1,
             },
             PhyDcodeStep::Complete(outcome) => PhyDcodeAction::Complete(*outcome),
             PhyDcodeStep::Failed(failure) => PhyDcodeAction::Failed(*failure),
@@ -194,7 +200,7 @@ impl PhyDcodeTransition {
             (
                 PhyDcodeStep::ReadLow { calibration_index },
                 PhyDcodeCompletion::MaskedRead {
-                    field: fields::RFPLL_INTERNAL_DCODE_0,
+                    field: analog_i2c::rfpll::internal_dcode_0::INTERNAL_DCODE_0,
                     value,
                 },
             ) if value <= 0x3f => {
@@ -206,7 +212,7 @@ impl PhyDcodeTransition {
             (
                 PhyDcodeStep::ReadHigh { calibration_index },
                 PhyDcodeCompletion::MaskedRead {
-                    field: fields::RFPLL_INTERNAL_DCODE_1,
+                    field: analog_i2c::rfpll::internal_dcode_1::INTERNAL_DCODE_1,
                     value,
                 },
             ) if value <= 0x3f => {

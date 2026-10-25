@@ -464,7 +464,9 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                         registers,
                         init_parameters,
                         u32::from(HARDWARE_EDGE_LIMIT),
+                        async || delay::<D, _>(timer, Kind::Completion, 1).await,
                     )
+                    .await
                     .map_err(|_| PhyTargetPortError::HardwareEdgeTimedOut)?;
                 }
                 PhyRfWakeOperation::PublishRetainedFrequencyI2c => {
@@ -502,7 +504,7 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     write_i2c_direct(
                         timer,
                         registers,
-                        crate::analog::i2c::registers::TXRF_TX_CAPACITOR_LOW,
+                        crate::analog::i2c::analog_i2c::txrf::tx_capacitor_low::ADDRESS,
                         tx_cap,
                     )?;
                     oer_esp32s31_hal::phy::frequency::configure_nrx_frequency(
@@ -514,7 +516,7 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     write_i2c_direct(
                         timer,
                         registers,
-                        crate::analog::i2c::registers::TXRF_TX_CAPACITOR_LOW,
+                        crate::analog::i2c::analog_i2c::txrf::tx_capacitor_low::ADDRESS,
                         tx_cap,
                     )?;
                 }

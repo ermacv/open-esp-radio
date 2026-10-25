@@ -619,7 +619,7 @@ impl RxProgram {
     }
     fn start_field(&mut self, restore: bool) {
         self.work = Work::Field(i2c::field_write(
-            i2c::fields::BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE,
+            i2c::analog_i2c::bbtop::shared_rx_gain_calibration_enable::SHARED_RX_GAIN_CALIBRATION_ENABLE,
             u8::from(restore),
         ));
         self.cursor.pc = if restore {

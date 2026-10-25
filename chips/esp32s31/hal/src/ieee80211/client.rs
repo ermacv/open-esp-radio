@@ -44,7 +44,7 @@ pub(crate) trait WifiPowerPort: ClockPort {
     fn pulse_wifi_baseband_and_mac_reset(&mut self);
 }
 
-impl WifiPowerPort for oer_esp32s31_pac::RadioPhyRegisters {
+impl WifiPowerPort for crate::phy::registers::RadioPhyRegisters {
     fn pulse_wifi_baseband_and_mac_reset(&mut self) {
         self.set_wifi_baseband_and_mac_reset(true);
         self.set_wifi_baseband_and_mac_reset(false);

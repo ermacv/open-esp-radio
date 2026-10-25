@@ -18,7 +18,7 @@
 
 use core::marker::PhantomData;
 
-use oer_esp32s31_pac::{ModemClockDevice, RadioPhyRegisters};
+use crate::{modem::ModemClockDevice, phy::registers::RadioPhyRegisters};
 
 use super::{
     Dependency, ModemClockLease, ModemClockPlanner, PoisonedModemClockAcquire,

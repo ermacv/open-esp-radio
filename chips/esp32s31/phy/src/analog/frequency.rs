@@ -12,7 +12,7 @@
 //! action completed by the caller.
 
 use crate::analog::{
-    i2c::{Address, Field, fields, registers},
+    i2c::{Address, Field, analog_i2c},
     rfpll::{
         RfpllFrequencyAction, RfpllFrequencyCompletion, RfpllFrequencyFailure,
         RfpllFrequencyOutcome, RfpllFrequencyRequest, RfpllFrequencyTransition,
@@ -139,15 +139,16 @@ pub const fn phy_frequency_memory_record(
     let frequency_code = PHY_FREQUENCY_TABLE_FIRST_CODE.wrapping_add(index as u16);
     let sdm = calculate_rfpll_sdm(frequency_code, request.parameters.crystal_selector, 0).bytes();
     let cap = interpolated_cap(request.low_frequency_cap, request.high_frequency_cap, index);
-    const CAP_CONFIGURATION: u8 = fields::RFPLL_INITIAL_CONFIGURATION_HIGH.insert_truncated(
-        fields::RFPLL_INITIAL_CONFIGURATION_LOW.insert_truncated(0, 0x3f),
-        1,
-    );
-    let cap_high = fields::RFPLL_CAPACITOR_HIGH.insert_truncated(
+    const CAP_CONFIGURATION: u8 = analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH
+        .insert_truncated(
+            analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_LOW.insert_truncated(0, 0x3f),
+            1,
+        );
+    let cap_high = analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH.insert_truncated(
         CAP_CONFIGURATION,
         PhyRfpllCapacitorCodeCode::from_bits(cap).high(),
     );
-    let sdm_low = fields::SDM_RFPLL_SDM_LOW
+    let sdm_low = analog_i2c::sdm::low::LOW
         .insert_truncated(request.parameters.sdm_register_six_upper, sdm[0]);
     let xtal_duty = phy_frequency_xtal_duty(
         frequency_code,
@@ -354,7 +355,7 @@ pub const fn phy_frequency_cap_adjusted_word(
     let record = PhyFrequencyMemoryRecordCapAndSdm::from_bits(raw);
     let cap = u16::from_le_bytes([
         record.cap_low(),
-        fields::RFPLL_CAPACITOR_HIGH.extract(record.cap_high_byte()),
+        analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH.extract(record.cap_high_byte()),
     ]);
     let adjusted = cap.wrapping_add(correction.delta() as u16);
     frequency_cap_correction_word(raw, adjusted)
@@ -717,76 +718,76 @@ const fn frequency_i2c_descriptor(
 ) -> PhyFrequencyI2cDescriptor {
     match index {
         0 => PhyFrequencyI2cDescriptor {
-            address: registers::RFPLL_CAPACITOR_LOW,
+            address: analog_i2c::rfpll::capacitor_low::ADDRESS,
             encoded_index: 0x20,
             data: [0; 3],
         },
         1 => PhyFrequencyI2cDescriptor {
-            address: registers::RFPLL_CAPACITOR_HIGH,
+            address: analog_i2c::rfpll::capacitor_high::ADDRESS,
             encoded_index: 0x21,
             data: [0; 3],
         },
         2 => PhyFrequencyI2cDescriptor {
-            address: registers::SDM_RFPLL_SDM_UPDATE_ENABLE,
+            address: analog_i2c::sdm::update_enable::ADDRESS,
             encoded_index: 0x10,
             data: [
-                fields::SDM_RFPLL_SDM_UPDATE_ENABLE.insert_truncated(sdm_register_0, 0),
+                analog_i2c::sdm::update_enable::UPDATE_ENABLE.insert_truncated(sdm_register_0, 0),
                 0,
                 0,
             ],
         },
         3 => PhyFrequencyI2cDescriptor {
-            address: registers::SDM_RFPLL_SDM_LOW,
+            address: analog_i2c::sdm::low::ADDRESS,
             encoded_index: 0x22,
             data: [0; 3],
         },
         4 => PhyFrequencyI2cDescriptor {
-            address: registers::SDM_RFPLL_SDM_LOWER_MIDDLE_BYTE,
+            address: analog_i2c::sdm::lower_middle_byte::ADDRESS,
             encoded_index: 0x23,
             data: [0; 3],
         },
         5 => PhyFrequencyI2cDescriptor {
-            address: registers::SDM_RFPLL_SDM_UPPER_MIDDLE_BYTE,
+            address: analog_i2c::sdm::upper_middle_byte::ADDRESS,
             encoded_index: 0x24,
             data: [0; 3],
         },
         6 => PhyFrequencyI2cDescriptor {
-            address: registers::SDM_RFPLL_SDM_MOST_SIGNIFICANT_BYTE,
+            address: analog_i2c::sdm::most_significant_byte::ADDRESS,
             encoded_index: 0x25,
             data: [0; 3],
         },
         7 => PhyFrequencyI2cDescriptor {
-            address: registers::SDM_RFPLL_SDM_UPDATE_ENABLE,
+            address: analog_i2c::sdm::update_enable::ADDRESS,
             encoded_index: 0x11,
             data: [
-                fields::SDM_RFPLL_SDM_UPDATE_ENABLE.insert_truncated(sdm_register_0, 1),
+                analog_i2c::sdm::update_enable::UPDATE_ENABLE.insert_truncated(sdm_register_0, 1),
                 0,
                 0,
             ],
         },
         8 => PhyFrequencyI2cDescriptor {
-            address: registers::RFPLL_CAPACITOR_SEARCH_ENABLE,
+            address: analog_i2c::rfpll::capacitor_search_enable::ADDRESS,
             encoded_index: 0x12,
             data: [rfpll_register_0b, 0, 0],
         },
         9 => PhyFrequencyI2cDescriptor {
-            address: registers::ULP_BOD_XTAL_DUTY_CANDIDATE,
+            address: analog_i2c::ulp_bod::xtal_duty_candidate::ADDRESS,
             encoded_index: 0x26,
             data: [0; 3],
         },
         _ => {
             let selected = if front_end_parameter_bit {
-                fields::BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE
+                analog_i2c::bbtop::shared_rx_gain_calibration_enable::SHARED_RX_GAIN_CALIBRATION_ENABLE
                     .insert_truncated(front_end_register_3, 1)
             } else {
                 front_end_register_3
             };
             PhyFrequencyI2cDescriptor {
-                address: registers::BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE,
+                address: analog_i2c::bbtop::shared_rx_gain_calibration_enable::ADDRESS,
                 encoded_index: 0,
                 data: [
                     selected,
-                    fields::BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE
+                    analog_i2c::bbtop::shared_rx_gain_calibration_enable::SHARED_RX_GAIN_CALIBRATION_ENABLE
                         .insert_truncated(front_end_register_3, 0),
                     selected,
                 ],
@@ -866,17 +867,17 @@ impl PhyFrequencyI2cTransition {
     pub const fn action(self) -> PhyFrequencyI2cAction {
         match self.step {
             PhyFrequencyI2cStep::EnableSnapshot => PhyFrequencyI2cAction::WriteMasked {
-                field: fields::RFPLL_CAPACITOR_SEARCH_ENABLE,
+                field: analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
                 value: 1,
             },
             PhyFrequencyI2cStep::ReadRfpll => PhyFrequencyI2cAction::ReadByte {
-                address: fields::RFPLL_CAPACITOR_SEARCH_ENABLE.address(),
+                address: analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE.address(),
             },
             PhyFrequencyI2cStep::ReadSdm { .. } => PhyFrequencyI2cAction::ReadByte {
-                address: fields::SDM_RFPLL_SDM_UPDATE_ENABLE.address(),
+                address: analog_i2c::sdm::update_enable::UPDATE_ENABLE.address(),
             },
             PhyFrequencyI2cStep::ReadFrontEnd { .. } => PhyFrequencyI2cAction::ReadByte {
-                address: fields::BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE.address(),
+                address: analog_i2c::bbtop::shared_rx_gain_calibration_enable::SHARED_RX_GAIN_CALIBRATION_ENABLE.address(),
             },
             PhyFrequencyI2cStep::Memory {
                 rfpll_register_0b,
@@ -925,13 +926,13 @@ impl PhyFrequencyI2cTransition {
             (
                 PhyFrequencyI2cStep::EnableSnapshot,
                 PhyFrequencyI2cCompletion::MaskedWrite {
-                    field: fields::RFPLL_CAPACITOR_SEARCH_ENABLE,
+                    field: analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
                 },
             ) => PhyFrequencyI2cStep::ReadRfpll,
             (
                 PhyFrequencyI2cStep::ReadRfpll,
                 PhyFrequencyI2cCompletion::ByteRead { address, value },
-            ) if address == fields::RFPLL_CAPACITOR_SEARCH_ENABLE.address() => {
+            ) if address == analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE.address() => {
                 PhyFrequencyI2cStep::ReadSdm {
                     rfpll_register_0b: value,
                 }
@@ -939,7 +940,7 @@ impl PhyFrequencyI2cTransition {
             (
                 PhyFrequencyI2cStep::ReadSdm { rfpll_register_0b },
                 PhyFrequencyI2cCompletion::ByteRead { address, value },
-            ) if address == fields::SDM_RFPLL_SDM_UPDATE_ENABLE.address() => {
+            ) if address == analog_i2c::sdm::update_enable::UPDATE_ENABLE.address() => {
                 PhyFrequencyI2cStep::ReadFrontEnd {
                     rfpll_register_0b,
                     sdm_register_0: value,
@@ -951,7 +952,7 @@ impl PhyFrequencyI2cTransition {
                     sdm_register_0,
                 },
                 PhyFrequencyI2cCompletion::ByteRead { address, value },
-            ) if address == fields::BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE.address() => match self
+            ) if address == analog_i2c::bbtop::shared_rx_gain_calibration_enable::SHARED_RX_GAIN_CALIBRATION_ENABLE.address() => match self
                 .request
                 .publication
             {
@@ -1215,7 +1216,7 @@ pub struct PhyChannelFrequencyInitTransition {
 }
 
 impl PhyChannelFrequencyInitTransition {
-    const SDM_REGISTER_SIX: Address = fields::SDM_RFPLL_SDM_LOW.address();
+    const SDM_REGISTER_SIX: Address = analog_i2c::sdm::low::LOW.address();
 
     pub const fn new(request: PhyChannelFrequencyInitRequest) -> Self {
         Self {
@@ -1241,19 +1242,19 @@ impl PhyChannelFrequencyInitTransition {
             }
             PhyChannelFrequencyInitStep::InitialCapLow => {
                 PhyChannelFrequencyInitAction::WriteByte {
-                    address: registers::RFPLL_CAPACITOR_LOW,
+                    address: analog_i2c::rfpll::capacitor_low::ADDRESS,
                     value: 0xc8,
                 }
             }
             PhyChannelFrequencyInitStep::InitialCapHigh => {
                 PhyChannelFrequencyInitAction::WriteMasked {
-                    field: fields::RFPLL_CAPACITOR_HIGH,
+                    field: analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH,
                     value: 0,
                 }
             }
             PhyChannelFrequencyInitStep::DisableRfpll => {
                 PhyChannelFrequencyInitAction::WriteMasked {
-                    field: fields::RFPLL_INITIAL_CONFIGURATION_HIGH,
+                    field: analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
                     value: 0,
                 }
             }
@@ -1265,13 +1266,13 @@ impl PhyChannelFrequencyInitTransition {
             }
             PhyChannelFrequencyInitStep::EnableCapRange { .. } => {
                 PhyChannelFrequencyInitAction::WriteMasked {
-                    field: fields::RFPLL_INITIAL_CONFIGURATION_LOW,
+                    field: analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_LOW,
                     value: 0x3f,
                 }
             }
             PhyChannelFrequencyInitStep::EnableRfpll { .. } => {
                 PhyChannelFrequencyInitAction::WriteMasked {
-                    field: fields::RFPLL_INITIAL_CONFIGURATION_HIGH,
+                    field: analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
                     value: 1,
                 }
             }
@@ -1351,19 +1352,19 @@ impl PhyChannelFrequencyInitTransition {
             (
                 PhyChannelFrequencyInitStep::InitialCapLow,
                 PhyChannelFrequencyInitCompletion::ByteWrite { address },
-            ) if address == registers::RFPLL_CAPACITOR_LOW => {
+            ) if address == analog_i2c::rfpll::capacitor_low::ADDRESS => {
                 PhyChannelFrequencyInitStep::InitialCapHigh
             }
             (
                 PhyChannelFrequencyInitStep::InitialCapHigh,
                 PhyChannelFrequencyInitCompletion::MaskedWrite {
-                    field: fields::RFPLL_CAPACITOR_HIGH,
+                    field: analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH,
                 },
             ) => PhyChannelFrequencyInitStep::DisableRfpll,
             (
                 PhyChannelFrequencyInitStep::DisableRfpll,
                 PhyChannelFrequencyInitCompletion::MaskedWrite {
-                    field: fields::RFPLL_INITIAL_CONFIGURATION_HIGH,
+                    field: analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
                 },
             ) => PhyChannelFrequencyInitStep::Nominal(self.rfpll_transition(0x985)),
             (
@@ -1389,13 +1390,13 @@ impl PhyChannelFrequencyInitTransition {
             (
                 PhyChannelFrequencyInitStep::EnableCapRange { nominal },
                 PhyChannelFrequencyInitCompletion::MaskedWrite {
-                    field: fields::RFPLL_INITIAL_CONFIGURATION_LOW,
+                    field: analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_LOW,
                 },
             ) => PhyChannelFrequencyInitStep::EnableRfpll { nominal },
             (
                 PhyChannelFrequencyInitStep::EnableRfpll { nominal },
                 PhyChannelFrequencyInitCompletion::MaskedWrite {
-                    field: fields::RFPLL_INITIAL_CONFIGURATION_HIGH,
+                    field: analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
                 },
             ) => PhyChannelFrequencyInitStep::Low {
                 nominal,
@@ -1467,7 +1468,7 @@ impl PhyChannelFrequencyInitTransition {
                         crystal_selector: self.request.crystal_selector,
                         middle_xtal_duty: self.request.middle_xtal_duty,
                         outer_xtal_duty: self.request.outer_xtal_duty,
-                        sdm_register_six_upper: fields::SDM_RFPLL_SDM_LOW
+                        sdm_register_six_upper: analog_i2c::sdm::low::LOW
                             .insert_truncated(value, 0),
                     },
                     // The pinned archive redundantly reads each cap immediately

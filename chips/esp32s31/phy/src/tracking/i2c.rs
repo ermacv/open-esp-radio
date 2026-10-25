@@ -6,7 +6,7 @@
 //! body is 330 bytes at `0x1000_0140`; no vendor table or ABI image is needed
 //! by this source-owned replacement.
 
-use crate::analog::i2c::{MaskedI2cWriteBinding, MaskedI2cWriteBindingError, fields};
+use crate::analog::i2c::{MaskedI2cWriteBinding, MaskedI2cWriteBindingError, analog_i2c};
 
 /// Semantic replacement for the vendor range byte at `phy_param + 0x4d`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -109,9 +109,15 @@ impl PhyWifiI2cTrackingTransition {
     ) -> oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::Address> {
         let (first, second) = band.values();
         let (field, value) = if index == 0 {
-            (fields::TXRF_WIFI_TX_TEMPERATURE_TRACKING_0, first)
+            (
+                analog_i2c::txrf::wifi_tx_temperature_tracking_0::WIFI_TX_TEMPERATURE_TRACKING_0,
+                first,
+            )
         } else {
-            (fields::TXRF_WIFI_TX_TEMPERATURE_TRACKING_1, second)
+            (
+                analog_i2c::txrf::wifi_tx_temperature_tracking_1::WIFI_TX_TEMPERATURE_TRACKING_1,
+                second,
+            )
         };
         crate::analog::i2c::field_write(field, value)
     }
