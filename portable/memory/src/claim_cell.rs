@@ -4,11 +4,13 @@
 //! A [`ClaimCell`] holds a value installed once ([`ClaimCell::install`]).
 //! While it is free, a caller borrows it for one call ([`ClaimCell::lend`]),
 //! moves it out for good ([`ClaimCell::take`]) or keeps it for good in the
-//! cell and borrows it for one last call ([`ClaimCell::seal`]). Each is one
-//! compare-and-swap of the cell's state: a caller that does not find the
-//! cell free (a lend on another hart, or one it interrupted) is refused at
-//! once and never waits, so an interrupt handler or a fatal path may call it.
-//! A taken or sealed cell never lends again.
+//! cell and borrows it for one last call ([`ClaimCell::seal`]), or keeps it
+//! for good for one key, which may borrow it again one call at a time
+//! ([`ClaimCell::hold`]: a hart's fatal path). Each is one compare-and-swap
+//! of the cell's state: a caller that does not find the cell free (a lend on
+//! another hart, or one it interrupted) is refused at once and never waits,
+//! so an interrupt handler or a fatal path may call it. A taken or sealed
+//! cell never lends again; a held one lends only to its key.
 #![allow(
     unsafe_code,
     reason = "the cell lends or moves its value under one winning exchange"
@@ -36,6 +38,15 @@ const TAKEN: u8 = 4;
 /// The value stays in the cell for the one [`ClaimCell::seal`] call, for
 /// good.
 const SEALED: u8 = 5;
+/// The value is held for good for key `k` ([`ClaimCell::hold`]) in state
+/// `HELD + 2 * k`, lent to one of its calls in the state after it.
+const HELD: u8 = 8;
+/// The keys a cell holds for: `0..KEYS`.
+pub const KEYS: u8 = (u8::MAX - HELD) / 2;
+
+const fn held(key: u8) -> u8 {
+    HELD + 2 * key
+}
 
 /// Why a cell refused a caller.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,8 +55,18 @@ pub enum Claim {
     Empty,
     /// One lend holds the value now: it is free again when that call ends.
     Lent,
-    /// The value was taken or sealed for good.
+    /// The value was taken or sealed for good, or is held for another key.
     Kept,
+}
+
+/// What a [`ClaimCell::hold`] call did.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Held<R> {
+    /// `f`'s result.
+    pub value: R,
+    /// Whether this call took the cell for its key; `false` when the key
+    /// held it before.
+    pub first: bool,
 }
 
 /// One value, installed once, lent to one call at a time until it is taken
@@ -150,6 +171,52 @@ impl<T> ClaimCell<T> {
         Ok(f(unsafe { (*self.value.get()).assume_init_mut() }))
     }
 
+    /// Keep the value in the cell for good for `key` and run `f` on it; a
+    /// later call with the same key reaches it again, one call at a time,
+    /// and no other key or claim ever does. Never waits.
+    ///
+    /// # Errors
+    ///
+    /// The cell is empty, lent now (to a lend or to an enclosing call of
+    /// this key), taken, sealed, or held for another key.
+    ///
+    /// # Panics
+    ///
+    /// When `key` is not below [`KEYS`].
+    #[inline(always)]
+    pub fn hold<R>(&self, key: u8, f: impl FnOnce(&mut T) -> R) -> Result<Held<R>, Claim> {
+        assert!(key < KEYS, "a cell holds for keys below KEYS");
+        let ours = held(key);
+        let first =
+            match self
+                .state
+                .compare_exchange(FREE, ours + 1, Ordering::Acquire, Ordering::Acquire)
+            {
+                Ok(_) => true,
+                Err(found) if found == ours => {
+                    match self.state.compare_exchange(
+                        ours,
+                        ours + 1,
+                        Ordering::Acquire,
+                        Ordering::Acquire,
+                    ) {
+                        Ok(_) => false,
+                        Err(_) => return Err(Claim::Kept),
+                    }
+                }
+                Err(EMPTY | INSTALLING) => return Err(Claim::Empty),
+                Err(found) if found == LENT || found == ours + 1 => return Err(Claim::Lent),
+                Err(_) => return Err(Claim::Kept),
+            };
+        // SAFETY: the exchange to `ours + 1` succeeded for this call alone,
+        // from FREE (the value written before FREE's Release store) or from
+        // `ours`, which only this method stores after a borrow ended; no
+        // other exchange admits a caller until `ours` is stored below.
+        let value = f(unsafe { (*self.value.get()).assume_init_mut() });
+        self.state.store(ours, Ordering::Release);
+        Ok(Held { value, first })
+    }
+
     /// Move the cell from FREE to `next`, or say why not.
     #[inline(always)]
     fn claim(&self, next: u8) -> Result<(), Claim> {
@@ -173,9 +240,11 @@ impl<T> Default for ClaimCell<T> {
 
 impl<T> Drop for ClaimCell<T> {
     fn drop(&mut self) {
-        if matches!(*self.state.get_mut(), FREE | SEALED) {
-            // SAFETY: FREE and SEALED hold the initialized value, which no
-            // reference reaches once the cell itself is dropped.
+        let state = *self.state.get_mut();
+        if matches!(state, FREE | SEALED) || state >= HELD {
+            // SAFETY: FREE, SEALED and the held states hold the initialized
+            // value, which no reference reaches once the cell itself is
+            // dropped.
             unsafe { self.value.get_mut().assume_init_drop() };
         }
     }

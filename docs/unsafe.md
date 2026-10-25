@@ -333,9 +333,14 @@ value before a Release store of `FREE`; `lend`, `take` and `seal` each win
 one Acquire exchange from `FREE` before they reach the value. `lend` creates
 the only `&mut T` and returns the state to `FREE` once that borrow ended;
 `take` reads the value out once and `seal` lends it once, and neither state
-is ever left. A caller that does not find `FREE` is refused without
+is ever left. `hold(key)` keeps the value for one key for good (a hart's
+fatal path holds the core-control words): its exchange from `FREE`, or from
+that key's held state, to the key's lent state admits one call at a time,
+which returns the state to the key's held state; no other key or claim
+reaches the value again, and an enclosing call of the same key refuses a
+nested one. A caller that does not find its state is refused without
 waiting. It is `Sync` only for `T: Send`, and its drop drops a value it
-still holds (`FREE` or `SEALED`).
+still holds (`FREE`, `SEALED` or held).
 
 `platform-staged-layout` declares the stage-two handoff contract: the unsafe
 trait `AdoptsBootstrapMapping`, a board's promise that its adoption of the

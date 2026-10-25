@@ -53,7 +53,7 @@ pub use affine_spsc::{
     AffineSpscTrySendError, CachedSpscCursor, CompactSpscCursor, LocalSpscReceiver,
     LocalSpscSender, SpscCursor, UniqueQueueIndex,
 };
-pub use claim_cell::{Claim, ClaimCell};
+pub use claim_cell::{Claim, ClaimCell, Held, KEYS};
 pub use dma_bytes::DmaBytes;
 pub use handler_cell::{HandlerCell, Installed};
 pub use indexed_custody::{CustodyDomain, Drained, IndexedCustody, Quarantine, RetainedName};

@@ -98,3 +98,82 @@ fn the_cell_drops_the_value_it_still_holds_and_no_other() {
     drop(kept);
     assert_eq!(Rc::strong_count(&taken), 1);
 }
+
+#[test]
+fn a_held_value_lends_again_to_its_key_alone() {
+    let cell = ClaimCell::new();
+    cell.install(1_u32).expect("an empty cell installs");
+    assert_eq!(
+        cell.hold(0, |value| {
+            *value += 1;
+            *value
+        }),
+        Ok(Held {
+            value: 2,
+            first: true
+        })
+    );
+    assert_eq!(
+        cell.hold(0, |value| *value),
+        Ok(Held {
+            value: 2,
+            first: false
+        }),
+        "the key reaches it again"
+    );
+    assert_eq!(
+        cell.hold(1, |value| *value),
+        Err(Claim::Kept),
+        "no other key"
+    );
+    assert_eq!(cell.lend(|value| *value), Err(Claim::Kept));
+    assert_eq!(cell.take(), Err(Claim::Kept));
+    assert_eq!(cell.seal(|value| *value), Err(Claim::Kept));
+}
+
+#[test]
+fn a_held_value_is_lent_to_one_call_of_its_key_at_a_time() {
+    let cell = ClaimCell::new();
+    cell.install(5_u32).expect("an empty cell installs");
+    let inner = cell.hold(1, |_| {
+        (cell.hold(1, |value| *value), cell.hold(0, |value| *value))
+    });
+    assert_eq!(
+        inner,
+        Ok(Held {
+            value: (Err(Claim::Lent), Err(Claim::Kept)),
+            first: true
+        })
+    );
+    assert_eq!(
+        cell.hold(1, |value| *value).map(|held| held.value),
+        Ok(5),
+        "held again once the call ended"
+    );
+}
+
+#[test]
+fn a_hold_is_refused_while_a_lend_runs_and_before_the_install() {
+    let cell = ClaimCell::new();
+    assert_eq!(cell.hold(0, |value: &mut u32| *value), Err(Claim::Empty));
+    cell.install(3).expect("an empty cell installs");
+    assert_eq!(
+        cell.lend(|_| cell.hold(0, |value| *value)),
+        Ok(Err(Claim::Lent))
+    );
+    assert_eq!(
+        cell.hold(0, |value| *value).map(|held| held.first),
+        Ok(true)
+    );
+}
+
+#[test]
+fn the_cell_drops_a_held_value() {
+    let value = Rc::new(());
+    {
+        let cell = ClaimCell::new();
+        cell.install(Rc::clone(&value)).expect("installs");
+        cell.hold(0, |_| ()).expect("a free cell holds");
+    }
+    assert_eq!(Rc::strong_count(&value), 1);
+}
