@@ -40,8 +40,16 @@ pub struct TxQueues<K, T, const CAPACITY: usize, F = ()> {
 }
 
 impl<K: Copy + Eq, T, const CAPACITY: usize, F: Copy + Eq> TxQueues<K, T, CAPACITY, F> {
+    /// An empty arena with capacity checked at compile time.
+    ///
+    /// ```compile_fail,E0080
+    /// use oer_ieee80211_datapath::queues::TxQueues;
+    /// let _ = TxQueues::<u8, u8, 0>::new();
+    /// ```
     pub const fn new() -> Self {
-        assert!(CAPACITY > 0, "TX queues need at least one owner slot");
+        const {
+            assert!(CAPACITY > 0, "TX queues need at least one owner slot");
+        }
         let mut entries = [const {
             Entry {
                 value: None,

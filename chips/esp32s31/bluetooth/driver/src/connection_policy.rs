@@ -83,7 +83,10 @@ pub const fn connection_allowances(
         receive_guard: RadioDuration::from_micros(RECEIVE_GUARD_MICROS as u64),
         receive_tail: RadioDuration::from_micros(RECEIVE_TAIL_MICROS as u64),
         boundary_guard: NonZeroRadioDuration::from_micros(
-            NonZeroU64::new(BOUNDARY_GUARD_MICROS as u64).expect("the boundary guard is nonzero"),
+            const {
+                NonZeroU64::new(BOUNDARY_GUARD_MICROS as u64)
+                    .expect("the boundary guard is nonzero")
+            },
         ),
         first_event_guard: RadioDuration::from_micros(FIRST_EVENT_GUARD_MICROS as u64),
         event_length: RadioDuration::from_micros(event_micros as u64),

@@ -153,7 +153,7 @@ fn drain_step<const RX: usize, const TX: usize, T: Clock>(
                         clock.now().as_micros(),
                     );
                     permit.send(TxMsdu {
-                        priority: WmmUserPriority::new(0).expect("best effort priority"),
+                        priority: WmmUserPriority::UP0,
                         frame,
                     });
                 }

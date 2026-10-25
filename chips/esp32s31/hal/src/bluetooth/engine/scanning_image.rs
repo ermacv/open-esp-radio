@@ -94,34 +94,23 @@ const SCAN_RESET: LinkStateImage = LinkStateImage {
         .with_queue_ready(true),
     rx_path: BleLinkStateRxPath::ZERO
         .with_unconsumed_limit(0xff)
-        .with_bits_28_31_opaque(0x4)
-        .expect("reviewed field image fits"),
+        .with_bits_28_31_opaque_constant::<0x4>(),
     control_policy: BleLinkStateControlPolicy::ZERO
-        .with_bits_20_23_opaque(0x1)
-        .expect("reviewed field image fits")
+        .with_bits_20_23_opaque_constant::<0x1>()
         .with_bit_29_opaque(true)
         .with_bit_31_opaque(true),
-    packet_policy: BleLinkStatePacketPolicy::ZERO
-        .with_bits_26_27_opaque(0x1)
-        .expect("reviewed field image fits"),
+    packet_policy: BleLinkStatePacketPolicy::ZERO.with_bits_26_27_opaque_constant::<0x1>(),
     receive_context: BleLinkStateReceiveContext::ZERO.with_bit_30_opaque(true),
     own_address_policy: BleLinkStateOwnAddressPolicy::ZERO
-        .with_bits_20_22_opaque(1)
-        .expect("reviewed field image fits")
-        .with_bits_24_26_opaque(0x1)
-        .expect("reviewed field image fits"),
-    crc_initialization: BleLinkStateCrcInitialization::ZERO
-        .with_value(0x555555)
-        .expect("reviewed field image fits"),
-    sequence_policy: BleLinkStateSequencePolicy::ZERO
-        .with_bits_9_12_opaque(0xf)
-        .expect("reviewed field image fits"),
+        .with_bits_20_22_opaque_constant::<1>()
+        .with_bits_24_26_opaque_constant::<0x1>(),
+    crc_initialization: BleLinkStateCrcInitialization::ZERO.with_value_constant::<0x555555>(),
+    sequence_policy: BleLinkStateSequencePolicy::ZERO.with_bits_9_12_opaque_constant::<0xf>(),
     access_address: BleLinkStateAccessAddress::ZERO
         .with_value(LeAccessAddress::PRIMARY_ADVERTISING.controller_image()),
     word_0048_opaque: BleLinkStateWord0048Opaque::ZERO.with_bit_9_opaque(true),
     direction_finding: BleLinkStateDirectionFinding::ZERO
-        .with_common_radio_policy(0x3)
-        .expect("reviewed field image fits"),
+        .with_common_radio_policy_constant::<0x3>(),
     ..LinkStateImage::ZERO
 };
 
@@ -210,10 +199,8 @@ impl LegacyScanSchedulerItemWords {
         self.word_14 = self
             .word_14
             .with_power_index(link_state.power_index())
-            .with_phy_code_28_29(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_28_29_LE_1M)
-            .expect("zero fits")
-            .with_phy_code_30_31(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_30_31_LE_1M)
-            .expect("zero fits");
+            .with_phy_code_28_29_constant::<{ crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_28_29_LE_1M }>()
+            .with_phy_code_30_31_constant::<{ crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_30_31_LE_1M }>();
         self.word_18 = self
             .word_18
             .with_arbitration_priority(value.priority.value())

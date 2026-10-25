@@ -172,8 +172,7 @@ impl LinkStateStorage {
             Some(protection) => CONNECTION_SEQUENCE
                 .with_coexistence_protection(protection.value())
                 .expect("validated protection fits")
-                .with_bits_20_21_opaque(3)
-                .expect("reviewed image fits"),
+                .with_bits_20_21_opaque_constant::<3>(),
             None => CONNECTION_SEQUENCE,
         };
         self.layout.sequence_policy().write(sequence);
@@ -225,10 +224,8 @@ impl LinkStateStorage {
             self.layout
                 .direction_finding_policy()
                 .read()
-                .with_bits_19_20_opaque(3)
-                .expect("disabled policy fits")
-                .with_bits_21_30_opaque(0)
-                .expect("zero fits"),
+                .with_bits_19_20_opaque_constant::<3>()
+                .with_bits_21_30_opaque_constant::<0>(),
         );
     }
 
@@ -293,8 +290,7 @@ impl ItemStorage {
             BleSchedulerItemLinkState::ZERO
                 .with_address(Some(binding.link_state.reference()))
                 .expect("a bound link is encodable")
-                .with_kind(crate::layouts::BleSchedulerItemLinkState::KIND_CONNECTION)
-                .expect("connection prefix fits"),
+                .with_kind_constant::<{ crate::layouts::BleSchedulerItemLinkState::KIND_CONNECTION }>(),
         );
         self.layout.control().write(CONNECTION_ITEM_CONTROL);
     }
@@ -304,8 +300,7 @@ impl ItemStorage {
             BleSchedulerItemHardwareNext::ZERO
                 .with_address(next_free.map(ControllerSramLink::reference))
                 .expect("a bound link is encodable")
-                .with_bits_20_21_opaque(3)
-                .expect("allocation prefix fits"),
+                .with_bits_20_21_opaque_constant::<3>(),
         );
     }
 
@@ -335,8 +330,7 @@ impl ItemStorage {
                 .expect("data channel fits")
                 .with_arbitration_priority(priority.value() % 16)
                 .expect("projected priority fits")
-                .with_priority_copy(7)
-                .expect("reviewed image fits"),
+                .with_priority_copy_constant::<7>(),
         );
     }
 
@@ -358,14 +352,8 @@ impl ItemStorage {
                 .rate_and_power()
                 .read()
                 .with_power_index(power_index)
-                .with_phy_code_28_29(
-                    crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_28_29_LE_1M,
-                )
-                .expect("zero fits")
-                .with_phy_code_30_31(
-                    crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_30_31_LE_1M,
-                )
-                .expect("zero fits"),
+                .with_phy_code_28_29_constant::<{ crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_28_29_LE_1M }>()
+                .with_phy_code_30_31_constant::<{ crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_30_31_LE_1M }>(),
         );
         self.layout
             .receive_wait()
@@ -863,31 +851,25 @@ const CONNECTION_TX_PATH: BleLinkStateTxPath = BleLinkStateTxPath::ZERO
 
 /// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
 const CONNECTION_CONTROL: BleLinkStateControlPolicy = BleLinkStateControlPolicy::ZERO
-    .with_bits_20_23_opaque(0x2)
-    .expect("reviewed field image fits")
-    .with_bits_24_27_opaque(0x2)
-    .expect("reviewed field image fits")
+    .with_bits_20_23_opaque_constant::<0x2>()
+    .with_bits_24_27_opaque_constant::<0x2>()
     .with_bit_31_opaque(true);
 
 /// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
-const CONNECTION_SEQUENCE: BleLinkStateSequencePolicy = BleLinkStateSequencePolicy::ZERO
-    .with_bits_9_12_opaque(0xf)
-    .expect("reviewed field image fits");
+const CONNECTION_SEQUENCE: BleLinkStateSequencePolicy =
+    BleLinkStateSequencePolicy::ZERO.with_bits_9_12_opaque_constant::<0xf>();
 
 /// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
-const CONNECTION_RADIO_POLICY: BleLinkStateDirectionFinding = BleLinkStateDirectionFinding::ZERO
-    .with_common_radio_policy(0x3)
-    .expect("reviewed field image fits");
+const CONNECTION_RADIO_POLICY: BleLinkStateDirectionFinding =
+    BleLinkStateDirectionFinding::ZERO.with_common_radio_policy_constant::<0x3>();
 
 /// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
-const CONNECTION_WAIT_SHORT: BleSchedulerItemReceiveWait = BleSchedulerItemReceiveWait::ZERO
-    .with_bits_16_20_opaque(0xf)
-    .expect("reviewed field image fits");
+const CONNECTION_WAIT_SHORT: BleSchedulerItemReceiveWait =
+    BleSchedulerItemReceiveWait::ZERO.with_bits_16_20_opaque_constant::<0xf>();
 
 /// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
-const CONNECTION_WAIT_LONG: BleSchedulerItemReceiveWait = BleSchedulerItemReceiveWait::ZERO
-    .with_bits_16_20_opaque(0x1f)
-    .expect("reviewed field image fits");
+const CONNECTION_WAIT_LONG: BleSchedulerItemReceiveWait =
+    BleSchedulerItemReceiveWait::ZERO.with_bits_16_20_opaque_constant::<0x1f>();
 
 /// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
 const CONNECTION_ALLOCATION_FLAGS: BleSchedulerItemWord001cOpaque =

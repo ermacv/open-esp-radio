@@ -113,10 +113,10 @@ impl DtmSchedulerItemEventType {
                 Some(match phase {
                     // SOURCE: pinned dtm_4.o initial and recurring receiver bodies.
                     DtmReceiverEventPhase::Initial => {
-                        DtmReceiveWait::new(1, 15).expect("reviewed timing fits")
+                        const { DtmReceiveWait::new(1, 15).expect("reviewed timing fits") }
                     }
                     DtmReceiverEventPhase::Recurring => {
-                        DtmReceiveWait::new(1, 0).expect("reviewed timing fits")
+                        const { DtmReceiveWait::new(1, 0).expect("reviewed timing fits") }
                     }
                 }),
             ),
@@ -125,7 +125,7 @@ impl DtmSchedulerItemEventType {
             transmitter,
             code,
             wait,
-            SchedulerEventPriority::new(3).expect("reviewed priority fits"),
+            const { SchedulerEventPriority::new(3).expect("reviewed priority fits") },
         )
         .expect("selected PHY fits")
     }

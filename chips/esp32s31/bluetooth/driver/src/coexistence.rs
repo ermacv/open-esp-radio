@@ -26,7 +26,7 @@ pub enum CoexistenceProfile {
 }
 
 /// The standalone lane of every event.
-const STANDALONE: u8 = 15;
+const STANDALONE: SchedulerItemCoexistencePriority = lane::<15>();
 
 /// The legacy advertising event lane at each level.
 ///
@@ -38,7 +38,8 @@ const STANDALONE: u8 = 15;
 /// = `04 09 0b ...`, installed with dynamic control enabled by
 /// `coexStack.c.o_1.o` `brk_sym_coexStack_hzrw4DdhxAw5xAlGFEwI` when the
 /// stack initializes.
-const LEGACY_ADVERTISING_EVENT: [u8; 3] = [4, 9, 11];
+const LEGACY_ADVERTISING_EVENT: [SchedulerItemCoexistencePriority; 3] =
+    [lane::<4>(), lane::<9>(), lane::<11>()];
 
 /// The legacy advertising lanes before the event lane.
 ///
@@ -48,7 +49,8 @@ const LEGACY_ADVERTISING_EVENT: [u8; 3] = [4, 9, 11];
 /// `sym_coexAdv_FwE5ZScbIgFmY4AsgYl9` = `04 04 04`, lane one zero, and lanes
 /// two and three the two bytes of `sym_coexAdv_6kaAR6zMjkyNvhAbQULQ` =
 /// `0d 0d`.
-const LEGACY_ADVERTISING_LANES: [u8; 4] = [4, 0, 13, 13];
+const LEGACY_ADVERTISING_LANES: [SchedulerItemCoexistencePriority; 4] =
+    [lane::<4>(), lane::<0>(), lane::<13>(), lane::<13>()];
 
 /// The passive scan window's lanes.
 ///
@@ -69,7 +71,8 @@ const LEGACY_ADVERTISING_LANES: [u8; 4] = [4, 0, 13, 13];
 /// 1 and lane one byte 6 or 7, the column chosen by the scan's time-based
 /// state. Both columns of the pinned table are equal, so the lanes do not
 /// depend on that state.
-const PASSIVE_SCAN_LANES: [u8; 4] = [4, 11, 0, 0];
+const PASSIVE_SCAN_LANES: [SchedulerItemCoexistencePriority; 4] =
+    [lane::<4>(), lane::<11>(), lane::<0>(), lane::<0>()];
 
 /// The connection event lane at each level.
 ///
@@ -79,7 +82,8 @@ const PASSIVE_SCAN_LANES: [u8; 4] = [4, 11, 0, 0];
 /// bytes 3..6, of `sym_coexConn_1jwNCSpbwgr6k9BEu0Eg` = `04 09 0b 04 09 0b
 /// ...` at the level; the peripheral path `r_sym_ble_tPr7egUaNHmqfcieCA5O`
 /// passes row one.
-const CONNECTION_EVENT: [u8; 3] = [4, 9, 11];
+const CONNECTION_EVENT: [SchedulerItemCoexistencePriority; 3] =
+    [lane::<4>(), lane::<9>(), lane::<11>()];
 
 /// The connection's base lane.
 ///
@@ -88,7 +92,7 @@ const CONNECTION_EVENT: [u8; 3] = [4, 9, 11];
 /// role) writes both lanes from the default table
 /// `sym_coexConn_JIeRoeXKfSVWkakjpLwz` = `04 04 08`, byte 0 or 1 by role;
 /// the event lane is replaced for every event.
-const CONNECTION_BASE: u8 = 4;
+const CONNECTION_BASE: SchedulerItemCoexistencePriority = lane::<4>();
 
 /// The connection's coexistence protection in 625 us slots.
 ///
@@ -99,11 +103,8 @@ const CONNECTION_BASE: u8 = 4;
 /// to 1..=63, and writes it to link-state bits 19:14 with bits 21:20 set.
 const CONNECTION_PROTECTION_SLOTS: u32 = 8;
 
-const fn lane(value: u8) -> SchedulerItemCoexistencePriority {
-    match SchedulerItemCoexistencePriority::new(value) {
-        Some(lane) => lane,
-        None => panic!("a reviewed lane fits five bits"),
-    }
+const fn lane<const VALUE: u8>() -> SchedulerItemCoexistencePriority {
+    const { SchedulerItemCoexistencePriority::new(VALUE).expect("a reviewed lane fits five bits") }
 }
 
 /// The row of the legacy advertising event lane for `kind`: the vendor's
@@ -135,16 +136,16 @@ pub const fn advertising_priorities(
 ) -> AdvertisingCoexistencePriorities {
     match profile {
         CoexistenceProfile::Standalone => AdvertisingCoexistencePriorities {
-            lanes: [lane(STANDALONE); 4],
+            lanes: [STANDALONE; 4],
         },
         CoexistenceProfile::Shared => {
             let [_, one, two, three] = LEGACY_ADVERTISING_LANES;
             AdvertisingCoexistencePriorities {
                 lanes: [
-                    lane(LEGACY_ADVERTISING_EVENT[advertising_level_index(kind)]),
-                    lane(one),
-                    lane(two),
-                    lane(three),
+                    LEGACY_ADVERTISING_EVENT[advertising_level_index(kind)],
+                    one,
+                    two,
+                    three,
                 ],
             }
         }
@@ -159,14 +160,7 @@ pub const fn passive_scan_priorities(
         CoexistenceProfile::Standalone => [STANDALONE; 4],
         CoexistenceProfile::Shared => PASSIVE_SCAN_LANES,
     };
-    LegacyScanCoexistencePriorities {
-        lanes: [
-            lane(lanes[0]),
-            lane(lanes[1]),
-            lane(lanes[2]),
-            lane(lanes[3]),
-        ],
-    }
+    LegacyScanCoexistencePriorities { lanes }
 }
 
 /// The lanes of one connection event.
@@ -176,12 +170,12 @@ pub const fn connection_priorities(
 ) -> ConnectionCoexistencePriorities {
     match profile {
         CoexistenceProfile::Standalone => ConnectionCoexistencePriorities {
-            event: lane(STANDALONE),
-            base: lane(STANDALONE),
+            event: STANDALONE,
+            base: STANDALONE,
         },
         CoexistenceProfile::Shared => ConnectionCoexistencePriorities {
-            event: lane(CONNECTION_EVENT[connection_level_index(kind)]),
-            base: lane(CONNECTION_BASE),
+            event: CONNECTION_EVENT[connection_level_index(kind)],
+            base: CONNECTION_BASE,
         },
     }
 }

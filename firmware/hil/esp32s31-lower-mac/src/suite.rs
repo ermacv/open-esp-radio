@@ -167,7 +167,7 @@ impl Composition for Fixture {
 struct Coex;
 impl RadioCoexPriorities for Coex {
     fn beacon_window_pti(&self) -> oer_esp32s31_hal::types::MacPti {
-        let event = oer_esp32s31_radio_coex::CoexEventId::new(0).expect("beacon event");
+        let event = const { oer_esp32s31_radio_coex::CoexEventId::new(0).expect("beacon event") };
         oer_esp32s31_hal::types::MacPti::new(
             oer_esp32s31_radio_coex::CoexPtiTable::VENDOR
                 .pti(event)

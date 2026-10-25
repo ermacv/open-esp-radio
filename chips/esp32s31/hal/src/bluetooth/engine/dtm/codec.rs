@@ -44,14 +44,10 @@ type DtmTxPacketAddress = LeTxPacketAddress<BLUETOOTH_DTM_TX_PACKET_BYTES>;
 
 /// SOURCE: chips/esp32s31/notes/bluetooth-direct-test-mode.md, allocation/reset profile (bt-lib pin 10c50778).
 const LINK_STATE_ALLOCATION_CONFIG_IMAGE: BleLinkStateSequencePolicy =
-    BleLinkStateSequencePolicy::ZERO
-        .with_bits_9_12_opaque(0xf)
-        .expect("reviewed field image fits");
+    BleLinkStateSequencePolicy::ZERO.with_bits_9_12_opaque_constant::<0xf>();
 /// SOURCE: chips/esp32s31/notes/bluetooth-direct-test-mode.md, allocation/reset profile (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE: BleSchedulerItemHardwareNext =
-    BleSchedulerItemHardwareNext::ZERO
-        .with_bits_20_21_opaque(0x3)
-        .expect("reviewed field image fits");
+    BleSchedulerItemHardwareNext::ZERO.with_bits_20_21_opaque_constant::<0x3>();
 /// SOURCE: chips/esp32s31/notes/bluetooth-direct-test-mode.md, allocation/reset profile (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: BleSchedulerItemWord001cOpaque =
     BleSchedulerItemWord001cOpaque::from_bits(0xffdfffff);
@@ -61,14 +57,10 @@ const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: BleSchedulerItemWord001cOpaque =
 /// SOURCE: chips/esp32s31/notes/bluetooth-direct-test-mode.md, allocation/reset profile (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_POSITIONAL_24_IMAGE: BleSchedulerItemCoexistencePriority =
     BleSchedulerItemCoexistencePriority::ZERO
-        .with_lane_0(0x1)
-        .expect("reviewed field image fits")
-        .with_lane_1(0x1)
-        .expect("reviewed field image fits")
-        .with_lane_2(0x1)
-        .expect("reviewed field image fits")
-        .with_lane_3(0x1)
-        .expect("reviewed field image fits");
+        .with_lane_0_constant::<0x1>()
+        .with_lane_1_constant::<0x1>()
+        .with_lane_2_constant::<0x1>()
+        .with_lane_3_constant::<0x1>();
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct DtmRxPacketAddress {

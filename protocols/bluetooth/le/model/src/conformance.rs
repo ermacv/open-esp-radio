@@ -36,7 +36,7 @@ impl Fixture for ModelFixture {
             return pair(case, self.power).await;
         }
         let env = Rc::new(Environment::new(
-            NonZeroU64::new(1_000).expect("nonzero profile period"),
+            const { NonZeroU64::new(1_000).expect("nonzero profile period") },
         ));
         with_local_slot(async |claim| {
             let backend = Backend::<_, Tag>::new(env.clone());
@@ -596,11 +596,11 @@ async fn join<A: Future, B: Future>(a: A, b: B) -> (A::Output, B::Output) {
 }
 async fn pair(case: Case, power: TxPower) -> Result<Trace, Violation> {
     let env = Rc::new(Environment::new(
-        NonZeroU64::new(1_000).expect("nonzero profile period"),
+        const { NonZeroU64::new(1_000).expect("nonzero profile period") },
     ));
     if case == Case::Loss {
         env.set_loss(Loss::EveryNth(
-            core::num::NonZeroU32::new(2).expect("nonzero loss period"),
+            const { core::num::NonZeroU32::new(2).expect("nonzero loss period") },
         ));
     }
     let pair = Rc::new(Pair {

@@ -113,19 +113,14 @@ impl LegacyAdvertisingLinkStateWords {
             .word_04
             .with_header(None)
             .expect("empty link fits")
-            .with_phy_code_28_29(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_28_29_LE_1M)
-            .expect("zero fits")
-            .with_phy_code_30_31(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_30_31_LE_1M)
-            .expect("zero fits");
+            .with_phy_code_28_29_constant::<{ crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_28_29_LE_1M }>()
+            .with_phy_code_30_31_constant::<{ crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_30_31_LE_1M }>();
         self.word_08 = ADVERTISING_RESET.word_08;
         self.word_0c = self
             .word_0c
             .with_bit_29_opaque(true)
             .with_bit_31_opaque(true);
-        self.word_14 = self
-            .word_14
-            .with_bits_26_27_opaque(1)
-            .expect("reviewed profile fits");
+        self.word_14 = self.word_14.with_bits_26_27_opaque_constant::<1>();
         self.word_18 = self
             .word_18
             .with_bits_26_29_opaque(self.word_18.bits_26_29_opaque() & 7)
@@ -136,38 +131,28 @@ impl LegacyAdvertisingLinkStateWords {
         match own_address {
             LegacyAdvertisingOwnAddress::Public => {}
             LegacyAdvertisingOwnAddress::Random(address) => {
-                self.word_24 = self
-                    .word_24
-                    .with_source(1)
-                    .expect("random address source fits");
+                self.word_24 = self.word_24.with_source_constant::<1>();
                 self.word_3c = self.word_3c.with_value(u32::from_le_bytes([
                     address[0], address[1], address[2], address[3],
                 ]));
                 self.word_40 = self
                     .word_40
                     .with_value(u16::from_le_bytes([address[4], address[5]]))
-                    .with_bits_16_17_opaque(3)
-                    .expect("two set bits fit");
+                    .with_bits_16_17_opaque_constant::<3>();
             }
         }
         self.crc_init_word_2c = self
             .crc_init_word_2c
-            .with_scan_filter_policy(0)
-            .expect("zero fits")
-            .with_value(LeCrcInit::LE_PRESET.controller_value())
-            .expect("CRC fits");
+            .with_scan_filter_policy_constant::<0>()
+            .with_value_constant::<{ LeCrcInit::LE_PRESET.controller_value() }>();
         self.word_30 = self
             .word_30
             .with_bits_0_7_opaque(0)
-            .with_bits_9_12_opaque(15)
-            .expect("reviewed sequence fits")
+            .with_bits_9_12_opaque_constant::<15>()
             .with_bit_13_opaque(false);
         self.word_34 = ADVERTISING_RESET.word_34;
         self.access_address_word_38 = ADVERTISING_RESET.access_address_word_38;
-        self.word_50 = self
-            .word_50
-            .with_common_radio_policy(3)
-            .expect("reviewed radio policy fits");
+        self.word_50 = self.word_50.with_common_radio_policy_constant::<3>();
         self.word_60 = self
             .word_60
             .with_priority(priority.value())
@@ -215,10 +200,8 @@ impl LegacyAdvertisingSchedulerItemWords {
         self.word_04 = self.word_04.with_event_ready(true);
         self.word_14 = self
             .word_14
-            .with_phy_code_28_29(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_28_29_LE_1M)
-            .expect("zero fits")
-            .with_phy_code_30_31(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_30_31_LE_1M)
-            .expect("zero fits")
+            .with_phy_code_28_29_constant::<{ crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_28_29_LE_1M }>()
+            .with_phy_code_30_31_constant::<{ crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_30_31_LE_1M }>()
             .with_power_index(link_state.power_index());
         self.word_18 = self
             .word_18
@@ -245,16 +228,13 @@ const ADVERTISING_RESET: LegacyAdvertisingLinkStateWords = LegacyAdvertisingLink
     word_04: BleLinkStateScanResponse::ZERO,
     word_08: BleLinkStateRxPath::ZERO
         .with_unconsumed_limit(0xff)
-        .with_bits_28_31_opaque(0xe)
-        .expect("reviewed field image fits"),
+        .with_bits_28_31_opaque_constant::<0xe>(),
     word_0c: BleLinkStateControlPolicy::ZERO,
     word_14: BleLinkStatePacketPolicy::ZERO,
     word_18: BleLinkStateReceiveContext::ZERO,
     word_24: BleLinkStateOwnAddressPolicy::ZERO
-        .with_bits_20_22_opaque(1)
-        .expect("reviewed field image fits")
-        .with_bits_24_26_opaque(0x7)
-        .expect("reviewed field image fits"),
+        .with_bits_20_22_opaque_constant::<1>()
+        .with_bits_24_26_opaque_constant::<0x7>(),
     crc_init_word_2c: BleLinkStateCrcInitialization::ZERO,
     word_30: BleLinkStateSequencePolicy::ZERO,
     word_34: BleLinkStateEventSpan::ZERO,
@@ -283,6 +263,15 @@ const ADVERTISING_ITEM_EVENT: LegacyAdvertisingSchedulerItemWords =
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SchedulerEventPriority(u8);
 impl SchedulerEventPriority {
+    /// A priority in the four-bit scheduler domain.
+    ///
+    /// Fixed role priorities are checked in a const initializer.
+    ///
+    /// ```compile_fail,E0080
+    /// use oer_esp32s31_hal::bluetooth::engine::SchedulerEventPriority;
+    /// const PRIORITY: SchedulerEventPriority =
+    ///     SchedulerEventPriority::new(16).expect("reviewed priority fits");
+    /// ```
     pub const fn new(value: u8) -> Option<Self> {
         if value <= 15 { Some(Self(value)) } else { None }
     }

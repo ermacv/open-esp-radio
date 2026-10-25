@@ -119,6 +119,12 @@ transaction asserts its masks against the register's declared fields in a
 `whole-word`: the vendor's store of a whole word, with its evidence
 sources, which also writes the bits the model leaves undeclared.
 
+Generated SRAM-layout builders check a narrow constant field value through
+`with_<field>_constant::<VALUE>()` at monomorphization, including calls from
+runtime code. The setter preserves every other bit. A dynamic field value
+uses the checked `with_<field>(value)` returning `Option`; declaring its
+caller `const fn` does not turn that admission into a compile-time proof.
+
 `esp32s31/pac/` is the generated PAC (`src/generated.rs`) and its root
 (`src/lib.rs`, the one claim); it has no handwritten module
 ([PAC](../chips/esp32s31/pac/README.md)).

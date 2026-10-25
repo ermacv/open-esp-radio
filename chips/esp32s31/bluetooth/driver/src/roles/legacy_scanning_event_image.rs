@@ -73,8 +73,8 @@ impl LegacyScanStartSelection {
             channel,
             flexible_start: matches!(self, Self::EarliestAvailable),
             // SOURCE: pinned scanner first-event arbitration and priority-copy fields.
-            priority: SchedulerEventPriority::new(1).expect("reviewed priority fits"),
-            priority_copy: SchedulerEventPriority::new(0).expect("reviewed priority fits"),
+            priority: const { SchedulerEventPriority::new(1).expect("reviewed priority fits") },
+            priority_copy: const { SchedulerEventPriority::new(0).expect("reviewed priority fits") },
         }
     }
 }
