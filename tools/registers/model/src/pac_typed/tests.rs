@@ -718,6 +718,21 @@ fn a_fifo_port_is_only_popped_and_pushed() {
 }
 
 #[test]
+fn a_whole_word_fifo_port_pops_the_word_it_reads() {
+    let mut pack = typed_pack();
+    pack.fifo_ports.push(fifo("DATA"));
+    let word = register("DATA", 0, "read-only", "", &field("VALUE", 0, 32, ""));
+    let rust = pack
+        .render_typed_rust(&svd(&word), &Default::default())
+        .unwrap();
+    assert!(
+        rust.contains("pub fn pop_data(&mut self) -> u32 {\nself.0.read::<0x0>()\n}"),
+        "{rust}"
+    );
+    assert!(!rust.contains("pub fn push_data("), "{rust}");
+}
+
+#[test]
 fn a_fifo_port_its_read_declares_changing_is_still_pushed() {
     let clearing = register(
         "DATA",
@@ -1494,6 +1509,50 @@ fn a_partition_image_refuses_a_register_its_read_changes() {
             .is_empty(),
         "the svd2rust backend reads no typed partition"
     );
+}
+
+#[test]
+fn a_partition_image_reads_no_word_of_a_block_without_a_readable_register() {
+    let mut pack = partitioned_pack();
+    pack.partition_image_reads.push(crate::PartitionImageRead {
+        name: "image".to_owned(),
+        partition: pack.ownership_partitions[0].name.clone(),
+        exposure: crate::PacApiExposure::Facade,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    let commands = register("COMMAND", 0, "write-only", "", &field("OPCODE", 0, 8, ""));
+    let rust = pack
+        .render_typed_rust(&svd(&commands), &Default::default())
+        .expect("the write-only block renders");
+    assert!(!rust.contains("fn read_image_word"), "{rust}");
+    assert!(rust.contains("pub const IMAGE_LEN: usize = 0;"), "{rust}");
+}
+
+#[test]
+fn an_enumeration_with_a_value_above_i32_max_takes_the_register_width() {
+    let values = |high: u32| {
+        format!(
+            "<enumeratedValues><enumeratedValue><name>CLOSED</name><value>0</value></enumeratedValue>\
+             <enumeratedValue><name>OPEN</name><value>{high:#x}</value></enumeratedValue></enumeratedValues>"
+        )
+    };
+    let gates = |high| {
+        register(
+            "GATES",
+            0,
+            "read-write",
+            "",
+            &field("STATE", 0, 32, &values(high)),
+        )
+    };
+    let wide = typed_pack()
+        .render_typed_rust(&svd(&gates(0xffff_ffff)), &Default::default())
+        .expect("the wide enumeration renders");
+    assert!(wide.contains("#[repr(u32)]\npub enum State"), "{wide}");
+    let narrow = typed_pack()
+        .render_typed_rust(&svd(&gates(0x7fff_ffff)), &Default::default())
+        .expect("the narrow enumeration renders");
+    assert!(!narrow.contains("#[repr(u32)]"), "{narrow}");
 }
 
 #[test]
