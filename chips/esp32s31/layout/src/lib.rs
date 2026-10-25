@@ -11,7 +11,7 @@
 //! for the bootstrap, the board, and the build scripts of every image; each
 //! value's `SOURCE:` is in those files. With the `build` feature, [`build`]
 //! links a binary with the shared scripts and this chip's ROM script
-//! (`chips/esp32s31/layout/linker`).
+//! (generated in this crate's build directory).
 
 include!(concat!(env!("OUT_DIR"), "/layout.rs"));
 
@@ -23,7 +23,7 @@ pub mod build {
     use std::path::Path;
 
     fn linker_dir() -> std::path::PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("linker")
+        Path::new(env!("OUT_DIR")).to_path_buf()
     }
 
     /// Link binary `bin` as a stage-two runtime of this board.
@@ -34,5 +34,27 @@ pub mod build {
     /// Link binary `bin` as this board's Flash-resident bootstrap.
     pub fn configure_bootstrap(bin: &str) {
         oer_espressif_staged_layout::build::configure_bootstrap(bin, &super::LAYOUT, &linker_dir());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate std;
+
+    #[test]
+    fn the_linker_inputs_are_generated_from_the_tracked_facts() {
+        let (facts, _) = oer_espressif_facts::generate::tracked("esp32s31").expect("chip facts");
+        let rom = facts.rom.as_ref().expect("ROM facts");
+        let out = std::path::Path::new(env!("OUT_DIR"));
+        let script = std::fs::read_to_string(out.join(super::LAYOUT.rom_script))
+            .expect("generated ROM script");
+        assert_eq!(
+            script,
+            oer_espressif_facts::generate::rom_script(rom).expect("ROM generation")
+        );
+        assert_eq!(
+            std::fs::read(out.join("dma-window.x")).expect("staged DMA fragment"),
+            include_bytes!("../linker/dma-window.x")
+        );
     }
 }

@@ -483,13 +483,26 @@ pub struct Rom {
     /// ROM code no shipped image may call into.
     #[serde(default)]
     pub forbidden: Vec<RomRange>,
-    /// The ROM symbol script the images link with, relative to the chip's
-    /// layout crate's `linker` directory (`chips/<id>/layout/linker`).
+    /// The ROM symbol script the images link with, relative to the chip
+    /// layout's linker input directory (the generated build output on S31).
     pub linker_script: String,
+    /// ROM entry points called by our code, with their pinned provenance.
+    #[serde(default)]
+    pub functions: Vec<RomFunction>,
     /// What the ROM uses of the internal SRAM, `start..end`, and while it
     /// keeps each range.
     #[serde(default)]
     pub sram: Vec<RomSram>,
+}
+
+/// One ROM function exported by the generated linker script.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct RomFunction {
+    pub name: String,
+    pub address: u32,
+    /// A `SOURCE:` citation of the pinned ESP-IDF script or ROM ELF.
+    pub source: String,
 }
 
 /// A range of internal SRAM the mask ROM uses.

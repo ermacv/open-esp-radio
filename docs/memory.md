@@ -23,7 +23,7 @@ facts at build time; the host checks read the same facts.
 | SRAM | Strict and hot code, interrupt stacks, critical state and DMA storage: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
 | PSRAM | Ordinary runtime code, data and the CPU0 task stack: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
 | Flash XIP | The bootstrap's ordinary code and constants: [bootstrap sections](../chips/espressif/staged-layout/linker/bootstrap/sections.x). |
-| ROM | Chip routines available to the images: [S31 ROM symbols](../chips/esp32s31/layout/linker/rom/esp32s31-eco0.x) and [C5 ROM symbols](../chips/esp32c5/layout/linker/rom/esp32c5-eco2.x). |
+| ROM | Chip routines available to the images: [S31 ROM facts](../chips/esp32s31/platform/rom-rev0.toml) generate its ROM script in the layout build directory; [C5 ROM symbols](../chips/esp32c5/layout/linker/rom/esp32c5-eco2.x). |
 | RTC retained | Reset-retained records in `.rtc_fast.persistent`, below the reserved tail: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
 
 ## Code placement

@@ -13,7 +13,7 @@ tools load.
 | ISA | `chips/espressif/platform/isa/<isa>.toml` | the ISA of the harts and its bare-metal Rust target |
 | family | `chips/espressif/platform/family.toml` | the boot flow, the CLIC's lines and levels, the interrupt-table layout and symbols, the placement contract, the staged boot's host contract (MMU page, image headers, probe page, handoff margin), the reachability report's observed functions |
 | chip | `chips/<id>/platform/chip.toml` | the chip's properties, flash map, address map (internal SRAM, flash window, retained memory) with each region's attributes, what the boot chain keeps (`[boot-chain]`), harts, core start, reset cause; still the image registry (`[hil]`, `[packages]`, `[[probe]]`) |
-| ROM | `chips/<id>/platform/rom-<revision>.toml` | the mask ROM of one chip revision: its pinned ELF, symbol script, function summaries, forbidden code and what it uses of the internal SRAM (`[rom] sram`) |
+| ROM | `chips/<id>/platform/rom-<revision>.toml` | the mask ROM of one chip revision: its pinned ELF, symbol script, sourced entry points (`[[rom.functions]]`), function summaries, forbidden code and what it uses of the internal SRAM (`[rom] sram`) |
 | module | `chips/<id>/platform/modules/<module>.toml` | the module that carries the chip: its flash and PSRAM |
 | board | `chips/<id>/platform/boards/<board>.toml` | the board that carries the module |
 
@@ -80,6 +80,17 @@ it writes is in git:
   entry and exit of `vectors.s`), every line's default handler (the linker
   fragment `oer-staged-runtime-vectors.x`) and the interrupt table's
   `LINES`, from the chip's harts and CLIC lines.
+- `rom_script`: the ROM linker assignments from `[[rom.functions]]`, each
+  with a `name`, `address` and pinned `SOURCE:` citation in `source`. The
+  S31 layout build writes `[rom] linker-script` under its `OUT_DIR` and
+  stages the register-model-generated DMA window beside it for the shared
+  linker binding. A host test scans our S31, shared chip and firmware
+  foreign function declarations and requires exactly the same export set;
+  the provenance test restricts S31 exports to the pinned nonradio script.
+  Radio ROM and vendor libc/compiler-intrinsic script provenance and
+  forbidden ROM addresses are refused before generation. The pinned
+  compiler_builtins enables its `mem` routines for bare-metal `-none`
+  targets, including S31's `riscv32imafc-unknown-none-elf`.
 
 `tracked` holds the tracked layer files and each chip's stack policy as the
 build compiled them in, for host tests, the generating build scripts and

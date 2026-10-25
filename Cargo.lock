@@ -3011,6 +3011,7 @@ name = "oer-espressif-facts"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "syn 2.0.119",
  "toml",
 ]
 
