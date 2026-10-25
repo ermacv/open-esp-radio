@@ -12,10 +12,7 @@
 use crate::{
     ieee80211::{dma::rx_dma::RxDma, station_wake::StationWakeState},
     owner::{MacInterruptRegisters, MacInterruptSetup, MacPowerInterruptRegisters, RadioAccess},
-    types::{
-        MacHeTxProgram, MacHtTxProgram, MacInterface, MacInterruptSnapshot, MacLegacyTxProgram,
-        MacPowerInterruptSnapshot, TxBlockAckPayload,
-    },
+    types::{MacHeTxProgram, MacHtTxProgram, MacInterface, MacLegacyTxProgram, TxBlockAckPayload},
 };
 
 /// The running Wi-Fi register owner of a probe image, clocked and
@@ -58,9 +55,15 @@ pub fn hal_mac_interrupt_get_event() -> u32 {
         .probe_bits()
 }
 
-pub fn hal_mac_interrupt_clr_event(events: u32) -> u32 {
-    mac_interrupt_registers().acknowledge_mac_interrupts(MacInterruptSnapshot::for_probe(events));
-    events
+/// Acknowledge the events the MAC status holds now: a fresh sample of the
+/// handler's part, never an image the comparison chose. Returns the
+/// acknowledged bits; `events` (the vendor's argument) is not written.
+pub fn hal_mac_interrupt_clr_event(_events: u32) -> u32 {
+    let mut registers = mac_interrupt_registers();
+    let snapshot = registers.mac_interrupt_status();
+    let acknowledged = snapshot.probe_bits();
+    registers.acknowledge_mac_interrupts(snapshot);
+    acknowledged
 }
 
 pub fn hal_pwr_interrupt_get_event() -> u32 {
@@ -69,10 +72,14 @@ pub fn hal_pwr_interrupt_get_event() -> u32 {
         .probe_bits()
 }
 
-pub fn hal_pwr_interrupt_clr_event(events: u32) -> u32 {
-    mac_power_interrupt_registers()
-        .acknowledge_power_interrupts(MacPowerInterruptSnapshot::for_probe(events));
-    events
+/// Acknowledge the WDEVPWR events the status holds now, as
+/// [`hal_mac_interrupt_clr_event`] does for the MAC.
+pub fn hal_pwr_interrupt_clr_event(_events: u32) -> u32 {
+    let mut registers = mac_power_interrupt_registers();
+    let snapshot = registers.power_interrupt_status();
+    let acknowledged = snapshot.probe_bits();
+    registers.acknowledge_power_interrupts(snapshot);
+    acknowledged
 }
 
 pub fn hal_mac_rx_disable(passthrough: u32) -> u32 {
