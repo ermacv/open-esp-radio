@@ -14,6 +14,18 @@ accuracy = "exact"
 completeness = "complete"
 naming = "vendor"
 
+[review.opaque]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H"]
+provenance = "imported"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."LP_ANA_FIB_ENABLE.LP_ANA_BOD_MODE1_FIB"]
+sources = ["ESP_IDF_4D59230D_S31_BROWNOUT_LL"]
+
+[review.entity."LP_ANA_FIB_ENABLE.LP_ANA_ANA_FIB_PWR_GLITCH_ENA"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_ANALOG_PERI_REG_H"]
+
 [[registers]]
 name = "LP_ANA_BOD_MODE0_CNTL"
 offset = 0x0
@@ -115,10 +127,28 @@ description = "need_des"
 reset = { value = 0xffffffff }
 
 [[registers.fields]]
-name = "LP_ANA_ANA_FIB_ENA"
-bits = "31:0"
+name = "BIT_0_OPAQUE"
+bits = "0"
 class = "plain"
-description = "need_des"
+description = "A bit of the analog FIB enables whose meaning no source states; reset one."
+
+[[registers.fields]]
+name = "LP_ANA_BOD_MODE1_FIB"
+bits = "1"
+class = "plain"
+description = "Set: the analog hardware controls the brownout detector's mode 1; clear: software controls it (BROWNOUT_DETECTOR_LL_FIB_ENABLE)."
+
+[[registers.fields]]
+name = "LP_ANA_ANA_FIB_PWR_GLITCH_ENA"
+bits = "5:2"
+class = "plain"
+description = "The analog FIB enables of the power-glitch detectors."
+
+[[registers.fields]]
+name = "BITS_6_31_OPAQUE"
+bits = "31:6"
+class = "plain"
+description = "Bits of the analog FIB enables whose meaning no source states; reset ones."
 
 [[registers]]
 name = "LP_ANA_INT_RAW"

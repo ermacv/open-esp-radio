@@ -232,3 +232,7 @@ description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7:
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L117"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/reg_base.h:117 (file sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d), Apache-2.0: DR_REG_BUS_MONITOR_BASE 0x2D002000."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_BROWNOUT_LL"
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/esp_hal_pmu/esp32s31/include/hal/brownout_ll.h sha256 fa02b0233b018f6fe1ae0c5ca7b25e7fc8d13608d39b063387b518b2f50be3c7. BROWNOUT_DETECTOR_LL_FIB_ENABLE is BIT(1) of LP_ANA_PERI.fib_enable (line 22); brownout_ll_ana_reset_enable (lines 108-116) clears it to give BOD mode 1 to software, then writes bod_mode1_cntl.bod_mode1_reset_ena. components/soc/esp32s31/register/soc/lp_analog_peri_reg.h:122-125 places LP_ANA_ANA_FIB_PWR_GLITCH_ENA (mask 0xf) at bit 2."

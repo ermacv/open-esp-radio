@@ -90194,10 +90194,28 @@ pub mod lp_ana {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// need_des
+            /// A bit of the analog FIB enables whose meaning no source states; reset one.
             #[inline]
-            pub const fn ana_fib_ena(self) -> u32 {
-                self.0
+            pub const fn bit_0_opaque(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Set: the analog hardware controls the brownout detector's mode 1; clear: software controls it (BROWNOUT_DETECTOR_LL_FIB_ENABLE).
+            #[inline]
+            pub const fn bod_mode1_fib(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The analog FIB enables of the power-glitch detectors.
+            #[inline]
+            pub const fn ana_fib_pwr_glitch_ena(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 2)
+            }
+
+            /// Bits of the analog FIB enables whose meaning no source states; reset ones.
+            #[inline]
+            pub const fn bits_6_31_opaque(self) -> oer_mmio::Bits<26> {
+                oer_mmio::Bits::truncate(self.0 >> 6)
             }
         }
 
@@ -90205,16 +90223,55 @@ pub mod lp_ana {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// need_des
+            /// A bit of the analog FIB enables whose meaning no source states; reset one.
             #[inline]
-            pub const fn ana_fib_ena(&self) -> u32 {
-                self.0
+            pub const fn bit_0_opaque(&self) -> bool {
+                (self.0 & 0x00000001) != 0
             }
 
-            /// Set `LP_ANA_ANA_FIB_ENA`.
+            /// Set: the analog hardware controls the brownout detector's mode 1; clear: software controls it (BROWNOUT_DETECTOR_LL_FIB_ENABLE).
             #[inline]
-            pub fn set_ana_fib_ena(&mut self, value: u32) -> &mut Self {
-                self.0 = value;
+            pub const fn bod_mode1_fib(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The analog FIB enables of the power-glitch detectors.
+            #[inline]
+            pub const fn ana_fib_pwr_glitch_ena(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 2)
+            }
+
+            /// Bits of the analog FIB enables whose meaning no source states; reset ones.
+            #[inline]
+            pub const fn bits_6_31_opaque(&self) -> oer_mmio::Bits<26> {
+                oer_mmio::Bits::truncate(self.0 >> 6)
+            }
+
+            /// Set `BIT_0_OPAQUE`.
+            #[inline]
+            pub fn set_bit_0_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+
+            /// Set `LP_ANA_BOD_MODE1_FIB`.
+            #[inline]
+            pub fn set_bod_mode1_fib(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `LP_ANA_ANA_FIB_PWR_GLITCH_ENA`.
+            #[inline]
+            pub fn set_ana_fib_pwr_glitch_ena(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & 0xffffffc3) | (value.get() << 2);
+                self
+            }
+
+            /// Set `BITS_6_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_6_31_opaque(&mut self, value: oer_mmio::Bits<26>) -> &mut Self {
+                self.0 = (self.0 & 0x0000003f) | (value.get() << 6);
                 self
             }
         }
