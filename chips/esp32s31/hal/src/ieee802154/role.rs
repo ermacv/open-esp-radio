@@ -594,7 +594,7 @@ impl Ieee802154FoundationConfigured {
     /// Hand the task and inactive interrupt owners to the operational MAC.
     ///
     /// This transition performs no MMIO. Event and abort delivery stay masked
-    /// until the interrupt owner is activated. The operational MAC publishes
+    /// until the interrupt owner is armed and its events are enabled. The operational MAC publishes
     /// its own PIB; both owners return through [`Self::from_operational`].
     pub fn into_operational(self) -> Ieee802154Operational {
         let Ieee802154Mac { task, interrupts } = self.inner.into_backend();
@@ -647,7 +647,7 @@ impl Ieee802154MacPolicyConfigured {
 /// The owners of one operational IEEE 802.15.4 MAC epoch.
 ///
 /// The task owner executes commands; the interrupt owner is inactive until
-/// its platform route activates it. Neither is RF readiness.
+/// it is armed. Neither is RF readiness.
 #[must_use = "the operational owners must return through the foundation owner"]
 pub struct Ieee802154Operational {
     /// Task-side MAC registers.

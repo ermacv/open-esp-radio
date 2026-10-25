@@ -5,17 +5,21 @@ with `interrupt_table!` (a chip's platform wraps it with its CPU lines, such
 as `oer_espressif_staged_runtime::interrupt_table!`), and the router that
 writes the routes and lines by it.
 
-One line, one source, one direct call. Each entry binds one interrupt part
+One line, one part, one direct call. Each entry binds one interrupt part
 to one CPU line at a level on a hart:
 
 ```text
 field: Token = Part => handler, line LINE, level LEVEL, hart HART, CLASS;
 ```
 
-The source comes from the part's type (`oer_mmio::InterruptSource`, which
-the PAC generator implements for a block's interrupt side), never from the
-entry's text, and the handler is a `fn(&mut Part)`. For each entry the macro
-defines:
+The sources come from the part's type (`oer_mmio::InterruptSources`: the one
+source of an `oer_mmio::InterruptSource`, which the PAC generator implements
+for a block's interrupt side, or the several sources of a part one handler
+serves together), never from the entry's text, and the handler is a
+`fn(&mut Part)`; it learns which source fired from its peripherals' status,
+never from the matrix. A part made of several members builds its sources
+with `interrupt_sources![Member, ...]`, at compile time; a source listed
+twice fails to compile. For each entry the macro defines:
 
 - `__oer_interrupt_h<HART>_l<LINE>`, the strong symbol the line's vector
   calls: it lends the bound part to the handler and runs nothing before the
@@ -29,8 +33,12 @@ defines:
 - with `#[cfg(...)]` before its doc comment, nothing at all in a build that
   leaves the entry out: its table element has no handler (a zero word).
 
+The table holds one element per source of each entry, each with the
+entry's line, level, hart, class and handler.
+
 The table fails to compile when an entry's line, level or hart is outside
-the chip's `Lines`, when two entries share a line and hart or a source, when
+the chip's `Lines`, when two entries share a line and hart, when two entries
+or one part list a source twice, when
 two `Executor` entries share a level and hart, a `Hardware` or
 `Exempt(WakerCall, ..)` entry sits on an executor's level of its hart, or an
 `Exempt(ExecutorLevel, ..)` entry does not. A handler that takes another
@@ -60,12 +68,13 @@ gives the CLIC three level bits):
 - `Router::bind` consumes an entry's token and its part, moves the part where
   only the entry's handler reaches it, writes the entry's line (enabled,
   hardware-vectored, positive-level-triggered, its level in the control
-  byte, `line_control`) and only then routes the source to it, and returns
+  byte, `line_control`) and only then routes each of the part's sources to
+  it, and returns
   `Bound<Part>`, the proof a driver takes before it enables the peripheral's
   interrupt; an entry of another hart or one the table lacks comes back with
   its token and part, and an entry outside the controller fails to compile;
-- `Router::silent` returns `Silent<Part>`, the proof that the part's source is
-  routed nowhere and no entry of the table binds it, which a driver that
+- `Router::silent` returns `Silent<Part>`, the proof that each of the part's
+  sources is routed nowhere and no entry of the table binds it, which a driver that
   polls the part's events takes instead of `Bound` (both implement the
   sealed `EventAuthority`);
 - a controller refuses a source or line outside it and writes nothing; it

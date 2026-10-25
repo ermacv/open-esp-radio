@@ -26,7 +26,10 @@ pub struct Doorbell<const SWI: u8> {
 }
 
 /// Check that `Bell` is the token of software interrupt `SWI`.
-const fn bell_source<const SWI: u8, Bell: Entry>() {
+const fn bell_source<const SWI: u8, Bell: Entry>()
+where
+    Bell::Part: oer_interrupt_table::InterruptSource,
+{
     assert!(
         <Bell::Part as oer_interrupt_table::InterruptSource>::SOURCE
             == software_interrupt_source(SWI) as u16,
@@ -49,6 +52,7 @@ macro_rules! impl_doorbell {
             where
                 Radio: Entry,
                 Bell: Entry,
+                Bell::Part: oer_interrupt_table::InterruptSource,
             {
                 const { bell_source::<$number, Bell>() };
                 let _ = level;

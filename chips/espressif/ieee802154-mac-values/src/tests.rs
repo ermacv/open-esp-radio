@@ -3,8 +3,7 @@ use std::vec::Vec;
 use super::{
     Ieee802154InterruptActivationPlan, Ieee802154InterruptTransitionPort,
     Ieee802154ObservedEventState, Ieee802154RxStateCode, Ieee802154StateSnapshot,
-    Ieee802154TxStateCode, execute_interrupt_activation, execute_interrupt_arming,
-    execute_interrupt_deactivation,
+    Ieee802154TxStateCode, execute_interrupt_arming, execute_interrupt_deactivation,
 };
 
 #[test]
@@ -61,7 +60,6 @@ enum InterruptTransitionOperation {
     StopTimer0,
     StopTimer1,
     MaskEvents,
-    EnableRuntimeEvents,
     MaskTxAborts,
     EnableRuntimeTxAborts,
     MaskRxAborts,
@@ -100,11 +98,6 @@ impl Ieee802154InterruptTransitionPort for RecordingInterruptTransitionPort {
     fn mask_all_events(&mut self) {
         self.operations
             .push(InterruptTransitionOperation::MaskEvents);
-    }
-
-    fn enable_runtime_events(&mut self) {
-        self.operations
-            .push(InterruptTransitionOperation::EnableRuntimeEvents);
     }
 
     fn mask_all_tx_aborts(&mut self) {
@@ -146,32 +139,6 @@ impl Ieee802154InterruptTransitionPort for RecordingInterruptTransitionPort {
                 snapshot.0,
             ));
     }
-}
-
-#[test]
-fn production_activation_executor_masks_then_acks_the_exact_affine_sample() {
-    let mut port = RecordingInterruptTransitionPort {
-        event_identity: 0xa5,
-        operations: Vec::new(),
-    };
-    execute_interrupt_activation(
-        &mut port,
-        Ieee802154InterruptActivationPlan::SOURCE_CONFIRMED_BASELINE,
-    );
-
-    assert_eq!(
-        port.operations,
-        [
-            InterruptTransitionOperation::MaskEvents,
-            InterruptTransitionOperation::EnableRuntimeTxAborts,
-            InterruptTransitionOperation::EnableRuntimeRxAborts,
-            InterruptTransitionOperation::OrderDeviceAccesses,
-            InterruptTransitionOperation::SampleStaleEvents(0xa5),
-            InterruptTransitionOperation::AcknowledgeStaleEvents(0xa5),
-            InterruptTransitionOperation::EnableRuntimeEvents,
-            InterruptTransitionOperation::OrderDeviceAccesses,
-        ]
-    );
 }
 
 #[test]

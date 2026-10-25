@@ -1065,13 +1065,6 @@ impl Ieee802154InterruptTransitionPort for Ieee802154PacInterruptTransitionPort<
         self.task.peripherals.ieee802154_mac.mask_all_events();
     }
 
-    fn enable_runtime_events(&mut self) {
-        self.task
-            .peripherals
-            .ieee802154_mac
-            .enable_runtime_events_without_timer0();
-    }
-
     fn mask_all_tx_aborts(&mut self) {
         self.task.peripherals.ieee802154_mac.mask_all_tx_aborts();
     }
