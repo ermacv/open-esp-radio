@@ -49,7 +49,7 @@ impl Context<'_> {
 }
 
 /// Bound both record overhead and owned text before materializing repetitions.
-/// Separate budgets cover all included types and all expanded instances.
+/// Separate budgets cover all included types and all expanded chip relations.
 #[derive(Default)]
 pub(super) struct ExpansionBudget {
     records: u64,
@@ -68,7 +68,7 @@ impl ExpansionBudget {
         self.records = self.records.saturating_add(count.saturating_mul(records));
         self.text = self.text.saturating_add(count.saturating_mul(text));
         let exceeded = if self.records > 65_536 {
-            Some("65,536 register/field records")
+            Some("65,536 expanded records")
         } else if self.text > 64 * 1024 * 1024 {
             Some("64 MiB of expanded text")
         } else {

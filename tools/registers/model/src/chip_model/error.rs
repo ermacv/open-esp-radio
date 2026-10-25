@@ -109,6 +109,29 @@ pub enum ErrorKind {
     UnknownInstance(String),
     #[error("interrupt output: {0}")]
     Output(String),
+    #[error("interrupt coverage: {0}")]
+    InterruptCoverage(String),
+    #[error("interrupt source {0} is neither bound nor explicitly unbound")]
+    MissingInterruptSource(u16),
+    #[error("names no expanded MMIO field: {0}")]
+    UnknownField(String),
+    #[error(
+        "{kind} field {field} has class {class} and width {width}; gates and resets require one plain bit; muxes require plain"
+    )]
+    ControlField {
+        field: String,
+        kind: &'static str,
+        class: &'static str,
+        width: u32,
+    },
+    #[error("control link: {0}")]
+    Control(String),
+    #[error("shared control: {0}")]
+    SharedControl(String),
+    #[error("gate group: {0}")]
+    GateGroup(String),
+    #[error("clock source: {0}")]
+    ClockSource(String),
     #[error("analog-I2C route: {0}")]
     Route(String),
     #[error("analog-I2C block code {0:#04x} is used twice")]

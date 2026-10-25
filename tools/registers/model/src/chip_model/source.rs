@@ -344,6 +344,15 @@ pub struct RootFile {
     pub instances: Vec<Instance>,
     #[serde(default)]
     pub interrupts: Vec<Interrupt>,
+    pub interrupt_sources: InterruptSources,
+    #[serde(default)]
+    pub unbound_interrupts: Vec<UnboundInterrupt>,
+    #[serde(default)]
+    pub shared_controls: Vec<SharedControl>,
+    #[serde(default)]
+    pub gate_groups: Vec<GateGroup>,
+    #[serde(default)]
+    pub clock_sources: Vec<ClockSource>,
     #[serde(default)]
     pub analog_i2c: AnalogSpace,
     #[serde(default)]
@@ -361,6 +370,80 @@ pub struct Instance {
     pub block_type: String,
     pub base: u64,
     pub extent: Extent,
+    pub sources: Vec<String>,
+    #[serde(default)]
+    pub clocks: Vec<Control>,
+    #[serde(default)]
+    pub resets: Vec<Control>,
+    #[serde(default)]
+    pub muxes: Vec<Mux>,
+}
+
+/// A fixed gate or reset link to an expanded MMIO field identity.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Control {
+    pub role: String,
+    pub field: String,
+    pub sources: Vec<String>,
+}
+
+/// A selector and its sourced input encodings. Unlisted encodings are unknown.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Mux {
+    pub role: String,
+    pub field: String,
+    pub inputs: BTreeMap<String, String>,
+    pub sources: Vec<String>,
+}
+
+/// One field shared by exactly these distinct MMIO instances.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct SharedControl {
+    pub name: String,
+    pub field: String,
+    pub instances: Vec<String>,
+    pub sources: Vec<String>,
+}
+
+/// A vendor's fixed group of gate bits, independent of its consumers.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct GateGroup {
+    pub name: String,
+    pub fields: Vec<String>,
+    pub sources: Vec<String>,
+}
+
+/// A clock-tree source; only known frequency and parent facts are stated.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct ClockSource {
+    pub name: String,
+    #[serde(default)]
+    pub frequency_hz: Option<u64>,
+    #[serde(default)]
+    pub parent: Option<String>,
+    pub sources: Vec<String>,
+}
+
+/// All interrupt numbers are in `0..count`, each bound or explicitly unbound.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct InterruptSources {
+    pub count: u32,
+    pub sources: Vec<String>,
+}
+
+/// A source whose hardware owner or output is not established.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct UnboundInterrupt {
+    pub source: u16,
+    pub name: String,
+    pub reason: String,
     pub sources: Vec<String>,
 }
 

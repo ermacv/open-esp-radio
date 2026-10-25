@@ -19,17 +19,20 @@ use crate::{
 };
 
 mod block_type;
+mod controls;
 mod error;
 mod source;
 
 pub use block_type::{BlockType, Element};
 use block_type::{Context, ExpansionBudget, check_name, parse_bits};
+pub use controls::{ControlKind, ExpandedControl, ExpandedGateGroup, ResolvedField};
 pub use error::{Error, ErrorKind};
 pub use source::{
-    AnalogInstance, AnalogSpace, Command, Dim, Extent, Field, FieldClass, Group, Instance,
-    Interrupt, InterruptOutput, LayoutPlacement, OpaqueReview, ROOT_SCHEMA, RamRegion, ReadSafe,
-    Register, Reserved, Reset, ReviewOverride, RootFile, Sourced, Space, TYPE_SCHEMA, TypeFile,
-    TypeHeader, TypeReview, Value, View, WriteRange,
+    AnalogInstance, AnalogSpace, ClockSource, Command, Control, Dim, Extent, Field, FieldClass,
+    GateGroup, Group, Instance, Interrupt, InterruptOutput, InterruptSources, LayoutPlacement, Mux,
+    OpaqueReview, ROOT_SCHEMA, RamRegion, ReadSafe, Register, Reserved, Reset, ReviewOverride,
+    RootFile, SharedControl, Sourced, Space, TYPE_SCHEMA, TypeFile, TypeHeader, TypeReview,
+    UnboundInterrupt, Value, View, WriteRange,
 };
 
 /// Where an expanded register is.
@@ -79,6 +82,8 @@ pub struct ChipModel {
     types: BTreeMap<String, BlockType>,
     layouts: Vec<MemoryLayout>,
     registers: Vec<ExpandedRegister>,
+    controls: Vec<ExpandedControl>,
+    gate_groups: Vec<ExpandedGateGroup>,
 }
 
 impl ChipModel {
@@ -131,13 +136,17 @@ impl ChipModel {
         place_layouts(context, &root, &regions, &mut layouts)?;
         crate::layouts::validate_layout_set(&layouts)
             .map_err(|error| context.error("", ErrorKind::Layouts(Box::new(error))))?;
-        let registers = expand(context, &root, &types)?;
+        let mut budget = ExpansionBudget::default();
+        let registers = expand(context, &root, &types, &mut budget)?;
+        let controls = controls::expand(context, &root, &registers, &mut budget)?;
         Ok(Self {
             path: path.to_owned(),
             root,
             types,
             layouts,
             registers,
+            controls: controls.links,
+            gate_groups: controls.groups,
         })
     }
 
@@ -160,6 +169,31 @@ impl ChipModel {
 
     pub fn interrupts(&self) -> &[Interrupt] {
         &self.root.interrupts
+    }
+
+    pub fn interrupt_sources(&self) -> &InterruptSources {
+        &self.root.interrupt_sources
+    }
+
+    pub fn unbound_interrupts(&self) -> &[UnboundInterrupt] {
+        &self.root.unbound_interrupts
+    }
+
+    /// Fixed instance controls, with absolute field identities and addresses.
+    pub fn controls(&self) -> &[ExpandedControl] {
+        &self.controls
+    }
+
+    pub fn shared_controls(&self) -> &[SharedControl] {
+        &self.root.shared_controls
+    }
+
+    pub fn gate_groups(&self) -> &[ExpandedGateGroup] {
+        &self.gate_groups
+    }
+
+    pub fn clock_sources(&self) -> &[ClockSource] {
+        &self.root.clock_sources
     }
 
     pub fn analog_instances(&self) -> &[AnalogInstance] {
@@ -398,18 +432,40 @@ fn check_interrupts(
 ) -> Result<(), Error> {
     let mut names = BTreeSet::new();
     let mut numbers = BTreeSet::new();
+    let count = root.interrupt_sources.count;
+    context.sources("interrupt-sources", &root.interrupt_sources.sources)?;
+    if count > u32::from(u16::MAX) + 1 {
+        return Err(context.error(
+            "interrupt-sources",
+            ErrorKind::InterruptCoverage("count exceeds the u16 source number space".to_owned()),
+        ));
+    }
+    for (name, source) in root
+        .interrupts
+        .iter()
+        .map(|irq| (&irq.name, irq.source))
+        .chain(
+            root.unbound_interrupts
+                .iter()
+                .map(|irq| (&irq.name, irq.source)),
+        )
+    {
+        check_name(name, false).map_err(|kind| context.error(name, kind))?;
+        if !names.insert(name.as_str()) {
+            return Err(context.error(name, ErrorKind::Duplicate(format!("interrupt {name}"))));
+        }
+        if !numbers.insert(source) {
+            return Err(context.error(name, ErrorKind::DuplicateSourceNumber(source)));
+        }
+        if u32::from(source) >= count {
+            return Err(context.error(
+                name,
+                ErrorKind::InterruptCoverage(format!("source {source} is outside 0..{count}")),
+            ));
+        }
+    }
     for interrupt in &root.interrupts {
         let fail = |kind| context.error(&interrupt.name, kind);
-        check_name(&interrupt.name, false).map_err(fail)?;
-        if !names.insert(interrupt.name.as_str()) {
-            return Err(fail(ErrorKind::Duplicate(format!(
-                "interrupt {}",
-                interrupt.name
-            ))));
-        }
-        if !numbers.insert(interrupt.source) {
-            return Err(fail(ErrorKind::DuplicateSourceNumber(interrupt.source)));
-        }
         let block_type = root
             .instances
             .iter()
@@ -439,6 +495,25 @@ fn check_interrupts(
             _ => {}
         }
         context.sources(&interrupt.name, &interrupt.sources)?;
+    }
+    for interrupt in &root.unbound_interrupts {
+        if interrupt.reason.trim().is_empty() {
+            return Err(context.error(
+                &interrupt.name,
+                ErrorKind::InterruptCoverage("unbound source needs a nonblank reason".to_owned()),
+            ));
+        }
+        context.sources(&interrupt.name, &interrupt.sources)?;
+    }
+    for source in 0..count {
+        // The count was checked against the source number space above.
+        let source = source as u16;
+        if !numbers.contains(&source) {
+            return Err(context.error(
+                "interrupt-sources",
+                ErrorKind::MissingInterruptSource(source),
+            ));
+        }
     }
     Ok(())
 }
@@ -567,6 +642,7 @@ fn expand(
     context: Context<'_>,
     root: &RootFile,
     types: &BTreeMap<String, BlockType>,
+    budget: &mut ExpansionBudget,
 ) -> Result<Vec<ExpandedRegister>, Error> {
     let mut out = Vec::new();
     let placed = root
@@ -586,7 +662,6 @@ fn expand(
                 Placed::Analog(instance.code),
             )
         }));
-    let mut budget = ExpansionBudget::default();
     let mut count = 0;
     for (instance, name, _) in placed.clone() {
         let block_type = types

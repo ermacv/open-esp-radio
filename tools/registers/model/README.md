@@ -191,8 +191,8 @@ registers, `dim` elements and group elements alike, and no register or
 other group lies inside a group's span, from its first element's start to
 its last element's end. An analog byte's index is below 256. Repeated spans
 are checked before expansion. The loader bounds materialization for all
-included types combined, and separately for the chip's expanded instances,
-to 65,536 register/field records and 64 MiB of owned expansion
+included types combined, and separately for the chip's expanded instances
+and root relations, to 65,536 records and 64 MiB of owned expansion
 text (including source-string slots); excessive expansion returns a typed
 error before creating those records.
 
@@ -217,6 +217,7 @@ that instance in the root, not a second review.
 ```toml
 schema = 4
 chip = "esp32s31"
+interrupt-sources = { count = 169, sources = ["IDF_INTERRUPTS_H"] }
 types = ["types/timg.toml", "types/bbpll.toml"]   # relative to the root
 layouts = ["layouts/rx-descriptor.toml"]
 
@@ -235,8 +236,8 @@ extent = { size = 0x800, partial = true, sources = ["BLOB_BT_WORDS"] }
 sources = ["BLOB_BT_WORDS"]
 
 [[interrupts]]
-name = "TG0_T0_LEVEL"
-source = 51
+name = "TG0_T0"
+source = 25
 instance = "TIMG0"
 output = "T0"                     # required when the type names outputs
 sources = ["IDF_INTERRUPTS_H"]
@@ -270,11 +271,17 @@ An instance has no per-instance patch: TIMG0 and TIMG1 are two instances of
 one type. Every word of its type lies inside its extent, and no two MMIO
 instances or RAM regions overlap. A `partial` extent is the part of a block
 the sources show, with its own sources; a block known only from vendor
-binaries is a descriptive type with such an extent. Every interrupt source
-has a unique name and number and is bound to an existing instance and, when
-its type names outputs, to one of them; several sources may lead to one
-output. Analog-I2C instances are addressed by their block code, not by a
-CPU address, and keep their request routes. Memory layout files keep their
+binaries is a descriptive type with such an extent. `interrupt-sources`
+is required: its sourced `count` declares the complete source range
+`0..count` (at most 65536 sources). Each number occurs exactly once in
+`[[interrupts]]` or `[[unbound-interrupts]]`; names are unique across both
+lists. A bound source names an existing instance and, when its type names
+outputs, one of them; several sources may lead to one output. An unbound
+entry has `source`, `name`, a nonblank `reason`, and `sources`. Missing,
+out-of-range, repeated or simultaneously bound/unbound sources fail loading.
+The root example is an excerpt: the other S31 sources must also be listed.
+Analog-I2C instances are addressed by their block code, not by a CPU
+address, and keep their request routes. Memory layout files keep their
 own format without a file-level `placement`; the root may place a layout
 in RAM regions, which an address field's `placement` also names. Omitting
 `[[layout-placements]]` for an included layout leaves it unplaced: it can
@@ -289,6 +296,202 @@ absolute address (an `AnalogAddress` in the analog space) and the identity
 (`TIMG0.T1.CONFIG.EN`). Every `sources` entry must exist in the evidence
 catalogs. Every check here runs on load and fails with a typed
 `chip_model::Error` that names the file and the entity.
+
+### Fixed clocks, resets and selectors
+
+An MMIO instance's `clocks` and `resets` are lists of `{ role, field,
+sources }`; `muxes` adds `inputs = { encoding = "CLOCK_SOURCE" }`.
+`field` is an absolute expanded `INSTANCE.REGISTER.FIELD` identity,
+including concrete `dim` and group indices. The referenced instance must
+be a different MMIO instance of the root; links to the instance's own block
+are rejected. Gates and resets require one `plain` bit; a mux requires a
+`plain` field. A field has one control kind across all instance links and
+gate groups: clock gate, reset or mux. Roles are nonempty segments of ASCII
+lowercase letters and digits separated by single hyphens, unique within each
+list; leading, trailing and consecutive hyphens are rejected. Several roles
+of one instance still count as one user. Input keys are canonical unsigned
+decimal numbers within the field's width; every value names a declared
+`[[clock-sources]]` entry.
+The input map is nonempty and identical for all users of one selector;
+unlisted encodings remain unknown.
+
+Every field used by at least two distinct instances requires one named
+`[[shared-controls]]` entry with `field`, `instances` and `sources`.
+The name and field are unique; `instances` lists exactly its users, each
+once, at least two. Each user keeps its own role and sourced field link.
+Grouping fields in one vendor word does not make them shared controls:
+sharing concerns the same field, not adjacent bits or policy dependencies.
+
+`[[gate-groups]]` names a vendor's fixed group of distinct one-bit `plain`
+fields, with `fields` and `sources`. It has no consumers or ordering;
+group membership does not count as another instance using a field. A group
+may include a linked clock gate or a gate without instance links, but never
+a field linked as a reset or mux.
+`[[clock-sources]]` has a unique `name`, `sources`, optional positive
+`frequency-hz`, and optional `parent` naming another clock source. Parent
+cycles and unknown parents are errors; unknown frequencies stay absent.
+Names of shared controls, gate groups and clock sources are `UPPER_SNAKE`.
+All new source lists obey the same evidence-catalog checks as type sources.
+Controls, mux inputs, shared-control users, gate-group fields and clock
+sources share the chip expansion budget. Copied identities, roles, input
+names and source-string slots count toward its text limit. Budget checks
+precede relation expansion; parent-chain validation visits each clock once.
+
+There are no power-domain or instance `parents` fields: S31 subsystem
+membership and reset propagation are not established by the sources.
+Known common controls use explicit field links and shared controls.
+Reference counts, module dependency sets, enable/reset order, writers,
+retention and fixed write sequences belong to HAL or PAC policy. In-block
+register-clock fields and interrupt status/acknowledgement banks belong to
+the block type.
+
+These are S31 root excerpts. Included types, other sources and modem
+instance placements are omitted. Evidence IDs below denote entries for
+ESP-IDF `4d59230ddff16327812782151ef0afef202dc6d7`:
+
+| Evidence ID | Source under `components/` |
+| --- | --- |
+| `IDF_REG_BASE_H` | `soc/esp32s31/register/soc/reg_base.h:8-144` |
+| `IDF_TIMG_LL` | `esp_hal_timg/esp32s31/include/hal/timg_ll.h:35-68` |
+| `IDF_TIMER_LL` | `esp_hal_timg/esp32s31/include/hal/timer_ll.h:100-158` |
+| `IDF_MWDT_LL` | `esp_hal_timg/esp32s31/include/hal/mwdt_ll.h:273-297` |
+| `IDF_USB_LL` | `esp_hal_usb/esp32s31/include/hal/usb_serial_jtag_ll.h:337-350` |
+| `IDF_MODEM_IMPL` | `esp_hw_support/modem/port/esp32s31/modem_clock_impl.c:17,19,178-181` |
+| `IDF_MODEM_SYSCON_LL` | `hal/esp32s31/include/hal/modem_syscon_ll.h:401-412` |
+| `IDF_MODEM_CLOCK_HAL` | `hal/esp32s31/modem_clock_hal.c:18-20,203-212,242-251,281-290` |
+| `IDF_INTERRUPTS_H` | `soc/esp32s31/include/soc/interrupts.h:19-188` |
+
+```toml
+[[instances]]
+name = "TIMG0"
+type = "TIMG"
+base = 0x20580000
+extent = { size = 0x1000 }
+sources = ["IDF_REG_BASE_H"]
+clocks = [
+  { role = "bus", field = "HP_SYS_CLKRST.TIMERGRP0_CTRL0.REG_TIMERGRP0_APB_CLK_EN", sources = ["IDF_TIMG_LL"] },
+  { role = "t0", field = "HP_SYS_CLKRST.TIMERGRP0_CTRL0.REG_TIMERGRP0_T0_CLK_EN", sources = ["IDF_TIMER_LL"] },
+  { role = "t1", field = "HP_SYS_CLKRST.TIMERGRP0_CTRL0.REG_TIMERGRP0_T1_CLK_EN", sources = ["IDF_TIMER_LL"] },
+  { role = "wdt", field = "HP_SYS_CLKRST.TIMERGRP0_CTRL0.REG_TIMERGRP0_WDT_CLK_EN", sources = ["IDF_MWDT_LL"] },
+]
+resets = [
+  { role = "group", field = "HP_SYS_CLKRST.TIMERGRP0_CTRL0.REG_TIMERGRP0_RST_EN", sources = ["IDF_TIMG_LL"] },
+]
+muxes = [
+  { role = "t0", field = "HP_SYS_CLKRST.TIMERGRP0_CTRL0.REG_TIMERGRP0_T0_SRC_SEL", inputs = { 0 = "XTAL", 1 = "RC_FAST", 2 = "REF_F80M" }, sources = ["IDF_TIMER_LL"] },
+  { role = "t1", field = "HP_SYS_CLKRST.TIMERGRP0_CTRL0.REG_TIMERGRP0_T1_SRC_SEL", inputs = { 0 = "XTAL", 1 = "RC_FAST", 2 = "REF_F80M" }, sources = ["IDF_TIMER_LL"] },
+  { role = "wdt", field = "HP_SYS_CLKRST.TIMERGRP0_CTRL0.REG_TIMERGRP0_WDT_SRC_SEL", inputs = { 0 = "XTAL" }, sources = ["IDF_MWDT_LL"] },
+]
+
+[[instances]]
+name = "USB_SERIAL_JTAG"
+type = "USB_SERIAL_JTAG"
+base = 0x20391000
+extent = { size = 0x1000 }
+sources = ["IDF_REG_BASE_H"]
+clocks = [
+  { role = "bus", field = "HP_SYS_CLKRST.USB_DEVICE_CTRL0.REG_USB_DEVICE_APB_CLK_EN", sources = ["IDF_USB_LL"] },
+  { role = "48m", field = "CNNT_SYS.SYS_HP_USB_DEVICE_CTRL.SYS_USB_DEVICE_48M_CLK_EN", sources = ["IDF_USB_LL"] },
+]
+resets = [
+  { role = "block", field = "CNNT_SYS.SYS_HP_USB_DEVICE_CTRL.SYS_USB_DEVICE_RST_EN", sources = ["IDF_USB_LL"] },
+]
+
+# Excerpts of modem instances: their sourced placements are separate facts.
+[[instances]]
+name = "BT_BB"
+type = "BT_BB"
+clocks = [{ role = "baseband", field = "MODEM_SYSCON.CLK_CONF1.CLK_BTBB_EN", sources = ["IDF_MODEM_IMPL"] }]
+
+[[instances]]
+name = "IEEE802154"
+type = "IEEE802154"
+clocks = [{ role = "baseband", field = "MODEM_SYSCON.CLK_CONF1.CLK_BTBB_EN", sources = ["IDF_MODEM_IMPL"] }]
+
+[[shared-controls]]
+name = "BT_I154_COMMON_BB"
+field = "MODEM_SYSCON.CLK_CONF1.CLK_BTBB_EN"
+instances = ["BT_BB", "IEEE802154"]
+sources = ["IDF_MODEM_IMPL"]
+
+[[instances]]
+name = "MODEM_PWR"
+type = "MODEM_PWR"
+muxes = [{ role = "32k", field = "MODEM_LPCON.MODEM_32K_CLK_CONF.CLK_MODEM_32K_SEL", inputs = { 0 = "XTAL32K", 1 = "RC32K", 2 = "EXT32K" }, sources = ["IDF_MODEM_CLOCK_HAL"] }]
+
+[[instances]]
+name = "COEX"
+type = "COEX"
+muxes = [{ role = "32k", field = "MODEM_LPCON.MODEM_32K_CLK_CONF.CLK_MODEM_32K_SEL", inputs = { 0 = "XTAL32K", 1 = "RC32K", 2 = "EXT32K" }, sources = ["IDF_MODEM_CLOCK_HAL"] }]
+
+[[shared-controls]]
+name = "MODEM_32K"
+field = "MODEM_LPCON.MODEM_32K_CLK_CONF.CLK_MODEM_32K_SEL"
+instances = ["MODEM_PWR", "COEX"]  # MODEM_PWR has LP-timer and Wi-Fi-power outputs
+sources = ["IDF_MODEM_CLOCK_HAL"]
+
+[[gate-groups]]
+name = "WIFI_BB"
+fields = [
+  "MODEM_SYSCON.CLK_CONF1.CLK_WIFIBB_22M_EN",
+  "MODEM_SYSCON.CLK_CONF1.CLK_WIFIBB_40M_EN",
+  "MODEM_SYSCON.CLK_CONF1.CLK_WIFIBB_80M_EN",
+  "MODEM_SYSCON.CLK_CONF1.CLK_WIFIBB_40X_EN",
+  "MODEM_SYSCON.CLK_CONF1.CLK_WIFIBB_80X_EN",
+  "MODEM_SYSCON.CLK_CONF1.CLK_WIFIBB_40X1_EN",
+  "MODEM_SYSCON.CLK_CONF1.CLK_WIFIBB_160X1_EN",
+]
+sources = ["IDF_MODEM_SYSCON_LL"]
+
+[[clock-sources]]
+name = "XTAL"
+sources = ["IDF_TIMER_LL"]
+[[clock-sources]]
+name = "RC_FAST"
+sources = ["IDF_TIMER_LL"]
+[[clock-sources]]
+name = "REF_F80M"
+sources = ["IDF_TIMER_LL"]
+[[clock-sources]]
+name = "XTAL32K"
+sources = ["IDF_MODEM_CLOCK_HAL"]
+[[clock-sources]]
+name = "RC32K"
+sources = ["IDF_MODEM_CLOCK_HAL"]
+[[clock-sources]]
+name = "EXT32K"
+sources = ["IDF_MODEM_CLOCK_HAL"]
+
+[[interrupts]]
+source = 124
+name = "MODEM_BT_MAC"
+instance = "BT_MAC"
+output = "PRIMARY"
+sources = ["IDF_INTERRUPTS_H"]
+[[interrupts]]
+source = 133
+name = "MODEM_BT_MAC_INT1"
+instance = "BT_MAC"
+output = "NRT"
+sources = ["IDF_INTERRUPTS_H"]
+
+[[unbound-interrupts]]
+source = 95
+name = "MSPI_FLASH"
+reason = "The source covers the flash controller pair; the raising instance is not established."
+sources = ["IDF_INTERRUPTS_H"]
+```
+
+The BT_MAC type declares `PRIMARY` and `NRT`; both sources bind to that
+single instance. Shared acknowledgement banks are type facts. The 32 kHz
+selector is shared by two instances, even though MODEM_PWR uses it for two
+outputs. Unknown-owner sources remain explicitly unbound with a reason.
+
+`ChipModel::controls()` returns each link's instance, kind, role, sources,
+resolved absolute field identity, absolute register address and bit range,
+and numeric mux inputs. `gate_groups()` returns resolved fields and sources;
+`shared_controls()`, `clock_sources()`, `interrupt_sources()` and
+`unbound_interrupts()` retain their checked root facts.
 
 ## Analog-I2C space
 
