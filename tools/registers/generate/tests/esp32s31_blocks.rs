@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use oer_registers_model::{
     RegisterEvidenceSet,
     chip_import::ImportSpec,
-    chip_model::{ChipModel, Location},
+    chip_model::{ChipModel, ControlKind, FieldClass, Location},
     chip_policy::{ChipPolicy, Claim, Holder},
 };
 
@@ -325,4 +325,188 @@ fn the_esp32s31_policy_loads_over_the_root() {
         policy.claim("UART0.FIFO"),
         Some(Claim::Whole(Holder::Unclaimed(_)))
     ));
+}
+
+#[test]
+fn timg0_keeps_its_bus_timer_watchdog_gates_and_group_reset() {
+    let model = model();
+    for (kind, role, field) in [
+        (ControlKind::Clock, "bus", "REG_TIMERGRP0_APB_CLK_EN"),
+        (ControlKind::Clock, "t0", "REG_TIMERGRP0_T0_CLK_EN"),
+        (ControlKind::Clock, "t1", "REG_TIMERGRP0_T1_CLK_EN"),
+        (ControlKind::Clock, "wdt", "REG_TIMERGRP0_WDT_CLK_EN"),
+        (ControlKind::Reset, "group", "REG_TIMERGRP0_RST_EN"),
+    ] {
+        let link = model
+            .controls()
+            .iter()
+            .find(|link| link.instance == "TIMG0" && link.kind == kind && link.role == role)
+            .expect("TIMG0 has the sourced control role");
+        assert_eq!(
+            link.field.identity,
+            format!("HP_SYS_CLKRST.TIMERGRP0_CTRL0.{field}")
+        );
+        assert!(!link.sources.is_empty());
+    }
+    let timer_mux = model
+        .controls()
+        .iter()
+        .find(|link| link.instance == "TIMG0" && link.kind == ControlKind::Mux && link.role == "t0")
+        .expect("TIMG0 has its T0 source selector");
+    assert_eq!(
+        timer_mux
+            .inputs
+            .iter()
+            .map(|(code, name)| (*code, name.as_str()))
+            .collect::<Vec<_>>(),
+        [(0, "XTAL"), (1, "RC_FAST"), (2, "REF_F80M")]
+    );
+    // The LL's XTAL assertion never writes a selector encoding, and its
+    // default-clock comment names P4. Neither establishes an S31 input.
+    for instance in ["TIMG0", "TIMG1"] {
+        assert!(!model.controls().iter().any(|link| {
+            link.instance == instance && link.kind == ControlKind::Mux && link.role == "wdt"
+        }));
+    }
+}
+
+#[test]
+fn root_controls_keep_policy_dependencies_and_unestablished_relations_absent() {
+    let model = model();
+    assert!(
+        model
+            .gate_groups()
+            .iter()
+            .all(|group| group.name != "SOC_PLL_SOURCE_CG")
+    );
+    let pad_gate = "HP_SYS_CLKRST.MSPI_PAD_CTRL0.REG_MSPI_PAD_CTRL_APB_CLK_EN";
+    let pad_users = model
+        .controls()
+        .iter()
+        .filter(|link| link.field.identity == pad_gate)
+        .map(|link| (link.instance.as_str(), link.kind, link.role.as_str()))
+        .collect::<Vec<_>>();
+    assert_eq!(pad_users, [("IOMUX_MSPI_PIN", ControlKind::Clock, "bus")]);
+    assert!(
+        model
+            .shared_controls()
+            .iter()
+            .all(|shared| shared.field != pad_gate)
+    );
+    assert!(!model.controls().iter().any(|link| {
+        link.instance == "EFUSE" && link.kind == ControlKind::Clock && link.role == "core"
+    }));
+
+    let spi1 = model
+        .controls()
+        .iter()
+        .filter(|link| link.instance == "SPI1")
+        .collect::<Vec<_>>();
+    assert_eq!(spi1.len(), 3);
+    for link in spi1 {
+        assert_eq!(link.kind, ControlKind::Clock);
+        assert!(
+            link.sources
+                .iter()
+                .any(|source| source == "ESP_IDF_4D59230D_S31_SPIMEM_FLASH_LL_H_L810")
+        );
+        let shared = model
+            .shared_controls()
+            .iter()
+            .find(|shared| shared.field == link.field.identity)
+            .expect("the established FLASH gate has explicit users");
+        assert_eq!(shared.instances, ["SPI0", "SPI1"]);
+    }
+}
+
+#[test]
+fn lp_watchdog_slow_clock_link_cites_its_consumer_and_all_established_inputs() {
+    let model = model();
+    let mux = model
+        .controls()
+        .iter()
+        .find(|link| {
+            link.instance == "LP_WDT" && link.kind == ControlKind::Mux && link.role == "slow"
+        })
+        .expect("RWDT timeout ticks use the RTC slow-clock frequency");
+    assert!(
+        mux.sources
+            .iter()
+            .any(|source| source == "ESP_IDF_4D59230D_S31_BOOTLOADER_INIT_C_L95")
+    );
+    assert_eq!(
+        mux.inputs
+            .iter()
+            .map(|(code, name)| (*code, name.as_str()))
+            .collect::<Vec<_>>(),
+        [(0, "RC_SLOW"), (1, "XTAL32K"), (3, "OSC_SLOW")]
+    );
+}
+
+#[test]
+fn bluetooth_and_ieee802154_share_the_bt_baseband_gate() {
+    let model = model();
+    let common = model
+        .shared_controls()
+        .iter()
+        .find(|control| control.name == "BT_I154_COMMON_BB")
+        .expect("the common BT/IEEE 802.15.4 baseband gate is explicit");
+    assert_eq!(common.field, "MODEM_SYSCON.CLK_CONF1.CLK_BTBB_EN");
+    assert_eq!(common.instances, ["BT_BB", "IEEE802154"]);
+    for instance in &common.instances {
+        assert!(model.controls().iter().any(|link| {
+            &link.instance == instance
+                && link.kind == ControlKind::Clock
+                && link.role == "baseband"
+                && link.field.identity == common.field
+        }));
+    }
+}
+
+#[test]
+fn modem_power_and_coexistence_keep_pulse_resets_and_the_common_32k_mux() {
+    let model = model();
+    for (instance, role, field) in [
+        ("MODEM_PWR", "wifi-power", "RST_WIFIPWR"),
+        ("MODEM_PWR", "lp-timer", "RST_LP_TIMER"),
+        ("COEX", "block", "RST_COEX"),
+        ("I2C_ANA_MST", "master", "RST_I2C_MST"),
+    ] {
+        let reset = model
+            .controls()
+            .iter()
+            .find(|link| {
+                link.instance == instance && link.kind == ControlKind::Reset && link.role == role
+            })
+            .expect("the LPCON pulse reset is sourced");
+        assert_eq!(
+            reset.field.identity,
+            format!("MODEM_LPCON.RST_CONF.{field}")
+        );
+        assert_eq!(reset.field.class, FieldClass::WriteOnly);
+    }
+    let common = model
+        .shared_controls()
+        .iter()
+        .find(|control| control.name == "MODEM_32K")
+        .expect("the 32 kHz selector is shared");
+    assert_eq!(common.instances, ["COEX", "MODEM_PWR"]);
+    for instance in &common.instances {
+        let mux = model
+            .controls()
+            .iter()
+            .find(|link| {
+                &link.instance == instance
+                    && link.kind == ControlKind::Mux
+                    && link.field.identity == common.field
+            })
+            .expect("each user links to the common selector");
+        assert_eq!(
+            mux.inputs
+                .iter()
+                .map(|(code, name)| (*code, name.as_str()))
+                .collect::<Vec<_>>(),
+            [(0, "XTAL32K"), (1, "RC32K"), (2, "EXT32K")]
+        );
+    }
 }

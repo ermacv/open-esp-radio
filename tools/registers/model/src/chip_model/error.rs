@@ -116,7 +116,7 @@ pub enum ErrorKind {
     #[error("names no expanded MMIO field: {0}")]
     UnknownField(String),
     #[error(
-        "{kind} field {field} has class {class} and width {width}; gates and resets require one plain bit; muxes require plain"
+        "{kind} field {field} has class {class} and width {width}; gates require one plain bit; resets require one plain, write-only or write-trigger bit; muxes require plain"
     )]
     ControlField {
         field: String,
