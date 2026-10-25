@@ -108,7 +108,23 @@ impl<P: Placement, Q: Placement> FlashCommandRegisters for FlashRegisters<P, Q> 
     }
 
     fn busy(&self, _: Access<'_>) -> bool {
-        self.spi1.spi_mem_cmd_spi_mem_usr_busy()
+        // Every self-clearing command of the word, not only the user one.
+        let cmd = self.spi1.read_spi_mem_cmd();
+        cmd.spi_mem_flash_pe()
+            || cmd.spi_mem_usr()
+            || cmd.spi_mem_flash_hpm()
+            || cmd.spi_mem_flash_res()
+            || cmd.spi_mem_flash_dp()
+            || cmd.spi_mem_flash_ce()
+            || cmd.spi_mem_flash_be()
+            || cmd.spi_mem_flash_se()
+            || cmd.spi_mem_flash_pp()
+            || cmd.spi_mem_flash_wrsr()
+            || cmd.spi_mem_flash_rdsr()
+            || cmd.spi_mem_flash_rdid()
+            || cmd.spi_mem_flash_wrdi()
+            || cmd.spi_mem_flash_wren()
+            || cmd.spi_mem_flash_read()
     }
 
     fn data(&self, _: Access<'_>) -> [u32; CHUNK_WORDS] {

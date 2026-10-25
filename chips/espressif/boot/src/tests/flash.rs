@@ -93,6 +93,18 @@ struct Model {
     fetch_suspended: bool,
     frozen: bool,
     xip_reads: Vec<usize>,
+    /// The suspensions begun so far.
+    suspends: usize,
+    /// Every suspension after the first never sees the cache sync idle.
+    fail_resuspend: bool,
+}
+
+impl Model {
+    /// Whether a command of the command word runs.
+    fn running(&self) -> bool {
+        let now = self.clock.now();
+        self.running_until.is_some_and(|until| now < until)
+    }
 }
 
 type Shared = Rc<RefCell<Model>>;
@@ -119,6 +131,8 @@ fn model(clock: &Rc<VirtualClock>) -> Shared {
         fetch_suspended: false,
         frozen: false,
         xip_reads: Vec::new(),
+        suspends: 0,
+        fail_resuspend: false,
     }))
 }
 
@@ -139,10 +153,19 @@ impl FlashCommandRegisters for Port {
         self.0.borrow().status_mode_bits
     }
     fn configure_read(&mut self, _: Access<'_>, command: FlashReadCommand) {
-        self.0.borrow_mut().log.push(Op::Configure(command));
+        let mut model = self.0.borrow_mut();
+        assert!(
+            !model.running(),
+            "the phases change under a running command"
+        );
+        model.log.push(Op::Configure(command));
     }
     fn set_transfer(&mut self, _: Access<'_>, address: u32, bytes: u32) {
         let mut model = self.0.borrow_mut();
+        assert!(
+            !model.running(),
+            "the transfer changes under a running command"
+        );
         model.log.push(Op::Transfer(address, bytes));
         model.transfer = (address, bytes);
     }
@@ -170,9 +193,7 @@ impl FlashCommandRegisters for Port {
         Ok(())
     }
     fn busy(&self, _: Access<'_>) -> bool {
-        let model = self.0.borrow();
-        let now = model.clock.now();
-        model.running_until.is_some_and(|until| now < until)
+        self.0.borrow().running()
     }
     fn data(&self, _: Access<'_>) -> [u32; 16] {
         self.0.borrow().buffer
@@ -196,6 +217,10 @@ impl FlashTimingRegisters for Port {
     }
     fn restore_timing(&mut self, _: Access<'_>, (): ()) {
         let mut model = self.0.borrow_mut();
+        assert!(
+            model.fetch_suspended,
+            "the timing changes with fetch running"
+        );
         model.log.push(Op::RestoreTiming);
         model.port_timing = None;
         model.cache_timing = None;
@@ -214,12 +239,17 @@ impl FlashClockRegisters for FlashClock {
     }
     fn restore_clock(&mut self, _: Access<'_>, (): ()) {
         let mut model = self.0.borrow_mut();
+        assert!(
+            model.fetch_suspended,
+            "the clock changes with fetch running"
+        );
         model.log.push(Op::RestoreClock);
         model.tuned_clock = false;
     }
 }
 
-/// The cache's fetch: every idle flag reads idle at once.
+/// The cache's fetch: every idle flag reads idle at once, except the
+/// cache sync after the first suspension when `fail_resuspend` is set.
 struct Fetch(Shared);
 
 impl FetchSuspendRegisters for Fetch {
@@ -227,6 +257,9 @@ impl FetchSuspendRegisters for Fetch {
         let mut model = self.0.borrow_mut();
         model.log.push(if shut { Op::Suspend } else { Op::Resume });
         model.fetch_suspended = shut;
+        if shut {
+            model.suspends += 1;
+        }
     }
     fn autoload_enabled(&self, _: Access<'_>) -> bool {
         false
@@ -239,7 +272,8 @@ impl FetchSuspendRegisters for Fetch {
         true
     }
     fn sync_done(&self, _: Access<'_>) -> bool {
-        true
+        let model = self.0.borrow();
+        !(model.fail_resuspend && model.suspends > 1)
     }
     fn lock_done(&self, _: Access<'_>) -> bool {
         true
@@ -366,6 +400,13 @@ fn a_read_waits_for_a_running_command_and_a_command_that_never_ends_is_a_named_t
         read_words(&model, 0, 2),
         Err(BootFailure::Wait(WaitFailure::TimedOut("flash-command")))
     );
+    // A command that never ends before the read: nothing is configured.
+    let before = ops(&model).len();
+    assert_eq!(
+        read_words(&model, 0, 2),
+        Err(BootFailure::Wait(WaitFailure::TimedOut("flash-command")))
+    );
+    assert_eq!(ops(&model).len(), before, "no word of the read is written");
 }
 
 #[test]
@@ -585,4 +626,28 @@ fn a_region_without_a_page_per_candidate_and_three_more_is_refused_unswept() {
         Err(BootFailure::Flash(FlashFailure::TuningRegion))
     );
     assert_eq!(ops(&model), []);
+}
+
+#[test]
+fn a_rollback_that_cannot_suspend_fetch_again_leaves_the_clock_and_the_timing_and_fails() {
+    let clock = Rc::new(VirtualClock::new());
+    let model = model(&clock);
+    model.borrow_mut().direct_good = 0xfff;
+    model.borrow_mut().cache_good = 0xfff;
+    // The suspension after the first cached read times out, and so does
+    // the rollback's.
+    model.borrow_mut().fail_resuspend = true;
+    assert_eq!(
+        tune_on(&model, REGION),
+        Err(BootFailure::Flash(FlashFailure::RollbackUnsuspended))
+    );
+    let ops = without_reads(&ops(&model));
+    assert!(
+        !ops.iter()
+            .any(|op| matches!(op, Op::RestoreClock | Op::RestoreTiming)),
+        "{ops:?}"
+    );
+    let model = model.borrow();
+    assert!(model.tuned_clock, "the clock stays at the sweep's");
+    assert!(model.suspends >= 3, "the rollback tried to suspend fetch");
 }

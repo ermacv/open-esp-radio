@@ -4,7 +4,8 @@
 //! **Read.** The boot reads flash itself, with the read command the ROM's
 //! `esp_rom_spiflash_read` picks for the controller's read mode (the mode
 //! the bootloader configured): the user command, address and dummy phases
-//! of that command, then for each chunk of at most [`CHUNK_WORDS`] words
+//! of that command, once no command of the command word runs, then for
+//! each chunk of at most [`CHUNK_WORDS`] words
 //! the address and the input length, the user command started once none
 //! runs, its completion waited for, and the data words copied out. A read
 //! outside the flash, or one whose address is not word aligned, is refused
@@ -27,8 +28,10 @@
 //! whole untouched XIP page through the cache. The candidate in the middle
 //! of the longest run of at least three that pass both (the first on a
 //! tie) is applied; the remaining pages must then read back through the
-//! cache. Any failure restores every timing word and the clock, then fails
-//! the boot: nothing falls back to the bootloader's rate. Each XIP page is
+//! cache. Any failure restores every timing word and the clock under a
+//! suspended fetch, then fails the boot: nothing falls back to the
+//! bootloader's rate. Where fetch cannot be suspended again, nothing is
+//! restored and the boot fails as `RollbackUnsuspended`. Each XIP page is
 //! read once, cold, because a rejected candidate can leave corrupted lines
 //! in the cache.
 //!
@@ -119,7 +122,8 @@ pub trait FlashCommandRegisters {
     fn set_transfer(&mut self, access: Access<'_>, address: u32, bytes: u32);
     /// Start the user command, or [`Busy`] while one runs.
     fn start(&mut self, access: Access<'_>) -> Result<(), Busy>;
-    /// Whether the user command still runs.
+    /// Whether any command of the command word still runs: the user
+    /// command or any other the word starts.
     fn busy(&self, access: Access<'_>) -> bool;
     /// The data words of the last command.
     fn data(&self, access: Access<'_>) -> [u32; CHUNK_WORDS];
@@ -143,6 +147,9 @@ pub enum FlashFailure {
     NoStableWindow,
     /// A page read back otherwise through the cache at the chosen timing.
     CacheMismatch,
+    /// The sweep failed and fetch could not be suspended again to roll it
+    /// back: the clock and the timing stay at the sweep's.
+    RollbackUnsuspended,
 }
 
 impl FlashFailure {
@@ -156,6 +163,7 @@ impl FlashFailure {
             Self::ScratchTooSmall => "flash-tuning-scratch",
             Self::NoStableWindow => "flash-no-stable-window",
             Self::CacheMismatch => "flash-cache-mismatch",
+            Self::RollbackUnsuspended => "flash-rollback-unsuspended",
         }
     }
 }
@@ -191,6 +199,9 @@ where
         return Err(FlashFailure::StatusModeBits.into());
     }
     let mode = registers.read_mode(Access::new());
+    // No phase of a running command changes: the whole command word is
+    // idle before the read configures it.
+    deadline.poll(wait, || (!registers.busy(Access::new())).then_some(()))?;
     registers.configure_read(Access::new(), flash.commands.get(mode));
     let mut chunk_address = address;
     for chunk in destination.chunks_mut(CHUNK_WORDS) {
@@ -416,21 +427,29 @@ where
         waits,
         deadline,
     );
-    let rollback = |port: &mut F, clock: &mut K, cache: &mut S, suspended: Option<_>| {
-        // Restore under a suspended fetch where the suspension holds; a
-        // failed suspension undid itself, and the words are restored all
-        // the same.
-        let suspended = suspended.or_else(|| suspend_fetch(cache, waits.suspend, deadline).ok());
+    // The clock and the timing words change only while fetch is
+    // suspended: where the suspension cannot be had again (a failed one
+    // undid itself and left fetch running), they stay at the sweep's and
+    // the boot fails with `RollbackUnsuspended`.
+    let rollback = |port: &mut F,
+                    clock: &mut K,
+                    cache: &mut S,
+                    suspended: Option<_>|
+     -> Result<(), BootFailure> {
+        let suspended = match suspended {
+            Some(held) => held,
+            None => suspend_fetch(cache, waits.suspend, deadline)
+                .map_err(|_| FlashFailure::RollbackUnsuspended)?,
+        };
         clock.restore_clock(Access::new(), saved_clock);
         port.restore_timing(Access::new(), saved_timing);
-        if let Some(suspended) = suspended {
-            resume_fetch(cache, suspended);
-        }
+        resume_fetch(cache, suspended);
+        Ok(())
     };
     let timing = match swept {
         Ok(timing) => timing,
         Err(failure) => {
-            rollback(port, clock, cache, suspended.take());
+            rollback(port, clock, cache, suspended.take())?;
             return Err(failure);
         }
     };
@@ -440,7 +459,7 @@ where
     // The pages no candidate read, through the cache at the chosen timing.
     let verified = (0..pages - candidates).all(|page| page_matches(xip, scratch, page));
     if !verified {
-        rollback(port, clock, cache, None);
+        rollback(port, clock, cache, None)?;
         return Err(FlashFailure::CacheMismatch.into());
     }
     Ok(timing)

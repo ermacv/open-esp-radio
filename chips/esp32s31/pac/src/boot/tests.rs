@@ -320,6 +320,27 @@ fn a_flash_read_sets_up_the_read_modes_command_then_starts_the_user_command() {
 }
 
 #[test]
+fn a_flash_read_waits_for_every_command_of_the_word_before_writing_its_phases() {
+    // Every command of SPI1's command word but the user one reads running.
+    let mut spi0 = memory(spi0::SIZE, 0);
+    let mut spi1 = qio_spi1();
+    spi1[spi1::spi_mem_cmd::OFFSET / 4] = spi1::spi_mem_cmd::BUSY & !spi1::spi_mem_cmd::COMMANDS;
+    let before = spi1.clone();
+    let virtual_clock = VirtualClock::new();
+    let ticking = Ticking(&virtual_clock);
+    let deadline = BootDeadline::start(&ticking, budget());
+    let mut owner = FlashRegisters::host(&mut spi0, &mut spi1).expect("host memory holds them");
+    let wait = BootWait::new("flash-command", Duration::from_micros(50));
+    let mut destination = [0_u32; 1];
+    assert_eq!(
+        read(&mut owner, FLASH, 0, &mut destination, wait, &deadline),
+        Err(BootFailure::Wait(WaitFailure::TimedOut("flash-command")))
+    );
+    drop(owner);
+    assert_eq!(spi1, before, "no phase, address or length changed");
+}
+
+#[test]
 fn a_flash_read_while_the_status_word_sends_mode_bits_is_refused_unwritten() {
     // All ones: the status word's mode-bit enable reads set.
     let mut spi0 = memory(spi0::SIZE, 0);
