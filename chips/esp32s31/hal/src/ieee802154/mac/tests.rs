@@ -45,11 +45,15 @@ fn assembling_host_owners_performs_no_register_access() {
 }
 
 #[test]
-fn activation_enables_the_runtime_baseline_and_teardown_masks_it_again() {
+fn arming_masks_the_events_and_the_session_enables_then_masks_them() {
     let mut memory = HostMemory::filled(u32::MAX);
     let (mut task, setup) = memory.owners();
-    let interrupts = setup.activate(&mut task);
+    let interrupts = setup.arm(&mut task);
+    // Arming leaves every event masked: nothing is raised before a handler
+    // holds the owner (`enable_events` takes the binding's proof).
+    assert!(task.foundation_snapshot().events_masked());
 
+    task.publish_runtime_events();
     let events = task.mac_part().read_event_enable();
     for (enabled, served) in [
         (events.tx_done(), true),
@@ -83,8 +87,14 @@ fn activation_enables_the_runtime_baseline_and_teardown_masks_it_again() {
     );
     assert!(!(tx.rx_ack_stop() || tx.tx_stop() || tx.rx_ack_crc_error()));
     assert_eq!(tx.tx_abort_en_25_30().get(), 0);
-    // Activation acknowledged the stale sample it took.
+    // Arming acknowledged the stale sample it took.
     assert!(interrupts.events().contains(Ieee802154Event::TxDone));
+
+    // The session's end masks every event and keeps the aborts.
+    task.mask_events();
+    let foundation = task.foundation_snapshot();
+    assert!(foundation.events_masked());
+    assert!(!foundation.rx_aborts_masked());
 
     let setup = interrupts.deactivate(&mut task);
     let foundation = task.foundation_snapshot();
@@ -98,7 +108,7 @@ fn activation_enables_the_runtime_baseline_and_teardown_masks_it_again() {
 fn clearing_events_acknowledges_only_the_sampled_events_the_mask_selects() {
     let mut memory = HostMemory::filled(u32::MAX);
     let (mut task, setup) = memory.owners();
-    let mut interrupts = setup.activate(&mut task);
+    let mut interrupts = setup.arm(&mut task);
     // The stale acknowledgement left every event asserted, the two unnamed
     // ones included.
     assert!(interrupts.events().classification().is_err());

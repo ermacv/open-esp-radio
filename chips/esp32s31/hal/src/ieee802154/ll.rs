@@ -24,6 +24,7 @@ use oer_espressif_ieee802154_engine::{
         Ieee802154TxAbortReasonObservation,
     },
 };
+use oer_interrupt_table::Silent;
 use oer_mmio::Placement;
 
 use crate::ieee802154::mac::{
@@ -58,12 +59,42 @@ const fn timer_stop(timer: Ieee802154Timer) -> Opcode {
     }
 }
 
-/// The task owner and its active interrupt owner, held together for the
-/// life of an interrupt-driven MAC epoch.
+/// The task owner and its armed interrupt owner, held together for the
+/// life of a polled MAC epoch.
 ///
-/// The public driver runs its operation starts, stops and interrupt handler
-/// under one critical section over the complete MAC register block, so this
-/// pair is the only implementation of [`Ieee802154LowLevel`] over hardware.
+/// The engine reads and acknowledges `EVENT_STATUS` from its operation
+/// starts and stops as well as from its event service, as the public driver
+/// does under one critical section over the complete MAC register block, so
+/// this pair is the only implementation of [`Ieee802154LowLevel`] over
+/// hardware. The engine enables the MAC's events and polls them, so the
+/// pair holds the router's [`Silent`] proof that no CPU line receives the
+/// MAC's source:
+///
+/// ```no_run
+/// use oer_esp32s31_hal::ieee802154::{ll::Ieee802154MacOwners, mac::*};
+/// use oer_esp32s31_hal::platform::InterruptController;
+/// use oer_interrupt_table::Router;
+/// fn poll(
+///     router: &Router<InterruptController>,
+///     mut task: Ieee802154TaskOwner,
+///     setup: Ieee802154InterruptSetupOwner,
+/// ) -> Option<Ieee802154MacOwners> {
+///     // Refused when the table binds the MAC's source or it is routed.
+///     let silent = router.silent::<Ieee802154InterruptOwner>().ok()?;
+///     let interrupts = setup.arm(&mut task);
+///     Some(Ieee802154MacOwners::new(task, interrupts, silent))
+/// }
+/// # fn main() {}
+/// ```
+///
+/// ```compile_fail,E0061
+/// # use oer_esp32s31_hal::ieee802154::{ll::Ieee802154MacOwners, mac::*};
+/// fn poll(mut task: Ieee802154TaskOwner, setup: Ieee802154InterruptSetupOwner) {
+///     let interrupts = setup.arm(&mut task);
+///     // Enabling the events by polling takes the silent route's proof.
+///     let _mac = Ieee802154MacOwners::new(task, interrupts);
+/// }
+/// ```
 #[must_use = "the MAC owners must be separated and returned to their route"]
 pub struct Ieee802154MacOwners<
     P: Placement = MacPlacement,
@@ -72,20 +103,38 @@ pub struct Ieee802154MacOwners<
 > {
     task: Ieee802154TaskOwner<P, E, B>,
     interrupts: Ieee802154InterruptOwner<P>,
+    silent: Silent<Ieee802154InterruptOwner<P>>,
 }
 
+/// The task owner, the armed interrupt owner and the router's proof that
+/// the pair polls the MAC's source, as [`Ieee802154MacOwners::into_parts`]
+/// separates them.
+pub type Ieee802154MacParts<P = MacPlacement, E = EtmPlacement, B = RxInfoPlacement> = (
+    Ieee802154TaskOwner<P, E, B>,
+    Ieee802154InterruptOwner<P>,
+    Silent<Ieee802154InterruptOwner<P>>,
+);
+
 impl<P: Placement, E: Placement, B: Placement> Ieee802154MacOwners<P, E, B> {
-    /// Hold the task owner with the interrupt owner it activated.
+    /// Hold the task owner with the interrupt owner it armed and the proof
+    /// that no line receives the MAC's source
+    /// (`oer_interrupt_table::Router::silent`).
     pub const fn new(
         task: Ieee802154TaskOwner<P, E, B>,
         interrupts: Ieee802154InterruptOwner<P>,
+        silent: Silent<Ieee802154InterruptOwner<P>>,
     ) -> Self {
-        Self { task, interrupts }
+        Self {
+            task,
+            interrupts,
+            silent,
+        }
     }
 
-    /// Separate the owners, for interrupt deactivation.
-    pub fn into_parts(self) -> (Ieee802154TaskOwner<P, E, B>, Ieee802154InterruptOwner<P>) {
-        (self.task, self.interrupts)
+    /// Separate the owners and the proof, for the interrupt owner's
+    /// deactivation.
+    pub fn into_parts(self) -> Ieee802154MacParts<P, E, B> {
+        (self.task, self.interrupts, self.silent)
     }
 
     /// Read the MAC power-sequencing words from `PAON_DELAY` to `DCDC_CTRL`,

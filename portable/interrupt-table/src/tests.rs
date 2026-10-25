@@ -150,6 +150,39 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
         Some(2)
     );
 
+    // The pair's entry writes its line once, then routes both sources to
+    // it; its line's symbol runs its handler on the bound part.
+    unsafe extern "C" {
+        fn __oer_interrupt_h0_l18();
+    }
+    let before = zero.controller.writes.len();
+    let _bound: crate::Bound<PairIrq> = zero.bind(tokens.pair, PairIrq::default()).unwrap();
+    assert_eq!(
+        zero.controller.writes[before..],
+        [
+            Write::Line {
+                line: 18,
+                state: LineState::bound(1, 3)
+            },
+            Write::Route {
+                source: 4,
+                line: 18
+            },
+            Write::Route {
+                source: 7,
+                line: 18
+            },
+        ]
+    );
+    zero.verify().unwrap();
+    // SAFETY: the table's handler of line 18 takes no arguments and only
+    // borrows the pair's cell.
+    unsafe { __oer_interrupt_h0_l18() };
+    assert_eq!(
+        <PairToken as Entry>::cell().with(|part| part.handled),
+        Some(1)
+    );
+
     let mut one = fake_router(1);
     let _bound = one.bind(refused.token, refused.part).unwrap();
     assert_eq!(one.controller.routes[5], Some(17));
@@ -159,8 +192,8 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
 
 #[test]
 fn the_table_lays_out_each_entry_as_the_tools_read_it() {
-    let [timer, radio, absent] = INTERRUPT_TABLE else {
-        panic!("three entries");
+    let [timer, radio, pair_4, pair_7, absent] = INTERRUPT_TABLE else {
+        panic!("five bindings");
     };
     assert_eq!(
         (
@@ -183,6 +216,18 @@ fn the_table_lays_out_each_entry_as_the_tools_read_it() {
         ),
         (5, 17, 2, 1, crate::Class::Executor)
     );
+    // The pair's entry lays out one binding per source: the same line,
+    // level, hart and handler.
+    for (binding, source) in [(pair_4, 4), (pair_7, 7)] {
+        assert_eq!(
+            (binding.source, binding.line, binding.level, binding.hart),
+            (source, 18, 1, 0)
+        );
+    }
+    let (Some(first), Some(second)) = (pair_4.handler, pair_7.handler) else {
+        panic!("both bindings of the pair have its handler");
+    };
+    assert!(core::ptr::fn_addr_eq(first, second));
     assert!(absent.handler.is_none());
 }
 
@@ -263,6 +308,11 @@ fn only_a_silent_source_no_entry_binds_gets_the_polling_proof() {
     assert_eq!(
         router.silent::<RadioIrq>().err(),
         Some(Error::Bindable { source: 5 })
+    );
+    // A part of several sources is silent only when each of them is.
+    assert_eq!(
+        router.silent::<PairIrq>().err(),
+        Some(Error::Bindable { source: 4 })
     );
     router.controller.routes[6] = Some(30);
     assert_eq!(

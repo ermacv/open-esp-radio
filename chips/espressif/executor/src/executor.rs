@@ -312,6 +312,7 @@ impl<const SWI: u8> Executor<SWI> {
     where
         T: Tasks<Mode = Thread>,
         W: Entry,
+        W::Part: oer_interrupt_table::InterruptSource,
         C: oer_interrupt_table::Controller,
     {
         const {
@@ -467,6 +468,7 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
     where
         T: Tasks<Mode = InterruptMode>,
         W: Entry,
+        W::Part: oer_interrupt_table::InterruptSource,
         C: oer_interrupt_table::Controller,
         High: Entry,
         Low: Entry,
