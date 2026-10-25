@@ -1,12 +1,12 @@
 //! The bus driver over host memory: each start refuses a busy host without
-//! publishing a command, and each completion is one sample.
+//! changing any word of the master, and each completion is one sample.
 //!
 //! Words are named by their byte offsets from the master's base: the host
 //! command words at 0x0 and 0x4, the read-mask word at 0x1c and the host map
 //! at 0x20. A command word holds the block, the register, the data byte, the
 //! read/write bit (24), the busy bit (25) and the start bit (26).
 
-use super::{AnalogBus, PhyI2cAccessError};
+use super::{AnalogBus, BluetoothTxPowerControlRegister, PhyI2cAccessError};
 use oer_esp32s31_pac::{
     analog_i2c::{Host, blocks, registers},
     i2c_ana_mst::{self, I2cAnaMst},
@@ -41,23 +41,62 @@ fn an_idle_read_publishes_the_read_mask_then_the_command() {
     assert_eq!(words[HOST_MAP], 0x3fa0 << 4, "the radio host map");
 }
 
-#[test]
-fn a_busy_host_refuses_a_start_without_a_command() {
+fn assert_busy_refusal(
+    host: usize,
+    start: impl FnOnce(&mut AnalogBus<'_, oer_mmio::Host<'_>>) -> Result<(), PhyI2cAccessError>,
+) {
     let mut words = memory();
-    words[HOST_1] = BUSY;
+    words.fill(0xa5a5_5a5a);
+    words[HOST_0] &= !BUSY;
+    words[HOST_1] &= !BUSY;
+    words[host] |= BUSY;
+    words[HOST_MAP] = 0x0a << 4;
+    let before = words.clone();
     let mut master = I2cAnaMst::host(&mut words).expect("memory holds the block");
-    let mut bus = AnalogBus::new(&mut master);
     assert_eq!(
-        bus.try_start_write(registers::BBTOP_RF_CLOSE_CONTROL, 0x07),
-        Err(PhyI2cAccessError::Busy)
-    );
-    assert_eq!(
-        bus.try_start_read(registers::BBTOP_RF_CLOSE_CONTROL),
+        start(&mut AnalogBus::new(&mut master)),
         Err(PhyI2cAccessError::Busy)
     );
     drop(master);
-    assert_eq!(words[HOST_1], BUSY, "no command was published");
-    assert_eq!(words[READ_MASK], 0, "no read mask was published");
+    assert_eq!(
+        bytemuck::cast_slice::<u32, u8>(&words),
+        bytemuck::cast_slice::<u32, u8>(&before),
+        "Busy leaves the entire master block unchanged"
+    );
+}
+
+#[test]
+fn busy_refusal_read_leaves_the_master_unchanged() {
+    assert_busy_refusal(HOST_1, |bus| {
+        bus.try_start_read(registers::BBTOP_RF_CLOSE_CONTROL)
+    });
+    assert_busy_refusal(HOST_0, |bus| {
+        bus.try_start_read(registers::BBPLL_I2C_BBPLL_OC_REF_DIV)
+    });
+}
+
+#[test]
+fn busy_refusal_write_leaves_the_master_unchanged() {
+    assert_busy_refusal(HOST_1, |bus| {
+        bus.try_start_write(registers::BBTOP_RF_CLOSE_CONTROL, 0x07)
+    });
+    assert_busy_refusal(HOST_0, |bus| {
+        bus.try_start_write(registers::BBPLL_I2C_BBPLL_OC_REF_DIV, 0x07)
+    });
+}
+
+#[test]
+fn busy_refusal_bluetooth_read_leaves_the_master_unchanged() {
+    assert_busy_refusal(HOST_1, |bus| {
+        bus.start_bluetooth_tx_power_control_read(BluetoothTxPowerControlRegister::Low0)
+    });
+}
+
+#[test]
+fn busy_refusal_bluetooth_write_leaves_the_master_unchanged() {
+    assert_busy_refusal(HOST_1, |bus| {
+        bus.start_bluetooth_tx_power_control_write(BluetoothTxPowerControlRegister::Low0, 0x07)
+    });
 }
 
 #[test]

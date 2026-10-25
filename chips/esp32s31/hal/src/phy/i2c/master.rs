@@ -52,10 +52,11 @@ impl<'a, P: Placement> AnalogBus<'a, P> {
     /// Start one analog-register read; refused while its host is busy.
     pub fn try_start_read(&mut self, address: Address) -> Result<(), PhyI2cAccessError> {
         let route = normal_route(address)?;
-        let host = self.configure_and_select_host(route);
+        let host = route.host;
         if is_busy(self.master, host) {
             return Err(PhyI2cAccessError::Busy);
         }
+        configure_host_map(self.master);
         publish_read_mask(self.master, route);
         publish_command(
             self.master,
@@ -79,10 +80,11 @@ impl<'a, P: Placement> AnalogBus<'a, P> {
         address: Address,
         value: u8,
     ) -> Result<(), PhyI2cAccessError> {
-        let host = self.configure_and_select_host(normal_route(address)?);
+        let host = normal_route(address)?.host;
         if is_busy(self.master, host) {
             return Err(PhyI2cAccessError::Busy);
         }
+        configure_host_map(self.master);
         publish_command(
             self.master,
             host,
@@ -104,17 +106,15 @@ impl<'a, P: Placement> AnalogBus<'a, P> {
         &mut self,
         register: BluetoothTxPowerControlRegister,
     ) -> Result<(), PhyI2cAccessError> {
-        configure_host_map(self.master);
-        if is_busy(self.master, Host::Host1) {
+        let route = normal_route(oer_esp32s31_pac::analog_i2c::registers::BBTOP_RF_CLOSE_CONTROL)?;
+        if is_busy(self.master, route.host) {
             return Err(PhyI2cAccessError::Busy);
         }
-        publish_read_mask(
-            self.master,
-            normal_route(oer_esp32s31_pac::analog_i2c::registers::BBTOP_RF_CLOSE_CONTROL)?,
-        );
+        configure_host_map(self.master);
+        publish_read_mask(self.master, route);
         publish_command(
             self.master,
-            Host::Host1,
+            route.host,
             BLUETOOTH_TX_POWER_CONTROL_BLOCK,
             register.address(),
             0,
@@ -129,10 +129,10 @@ impl<'a, P: Placement> AnalogBus<'a, P> {
         register: BluetoothTxPowerControlRegister,
         value: u8,
     ) -> Result<(), PhyI2cAccessError> {
-        configure_host_map(self.master);
         if is_busy(self.master, Host::Host1) {
             return Err(PhyI2cAccessError::Busy);
         }
+        configure_host_map(self.master);
         publish_command(
             self.master,
             Host::Host1,
