@@ -6432,7 +6432,7 @@ reasons = ["the curated model's HP_SYS_CLKRST_RADIO describes its word"]
 peripheral = "HP_SYS_CLKRST"
 register = "UART0_CTRL0"
 api = "none"
-reasons = ["the curated model's HP_SYS_CLKRST_CORE describes its word"]
+reasons = ["the curated model's HP_SYS_CLKRST_UART0 describes its word"]
 
 [[register]]
 peripheral = "HP_SYS_CLKRST"

@@ -4,7 +4,7 @@
 
 use std::{vec, vec::Vec};
 
-use super::{CoreControlRegisters, HOST_SIZES, HpCore};
+use super::{CoreControlRegisters, HOST_SIZES, HpCore, UART0_HOST_SIZE, Uart0ClockRegisters};
 
 struct Memory([Vec<u32>; 4]);
 
@@ -84,11 +84,11 @@ fn a_core_reset_pulses_only_that_core_s_word() {
 }
 
 #[test]
-fn uart0_s_clock_returns_to_undivided_xtal_and_core_1_s_word_keeps_its_bits() {
-    let mut memory = Memory::filled(u32::MAX);
-    let mut registers = memory.registers();
+fn uart0_s_clock_returns_to_undivided_xtal_with_its_gate_open() {
+    let mut words = vec![u32::MAX; UART0_HOST_SIZE / 4];
+    let mut registers = Uart0ClockRegisters::host(&mut words).expect("host memory holds the block");
     registers.restore_uart0_clock();
-    let clock = registers.clocks.read_uart0_ctrl0();
+    let clock = registers.0.read_uart0_ctrl0();
     assert_eq!(clock.clk_src_sel().get(), 0);
     assert_eq!(
         (
@@ -99,7 +99,4 @@ fn uart0_s_clock_returns_to_undivided_xtal_and_core_1_s_word_keeps_its_bits() {
         (0, 0, 0)
     );
     assert!(clock.clk_en());
-    // Core 1's word beside it keeps every bit.
-    let control = registers.clocks.read_hpcore1_ctrl0();
-    assert!(control.core1_cpu_clk_en() && control.core1_global_rst_en());
 }

@@ -19,16 +19,23 @@
 //! never returns to the code it interrupted ([`fatal`]). With it,
 //! [`stop_the_world`] takes the words, stops the other hart and confirms it:
 //! the hardware's stall status, or core 1 held in reset with its clock
-//! gated. The [`StopTheWorld`] it returns lets its holder take over a block
-//! that another owner holds ([`StopTheWorld::take_over`]), as no other
-//! context runs again. A stall the hardware does not confirm within
-//! [`STALL_POLLS`] is a typed failure: the caller keeps its record for the
-//! next boot and resets.
+//! gated. A stall the hardware does not confirm within [`STALL_POLLS`] is a
+//! typed failure. The stop only prepares the chip's reset: the fatal path
+//! keeps its record for the next boot and resets ([`software_reset`]).
 //!
-//! The stop confirms that the other hart executes nothing; it does not
-//! prove that the bus transactions it issued completed, nor does it stop
-//! DMA engines, the LP core or a debugger. A block's takeover resets the
-//! state its owner may have left.
+//! The stop gives no right to a block another owner holds. The stall status
+//! says that the other hart issues no new instruction; no source states
+//! that the bus transactions it issued before completed (ESP-IDF's
+//! `hp_system_reg.h` defines only the status, and the ESP32-S31 TRM has no
+//! HP-CPU chapter), so a write of the stopped hart may still reach a block
+//! after the stop. Nor does the stop halt DMA engines, the LP core or a
+//! debugger. A takeover of a held block needs a documented drain after the
+//! stall, or one a stand run shows, and a revocation of the old owner's
+//! accesses.
+//!
+//! UART0's function clock, which the boot ROM prints through, has its own
+//! holder: the reset restores it even when it cannot hold the core-control
+//! words.
 
 use core::{
     marker::PhantomData,
@@ -36,7 +43,9 @@ use core::{
 };
 
 pub use oer_esp32s31_pac::platform::HpCore;
-use oer_esp32s31_pac::platform::{CoreControlHandoff, CoreControlRegisters};
+use oer_esp32s31_pac::platform::{
+    CoreControlHandoff, CoreControlRegisters, Uart0ClockHandoff, Uart0ClockRegisters,
+};
 use oer_mmio::Placement;
 
 #[cfg(test)]
@@ -47,12 +56,12 @@ compile_error!(
     "the runtime's critical-section masks only the current hart; an image whose hart 1 runs code needs a cross-hart lock without spinning"
 );
 
-/// Polls of the stall status that a stall or run request waits for its
-/// confirmation. No source states the hardware's latency (ESP-IDF stalls
-/// without waiting and waits without a bound for the run); a poll is one
-/// register read, so the budget is milliseconds, far beyond a pipeline's
-/// drain, and a hart that does not stop within it is reported, not waited
-/// for.
+/// Reads of the stall status that a stall or run request waits for its
+/// confirmation; a hart the status does not confirm within them is
+/// reported, not waited for. The budget counts completed reads, not time:
+/// no source states the hardware's latency (ESP-IDF stalls without waiting
+/// and waits without a bound for the run), and a read that never completes
+/// is not bounded by it.
 pub const STALL_POLLS: u32 = 10_000;
 
 /// Keeps a value on the hart that made it: not `Send`.
@@ -275,7 +284,7 @@ trait BootAddress {
     fn set(&mut self, entry: u32);
 }
 
-/// Prepare the chip's reset on `this` hart: UART0's clock for the boot ROM,
+/// Prepare the chip's reset on `this` hart, holding the core-control words:
 /// no boot address for hart 1, then the other hart reset and stalled. The
 /// boot address is cleared before the reset pulse, so a running hart 1
 /// that the pulse sends into the ROM finds no entry of this image.
@@ -289,7 +298,6 @@ fn prepare_reset<P: Placement, Q: Placement, R: Placement, S: Placement>(
     boot: &mut impl BootAddress,
     this: HpCore,
 ) {
-    words.restore_uart0_clock();
     boot.set(0);
     let other = other(this);
     words.reset_core(other);
@@ -489,22 +497,24 @@ pub unsafe fn fatal<T>(fatal_path: impl for<'a> FnOnce(Fatal<'a>) -> T) -> T {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StopError {
     /// The other hart's fatal path holds the core-control words: it stops
-    /// this hart, which takes over nothing.
+    /// this hart.
     Lost,
     /// The cores' owner runs an operation, which this path may have
     /// interrupted; it is not waited for.
     Busy,
     /// This hart's fatal path took the words before: a fatal path inside a
-    /// fatal path takes over nothing.
+    /// fatal path.
     Reentered,
     /// The hardware did not confirm the other hart's stall within
     /// [`STALL_POLLS`].
     Unconfirmed,
 }
 
-/// Proof that no context but this fatal path runs on the chip's HP harts:
-/// this hart's interrupts are masked and the other hart is confirmed
-/// stopped. It stays in its fatal path, on its hart (not `Send`).
+/// The other hart stopped for the chip's reset: this hart's interrupts are
+/// masked and the other hart is confirmed stopped. It prepares the reset
+/// and gives no right to a block another owner holds: the stop does not
+/// show that the other hart's bus transactions completed. It stays in its
+/// fatal path, on its hart (not `Send`).
 pub struct StopTheWorld<'a> {
     hart: HpCore,
     stopped: Stopped,
@@ -522,35 +532,17 @@ impl StopTheWorld<'_> {
     pub const fn other(&self) -> Stopped {
         self.stopped
     }
-
-    /// Take over a block another owner holds: that owner never runs again.
-    /// The block's [`TakeOver`] resets what its owner left and refuses a
-    /// second takeover while the first one's owner may live.
-    pub fn take_over<T: TakeOver>(&mut self) -> Option<T> {
-        T::take_over(self)
-    }
 }
 
-/// A block owner a fatal path takes over once the world stopped.
-pub trait TakeOver: Sized + sealed::Sealed {
-    /// The block's owner, its state reset; `None` once taken over before.
-    fn take_over(stop: &mut StopTheWorld<'_>) -> Option<Self>;
-}
-
-pub(crate) mod sealed {
-    /// Only this HAL's blocks are taken over.
-    pub trait Sealed {}
-}
-
-/// Stop the world from `fatal`'s path: claim the core-control words for
-/// good, then stop the other hart and confirm it.
+/// Stop the world from `fatal`'s path before its reset: claim the
+/// core-control words for good, then stop the other hart and confirm it.
+/// The path resets with the same proof afterwards ([`software_reset`]).
 ///
 /// # Errors
 /// [`StopError`]: the other hart's fatal path or the cores' owner holds the
 /// words, this hart stopped the world before, or the other hart's stall was
-/// not confirmed. Nothing is taken over then; the caller keeps its record
-/// and resets.
-pub fn stop_the_world(fatal: Fatal<'_>) -> Result<StopTheWorld<'_>, StopError> {
+/// not confirmed. The caller keeps its record and resets all the same.
+pub fn stop_the_world<'a>(fatal: &Fatal<'a>) -> Result<StopTheWorld<'a>, StopError> {
     let hart = fatal.hart;
     let stopped = stop_with(&HOLDER, capture, hart, STALL_POLLS)?;
     Ok(StopTheWorld {
@@ -578,13 +570,72 @@ fn stop_with<P: Placement, Q: Placement, R: Placement, S: Placement>(
 
 /// Reset the chip from `fatal`'s path, as the boot ROM expects it: UART0's
 /// clock restored, no boot address for hart 1, the other hart reset and
-/// stalled, then the ROM's system reset. A path that cannot hold the
-/// core-control words (the other hart's fatal path, or the cores' owner in
-/// an operation) resets through the ROM alone.
+/// stalled, then the ROM's system reset. UART0's clock has its own holder,
+/// so every path restores it unless the other hart's fatal path took it
+/// first to restore it itself. A path that cannot hold the core-control
+/// words (the other hart's fatal path, or the cores' owner in an operation)
+/// skips only the hart preparation.
 pub fn software_reset(fatal: Fatal<'_>) -> ! {
+    restore_uart0_with(&UART0_HOLDER, capture_uart0, fatal.hart);
     reset_with(&HOLDER, capture, &mut rom::Rom, fatal.hart);
     oer_mmio::fence();
     rom::system_reset()
+}
+
+/// Who restores UART0's function clock: no one yet, or one hart's fatal
+/// path, for good. Only the software reset takes it.
+pub(crate) struct Uart0Holder(AtomicU8);
+
+impl Uart0Holder {
+    pub(crate) const fn new() -> Self {
+        Self(AtomicU8::new(FREE))
+    }
+
+    /// Claim the word for `hart`'s fatal path, for good: `true` when it is
+    /// this hart's now or was before. Never waits.
+    fn claim(&self, hart: HpCore) -> bool {
+        let ours = fatal_state(hart);
+        match self
+            .0
+            .compare_exchange(FREE, ours, Ordering::AcqRel, Ordering::Acquire)
+        {
+            Ok(_) => true,
+            Err(found) => found == ours,
+        }
+    }
+}
+
+/// The chip's one holder of UART0's function clock word.
+static UART0_HOLDER: Uart0Holder = Uart0Holder::new();
+
+/// UART0's clock owner, built for the holder's claimant.
+#[allow(
+    unsafe_code,
+    reason = "the software reset captures the UART0 clock word it holds"
+)]
+fn capture_uart0() -> Uart0ClockRegisters {
+    // SAFETY: `UART0_HOLDER` calls for this only after its compare-and-swap
+    // made the caller's hart the word's one writer, for good: no other
+    // hart's path builds this owner. A reset inside a reset on the same
+    // hart never returns to the outer one, whose owner never accesses the
+    // word again. esp-hal writes the word only inside esp_hal::init and
+    // from a UART driver no image makes (`registers/shared-words.toml`).
+    let handoff = unsafe { Uart0ClockHandoff::assume_exclusive() };
+    Uart0ClockRegisters::from_handoff(handoff)
+}
+
+/// Restore UART0's clock for the boot ROM if `hart` holds the word; whether
+/// it did.
+fn restore_uart0_with<P: Placement>(
+    holder: &Uart0Holder,
+    capture: impl FnOnce() -> Uart0ClockRegisters<P>,
+    hart: HpCore,
+) -> bool {
+    let ours = holder.claim(hart);
+    if ours {
+        capture().restore_uart0_clock();
+    }
+    ours
 }
 
 /// Whether the reset was prepared, holding the words.

@@ -3,11 +3,15 @@
 
 use std::{cell::Cell, vec, vec::Vec};
 
-use oer_esp32s31_pac::platform::{CoreControlRegisters, core_control::HOST_SIZES};
+use oer_esp32s31_pac::platform::{
+    CoreControlRegisters, Uart0ClockRegisters,
+    core_control::{HOST_SIZES, UART0_HOST_SIZE},
+};
 use oer_mmio::Host;
 
 use super::{
-    BootAddress, Election, Holder, HpCore, StopError, Stopped, prepare_reset, reset_with, stop_with,
+    BootAddress, Election, Holder, HpCore, StopError, Stopped, Uart0Holder, prepare_reset,
+    reset_with, restore_uart0_with, stop_with,
 };
 
 type HostRegisters<'a> = CoreControlRegisters<Host<'a>, Host<'a>, Host<'a>, Host<'a>>;
@@ -172,7 +176,7 @@ fn a_second_stop_on_the_same_hart_is_a_reentry() {
 }
 
 #[test]
-fn the_reset_restores_uart0_clears_the_boot_address_and_resets_and_stalls_the_other_hart() {
+fn the_reset_clears_the_boot_address_and_resets_and_stalls_the_other_hart() {
     let mut memory = Memory::new(0);
     let mut boot = Boot::default();
     prepare_reset(&mut memory.registers(), &mut boot, HpCore::Core0);
@@ -180,11 +184,7 @@ fn the_reset_restores_uart0_clears_the_boot_address_and_resets_and_stalls_the_ot
     let registers = memory.registers();
     assert!(registers.stall_requested(HpCore::Core1));
     assert!(!registers.stall_requested(HpCore::Core0));
-    let [_, _, clocks, reset] = &memory.0;
-    assert!(
-        clocks.iter().any(|word| *word != 0),
-        "UART0's clock gate opened"
-    );
+    let [_, _, _, reset] = &memory.0;
     assert_eq!(
         reset.iter().filter(|word| **word != 0).count(),
         1,
@@ -213,4 +213,72 @@ fn a_reset_after_the_stop_keeps_its_words_and_one_without_them_touches_nothing()
         HpCore::Core0
     ));
     assert!(other.0.is_empty(), "the loser resets through the ROM alone");
+}
+
+/// Host memory of UART0's clock block, every bit clear: a restore opens its
+/// gate.
+fn uart0_memory() -> Vec<u32> {
+    vec![0; UART0_HOST_SIZE / 4]
+}
+
+fn uart0_gate_open(words: &[u32]) -> bool {
+    words.iter().any(|word| *word != 0)
+}
+
+#[test]
+fn a_reset_that_cannot_hold_the_core_control_words_still_restores_uart0() {
+    // The cores' owner runs an operation the fatal path interrupted.
+    let holder = Holder::new();
+    assert!(holder.take_owner() && holder.begin());
+    let mut cores = Memory::new(0);
+    let mut boot = Boot::default();
+    assert!(!reset_with(
+        &holder,
+        || cores.registers(),
+        &mut boot,
+        HpCore::Core0
+    ));
+    let uart0 = Uart0Holder::new();
+    let mut words = uart0_memory();
+    assert!(restore_uart0_with(
+        &uart0,
+        || Uart0ClockRegisters::host(&mut words).expect("host memory holds the block"),
+        HpCore::Core0
+    ));
+    assert!(uart0_gate_open(&words), "UART0's clock gate opened");
+}
+
+#[test]
+fn uart0_is_restored_by_the_first_fatal_hart_and_again_only_on_that_hart() {
+    let uart0 = Uart0Holder::new();
+    let mut words = uart0_memory();
+    assert!(restore_uart0_with(
+        &uart0,
+        || Uart0ClockRegisters::host(&mut words).expect("host memory holds the block"),
+        HpCore::Core1
+    ));
+    let captured = Cell::new(false);
+    let mut other = uart0_memory();
+    assert!(!restore_uart0_with(
+        &uart0,
+        || {
+            captured.set(true);
+            Uart0ClockRegisters::host(&mut other).expect("host memory holds the block")
+        },
+        HpCore::Core0
+    ));
+    assert!(
+        !captured.get(),
+        "the other hart builds no owner of the word"
+    );
+    let mut again = uart0_memory();
+    assert!(restore_uart0_with(
+        &uart0,
+        || Uart0ClockRegisters::host(&mut again).expect("host memory holds the block"),
+        HpCore::Core1
+    ));
+    assert!(
+        uart0_gate_open(&again),
+        "a reset inside a reset restores it again"
+    );
 }

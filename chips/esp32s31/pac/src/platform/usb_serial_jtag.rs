@@ -143,15 +143,6 @@ impl<P: Placement> UsbEndpointRegisters<P> {
                 .set_serial_out_recv_pkt_int_ena(true);
         });
     }
-
-    /// Disable both console interrupts, keeping every other enable.
-    pub fn disable_events(&mut self) {
-        self.0.modify_int_ena(|enables| {
-            enables
-                .set_serial_in_empty_int_ena(false)
-                .set_serial_out_recv_pkt_int_ena(false);
-        });
-    }
 }
 
 /// The interrupt handler's side: the interrupt status and its

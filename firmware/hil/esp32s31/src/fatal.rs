@@ -6,9 +6,8 @@
 //! a register read through a typed accessor or a bounded copy, so the fatal
 //! path stays a short leaf in every context's stack bound. The chip then
 //! resets, and the next boot's [`report_previous`] prints the record once.
-//! A failed boot check whose note neither a free USB block nor a takeover
-//! after the stop of the other hart carried records only its [`Failure`]
-//! and the hart, then halts.
+//! A failed boot check whose note the console's driver kept off the USB
+//! block records only its [`Failure`] and the hart, then resets the chip.
 
 use esp_hal::system::Cpu;
 use oer_diagnostics::Note;

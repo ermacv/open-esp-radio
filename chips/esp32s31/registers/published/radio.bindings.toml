@@ -66732,10 +66732,10 @@ access = "read-write"
 address = 542666888
 width = 32
 access = "read-write"
-identity = "HP_SYS_CLKRST_CORE.UART0_CTRL0"
-peripheral = "HP_SYS_CLKRST_CORE"
-peripheral-type = "HpSysClkrstCore"
-peripheral-module = "hp_sys_clkrst_core"
+identity = "HP_SYS_CLKRST_UART0.UART0_CTRL0"
+peripheral = "HP_SYS_CLKRST_UART0"
+peripheral-type = "HpSysClkrstUart0"
+peripheral-module = "hp_sys_clkrst_uart0"
 scope = []
 register-method = "uart0_ctrl0"
 

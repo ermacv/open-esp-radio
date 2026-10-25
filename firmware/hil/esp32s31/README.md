@@ -87,11 +87,13 @@ interrupt-context panic omits location and message because compiler metadata
 may be in unavailable PSRAM; the hook receives the platform's safe
 `PanicDetails`. The hook's code and diagnostic stage stay in SRAM, its
 records stay in RTC memory, and its fault CRC uses no cached lookup table.
-A failed boot check masks the hart's interrupts for good and prints
-`OPEN_RADIO_HIL runtime=FAIL` while no one holds the USB Serial/JTAG block;
-once the console's driver holds it, the check stops the other hart
-(`cores::stop_the_world`) and takes the block over to print the same line.
-When the stop fails, the check's reason is kept in the same record instead,
-and the next boot prints `OPEN_RADIO_HIL runtime=FAIL boot=previous`. Either
-way the hart halts.
+A failed boot check masks the hart's interrupts for good. While no one
+holds the USB Serial/JTAG block it prints `OPEN_RADIO_HIL runtime=FAIL` and
+halts. Once the console's driver holds the block, the check never takes it
+over: it keeps its reason in the same record and resets the chip
+(`cores::software_reset`), and the next boot prints
+`OPEN_RADIO_HIL runtime=FAIL boot=previous`. A takeover of the driver's
+block returns only with a documented drain of the other hart's bus
+transactions after its stall, or one a stand run shows, and a revocation of
+the old owner's accesses.
 

@@ -1,7 +1,7 @@
 error[E0277]: `*const ()` cannot be sent between threads safely
-  --> tests/ui/fatal_proofs_stay_on_their_hart.rs:11:16
+  --> tests/ui/fatal_proofs_stay_on_their_hart.rs:10:16
    |
-11 |     other_hart(path); // ui-error: E0277
+10 |     other_hart(path); // ui-error: E0277
    |     ---------- ^^^^ `*const ()` cannot be sent between threads safely
    |     |
    |     required by a bound introduced by this call
@@ -18,15 +18,15 @@ note: required because it appears within the type `Fatal<'_>`
    | pub struct Fatal<'a> {
    |            ^^^^^
 note: required by a bound in `other_hart`
-  --> tests/ui/fatal_proofs_stay_on_their_hart.rs:5:18
+  --> tests/ui/fatal_proofs_stay_on_their_hart.rs:4:18
    |
- 5 | fn other_hart<T: Send>(_: T) {}
+ 4 | fn other_hart<T: Send>(_: T) {}
    |                  ^^^^ required by this bound in `other_hart`
 
 error[E0277]: `*const ()` cannot be sent between threads safely
-  --> tests/ui/fatal_proofs_stay_on_their_hart.rs:13:16
+  --> tests/ui/fatal_proofs_stay_on_their_hart.rs:12:16
    |
-13 |     other_hart(stop); // ui-error: E0277
+12 |     other_hart(stop); // ui-error: E0277
    |     ---------- ^^^^ `*const ()` cannot be sent between threads safely
    |     |
    |     required by a bound introduced by this call
@@ -43,37 +43,7 @@ note: required because it appears within the type `StopTheWorld<'_>`
    | pub struct StopTheWorld<'a> {
    |            ^^^^^^^^^^^^
 note: required by a bound in `other_hart`
-  --> tests/ui/fatal_proofs_stay_on_their_hart.rs:5:18
+  --> tests/ui/fatal_proofs_stay_on_their_hart.rs:4:18
    |
- 5 | fn other_hart<T: Send>(_: T) {}
-   |                  ^^^^ required by this bound in `other_hart`
-
-error[E0277]: `*const ()` cannot be sent between threads safely
-  --> tests/ui/fatal_proofs_stay_on_their_hart.rs:15:16
-   |
-15 |     other_hart(console); // ui-error: E0277
-   |     ---------- ^^^^^^^ `*const ()` cannot be sent between threads safely
-   |     |
-   |     required by a bound introduced by this call
-   |
-   = help: within `TakenConsole`, the trait `Send` is not implemented for `*const ()`
-note: required because it appears within the type `PhantomData<*const ()>`
-  --> $RUST/core/src/marker.rs
-   |
-   | pub struct PhantomData<T: PointeeSized>;
-   |            ^^^^^^^^^^^
-note: required because it appears within the type `UsbEndpoint<oer_mmio::Fixed<540610560>>`
-  --> src/usb_serial_jtag.rs
-   |
-   | pub struct UsbEndpoint<P: Placement = UsbSerialJtagPlacement>(UsbEndpointRegisters<P>, ThisHart);
-   |            ^^^^^^^^^^^
-note: required because it appears within the type `TakenConsole`
-  --> src/usb_serial_jtag.rs
-   |
-   | pub struct TakenConsole(UsbEndpoint);
-   |            ^^^^^^^^^^^^
-note: required by a bound in `other_hart`
-  --> tests/ui/fatal_proofs_stay_on_their_hart.rs:5:18
-   |
- 5 | fn other_hart<T: Send>(_: T) {}
+ 4 | fn other_hart<T: Send>(_: T) {}
    |                  ^^^^ required by this bound in `other_hart`

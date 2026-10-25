@@ -28,7 +28,9 @@ mod tests;
 pub mod core_control;
 pub mod usb_serial_jtag;
 
-pub use core_control::{CoreControlHandoff, CoreControlRegisters};
+pub use core_control::{
+    CoreControlHandoff, CoreControlRegisters, Uart0ClockHandoff, Uart0ClockRegisters,
+};
 
 pub use usb_serial_jtag::{
     UsbEndpointRegisters, UsbEvents, UsbInterruptRegisters, UsbPadRegisters, UsbSerialJtagHandoff,

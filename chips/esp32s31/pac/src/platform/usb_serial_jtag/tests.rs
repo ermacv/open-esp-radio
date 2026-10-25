@@ -89,30 +89,6 @@ fn enabling_sets_both_console_interrupts_and_keeps_the_others() {
 }
 
 #[test]
-fn disabling_clears_both_console_interrupts_and_keeps_the_others() {
-    let mut words = memory(usb_serial_jtag::SIZE, u32::MAX);
-    let mut pads = memory(usb_serial_jtag_pads::SIZE, 0);
-    let (mut endpoint, _, _) = owners(&mut words, &mut pads).into_parts();
-    endpoint.disable_events();
-    drop(endpoint);
-    let mut disabled = words.clone();
-    let block = usb_serial_jtag::UsbSerialJtag::host(&mut disabled).expect("host block");
-    let enables = block.read_int_ena();
-    assert!(!enables.serial_in_empty_int_ena());
-    assert!(!enables.serial_out_recv_pkt_int_ena());
-    drop(block);
-    let mut pads = memory(usb_serial_jtag_pads::SIZE, 0);
-    let (mut endpoint, _, _) = owners(&mut words, &mut pads).into_parts();
-    endpoint.enable_events();
-    drop(endpoint);
-    assert_eq!(
-        words,
-        memory(usb_serial_jtag::SIZE, u32::MAX),
-        "every other enable kept its value"
-    );
-}
-
-#[test]
 fn the_handler_acknowledges_exactly_the_events_it_read() {
     for events in [
         UsbEvents {

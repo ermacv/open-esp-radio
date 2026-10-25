@@ -1,20 +1,28 @@
 //! Core control: each HP core's stall request and stall status, HP core 1's
-//! clocks and global reset, each core's software CPU reset, and UART0's
-//! function clock, which the boot ROM prints through after a software reset.
+//! clocks and global reset and each core's software CPU reset
+//! ([`CoreControlRegisters`]), and apart from them UART0's function clock,
+//! which the boot ROM prints through after a software reset
+//! ([`Uart0ClockRegisters`]).
 //!
-//! One handoff proof makes the owner of the four blocks. The HAL's cores
-//! module makes it only after its holder's compare-and-swap made the caller
-//! the words' one writer: the cores' owner for one operation, or the fatal
-//! path for good.
+//! One handoff proof makes the owner of the four core-control blocks. The
+//! HAL's cores module makes it only after its holder's compare-and-swap made
+//! the caller the words' one writer: the cores' owner for one operation, or
+//! the fatal path for good. UART0's clock has its own handoff and its own
+//! holder, so a reset that cannot hold the core-control words still
+//! restores it.
 
 use oer_mmio::{Bits, Fixed, Placement};
 
 use super::HpCore;
 use crate::generated::{
     hp_sys_clkrst_core::{self, HpSysClkrstCore},
+    hp_sys_clkrst_uart0::{self, HpSysClkrstUart0},
     hp_sys_core_stall_status::{self, HpSysCoreStallStatus},
     lp_aon_clkrst_core_reset::{self, LpAonClkrstCoreReset},
-    peripheral_ownership::{CoreControlPeripherals, CoreControlPeripheralsClaims},
+    peripheral_ownership::{
+        CoreControlPeripherals, CoreControlPeripheralsClaims, Uart0ClockPeripherals,
+        Uart0ClockPeripheralsClaims,
+    },
     pmu_cpu_stall::{self, PmuCpuStall},
 };
 
@@ -179,25 +187,6 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement> CoreControlRegister
             HpCore::Core1 => self.reset.trigger_hpcore1_reset_ctrl_hpcore1_sw_reset(),
         }
     }
-
-    /// Return UART0's function clock to its power-on state, XTAL undivided
-    /// with its gate open, keeping the bus clock and reset bits: the boot
-    /// ROM prints through UART0 after a software reset, and the source the
-    /// firmware chose may not run any more.
-    ///
-    /// SOURCE: esp-hal 1f646c5 `esp-hal/src/uart/clocks/v2_esp32s31.rs`
-    /// (`restore_power_on_function_clock`); ESP-IDF 4d59230d
-    /// `hp_sys_clkrst_reg.h` (`UART0_CLK_SRC_SEL` 0 is XTAL).
-    pub fn restore_uart0_clock(&mut self) {
-        self.clocks.modify_uart0_ctrl0(|clock| {
-            clock
-                .set_clk_src_sel(Bits::constant::<0>())
-                .set_sclk_div_num(0)
-                .set_sclk_div_numerator(0)
-                .set_sclk_div_denominator(0)
-                .set_clk_en(true);
-        });
-    }
 }
 
 #[cfg(any(test, feature = "test-support"))]
@@ -235,3 +224,84 @@ pub const HOST_SIZES: [usize; 4] = [
     hp_sys_clkrst_core::SIZE,
     lp_aon_clkrst_core_reset::SIZE,
 ];
+
+/// Proof that the caller holds UART0's function clock word alone.
+#[must_use = "the UART0 clock owner needs the platform's transfer"]
+pub struct Uart0ClockHandoff(());
+
+impl Uart0ClockHandoff {
+    /// Assert that the caller holds UART0's function clock word alone.
+    ///
+    /// # Safety
+    /// While the owner built from this proof lives, no other code accesses
+    /// the word: no owner built from another proof lives at the same time,
+    /// except one whose code never runs again, and no esp-hal writer of it
+    /// runs.
+    #[allow(
+        unsafe_code,
+        reason = "the platform proves exclusive ownership of UART0's clock word"
+    )]
+    pub const unsafe fn assume_exclusive() -> Self {
+        Self(())
+    }
+}
+
+/// UART0's function clock word.
+#[must_use = "dropping a register owner permanently loses its register authority"]
+pub struct Uart0ClockRegisters<P: Placement = Fixed<{ hp_sys_clkrst_uart0::BASE }>>(
+    HpSysClkrstUart0<P>,
+);
+
+impl Uart0ClockRegisters {
+    /// Claim the block from the platform handoff.
+    #[allow(
+        unsafe_code,
+        reason = "the consumed handoff proves unique register ownership"
+    )]
+    pub fn from_handoff(_handoff: Uart0ClockHandoff) -> Self {
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "the chip PAC's root claims a domain's typed blocks, from its handoff"
+        )]
+        // SAFETY: `Uart0ClockHandoff`'s constructor guarantees that no other
+        // code accesses the word while this owner lives. The generated
+        // `const` assertion beside the typed blocks checks that no other
+        // typed block lists it.
+        let claims = unsafe { oer_mmio::assume_owned::<Uart0ClockPeripheralsClaims>() };
+        Self(Uart0ClockPeripherals::from_claims(claims).hp_sys_clkrst_uart0)
+    }
+}
+
+impl<P: Placement> Uart0ClockRegisters<P> {
+    /// Return UART0's function clock to its power-on state, XTAL undivided
+    /// with its gate open, keeping the bus clock and reset bits: the boot
+    /// ROM prints through UART0 after a software reset, and the source the
+    /// firmware chose may not run any more.
+    ///
+    /// SOURCE: esp-hal 1f646c5 `esp-hal/src/uart/clocks/v2_esp32s31.rs`
+    /// (`restore_power_on_function_clock`); ESP-IDF 4d59230d
+    /// `hp_sys_clkrst_reg.h` (`UART0_CLK_SRC_SEL` 0 is XTAL).
+    pub fn restore_uart0_clock(&mut self) {
+        self.0.modify_uart0_ctrl0(|clock| {
+            clock
+                .set_clk_src_sel(Bits::constant::<0>())
+                .set_sclk_div_num(0)
+                .set_sclk_div_numerator(0)
+                .set_sclk_div_denominator(0)
+                .set_clk_en(true);
+        });
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl<'a> Uart0ClockRegisters<oer_mmio::Host<'a>> {
+    /// The block over host memory, which holds the words from the block's
+    /// base to its last one.
+    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+        HpSysClkrstUart0::host(words).map(Self)
+    }
+}
+
+/// The bytes of host memory UART0's clock block needs.
+#[cfg(any(test, feature = "test-support"))]
+pub const UART0_HOST_SIZE: usize = hp_sys_clkrst_uart0::SIZE;

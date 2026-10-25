@@ -56,6 +56,7 @@ typed-peripherals = [
     "PMU_CPU_STALL",
     "HP_SYS_CORE_STALL_STATUS",
     "HP_SYS_CLKRST_CORE",
+    "HP_SYS_CLKRST_UART0",
     "LP_AON_CLKRST_CORE_RESET",
 ]
 
@@ -70,8 +71,15 @@ handoff = true
 [[ownership-partitions]]
 name = "CoreControlPeripherals"
 member = "core_control"
-description = "Core control: each HP core's stall request and stall status, HP core 1's clocks and global reset, each core's software CPU reset and UART0's function clock, written by the cores' owner and the fatal path."
+description = "Core control: each HP core's stall request and stall status, HP core 1's clocks and global reset and each core's software CPU reset, written by the cores' owner and the fatal path."
 peripherals = ["PMU_CPU_STALL", "HP_SYS_CORE_STALL_STATUS", "HP_SYS_CLKRST_CORE", "LP_AON_CLKRST_CORE_RESET"]
+handoff = true
+
+[[ownership-partitions]]
+name = "Uart0ClockPeripherals"
+member = "uart0_clock"
+description = "UART0's function clock, which the boot ROM prints through after a software reset, written once by the fatal path's reset."
+peripherals = ["HP_SYS_CLKRST_UART0"]
 handoff = true
 
 [[ownership-partitions]]

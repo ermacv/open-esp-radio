@@ -4,9 +4,10 @@
 //! Each masks the hart's interrupts for good (the CLIC threshold at its
 //! maximum, then `mstatus.MIE` clear) before anything else, so no handler of
 //! the hart runs again, and lends the chip HAL's [`Fatal`] proof to what
-//! follows: with it a path may stop the other hart and take over a block
-//! another owner holds (`cores::stop_the_world`), and the chip resets
-//! through the HAL (`cores::software_reset`), not esp-hal.
+//! follows: with it a path may stop the other hart before the reset
+//! (`cores::stop_the_world`, which gives no right to another owner's
+//! block), and the chip resets through the HAL (`cores::software_reset`),
+//! not esp-hal.
 
 #[cfg(feature = "esp32c5")]
 use oer_esp32c5_hal::cores;

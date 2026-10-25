@@ -132,12 +132,14 @@ moves; ownership, orchestration and wiring are rebuilt.
   the bug it prevents.
 - DMA-reachable storage is permanent and is released only after a proof that
   DMA stopped; otherwise it is quarantined until reset.
-- A fatal path takes over a block another owner holds only with a
-  `StopTheWorld`: its hart masked, the other hart confirmed stopped (the
-  hardware's stall status, or held in reset), from a fatal context that never
-  returns. One compare-and-swap elects the fatal hart, so two failing harts
-  never stall each other; a stop that is not confirmed in its bound takes
-  over nothing, and the path keeps its record and resets.
+- A fatal path never takes over a block another owner holds: it keeps its
+  record and resets the chip, and the next boot reports it. Its stop of the
+  other hart (`StopTheWorld`: its hart masked, the other hart confirmed
+  stopped by the hardware's stall status or held in reset) only prepares the
+  reset; one compare-and-swap elects the fatal hart, so two failing harts
+  never stall each other. A takeover needs a documented drain of the
+  stopped hart's bus transactions after its stall, or one a stand run
+  shows, and a revocation of the old owner's accesses.
 
 ## Hardware
 

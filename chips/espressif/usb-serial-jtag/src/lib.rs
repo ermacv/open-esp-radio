@@ -18,9 +18,7 @@
 //! [`IrqSignal`](oer_interrupt_table::signal::IrqSignal); it calls no
 //! waker, and the interrupt enables belong to the task, which sets them once,
 //! so the two share no register and no lock. A fatal path takes only a free
-//! block, for good, and never one the driver or an early record holds,
-//! unless it stopped every other context: then it takes the block over
-//! from whoever holds it ([`ownership::Ownership::take_over`]).
+//! block, for good, and never one the driver or an early record holds.
 
 #[cfg(test)]
 extern crate std;
@@ -83,34 +81,6 @@ pub trait EndpointRegisters {
     fn pop(&mut self) -> u8;
     /// Enables both console interrupts, keeping every other enable.
     fn enable_events(&mut self);
-}
-
-/// An owner's registers lent for a while, such as the block a fatal path
-/// took over.
-impl<R: EndpointRegisters + ?Sized> EndpointRegisters for &mut R {
-    fn has_room(&self) -> bool {
-        (**self).has_room()
-    }
-
-    fn push(&mut self, byte: u8) {
-        (**self).push(byte);
-    }
-
-    fn send(&mut self) {
-        (**self).send();
-    }
-
-    fn has_data(&self) -> bool {
-        (**self).has_data()
-    }
-
-    fn pop(&mut self) -> u8 {
-        (**self).pop()
-    }
-
-    fn enable_events(&mut self) {
-        (**self).enable_events();
-    }
 }
 
 /// The interrupt handler's registers of the block.

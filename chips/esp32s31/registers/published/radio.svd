@@ -12912,7 +12912,7 @@
     </peripheral>
     <peripheral>
       <name>HP_SYS_CLKRST_CORE</name>
-      <description>HP system clock/reset registers: HP core 1's clocks and global reset, and UART0's function clock, which the boot ROM prints through after a software reset.</description>
+      <description>HP system clock/reset registers: HP core 1's clocks and global reset.</description>
       <baseAddress>0x20587000</baseAddress>
       <registers>
         <register>
@@ -12949,6 +12949,13 @@
             </field>
           </fields>
         </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>HP_SYS_CLKRST_UART0</name>
+      <description>HP system clock/reset registers: UART0's function clock, which the boot ROM prints through after a software reset.</description>
+      <baseAddress>0x20587000</baseAddress>
+      <registers>
         <register>
           <name>UART0_CTRL0</name>
           <description>UART0's function clock: source, enable and divider. Its bus clock and reset bits are not described.</description>

@@ -56,7 +56,7 @@ bitWidth = 1
 
 [[peripherals]]
 name = "HP_SYS_CLKRST_CORE"
-description = "HP system clock/reset registers: HP core 1's clocks and global reset, and UART0's function clock, which the boot ROM prints through after a software reset."
+description = "HP system clock/reset registers: HP core 1's clocks and global reset."
 baseAddress = 0x20587000
 
 [[peripherals.registers]]
@@ -92,6 +92,11 @@ name = "CORE1_FORCE_NORST"
 description = "Keeps HP core 1 out of reset."
 bitOffset = 3
 bitWidth = 1
+
+[[peripherals]]
+name = "HP_SYS_CLKRST_UART0"
+description = "HP system clock/reset registers: UART0's function clock, which the boot ROM prints through after a software reset."
+baseAddress = 0x20587000
 
 [[peripherals.registers]]
 [peripherals.registers.register]
@@ -219,6 +224,29 @@ completeness = "complete"
 
 [[peripheral-review]]
 entity = "HP_SYS_CLKRST_CORE"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[peripheral-review]]
+entity = "HP_SYS_CLKRST_UART0"
 
 [peripheral-review.peripheral]
 sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]

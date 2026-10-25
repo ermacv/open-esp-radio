@@ -341,7 +341,7 @@ reason = "esp-hal 1f646c5 stores it in disable_core1, which pre_init calls on ha
 
 [[word]]
 address = 0x20587088
-radio = "HP_SYS_CLKRST_CORE.UART0_CTRL0 (typed block)"
+radio = "HP_SYS_CLKRST_UART0.UART0_CTRL0 (typed block)"
 esp_hal = "HP_SYS_CLKRST.uart_ctrl0 in Uart0's clock and reset control (esp-metadata-generated/_generated_esp32s31.rs) and UartInstance's function clock (uart/clocks/v2_esp32s31.rs)"
 coordination = "disjoint-lifecycle"
 reason = "esp-hal 1f646c5 stores it inside esp_hal::init (disable_peripherals), from a UART driver, which needs the UART0 singleton no image takes, and in software_reset, which nothing calls any more. Our one writer is the software reset, which restores the boot ROM's function clock and then resets the chip: no code of the image runs after it."
