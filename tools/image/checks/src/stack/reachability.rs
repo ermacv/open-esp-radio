@@ -25,7 +25,7 @@ pub fn probe(
     let (mut body, mut peak) = image.with_bounds(|keep, control| {
         let mut body = String::new();
         let mut entries = BTreeSet::new();
-        for symbol in ["runtime_main", "_start_rust", "main", "_start"] {
+        for symbol in ["runtime_main", "bootstrap_main", "main", "_start"] {
             if let Some(address) = image.symbol(symbol)
                 && entries.insert(address)
             {

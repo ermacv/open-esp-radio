@@ -12,18 +12,15 @@ default = []
 # Nominal static radio-slot declarations. Images without a port slot retain
 # their dependency graph and linked bytes.
 port-slots = ["dep:oer-radio-port"]
-# The chip of esp-hal; an image selects exactly one.
+# An image selects its chip.
 esp32s31 = [
     "chip",
-    "esp-hal/esp32s31",
     "dep:oer-esp32s31-hal",
 ]
 # The executor and time driver, which a chip feature selects.
 chip = [
     "dep:embassy-time-driver",
-    "dep:esp-hal",
     "dep:portable-atomic",
-    "dep:riscv",
     "dep:oer-interrupt-table",
     "dep:oer-riscv",
     "dep:oer-mmio",
@@ -37,15 +34,11 @@ bytemuck = { version = "1.25.2", default-features = false }
 oer-memory = { path = "../../../portable/memory" }
 oer-radio-port = { path = "../../../protocols/radio/port", optional = true }
 embassy-time-driver = { version = "0.2", features = ["tick-hz-1_000_000"], optional = true }
-esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "1f646c5af4f4ca2774f493783581237fea2379dc", default-features = false, features = ["static-interrupts", "rt", "unstable"], optional = true }
 portable-atomic = { version = "1.11", default-features = false, optional = true }
 oer-interrupt-table = { path = "../../../portable/interrupt-table", optional = true }
 oer-riscv = { path = "../../../portable/riscv", optional = true }
 oer-mmio = { path = "../../../portable/mmio", optional = true }
 oer-esp32s31-hal = { path = "../../esp32s31/hal", optional = true }
-
-[target.'cfg(target_arch = "riscv32")'.dependencies]
-riscv = { version = "0.15", optional = true }
 
 [target.'cfg(not(target_os = "none"))'.dev-dependencies]
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
@@ -67,6 +60,6 @@ default-target = "riscv32imafc-unknown-none-elf"
 targets = []
 
 [package.metadata.open-radio]
-# An image selects exactly one chip of esp-hal; each profile builds for its
+# An image selects exactly one chip; each profile builds for its
 # chip's target only.
 supported-feature-profiles = ["esp32s31"]

@@ -12,13 +12,10 @@ build = "build.rs"
 [dependencies]
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
-esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 static_cell = { workspace = true }
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
 oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31"] }
 oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["esp32s31"] }
-oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }
-oer-espressif-esp-hal-soc.workspace = true
 oer-espressif-usb-serial-jtag.workspace = true
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-time = { path = "../../../portable/time" }
@@ -46,5 +43,5 @@ task-stack = "proven"
 
 [package.metadata.open-radio.panic-budget]
 # Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
-runtime = { pac = 11, hal = 9, chips = 322, portable = 5, firmware = 23, esp-hal = 7, unnamed = 11, hardware = 8 }
-bootstrap = { esp-hal = 8, unnamed = 2 }
+runtime = { pac = 11, hal = 9, chips = 322, portable = 5, firmware = 23, unnamed = 11, hardware = 8 }
+bootstrap = { unnamed = 2 }

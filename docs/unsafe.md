@@ -42,7 +42,7 @@ Below it are, by directory (`/` ends a domain):
 | --- | --- |
 | The volatile register-access core | `portable/mmio` |
 | Semantic PACs and the HAL | `chips/esp32c5/pac`, `chips/esp32s31/pac`, `chips/esp32c5/hal`, `chips/esp32s31/hal` |
-| Platform, executor and framework bindings | `chips/esp32c5/board`, `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `chips/espressif/esp-hal/`, `chips/esp32c5/esp-hal-soc`, `portable/embassy/` |
+| Platform, executor, architectural instructions and framework bindings | `chips/esp32c5/board`, `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `chips/esp32c5/esp-hal-soc`, `portable/embassy/`, `portable/riscv` |
 | Cores of memory the hardware shares | `portable/memory`, `portable/interrupt-table`, `chips/espressif/staged-layout` |
 | The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
 | The C-driver stand | `tools/vendor/ieee802154-esp32s31` |
@@ -56,35 +56,14 @@ the owners of its policy's parts, into the chip PAC's `generated.rs`. The
 unsafe code under a typed block is `oer-mmio` (`portable/mmio`) alone, and
 the PAC root's one claim:
 
-- `oer_mmio::assume_owned`, the promise that the claimed blocks' words are
-  the caller's alone. A block's authority is the list of its declared words,
-  not the address range they span, so blocks whose ranges interleave claim
-  only their own words. Only the chip PAC's root makes the promise: its
-  `take()` claims every part of the policy once and hands out the
-  partitions (clippy `disallowed-methods` refuses `assume_owned`
-  elsewhere). The USB Serial/JTAG console's block has an owner before
-  esp-hal exists: each chip HAL's `usb_serial_jtag` keeps the block's
-  holder (`oer-espressif-usb-serial-jtag`'s `Ownership`), which one
-  compare-and-swap changes and nothing waits for. The early writer makes
-  the handoff for each record it holds the block for, and a record that
-  finds the block held is dropped and counted; the esp-hal adapter's
-  `take_usb_serial_jtag` takes only a free block and consumes `USB_DEVICE`
-  to make the driver's owner. The ESP32-S31's `fatal_note` makes the
-  handoff once more, only from a free block, which it keeps for good; it
-  never takes the block from the driver or an early record, so every owner
-  of the block lives alone. Its driver's endpoint and pads are not `Send`.
-  The core-control words (S31: each core's stall request and status, core
-  1's clocks and reset and the CPU reset triggers) are claimed by the chip
-  HAL's `cores` after one compare-and-swap of their holder: the cores'
-  owner for one operation, or a fatal path, for good. The S31's UART0
-  function clock has its own handoff, claimed by the software reset after
-  its own holder's compare-and-swap; the C5's core-control word is that
-  clock, which only the software reset claims. Only the staged runtime's fatal
-  paths make the HAL's `Fatal` proof (the `unsafe` `cores::fatal`, after
-  masking the hart for good), and only that proof makes a `StopTheWorld`,
-  which gives no right to another owner's block.
-  The generated `const` assertion beside the claim checks that no two
-  blocks list the same word.
+- `oer_mmio::assume_owned` promises exclusive ownership of the declared
+  words, rather than every word of an overlapping address range. The chip's
+  reset root claims those words once and splits domain owners. No vendor
+  singleton, handoff adapter or shared-word inventory authorizes a claim.
+  A probe may reclaim a block only after dropping its previous owner.
+  Generated const assertions exclude overlapping claims. Fatal paths mask
+  their hart permanently and use the HAL's `StopTheWorld` proof to prepare
+  reset; they do not revoke or take over another owner's peripheral.
 - The volatile reads and writes of a `Block` and of a `Part`. Every word
   offset, stride and element count is a const generic, checked against the
   block's word list at compile time; an array index is an `Index<N>` from a
@@ -133,11 +112,7 @@ sources, which also writes the bits the model leaves undeclared.
 
 `esp32s31/pac/` is the generated PAC (`src/generated.rs`) and its root
 (`src/lib.rs`, the one claim); it has no handwritten module
-([PAC](../chips/esp32s31/pac/README.md)). Non-radio register
-access through upstream `esp-hal`/`esp-pacs` belongs to
-`adapters/esp-hal/soc/`, which also contains cache/MMU and GDMA
-transactions. Its Cargo package is `oer-espressif-esp-hal-soc`; its implementation
-is handwritten code.
+([PAC](../chips/esp32s31/pac/README.md)).
 
 The crates below cover distinct obligations: singleton acquisition and MMIO
 serialization, stable addresses and CPU/DMA transfer, target ABI and placement,

@@ -96,7 +96,7 @@ moves; ownership, orchestration and wiring are rebuilt.
   (the bootstrap, CPU0 as stage two's entry, each task, each interrupt
   context), the panic sites it reaches, by the crate layer of the function
   holding them: PAC, HAL, chips, portable, protocols, firmware, core,
-  embassy, esp-hal, third-party, unnamed (`#[no_mangle]` and assembly
+  embassy, third-party, unnamed (`#[no_mangle]` and assembly
   symbols). Each image declares a budget of its runtime and bootstrap in
   `[package.metadata.open-radio.panic-budget]`, per layer and for the sites
   its `Hardware` interrupt contexts reach together (`hardware`); a count
@@ -145,28 +145,23 @@ moves; ownership, orchestration and wiring are rebuilt.
 
 ## Hardware
 
-- **Two roots, one shrinking.** esp-hal (the owner's fork, fixes only) still
-  owns parts of the SoC before the radio handoff: boot, clocks, PSRAM,
-  flash, console. Stage two's traps are the
-  staged runtime's: its vector tables, entries and checked exit, the direct
-  call of each line's handler, the image's `critical-section` and the fatal
-  paths, which mask their hart for good and reset the chip through the chip
-  HAL's `cores` (core control on our typed blocks). The
-  interrupt table's router writes the routes and CPU lines through the
-  chip HAL's interrupt controller on the typed interrupt matrix and CLIC,
-  every source's route word included (the IEEE 802.15.4 MAC's too). The executor's time, software interrupt lines and
-  timer comparators run on our typed platform blocks. esp-hal, esp-pacs, esp-riscv-rt and
-  esp-metadata are used only at the sites listed in
-  `tools/test/layers/tests/platform_crates.allowlist`; a test fails on any use
-  elsewhere, and new platform code goes into our HAL and PAC crates. Each
-  domain that moves to our code removes its lines. Our HAL owns the radio blocks after the
-  handoff, taken through a safe constructor that consumes esp-hal's radio
-  singletons. `embassy-sync`, `embassy-futures`,
-  `embassy-net` and `embassy-time` stay; tasks run on our own static
-  executor (`chips/espressif/executor`): each executor's tasks are declared
-  when the image compiles, live in static slots, are polled by a direct call
-  and wake through one waker vtable whose data names the executor and the
-  task.
+- **One root at reset.** The S31 workspace contains no esp-* platform
+  crates or esp-pacs. Host `espflash` and its transitive image-format parser
+  serve image encoding and the stand. The reset root claims the chip once
+  and splits its owned blocks by domain; no vendor singleton, adapter,
+  handoff partition or shared-word inventory grants access. The bootstrap
+  owns reset, its linker sections and application descriptor, and runs the
+  bounded `oer-espressif-boot` sequences over the HAL's register traits.
+  Stage two adopts the initialized platform without repeating cold boot.
+  Its own traps, vectors, checked exits and the image's `critical-section`
+  run on the typed interrupt controller. Each table entry moves its part
+  through `Router::bind`; the executor receives owned software lines and
+  timer blocks. Source identities come from the HAL's `ExecutorPlatform`
+  contract, and architectural CSR access and waits from `oer-riscv`.
+  `embassy-sync`, `embassy-futures`, `embassy-net` and `embassy-time` stay;
+  tasks run on the static executor (`chips/espressif/executor`), in static
+  slots, polled by direct calls, with one waker vtable whose data names the
+  executor and task.
 - **Register model.** The chip is block types (one hardware block each,
   offsets from its base) placed by a root at their addresses, with its
   interrupt sources, analog-I2C bytes (a separate space addressed by block

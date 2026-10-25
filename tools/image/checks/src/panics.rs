@@ -45,8 +45,6 @@ pub enum Layer {
     Core,
     /// `embassy-*`.
     Embassy,
-    /// esp-hal and its companions (`esp-*`, the esp-pacs `esp32*`).
-    EspHal,
     /// Every other crate.
     ThirdParty,
     /// Functions whose name names no crate: `#[no_mangle]` and assembly
@@ -55,7 +53,7 @@ pub enum Layer {
 }
 
 impl Layer {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 10] = [
         Self::Pac,
         Self::Hal,
         Self::Chips,
@@ -64,7 +62,6 @@ impl Layer {
         Self::Firmware,
         Self::Core,
         Self::Embassy,
-        Self::EspHal,
         Self::ThirdParty,
         Self::Unnamed,
     ];
@@ -80,7 +77,6 @@ impl Layer {
             Self::Firmware => "firmware",
             Self::Core => "core",
             Self::Embassy => "embassy",
-            Self::EspHal => "esp-hal",
             Self::ThirdParty => "third-party",
             Self::Unnamed => "unnamed",
         }
@@ -153,7 +149,6 @@ impl Layers {
         match krate {
             "core" | "alloc" | "compiler_builtins" => Layer::Core,
             _ if krate.starts_with("embassy_") => Layer::Embassy,
-            _ if krate.starts_with("esp_") || krate.starts_with("esp32") => Layer::EspHal,
             _ => Layer::ThirdParty,
         }
     }

@@ -3,18 +3,9 @@
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 //! Scheduler-free static task executor and time driver for Espressif
-//! staged-boot applications; a chip feature selects the chip of esp-hal.
-//!
-//! This crate owns only task execution, executor wake-up and timer-queue
-//! integration. It does
-//! not own radio policy, board electrical parameters, credentials, sockets or
-//! a host protocol. Timer observations, idle accounting and poll timing,
-//! compiled for an image that declares the profile class (`cfg(oer_profile)`),
-//! describe only its own execution. Applications supply esp-hal's software
-//! interrupt lines and system timer explicitly, with the tokens of their
-//! sources in the image's interrupt table; each is consumed by its platform
-//! handoff, and the executor drives our typed blocks (`FROM_CPU_0..3`, the
-//! SYSTIMER comparators and its shared counter latch) from then on.
+//! staged-boot applications. The reset root supplies owned HAL blocks;
+//! interrupt parts are bound through the image's typed interrupt router.
+//! The executor owns task execution, wake-up and timer-queue integration.
 //!
 //! - Each executor's tasks are declared by [`tasks!`] into static slots and
 //!   polled by a direct call per task; [`task`] describes the slots, the
@@ -51,6 +42,7 @@ mod deadline_cell;
 mod doorbell;
 #[cfg(feature = "chip")]
 mod executor;
+pub mod hardware;
 #[cfg(any(feature = "chip", test))]
 mod level;
 #[cfg(any(feature = "chip", test))]

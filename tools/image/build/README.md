@@ -213,7 +213,7 @@ linker script's bottom and top symbols) and `minimum_free_bytes`: the root's
 worst-case call chain (`Analysis::bound_with`) must leave the storage that
 many bytes. The runtime's root is `runtime_main` on CPU0's task stack, which
 the platform runtime's assembly enters at the stack's top; the bootstrap's is
-riscv-rt's `_start_rust`. A root the image lacks fails, as does a stack
+the staged bootstrap's `bootstrap_main`. A root the image lacks fails, as does a stack
 without storage.
 Unless the image declares `task-stack = "proven"`, a task stack's bound may
 be `partial + ?`: an executor's task polls and trait

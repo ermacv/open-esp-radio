@@ -23,15 +23,12 @@ heapless = { version = "0.9.3", features = ["serde"] }
 embassy-sync = "0.8.0"
 oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["phy", "async-io"] }
 oer-hil-agent = { path = "../../../portable/hil-agent" }
-esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 static_cell = { workspace = true }
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
 oer-espressif-usb-serial-jtag.workspace = true
 oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31"] }
 oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["esp32s31"] }
-oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }
-oer-espressif-esp-hal-soc.workspace = true
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-time = { path = "../../../portable/time" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
@@ -53,5 +50,5 @@ workspace = true
 
 [package.metadata.open-radio.panic-budget]
 # Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
-runtime = { pac = 11, hal = 21, chips = 347, portable = 34, firmware = 143, core = 2, embassy = 2, esp-hal = 13, unnamed = 40, hardware = 9 }
-bootstrap = { esp-hal = 8, unnamed = 2 }
+runtime = { pac = 11, hal = 21, chips = 347, portable = 34, firmware = 143, core = 2, embassy = 2, unnamed = 40, hardware = 9 }
+bootstrap = { unnamed = 2 }

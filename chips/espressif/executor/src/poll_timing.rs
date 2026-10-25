@@ -207,7 +207,7 @@ pub struct Mcycle;
 impl CycleSource for Mcycle {
     #[inline(always)]
     fn now(&self) -> u32 {
-        riscv::register::mcycle::read() as u32
+        oer_riscv::cycle32()
     }
 }
 

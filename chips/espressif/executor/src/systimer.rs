@@ -2,7 +2,7 @@
 //! acknowledgement on the typed SYSTIMER blocks, and the shared counter
 //! latch published for [`crate::chip`]'s clock.
 
-use crate::chip::{SYSTIMER, platform};
+use crate::chip::platform;
 
 /// A hardware comparator; every value names an existing target.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -47,6 +47,13 @@ impl Comparator {
     }
 }
 
+/// The running timer's disjoint owners, moved from the reset root.
+pub struct SystemTimer {
+    pub comparators: platform::Systimer,
+    pub counter: platform::SystimerCounter,
+    pub acknowledge: platform::SystimerAcknowledge,
+}
+
 /// The sole writer of comparator configuration, held by the writer executor.
 pub struct ComparatorWriter {
     timer: platform::Systimer,
@@ -67,30 +74,22 @@ impl ComparatorWriter {
     /// the comparator owner and each comparator's acknowledger. The returned
     /// owners cannot be cloned or obtained a second time.
     pub fn adopt(
-        systimer: SYSTIMER<'static>,
+        systimer: SystemTimer,
     ) -> (
         Self,
         ComparatorAcknowledger<0>,
         ComparatorAcknowledger<1>,
         ComparatorAcknowledger<2>,
     ) {
-        let _consumed = systimer;
-        #[allow(
-            unsafe_code,
-            reason = "the consumed esp-hal SYSTIMER proves the system timer handoff"
-        )]
-        // SAFETY: esp-hal makes the `SYSTIMER` singleton once and it is
-        // consumed here for good, so no esp-hal `SystemTimer`, unit or alarm
-        // can exist; esp-hal's `Instant::now` strobes the counter latch as
-        // `registers/shared-words.toml` reviews. This is the system timer's
-        // only handoff.
-        let handoff = unsafe { platform::SystemTimerHandoff::assume_exclusive() };
-        let blocks = platform::SystemTimerPeripherals::from_handoff(handoff);
-        crate::chip::install_counter(blocks.systimer_counter);
-        let acknowledge = ACKNOWLEDGE.get_or_init(|| blocks.systimer_acknowledge);
+        crate::chip::install_counter(systimer.counter);
+        assert!(
+            ACKNOWLEDGE.get().is_none(),
+            "the acknowledgement owner is published once"
+        );
+        let acknowledge = ACKNOWLEDGE.get_or_init(|| systimer.acknowledge);
         (
             Self {
-                timer: blocks.systimer,
+                timer: systimer.comparators,
             },
             ComparatorAcknowledger { acknowledge },
             ComparatorAcknowledger { acknowledge },

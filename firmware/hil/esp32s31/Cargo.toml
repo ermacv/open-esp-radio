@@ -48,7 +48,6 @@ wifi-station = [
     "dep:oer-espressif-ieee80211-policy",
     "dep:oer-ieee80211-upper-mac",
     "dep:oer-ieee80211-port",
-    "dep:oer-espressif-esp-hal-radio",
     "dep:oer-embassy-net",
     "dep:oer-embassy-time",
     "dep:oer-esp32s31-phy",
@@ -79,7 +78,6 @@ oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta", optional = true
 oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-policy", optional = true }
 oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac", optional = true }
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port", optional = true }
-oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"], optional = true }
 oer-embassy-net = { path = "../../../portable/embassy/net", optional = true }
 oer-embassy-time = { path = "../../../portable/embassy/time", optional = true }
 oer-interrupt-table = { path = "../../../portable/interrupt-table" }
@@ -100,9 +98,7 @@ oer-diagnostics = { path = "../../../portable/diagnostics" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 embassy-sync = { workspace = true, optional = true }
 embassy-time.workspace = true
-esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 critical-section = "1.2.0"
-oer-espressif-esp-hal-soc.workspace = true
 oer-espressif-executor = { workspace = true, features = ["esp32s31"] }
 oer-hil-protocol = { workspace = true, optional = true, features = ["async-io"] }
 oer-hil-agent = { path = "../../../portable/hil-agent", optional = true, default-features = false }
@@ -121,5 +117,5 @@ oer-esp32s31-layout = { path = "../../../chips/esp32s31/layout", features = ["bu
 
 [package.metadata.open-radio.panic-budget]
 # Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
-runtime = { pac = 11, hal = 39, chips = 489, portable = 122, protocols = 191, firmware = 69, core = 20, embassy = 66, esp-hal = 19, third-party = 63, unnamed = 13, hardware = 11 }
-bootstrap = { esp-hal = 8, unnamed = 2 }
+runtime = { pac = 11, hal = 39, chips = 489, portable = 122, protocols = 191, firmware = 69, core = 20, embassy = 66, third-party = 63, unnamed = 13, hardware = 11 }
+bootstrap = { unnamed = 2 }

@@ -13,6 +13,8 @@ MEMORY
        (at or below the SRAM end) while it loads this image (see sections.x). */
     SRAM   (RWX) : ORIGIN = SRAM_ORIGIN, LENGTH = SRAM_LENGTH
 
+    RETAINED (RW) : ORIGIN = RETAINED_ORIGIN, LENGTH = RETAINED_LENGTH
+
     /* The unified flash-mapped instruction/data window of the bootstrap. */
     ROTEXT  (RX) : ORIGIN = BOOTSTRAP_FLASH_TEXT_ORIGIN, LENGTH = BOOTSTRAP_FLASH_TEXT_LENGTH
 

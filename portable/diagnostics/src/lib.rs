@@ -9,6 +9,7 @@ pub mod console;
 pub mod fifo;
 pub mod note;
 pub mod path;
+pub mod radio_root;
 pub mod record;
 #[cfg(feature = "render")]
 pub mod render;

@@ -16,7 +16,7 @@ use core::sync::atomic::{Ordering, fence};
 
 use oer_interrupt_table::Entry;
 
-use crate::chip::{Cpu, Interrupt, Line, Priority, SoftwareInterrupt, software_interrupt_source};
+use crate::chip::{Line, platform, software_interrupt_source};
 use crate::executor::SameLevel;
 use crate::software_line::SoftwareLine;
 
@@ -26,29 +26,29 @@ pub struct Doorbell<const SWI: u8> {
 }
 
 /// Check that `Bell` is the token of software interrupt `SWI`.
-const fn bell_source<const SWI: u8, Bell: Entry<Source = Interrupt>>() {
+const fn bell_source<const SWI: u8, Bell: Entry>() {
     assert!(
-        Bell::SOURCE as u16 == software_interrupt_source(SWI) as u16,
+        <Bell::Part as oer_interrupt_table::InterruptSource>::SOURCE
+            == software_interrupt_source(SWI) as u16,
         "the token is not the doorbell's software interrupt"
     );
 }
 
 macro_rules! impl_doorbell {
-    ($number:literal, $take:ident) => {
+    ($number:literal, $block:ident, $take:ident) => {
         impl Doorbell<$number> {
             /// The doorbell on `interrupt`, whose source `bell` is the token of;
             /// `level` proves that it shares the radio interrupt's level and core.
-            /// Consumes esp-hal's line, claims the line's typed block, lowers a
-            /// stale raise and returns both halves. Install the acknowledger in
-            /// its handler's storage before calling its `enable` method.
+            /// Moves the line's block from the reset root and lowers a stale
+            /// raise. Bind the interrupt part through the router only after
+            /// the handler owns the returned acknowledger.
             pub fn new<Radio, Bell>(
-                interrupt: SoftwareInterrupt<'static, $number>,
-                bell: Bell,
+                interrupt: platform::$block,
                 level: SameLevel<Radio, Bell>,
             ) -> (Self, DoorbellAcknowledger<$number>)
             where
-                Radio: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
-                Bell: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
+                Radio: Entry,
+                Bell: Entry,
             {
                 const { bell_source::<$number, Bell>() };
                 let _ = level;
@@ -60,7 +60,6 @@ macro_rules! impl_doorbell {
                     Self { line },
                     DoorbellAcknowledger {
                         line: LineAcknowledger { line },
-                        bell: oer_espressif_esp_hal_irq::Route::new(bell),
                     },
                 )
             }
@@ -68,10 +67,10 @@ macro_rules! impl_doorbell {
     };
 }
 
-impl_doorbell!(0, take_line_0);
-impl_doorbell!(1, take_line_1);
-impl_doorbell!(2, take_line_2);
-impl_doorbell!(3, take_line_3);
+impl_doorbell!(0, FromCpu0, own_line_0);
+impl_doorbell!(1, FromCpu1, own_line_1);
+impl_doorbell!(2, FromCpu2, own_line_2);
+impl_doorbell!(3, FromCpu3, own_line_3);
 
 impl<const SWI: u8> Doorbell<SWI> {
     /// Raise the doorbell. The fence orders the caller's request writes
@@ -100,22 +99,9 @@ impl<const SWI: u8> LineAcknowledger<SWI> {
 /// The acknowledgement and route authority moved into the doorbell's ISR.
 pub struct DoorbellAcknowledger<const SWI: u8> {
     line: LineAcknowledger<SWI>,
-    bell: oer_espressif_esp_hal_irq::Route,
 }
 
 impl<const SWI: u8> DoorbellAcknowledger<SWI> {
-    /// Separate handler acknowledgement from task-owned route authority.
-    /// The image must install the returned acknowledger before enabling the
-    /// route, and mask the route before a task transfers handler storage.
-    pub fn into_parts(self) -> (LineAcknowledger<SWI>, oer_espressif_esp_hal_irq::Route) {
-        (self.line, self.bell)
-    }
-
-    /// Enable the route after this owner has reached the ISR's storage.
-    pub fn enable(&mut self) -> Result<(), oer_espressif_esp_hal_irq::Error> {
-        oer_espressif_esp_hal_irq::enable_route(&self.bell)
-    }
-
     /// Lower the line before taking requests. Only the handler owns this half.
     #[inline(always)]
     pub fn acknowledge(&mut self) {

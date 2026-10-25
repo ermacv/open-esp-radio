@@ -34,8 +34,8 @@ cargo clippy --all-targets
 cargo check -p oer-esp32s31-hal --target riscv32imafc-unknown-none-elf
 ```
 
-Chip code depends on the owner's esp-hal fork (`ermacv/esp-hal`); upstream
-esp-hal does not run the staged boot.
+The S31 workspace uses its own PAC, HAL, reset entry and staged runtime.
+Host `espflash` encodes and flashes images; no esp-* platform crate is linked.
 
 ## License
 

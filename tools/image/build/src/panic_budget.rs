@@ -109,7 +109,6 @@ mod tests {
             include_str!("../../../../firmware/apps/w1/Cargo.toml"),
             include_str!("../../../../firmware/apps/w2/Cargo.toml"),
             include_str!("../../../../firmware/apps/w3/Cargo.toml"),
-            include_str!("../../../../firmware/hil/esp32c5/Cargo.toml"),
             include_str!("../../../../firmware/hil/esp32s31/Cargo.toml"),
             include_str!("../../../../firmware/hil/esp32s31-lower-mac/Cargo.toml"),
             include_str!("../../../../firmware/hil/esp32s31-phy/Cargo.toml"),
@@ -131,6 +130,7 @@ mod tests {
         for declared in [
             serde_json::json!({ "runtime": { "hardware": "two" } }),
             serde_json::json!({ "runtime": { "drivers": 1 } }),
+            serde_json::json!({ "bootstrap": { "esp-hal": 1 } }),
             serde_json::json!({ "stage-two": { "core": 1 } }),
             serde_json::json!({ "runtime": { "core": -1 } }),
             serde_json::json!(3),

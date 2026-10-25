@@ -1,10 +1,10 @@
 #![no_std]
-#![forbid(unsafe_code)]
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 //! Architectural RISC-V constants that firmware and analysis share: CSR
 //! numbers and the fields of the CSRs this repository programs or decodes.
 //!
-//! The crate holds definitions only, with no chip parameter (a chip's
+//! The crate holds architectural definitions and instructions, with no chip parameter (a chip's
 //! interrupt-line count or trigger budget lives with the chip). CSR numbers
 //! are `u16` for decoders and `const` operands of `asm!` and `global_asm!`;
 //! register values are `usize` (XLEN).
@@ -188,3 +188,9 @@ pub mod trigger {
         pub const DMODE: usize = 1 << (usize::BITS - 5);
     }
 }
+
+#[cfg(target_arch = "riscv32")]
+#[allow(unsafe_code, reason = "architectural CSR and wait instructions")]
+mod instructions;
+#[cfg(target_arch = "riscv32")]
+pub use instructions::{cycle32, cycle64, hart_id, interrupt_free, wait_for_interrupt};
