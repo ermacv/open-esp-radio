@@ -36,13 +36,14 @@ host. Generated PAC code has no crate-root unsafe attribute.
 
 ## The boundary
 
-Below it are, by directory (`/` ends a domain):
+Below it are, by directory (`/` ends a domain), for the S31 workspace.
+C5 code lies outside the workspace and its checks:
 
 | Kind | Directories |
 | --- | --- |
 | The volatile register-access core | `portable/mmio` |
-| Semantic PACs and the HAL | `chips/esp32c5/pac`, `chips/esp32s31/pac`, `chips/esp32c5/hal`, `chips/esp32s31/hal` |
-| Platform, executor, architectural instructions and framework bindings | `chips/esp32c5/board`, `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `chips/esp32c5/esp-hal-soc`, `portable/embassy/`, `portable/riscv` |
+| Semantic PACs and the HAL | `chips/esp32s31/pac`, `chips/esp32s31/hal` |
+| Platform, executor, architectural instructions and framework bindings | `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `portable/embassy/`, `portable/riscv` |
 | Cores of memory the hardware shares | `portable/memory`, `portable/interrupt-table`, `chips/espressif/staged-layout` |
 | The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
 | The C-driver stand | `tools/vendor/ieee802154-esp32s31` |
@@ -51,15 +52,15 @@ Below it are, by directory (`/` ends a domain):
 ## Generated access and trusted handwritten code
 
 Typed register blocks are generated without `unsafe`: `cargo registers
-generate` renders every MMIO block type of the chip's register model, with
-the owners of its policy's parts, into the chip PAC's `generated.rs`. The
-unsafe code under a typed block is `oer-mmio` (`portable/mmio`) alone, and
-the PAC root's one claim:
+generate --chip <chip>` renders every MMIO block type of the chip's register
+model, with the owners of its policy's parts, into the chip PAC's
+`generated.rs`. The unsafe code under a typed block is `oer-mmio`
+(`portable/mmio`) alone, and the PAC root's one claim:
 
 - `oer_mmio::assume_owned` promises exclusive ownership of the declared
   words, rather than every word of an overlapping address range. The chip's
-  reset root claims those words once and splits domain owners. No vendor
-  singleton, handoff adapter or shared-word inventory authorizes a claim.
+  PAC takes those words once; the HAL root splits them into domain owners.
+  Only the root's owned partitions authorize register access.
   A probe may reclaim a block only after dropping its previous owner.
   Generated const assertions exclude overlapping claims. Fatal paths mask
   their hart permanently and use the HAL's `StopTheWorld` proof to prepare
@@ -412,8 +413,8 @@ drivers and adapters reach registers through HAL owners. Check the executable li
 Upper layers use opaque, finite capabilities rather than raw pointers,
 unchecked lifetimes, generic PAC callbacks or independently reusable interrupt
 owners. MMIO outside the restricted PAC must use typed accessors. Missing
-register fields are reviewed and published in the SVD/PAC, not reconstructed
-with local masks in a HAL or adapter.
+register fields are reviewed in `chips/<chip>/registers/` and regenerated
+into the PAC, never reconstructed with local masks in a HAL or adapter.
 
 ## Active-owner lifetime
 

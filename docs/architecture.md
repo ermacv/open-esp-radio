@@ -66,7 +66,7 @@ moves; ownership, orchestration and wiring are rebuilt.
 
 | Context | Runs | Rule |
 | --- | --- | --- |
-| P3, core 0 | radio interrupt handlers; one shared radio doorbell on `FROM_CPU` line 3; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
+| P3, core 0 | radio interrupt handlers; the radio doorbell on `FROM_CPU` line 3, a source of its radio's interrupt part; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
 | P2 | one radio executor on `FROM_CPU` line 2: Wi-Fi driver, BLE lower link layer, the radio-system actor | every step bounded; long waits are timer waits |
 | P1 / thread | role bodies, network stack, application | — |
 
@@ -154,12 +154,14 @@ moves; ownership, orchestration and wiring are rebuilt.
 ## Hardware
 
 - **One root at reset.** The S31 workspace contains no esp-* platform
-  crates or esp-pacs. Host `espflash` and its transitive image-format parser
+  crates or bridges. Host `espflash` and its transitive image-format parser
   serve image encoding and the stand. The reset root claims the chip once
-  and splits its owned blocks by domain; no vendor singleton, adapter,
-  handoff partition or shared-word inventory grants access. The bootstrap
-  owns reset, its linker sections and application descriptor, and runs the
-  bounded `oer-espressif-boot` sequences over the HAL's register traits.
+  through the PAC's single `take()`. The HAL's `Root::take` returns that
+  unique owner; `Root::into_bootstrap` and `Root::into_runtime` split its
+  partitions for each image's phase. Only these owned partitions grant
+  access. The bootstrap owns reset, its linker sections and application
+  descriptor, and runs the bounded `oer-espressif-boot` sequences over the
+  HAL's register traits.
   Stage two adopts the initialized platform without repeating cold boot.
   Its own traps, vectors, checked exits and the image's `critical-section`
   run on the typed interrupt controller. Each table entry moves its part
@@ -175,29 +177,34 @@ moves; ownership, orchestration and wiring are rebuilt.
   interrupt sources, analog-I2C bytes (a separate space addressed by block
   and index), RAM regions and the memory the hardware reads and writes (DMA
   descriptors, the RX control prefix, TX descriptor words, BLE exchange
-  memory), all in `chips/<chip>/registers/` with an ownership policy over
-  them ([hardware memory](hardware-memory.md)). A bit is described, opaque
-  (a use observed, meaning unknown), reserved or absent; only described and
-  opaque bits are fields, each of one access class. Pointer fields state
-  their target and encoding and take typed references; placement is proved
-  by the linker; each block's handover protocol is its HAL engine.
-  Hardware codes and opcodes are sourced named field values in this model;
-  sequence settings and images with unproved code meaning remain cited HAL
-  configuration. HAL derives bounds, array lengths and wrapping moduli from
-  generated geometry, including sourced block quantities outside registers.
+  memory), all in `chips/<chip>/registers/`: `types/`, `layouts/` and
+  `chip.toml`, with sources in `evidence/` and the schema-6 ownership policy
+  in `policy.toml` ([hardware memory](hardware-memory.md)). A bit is
+  described, opaque (a use observed, meaning unknown), reserved or absent;
+  only described and opaque bits are fields, each of one access class.
+  Pointer fields state their target and encoding and take typed references;
+  placement is proved by the linker; each block's handover protocol is its
+  HAL engine. Hardware codes and opcodes are sourced named field values in
+  this model; sequence settings and images with unproved code meaning remain
+  cited HAL configuration. HAL derives bounds, array lengths and wrapping
+  moduli from generated geometry, including sourced block quantities outside
+  registers.
 - **PAC and HAL.** The PAC is the exact model, generated whole by `cargo
-  registers generate`: typed blocks taken once by its root, field accessors
-  by class, typed value domains and DMA pointers, interrupt sources,
-  ownership parts, memory layouts, the analog-I2C dictionary and the few
-  policy items accessors cannot express (whole-word images, masked
-  acknowledgements, interrupt snapshots, pointer ORs). It has no handwritten module and
-  no logic. Register sets, phased sequencing, polls, retries, interrupt
-  routing and lifecycle policy belong to the HAL, each vendor step with its
+  registers generate --chip esp32s31`: typed blocks taken once by its root,
+  field accessors by class, typed value domains and DMA pointers, interrupt
+  sources, ownership parts, memory layouts, the analog-I2C dictionary and
+  the few policy items accessors cannot express (whole-word images, masked
+  acknowledgements, interrupt snapshots, pointer ORs). Its hardware API is
+  generated; `src/lib.rs` exposes it and the single `take()` claim.
+  Register sets, phased sequencing, polls, retries, interrupt routing and
+  lifecycle policy belong to the HAL, each vendor step with its
   `SOURCE:` ([PAC](../chips/esp32s31/pac/README.md),
   [the thin PAC](../tools/registers/model/README.md#the-thin-pac)).
-- **Radio access.** The S31 Wi-Fi handoff returns one `RadioAccess` by value;
-  the driver owns it through the runtime epoch and lends it with `&mut`. No
-  shared register arena or dynamic borrow guard.
+- **Radio access.** The HAL root returns one `RadioHardware` by value.
+  Its split gives the radio system the shared `RadioDomain` and each
+  protocol its partition. The Wi-Fi driver owns its `RadioAccess` through
+  the runtime epoch and lends it with `&mut`. There is no shared register
+  arena or dynamic borrow guard.
 
 ## Radio system
 

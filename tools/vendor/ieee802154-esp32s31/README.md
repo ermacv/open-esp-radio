@@ -62,8 +62,8 @@ INCOMPLETE.
 The compiled driver keeps its state in C globals, so each process runs one
 scenario. `run` prints the scenario's boundary trace, one record per line;
 buffer addresses appear as `tx#n` (the `n`th transmitted frame) and `buf#n`
-(the `n`th distinct driver buffer). The [tests](../ieee802154-esp32s31-cli/tests/catalog.rs) check the
-catalog against expectations read from the pinned source.
+(the `n`th distinct driver buffer). The [scenario catalog tests](src/catalog.rs)
+check the catalog against expectations read from the pinned source.
 
 ## Comparing the production engine
 

@@ -1,7 +1,8 @@
 # ESP32-S31 PAC
 
 The PAC is the exact model of the hardware, generated from the
-[register model](../registers/README.md) and its ownership policy by
+[register model](../registers/README.md) (`types/`, `layouts/`, `chip.toml`,
+`evidence/`) and its schema-6 `policy.toml` by
 `cargo registers generate --chip esp32s31`
 ([renderer](../../../tools/registers/model/README.md#the-thin-pac)). It
 holds no logic: every sequence, poll, retry, routing and lifecycle decision
@@ -10,7 +11,7 @@ over it is the HAL's, each vendor step with its `SOURCE:`.
 | File | What it holds |
 | --- | --- |
 | [`src/generated.rs`](src/generated.rs) | Generated, never edited: a module per block type with its register modules (masks, offsets, `R`, `W`, `Snapshot`, value types) and the owners of its parts; the field accessors of each field's class; typed DMA pointers; `Interrupt` and `instances` (bases, sizes, bound sources); `ownership` (the partitions, `Claims`, `partition`); the irreducible policy items (whole-word images, masked acknowledgements, interrupt snapshots, whole-word-bits writes, pointer ORs); `layouts`; `analog_i2c` |
-| [`src/lib.rs`](src/lib.rs) | The root: `take()` claims every part once and returns the partitions |
+| [`src/lib.rs`](src/lib.rs) | Exposes the generated API and its single root claim: `take()` claims every part once and returns the partitions |
 
 - **Accessors by class.** Reads, read-modify-writes that keep every bit
   they do not set, writes from zero that take the fields no write may leave
@@ -28,6 +29,10 @@ over it is the HAL's, each vendor step with its `SOURCE:`.
   interrupt names its source (`oer_mmio::InterruptSource`). `take()` is the
   one place the claimed words are assumed exclusive; the generated
   `disjoint_blocks` check proves no two claimed blocks list one word.
+
+There are no handwritten register modules. The HAL's `root::Root::take`
+wraps this one claim; `into_bootstrap` and `into_runtime` compose the
+phase-specific owners. The PAC holds no boot or radio sequencing.
 
 `tests/` exercises the generated layouts over host memory; the renderer's
 own tests prove the accessors' behaviour and what they refuse.

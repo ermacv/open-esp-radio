@@ -33,7 +33,7 @@ portable/   generic support no protocol or chip owns (no_std)
   embassy/      bindings to Embassy (time, net)
   hil-agent/    the agent core the HIL images run
 chips/      everything about Espressif hardware
-  espressif/    IP shared by Espressif chips: Wi-Fi MAC PAC, analog, modem
+  espressif/    IP shared by Espressif chips: analog, modem
                 clock, coexistence, the 802.15.4 engine, Wi-Fi policy, the
                 staged boot (bootstrap, runtime, layout), executor,
                 the chip facts model (facts/) and the
@@ -44,7 +44,7 @@ chips/      everything about Espressif hardware
                 chip knowledge, and the chip's data:
                 platform/   chip, module and board fact layers, partitions, ROM
                             functions, stack budgets
-                registers/  the reviewed register model and its publications
+                registers/  block types, layouts, chip root, evidence and ownership policy
                 notes/      recovered facts and research notes
                 vendor/     the vendor pins and generated facts
 firmware/   images for a chip: apps/ bootstrap/ hil/ probes/, ESP-IDF peers/ and vendor/
@@ -144,7 +144,7 @@ and runs is a thin wrapper over `cargo fw` and the program.
 | run the 802.15.4 vendor stand | `cargo run -p oer-tool-vendor-ieee802154-esp32s31-cli -- compare <scenario>` | vendor driver and `chips/espressif/ieee802154-engine` meet at the low-level boundary |
 | declare an image's task stacks proven | `task-stack = "proven"` under the image's `[package.metadata.open-radio]`, then `cargo fw build <image>` | `tools/image/build/src/task_stack.rs`; the check in `tools/image/checks/src/stack.rs` |
 | check an image's stack | `cargo fw build <image>` | `tools/image/checks` reads the ELF |
-| add a register field | edit `chips/<chip>/registers/`, `cargo registers generate` | `chips/<chip>/pac` |
+| add a register field | edit `chips/<chip>/registers/`, `cargo registers generate --chip <chip>` | `chips/<chip>/pac` |
 
 ## Known deviations
 

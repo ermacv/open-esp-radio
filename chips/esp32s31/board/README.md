@@ -1,8 +1,10 @@
 # ESP32-S31 staged application boot
 
 This platform composes the reset root (`oer-esp32s31-hal`) for
-ESP32-S31-Function-CoreBoard-1. It has no
-test protocol, radio role, executor or network-stack dependency.
+ESP32-S31-Function-CoreBoard-1. The bootstrap uses the chip HAL over the
+generated PAC; the workspace contains no esp-* platform crates. The board
+profile has no test protocol, radio role, executor or network-stack
+dependency.
 
 | Component | Responsibility |
 | --- | --- |
@@ -63,8 +65,14 @@ It does not return or carry Rust peripheral owners across the image boundary.
 Stage-two assembly initializes application data and SRAM interrupt/DMA sections
 before entering `runtime_main`, which the image defines with
 `oer_espressif_staged_runtime::entry!`; it hands the image's `main` the one
-`Handoff`. The application takes the reset root (`Root::take`, then
-`into_runtime`), then
+`Handoff`. Hardware ownership comes from the HAL's reset root: the
+application takes it (`Root::take`, then `Root::into_runtime`), which
+installs the console's parts for the early writer and returns the
+watchdogs, system timer, software lines, interrupt controller, eFuse,
+entropy, reset causes, the Wi-Fi interrupt banks, the platform clock owner
+(`ChipClocks`) and `RadioHardware`. The bootstrap uses its own `Root::take`
+and `Root::into_bootstrap` for the bounded SoC, brownout, clock, PSRAM, cache
+and flash sequences. The application then calls
 `handoff.adopt(INTERRUPT_TABLE, runtime.interrupts.controller, BootstrapPsram)`:
 the board's `BootstrapPsram` implements the staged layout's
 `AdoptsBootstrapMapping`, the promise that it adopts the bootstrap's mapping
@@ -95,7 +103,11 @@ level, the class and the hart (`u8` each) and the handler address at offset 8
 `portable/interrupt-table` keep that layout. Binding an entry moves its part
 where only its handler reaches it, writes the line and then the route, and
 returns the `Bound` proof the driver takes before it enables the
-peripheral's interrupt.
+peripheral's interrupt. The bootloader's PMS and PMA configuration stays
+as found; the bootstrap's HAL SoC initialization contains hart 1, opens the
+APM filters and starts the TRNG with its health tests. Short settles count
+CPU cycles at the CPU rate the HAL reads from the owned clock registers; no
+ROM delay routine or ROM calibration state is used.
 
 Every image uses one placement: PSRAM for code, ordinary data and a 192-KiB
 CPU0 task stack; SRAM for interrupt entries, hot code, critical state, DMA
@@ -116,7 +128,8 @@ Reads on the board show what the bootloader leaves:
 - The `espflash`-bundled ESP-IDF bootloader already programs PMA entry 7 as
   the locked 64 MiB NAPOT external-memory aperture at `0x5000_0000`; entry
   15 covers the flash window `0x4000_0000` (512 MiB), entries 12-14 the
-  internal memories, and entry 8 is unused.
+  internal memories, and entry 8 is unused. The bootstrap does not rewrite
+  the locked entry.
 - A Flash MMU entry implements bits 0-10 and 13 of the content word: the
   page-number field the PAC publishes as 10 bits (`PADDR`, with bit 10 as
   `ACCESS_SPIRAM`) is the 11-bit value mask of ESP-IDF's `ext_mem_defs.h`;
@@ -132,23 +145,22 @@ Reads on the board show what the bootloader leaves:
 ## Brownout detector policy
 
 The ESP-IDF bootloader leaves its analog mode-1 brownout reset armed. The
-bootstrap replaces it once, right after the SoC initialization and before the
-application runs, with ESP-IDF's application policy, as `esp_brownout_init`
-does at startup: mode 0 at level 7 (about 2.4 V), with the hardware reset,
+bootstrap applies the HAL's `Brownout::apply_idf_policy` once, after the
+SoC initialization and before clock and memory bring-up, with ESP-IDF's
+application policy, as `esp_brownout_init` does at startup: mode 0 at level
+7 (about 2.4 V), with the hardware reset,
 flash power-down and RF power-down, and no brownout interrupt (the ESP32-S31
 has no `ESP_BROWNOUT_USE_INTR`). A brownout still resets the chip; the
 policy sets the threshold and powers the flash and RF down before the reset.
 
 The bootstrap then reads the detector's mode, actions and waits back and
 prints `OER_BOOT bootstrap=BROWNOUT`, or stops with
-`reason=brownout-policy`, so every boot checks it; the threshold is an
-analog register that cannot be read back. Every image boots
+`reason=brownout-policy`, so every boot checks it; the threshold's analog
+byte is not part of that readback. Every image boots
 through the bootstrap, so the detector is configured before the
-application, and before the radio platform takes the analog bus. Rejected:
-keeping the bootloader's mode-1 reset, a project-specific level, action or
-interrupt, and applying the policy in the radio platform constructor, which
-pulled a critical section into PHY code compared with the vendor
-library; disabling the detector is never an option.
+application and before the radio platform takes the analog bus. The
+bootstrap owns this policy; the radio platform does not reconfigure or
+disable the detector.
 
 ## Recovery after a lockup
 

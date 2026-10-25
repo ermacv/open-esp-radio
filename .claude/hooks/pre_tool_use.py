@@ -3,8 +3,8 @@
 
 Reads the hook input JSON on stdin and blocks (exit 2, one line on stderr):
 
-- a Read of a large generated file (raw PAC, PAC API catalog, published SVD
-  or binding index, vendor fact registries, recorded PHY baselines), or a Bash command that prints
+- a Read of a large generated file (PAC API catalog, vendor fact registries,
+  header signatures, recorded PHY baselines), or a Bash command that prints
   one whole (cat, head, sed, ...): grep it with an explicit path;
 - an Edit or Write of such a file: regenerate it with its owner's command.
 
@@ -20,12 +20,9 @@ import sys
 
 GENERATED = re.compile(
     r"(?:^|/)(?:"
-    r"chips/[^/]+/[^/]*pac-raw/src/lib\.rs"
-    r"|chips/[^/]+/[^/]*pac/src/generated\.rs"
-    r"|registers/(?:[^/]+/)?published/[^/]+\.(?:svd|bindings\.toml)"
-    r"|vendor/facts/provenance\.toml"
-    r"|vendor/facts/names/[^/]+\.toml"
-    r"|vendor/phy-baselines/[^/]+/[^/]+\.json"
+    r"chips/[^/]+/pac/src/generated\.rs"
+    r"|chips/[^/]+/vendor/facts/(?:[^/]+/)*[^/]+\.toml"
+    r"|chips/[^/]+/vendor/phy-baselines/[^/]+/[^/]+\.json"
     r")$"
 )
 GENERATED_HINT = (
@@ -35,18 +32,17 @@ GENERATED_HINT = (
 
 # Generated files and the command that writes each; never edited by hand.
 REGENERATED = [
-    (re.compile(r"(?:^|/)(?:chips/[^/]+/[^/]*pac-raw/src/lib\.rs"
-                r"|chips/[^/]+/[^/]*pac/src/generated\.rs"
-                r"|registers/(?:[^/]+/)?published/[^/]+\.(?:svd|bindings\.toml))$"),
-     "`cargo registers generate --manifest registers/<chip>/publication/<publication>.toml` "
-     "after editing the register model or policy"),
-    (re.compile(r"(?:^|/)linker/dma-window\.x$"),
-     "`cargo registers generate --manifest registers/<chip>/publication/registers.toml` "
-     "after editing the memory map or the register model"),
-    (re.compile(r"(?:^|/)vendor/facts/(?:provenance\.toml|names/[^/]+\.toml)$"),
+    (re.compile(r"(?:^|/)chips/[^/]+/(?:pac/src/generated\.rs"
+                r"|layout/linker/dma-window\.x)$"),
+     "`cargo registers generate --chip <chip>` "
+     "after editing chips/<chip>/registers/ (chip.toml, types, layouts, evidence or policy.toml)"),
+    (re.compile(r"(?:^|/)chips/[^/]+/vendor/facts/idf-function-signatures(?:\.provenance)?\.toml$"),
+     "`cargo registers signatures --chip <chip> --idf <checkout> --sdkconfig <sdkconfig.h>` "
+     "from the pinned headers and explicit SDK configuration"),
+    (re.compile(r"(?:^|/)chips/[^/]+/vendor/facts/(?:[^/]+/)*[^/]+\.toml$"),
      "no tool in this repository writes it: a machine-written vendor fact registry "
      "changes only by re-deriving it, which the owner decides"),
-    (re.compile(r"(?:^|/)vendor/phy-baselines/[^/]+/[^/]+\.json$"),
+    (re.compile(r"(?:^|/)chips/[^/]+/vendor/phy-baselines/[^/]+/[^/]+\.json$"),
      "`cargo vendor-check phy-baseline generate` from complete vendor capture runs"),
 ]
 

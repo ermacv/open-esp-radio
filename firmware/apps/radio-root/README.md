@@ -1,10 +1,11 @@
 # radio-root
 
-This ESP32-S31 staged application takes the reset root, adopts PSRAM, and
-acquires and releases each platform clock once through the chip's platform
-clock owner (`oer_esp32s31_hal::power::ChipClocks`). It initializes no RF,
-PHY or MAC. The radio root remains held until reset, and the image's one
-executor feeds the RTC watchdog the root armed.
+This ESP32-S31 staged application takes the reset root, adopts PSRAM, owns
+`RadioHardware` from the HAL root's `into_runtime()`, and acquires and
+releases each platform clock once through the chip's platform clock owner
+(`oer_esp32s31_hal::power::ChipClocks`). It initializes no RF, PHY or MAC.
+The radio root remains held until reset, and the image's one executor feeds
+the RTC watchdog the root armed.
 
 ```console
 cargo fw build radio-root

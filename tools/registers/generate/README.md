@@ -22,9 +22,9 @@ cargo registers generate --chip esp32s31 --check
 
 Every output is rendered before any is written; each file is replaced
 atomically. `--check` writes nothing and fails if an output is missing or
-differs. No SVD, raw PAC or binding index is generated: host tools read the
-register model itself (`oer_registers_model::Chip::load`), each register's
-address, width and fields from `ChipModel::registers()`.
+differs. Host tools read the register model itself
+(`oer_registers_model::Chip::load`), each register's address, width and
+fields from `ChipModel::registers()`.
 
 ## Register checks
 
