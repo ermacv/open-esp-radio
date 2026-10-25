@@ -704,12 +704,6 @@ sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:16", "esp-idf:
 
 [[registers]]
 peripheral = "PCR"
-register = "UART0_SCLK_CONF"
-reserved = 0xff800000
-sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:42", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:67"]
-
-[[registers]]
-peripheral = "PCR"
 register = "UART0_PD_CTRL"
 reserved = 0xfffffff9
 sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:85", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:86"]

@@ -3073,8 +3073,9 @@ name = "oer-espressif-staged-runtime"
 version = "0.1.0"
 dependencies = [
  "critical-section",
- "esp-hal",
  "oer-diagnostics",
+ "oer-esp32c5-hal",
+ "oer-esp32s31-hal",
  "oer-espressif-facts",
  "oer-espressif-staged-layout",
  "oer-interrupt-table",

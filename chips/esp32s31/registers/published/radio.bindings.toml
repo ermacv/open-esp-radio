@@ -66647,6 +66647,70 @@ bit-width = 1
 access = "read-write"
 
 [[registers]]
+address = 542662756
+width = 32
+access = "read-only"
+identity = "HP_SYS_CORE_STALL_STATUS.CPU_CORESTALLED_ST"
+peripheral = "HP_SYS_CORE_STALL_STATUS"
+peripheral-type = "HpSysCoreStallStatus"
+peripheral-module = "hp_sys_core_stall_status"
+scope = []
+register-method = "cpu_corestalled_st"
+
+[[registers.fields]]
+svd-name = "CORE0_CORESTALLED_ST"
+method = "core0_corestalled_st"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CORE1_CORESTALLED_ST"
+method = "core1_corestalled_st"
+bit-offset = 1
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 542666784
+width = 32
+access = "read-write"
+identity = "HP_SYS_CLKRST_CORE.HPCORE1_CTRL0"
+peripheral = "HP_SYS_CLKRST_CORE"
+peripheral-type = "HpSysClkrstCore"
+peripheral-module = "hp_sys_clkrst_core"
+scope = []
+register-method = "hpcore1_ctrl0"
+
+[[registers.fields]]
+svd-name = "CORE1_CLIC_CLK_EN"
+method = "core1_clic_clk_en"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CORE1_CPU_CLK_EN"
+method = "core1_cpu_clk_en"
+bit-offset = 1
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CORE1_GLOBAL_RST_EN"
+method = "core1_global_rst_en"
+bit-offset = 2
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CORE1_FORCE_NORST"
+method = "core1_force_norst"
+bit-offset = 3
+bit-width = 1
+access = "read-write"
+
+[[registers]]
 address = 542666816
 width = 32
 access = "read-write"
@@ -66662,6 +66726,52 @@ svd-name = "MODEM_CLK_EN"
 method = "modem_clk_en"
 bit-offset = 0
 bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 542666888
+width = 32
+access = "read-write"
+identity = "HP_SYS_CLKRST_UART0.UART0_CTRL0"
+peripheral = "HP_SYS_CLKRST_UART0"
+peripheral-type = "HpSysClkrstUart0"
+peripheral-module = "hp_sys_clkrst_uart0"
+scope = []
+register-method = "uart0_ctrl0"
+
+[[registers.fields]]
+svd-name = "CLK_SRC_SEL"
+method = "clk_src_sel"
+bit-offset = 5
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CLK_EN"
+method = "clk_en"
+bit-offset = 7
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "SCLK_DIV_NUM"
+method = "sclk_div_num"
+bit-offset = 8
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "SCLK_DIV_NUMERATOR"
+method = "sclk_div_numerator"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "SCLK_DIV_DENOMINATOR"
+method = "sclk_div_denominator"
+bit-offset = 24
+bit-width = 8
 access = "read-write"
 
 [[registers]]
@@ -66839,6 +66949,42 @@ bit-width = 6
 access = "read-only"
 
 [[registers]]
+address = 544215100
+width = 32
+access = "read-write"
+identity = "LP_AON_CLKRST_CORE_RESET.HPCORE0_RESET_CTRL"
+peripheral = "LP_AON_CLKRST_CORE_RESET"
+peripheral-type = "LpAonClkrstCoreReset"
+peripheral-module = "lp_aon_clkrst_core_reset"
+scope = []
+register-method = "hpcore0_reset_ctrl"
+
+[[registers.fields]]
+svd-name = "HPCORE0_SW_RESET"
+method = "hpcore0_sw_reset"
+bit-offset = 20
+bit-width = 1
+access = "write-only"
+
+[[registers]]
+address = 544215104
+width = 32
+access = "read-write"
+identity = "LP_AON_CLKRST_CORE_RESET.HPCORE1_RESET_CTRL"
+peripheral = "LP_AON_CLKRST_CORE_RESET"
+peripheral-type = "LpAonClkrstCoreReset"
+peripheral-module = "lp_aon_clkrst_core_reset"
+scope = []
+register-method = "hpcore1_reset_ctrl"
+
+[[registers.fields]]
+svd-name = "HPCORE1_SW_RESET"
+method = "hpcore1_sw_reset"
+bit-offset = 20
+bit-width = 1
+access = "write-only"
+
+[[registers]]
 address = 544215144
 width = 32
 access = "read-write"
@@ -66983,6 +67129,31 @@ svd-name = "XPD_RF_CIRCUIT"
 method = "xpd_rf_circuit"
 bit-offset = 16
 bit-width = 16
+access = "read-write"
+
+[[registers]]
+address = 544227820
+width = 32
+access = "read-write"
+identity = "PMU_CPU_STALL.CPU_STALL_SW"
+peripheral = "PMU_CPU_STALL"
+peripheral-type = "PmuCpuStall"
+peripheral-module = "pmu_cpu_stall"
+scope = []
+register-method = "cpu_stall_sw"
+
+[[registers.fields]]
+svd-name = "HPCORE1_SW_STALL_CODE"
+method = "hpcore1_sw_stall_code"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "HPCORE0_SW_STALL_CODE"
+method = "hpcore0_sw_stall_code"
+bit-offset = 24
+bit-width = 8
 access = "read-write"
 
 [[registers]]

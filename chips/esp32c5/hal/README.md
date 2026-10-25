@@ -12,6 +12,7 @@
 | `analog::AnalogI2c` | The PHY's analog register bus: the chip-neutral [contract](../../espressif/analog/README.md), including its parallel writes, over the PAC's analog I2C master |
 | `analog::initialization` | The 44-pair parallel analog initialization of `phy_i2c_init1` over the `phy_param` fields it reads |
 | `platform` | `Entropy<C: Clock>`, which enables the random number generator as ESP-IDF does and spaces reads by `READ_GAP` with a named settle, and `ResetCauses` with the chip's reset-cause table; both are built from the PAC owners an esp-hal adapter hands over |
+| `cores` | The fatal path's proof (`Fatal`, made only by the staged runtime's fatal paths) and the chip's software reset: UART0's function clock restored, then the ROM's system reset |
 | `usb_serial_jtag` | The USB Serial/JTAG console's ownership: the early writer, which builds the block's owner for each record it holds the block for until the esp-hal adapter retires it, and the endpoint, interrupt and pads of the console's driver ([`oer-espressif-usb-serial-jtag`](../../espressif/usb-serial-jtag/src/lib.rs)) |
 | `modem_clock::ModemClocks` | The shared modem clocks over the chip-neutral [planner](../../espressif/modem-clock/README.md), with the ESP32-C5 device order and module sets, and the IEEE 802.15.4 MAC reset |
 

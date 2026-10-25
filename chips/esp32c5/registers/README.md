@@ -32,6 +32,7 @@ reaches.
 | `published/soc.report.toml` | Generated report of every vendor field the API names after its header and every register the conservative pass narrowed, with its reasons |
 | `model/platform-device.toml`, `model/platform/`, `policy/platform-ownership.toml`, `publication/platform.toml` | The platform publication: the reset-cause word the host reads through JTAG after a power cycle, from the same `peripherals/lp-clkrst-reset-cause.toml` fragment the firmware PAC renders; SVD and `published/platform.bindings.toml` only |
 | `model/peripherals/{lpperi-rng,lp-clkrst-reset-cause,usb-serial-jtag}.toml` | Platform blocks rendered as typed register blocks (`typed-peripherals` in `policy/api.toml`): the random number generator's clock gate, configuration and output, the HP core's reset cause, and the USB Serial/JTAG console's data FIFO, interrupts and pads. Each partition is claimed by its own platform handoff |
+| `model/peripherals/core-control.toml` | The core-control block, typed and claimed by its own platform handoff (`CoreControlPeripherals`): PCR's UART0 function clock, which the software reset restores for the boot ROM |
 
 The model publishes, for chip revision v1.0, the IEEE 802.15.4 MAC aperture
 at `0x600A3000` with its interrupt route, the analog I2C master, the shared

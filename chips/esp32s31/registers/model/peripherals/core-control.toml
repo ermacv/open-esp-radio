@@ -1,0 +1,292 @@
+schema = 2
+
+[[peripherals]]
+name = "PMU_CPU_STALL"
+description = "Power management unit: the software stall request of each HP core."
+baseAddress = 0x20704000
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "CPU_STALL_SW"
+description = "Software stall request codes of the two HP cores: 0x86 requests a stall, 0xFF lets the core run."
+addressOffset = 0x1ec
+size = 32
+access = "read-write"
+resetValue = 0x00000000
+reserved = { mask = 0x0000ffff, sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"] }
+
+[[peripherals.registers.register.fields]]
+name = "HPCORE1_SW_STALL_CODE"
+description = "Stall request code of HP core 1."
+bitOffset = 16
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "HPCORE0_SW_STALL_CODE"
+description = "Stall request code of HP core 0."
+bitOffset = 24
+bitWidth = 8
+
+[[peripherals]]
+name = "HP_SYS_CORE_STALL_STATUS"
+description = "HP system registers: whether each HP core is stalled."
+baseAddress = 0x20586000
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "CPU_CORESTALLED_ST"
+description = "The hardware's corestalled status of each HP core, separate from the stall request."
+addressOffset = 0x64
+size = 32
+access = "read-only"
+resetValue = 0x00000000
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"] }
+
+[[peripherals.registers.register.fields]]
+name = "CORE0_CORESTALLED_ST"
+description = "HP core 0 is stalled."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CORE1_CORESTALLED_ST"
+description = "HP core 1 is stalled."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals]]
+name = "HP_SYS_CLKRST_CORE"
+description = "HP system clock/reset registers: HP core 1's clocks and global reset."
+baseAddress = 0x20587000
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "HPCORE1_CTRL0"
+description = "HP core 1's CLIC and CPU clock enables and its global reset."
+addressOffset = 0x20
+size = 32
+access = "read-write"
+resetValue = 0x00000004
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"] }
+
+[[peripherals.registers.register.fields]]
+name = "CORE1_CLIC_CLK_EN"
+description = "HP core 1's CLIC clock enable."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CORE1_CPU_CLK_EN"
+description = "HP core 1's CPU clock enable."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CORE1_GLOBAL_RST_EN"
+description = "Holds HP core 1 in its global reset while set."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CORE1_FORCE_NORST"
+description = "Keeps HP core 1 out of reset."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals]]
+name = "HP_SYS_CLKRST_UART0"
+description = "HP system clock/reset registers: UART0's function clock, which the boot ROM prints through after a software reset."
+baseAddress = 0x20587000
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "UART0_CTRL0"
+description = "UART0's function clock: source, enable and divider. Its bus clock and reset bits are not described."
+addressOffset = 0x88
+size = 32
+access = "read-write"
+resetValue = 0x00000083
+
+[[peripherals.registers.register.fields]]
+name = "CLK_SRC_SEL"
+description = "Function clock source: 0 XTAL, 1 RC_FAST, 2 PLL_F80M."
+bitOffset = 5
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "CLK_EN"
+description = "Function clock enable."
+bitOffset = 7
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "SCLK_DIV_NUM"
+description = "Integral part of the function clock divider; zero divides by one."
+bitOffset = 8
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "SCLK_DIV_NUMERATOR"
+description = "Numerator of the function clock divider's fractional part."
+bitOffset = 16
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "SCLK_DIV_DENOMINATOR"
+description = "Denominator of the function clock divider's fractional part."
+bitOffset = 24
+bitWidth = 8
+
+[[peripherals]]
+name = "LP_AON_CLKRST_CORE_RESET"
+description = "LP always-on clock/reset registers: the software CPU reset of each HP core. Their stall, reset-length and debug fields are not described."
+baseAddress = 0x20701000
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "HPCORE0_RESET_CTRL"
+description = "HP core 0's reset control."
+addressOffset = 0x3c
+size = 32
+access = "read-write"
+resetValue = 0x40010000
+reserved = { mask = 0x1fe00000, sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"] }
+
+[[peripherals.registers.register.fields]]
+name = "HPCORE0_SW_RESET"
+description = "Writing one resets HP core 0 once; it does not hold the core in reset."
+bitOffset = 20
+bitWidth = 1
+access = "write-only"
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "HPCORE1_RESET_CTRL"
+description = "HP core 1's reset control."
+addressOffset = 0x40
+size = 32
+access = "read-write"
+resetValue = 0x40010000
+reserved = { mask = 0x1fe00000, sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"] }
+
+[[peripherals.registers.register.fields]]
+name = "HPCORE1_SW_RESET"
+description = "Writing one resets HP core 1 once; it does not hold the core in reset."
+bitOffset = 20
+bitWidth = 1
+access = "write-only"
+
+[[peripheral-review]]
+entity = "PMU_CPU_STALL"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[peripheral-review]]
+entity = "HP_SYS_CORE_STALL_STATUS"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[peripheral-review]]
+entity = "HP_SYS_CLKRST_CORE"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[peripheral-review]]
+entity = "HP_SYS_CLKRST_UART0"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[peripheral-review]]
+entity = "LP_AON_CLKRST_CORE_RESET"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_S31_CORE_CONTROL"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

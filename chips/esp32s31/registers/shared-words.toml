@@ -331,3 +331,38 @@ radio = "CLIC.INT_CONFIG (typed block)"
 esp_hal = "CLIC.int_config in init, from init_vectoring (interrupt/riscv/clic.rs, interrupt/riscv.rs)"
 coordination = "disjoint-lifecycle"
 reason = "init_vectoring gives each line its level and hardware vectoring and sets the level-bit count. esp-hal writes the word only in esp_hal::init, which returns before the interrupt matrix's handoff; the handoff consumes esp-hal's `INTERRUPT_CORE0`, `INTERRUPT_CORE1` and `CLIC` singletons, and esp-hal's other writers (interrupt::enable, map and bind_interrupt, the drivers' set_interrupt_handler and async constructors) have no caller in our images. After the handoff the chip HAL's interrupt controller, which the interrupt table's router drives, is the only writer (esp-hal 1f646c5 interrupt/mod.rs, interrupt/riscv.rs, interrupt/riscv/clic.rs)."
+
+[[word]]
+address = 0x20587020
+radio = "HP_SYS_CLKRST_CORE.HPCORE1_CTRL0 (typed block)"
+esp_hal = "HP_SYS_CLKRST.hpcore1_ctrl0 in disable_core1 and start_core1 (soc/esp32s31/cpu_control.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal 1f646c5 stores it in disable_core1, which pre_init calls on hart 0 inside esp_hal::init, before the image's code runs, and in start_core1, which only CpuControl::start_app_core reaches: clippy.toml refuses that method and the image gate refuses any image that links it ([core-start] starters of chip.toml). Our writers are the cores' owner, which the image takes after esp_hal::init, and the fatal path, which never returns to an esp_hal::init it preempted."
+
+[[word]]
+address = 0x20587088
+radio = "HP_SYS_CLKRST_UART0.UART0_CTRL0 (typed block)"
+esp_hal = "HP_SYS_CLKRST.uart_ctrl0 in Uart0's clock and reset control (esp-metadata-generated/_generated_esp32s31.rs) and UartInstance's function clock (uart/clocks/v2_esp32s31.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal 1f646c5 stores it inside esp_hal::init (disable_peripherals), from a UART driver, which needs the UART0 singleton no image takes, and in software_reset, which nothing calls any more. Our one writer is the software reset, which restores the boot ROM's function clock and then resets the chip: no code of the image runs after it."
+
+[[word]]
+address = 0x2070103c
+radio = "LP_AON_CLKRST_CORE_RESET.HPCORE0_RESET_CTRL (typed block)"
+esp_hal = "LP_AON_CLK_RST.hpcore0_reset_ctrl in pre_system_reset (soc/esp32s31/cpu_control.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "esp-hal 1f646c5 stores it only in pre_system_reset, which only esp_hal::system::software_reset calls; the staged runtime's fatal paths reset through the HAL's cores module instead, and nothing calls esp-hal's software_reset."
+
+[[word]]
+address = 0x20701040
+radio = "LP_AON_CLKRST_CORE_RESET.HPCORE1_RESET_CTRL (typed block)"
+esp_hal = "LP_AON_CLK_RST.hpcore1_reset_ctrl in pre_system_reset (soc/esp32s31/cpu_control.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "esp-hal 1f646c5 stores it only in pre_system_reset, which only esp_hal::system::software_reset calls; the staged runtime's fatal paths reset through the HAL's cores module instead, and nothing calls esp-hal's software_reset."
+
+[[word]]
+address = 0x207041ec
+radio = "PMU_CPU_STALL.CPU_STALL_SW (typed block)"
+esp_hal = "PMU.cpu_stall_sw in internal_park_core (soc/esp32s31/cpu_control.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal 1f646c5 stores it in internal_park_core, which pre_init calls on hart 0 inside esp_hal::init, before the image's code runs; its other callers are CpuControl's park and unpark (the CPU_CTRL singleton no image takes; clippy.toml refuses unpark_core) and pre_system_reset, which only esp-hal's software_reset reaches, which nothing calls any more. Our writers are the cores' owner, which the image takes after esp_hal::init, and the fatal path, which never returns to an esp_hal::init it preempted."

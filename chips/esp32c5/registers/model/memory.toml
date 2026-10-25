@@ -402,6 +402,14 @@ end-exclusive = 0x60009068
 permissions = "rw"
 
 [[regions]]
+name = "pcr-uart0-sclk-conf"
+address-space = "cpu"
+kind = "mmio"
+start = 0x60096004
+end-exclusive = 0x60096008
+permissions = "rw"
+
+[[regions]]
 name = "pcr-timg1-conf"
 address-space = "cpu"
 kind = "mmio"

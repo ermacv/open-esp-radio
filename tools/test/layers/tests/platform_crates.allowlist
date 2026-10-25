@@ -24,8 +24,6 @@ chips/espressif/executor/tests/chip/c5.rs 1
 chips/espressif/executor/tests/chip/s31.rs 3
 chips/espressif/staged-bootstrap/Cargo.toml 1
 chips/espressif/staged-bootstrap/src/lib.rs 1
-chips/espressif/staged-runtime/Cargo.toml 1
-chips/espressif/staged-runtime/src/panic.rs 1
 firmware/apps/b0/Cargo.toml 1
 firmware/apps/b0/src/entry.rs 1
 firmware/apps/b0/src/radio.rs 2
@@ -62,7 +60,7 @@ firmware/hil/esp32s31-phy/src/health/startup.rs 2
 firmware/hil/esp32s31-phy/src/main.rs 3
 firmware/hil/esp32s31/src/boot_smoke_rearm.rs 1
 firmware/hil/esp32s31/src/exception.rs 1
-firmware/hil/esp32s31/src/fatal.rs 5
+firmware/hil/esp32s31/src/fatal.rs 4
 firmware/hil/esp32s31/src/main.rs 3
 firmware/hil/esp32s31/src/software_interrupt.rs 2
 firmware/hil/esp32s31/src/system/postmortem.rs 2

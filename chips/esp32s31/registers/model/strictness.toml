@@ -794,12 +794,6 @@ sources = ["esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h:145
 
 [[registers]]
 peripheral = "HP_SYS_CLKRST"
-register = "HPCORE1_CTRL0"
-reserved = 0xfffffff0
-sources = ["esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h:178", "esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:205"]
-
-[[registers]]
-peripheral = "HP_SYS_CLKRST"
 register = "TRACE_CTRL0"
 reserved = 0xffffff00
 sources = ["esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h:211", "esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:249"]
@@ -1602,34 +1596,6 @@ sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:431"]
 
 [[registers]]
 peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_HPCORE0_RESET_CTRL"
-reserved = 0x1fe00000
-sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:442", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:429"]
-
-[[fields]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_HPCORE0_RESET_CTRL"
-field = "LP_AONCLKRST_HPCORE0_SW_RESET"
-kind = "write-trigger"
-access = "read-write"
-sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:479"]
-
-[[registers]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_HPCORE1_RESET_CTRL"
-reserved = 0x1fe00000
-sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:513", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:478"]
-
-[[fields]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_HPCORE1_RESET_CTRL"
-field = "LP_AONCLKRST_HPCORE1_SW_RESET"
-kind = "write-trigger"
-access = "read-write"
-sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:550"]
-
-[[registers]]
-peripheral = "LP_AON_CLKRST"
 register = "LP_AONCLKRST_TOUCH_AON"
 reserved = 0x7fffffff
 sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:584", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:492"]
@@ -2407,12 +2373,6 @@ peripheral = "PMU"
 register = "PSRAM_CFG"
 reserved = 0x7fffffff
 sources = ["esp-idf:components/soc/esp32s31/register/soc/pmu_reg.h:4090", "esp-idf:components/soc/esp32s31/register/soc/pmu_struct.h:1021"]
-
-[[registers]]
-peripheral = "PMU"
-register = "CPU_STALL_SW"
-reserved = 0x0000ffff
-sources = ["esp-idf:components/soc/esp32s31/register/soc/pmu_reg.h:4102", "esp-idf:components/soc/esp32s31/register/soc/pmu_struct.h:1030"]
 
 [[registers]]
 peripheral = "PMU"

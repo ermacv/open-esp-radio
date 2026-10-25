@@ -89,6 +89,16 @@ typed block is `oer-mmio` (`portable/mmio`) alone:
   handoff once more, only from a free block, which it keeps for good; it
   never takes the block from the driver or an early record, so every owner
   of the block lives alone. Its driver's endpoint and pads are not `Send`.
+  The core-control words (S31: each core's stall request and status, core
+  1's clocks and reset and the CPU reset triggers) are claimed by the chip
+  HAL's `cores` after one compare-and-swap of their holder: the cores'
+  owner for one operation, or a fatal path, for good. The S31's UART0
+  function clock has its own handoff, claimed by the software reset after
+  its own holder's compare-and-swap; the C5's core-control word is that
+  clock, which only the software reset claims. Only the staged runtime's fatal
+  paths make the HAL's `Fatal` proof (the `unsafe` `cores::fatal`, after
+  masking the hart for good), and only that proof makes a `StopTheWorld`,
+  which gives no right to another owner's block.
   The generated `const` assertion beside the claim checks that no two
   blocks list the same word. A word esp-hal also writes is claimed only
   with its reviewed coordination in the chip's

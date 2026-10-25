@@ -12853,6 +12853,193 @@
       </registers>
     </peripheral>
     <peripheral>
+      <name>PMU_CPU_STALL</name>
+      <description>Power management unit: the software stall request of each HP core.</description>
+      <baseAddress>0x20704000</baseAddress>
+      <registers>
+        <register>
+          <name>CPU_STALL_SW</name>
+          <description>Software stall request codes of the two HP cores: 0x86 requests a stall, 0xFF lets the core run.</description>
+          <addressOffset>0x1EC</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>HPCORE1_SW_STALL_CODE</name>
+              <description>Stall request code of HP core 1.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>HPCORE0_SW_STALL_CODE</name>
+              <description>Stall request code of HP core 0.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>HP_SYS_CORE_STALL_STATUS</name>
+      <description>HP system registers: whether each HP core is stalled.</description>
+      <baseAddress>0x20586000</baseAddress>
+      <registers>
+        <register>
+          <name>CPU_CORESTALLED_ST</name>
+          <description>The hardware's corestalled status of each HP core, separate from the stall request.</description>
+          <addressOffset>0x64</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>CORE0_CORESTALLED_ST</name>
+              <description>HP core 0 is stalled.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CORE1_CORESTALLED_ST</name>
+              <description>HP core 1 is stalled.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>HP_SYS_CLKRST_CORE</name>
+      <description>HP system clock/reset registers: HP core 1's clocks and global reset.</description>
+      <baseAddress>0x20587000</baseAddress>
+      <registers>
+        <register>
+          <name>HPCORE1_CTRL0</name>
+          <description>HP core 1's CLIC and CPU clock enables and its global reset.</description>
+          <addressOffset>0x20</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000004</resetValue>
+          <fields>
+            <field>
+              <name>CORE1_CLIC_CLK_EN</name>
+              <description>HP core 1's CLIC clock enable.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CORE1_CPU_CLK_EN</name>
+              <description>HP core 1's CPU clock enable.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CORE1_GLOBAL_RST_EN</name>
+              <description>Holds HP core 1 in its global reset while set.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CORE1_FORCE_NORST</name>
+              <description>Keeps HP core 1 out of reset.</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>HP_SYS_CLKRST_UART0</name>
+      <description>HP system clock/reset registers: UART0's function clock, which the boot ROM prints through after a software reset.</description>
+      <baseAddress>0x20587000</baseAddress>
+      <registers>
+        <register>
+          <name>UART0_CTRL0</name>
+          <description>UART0's function clock: source, enable and divider. Its bus clock and reset bits are not described.</description>
+          <addressOffset>0x88</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000083</resetValue>
+          <fields>
+            <field>
+              <name>CLK_SRC_SEL</name>
+              <description>Function clock source: 0 XTAL, 1 RC_FAST, 2 PLL_F80M.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>CLK_EN</name>
+              <description>Function clock enable.</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>SCLK_DIV_NUM</name>
+              <description>Integral part of the function clock divider; zero divides by one.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>SCLK_DIV_NUMERATOR</name>
+              <description>Numerator of the function clock divider's fractional part.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>SCLK_DIV_DENOMINATOR</name>
+              <description>Denominator of the function clock divider's fractional part.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>LP_AON_CLKRST_CORE_RESET</name>
+      <description>LP always-on clock/reset registers: the software CPU reset of each HP core. Their stall, reset-length and debug fields are not described.</description>
+      <baseAddress>0x20701000</baseAddress>
+      <registers>
+        <register>
+          <name>HPCORE0_RESET_CTRL</name>
+          <description>HP core 0's reset control.</description>
+          <addressOffset>0x3C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x40010000</resetValue>
+          <fields>
+            <field>
+              <name>HPCORE0_SW_RESET</name>
+              <description>Writing one resets HP core 0 once; it does not hold the core in reset.</description>
+              <bitOffset>20</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>write-only</access>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>HPCORE1_RESET_CTRL</name>
+          <description>HP core 1's reset control.</description>
+          <addressOffset>0x40</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x40010000</resetValue>
+          <fields>
+            <field>
+              <name>HPCORE1_SW_RESET</name>
+              <description>Writing one resets HP core 1 once; it does not hold the core in reset.</description>
+              <bitOffset>20</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>write-only</access>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
       <name>WIFI_MAC_STA_BEACON_FILTER</name>
       <description>Station beacon-filter control word recovered from the complete enable and disable leaves. The three low bits are toggled together; individual hardware meanings remain unknown.</description>
       <baseAddress>0x201042B4</baseAddress>

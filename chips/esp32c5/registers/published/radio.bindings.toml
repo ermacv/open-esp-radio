@@ -5929,6 +5929,52 @@ bit-width = 20
 access = "read-only"
 
 [[registers]]
+address = 1611227140
+width = 32
+access = "read-write"
+identity = "PCR_UART0_CLOCK.UART0_SCLK_CONF"
+peripheral = "PCR_UART0_CLOCK"
+peripheral-type = "PcrUart0Clock"
+peripheral-module = "pcr_uart0_clock"
+scope = []
+register-method = "uart0_sclk_conf"
+
+[[registers.fields]]
+svd-name = "UART0_SCLK_DIV_A"
+method = "uart0_sclk_div_a"
+bit-offset = 0
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "UART0_SCLK_DIV_B"
+method = "uart0_sclk_div_b"
+bit-offset = 6
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "UART0_SCLK_DIV_NUM"
+method = "uart0_sclk_div_num"
+bit-offset = 12
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "UART0_SCLK_SEL"
+method = "uart0_sclk_sel"
+bit-offset = 20
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "UART0_SCLK_EN"
+method = "uart0_sclk_en"
+bit-offset = 22
+bit-width = 1
+access = "read-write"
+
+[[registers]]
 address = 1611227232
 width = 32
 access = "read-write"

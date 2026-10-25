@@ -9,9 +9,9 @@ schema = 1
 peripherals = 61
 skipped-peripherals = 1
 registers = 2003
-full = 1101
+full = 1100
 read = 621
-none = 281
+none = 282
 renamed-fields = 36
 
 [[skipped]]
@@ -3581,6 +3581,12 @@ peripheral = "PCNT"
 register = "U%s_STATUS"
 api = "read"
 reasons = []
+
+[[register]]
+peripheral = "PCR"
+register = "UART0_SCLK_CONF"
+api = "none"
+reasons = ["the curated model's PCR_UART0_CLOCK describes its word"]
 
 [[register]]
 peripheral = "PCR"

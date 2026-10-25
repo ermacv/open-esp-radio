@@ -7,7 +7,7 @@
 //! path stays a short leaf in every context's stack bound. The chip then
 //! resets, and the next boot's [`report_previous`] prints the record once.
 //! A failed boot check whose note the console's driver kept off the USB
-//! block records only its [`Failure`] and the hart, then halts.
+//! block records only its [`Failure`] and the hart, then resets the chip.
 
 use esp_hal::system::Cpu;
 use oer_diagnostics::Note;
@@ -134,10 +134,11 @@ pub(crate) fn record_failure(failure: Failure) {
     slot.checksum = slot.sum();
 }
 
-/// Record an exception's machine state and its `ra`, then reset.
+/// Record an exception's machine state and its `ra`, then reset through
+/// the runtime's fatal reset.
 pub(crate) fn record_exception(ra: u32) -> ! {
     record(EXCEPTION, ra, 0);
-    esp_hal::system::software_reset()
+    oer_espressif_staged_runtime::reset()
 }
 
 fn record(kind: u32, ra: u32, stage: u32) {

@@ -29,6 +29,7 @@ fragments = [
     "peripherals/timg-wdt.toml",
     "peripherals/lp-wdt.toml",
     "peripherals/pcr-timg1.toml",
+    "peripherals/core-control.toml",
     "peripherals/systimer.toml",
     "peripherals/software-interrupts.toml",
     "peripherals/clic.toml",

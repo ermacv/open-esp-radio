@@ -12,7 +12,8 @@
 //!
 //! An image with the `panic-hook` feature defines `oer_platform_panic_hook`,
 //! which the entry calls after the record: it records more of the image's
-//! state the same way, without formatting, and returns. The chip then resets;
+//! state the same way, without formatting, and returns. The chip then resets
+//! ([`fatal::reset`](crate::fatal::reset));
 //! the next boot takes the record with [`take_previous`] and reports it in
 //! thread context.
 use core::cell::UnsafeCell;
@@ -290,7 +291,7 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     };
     #[cfg(not(feature = "panic-hook"))]
     let _ = details;
-    esp_hal::system::software_reset()
+    crate::fatal::reset()
 }
 
 /// The last [`FILE_BYTES`] of `file`, zero-padded, and how many there are.

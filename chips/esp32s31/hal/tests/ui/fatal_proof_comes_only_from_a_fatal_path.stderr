@@ -1,0 +1,30 @@
+error: cannot construct `StopTheWorld<'_>` with struct literal syntax due to private fields
+  --> tests/ui/fatal_proof_comes_only_from_a_fatal_path.rs:18:19
+   |
+18 |     let _forged = StopTheWorld { hart: stop.hart() }; // ui-error: cannot construct `StopTheWorld<'_>` with struct literal syntax du...
+   |                   ^^^^^^^^^^^^   ----------------- private field
+   |
+   = note: ...and other private fields `stopped`, `_path` and `_hart` that were not provided
+
+error[E0133]: call to unsafe function `fatal` is unsafe and requires unsafe block
+ --> tests/ui/fatal_proof_comes_only_from_a_fatal_path.rs:8:5
+  |
+8 |     cores::fatal(|path| drop(path)); // ui-error: E0133
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+  |
+  = note: consult the function's documentation for information on how to avoid undefined behavior
+
+error[E0521]: borrowed data escapes outside of closure
+  --> tests/ui/fatal_proof_comes_only_from_a_fatal_path.rs:11:34
+   |
+ 4 | pub fn paths(slot: &mut Option<Fatal<'static>>) {
+   |              ---- `slot` declared here, outside of the closure body
+...
+11 |     unsafe { cores::fatal(|path| *slot = Some(path)) }; // ui-error: E0521
+   |                            ----  ^^^^^^^^^^^^^^^^^^ `path` escapes the closure body here
+   |                            |
+   |                            `path` is a reference that is only valid in the closure body
+   |
+   = note: requirement occurs because of the type `Fatal<'_>`, which makes the generic argument `'_` invariant
+   = note: the struct `Fatal<'a>` is invariant over the parameter `'a`
+   = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance

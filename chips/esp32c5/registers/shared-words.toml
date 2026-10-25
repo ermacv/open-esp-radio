@@ -343,3 +343,10 @@ radio = "CLIC.INT_CONFIG (typed block)"
 esp_hal = "CLIC.int_config in init, from init_vectoring (interrupt/riscv/clic.rs, interrupt/riscv.rs)"
 coordination = "disjoint-lifecycle"
 reason = "init_vectoring gives each line its level and hardware vectoring and sets the level-bit count. esp-hal writes the word only in esp_hal::init, which returns before the interrupt matrix's handoff; the handoff consumes esp-hal's `INTERRUPT_CORE0` singleton, and esp-hal's other writers (interrupt::enable, map and bind_interrupt, the drivers' set_interrupt_handler and async constructors) have no caller in our images. After the handoff the chip HAL's interrupt controller, which the interrupt table's router drives, is the only writer (esp-hal 1f646c5 interrupt/mod.rs, interrupt/riscv.rs, interrupt/riscv/clic.rs)."
+
+[[word]]
+address = 0x60096004
+radio = "PCR_UART0_CLOCK.UART0_SCLK_CONF (typed block)"
+esp_hal = "PCR.uart.clk_conf in UartInstance's function clock (uart/clocks/v2_pcr.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal 1f646c5 stores it from a UART driver's clock requests, which need the UART0 singleton no image takes, and in software_reset, which nothing calls any more. Our one writer is the software reset, which restores the boot ROM's function clock and then resets the chip: no code of the image runs after it."
