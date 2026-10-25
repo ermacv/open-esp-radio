@@ -96,7 +96,9 @@ header (`soc_headers.rs`):
   harmless, so no command is inferred from a class;
 - a field the header keeps to internal debugging ("Do not use it in
   applications") is never written: read only, and a write trigger among
-  them a lane every write leaves zero;
+  them a lane every write leaves zero, unless the overlay cites the vendor
+  driver's write of that field (`driver-writes`, `driver-writes-word`,
+  below);
 - a field the header describes as `Reserved`, and bits no header field
   declares, are reserved: no accessor, kept by every write;
 - a field a read clears ("cleared by a read", "cleared when read",
@@ -128,7 +130,23 @@ chip's `model/strictness.toml` ([`StrictnessOverlay`]) also states what the
 headers do not, per register (`offset`, `add`, `access`, `reserved`,
 `read-side-effect`, `fifo`, `write-one-to-clear`, `raw-status-writable`,
 `data-port`: a command port's data words, one field the hardware also
-writes, read and stored whole) and per field (`rename`, `access`,
+writes, read and stored whole; `define-fields`: the register's fields
+where the SVD and its header disagree, each `name`, `offset`, `width` and
+`description` from the cited source, replacing the SVD's; each takes the
+class of the header field whose bits hold it, and the bits no defined
+field holds are reserved; a defined field the header calls reserved
+stands only with its driver write; `driver-writes`: per field, the
+`esp-idf:` line outside `components/soc/` where the vendor driver writes
+it, an assignment to the field of the register's device member or a
+register write macro naming the register and the field's macro;
+`driver-writes-word`: per field, a value line assigning an identifier and
+a store of the whole word, either in one function with the value naming
+the field's macro and the store holding the identifier, or, for one bit,
+its literal returned by the function (`return`) and a store in the same
+file, the path between them listed line by line in `reviewed-chain` and
+reported unchecked. The overlay check opens every cited driver line in the
+pinned ESP-IDF; a driver write of a field that needs none, or one that
+does not hold, fails generation) and per field (`rename`, `access`,
 `kind = "plain" | "write-trigger"`, `values`), the command registers
 (`[[commands]]`: `fields`, optional `qualifiers`, `sources`) and the
 interrupt sources the SVD does not. A command register's `fields` are

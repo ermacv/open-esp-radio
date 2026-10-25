@@ -306193,13 +306193,13 @@ pub mod soc {
 
         impl oer_mmio::Registers for BlockWords {
             const WORDS: &'static [usize] = &[
-                0x0, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x2c, 0x34, 0x40, 0x44, 0x48, 0x4c,
-                0x50, 0x54, 0xd4, 0xd8, 0xdc, 0xe0, 0xe4, 0x100, 0x104, 0x108, 0x10c, 0x110, 0x114,
-                0x118, 0x11c, 0x120, 0x124, 0x128, 0x12c, 0x130, 0x134, 0x138, 0x13c, 0x140, 0x144,
-                0x148, 0x14c, 0x150, 0x154, 0x158, 0x15c, 0x160, 0x164, 0x168, 0x16c, 0x170, 0x174,
-                0x17c, 0x180, 0x190, 0x1a0, 0x200, 0x204, 0x240, 0x280, 0x300, 0x340, 0x344, 0x348,
-                0x34c, 0x350, 0x354, 0x358, 0x35c, 0x37c, 0x380, 0x384, 0x388, 0x38c, 0x3f0, 0x3f4,
-                0x3fc,
+                0x0, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x2c, 0x34, 0x3c, 0x40, 0x44, 0x48,
+                0x4c, 0x50, 0x54, 0xd4, 0xd8, 0xdc, 0xe0, 0xe4, 0x100, 0x104, 0x108, 0x10c, 0x110,
+                0x114, 0x118, 0x11c, 0x120, 0x124, 0x128, 0x12c, 0x130, 0x134, 0x138, 0x13c, 0x140,
+                0x144, 0x148, 0x14c, 0x150, 0x154, 0x158, 0x15c, 0x160, 0x164, 0x168, 0x16c, 0x170,
+                0x174, 0x17c, 0x180, 0x190, 0x1a0, 0x200, 0x204, 0x240, 0x280, 0x300, 0x340, 0x344,
+                0x348, 0x34c, 0x350, 0x354, 0x358, 0x35c, 0x37c, 0x380, 0x384, 0x388, 0x38c, 0x3f0,
+                0x3f4, 0x3fc,
             ];
         }
 
@@ -306383,10 +306383,34 @@ pub mod soc {
                 self.0.write::<0x34>(value.0);
             }
 
+            /// Read `CACHE_FCTRL`.
+            #[inline]
+            pub fn read_cache_fctrl(&self) -> cache_fctrl::R {
+                cache_fctrl::R(self.0.read::<0x3c>())
+            }
+
+            /// Read `CACHE_FCTRL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_cache_fctrl(&mut self, change: impl FnOnce(&mut cache_fctrl::W)) {
+                let mut value = cache_fctrl::W(self.0.read::<0x3c>());
+                change(&mut value);
+                self.0.write::<0x3c>(value.0);
+            }
+
             /// Read `CACHE_SCTRL`.
             #[inline]
             pub fn read_cache_sctrl(&self) -> cache_sctrl::R {
                 cache_sctrl::R(self.0.read::<0x40>())
+            }
+
+            /// Read `CACHE_SCTRL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_cache_sctrl(&mut self, change: impl FnOnce(&mut cache_sctrl::W)) {
+                let mut value = cache_sctrl::W(self.0.read::<0x40>());
+                change(&mut value);
+                self.0.write::<0x40>(value.0);
             }
 
             /// Read `SRAM_CMD`.
@@ -306410,16 +306434,43 @@ pub mod soc {
                 sram_drd_cmd::R(self.0.read::<0x48>())
             }
 
+            /// Read `SRAM_DRD_CMD`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_sram_drd_cmd(&mut self, change: impl FnOnce(&mut sram_drd_cmd::W)) {
+                let mut value = sram_drd_cmd::W(self.0.read::<0x48>());
+                change(&mut value);
+                self.0.write::<0x48>(value.0);
+            }
+
             /// Read `SRAM_DWR_CMD`.
             #[inline]
             pub fn read_sram_dwr_cmd(&self) -> sram_dwr_cmd::R {
                 sram_dwr_cmd::R(self.0.read::<0x4c>())
             }
 
+            /// Read `SRAM_DWR_CMD`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_sram_dwr_cmd(&mut self, change: impl FnOnce(&mut sram_dwr_cmd::W)) {
+                let mut value = sram_dwr_cmd::W(self.0.read::<0x4c>());
+                change(&mut value);
+                self.0.write::<0x4c>(value.0);
+            }
+
             /// Read `SRAM_CLK`.
             #[inline]
             pub fn read_sram_clk(&self) -> sram_clk::R {
                 sram_clk::R(self.0.read::<0x50>())
+            }
+
+            /// Read `SRAM_CLK`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_sram_clk(&mut self, change: impl FnOnce(&mut sram_clk::W)) {
+                let mut value = sram_clk::W(self.0.read::<0x50>());
+                change(&mut value);
+                self.0.write::<0x50>(value.0);
             }
 
             /// Read `FSM`.
@@ -308283,12 +308334,281 @@ pub mod soc {
             }
         }
 
+        /// The `CACHE_FCTRL` register.
+        ///
+        /// SPI0 bit mode control register.
+        pub mod cache_fctrl {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0xc00fffff;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x3c;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {
+                /// Allow AXI accesses to external RAM.
+                #[inline]
+                pub const fn axi_req_en(self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// The header's field CACHE_USR_ADDR_4BYTE.
+                #[inline]
+                pub const fn cache_usr_addr_4byte(self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// The header's field CACHE_FLASH_USR_CMD.
+                #[inline]
+                pub const fn cache_flash_usr_cmd(self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// The header's field FDIN_DUAL.
+                #[inline]
+                pub const fn fdin_dual(self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// The header's field FDOUT_DUAL.
+                #[inline]
+                pub const fn fdout_dual(self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// The header's field FADDR_DUAL.
+                #[inline]
+                pub const fn faddr_dual(self) -> bool {
+                    (self.0 & 0x00000020) != 0
+                }
+
+                /// The header's field FDIN_QUAD.
+                #[inline]
+                pub const fn fdin_quad(self) -> bool {
+                    (self.0 & 0x00000040) != 0
+                }
+
+                /// The header's field FDOUT_QUAD.
+                #[inline]
+                pub const fn fdout_quad(self) -> bool {
+                    (self.0 & 0x00000080) != 0
+                }
+
+                /// The header's field FADDR_QUAD.
+                #[inline]
+                pub const fn faddr_quad(self) -> bool {
+                    (self.0 & 0x00000100) != 0
+                }
+
+                /// The header's field ARB_WEI_EN.
+                #[inline]
+                pub const fn arb_wei_en(self) -> bool {
+                    (self.0 & 0x00000200) != 0
+                }
+
+                /// The header's field ARB_REQ0_PRI.
+                #[inline]
+                pub const fn arb_req0_pri(self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+
+                /// The header's field ARB_REQ1_PRI.
+                #[inline]
+                pub const fn arb_req1_pri(self) -> bool {
+                    (self.0 & 0x00000800) != 0
+                }
+
+                /// The header's field ARB_REQ0_WEI.
+                #[inline]
+                pub const fn arb_req0_wei(self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0 >> 12)
+                }
+
+                /// The header's field ARB_REQ1_WEI.
+                #[inline]
+                pub const fn arb_req1_wei(self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0 >> 16)
+                }
+
+                /// The header's field SAME_AW_AR_ADDR_CHK_EN.
+                #[inline]
+                pub const fn same_aw_ar_addr_chk_en(self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// Close the AXI interface to external RAM.
+                #[inline]
+                pub const fn close_axi_inf_en(self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Allow AXI accesses to external RAM.
+                #[inline]
+                pub const fn axi_req_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// The header's field CACHE_USR_ADDR_4BYTE.
+                #[inline]
+                pub const fn cache_usr_addr_4byte(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// The header's field CACHE_FLASH_USR_CMD.
+                #[inline]
+                pub const fn cache_flash_usr_cmd(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// The header's field FDIN_DUAL.
+                #[inline]
+                pub const fn fdin_dual(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// The header's field FDOUT_DUAL.
+                #[inline]
+                pub const fn fdout_dual(&self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// The header's field FADDR_DUAL.
+                #[inline]
+                pub const fn faddr_dual(&self) -> bool {
+                    (self.0 & 0x00000020) != 0
+                }
+
+                /// The header's field FDIN_QUAD.
+                #[inline]
+                pub const fn fdin_quad(&self) -> bool {
+                    (self.0 & 0x00000040) != 0
+                }
+
+                /// The header's field FDOUT_QUAD.
+                #[inline]
+                pub const fn fdout_quad(&self) -> bool {
+                    (self.0 & 0x00000080) != 0
+                }
+
+                /// The header's field FADDR_QUAD.
+                #[inline]
+                pub const fn faddr_quad(&self) -> bool {
+                    (self.0 & 0x00000100) != 0
+                }
+
+                /// The header's field ARB_WEI_EN.
+                #[inline]
+                pub const fn arb_wei_en(&self) -> bool {
+                    (self.0 & 0x00000200) != 0
+                }
+
+                /// The header's field ARB_REQ0_PRI.
+                #[inline]
+                pub const fn arb_req0_pri(&self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+
+                /// The header's field ARB_REQ1_PRI.
+                #[inline]
+                pub const fn arb_req1_pri(&self) -> bool {
+                    (self.0 & 0x00000800) != 0
+                }
+
+                /// The header's field ARB_REQ0_WEI.
+                #[inline]
+                pub const fn arb_req0_wei(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0 >> 12)
+                }
+
+                /// The header's field ARB_REQ1_WEI.
+                #[inline]
+                pub const fn arb_req1_wei(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0 >> 16)
+                }
+
+                /// The header's field SAME_AW_AR_ADDR_CHK_EN.
+                #[inline]
+                pub const fn same_aw_ar_addr_chk_en(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// Close the AXI interface to external RAM.
+                #[inline]
+                pub const fn close_axi_inf_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `AXI_REQ_EN`.
+                #[inline]
+                pub fn set_axi_req_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `ARB_WEI_EN`.
+                #[inline]
+                pub fn set_arb_wei_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000200) | (u32::from(value) << 9);
+                    self
+                }
+
+                /// Set `ARB_REQ0_PRI`.
+                #[inline]
+                pub fn set_arb_req0_pri(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000400) | (u32::from(value) << 10);
+                    self
+                }
+
+                /// Set `ARB_REQ1_PRI`.
+                #[inline]
+                pub fn set_arb_req1_pri(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000800) | (u32::from(value) << 11);
+                    self
+                }
+
+                /// Set `ARB_REQ0_WEI`.
+                #[inline]
+                pub fn set_arb_req0_wei(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                    self.0 = (self.0 & !0x0000f000) | (value.get() << 12);
+                    self
+                }
+
+                /// Set `ARB_REQ1_WEI`.
+                #[inline]
+                pub fn set_arb_req1_wei(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                    self.0 = (self.0 & !0x000f0000) | (value.get() << 16);
+                    self
+                }
+
+                /// Set `SAME_AW_AR_ADDR_CHK_EN`.
+                #[inline]
+                pub fn set_same_aw_ar_addr_chk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+
+                /// Set `CLOSE_AXI_INF_EN`.
+                #[inline]
+                pub fn set_close_axi_inf_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
+        }
+
         /// The `CACHE_SCTRL` register.
         ///
         /// SPI0 external RAM control register
         pub mod cache_sctrl {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0x0fdfcfff;
+            pub const FIELDS: u32 = 0x0fffcfff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x40;
 
@@ -308297,64 +308617,204 @@ pub mod soc {
             pub struct R(pub(super) u32);
 
             impl R {
-                /// The `CACHE_USR_SADDR_4BYTE` field.
+                /// The header's field CACHE_USR_SADDR_4BYTE.
                 #[inline]
                 pub const fn cache_usr_saddr_4byte(self) -> bool {
                     (self.0 & 0x00000001) != 0
                 }
 
-                /// The `USR_SRAM_DIO` field.
+                /// The header's field USR_SRAM_DIO.
                 #[inline]
                 pub const fn usr_sram_dio(self) -> bool {
                     (self.0 & 0x00000002) != 0
                 }
 
-                /// The `USR_SRAM_QIO` field.
+                /// The header's field USR_SRAM_QIO.
                 #[inline]
                 pub const fn usr_sram_qio(self) -> bool {
                     (self.0 & 0x00000004) != 0
                 }
 
-                /// The `USR_WR_SRAM_DUMMY` field.
+                /// The header's field USR_WR_SRAM_DUMMY.
                 #[inline]
                 pub const fn usr_wr_sram_dummy(self) -> bool {
                     (self.0 & 0x00000008) != 0
                 }
 
-                /// The `USR_RD_SRAM_DUMMY` field.
+                /// The header's field USR_RD_SRAM_DUMMY.
                 #[inline]
                 pub const fn usr_rd_sram_dummy(self) -> bool {
                     (self.0 & 0x00000010) != 0
                 }
 
-                /// The `CACHE_SRAM_USR_RCMD` field.
+                /// The header's field CACHE_SRAM_USR_RCMD.
                 #[inline]
                 pub const fn cache_sram_usr_rcmd(self) -> bool {
                     (self.0 & 0x00000020) != 0
                 }
 
-                /// The `SRAM_RDUMMY_CYCLELEN` field.
+                /// The read dummy phase's length minus one.
                 #[inline]
                 pub const fn sram_rdummy_cyclelen(self) -> oer_mmio::Bits<6> {
                     oer_mmio::Bits::truncate(self.0 >> 6)
                 }
 
-                /// The `SRAM_ADDR_BITLEN` field.
+                /// The address phase's length minus one.
                 #[inline]
                 pub const fn sram_addr_bitlen(self) -> oer_mmio::Bits<6> {
                     oer_mmio::Bits::truncate(self.0 >> 14)
                 }
 
-                /// The `CACHE_SRAM_USR_WCMD` field.
+                /// The header's field CACHE_SRAM_USR_WCMD.
                 #[inline]
                 pub const fn cache_sram_usr_wcmd(self) -> bool {
                     (self.0 & 0x00100000) != 0
                 }
 
-                /// The `SRAM_WDUMMY_CYCLELEN` field.
+                /// The cache's external RAM access uses eight lines.
+                #[inline]
+                pub const fn sram_oct(self) -> bool {
+                    (self.0 & 0x00200000) != 0
+                }
+
+                /// The write dummy phase's length minus one.
                 #[inline]
                 pub const fn sram_wdummy_cyclelen(self) -> oer_mmio::Bits<6> {
                     oer_mmio::Bits::truncate(self.0 >> 22)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The header's field CACHE_USR_SADDR_4BYTE.
+                #[inline]
+                pub const fn cache_usr_saddr_4byte(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// The header's field USR_SRAM_DIO.
+                #[inline]
+                pub const fn usr_sram_dio(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// The header's field USR_SRAM_QIO.
+                #[inline]
+                pub const fn usr_sram_qio(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// The header's field USR_WR_SRAM_DUMMY.
+                #[inline]
+                pub const fn usr_wr_sram_dummy(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// The header's field USR_RD_SRAM_DUMMY.
+                #[inline]
+                pub const fn usr_rd_sram_dummy(&self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// The header's field CACHE_SRAM_USR_RCMD.
+                #[inline]
+                pub const fn cache_sram_usr_rcmd(&self) -> bool {
+                    (self.0 & 0x00000020) != 0
+                }
+
+                /// The read dummy phase's length minus one.
+                #[inline]
+                pub const fn sram_rdummy_cyclelen(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0 >> 6)
+                }
+
+                /// The address phase's length minus one.
+                #[inline]
+                pub const fn sram_addr_bitlen(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0 >> 14)
+                }
+
+                /// The header's field CACHE_SRAM_USR_WCMD.
+                #[inline]
+                pub const fn cache_sram_usr_wcmd(&self) -> bool {
+                    (self.0 & 0x00100000) != 0
+                }
+
+                /// The cache's external RAM access uses eight lines.
+                #[inline]
+                pub const fn sram_oct(&self) -> bool {
+                    (self.0 & 0x00200000) != 0
+                }
+
+                /// The write dummy phase's length minus one.
+                #[inline]
+                pub const fn sram_wdummy_cyclelen(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0 >> 22)
+                }
+
+                /// Set `CACHE_USR_SADDR_4BYTE`.
+                #[inline]
+                pub fn set_cache_usr_saddr_4byte(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `USR_WR_SRAM_DUMMY`.
+                #[inline]
+                pub fn set_usr_wr_sram_dummy(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                    self
+                }
+
+                /// Set `USR_RD_SRAM_DUMMY`.
+                #[inline]
+                pub fn set_usr_rd_sram_dummy(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
+                    self
+                }
+
+                /// Set `CACHE_SRAM_USR_RCMD`.
+                #[inline]
+                pub fn set_cache_sram_usr_rcmd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000020) | (u32::from(value) << 5);
+                    self
+                }
+
+                /// Set `SRAM_RDUMMY_CYCLELEN`.
+                #[inline]
+                pub fn set_sram_rdummy_cyclelen(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000fc0) | (value.get() << 6);
+                    self
+                }
+
+                /// Set `SRAM_ADDR_BITLEN`.
+                #[inline]
+                pub fn set_sram_addr_bitlen(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                    self.0 = (self.0 & !0x000fc000) | (value.get() << 14);
+                    self
+                }
+
+                /// Set `CACHE_SRAM_USR_WCMD`.
+                #[inline]
+                pub fn set_cache_sram_usr_wcmd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00100000) | (u32::from(value) << 20);
+                    self
+                }
+
+                /// Set `SRAM_OCT`.
+                #[inline]
+                pub fn set_sram_oct(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00200000) | (u32::from(value) << 21);
+                    self
+                }
+
+                /// Set `SRAM_WDUMMY_CYCLELEN`.
+                #[inline]
+                pub fn set_sram_wdummy_cyclelen(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                    self.0 = (self.0 & !0x0fc00000) | (value.get() << 22);
+                    self
                 }
             }
         }
@@ -308630,6 +309090,41 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
 
+                /// Set `SDIN_OCT`.
+                #[inline]
+                pub fn set_sdin_oct(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00040000) | (u32::from(value) << 18);
+                    self
+                }
+
+                /// Set `SDOUT_OCT`.
+                #[inline]
+                pub fn set_sdout_oct(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00080000) | (u32::from(value) << 19);
+                    self
+                }
+
+                /// Set `SADDR_OCT`.
+                #[inline]
+                pub fn set_saddr_oct(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00100000) | (u32::from(value) << 20);
+                    self
+                }
+
+                /// Set `SCMD_OCT`.
+                #[inline]
+                pub fn set_scmd_oct(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00200000) | (u32::from(value) << 21);
+                    self
+                }
+
+                /// Set `SDUMMY_WOUT`.
+                #[inline]
+                pub fn set_sdummy_wout(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00800000) | (u32::from(value) << 23);
+                    self
+                }
+
                 /// Set `WDUMMY_DQS_ALWAYS_OUT`.
                 #[inline]
                 pub fn set_wdummy_dqs_always_out(&mut self, value: bool) -> &mut Self {
@@ -308641,6 +309136,20 @@ pub mod soc {
                 #[inline]
                 pub fn set_wdummy_always_out(&mut self, value: bool) -> &mut Self {
                     self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
+                    self
+                }
+
+                /// Set `SDIN_HEX`.
+                #[inline]
+                pub fn set_sdin_hex(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x04000000) | (u32::from(value) << 26);
+                    self
+                }
+
+                /// Set `SDOUT_HEX`.
+                #[inline]
+                pub fn set_sdout_hex(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
                     self
                 }
 
@@ -308686,6 +309195,40 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 28)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The `CACHE_SRAM_USR_RD_CMD_VALUE` field.
+                #[inline]
+                pub const fn cache_sram_usr_rd_cmd_value(&self) -> u16 {
+                    (self.0) as u16
+                }
+
+                /// The `CACHE_SRAM_USR_RD_CMD_BITLEN` field.
+                #[inline]
+                pub const fn cache_sram_usr_rd_cmd_bitlen(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0 >> 28)
+                }
+
+                /// Set `CACHE_SRAM_USR_RD_CMD_VALUE`.
+                #[inline]
+                pub fn set_cache_sram_usr_rd_cmd_value(&mut self, value: u16) -> &mut Self {
+                    self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                    self
+                }
+
+                /// Set `CACHE_SRAM_USR_RD_CMD_BITLEN`.
+                #[inline]
+                pub fn set_cache_sram_usr_rd_cmd_bitlen(
+                    &mut self,
+                    value: oer_mmio::Bits<4>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0xf0000000) | (value.get() << 28);
+                    self
+                }
+            }
         }
 
         /// The `SRAM_DWR_CMD` register.
@@ -308712,6 +309255,40 @@ pub mod soc {
                 #[inline]
                 pub const fn cache_sram_usr_wr_cmd_bitlen(self) -> oer_mmio::Bits<4> {
                     oer_mmio::Bits::truncate(self.0 >> 28)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The `CACHE_SRAM_USR_WR_CMD_VALUE` field.
+                #[inline]
+                pub const fn cache_sram_usr_wr_cmd_value(&self) -> u16 {
+                    (self.0) as u16
+                }
+
+                /// The `CACHE_SRAM_USR_WR_CMD_BITLEN` field.
+                #[inline]
+                pub const fn cache_sram_usr_wr_cmd_bitlen(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0 >> 28)
+                }
+
+                /// Set `CACHE_SRAM_USR_WR_CMD_VALUE`.
+                #[inline]
+                pub fn set_cache_sram_usr_wr_cmd_value(&mut self, value: u16) -> &mut Self {
+                    self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                    self
+                }
+
+                /// Set `CACHE_SRAM_USR_WR_CMD_BITLEN`.
+                #[inline]
+                pub fn set_cache_sram_usr_wr_cmd_bitlen(
+                    &mut self,
+                    value: oer_mmio::Bits<4>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0xf0000000) | (value.get() << 28);
+                    self
                 }
             }
         }
@@ -308752,6 +309329,63 @@ pub mod soc {
                 #[inline]
                 pub const fn sclk_equ_sysclk(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The `SCLKCNT_L` field.
+                #[inline]
+                pub const fn sclkcnt_l(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// The `SCLKCNT_H` field.
+                #[inline]
+                pub const fn sclkcnt_h(&self) -> u8 {
+                    (self.0 >> 8) as u8
+                }
+
+                /// The `SCLKCNT_N` field.
+                #[inline]
+                pub const fn sclkcnt_n(&self) -> u8 {
+                    (self.0 >> 16) as u8
+                }
+
+                /// The `SCLK_EQU_SYSCLK` field.
+                #[inline]
+                pub const fn sclk_equ_sysclk(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `SCLKCNT_L`.
+                #[inline]
+                pub fn set_sclkcnt_l(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                    self
+                }
+
+                /// Set `SCLKCNT_H`.
+                #[inline]
+                pub fn set_sclkcnt_h(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
+                    self
+                }
+
+                /// Set `SCLKCNT_N`.
+                #[inline]
+                pub fn set_sclkcnt_n(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
+                    self
+                }
+
+                /// Set `SCLK_EQU_SYSCLK`.
+                #[inline]
+                pub fn set_sclk_equ_sysclk(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -311613,7 +312247,7 @@ pub mod soc {
         /// MSPI-MMU item content register
         pub mod mmu_item_content {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0xffffffff;
+            pub const FIELDS: u32 = 0x00001fff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x37c;
 
@@ -311622,10 +312256,28 @@ pub mod soc {
             pub struct R(pub(super) u32);
 
             impl R {
-                /// The `MMU_ITEM_CONTENT` field.
+                /// The physical PSRAM page.
                 #[inline]
-                pub const fn mmu_item_content(self) -> u32 {
-                    self.0
+                pub const fn paddr(self) -> oer_mmio::Bits<10> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// The entry maps PSRAM: set in every PSRAM entry.
+                #[inline]
+                pub const fn access_psram(self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+
+                /// The entry is valid.
+                #[inline]
+                pub const fn valid(self) -> bool {
+                    (self.0 & 0x00000800) != 0
+                }
+
+                /// Accesses through the entry are decrypted.
+                #[inline]
+                pub const fn sensitive(self) -> bool {
+                    (self.0 & 0x00001000) != 0
                 }
             }
 
@@ -311633,16 +312285,55 @@ pub mod soc {
             pub struct W(pub(super) u32);
 
             impl W {
-                /// The `MMU_ITEM_CONTENT` field.
+                /// The physical PSRAM page.
                 #[inline]
-                pub const fn mmu_item_content(&self) -> u32 {
-                    self.0
+                pub const fn paddr(&self) -> oer_mmio::Bits<10> {
+                    oer_mmio::Bits::truncate(self.0)
                 }
 
-                /// Set `MMU_ITEM_CONTENT`.
+                /// The entry maps PSRAM: set in every PSRAM entry.
                 #[inline]
-                pub fn set_mmu_item_content(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
+                pub const fn access_psram(&self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+
+                /// The entry is valid.
+                #[inline]
+                pub const fn valid(&self) -> bool {
+                    (self.0 & 0x00000800) != 0
+                }
+
+                /// Accesses through the entry are decrypted.
+                #[inline]
+                pub const fn sensitive(&self) -> bool {
+                    (self.0 & 0x00001000) != 0
+                }
+
+                /// Set `PADDR`.
+                #[inline]
+                pub fn set_paddr(&mut self, value: oer_mmio::Bits<10>) -> &mut Self {
+                    self.0 = (self.0 & !0x000003ff) | value.get();
+                    self
+                }
+
+                /// Set `ACCESS_PSRAM`.
+                #[inline]
+                pub fn set_access_psram(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000400) | (u32::from(value) << 10);
+                    self
+                }
+
+                /// Set `VALID`.
+                #[inline]
+                pub fn set_valid(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000800) | (u32::from(value) << 11);
+                    self
+                }
+
+                /// Set `SENSITIVE`.
+                #[inline]
+                pub fn set_sensitive(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00001000) | (u32::from(value) << 12);
                     self
                 }
             }
@@ -312085,10 +312776,10 @@ pub mod soc {
 
         impl oer_mmio::Registers for BlockWords {
             const WORDS: &'static [usize] = &[
-                0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x38, 0x3c,
-                0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c, 0x70, 0x74, 0x78, 0x7c, 0x80, 0x84, 0x88, 0x8c,
-                0x90, 0x94, 0x98, 0x9c, 0xa0, 0xa4, 0xac, 0xc0, 0xc4, 0xc8, 0xcc, 0xd4, 0x180,
-                0x200, 0x3fc,
+                0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x34, 0x38,
+                0x3c, 0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c, 0x70, 0x74, 0x78, 0x7c, 0x80, 0x84, 0x88,
+                0x8c, 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xa4, 0xac, 0xc0, 0xc4, 0xc8, 0xcc, 0xd4,
+                0x180, 0x200, 0x3fc,
             ];
         }
 
@@ -312291,6 +312982,21 @@ pub mod soc {
             #[inline]
             pub fn read_rd_status(&self) -> rd_status::R {
                 rd_status::R(self.0.read::<0x2c>())
+            }
+
+            /// Read `MISC`.
+            #[inline]
+            pub fn read_misc(&self) -> misc::R {
+                misc::R(self.0.read::<0x34>())
+            }
+
+            /// Read `MISC`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_misc(&mut self, change: impl FnOnce(&mut misc::W)) {
+                let mut value = misc::W(self.0.read::<0x34>());
+                change(&mut value);
+                self.0.write::<0x34>(value.0);
             }
 
             /// Read `TX_CRC`.
@@ -313103,7 +313809,7 @@ pub mod soc {
         /// SPI1 clock division control register.
         pub mod clock {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0x00ffffff;
+            pub const FIELDS: u32 = 0x80ffffff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x14;
 
@@ -313112,22 +313818,28 @@ pub mod soc {
             pub struct R(pub(super) u32);
 
             impl R {
-                /// The `CLKCNT_L` field.
+                /// The clock low period; equal to CLKCNT_N.
                 #[inline]
                 pub const fn clkcnt_l(self) -> u8 {
                     (self.0) as u8
                 }
 
-                /// The `CLKCNT_H` field.
+                /// The clock high period: floor((CLKCNT_N + 1) / 2 - 1).
                 #[inline]
                 pub const fn clkcnt_h(self) -> u8 {
                     (self.0 >> 8) as u8
                 }
 
-                /// The `CLKCNT_N` field.
+                /// The divider: the PSRAM command port's clock runs at the system clock over CLKCNT_N + 1.
                 #[inline]
                 pub const fn clkcnt_n(self) -> u8 {
                     (self.0 >> 16) as u8
+                }
+
+                /// The clock is the system clock, undivided.
+                #[inline]
+                pub const fn clk_equ_sysclk(self) -> bool {
+                    (self.0 & 0x80000000) != 0
                 }
             }
 
@@ -313135,22 +313847,28 @@ pub mod soc {
             pub struct W(pub(super) u32);
 
             impl W {
-                /// The `CLKCNT_L` field.
+                /// The clock low period; equal to CLKCNT_N.
                 #[inline]
                 pub const fn clkcnt_l(&self) -> u8 {
                     (self.0) as u8
                 }
 
-                /// The `CLKCNT_H` field.
+                /// The clock high period: floor((CLKCNT_N + 1) / 2 - 1).
                 #[inline]
                 pub const fn clkcnt_h(&self) -> u8 {
                     (self.0 >> 8) as u8
                 }
 
-                /// The `CLKCNT_N` field.
+                /// The divider: the PSRAM command port's clock runs at the system clock over CLKCNT_N + 1.
                 #[inline]
                 pub const fn clkcnt_n(&self) -> u8 {
                     (self.0 >> 16) as u8
+                }
+
+                /// The clock is the system clock, undivided.
+                #[inline]
+                pub const fn clk_equ_sysclk(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
                 }
 
                 /// Set `CLKCNT_L`.
@@ -313171,6 +313889,13 @@ pub mod soc {
                 #[inline]
                 pub fn set_clkcnt_n(&mut self, value: u8) -> &mut Self {
                     self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
+                    self
+                }
+
+                /// Set `CLK_EQU_SYSCLK`.
+                #[inline]
+                pub fn set_clk_equ_sysclk(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
                     self
                 }
             }
@@ -313678,6 +314403,103 @@ pub mod soc {
                 #[inline]
                 pub const fn wb_mode_en(self) -> bool {
                     (self.0 & 0x08000000) != 0
+                }
+            }
+        }
+
+        /// The `MISC` register.
+        ///
+        /// SPI1 misc register
+        pub mod misc {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x00000603;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x34;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {
+                /// Disable chip select 0.
+                #[inline]
+                pub const fn cs0_dis(self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Disable chip select 1, the PSRAM's.
+                #[inline]
+                pub const fn cs1_dis(self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// The clock's idle level: 1 high, 0 low.
+                #[inline]
+                pub const fn ck_idle_edge(self) -> bool {
+                    (self.0 & 0x00000200) != 0
+                }
+
+                /// Keep the chip select low while idle.
+                #[inline]
+                pub const fn cs_keep_active(self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Disable chip select 0.
+                #[inline]
+                pub const fn cs0_dis(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Disable chip select 1, the PSRAM's.
+                #[inline]
+                pub const fn cs1_dis(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// The clock's idle level: 1 high, 0 low.
+                #[inline]
+                pub const fn ck_idle_edge(&self) -> bool {
+                    (self.0 & 0x00000200) != 0
+                }
+
+                /// Keep the chip select low while idle.
+                #[inline]
+                pub const fn cs_keep_active(&self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+
+                /// Set `CS0_DIS`.
+                #[inline]
+                pub fn set_cs0_dis(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `CS1_DIS`.
+                #[inline]
+                pub fn set_cs1_dis(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `CK_IDLE_EDGE`.
+                #[inline]
+                pub fn set_ck_idle_edge(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000200) | (u32::from(value) << 9);
+                    self
+                }
+
+                /// Set `CS_KEEP_ACTIVE`.
+                #[inline]
+                pub fn set_cs_keep_active(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000400) | (u32::from(value) << 10);
+                    self
                 }
             }
         }
@@ -380024,6 +380846,18 @@ pub mod soc {
                 mmu_item_content::R(self.0.read::<0x37c>())
             }
 
+            /// Read `MMU_ITEM_CONTENT`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_mmu_item_content(
+                &mut self,
+                change: impl FnOnce(&mut mmu_item_content::W),
+            ) {
+                let mut value = mmu_item_content::W(self.0.read::<0x37c>());
+                change(&mut value);
+                self.0.write::<0x37c>(value.0);
+            }
+
             /// Read `SPI_MEM_MMU_ITEM_INDEX`.
             #[inline]
             pub fn read_spi_mem_mmu_item_index(&self) -> spi_mem_mmu_item_index::R {
@@ -385669,7 +386503,7 @@ pub mod soc {
         /// MSPI-MMU item content register
         pub mod mmu_item_content {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0x00002fff;
+            pub const FIELDS: u32 = 0x000037ff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x37c;
 
@@ -385678,28 +386512,66 @@ pub mod soc {
             pub struct R(pub(super) u32);
 
             impl R {
-                /// Physical page number
+                /// The physical flash page.
                 #[inline]
-                pub const fn paddr(self) -> oer_mmio::Bits<10> {
+                pub const fn paddr(self) -> oer_mmio::Bits<11> {
                     oer_mmio::Bits::truncate(self.0)
                 }
 
-                /// Map to SPIRAM/PSRAM when set (flash when clear)
+                /// The entry is valid.
                 #[inline]
-                pub const fn access_spiram(self) -> bool {
-                    (self.0 & 0x00000400) != 0
+                pub const fn valid(self) -> bool {
+                    (self.0 & 0x00001000) != 0
                 }
 
-                /// Entry is valid when set (SPIRAM MMU)
-                #[inline]
-                pub const fn spiram_valid(self) -> bool {
-                    (self.0 & 0x00000800) != 0
-                }
-
-                /// Decrypt via flash encryption when set (flash MMU)
+                /// Accesses through the entry are decrypted.
                 #[inline]
                 pub const fn sensitive(self) -> bool {
                     (self.0 & 0x00002000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The physical flash page.
+                #[inline]
+                pub const fn paddr(&self) -> oer_mmio::Bits<11> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// The entry is valid.
+                #[inline]
+                pub const fn valid(&self) -> bool {
+                    (self.0 & 0x00001000) != 0
+                }
+
+                /// Accesses through the entry are decrypted.
+                #[inline]
+                pub const fn sensitive(&self) -> bool {
+                    (self.0 & 0x00002000) != 0
+                }
+
+                /// Set `PADDR`.
+                #[inline]
+                pub fn set_paddr(&mut self, value: oer_mmio::Bits<11>) -> &mut Self {
+                    self.0 = (self.0 & !0x000007ff) | value.get();
+                    self
+                }
+
+                /// Set `VALID`.
+                #[inline]
+                pub fn set_valid(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00001000) | (u32::from(value) << 12);
+                    self
+                }
+
+                /// Set `SENSITIVE`.
+                #[inline]
+                pub fn set_sensitive(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00002000) | (u32::from(value) << 13);
+                    self
                 }
             }
         }
@@ -387382,7 +388254,7 @@ pub mod soc {
         /// SPI1 clock division control register.
         pub mod spi_mem_clock {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0x00ffffff;
+            pub const FIELDS: u32 = 0x80ffffff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x14;
 
@@ -387391,22 +388263,28 @@ pub mod soc {
             pub struct R(pub(super) u32);
 
             impl R {
-                /// In the master mode it must be equal to SPI_MEM_CLKCNT_N.
+                /// The clock low period; equal to SPI_MEM_CLKCNT_N.
                 #[inline]
                 pub const fn spi_mem_clkcnt_l(self) -> u8 {
                     (self.0) as u8
                 }
 
-                /// In the master mode it must be floor((SPI_MEM_CLKCNT_N+1)/2-1).
+                /// The clock high period: floor((SPI_MEM_CLKCNT_N + 1) / 2 - 1).
                 #[inline]
                 pub const fn spi_mem_clkcnt_h(self) -> u8 {
                     (self.0 >> 8) as u8
                 }
 
-                /// In the master mode it is the divider of spi_mem_clk. So spi_mem_clk frequency is system/(SPI_MEM_CLKCNT_N+1)
+                /// The divider: the flash command port's clock runs at the system clock over SPI_MEM_CLKCNT_N + 1.
                 #[inline]
                 pub const fn spi_mem_clkcnt_n(self) -> u8 {
                     (self.0 >> 16) as u8
+                }
+
+                /// The clock is the system clock, undivided.
+                #[inline]
+                pub const fn spi_mem_clk_equ_sysclk(self) -> bool {
+                    (self.0 & 0x80000000) != 0
                 }
             }
 
@@ -387414,22 +388292,28 @@ pub mod soc {
             pub struct W(pub(super) u32);
 
             impl W {
-                /// In the master mode it must be equal to SPI_MEM_CLKCNT_N.
+                /// The clock low period; equal to SPI_MEM_CLKCNT_N.
                 #[inline]
                 pub const fn spi_mem_clkcnt_l(&self) -> u8 {
                     (self.0) as u8
                 }
 
-                /// In the master mode it must be floor((SPI_MEM_CLKCNT_N+1)/2-1).
+                /// The clock high period: floor((SPI_MEM_CLKCNT_N + 1) / 2 - 1).
                 #[inline]
                 pub const fn spi_mem_clkcnt_h(&self) -> u8 {
                     (self.0 >> 8) as u8
                 }
 
-                /// In the master mode it is the divider of spi_mem_clk. So spi_mem_clk frequency is system/(SPI_MEM_CLKCNT_N+1)
+                /// The divider: the flash command port's clock runs at the system clock over SPI_MEM_CLKCNT_N + 1.
                 #[inline]
                 pub const fn spi_mem_clkcnt_n(&self) -> u8 {
                     (self.0 >> 16) as u8
+                }
+
+                /// The clock is the system clock, undivided.
+                #[inline]
+                pub const fn spi_mem_clk_equ_sysclk(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
                 }
 
                 /// Set `SPI_MEM_CLKCNT_L`.
@@ -387450,6 +388334,13 @@ pub mod soc {
                 #[inline]
                 pub fn set_spi_mem_clkcnt_n(&mut self, value: u8) -> &mut Self {
                     self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
+                    self
+                }
+
+                /// Set `SPI_MEM_CLK_EQU_SYSCLK`.
+                #[inline]
+                pub fn set_spi_mem_clk_equ_sysclk(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
                     self
                 }
             }

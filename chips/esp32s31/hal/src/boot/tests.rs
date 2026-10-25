@@ -1,7 +1,8 @@
 use oer_time::Duration;
 
 use super::{
-    BOOT_BUDGET, BOOTLOADER_RTC_WATCHDOG, ClockRates, CpuProfile, CpuRoot, MAX_MEM_HZ, MemDivider,
+    BOOT_BUDGET, BOOTLOADER_RTC_WATCHDOG, ClockRates, CpuProfile, CpuRoot, FLASH_READ_COMMANDS,
+    FLASH_TIMING_CANDIDATES, MAX_MEM_HZ, MemDivider, octal_psram, psram_supply_level,
 };
 
 #[test]
@@ -41,4 +42,36 @@ fn both_profiles_share_the_cpll_so_switching_never_recalibrates_it() {
 fn the_boot_leaves_the_bootloader_most_of_its_rtc_watchdog() {
     let left = BOOTLOADER_RTC_WATCHDOG.saturating_sub(BOOT_BUDGET.duration());
     assert!(left >= Duration::from_secs(5), "{left:?}");
+}
+
+#[test]
+fn the_psram_supply_is_the_ldo_codes_that_give_exactly_1800_mv() {
+    let level = psram_supply_level(1800);
+    assert_eq!((level.dref.get(), level.mul.get()), (6, 5));
+    // vref 16 (10 + 6) with mul 5: the formula gives 1800 mV exactly.
+    assert_eq!((10 + 6) * (4 + 5) * 1000 * 1000, 1800 * 80_000);
+}
+
+#[test]
+fn the_octal_psram_divides_the_500_mhz_memory_pll_by_two() {
+    let profile = octal_psram(16 * 1024 * 1024);
+    assert_eq!(profile.divider, 2);
+    assert_eq!(profile.size, 16 * 1024 * 1024);
+}
+
+#[test]
+fn qio_reads_send_their_mode_bits_in_the_address_phase() {
+    let qio = FLASH_READ_COMMANDS.qio;
+    assert_eq!(
+        (qio.opcode, qio.address_bits, qio.dummy_cycles),
+        (0xeb, 32, 4)
+    );
+    let slow = FLASH_READ_COMMANDS.slow_read;
+    assert_eq!((slow.opcode, slow.dummy_cycles), (0x03, 0));
+}
+
+#[test]
+fn the_sweep_has_a_candidate_per_mask_bit() {
+    assert!(FLASH_TIMING_CANDIDATES.len() <= 16);
+    assert_eq!(FLASH_TIMING_CANDIDATES[1].extra_dummy.get(), 0);
 }

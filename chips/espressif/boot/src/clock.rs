@@ -7,11 +7,13 @@
 //! 1. reads the live root. When the CPU already runs from the profile's root
 //!    the PLL is never recalibrated, since that would disturb the clock the
 //!    CPU runs on; its configuration must read back as the profile's, or the
-//!    boot fails. Otherwise the PLL is configured, powered, calibrated (a
+//!    boot fails. Otherwise the PLL is configured, powered (the immediate
+//!    ties and gate, then the PMU's active state), calibrated (a
 //!    boot wait for its calibration's end, then the fixed settle its source
 //!    states) and its calibration stopped;
 //! 2. stages the root selection and every divider, then applies them all
-//!    with one update and waits for the update to complete, so no branch
+//!    with one update (started once no update runs) and waits for it to
+//!    complete, so no branch
 //!    runs over its limit between two partial updates;
 //! 3. reads the root and the dividers back.
 //!
@@ -28,7 +30,7 @@
 use oer_time::Clock;
 
 use crate::{
-    Access, BootFailure,
+    Access, BootFailure, Busy,
     wait::{BootDeadline, BootWait},
 };
 
@@ -52,8 +54,8 @@ pub trait CpuClockRegisters {
 /// The update that applies a staged clock configuration: a command the
 /// hardware clears when it completes.
 pub trait ClockUpdate {
-    /// Start the update.
-    fn start_update(&mut self, access: Access<'_>);
+    /// Start the update, or [`Busy`] while one runs.
+    fn start_update(&mut self, access: Access<'_>) -> Result<(), Busy>;
     /// Whether the update is still in progress.
     fn update_pending(&self, access: Access<'_>) -> bool;
 }
@@ -74,10 +76,22 @@ pub trait PllRegisters {
     fn stop_calibration(&mut self, access: Access<'_>);
 }
 
-/// A PLL's power and clock gates, which its calibration needs.
+/// A PLL's power and clock gates, which its calibration needs: the PMU's
+/// immediate ties and the PLL's clock gate.
 pub trait PllPower {
     /// Power the PLL and open its gates, in the chip's order.
     fn power_up(&mut self, access: Access<'_>);
+}
+
+/// The PLLs' power in the PMU's active state, which the PMU applies again on
+/// every state change: a PLL the boot powers only by the immediate ties
+/// would stop at the first one. The words belong to another block than the
+/// clock's, so the sequences take them as a separate owner.
+pub trait ActivePllPower {
+    /// Keep the CPU root's PLL powered in the active state.
+    fn keep_cpu_pll(&mut self, access: Access<'_>);
+    /// Keep the external memory's PLL powered in the active state.
+    fn keep_memory_pll(&mut self, access: Access<'_>);
 }
 
 /// The rates of a profile's branches, in hertz: the snapshot the boot hands
@@ -138,14 +152,16 @@ impl ClockFailure {
 }
 
 /// Bring the CPU clock to `profile` under `deadline` and return its rates.
-pub fn bring_up<R, C>(
+pub fn bring_up<R, A, C>(
     registers: &mut R,
+    active: &mut A,
     profile: CpuClockProfile<R::Root, R::Dividers, R::Target>,
     waits: ClockWaits,
     deadline: &BootDeadline<'_, C>,
 ) -> Result<ClockRates, BootFailure>
 where
     R: CpuClockRegisters + ClockUpdate + PllRegisters + PllPower,
+    A: ActivePllPower,
     C: Clock + ?Sized,
 {
     let live = registers
@@ -157,12 +173,12 @@ where
                 return Err(ClockFailure::LivePllMismatch.into());
             }
         } else {
-            calibrate(registers, target, waits, deadline)?;
+            calibrate(registers, active, target, waits, deadline)?;
         }
     }
     if live != profile.root || registers.dividers(Access::new()) != profile.dividers {
         registers.stage(Access::new(), profile.root, profile.dividers);
-        registers.start_update(Access::new());
+        deadline.poll(waits.update, || registers.start_update(Access::new()).ok())?;
         deadline.poll(waits.update, || {
             (!registers.update_pending(Access::new())).then_some(())
         })?;
@@ -175,18 +191,21 @@ where
     Ok(profile.rates)
 }
 
-fn calibrate<R, C>(
+fn calibrate<R, A, C>(
     registers: &mut R,
+    active: &mut A,
     target: R::Target,
     waits: ClockWaits,
     deadline: &BootDeadline<'_, C>,
 ) -> Result<(), BootFailure>
 where
     R: PllRegisters + PllPower,
+    A: ActivePllPower,
     C: Clock + ?Sized,
 {
     registers.set_target(Access::new(), target);
     registers.power_up(Access::new());
+    active.keep_cpu_pll(Access::new());
     registers.start_calibration(Access::new());
     deadline.poll(waits.calibration, || {
         registers.calibration_done(Access::new()).then_some(())

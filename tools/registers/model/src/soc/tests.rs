@@ -493,6 +493,323 @@ fn a_debugging_field_is_read_only_and_a_debugging_trigger_a_zero_lane() {
     }
 }
 
+const DRIVER: &str = "components/esp_hal_test/include/hal/test_ll.h";
+
+/// The timer's layout with the `DEBUG` and `CLOCK` unions and a device
+/// `TIMER0` holding them, beside the reserved words.
+const DRIVER_LAYOUT: &str = "typedef union {\n    struct {\n        uint32_t probe:2;\n        \
+    uint32_t spare:1;\n        uint32_t reserved_3:28;\n        uint32_t flag:1;\n    };\n    \
+    uint32_t val;\n} timer_debug_reg_t;\n\ntypedef union {\n    struct {\n        \
+    uint32_t div:8;\n        uint32_t reserved_8:23;\n        uint32_t equ:1;\n    };\n    \
+    uint32_t val;\n} timer_clock_reg_t;\n\ntypedef struct timer_dev_t {\n    \
+    volatile timer_config_reg_t config;\n    uint32_t reserved_040[2];\n} timer_dev_t;\n\n\
+    typedef struct timer_debug_dev_t {\n    volatile timer_debug_reg_t debug;\n    \
+    volatile timer_clock_reg_t clock;\n} timer_debug_dev_t;\n\nextern timer_debug_dev_t TIMER0;\n";
+
+/// `soc` over a tree that also holds `DRIVER_LAYOUT` and the driver file.
+fn driver_soc(registers: &str, reg: &str, overlay: &str, driver: &str) -> crate::Result<SocRender> {
+    let overlay = StrictnessOverlay::parse(&format!("{PIN}{}{overlay}", mapping()))?;
+    let mut tree = tree(reg);
+    tree.0.insert(LAYOUT.to_owned(), DRIVER_LAYOUT.to_owned());
+    tree.0.insert(DRIVER.to_owned(), driver.to_owned());
+    render_soc(&SocInputs {
+        vendor_svd: &vendor(registers),
+        vendor_path: "chips/test/registers/upstream/vendor.svd",
+        overlay: &overlay,
+        curated_svd: &curated(),
+        curated_typed: &BTreeSet::new(),
+        headers: &tree,
+    })
+}
+
+const DEBUG_TEXT: &str = "Only for internal debugging purposes. Do not use it in applications.";
+
+/// The SVD and header of `DEBUG`: `PROBE[1:0]`, `SPARE` and `FLAG` (bit
+/// 31), each kept to internal debugging.
+fn debug_register() -> (String, String) {
+    let svd = register(
+        "DEBUG",
+        0x30,
+        "read-write",
+        &(field("PROBE", 0, 2, "read-write")
+            + &field("SPARE", 2, 1, "read-write")
+            + &field("FLAG", 31, 1, "read-write")),
+    );
+    let header = reg_h(&[(
+        "DEBUG",
+        0x30,
+        &[
+            ("PROBE", "R/W", 0, 2, DEBUG_TEXT),
+            ("SPARE", "R/W", 2, 1, DEBUG_TEXT),
+            ("FLAG", "R/W", 31, 1, DEBUG_TEXT),
+        ],
+    )]);
+    (svd, header)
+}
+
+fn debug_entry(header: &str, writes: &str) -> String {
+    format!(
+        "[[registers]]\nperipheral = \"TIMER\"\nregister = \"DEBUG\"\n{writes}\
+         sources = [\"esp-idf:{REG}:{}\"]\n",
+        line(header, "TIMER_DEBUG_REG (")
+    )
+}
+
+fn one_line(field: &str, line: usize) -> String {
+    format!("driver-writes = [{{ field = \"{field}\", source = \"esp-idf:{DRIVER}:{line}\" }}]\n")
+}
+
+#[test]
+fn a_debugging_field_the_cited_driver_line_writes_keeps_its_header_access_and_only_it() {
+    let (svd, header) = debug_register();
+    let driver = "static inline void f(void)\n{\n    TIMER0.debug.probe = 1;\n    \
+                  REG_SET_FIELD(TIMER_DEBUG_REG, TIMER_PROBE_S, 1);\n    \
+                  uint32_t probe = TIMER0.debug.probe;\n    TIMER0.debug.probe == 1;\n}\n";
+    for written in [3, 4] {
+        let render = driver_soc(
+            &svd,
+            &header,
+            &debug_entry(&header, &one_line("PROBE", written)),
+            driver,
+        )
+        .expect("renders");
+        assert!(render.rust.contains("pub fn set_probe("), "{}", render.rust);
+        // The other debugging fields stay read only.
+        assert!(
+            !render.rust.contains("pub fn set_spare("),
+            "{}",
+            render.rust
+        );
+        assert!(!render.rust.contains("pub fn set_flag("), "{}", render.rust);
+    }
+    // A read, a comparison, another field's line: no write of PROBE.
+    for (field, line) in [("PROBE", 5), ("PROBE", 6), ("SPARE", 3)] {
+        let error = driver_soc(
+            &svd,
+            &header,
+            &debug_entry(&header, &one_line(field, line)),
+            driver,
+        )
+        .err()
+        .expect("the line writes no such field");
+        assert!(error.to_string().contains("does not write"), "{error}");
+    }
+    // A line past the file's end and a file the pin does not hold.
+    let error = driver_soc(
+        &svd,
+        &header,
+        &debug_entry(&header, &one_line("PROBE", 99)),
+        driver,
+    )
+    .err()
+    .expect("past the end");
+    assert!(error.to_string().contains("past the file's end"), "{error}");
+    let missing = debug_entry(
+        &header,
+        "driver-writes = [{ field = \"PROBE\", source = \"esp-idf:components/driver/none.c:3\" }]\n",
+    );
+    let error = driver_soc(&svd, &header, &missing, driver)
+        .err()
+        .expect("no such file");
+    assert!(error.to_string().contains("is not pinned"), "{error}");
+    // A register header is no driver, and the register-wide switch is gone.
+    for writes in [
+        format!("driver-writes = [{{ field = \"PROBE\", source = \"esp-idf:{REG}:3\" }}]\n"),
+        "driver-writes = true\n".to_owned(),
+    ] {
+        assert!(driver_soc(&svd, &header, &debug_entry(&header, &writes), driver).is_err());
+    }
+}
+
+#[test]
+fn a_driver_write_of_a_field_the_header_lets_applications_write_is_refused() {
+    let svd = register(
+        "DEBUG",
+        0x30,
+        "read-write",
+        &field("PROBE", 0, 2, "read-write"),
+    );
+    let header = reg_h(&[("DEBUG", 0x30, &[("PROBE", "R/W", 0, 2, "The probe.")])]);
+    let driver = "static inline void f(void)\n{\n    TIMER0.debug.probe = 1;\n}\n";
+    let error = driver_soc(
+        &svd,
+        &header,
+        &debug_entry(&header, &one_line("PROBE", 3)),
+        driver,
+    )
+    .err()
+    .expect("PROBE needs no exception");
+    assert!(error.to_string().contains("it needs none"), "{error}");
+}
+
+#[test]
+fn a_word_write_holds_the_fields_macro_in_its_value_and_its_identifier_in_the_store() {
+    let (svd, header) = debug_register();
+    let driver = "static inline void f(uint32_t div)\n{\n    \
+                  uint32_t bits = (div << TIMER_PROBE_S);\n    uint32_t other = div;\n    \
+                  WRITE_PERI_REG(TIMER_DEBUG_REG, bits);\n    WRITE_PERI_REG(TIMER_DEBUG_REG, other);\n}\n\
+                  static inline void g(uint32_t bits)\n{\n    WRITE_PERI_REG(TIMER_DEBUG_REG, bits);\n}\n";
+    let word = |value: usize, store: usize| {
+        debug_entry(
+            &header,
+            &format!(
+                "driver-writes-word = [{{ field = \"PROBE\", value = \"esp-idf:{DRIVER}:{value}\", \
+                 store = \"esp-idf:{DRIVER}:{store}\" }}]\n"
+            ),
+        )
+    };
+    let render = driver_soc(&svd, &header, &word(3, 5), driver).expect("renders");
+    assert!(render.rust.contains("pub fn set_probe("), "{}", render.rust);
+    for (value, store, why) in [
+        (4, 6, "names no macro of TIMER_PROBE"),
+        (3, 6, "holding bits"),
+        (3, 9, "not later in the function"),
+    ] {
+        let error = driver_soc(&svd, &header, &word(value, store), driver)
+            .err()
+            .expect("the word write does not hold");
+        assert!(error.to_string().contains(why), "{why}: {error}");
+    }
+}
+
+#[test]
+fn a_returned_one_bit_literal_and_a_word_store_are_checked_and_the_path_between_listed() {
+    let (svd, header) = debug_register();
+    let driver = "static inline uint32_t word(void)\n{\n    uint32_t value;\n    \
+                  value = (1 << 31);\n    return value;\n}\n\
+                  static inline void store(timer_debug_dev_t *dev, uint32_t *word)\n{\n    \
+                  dev->debug.val = *word;\n    dev->clock.val = *word;\n    return other;\n}\n";
+    let chain = format!("reviewed-chain = [\"esp-idf:{DRIVER}:5\", \"esp-idf:{DRIVER}:9\"]\n");
+    // The word write's table follows the entry's keys.
+    let with = |returned: usize, store: usize, chain: &str| {
+        format!(
+            "{}[[registers.driver-writes-word]]\nfield = \"FLAG\"\n\
+             value = \"esp-idf:{DRIVER}:4\"\nreturn = \"esp-idf:{DRIVER}:{returned}\"\n\
+             store = \"esp-idf:{DRIVER}:{store}\"\n{chain}",
+            debug_entry(&header, "")
+        )
+    };
+    let render = driver_soc(&svd, &header, &with(5, 9, &chain), driver).expect("renders");
+    assert!(render.rust.contains("pub fn set_flag("), "{}", render.rust);
+    // The path from the function's result to the store is listed unchecked.
+    let overlay = StrictnessOverlay::parse(&format!("{PIN}{}{}", mapping(), with(5, 9, &chain)))
+        .expect("parses");
+    let mut tree = tree(&header);
+    tree.0.insert(LAYOUT.to_owned(), DRIVER_LAYOUT.to_owned());
+    tree.0.insert(DRIVER.to_owned(), driver.to_owned());
+    let check = crate::check_overlay(&overlay, &vendor(&svd), &tree).expect("checks");
+    assert!(check.failures.is_empty(), "{:?}", check.failures);
+    assert!(
+        check
+            .unchecked
+            .iter()
+            .any(|line| line.contains("TIMER.DEBUG")
+                && line.contains("driver-writes-word FLAG")
+                && line.contains("reviewed-chain")),
+        "{:?}",
+        check.unchecked
+    );
+    // Another identifier returned, a store of another register, no chain.
+    for (returned, store, chain, why) in [
+        (11, 9, chain.as_str(), "is not `return value;`"),
+        (5, 10, chain.as_str(), "stores no word of TIMER_DEBUG"),
+        (5, 9, "", "reviewed-chain"),
+    ] {
+        let error = driver_soc(&svd, &header, &with(returned, store, chain), driver)
+            .err()
+            .expect("the word write does not hold");
+        assert!(error.to_string().contains(why), "{why}: {error}");
+    }
+}
+
+#[test]
+fn defined_fields_replace_the_vendor_fields_and_take_the_class_of_the_header_field_holding_them() {
+    // The SVD's fields overlap; the header has one word-wide field.
+    let svd = register(
+        "ENTRY",
+        0x34,
+        "read-write",
+        &(field("PAGE", 0, 10, "read-write")
+            + &field("VALID", 12, 1, "read-write")
+            + &field("OTHER", 12, 1, "read-write")),
+    );
+    let header = reg_h(&[
+        ("ENTRY", 0x34, &[("CONTENT", "R/W", 0, 31, "The entry.")]),
+        ("CLOCK", 0x38, &[("EQU", "R/W", 31, 1, "reserved")]),
+    ]);
+    let narrowed = soc(&svd, &header, "").expect("renders");
+    assert_eq!(api(&narrowed, "ENTRY"), RegisterApi::Read);
+    let source = format!("esp-idf:{REG}:{}", line(&header, "TIMER_ENTRY_REG ("));
+    let entry = format!(
+        "[[registers]]\nperipheral = \"TIMER\"\nregister = \"ENTRY\"\n\
+         define-fields = [\n\
+         {{ name = \"PAGE\", offset = 0, width = 11, description = \"The page.\" }},\n\
+         {{ name = \"VALID\", offset = 12, width = 1, description = \"The entry is valid.\" }},\n\
+         ]\nsources = [\"{source}\"]\n"
+    );
+    let render = soc(&svd, &header, &entry).expect("renders");
+    assert_eq!(
+        api(&render, "ENTRY"),
+        RegisterApi::Full,
+        "{}",
+        reasons(&render, "ENTRY")
+    );
+    for item in [
+        "pub fn set_page(&mut self, value: oer_mmio::Bits<11>)",
+        "pub fn set_valid(",
+    ] {
+        assert!(render.rust.contains(item), "{item}\n{}", render.rust);
+    }
+    assert!(
+        !render.rust.contains("pub const fn other("),
+        "{}",
+        render.rust
+    );
+    // A defined field stands where the header calls its bits reserved.
+    let clock = register(
+        "CLOCK",
+        0x38,
+        "read-write",
+        &field("DIV", 0, 8, "read-write"),
+    );
+    // A defined field stands where the header calls its bits reserved only
+    // with the driver's write of it: a header-only source is refused.
+    let clock_source = format!("esp-idf:{REG}:{}", line(&header, "TIMER_CLOCK_REG ("));
+    let defined_clock = |writes: &str| {
+        format!(
+            "[[registers]]\nperipheral = \"TIMER\"\nregister = \"CLOCK\"\n\
+             define-fields = [{{ name = \"EQU\", offset = 31, width = 1, description = \"Undivided.\" }}]\n\
+             {writes}sources = [\"{clock_source}\"]\n"
+        )
+    };
+    let error = soc(&(svd.clone() + &clock), &header, &defined_clock(""))
+        .err()
+        .expect("no driver write of EQU is cited");
+    assert!(
+        error.to_string().contains("no driver write of it"),
+        "{error}"
+    );
+    let driver =
+        "static inline void f(void)\n{\n    WRITE_PERI_REG(TIMER_CLOCK_REG, TIMER_EQU_S);\n}\n";
+    let render = driver_soc(
+        &(svd.clone() + &clock),
+        &header,
+        &defined_clock(&one_line("EQU", 3)),
+        driver,
+    )
+    .expect("renders");
+    assert!(render.rust.contains("pub fn set_equ("), "{}", render.rust);
+    // Overlapping definitions are refused.
+    let overlapping = entry.replace("offset = 12, width = 1", "offset = 10, width = 1");
+    let error = soc(&svd, &header, &overlapping)
+        .err()
+        .expect("PAGE and VALID overlap");
+    assert!(
+        error.to_string().contains("apart from the others"),
+        "{error}"
+    );
+}
+
 #[test]
 fn a_data_port_lifts_the_hardware_written_narrowing_and_a_wide_trigger_takes_a_value() {
     let words = register(

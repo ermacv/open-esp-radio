@@ -634,7 +634,19 @@ pub(crate) fn check_device(
     let mut result = OverlayCheck::default();
     for rule in &overlay.registers {
         let subject = format!("register {}.{}", rule.peripheral, rule.register);
-        match check_register(rule, &svd, &mut headers, &subject)? {
+        let layout = overlay
+            .headers
+            .iter()
+            .find(|header| header.peripheral == rule.peripheral)
+            .and_then(|header| header.layout.as_deref());
+        match check_register(
+            rule,
+            &svd,
+            &mut headers,
+            layout,
+            &subject,
+            &mut result.unchecked,
+        )? {
             Verdict::Checked => result.checked += 1,
             Verdict::Unchecked(why) => result.unchecked.push(format!("{subject}: {why}")),
             Verdict::Failed(why) => result.failures.extend(why),
@@ -710,9 +722,17 @@ fn check_register(
     rule: &RegisterRule,
     svd: &Svd,
     headers: &mut Headers<'_>,
+    layout_path: Option<&str>,
     subject: &str,
+    unchecked: &mut Vec<String>,
 ) -> Result<Verdict> {
     let (cited, other) = idf_sources(&rule.sources);
+    let fields_stated = !rule.define_fields.is_empty() || !rule.driver_written().is_empty();
+    if cited.is_empty() && fields_stated {
+        return Ok(Verdict::Failed(vec![format!(
+            "{subject}: defined fields and driver writes need the register's *_reg.h source"
+        )]));
+    }
     if cited.is_empty() {
         return Ok(Verdict::Unchecked(format!(
             "no esp-idf source ({other} other)"
@@ -767,7 +787,9 @@ fn check_register(
                 None => failures.push(format!("{cite} is not the end of a register union")),
                 Some(found) => layouts.push((cite, found)),
             }
-        } else {
+        } else if rule.define_fields.is_empty() {
+            // Only a field definition cites a file beside the register
+            // headers; a driver's write cites its line in its own entry.
             failures.push(format!("{cite} is neither a *_reg.h nor a *_struct.h"));
         }
     }
@@ -820,6 +842,23 @@ fn check_register(
             }
         }
     }
+    if fields_stated {
+        match &header {
+            None => failures.push(format!(
+                "{subject}: defined fields and driver writes need the register's *_reg.h source"
+            )),
+            Some(header) => check_driver_writes(
+                rule,
+                register,
+                header,
+                layout_path,
+                headers,
+                subject,
+                &mut failures,
+                unchecked,
+            )?,
+        }
+    }
     let wants_header = rule.access.is_some()
         || rule.write_one_to_clear
         || rule.raw_status_writable
@@ -860,6 +899,197 @@ fn check_register(
     } else {
         Verdict::Failed(failures)
     })
+}
+
+/// The defined fields and driver writes of `rule` against the header
+/// register `header` and the driver lines they cite.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one entry's check over the headers, its layout and the verdict's lists"
+)]
+fn check_driver_writes(
+    rule: &RegisterRule,
+    register: &SvdRegister,
+    header: &HeaderRegister,
+    layout: Option<&str>,
+    headers: &mut Headers<'_>,
+    subject: &str,
+    failures: &mut Vec<String>,
+    unchecked: &mut Vec<String>,
+) -> Result<()> {
+    use crate::soc_headers::{debug_only, reserved_description};
+    let written = rule.driver_written();
+    let defined: BTreeSet<&str> = rule
+        .define_fields
+        .iter()
+        .map(|field| field.name.as_str())
+        .collect();
+    let at_bits = |field: &SvdField| {
+        header
+            .fields
+            .iter()
+            .find(|h| h.low == field.low && h.width() == field.width)
+    };
+    for field in register
+        .fields
+        .iter()
+        .filter(|field| defined.contains(field.name.as_str()))
+    {
+        let holder = at_bits(field).or_else(|| {
+            header.fields.iter().find(|h| {
+                h.low <= field.low
+                    && field.low + field.width <= h.low + h.width()
+                    && !reserved_description(&h.description)
+            })
+        });
+        match holder {
+            None => failures.push(format!(
+                "{subject}: defined field {}: no header field holds its bits",
+                field.name
+            )),
+            Some(holder)
+                if reserved_description(&holder.description)
+                    && !written.contains(field.name.as_str()) =>
+            {
+                failures.push(format!(
+                    "{subject}: defined field {}: the header calls its bits reserved, and no \
+                     driver write of it is cited (driver-writes)",
+                    field.name
+                ));
+            }
+            Some(_) => {}
+        }
+    }
+    let mut header_fields = BTreeMap::new();
+    for name in &written {
+        let Some(field) = register.fields.iter().find(|field| field.name == *name) else {
+            failures.push(format!(
+                "{subject}: the driver write of {name} names no field of the register"
+            ));
+            continue;
+        };
+        let Some(at) = at_bits(field) else {
+            failures.push(format!(
+                "{subject}: the driver write of {name}: no header field at its bits"
+            ));
+            continue;
+        };
+        let reserved = reserved_description(&at.description) && defined.contains(name);
+        if !(debug_only(&at.description) || reserved) {
+            failures.push(format!(
+                "{subject}: the driver write of {name}: the header neither keeps {} to internal \
+                 debugging nor calls a defined field's bits reserved; it needs none",
+                at.name
+            ));
+            continue;
+        }
+        header_fields.insert(*name, at.clone());
+    }
+    let structs = match layout {
+        Some(path) => headers.structs(path)?.to_vec(),
+        None => Vec::new(),
+    };
+    let layout_text = layout.map(|path| headers.tree.read(path)).transpose()?;
+    let layout_register =
+        crate::soc_driver::LayoutRegister::new(header, &structs, layout_text.as_deref());
+    let tree = headers.tree;
+    let mut texts: BTreeMap<String, Option<String>> = BTreeMap::new();
+    let open = |source: &str,
+                texts: &mut BTreeMap<String, Option<String>>,
+                failures: &mut Vec<String>|
+     -> Option<(String, usize)> {
+        let cited = split_source(source)?;
+        if !texts.contains_key(cited.path) {
+            let text = match tree.read(cited.path) {
+                Ok(text) => Some(text),
+                Err(error) => {
+                    failures.push(format!("{subject}: {source}: {error}"));
+                    None
+                }
+            };
+            texts.insert(cited.path.to_owned(), text);
+        }
+        let text = texts.get(cited.path).and_then(Option::as_ref)?;
+        if cited.line == 0 || cited.line > text.lines().count() {
+            failures.push(format!("{subject}: {source} is past the file's end"));
+            return None;
+        }
+        Some((cited.path.to_owned(), cited.line))
+    };
+    for write in &rule.driver_writes {
+        let Some(field) = header_fields.get(write.field.as_str()) else {
+            continue;
+        };
+        let Some((path, line)) = open(&write.source, &mut texts, failures) else {
+            continue;
+        };
+        let code = texts
+            .get(&path)
+            .and_then(Option::as_ref)
+            .and_then(|text| text.lines().nth(line - 1))
+            .unwrap_or("");
+        if !crate::soc_driver::writes_field(code, &layout_register, field) {
+            failures.push(format!(
+                "{subject}: {} does not write {} of {}",
+                write.source, field.name, header.name
+            ));
+        }
+    }
+    for write in &rule.driver_writes_word {
+        let field = header_fields.get(write.field.as_str());
+        let value = open(&write.value, &mut texts, failures);
+        let returned = write
+            .returned
+            .as_deref()
+            .map(|source| open(source, &mut texts, failures));
+        let store = open(&write.store, &mut texts, failures);
+        for line in &write.reviewed_chain {
+            open(line, &mut texts, failures);
+        }
+        let (Some(field), Some(value), Some(store)) = (field, value, store) else {
+            continue;
+        };
+        let returned = match returned {
+            Some(None) => continue,
+            Some(Some(returned)) => Some(returned),
+            None => None,
+        };
+        fn cited<'t>(
+            texts: &'t BTreeMap<String, Option<String>>,
+            (path, line): &'t (String, usize),
+        ) -> crate::soc_driver::Cited<'t> {
+            crate::soc_driver::Cited {
+                path,
+                text: texts
+                    .get(path)
+                    .and_then(Option::as_ref)
+                    .map_or("", String::as_str),
+                line: *line,
+            }
+        }
+        if let Some(why) = crate::soc_driver::word_write_failure(
+            &layout_register,
+            field,
+            &cited(&texts, &value),
+            returned.as_ref().map(|line| cited(&texts, line)).as_ref(),
+            &cited(&texts, &store),
+        ) {
+            failures.push(format!(
+                "{subject}: the word write of {}: {why}",
+                write.field
+            ));
+        } else if write.returned.is_some() {
+            unchecked.push(format!(
+                "{subject}: driver-writes-word {}: the result of the function at {} reaching \
+                 the store at {} crosses its callers; reviewed-chain cites its {} lines",
+                write.field,
+                write.value,
+                write.store,
+                write.reviewed_chain.len()
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// A command register's entry: its `*_reg.h` source defines the register,

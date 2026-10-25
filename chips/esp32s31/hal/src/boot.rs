@@ -1,5 +1,6 @@
 //! The ESP32-S31 bootstrap's facts for the `oer-espressif-boot` sequences:
-//! the CPU clock profiles, the named boot waits and the boot budget below
+//! the CPU clock profiles, the flash read commands and timing candidates,
+//! the octal PSRAM's profile, the named boot waits and the boot budget below
 //! the RTC watchdog the bootloader armed.
 //!
 //! Every bound below is checked against the budget when the crate compiles.
@@ -8,12 +9,14 @@
 
 pub use oer_esp32s31_pac::boot::{
     BootBlocks, BootHandoff, BusDividers, CacheMap, CacheRegisters, ClockRegisters, CpllDividers,
-    CpuRoot, MemDivider,
+    CpuRoot, FlashRegisters, FlashTimingCandidate, MemDivider, PsramRegisters, PsramSupplyLevel,
 };
 pub use oer_espressif_boot::{
     BootFailure,
     cache::{CacheGeometry, SuspendWaits},
     clock::{ClockRates, ClockWaits, CpuClockProfile},
+    flash::{FlashGeometry, FlashReadCommand, FlashReadCommands, TuningWaits},
+    psram::{CacheAccess, ChipSelectTiming, OctalPsramProfile, PsramWaits},
     wait::{BootBudget, BootDeadline, BootWait},
 };
 use oer_mmio::Bits;
@@ -173,8 +176,184 @@ pub const SUSPEND_WAITS: SuspendWaits = SuspendWaits {
     thaw: BootWait::new("icache-thaw", Duration::from_millis(1)),
 };
 
+/// One user command of the flash or PSRAM command port: 64 bytes or a
+/// 16-bit mode register at the bootloader's 80 MHz take microseconds. The
+/// ROM's `Wait_SPI_Idle` and `SPI_read_data` and esp-hal 1f646c5
+/// `esp-hal/src/psram/oct_hex.rs:369-381` poll `CMD.USR` without a time
+/// limit; this bound is this crate's.
+pub const COMMAND_WAIT: BootWait = BootWait::new("spi-command", Duration::from_millis(1));
+
+/// The flash timing sweep's waits.
+pub const TUNING_WAITS: TuningWaits = TuningWaits {
+    command: COMMAND_WAIT,
+    suspend: SUSPEND_WAITS,
+};
+
+const fn read_command(opcode: u8, address_bits: u8, dummy_cycles: u8) -> FlashReadCommand {
+    FlashReadCommand {
+        opcode,
+        address_bits,
+        dummy_cycles,
+    }
+}
+
+/// The read command of each read mode, as the ROM's flash read sends it:
+/// a 24-bit address (the ROM's `rd_addr_bit_len`, ESP-IDF's
+/// `SPI1_R_QIO_ADDR_BITSLEN` 23 + 1), QIO and DIO with their continuous-mode
+/// bits in the address phase, and the ROM's dummy cycles plus its
+/// `dummy_len_plus[1]`, which is zero on this chip.
+///
+/// SOURCE(esp32s31): pinned rev0 ROM (esp-rom-elfs 20260528, SHA-256
+/// a52ad751...ab87), Blobray function records of `_esp_rom_spiflash_read`
+/// @0x2f80f0c2 (QIO 0xEB, 8 more address bits, dummy + 4; DIO 0xBB, 4 more,
+/// dummy + 2; QOUT 0x6B, DOUT 0x3B and fast read 0x0B, dummy + 8; slow read
+/// 0x03, dummy + 0) and `spi_dummy_len_fix` @0x2f80df7e (stores zero to
+/// `dummy_len_plus`); ESP-IDF 4d59230d
+/// `components/esp_rom/esp32s31/include/esp32s31/rom/spi_flash.h:54-60`
+/// (24-bit read addresses) and
+/// `components/bootloader_support/bootloader_flash/src/bootloader_flash_config_esp32s31.c`
+/// (the S31 bootloader sets no `dummy_len_plus`).
+pub const FLASH_READ_COMMANDS: FlashReadCommands = FlashReadCommands {
+    qio: read_command(0xeb, 24 + 8, 4),
+    dio: read_command(0xbb, 24 + 4, 2),
+    qout: read_command(0x6b, 24, 8),
+    dout: read_command(0x3b, 24, 8),
+    fast_read: read_command(0x0b, 24, 8),
+    slow_read: read_command(0x03, 24, 0),
+};
+
+/// The flash of `capacity` bytes, the module's.
+pub const fn flash_geometry(capacity: u32) -> FlashGeometry {
+    FlashGeometry {
+        capacity,
+        commands: FLASH_READ_COMMANDS,
+    }
+}
+
+const fn candidate(din_mode: u32, din_num: u32, extra_dummy: u32) -> FlashTimingCandidate {
+    FlashTimingCandidate {
+        din_mode: Bits::truncate(din_mode),
+        din_num: Bits::truncate(din_num),
+        extra_dummy: Bits::truncate(extra_dummy),
+    }
+}
+
+/// The 120-MHz STR timing candidates, in the sweep's order: input delay
+/// mode, delay number and extra dummy cycles.
+///
+/// SOURCE: esp-hal 1f646c5 `esp-hal/src/flash/timing.rs:53-66`
+/// (`FLASH_120MHZ_TIMING`, ESP-IDF's 120-MHz STR table of the related P4,
+/// C5 and C61 MSPI timing block).
+pub const FLASH_TIMING_CANDIDATES: [FlashTimingCandidate; 12] = [
+    candidate(2, 0, 1),
+    candidate(0, 0, 0),
+    candidate(2, 2, 2),
+    candidate(2, 1, 2),
+    candidate(2, 0, 2),
+    candidate(0, 0, 1),
+    candidate(2, 2, 3),
+    candidate(2, 1, 3),
+    candidate(2, 0, 3),
+    candidate(0, 0, 2),
+    candidate(2, 2, 4),
+    candidate(2, 1, 4),
+];
+
+/// The PSRAM PHY supply's level, in millivolts.
+///
+/// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/clocks.rs:335-337`.
+pub const PSRAM_SUPPLY_MV: u32 = 1800;
+
+/// The external LDO's reference and multiplier codes nearest `millivolts`:
+/// `vout = vref × (4 + mul) / 4 × 20`, `vref` 10 + dref below 9, else
+/// 20 + 2 × (dref − 9); the first closest pair in order.
+///
+/// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/clocks.rs:353-383`
+/// (`ldo_voltage_to_params`, without eFuse calibration).
+pub const fn psram_supply_level(millivolts: u32) -> PsramSupplyLevel {
+    let mut best = u32::MAX;
+    let mut level = (0, 0);
+    let mut dref = 0;
+    while dref < 16 {
+        let vref_20 = if dref < 9 {
+            10 + dref
+        } else {
+            20 + (dref - 9) * 2
+        };
+        let mut mul = 0;
+        while mul < 8 {
+            let vout = vref_20 * 1000 * (4000 + mul * 1000);
+            let diff = (millivolts * 80_000).abs_diff(vout);
+            if diff < best {
+                best = diff;
+                level = (dref, mul);
+            }
+            mul += 1;
+        }
+        dref += 1;
+    }
+    PsramSupplyLevel {
+        dref: Bits::truncate(level.0),
+        mul: Bits::truncate(level.1),
+    }
+}
+
+/// The memory PLL's rate, the PSRAM controllers' source.
+///
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/esp_psram/device/esp_psram_impl_ap_oct.c:60-61`
+/// (`AP_OCT_PSRAM_MPLL_DEFAULT_FREQ_MHZ` 500 at 250 MHz).
+pub const MPLL_HZ: u32 = 500_000_000;
+
+/// The octal PSRAM's clock.
+pub const PSRAM_HZ: u32 = 250_000_000;
+
+/// The board's octal PSRAM at 250 MHz, of `size` bytes (the module's).
+///
+/// SOURCE: esp-hal 1f646c5 `esp-hal/src/psram/esp32s31.rs:97-105`
+/// (`PsramTimingParams::MHZ_250`: MR0 read latency 6, MR4 write latency 3,
+/// cache dummies 33 and 15 as the controller holds them, register dummy
+/// 16), `esp-hal/src/psram/oct_hex.rs:270-284` and ESP-IDF 4d59230d
+/// `components/esp_psram/device/esp_psram_impl_ap_oct.c:55-58` (chip
+/// select setup and hold 4, hold delay 3).
+pub const fn octal_psram(size: u32) -> OctalPsramProfile<PsramSupplyLevel> {
+    OctalPsramProfile {
+        supply: psram_supply_level(PSRAM_SUPPLY_MV),
+        divider: (MPLL_HZ / PSRAM_HZ) as u8,
+        read_latency: 6,
+        write_latency: 3,
+        register_dummy_bits: 16,
+        chip_select: ChipSelectTiming {
+            setup: 4,
+            hold: 4,
+            hold_delay: 3,
+        },
+        cache: CacheAccess {
+            read_dummy_cyclelen: 33,
+            write_dummy_cyclelen: 15,
+        },
+        size,
+    }
+}
+
+const _: () = assert!(
+    MPLL_HZ.is_multiple_of(PSRAM_HZ) && MPLL_HZ / PSRAM_HZ <= u8::MAX as u32,
+    "the PSRAM clock divides the memory PLL's"
+);
+
+/// The PSRAM bring-up's waits.
+pub const PSRAM_WAITS: PsramWaits = PsramWaits {
+    // SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/clocks.rs:347`
+    // (1000 µs after the supply's current limit ends).
+    supply_settle: BootWait::new("psram-supply", Duration::from_millis(1)),
+    command: COMMAND_WAIT,
+    cache_sync: CACHE_SYNC,
+};
+
 const _: () = {
     let budget = BOOT_BUDGET;
+    assert!(budget.admits(COMMAND_WAIT));
+    assert!(budget.admits(PSRAM_WAITS.supply_settle));
     assert!(budget.admits(CLOCK_WAITS.calibration));
     assert!(budget.admits(CLOCK_WAITS.calibration_settle));
     assert!(budget.admits(CLOCK_WAITS.update));

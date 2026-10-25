@@ -28,8 +28,17 @@
 //!   flash access;
 //! - [`mmu`]: an MMU entry read with its valid flag and target checked, and a
 //!   range mapped into free entries;
+//! - [`flash`]: the flash read through the SPI1 user command port and the
+//!   flash clock's timing sweep;
+//! - [`psram`]: an octal PSRAM's cold power, clock and controller, its mode
+//!   registers and its density, a density the boot does not know refused;
 //! - [`watchdog`]: the boot's watchdogs, the RTC watchdog kept armed as the
 //!   boot's backstop until the boot hands off.
+//!
+//! A command the hardware clears when it completes (a clock update, a
+//! cache sync, an SPI user command) starts only while none runs: its start
+//! returns [`Busy`] otherwise, writing nothing, and a sequence retries it
+//! under the command's boot wait.
 #![no_std]
 #![forbid(unsafe_code)]
 
@@ -38,7 +47,9 @@ extern crate std;
 
 pub mod cache;
 pub mod clock;
+pub mod flash;
 pub mod mmu;
+pub mod psram;
 pub mod wait;
 pub mod watchdog;
 
@@ -47,7 +58,9 @@ mod tests;
 
 pub use cache::CacheFailure;
 pub use clock::ClockFailure;
+pub use flash::FlashFailure;
 pub use mmu::MmuFailure;
+pub use psram::PsramFailure;
 pub use wait::WaitFailure;
 
 /// Proof that a register call comes from this crate's sequences.
@@ -63,6 +76,10 @@ impl Access<'_> {
     }
 }
 
+/// A command register reads a running command: the start wrote nothing.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Busy;
+
 /// Why the boot stopped: the bootstrap reports it and halts; nothing falls
 /// back.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -75,6 +92,10 @@ pub enum BootFailure {
     Cache(CacheFailure),
     /// An MMU entry or range was refused.
     Mmu(MmuFailure),
+    /// A flash read or the flash timing was refused.
+    Flash(FlashFailure),
+    /// The PSRAM did not come up.
+    Psram(PsramFailure),
 }
 
 impl BootFailure {
@@ -85,6 +106,8 @@ impl BootFailure {
             Self::Clock(failure) => failure.reason(),
             Self::Cache(failure) => failure.reason(),
             Self::Mmu(failure) => failure.reason(),
+            Self::Flash(failure) => failure.reason(),
+            Self::Psram(failure) => failure.reason(),
         }
     }
 
@@ -118,5 +141,17 @@ impl From<CacheFailure> for BootFailure {
 impl From<MmuFailure> for BootFailure {
     fn from(failure: MmuFailure) -> Self {
         Self::Mmu(failure)
+    }
+}
+
+impl From<FlashFailure> for BootFailure {
+    fn from(failure: FlashFailure) -> Self {
+        Self::Flash(failure)
+    }
+}
+
+impl From<PsramFailure> for BootFailure {
+    fn from(failure: PsramFailure) -> Self {
+        Self::Psram(failure)
     }
 }

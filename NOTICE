@@ -187,6 +187,11 @@ License:   MIT OR Apache-2.0
 chips/espressif/staged-layout/linker/runtime/link.x repeats its
 PROVIDE(interruptN = DefaultHandler) symbol interface.
 
+From the pinned fork https://github.com/ermacv/esp-hal at
+1f646c5af4f4ca2774f493783581237fea2379dc, ported and modified by Vladislav
+Ermachenkov: chips/espressif/boot/src/flash.rs (`page_count`,
+`select_window`), esp-hal/src/flash/tuning.rs.
+
 
 9. wireless-regdb
 -----------------
