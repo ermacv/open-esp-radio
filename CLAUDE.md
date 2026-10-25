@@ -26,11 +26,13 @@ system these rules serve.
   adapter, `take_*` handoff, `handoff = true` partition, shared-word inventory
   or platform allowlist is permitted. C5 stays outside the workspace.
 - **Compile time first.** Every check that can run at compile time runs there.
-- **Panics.** Input from outside never panics: frames from the air, any peer
+- **Panics and unsafe.** A change introduces no new runtime panic sites or
+  `unsafe` code. Compile-time checks and test assertions are allowed.
+  Input from outside never panics: frames from the air, any peer
   value (counters, PNs, sequence numbers, lengths, indices), host and API
-  input return a handled error. Elsewhere `todo!`, `unreachable!`, `panic!`
-  and `expect` (never a bare `unwrap()`) are allowed, each with a static
-  message. Panic lints warn; a crate moves to `deny` when its contract
+  input return a handled error. Existing `todo!`, `unreachable!`, `panic!`
+  and `expect` (never a bare `unwrap()`) keep their static messages.
+  Panic lints warn; a crate moves to `deny` when its contract
   freezes.
 - **Execution.** An interrupt handler never shares a lock with a task. Driver
   code never blocks or spins; it yields to its executor. The one exception is

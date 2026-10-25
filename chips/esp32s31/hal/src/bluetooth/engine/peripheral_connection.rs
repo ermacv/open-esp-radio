@@ -159,9 +159,11 @@ impl LinkStateStorage {
             .word_001c_opaque()
             .write(BleLinkStateWord001cOpaque::ZERO);
         self.layout.rx_list().write(
-            BleLinkStateRxList::ZERO
-                .with_class(BleLinkStateRxList::CLASS_PRIVATE_CONNECTION)
-                .expect("private RX class fits"),
+            const {
+                BleLinkStateRxList::ZERO
+                    .with_class(BleLinkStateRxList::CLASS_PRIVATE_CONNECTION)
+                    .expect("private RX class fits")
+            },
         );
         self.layout
             .crc_initialization()

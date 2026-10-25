@@ -8,8 +8,8 @@
 
 use crate::modem::values::{
     ExternalCoexFlag, ExternalCoexGrantDelay, ExternalCoexNibble, ExternalCoexSync,
-    ExternalCoexWorkMode,
 };
+use oer_esp32s31_pac::coex::pti::WorkMode;
 
 /// Signal wires between the chip and the external radio
 /// (`external_coex_wire_t`).
@@ -79,18 +79,14 @@ impl<'a, P: oer_mmio::Placement> ExternalCoexControl<'a, P> {
             w.set_sync(oer_mmio::Bits::truncate((sync(0)).get()));
         });
         block.modify_pti(|w| {
-            w.set_work_mode(oer_mmio::Bits::truncate(
-                (ExternalCoexWorkMode::new(match role {
-                    ExternalCoexRole::Leader => {
-                        oer_esp32s31_pac::coex::pti::WorkMode::Leader.bits()
-                    }
-                    ExternalCoexRole::Follower => {
-                        oer_esp32s31_pac::coex::pti::WorkMode::Follower.bits()
-                    }
-                })
-                .expect("a role fits the work mode"))
-                .get(),
-            ));
+            w.set_work_mode(match role {
+                ExternalCoexRole::Leader => {
+                    oer_mmio::Bits::constant::<{ WorkMode::Leader.bits() }>()
+                }
+                ExternalCoexRole::Follower => {
+                    oer_mmio::Bits::constant::<{ WorkMode::Follower.bits() }>()
+                }
+            });
         });
         match role {
             ExternalCoexRole::Leader => block.modify_control(|w| {

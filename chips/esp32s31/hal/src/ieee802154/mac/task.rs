@@ -8,7 +8,7 @@
 use oer_esp32s31_pac::ieee802154::{
     command::Opcode,
     ed_config::{CcaMode, EdSampleMode},
-    event_enable, rx_abort_enable, tx_abort_enable,
+    event_enable, rx_abort_enable, security_key, tx_abort_enable,
 };
 use oer_espressif_ieee802154_engine::coex::CoexPti;
 use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
@@ -255,6 +255,14 @@ const fn context(index: Ieee802154MultipanIndex) -> Index<4> {
         _ => Index::constant::<3>(),
     }
 }
+
+/// The transmit-security key words, in write order, checked against the PAC.
+const KEY_WORDS: [Index<{ security_key::COUNT }>; security_key::COUNT] = [
+    Index::constant::<0>(),
+    Index::constant::<1>(),
+    Index::constant::<2>(),
+    Index::constant::<3>(),
+];
 
 /// The `CCA_MODE` value of a CCA mode.
 const fn cca_mode(mode: Ieee802154CcaMode) -> CcaMode {
@@ -818,9 +826,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// `ieee802154_ll_set_security_key`: four little-endian words in order.
     pub(crate) fn set_security_key(&mut self, key: &[u8; 16]) {
         let (words, _) = key.as_chunks::<4>();
-        for (index, word) in words.iter().enumerate() {
-            let index = Index::<{ oer_esp32s31_pac::ieee802154::security_key::COUNT }>::new(index)
-                .expect("the key words fit their register array");
+        for (index, word) in KEY_WORDS.into_iter().zip(words) {
             let word = u32::from_le_bytes(*word);
             self.mac.write_security_key(index, |writer| {
                 writer.set_key_word(word);
