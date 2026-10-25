@@ -9,9 +9,9 @@ schema = 1
 peripherals = 100
 skipped-peripherals = 3
 registers = 4724
-full = 2501
-read = 1338
-none = 885
+full = 2508
+read = 1333
+none = 883
 renamed-fields = 29
 
 [[skipped]]
@@ -8980,12 +8980,6 @@ reasons = []
 
 [[register]]
 peripheral = "SPI0"
-register = "MMU_ITEM_CONTENT"
-api = "read"
-reasons = ["field PADDR: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [9:0]", "field ACCESS_SPIRAM: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [10:10]", "field SPIRAM_VALID: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [11:11]", "field VALID: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [12:12]", "field SPIRAM_SENSITIVE: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [12:12]", "field SENSITIVE: esp-idf:components/soc/esp32s31/register/soc/spi_mem_c_reg.h:6317 has no field at bits [13:13]", "overlapping fields SPIRAM_SENSITIVE, VALID", "undeclared bits 0xffffd000"]
-
-[[register]]
-peripheral = "SPI0"
 register = "SPI_MEM_REGISTERRND_ECO_HIGH"
 api = "read"
 reasons = []
@@ -9047,36 +9041,6 @@ reasons = []
 [[register]]
 peripheral = "MEMSPI2"
 register = "RD_STATUS"
-api = "read"
-reasons = []
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "CACHE_FCTRL"
-api = "none"
-reasons = ["a field array"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "CACHE_SCTRL"
-api = "read"
-reasons = []
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "SRAM_DRD_CMD"
-api = "read"
-reasons = []
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "SRAM_DWR_CMD"
-api = "read"
-reasons = []
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "SRAM_CLK"
 api = "read"
 reasons = []
 
@@ -9259,12 +9223,6 @@ peripheral = "MEMSPI3"
 register = "RD_STATUS"
 api = "read"
 reasons = ["field STATUS is R/W/SS (esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:575): the hardware also changes it"]
-
-[[register]]
-peripheral = "MEMSPI3"
-register = "MISC"
-api = "none"
-reasons = ["a field array"]
 
 [[register]]
 peripheral = "MEMSPI3"

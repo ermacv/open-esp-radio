@@ -494,6 +494,84 @@ fn a_debugging_field_is_read_only_and_a_debugging_trigger_a_zero_lane() {
 }
 
 #[test]
+fn a_driver_written_debugging_register_keeps_its_header_access() {
+    let svd = register(
+        "DEBUG",
+        0x30,
+        "read-write",
+        &field("PROBE", 0, 2, "read-write"),
+    );
+    let debug = "Only for internal debugging purposes. Do not use it in applications.";
+    let header = reg_h(&[("DEBUG", 0x30, &[("PROBE", "R/W", 0, 2, debug)])]);
+    let entry = |sources: &str| {
+        format!(
+            "[[registers]]\nperipheral = \"TIMER\"\nregister = \"DEBUG\"\n\
+             driver-writes = true\nsources = [{sources}]\n"
+        )
+    };
+    let render = soc(
+        &svd,
+        &header,
+        &entry("\"esp-idf:components/esp_hal_test/include/hal/test_ll.h:7\""),
+    )
+    .expect("renders");
+    assert!(render.rust.contains("pub fn set_probe("), "{}", render.rust);
+    // Only a driver outside the register headers lifts the rule.
+    let error = soc(
+        &svd,
+        &header,
+        &entry(&format!("\"esp-idf:{REG}:{}\"", line(&header, "TIMER_PROBE"))),
+    )
+    .err()
+    .expect("a register header is no driver");
+    assert!(error.to_string().contains("driver-writes"), "{error}");
+}
+
+#[test]
+fn defined_fields_replace_the_vendor_fields_and_take_the_class_of_the_header_field_holding_them() {
+    // The SVD's fields overlap; the header has one word-wide field.
+    let svd = register(
+        "ENTRY",
+        0x34,
+        "read-write",
+        &(field("PAGE", 0, 10, "read-write")
+            + &field("VALID", 12, 1, "read-write")
+            + &field("OTHER", 12, 1, "read-write")),
+    );
+    let header = reg_h(&[("ENTRY", 0x34, &[("CONTENT", "R/W", 0, 32, "The entry.")])]);
+    let narrowed = soc(&svd, &header, "").expect("renders");
+    assert_eq!(api(&narrowed, "ENTRY"), RegisterApi::Read);
+    let source = format!("esp-idf:{REG}:{}", line(&header, "TIMER_ENTRY_REG ("));
+    let entry = format!(
+        "[[registers]]\nperipheral = \"TIMER\"\nregister = \"ENTRY\"\n\
+         define-fields = [\n\
+         {{ name = \"PAGE\", offset = 0, width = 11, description = \"The page.\" }},\n\
+         {{ name = \"VALID\", offset = 12, width = 1, description = \"The entry is valid.\" }},\n\
+         ]\nsources = [\"{source}\"]\n"
+    );
+    let render = soc(&svd, &header, &entry).expect("renders");
+    assert_eq!(
+        api(&render, "ENTRY"),
+        RegisterApi::Full,
+        "{}",
+        reasons(&render, "ENTRY")
+    );
+    for item in [
+        "pub fn set_page(&mut self, value: oer_mmio::Bits<11>)",
+        "pub fn set_valid(",
+    ] {
+        assert!(render.rust.contains(item), "{item}\n{}", render.rust);
+    }
+    assert!(!render.rust.contains("pub const fn other("), "{}", render.rust);
+    // Overlapping definitions are refused.
+    let overlapping = entry.replace("offset = 12, width = 1", "offset = 10, width = 1");
+    let error = soc(&svd, &header, &overlapping)
+        .err()
+        .expect("PAGE and VALID overlap");
+    assert!(error.to_string().contains("apart from the others"), "{error}");
+}
+
+#[test]
 fn a_data_port_lifts_the_hardware_written_narrowing_and_a_wide_trigger_takes_a_value() {
     let words = register(
         "W%s",

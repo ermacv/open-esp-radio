@@ -432,6 +432,7 @@ pub(crate) fn derive_register(
     header: &HeaderRegister,
     fields: &[SvdField<'_>],
     array: bool,
+    defined: bool,
 ) -> Derived {
     let mut derived = Derived {
         source: format!("esp-idf:{path}:{}", header.line),
@@ -467,10 +468,19 @@ pub(crate) fn derive_register(
                 field.name
             ));
         }
+        // A field the overlay defines (`define-fields`) inside a wider
+        // header field takes that field's class.
+        let inside = |h: &&HeaderField| {
+            defined
+                && h.low <= field.low
+                && field.low + field.width <= h.low + h.width()
+                && !reserved_description(&h.description)
+        };
         let Some(header_field) = header
             .fields
             .iter()
             .find(|h| h.low == field.low && h.width() == field.width)
+            .or_else(|| header.fields.iter().find(inside))
         else {
             if bits(field.low, field.width) & declared == 0 {
                 // Bits only reserved header lanes cover.
@@ -493,11 +503,16 @@ pub(crate) fn derive_register(
         // An array's fields name its first element (`FILTER_CH0_EN` in
         // every `GLITCH_FILTER_CH<n>`): their numbers are not compared.
         let digitless = |text: &str| text.replace(|c: char| c.is_ascii_digit(), "");
-        let same = if array {
-            crate::soc_overlay::same_field(&digitless(&header_field.name), &digitless(field.name))
-        } else {
-            crate::soc_overlay::same_field(&header_field.name, field.name)
-        };
+        let contained = header_field.low != field.low || header_field.width() != field.width;
+        let same = contained
+            || if array {
+                crate::soc_overlay::same_field(
+                    &digitless(&header_field.name),
+                    &digitless(field.name),
+                )
+            } else {
+                crate::soc_overlay::same_field(&header_field.name, field.name)
+            };
         if !same {
             let own = header_field
                 .name

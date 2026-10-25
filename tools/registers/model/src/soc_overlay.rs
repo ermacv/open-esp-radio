@@ -767,7 +767,9 @@ fn check_register(
                 None => failures.push(format!("{cite} is not the end of a register union")),
                 Some(found) => layouts.push((cite, found)),
             }
-        } else {
+        } else if !(rule.driver_writes || !rule.define_fields.is_empty()) {
+            // Only a driver's write or a field definition cites a file
+            // beside the register headers.
             failures.push(format!("{cite} is neither a *_reg.h nor a *_struct.h"));
         }
     }

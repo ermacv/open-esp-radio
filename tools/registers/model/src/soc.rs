@@ -160,7 +160,27 @@ pub struct RegisterRule {
     /// writes, read and stored whole, never modified.
     #[serde(default)]
     pub data_port: bool,
+    /// The register's fields where the vendor SVD and its header disagree
+    /// on them, from the cited source: they replace the SVD's fields, and
+    /// each takes its class from the header field whose bits hold it.
+    #[serde(default)]
+    pub define_fields: Vec<DefinedField>,
+    /// The vendor's own driver writes the register's fields its header
+    /// keeps to internal debugging: they keep their header's access. A
+    /// source outside `components/soc/` names the driver's write.
+    #[serde(default)]
+    pub driver_writes: bool,
     pub sources: Vec<String>,
+}
+
+/// One field an overlay register entry defines (`define-fields`).
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct DefinedField {
+    pub name: String,
+    pub offset: u32,
+    pub width: u32,
+    pub description: String,
 }
 
 /// What the overlay states about one vendor field.
@@ -330,6 +350,48 @@ impl StrictnessOverlay {
             if rule.data_port && (rule.fifo || rule.write_one_to_clear) {
                 return Err(Error::message(format!(
                     "overlay register {subject} is a data port and a FIFO port or write-one-to-clear"
+                )));
+            }
+            if !rule.define_fields.is_empty() {
+                if rule.add {
+                    return Err(Error::message(format!(
+                        "overlay register {subject} adds a register and defines its fields"
+                    )));
+                }
+                let mut names = BTreeSet::new();
+                let mut taken = 0_u32;
+                for field in &rule.define_fields {
+                    let fits =
+                        field.width > 0 && field.offset < 32 && field.width <= 32 - field.offset;
+                    let mask = if fits {
+                        (u32::MAX >> (32 - field.width)) << field.offset
+                    } else {
+                        0
+                    };
+                    if !fits
+                        || mask & taken != 0
+                        || !names.insert(field.name.as_str())
+                        || field.description.trim().is_empty()
+                    {
+                        return Err(Error::message(format!(
+                            "overlay register {subject} defines field {}: each field named once, \
+                             described, inside the word and apart from the others",
+                            field.name
+                        )));
+                    }
+                    taken |= mask;
+                }
+            }
+            if rule.driver_writes
+                && !rule.sources.iter().any(|source| {
+                    source.starts_with("esp-hal:")
+                        || source
+                            .strip_prefix("esp-idf:")
+                            .is_some_and(|path| !path.starts_with("components/soc/"))
+                })
+            {
+                return Err(Error::message(format!(
+                    "overlay register {subject}: driver-writes cites no driver outside components/soc/"
                 )));
             }
         }
@@ -792,7 +854,12 @@ pub fn render_soc(inputs: &SocInputs<'_>) -> Result<SocRender> {
                     None,
                 )
             } else {
-                let header = header_view(&facts, &name, register)?;
+                let header = header_view(
+                    &facts,
+                    &name,
+                    register,
+                    rule.is_some_and(|rule| !rule.define_fields.is_empty()),
+                )?;
                 let commands = command_rules.get(&key).copied();
                 if commands.is_some() {
                     matched_commands.insert(key);
@@ -1064,6 +1131,7 @@ fn header_view(
     facts: &HeaderFacts,
     peripheral: &str,
     register: &svd_rs::Register,
+    defined: bool,
 ) -> Result<HeaderView> {
     let fields = svd_fields(register);
     let mut derived: Option<Derived> = None;
@@ -1107,6 +1175,7 @@ fn header_view(
                     header,
                     &fields,
                     matches!(register, MaybeArray::Array(..)),
+                    defined,
                 );
                 match &derived {
                     None => derived = Some(next),
@@ -1180,7 +1249,7 @@ fn moved_registers(device: &Device, facts: &HeaderFacts) -> Vec<String> {
 /// header definition.
 fn correct(device: &mut Device, overlay: &StrictnessOverlay, facts: &HeaderFacts) -> Result<()> {
     for rule in &overlay.registers {
-        if !rule.add && rule.offset.is_none() {
+        if !rule.add && rule.offset.is_none() && rule.define_fields.is_empty() {
             continue;
         }
         let subject = format!("{}.{}", rule.peripheral, rule.register);
@@ -1202,6 +1271,9 @@ fn correct(device: &mut Device, overlay: &StrictnessOverlay, facts: &HeaderFacts
             (false, Some(register)) => {
                 if let Some(offset) = rule.offset {
                     register.address_offset = offset;
+                }
+                if !rule.define_fields.is_empty() {
+                    register.fields = Some(defined_fields(&subject, &rule.define_fields)?);
                 }
             }
             (false, None) => {
@@ -1284,6 +1356,26 @@ fn correct(device: &mut Device, overlay: &StrictnessOverlay, facts: &HeaderFacts
         }
     }
     Ok(())
+}
+
+/// The SVD fields of an overlay's `define-fields`; each field's access is
+/// its header class's, given when the register is classified.
+fn defined_fields(subject: &str, fields: &[DefinedField]) -> Result<Vec<svd_rs::Field>> {
+    fields
+        .iter()
+        .map(|field| {
+            svd_rs::FieldInfo::builder()
+                .name(field.name.clone())
+                .description(Some(field.description.clone()))
+                .bit_range(svd_rs::BitRange::from_offset_width(
+                    field.offset,
+                    field.width,
+                ))
+                .build(ValidateLevel::Disabled)
+                .map(MaybeArray::Single)
+                .map_err(|error| Error::message(format!("{subject}: {error}")))
+        })
+        .collect()
 }
 
 /// The conservative verdict on one register, with the register the typed
@@ -1539,7 +1631,9 @@ fn classify(
                     .then_some(CommandRole::Held)
             }
         });
-        let debug = derived_field.is_some_and(|field| field.debug);
+        // The vendor's driver writes it: its header access stands.
+        let debug = derived_field.is_some_and(|field| field.debug)
+            && !rule.is_some_and(|rule| rule.driver_writes);
         if debug && matches!(role, Some(CommandRole::Command | CommandRole::Qualifier)) {
             return Err(Error::message(format!(
                 "overlay names {name}.{}.{svd_name} a command or qualifier, but its header keeps it to internal debugging",
@@ -1695,9 +1789,16 @@ fn classify(
             register.name
         )));
     }
-    let reserved = explicit
-        .unwrap_or_else(|| derived.map_or(0, |derived| derived.reserved & !declared))
-        | header_reserved;
+    // The fields an overlay defines are the source's whole word: its other
+    // bits are reserved.
+    let defined = rule.is_some_and(|rule| !rule.define_fields.is_empty());
+    let reserved = explicit.unwrap_or_else(|| {
+        if defined {
+            !declared
+        } else {
+            derived.map_or(0, |derived| derived.reserved & !declared)
+        }
+    }) | header_reserved;
     let undeclared = !(declared | reserved);
     if undeclared != 0 && access.can_write() {
         narrow = true;
