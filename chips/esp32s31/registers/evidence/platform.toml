@@ -7,15 +7,15 @@ description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7,
 
 [[sources]]
 id = "S31_MODEM_SYSCON_STRUCT"
-description = "esp-wifi-sys commit 2585f278d381acc67c529fa730b91739b5461359, c/include/esp32s31/modem/modem_syscon_struct.h, sha256 1d37b7f4748e9b665ed1bf4f25dc85cd20d25fa5ab2726db82766dd0b506f69e"
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/include/modem/modem_syscon_struct.h: modem_syscon_dev_t and its register unions specify the modem clock gates, reset bits and shared control geometry."
 
 [[sources]]
 id = "S31_MODEM_LPCON_STRUCT"
-description = "esp-wifi-sys commit 2585f278d381acc67c529fa730b91739b5461359, c/include/esp32s31/modem/modem_lpcon_struct.h, sha256 af916837fb4c4ed8092fba78a844cc656299acfd63764a420c4c4fdac3472453"
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/include/modem/modem_lpcon_struct.h: modem_lpcon_dev_t and its register unions specify the shared low-power clocks, state-map nibbles and PHY tick geometry."
 
 [[sources]]
 id = "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"
-description = "Official esp-rs/esp-hal commit 63e97be553f435f29171f7ae5f37a41ad737a75a, https://raw.githubusercontent.com/esp-rs/esp-hal/63e97be553f435f29171f7ae5f37a41ad737a75a/esp-hal/src/rtc_cntl/rtc/esp32s31.rs, sha256 2958839efd1f008574ca93c45e947646d2cc2057ba62c23f24e786b0dea426d3. modem_clock_domain_power_state_icg_map_init defines ICG_NOGATING_ACTIVE_MODEM as bits one and two and ORs that value into all four MODEM_LPCON shared state-map nibbles."
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7, components/esp_hw_support/modem/port/esp32s31/modem_clock_impl.c:378-399 (modem_clock_domain_icg_config), components/esp_hw_support/modem/include/modem/modem_clock_impl.h:149-151 and components/hal/esp32s31/include/hal/modem_lpcon_ll.h. The LP_APB, I2C_MASTER, COEX and WIFIPWR domains all use ICG_NOGATING_ACTIVE | ICG_NOGATING_MODEM, bits two and one; the low-power accessors update the four shared state-map nibbles while preserving other fields."
 
 [[sources]]
 id = "ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK"
@@ -39,7 +39,7 @@ description = "Pinned public esp-radio commit 7f914782f5c689a74f37df83b89a0827d3
 
 [[sources]]
 id = "S31_ESP_PACS_SVD"
-description = "Reviewed ermacv/esp-pacs source snapshot 5b8b56036abd5f4646505b15988cc9da51cec826, retained independently of the build dependency revision. esp32s31/svd/patches/_modem_syscon.yml sha256 1f19377269adfab69596d7762499a28984b975fdb9f95f791de2ceff6f82f2e0 proves the selected MODEM_SYSCON register reset values, including CLK_CONF 0x00200002; the same reviewed PAC provides the exact LP_AON_CLKRST, LP_PERICLKRST and LP_TSENS register/field geometry."
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/soc/esp32s31/include/modem/modem_syscon_reg.h (CLK_CONF at +0x4: CLK_DATA_DUMP_MUX bit21 defaults to one and PWDET_CLK_DIV_NUM bits8:1 defaults to one, giving 0x00200002), modem_lpcon_reg.h and i2c_ana_mst_reg.h; components/soc/esp32s31/register/soc/lp_clkrst_reg.h, lp_peri_clkrst_reg.h, tsens_reg.h, hp_sys_clkrst_reg.h and pmu_reg.h, with their corresponding *_struct.h files. These vendor declarations supply the selected register/field geometry and reset defaults. LP_AONCLKRST_ROOT_CLK_CONF is an exception: FAST_CLK_SEL defaults to one at bits27:26 (vendor word 0x04000000), whereas the curated read-only word retains resetValue zero; the published SLOW_CLK_SEL field defaults to zero in both. This evidence does not corroborate the curated whole-word zero reset."
 
 [[sources]]
 id = "ROM_REV0_PHY_TSENS"
@@ -51,7 +51,7 @@ description = "Pinned ESP32-S31 libphy.a member phy_tsens.o, complete phy_tsens_
 
 [[sources]]
 id = "S31_REG_BASE"
-description = "Official ESP-IDF commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe, https://raw.githubusercontent.com/espressif/esp-idf/7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe/components/soc/esp32s31/register/soc/reg_base.h, sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d. It names IEEE802154_REG_BASE as 0x20103000 and the surrounding HP-system, LP-system and LP-peripheral blocks. The same bytes were previously reviewed from esp-wifi-sys commit 72b97e6fe55307aa92c8c1edf3fdb3f4df816e80."
+description = "Official ESP-IDF commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe, https://raw.githubusercontent.com/espressif/esp-idf/7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe/components/soc/esp32s31/register/soc/reg_base.h, sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d. It names IEEE802154_REG_BASE as 0x20103000 and the surrounding HP-system, LP-system and LP-peripheral blocks."
 
 [[sources]]
 id = "ESP_IDF_S31_INTERRUPT_SOURCES"
@@ -103,11 +103,11 @@ description = "Pinned public esp-radio commit 7f914782f5c689a74f37df83b89a0827d3
 
 [[sources]]
 id = "ESP_PACS_AAA5C2EA_S31_IEEE802154_RXON_DELAY"
-description = "Official esp-rs/esp-pacs commit aaa5c2ea8a82f0aa202422d69682e3179d7b2365, https://github.com/esp-rs/esp-pacs/blob/aaa5c2ea8a82f0aa202422d69682e3179d7b2365/esp32s31/src/ieee802154.rs sha256 e102b36158d5d1000108d04bf51d86be3fbeec3f8abd25c56f41f2f559db9825 and https://github.com/esp-rs/esp-pacs/blob/aaa5c2ea8a82f0aa202422d69682e3179d7b2365/esp32s31/src/ieee802154/rxon_delay.rs sha256 b36584fd316421b0e640f44264329727a72994f51bc817b9bb8c7651a59dfbd9. The generated public PAC independently places RXON_DELAY at offset 0x110 and exposes its preserving read-write field as bits 0:10. No reset-value claim is imported."
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/register/soc/ieee802154_reg.h:378-380 (IEEE802154_RXON_DELAY_REG +0x110, mask 0x7ff, shift zero) and ieee802154_struct.h:403-407 (rx_on_delay with an 11-bit delay field). These declarations supply the offset and field geometry. No reset-value claim is imported."
 
 [[sources]]
 id = "ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX"
-description = "Official esp-rs/esp-pacs commit aaa5c2ea8a82f0aa202422d69682e3179d7b2365. esp32s31/src/lib.rs publishes INTERRUPT_CORE0 at 0x20585000 and INTERRUPT_CORE1 at 0x20585800; the generated core register blocks place source-indexed route words at four-byte stride, and source 132 therefore resolves to offset 0x210 on each core. esp32s31/src/interrupt_core0.rs sha256 d949dd47ae1c59b3029bc8d6e2e29cc66e0f0d30165bee771e311cd6dc1f3243, interrupt_core0/core_0_intr_map.rs sha256 9bcb132b7ce49d93b98126d253dec00f03adabf03e0530b7dfaf416aeda48d89, interrupt_core1.rs sha256 9ccdbaef1abe65fff733cef87a6e7838e5f9f263aff89c9d9fe5d1e885d17ed0, and interrupt_core1/core_1_intr_map.rs sha256 2dd5ecc1033f088baaf7dee22b7f715e40eaa911b2b90b0d937c43a0c2af51ba. Both route words reset to zero and expose MAP at bits 0:5 and PASS_LEVEL at bits 8:9."
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/register/soc/reg_base.h (DR_REG_INTR0_BASE 0x20585000), interrupt_core0_reg.h and interrupt_core1_reg.h. Each source-indexed route word has four-byte stride; core1 is at +0x800 and source132 at +0x210 on each core. The route fields MAP bits5:0 and PASS_LEVEL bits9:8 default to zero in both headers."
 
 [[sources]]
 id = "ESP_IDF_25FE69F_S31_PHY_RETENTION"
@@ -115,7 +115,7 @@ description = "Official ESP-IDF commit 25fe69f946311abdaf9ad56591f25fedbc20ac98.
 
 [[sources]]
 id = "S31_PMU_HEADERS"
-description = "ESP-IDF master commit 102122904ade11fd1ae373848f34ffd7dfb18aeb, components/soc/esp32s31/register/soc/pmu_reg.h; local esp-wifi-sys commit 2585f278d381acc67c529fa730b91739b5461359, pmu_reg.h sha256 b1a04a306b9d7ee908e2f7b083d42b7a634f8687b6ee034cfe6f54f385e0d816 and pmu_struct.h sha256 5fc84c7569f9f24e193b0205728a647768c7c289b39d5ce679c50db7d8352e28 The same pmu_struct.h bytes at current IDF 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/register/soc/pmu_struct.h line58, declare pmu_hp_clk_power_reg_t low19 and bit31 reserved. Current ROM phy_open_fe_bb_clk at 0x2f823eea..0x2f823ef4 reads, ORs 0x0040000f and stores 0x2070401c: low4 are observed use despite that reserved declaration; low4 remain opaque and only other reserved lanes retain the source annotation."
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/register/soc/pmu_reg.h and pmu_struct.h. pmu_struct.h:58 declares pmu_hp_clk_power_reg_t low19 and bit31 reserved. Current ROM phy_open_fe_bb_clk at 0x2f823eea..0x2f823ef4 reads, ORs 0x0040000f and stores 0x2070401c: low4 are observed use despite that reserved declaration; low4 remain opaque and only other reserved lanes retain the source annotation."
 
 [[sources]]
 id = "ESP_IDF_ESP32S31_MODEM_REG_BASE"
@@ -131,19 +131,19 @@ description = "IEEE 802.11 HE PHY Capabilities byte three field semantics as exp
 
 [[sources]]
 id = "ESP_WIFI_SYS_S31_RXCTRL"
-description = "Sibling esp-wifi-sys commit 72b97e6fe55307aa92c8c1edf3fdb3f4df816e80, c/headers/esp32s31/esp_wifi_he_types.h sha256 602abd515ad617d06d8fe01e94fdf755890e72194a56a03821fa49770544162d, packed esp_wifi_rxctrl_t, branch CONFIG_SOC_WIFI_MAC_VERSION_NUM == 3. The same commit's c/include/esp32s31/sdkconfig.h (sha256 a665ef249e07f5985f59bd7aef3e3e78f3a9762775296658a1d03ed37f25f2ba) defines CONFIG_SOC_WIFI_MAC_VERSION_NUM 3 and c/include/esp32s31/soc/soc_caps.h (sha256 ffa7a4e918be8d1628ad0a8ea307c989a8486790daa75fb5da1eeef0a33ceb29) SOC_WIFI_MAC_VERSION_NUM (3); ESP-IDF fff9895c82d744c7237be8847347bdd1b07c6643 components/soc/esp32s31/include/soc/soc_caps.h agrees. In that branch the 64-byte structure places signed rssi in byte 0, the five-bit rate in byte 1 bits 4:0, he_siga1 at bytes 4..8, rxend_state (0 successful) in byte 8, he_siga2 at bytes 9..11, is_group in byte 11 bit 7, the 32-bit local-time timestamp at bytes 12..16, cur_bb_format in byte 0x25 bits 7:4, the ten-bit rx_channel_estimate_len at bytes 0x26..0x28 bits 9:0 with rx_channel_estimate_info_vld at bit 10, and, in the last eight bytes, sig_len in bits 13:0 of the first halfword, dump_len in bits 13:0 of the second and rx_state (0 successful) in the following byte. Byte 0x1f, the byte after rx_state and the HE-SIG-B option fields are reserved in this branch."
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7, components/esp_wifi/include/esp_wifi_he_types.h:177-246, packed esp_wifi_rxctrl_t for CONFIG_SOC_WIFI_MAC_VERSION_NUM == 3; components/soc/esp32s31/include/soc/soc_caps.h defines SOC_WIFI_MAC_VERSION_NUM 3. In that branch the 64-byte structure places signed rssi in byte 0, the five-bit rate in byte 1 bits 4:0, he_siga1 at bytes 4..8, rxend_state (0 successful) in byte 8, he_siga2 at bytes 9..11, is_group in byte 11 bit 7, the 32-bit local-time timestamp at bytes 12..16, cur_bb_format in byte 0x25 bits 7:4, the ten-bit rx_channel_estimate_len at bytes 0x26..0x28 bits 9:0 with rx_channel_estimate_info_vld at bit 10, and, in the last eight bytes, sig_len in bits 13:0 of the first halfword, dump_len in bits 13:0 of the second and rx_state (0 successful) in the following byte. Byte 0x1f, the byte after rx_state and the HE-SIG-B option fields are reserved in this branch."
 
 [[sources]]
 id = "ESP_WIFI_SYS_S31_RX_BB_FORMAT"
-description = "Sibling esp-wifi-sys commit 72b97e6fe55307aa92c8c1edf3fdb3f4df816e80, c/headers/esp32s31/esp_wifi_he_types.h sha256 602abd515ad617d06d8fe01e94fdf755890e72194a56a03821fa49770544162d, wifi_rx_bb_format_t: 11B 0, 11G/11A 1, HT 2, VHT 3, HE_SU 4, HE_MU 5, HE_ERSU 6, HE_TB 7, VHT_MU 11; the value of esp_wifi_rxctrl_t.cur_bb_format."
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7, components/esp_wifi/include/esp_wifi_he_types.h:161-172, wifi_rx_bb_format_t: 11B 0, 11G/11A 1, HT 2, VHT 3, HE_SU 4, HE_MU 5, HE_ERSU 6, HE_TB 7, VHT_MU 11; the value of esp_wifi_rxctrl_t.cur_bb_format."
 
 [[sources]]
 id = "ESP_WIFI_SYS_S31_HE_MU_SIG"
-description = "Sibling esp-wifi-sys commit 72b97e6fe55307aa92c8c1edf3fdb3f4df816e80, c/headers/esp32s31/esp_private/esp_wifi_he_types_private.h sha256 928b50eef6e9daa369a1c0f2aca8f07dde79b952eda2cdeb5355541fe1b2469b, complete esp_wifi_mu_siga1_t and packed esp_wifi_mu_siga2_t layouts: the HE-MU interpretation of the he_siga1 and he_siga2 words of esp_wifi_rxctrl_t."
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7, components/esp_wifi/include/esp_private/esp_wifi_he_types_private.h:39-105, complete esp_wifi_mu_siga1_t and packed esp_wifi_mu_siga2_t layouts: the HE-MU interpretation of the he_siga1 and he_siga2 words of esp_wifi_rxctrl_t."
 
 [[sources]]
 id = "ESP_WIFI_SYS_S31_HE_SU_SIG"
-description = "Sibling esp-wifi-sys commit 72b97e6fe55307aa92c8c1edf3fdb3f4df816e80, c/headers/esp32s31/esp_private/esp_wifi_he_types_private.h complete esp_wifi_su_siga1_t and packed esp_wifi_su_siga2_t layouts. These standard field names are joined only to bit positions independently exercised by the complete S31 blob formatter."
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7, components/esp_wifi/include/esp_private/esp_wifi_he_types_private.h:39-105, complete esp_wifi_su_siga1_t and packed esp_wifi_su_siga2_t layouts. These standard field names are joined only to bit positions independently exercised by the complete S31 blob formatter."
 
 [[sources]]
 id = "ROM_REV0_PHY_TSENS_DAC"

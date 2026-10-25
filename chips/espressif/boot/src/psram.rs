@@ -205,7 +205,9 @@ pub struct PsramReady {
 
 /// The mode register pairs.
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/psram/oct_hex.rs:146-156`.
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/esp_psram/device/esp_psram_impl_ap_oct.c:156-232,237-276`
+/// (mode-register transactions at addresses 0, 2, 4 and 8).
 const MR0_MR1: u32 = 0x0;
 const MR2_MR3: u32 = 0x2;
 const MR4_MR5: u32 = 0x4;
@@ -214,7 +216,9 @@ const MR8_MR9: u32 = 0x8;
 /// The command port's mode register commands: 16-bit command, 32-bit
 /// address, 16 data bits.
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/psram/oct_hex.rs:403-460`.
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/esp_psram/device/esp_psram_impl_ap_oct.c:27-31,156-174,189-206`
+/// (0x4040 read, 0xc0c0 write, 16-bit command/data and 32-bit address).
 const REGISTER_READ: u16 = 0x4040;
 const REGISTER_WRITE: u16 = 0xc0c0;
 

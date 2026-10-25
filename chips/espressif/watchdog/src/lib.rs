@@ -104,12 +104,11 @@ impl MainStageAction {
 /// 24, 32, 40, 64, 128 or 256 watchdog clock cycles.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResetLength {
-    /// The longest reset signal (selector 7), which esp-hal and ESP-IDF
+    /// The longest reset signal (selector 7), which ESP-IDF
     /// program for both the CPU and the system reset.
     ///
-    /// SOURCE: esp-hal 1f646c5 `esp-hal/src/timer/timg.rs:631-676`
-    /// (`wdt_cpu_reset_length` and `wdt_sys_reset_length` 7); ESP-IDF
-    /// 4d59230d `components/esp_hal_wdt/wdt_hal_iram.c:58-59,79-80` programs
+    /// SOURCE: ESP-IDF 4d59230d
+    /// `components/esp_hal_wdt/wdt_hal_iram.c:58-59,79-80` programs
     /// `WDT_RESET_SIG_LENGTH_3_2us`, also 7.
     Longest = 7,
 }

@@ -142,12 +142,13 @@ impl<P: Placement, Q: Placement> Mwdt1Registers<P, Q> {
     /// bus clock on, a reset pulse, the watchdog's source XTAL and its
     /// clock on. `esp_hal::init` gates the group's bus clock.
     ///
-    /// SOURCE: esp-hal 1f646c5 `esp-hal/src/timer/timg.rs:188-203`
-    /// (`TimerGroup::new`: `PeripheralClockControl::enable` then `reset`),
-    /// `esp-metadata-generated/src/_generated_esp32s31.rs:5658-5662,5811-5815`
-    /// (`APB_CLK_EN`, `RST_EN`) and `esp-hal/src/soc/esp32s31/clocks.rs:683-713`
-    /// (`WDT_CLK_EN`, `WDT_SRC_SEL` 0 = XTAL), as ESP-IDF 4d59230d
-    /// `components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h:292-301`.
+    /// SOURCE: ESP-IDF 4d59230d
+    /// `components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h:273-301`
+    /// (XTAL source and module gate),
+    /// `components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h`
+    /// (`TIMERGRP1_CTRL0`: APB clock, reset, watchdog gate/source) and
+    /// `components/esp_hal_timg/esp32s31/include/hal/timg_ll.h`
+    /// (`timg_ll_enable_bus_clock`, `timg_ll_reset_register`).
     pub fn start_clock(&mut self) {
         self.clock.modify_timergrp1_ctrl0(|w| {
             w.set_apb_clk_en(true);

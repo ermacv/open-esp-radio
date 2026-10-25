@@ -34,7 +34,9 @@ pub const CPLL_HZ: u32 = 320_000_000;
 
 /// The CPU PLL's dividers for [`CPLL_HZ`]: feedback 8 over reference 1.
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/clocks.rs:209-213`.
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:422-440`
+/// (`clk_ll_cpll_set_freq_mhz`: feedback 8, reference 1).
 pub const CPLL_320: CpllDividers = CpllDividers {
     feedback: 8,
     reference: Bits::constant::<1>(),
@@ -52,10 +54,11 @@ pub enum CpuProfile {
 impl CpuProfile {
     /// The profile's root, PLL, dividers and rates.
     ///
-    /// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/clocks.rs:41-91`
-    /// (`PRESET_160`: CPLL, CPU 1, memory 0, system 1, APB 1;
-    /// `PRESET_320`: CPLL, CPU 0, memory 1, system 2, APB 1; the memory
-    /// clock at most 160 MHz).
+    /// SOURCE: ESP-IDF 4d59230d
+    /// `components/esp_hw_support/port/esp32s31/rtc_clk.c:222-253`
+    /// (`rtc_clk_cpu_freq_to_cpll_mhz`: 160 MHz divisors 2/1/2/2;
+    /// 320 MHz divisors 1/2/3/2). The register codes are divisor minus one
+    /// (`components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:664-750`).
     pub const fn clock(self) -> CpuClockProfile<CpuRoot, BusDividers, CpllDividers> {
         let dividers = match self {
             Self::Mhz160 => BusDividers {
@@ -84,8 +87,9 @@ impl CpuProfile {
 /// root, the memory and system clocks divide the CPU clock, the APB clock
 /// divides the system clock, each by its code plus one.
 ///
-/// SOURCE: esp-hal 1f646c5
-/// `esp-metadata-generated/src/_generated_esp32s31.rs:3662-3748`.
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:664-762`
+/// (integer dividers and the CPU -> memory/system -> APB clock tree).
 pub const fn rates(root_hz: u32, dividers: BusDividers) -> ClockRates {
     let cpu_hz = root_hz / (dividers.cpu as u32 + 1);
     let mem_hz = match dividers.mem {
@@ -103,8 +107,9 @@ pub const fn rates(root_hz: u32, dividers: BusDividers) -> ClockRates {
 
 /// The highest memory clock.
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/clocks.rs:44,61,78`
-/// (`MEM_CLK` "Max 160 MHz").
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/esp_hw_support/port/esp32s31/rtc_clk.c:224`
+/// (`MEM_CLK <= 160MHz`).
 pub const MAX_MEM_HZ: u32 = 160_000_000;
 
 const _: () = {
@@ -135,8 +140,9 @@ pub const CLOCK_WAITS: ClockWaits = ClockWaits {
     // ESP-IDF 4d59230d `components/esp_hw_support/port/esp32s31/rtc_clk.c:144`
     // polls `clk_ll_cpll_calibration_is_done` without a limit.
     calibration: BootWait::new("cpll-calibration", Duration::from_millis(1)),
-    // SOURCE: `rtc_clk.c:145` ("wait for true stop") and esp-hal 1f646c5
-    // `esp-hal/src/soc/esp32s31/clocks.rs:243`: 10 µs.
+    // SOURCE: ESP-IDF 4d59230d
+    // `components/esp_hw_support/port/esp32s31/rtc_clk.c:145`:
+    // 10 µs after calibration completes ("wait for true stop").
     calibration_settle: BootWait::new("cpll-settle", Duration::from_micros(10)),
     // ESP-IDF 4d59230d `clk_tree_ll.h:602-606` (`clk_ll_bus_update`) polls
     // `SOC_CLK_UPDATE` without a limit.
@@ -146,8 +152,9 @@ pub const CLOCK_WAITS: ClockWaits = ClockWaits {
 /// The L1 cache's publication geometry: 64-byte lines, the data cache
 /// written back twice, both instruction caches invalidated.
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/cache.rs:3-5,35-61`;
-/// ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:31,45,160-166`
+/// (64-byte lines, data map 0x10, instruction map 0x03);
 /// `components/esp_rom/patches/esp_rom_cache_writeback_esp32p4_esp32s31.c:39-50`;
 /// `components/soc/esp32s31/register/soc/cache_reg.h:1633-1660`
 /// (`SYNC_MAP`; `SYNC_SIZE` 28 bits).
@@ -160,8 +167,8 @@ pub const CACHE_GEOMETRY: CacheGeometry<CacheMap> = CacheGeometry {
 };
 
 /// One sync command over a range of at most the stage-two image. ESP-IDF
-/// 4d59230d `esp_rom_cache_writeback_esp32p4_esp32s31.c:39-50` and esp-hal
-/// `cache.rs:35-61` poll `SYNC_DONE` without a limit.
+/// 4d59230d `components/esp_rom/patches/esp_rom_cache_writeback_esp32p4_esp32s31.c:39-50`
+/// polls `SYNC_DONE` without a limit.
 pub const CACHE_SYNC: BootWait = BootWait::new("cache-sync", Duration::from_millis(50));
 
 /// The fetch suspension's waits: each replaces an unbounded poll of the
@@ -178,9 +185,8 @@ pub const SUSPEND_WAITS: SuspendWaits = SuspendWaits {
 
 /// One user command of the flash or PSRAM command port: 64 bytes or a
 /// 16-bit mode register at the bootloader's 80 MHz take microseconds. The
-/// ROM's `Wait_SPI_Idle` and `SPI_read_data` and esp-hal 1f646c5
-/// `esp-hal/src/psram/oct_hex.rs:369-381` poll `CMD.USR` without a time
-/// limit; this bound is this crate's.
+/// ROM's `Wait_SPI_Idle` and `SPI_read_data` poll `CMD.USR` without a
+/// time limit (`oer_espressif_boot::flash`); this bound is this crate's.
 pub const COMMAND_WAIT: BootWait = BootWait::new("spi-command", Duration::from_millis(1));
 
 /// The flash timing sweep's waits.
@@ -241,9 +247,10 @@ const fn candidate(din_mode: u32, din_num: u32, extra_dummy: u32) -> FlashTiming
 /// The 120-MHz STR timing candidates, in the sweep's order: input delay
 /// mode, delay number and extra dummy cycles.
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/flash/timing.rs:53-66`
-/// (`FLASH_120MHZ_TIMING`, ESP-IDF's 120-MHz STR table of the related P4,
-/// C5 and C61 MSPI timing block).
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/esp_mspi/mspi_timing_tuning/port/esp32p4/mspi_timing_tuning_configs.h:79`
+/// (`MSPI_TIMING_FLASH_CONFIG_TABLE_CORE_CLK_120M_MODULE_CLK_120M_STR_MODE`).
+/// This is the related P4 block's table selected for this sweep.
 pub const FLASH_TIMING_CANDIDATES: [FlashTimingCandidate; 12] = [
     candidate(2, 0, 1),
     candidate(0, 0, 0),
@@ -261,15 +268,18 @@ pub const FLASH_TIMING_CANDIDATES: [FlashTimingCandidate; 12] = [
 
 /// The PSRAM PHY supply's level, in millivolts.
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/clocks.rs:335-337`.
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/esp_hw_support/port/esp32s31/Kconfig.ldo:21-33`
+/// (`ESP_LDO_VOLTAGE_PSRAM_DOMAIN`, default 1800 mV).
 pub const PSRAM_SUPPLY_MV: u32 = 1800;
 
 /// The external LDO's reference and multiplier codes nearest `millivolts`:
 /// `vout = vref × (4 + mul) / 4 × 20`, `vref` 10 + dref below 9, else
 /// 20 + 2 × (dref − 9); the first closest pair in order.
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/clocks.rs:353-383`
-/// (`ldo_voltage_to_params`, without eFuse calibration).
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/esp_hal_pmu/esp32s31/include/hal/ldo_ll.h:61-94`
+/// (`ldo_ll_voltage_to_dref_mul`, without eFuse calibration).
 pub const fn psram_supply_level(millivolts: u32) -> PsramSupplyLevel {
     let mut best = u32::MAX;
     let mut level = (0, 0);
@@ -310,12 +320,12 @@ pub const PSRAM_HZ: u32 = 250_000_000;
 
 /// The board's octal PSRAM at 250 MHz, of `size` bytes (the module's).
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/psram/esp32s31.rs:97-105`
-/// (`PsramTimingParams::MHZ_250`: MR0 read latency 6, MR4 write latency 3,
-/// cache dummies 33 and 15 as the controller holds them, register dummy
-/// 16), `esp-hal/src/psram/oct_hex.rs:270-284` and ESP-IDF 4d59230d
-/// `components/esp_psram/device/esp_psram_impl_ap_oct.c:55-58` (chip
-/// select setup and hold 4, hold delay 3).
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/esp_psram/device/esp_psram_impl_ap_oct.c:33-38,55-58`
+/// (250 MHz: read latency 6, write latency 3, dummy bits 34/16, register
+/// dummy 16; chip-select setup/hold 4, hold delay 3) and
+/// `components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:130-150`
+/// (cache dummy fields hold the bit count minus one: 33 and 15).
 pub const fn octal_psram(size: u32) -> OctalPsramProfile<PsramSupplyLevel> {
     OctalPsramProfile {
         supply: psram_supply_level(PSRAM_SUPPLY_MV),
@@ -343,8 +353,10 @@ const _: () = assert!(
 
 /// The PSRAM bring-up's waits.
 pub const PSRAM_WAITS: PsramWaits = PsramWaits {
-    // SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/clocks.rs:347`
-    // (1000 µs after the supply's current limit ends).
+    // SOURCE: ESP-IDF 4d59230d
+    // `components/esp_hw_support/port/esp32s31/Kconfig.ldo:35-38`
+    // (1000 µs) and `components/esp_hw_support/ldo/esp_ldo_regulator.c:92-119`
+    // (current limit off before the voltage-stable delay).
     supply_settle: BootWait::new("psram-supply", Duration::from_millis(1)),
     command: COMMAND_WAIT,
     cache_sync: CACHE_SYNC,

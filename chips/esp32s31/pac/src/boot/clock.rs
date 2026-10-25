@@ -62,10 +62,10 @@ pub enum MemDivider {
 /// The integer divider of every branch the CPU root feeds: each branch
 /// divides its source by its code plus one, with the fractional parts zero.
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/clocks.rs:475-541`
-/// (CPU, memory, system and APB dividers; numerators and denominators 0)
-/// and `esp-metadata-generated/src/_generated_esp32s31.rs:3662-3748` (CPU
-/// from the root, memory and system from the CPU, APB from the system).
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:664-762`
+/// (CPU from the root, memory/system from CPU, APB from system; divider
+/// fields hold the integer divisor minus one).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct BusDividers {
     pub cpu: u8,
@@ -77,9 +77,10 @@ pub struct BusDividers {
 /// The CPU PLL's divider pair (`LP_AONCLKRST_CPLL_DIV`): 320 MHz is the
 /// 40 MHz XTAL times the feedback divider over the reference divider.
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/clocks.rs:209-213`
-/// (feedback 8, reference 1 for 320 MHz; reset 15 / 2); ESP-IDF 4d59230d
-/// `clk_tree_ll.h:448-453` (the CPLL runs at 320 MHz alone).
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:410-453`
+/// (feedback 8, reference 1 for 320 MHz) and
+/// `components/soc/esp32s31/register/soc/lp_clkrst_reg.h` (`CPLL_DIV`: reset 15/2).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CpllDividers {
     pub feedback: u8,

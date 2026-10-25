@@ -11,14 +11,14 @@
 //! mutually exclusive: each starts alone, once none runs. A range just
 //! mapped is dropped from the data cache ([`invalidate_data`]).
 //!
-//! SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/cache.rs:3-61,88-95`
-//! (64-byte lines, data map 0x10 written back twice, both instruction
-//! caches 0x03 invalidated); ESP-IDF 4d59230d
+//! SOURCE(esp32s31): ESP-IDF 4d59230d
+//! `components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:31,45,160-166`
+//! (64-byte lines, data map 0x10, instruction map 0x03);
 //! `components/esp_rom/patches/esp_rom_cache_writeback_esp32p4_esp32s31.c:39-50`
-//! (the S31 writes back twice); esp-hal `esp-hal/src/soc/esp32c5/mod.rs:95-117`
-//! (C5: 32-byte lines, one shared cache 0x10 written back twice);
-//! `components/soc/esp32s31/register/soc/cache_reg.h:1574-1630` (the
-//! commands self-clear and exclude each other; `SYNC_DONE` reads the end).
+//! (two writebacks); `components/soc/esp32s31/register/soc/cache_reg.h:1574-1630`
+//! (commands self-clear and exclude each other; `SYNC_DONE` reads the end).
+//! SOURCE(esp32c5): esp-hal 1f646c5 `esp-hal/src/soc/esp32c5/mod.rs:95-117`
+//! (32-byte lines, one shared cache 0x10 written back twice).
 //!
 //! **Fetch suspension.** A flash access through the SPI1 command port must
 //! not race instruction fetch from flash. The sequence replaces the ROM's
@@ -226,10 +226,11 @@ where
 /// lines: memory the cache served stale (a range just mapped) is read
 /// again from its device.
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/psram/oct_hex.rs:48-59` (the PSRAM
-/// window invalidated after its mapping) and
-/// `esp-hal/src/soc/esp32s31/cache.rs:52-61,76-83` (the data cache's map,
-/// one invalidate, `SYNC_DONE`).
+/// SOURCE(esp32s31): ESP-IDF 4d59230d
+/// `components/esp_rom/esp32s31/include/esp32s31/rom/cache.h`
+/// (`Cache_Invalidate_Addr`, drop cached data for a range; data map BIT(4))
+/// and `components/soc/esp32s31/register/soc/cache_reg.h:1574-1640`
+/// (`INVALIDATE_ENA`, `SYNC_DONE`, `SYNC_MAP`).
 pub fn invalidate_data<R, C>(
     registers: &mut R,
     geometry: CacheGeometry<R::Map>,

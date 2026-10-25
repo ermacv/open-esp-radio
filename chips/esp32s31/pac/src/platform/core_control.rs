@@ -278,9 +278,11 @@ impl<P: Placement> Uart0ClockRegisters<P> {
     /// ROM prints through UART0 after a software reset, and the source the
     /// firmware chose may not run any more.
     ///
-    /// SOURCE: esp-hal 1f646c5 `esp-hal/src/uart/clocks/v2_esp32s31.rs`
-    /// (`restore_power_on_function_clock`); ESP-IDF 4d59230d
-    /// `hp_sys_clkrst_reg.h` (`UART0_CLK_SRC_SEL` 0 is XTAL).
+    /// SOURCE: ESP-IDF 4d59230d
+    /// `components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h:1408-1446`
+    /// (UART0 source, gate and divider fields) and
+    /// `components/esp_hal_uart/esp32s31/include/hal/uart_ll.h`
+    /// (`uart_ll_set_sclk`: XTAL selector zero).
     pub fn restore_uart0_clock(&mut self) {
         self.0.modify_uart0_ctrl0(|clock| {
             clock

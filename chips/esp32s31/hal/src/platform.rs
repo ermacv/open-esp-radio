@@ -96,8 +96,7 @@ impl ResetCauses {
 /// The shortest time between two reads of the generator's output, as `C`
 /// measures it.
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/rng/ll.rs:56-95` and ESP-IDF
-/// 4d59230d `components/esp_hw_support/hw_random.c:43,89`: consecutive
+/// SOURCE: ESP-IDF 4d59230d `components/esp_hw_support/hw_random.c:43,89`: consecutive
 /// reads are at least 16 APB clock cycles apart (`apb_cycle_wait_num`).
 /// That is under one microsecond at every APB frequency of at least
 /// 16 MHz; two microseconds of a clock counting whole microseconds

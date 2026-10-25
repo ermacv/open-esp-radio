@@ -129,15 +129,19 @@ bootstrap-psram-bytes = 0x1_0000
 # The MMU page that maps flash and PSRAM: stage two's payload fills at least
 # one, and the bootstrap's flash text starts on one, after the image headers.
 #
-# SOURCE: esp-hal 1f646c5 `esp-metadata/devices/esp32s31/soc.toml` and
+# SOURCE(esp32s31): ESP-IDF 4d59230d
+# `components/soc/esp32s31/include/soc/ext_mem_defs.h:14-19`
+# (`SOC_MMU_PAGE_SIZE`, default 0x10000).
+# SOURCE(esp32c5): esp-hal 1f646c5
 # `esp-metadata/devices/esp32c5/soc.toml` (`[device.mmu] page_size = 0x10000`).
 mmu-page-bytes = 0x1_0000
 # The ESP image's 0x18-byte file header and 0x08-byte segment header before
 # the bootstrap's text, so that its flash and virtual addresses agree modulo
 # the MMU page.
 #
-# SOURCE: esp-hal 1f646c5 `esp-hal/ld/esp32s31/memory.x` (`ROM : ORIGIN =
-# 0x40000000 + 0x20`, from ESP-IDF `components/esp_system/ld/esp32s31/memory.ld.in`).
+# SOURCE: ESP-IDF 4d59230d
+# `components/esp_system/ld/esp32s31/memory.ld.in:37-45`
+# (irom origin 0x40000020; 0x20 accounts for image and segment headers).
 image-segment-header-bytes = 0x20
 # SRAM at the top the runtime's SRAM sections leave free while CPU0 still
 # runs on the bootstrap's stack, until `_runtime_stack_bootstrap` switches to

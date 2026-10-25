@@ -20,12 +20,12 @@
 //! When the root and the dividers already read as the profile's, nothing is
 //! written.
 //!
-//! SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/clocks.rs:120-133`
-//! (the whole configuration latched by one update), `:135-150` (the update
-//! polled until clear), `:195-246` (a CPLL the CPU runs from is not
-//! recalibrated; otherwise dividers, power, gate, calibration, 10 µs, stop);
-//! ESP-IDF 4d59230d `components/esp_hw_support/port/esp32s31/rtc_clk.c:133-148`
-//! (calibration start, poll for its end, 10 µs, stop) and `:404-462`.
+//! SOURCE: ESP-IDF 4d59230d
+//! `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:175-195,422-478,599-605`
+//! (CPLL power, dividers, calibration and the bus update);
+//! `components/esp_hw_support/port/esp32s31/rtc_clk.c:133-148,404-432`
+//! (calibration start, completion, 10 µs settle, stop; prepare the PLL
+//! when the CPU source changes, then switch the CPU configuration).
 
 use oer_time::Clock;
 
