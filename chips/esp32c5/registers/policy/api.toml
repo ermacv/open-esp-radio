@@ -119,7 +119,7 @@ peripherals = ["FROM_CPU_3"]
 name = "InterruptMatrixPeripherals"
 member = "interrupt_matrix"
 handoff = true
-description = "The interrupt matrix route and pending words and the CLIC line words, which the interrupt table checks. Claimed by the interrupt table's platform handoff; esp-hal still writes the routes and the lines until the table writes them."
+description = "The interrupt matrix route and pending words and the CLIC configuration and line words, which the interrupt table writes and checks. Claimed by the interrupt table's platform handoff."
 peripherals = ["CLIC", "INTERRUPT_CORE0", "INTERRUPT_CORE0_STATUS"]
 
 [[ownership-partitions]]

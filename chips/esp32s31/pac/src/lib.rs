@@ -5,6 +5,9 @@
 extern crate std;
 
 #[cfg(test)]
+mod soc_tests;
+
+#[cfg(test)]
 mod test_memory;
 
 // Outside the production PHY module, which forbids all unsafe code.
@@ -28,6 +31,35 @@ pub(crate) use phy::frequency;
     reason = "generated capability catalog is wider than the restricted ownership facade"
 )]
 mod generated;
+
+/// Every peripheral of the vendor SVD the curated model does not describe,
+/// as typed register blocks with the chip's interrupt sources
+/// (`soc::Interrupt`); the PAC root claims them at once.
+pub use generated::soc;
+
+/// What the pinned ESP-IDF headers take away from the vendor SVD's API.
+///
+/// SOC_ETM's event status is write-one-to-clear (`soc_etm_reg.h:2597`): it is
+/// sampled and acknowledged,
+///
+/// ```
+/// use oer_esp32s31_pac::soc::soc_etm::SocEtm;
+/// fn acknowledge(etm: &mut SocEtm<oer_mmio::Host<'_>>) {
+///     let sample = etm.sample_evt_st0();
+///     etm.acknowledge_evt_st0(sample);
+/// }
+/// ```
+///
+/// never modified:
+///
+/// ```compile_fail
+/// use oer_esp32s31_pac::soc::soc_etm::SocEtm;
+/// fn modify(etm: &mut SocEtm<oer_mmio::Host<'_>>) {
+///     etm.modify_evt_st0(|_| {});
+/// }
+/// ```
+#[cfg(doctest)]
+pub struct SocHeaderSemantics;
 
 pub use phy::pbus;
 pub mod phy;

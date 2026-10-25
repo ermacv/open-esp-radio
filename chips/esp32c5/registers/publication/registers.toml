@@ -35,3 +35,8 @@ edition = "2024"
 [outputs.linker]
 path = "../../layout/linker/dma-window.x"
 address-low-field = "IEEE802154_MAC.RX_DMA_ADDRESS.ADDRESS"
+
+[soc]
+svd = "../upstream/esp32c5.svd"
+overlay = "../model/strictness.toml"
+report = "../published/soc.report.toml"

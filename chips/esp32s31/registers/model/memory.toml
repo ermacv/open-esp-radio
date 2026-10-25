@@ -680,6 +680,15 @@ permissions = "rw"
 
 # SOURCE: ESP_IDF_4D59230D_S31_CLIC
 [[regions]]
+name = "clic-config"
+address-space = "cpu"
+kind = "mmio"
+start = 0x10800000
+end-exclusive = 0x10800004
+permissions = "rw"
+
+# SOURCE: ESP_IDF_4D59230D_S31_CLIC
+[[regions]]
 name = "clic-lines"
 address-space = "cpu"
 kind = "mmio"

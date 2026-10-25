@@ -53,6 +53,7 @@ owned-ranges = [
     "pcr-timg1-wdt-clk-conf",
     "lp-wdt",
     "systimer",
+    "clic-config",
     "clic-lines",
     "interrupt-core0-routes-low",
     "interrupt-core0-routes-high",

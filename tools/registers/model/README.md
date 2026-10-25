@@ -68,6 +68,79 @@ remain algorithms in PAC code and do not assert a hardware reset. Sourced
 field declarations or changing their bit states. `CAPTURE` contains only
 read-safe bytes with an explicit comparison mask, in physical address order.
 
+## The vendor SVD
+
+`render_soc` renders every peripheral of a chip's vendor SVD as a typed
+register block in the PAC API's `soc` module. The vendor SVD names fields
+and an access, but not what a read or a write does: a write-one-to-clear
+status, a field the hardware changes under a read-modify-write and a
+reserved lane all read `read-write` there. The pinned ESP-IDF headers state
+it, so they decide the API. The overlay's `[[headers]]` table names each
+vendor peripheral's `*_reg.h` (offsets, field bits, access classes,
+descriptions) and `*_struct.h` (the device layout); the generator reads them
+as pinned artifacts of the chip's `artifacts.toml` (`cargo pins fetch`) and
+finds every vendor register in its header by name and offset. From the
+header (`soc_headers.rs`):
+
+- `R/W` is a plain field, `RO`/`R`/`HRO` a read-only one, a one-bit `WT` a
+  write trigger written only by its trigger;
+- a register whose every field is write-one-to-clear (`WTC`, `W1C`) is
+  sampled and acknowledged with exactly that sample, never modified;
+- a writable field the hardware also changes (`R/W/SC`, `R/W/SS`,
+  `R/W/WTC`), a set-only one (`W1S`, `WTS`, `WS`, `R/W1`), a multi-bit `WT`,
+  an unknown class and a write-one-to-clear field beside others leave the
+  register read-only;
+- a field the header describes as `Reserved`, and bits no header field
+  declares, are reserved: no accessor, kept by every write;
+- a field a read clears ("cleared by a read", "cleared when read",
+  `R_SS_RC`) or a port read and written in sequence gives its register no
+  API, also when only the vendor SVD's description says so;
+- a field the header names otherwise at the same bits takes the header's
+  name; the report lists each (`[[renamed]]`);
+- a register the header does not define is read-only, and has no API when
+  the device layout reserves its word (`uint32_t reserved_<offset>[n]`); a
+  peripheral without a header is read-only;
+- a register the header places at another offset than the SVD is an error
+  until the overlay corrects its `offset`; `add = true` builds a register
+  the SVD lacks from its header definition.
+
+A peripheral whose semantics the headers describe only in text (flags that
+a read clears or a write acknowledges in `R/W` fields, self-clearing bits)
+is stated in the overlay's `[[no-api]]` table with its reason and sources:
+none of its registers is rendered until a typed API exists.
+
+The SVD-only rules stay below the header's: a register with undeclared
+bits, a write-only field, overlapping fields, vendor modified-write values,
+a write constraint, a field without a snake-case name, or a raw interrupt
+status (`_RAW`) the header does not make write-one-to-clear is only read; a
+FIFO or data port by its name, a register not 32 bits wide, without fields,
+sharing a word or whose word the curated model describes is not rendered.
+
+`derivedFrom` peripherals take their base's registers, corrected. The
+chip's `model/strictness.toml` ([`StrictnessOverlay`]) also states what the
+headers do not, per register (`offset`, `add`, `access`, `reserved`,
+`read-side-effect`, `fifo`, `write-one-to-clear`, `raw-status-writable`)
+and per field (`rename`, `access`, `kind = "plain" | "write-trigger"`,
+`values`), and lists the interrupt sources the SVD does not. Every entry
+names existing vendor geometry and cites `esp-idf:<path>:<line>` (at the
+overlay's `esp-idf` pin, which must be the chip's pinned ESP-IDF),
+`esp-hal:<path>:<line>` (at its `esp-hal` pin) or `trm:<section>`. An
+`esp-idf:` citation is checked against the pinned file
+(`check_overlay`): a register definition line names the register at its
+offset, a field line the field (its words in order) with its bits and an
+access class that justifies the entry, a register union's reserved members
+the entry's `reserved`, an `interrupts.h` enumerator the source's number;
+`ETS_MAX_INTR_SOURCE`, the source count, is no source. A mismatch fails
+the generation. The module holds the chip's `Interrupt` enum, one partition
+`SocPeripherals` and its `Claims`, which a PAC root claims at once, and a
+`const` assertion that no vendor block lists a word of another typed
+block. The generated `registers/published/soc.report.toml` lists every
+renamed field and every register the pass narrowed, with its reasons.
+
+A typed block with an interrupt source implements
+`oer_mmio::InterruptSource` on its interrupt side (or on the whole owner
+of a block without sides).
+
 ## Direct register model
 
 `oer-registers-model` owns the portable register publication formats:

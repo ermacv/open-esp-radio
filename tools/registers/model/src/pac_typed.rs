@@ -194,6 +194,19 @@ impl PacApiPack {
             "// Typed register blocks over `oer-mmio`, rendered by `cargo registers`\n\
              // from the published SVD and the API policy; no `unsafe`, no raw write.\n\n",
         );
+        output.push_str(&self.render_typed_device(&device, &typed, libraries)?);
+        Ok(output)
+    }
+
+    /// The typed blocks of `typed` peripherals of `device` and their
+    /// partitions, after the operations were validated.
+    pub(crate) fn render_typed_device(
+        &self,
+        device: &Device,
+        typed: &BTreeSet<&str>,
+        libraries: &BTreeMap<String, SharedPeripheral>,
+    ) -> Result<String> {
+        let mut output = String::new();
         if let Some(name) = self.options.unexposed_peripherals.iter().find(|name| {
             !device
                 .peripherals
@@ -218,7 +231,7 @@ impl PacApiPack {
             .map(String::as_str)
             .collect::<BTreeSet<_>>();
         let mut blocks = BTreeMap::new();
-        for name in typed {
+        for &name in typed {
             let peripheral = device
                 .peripherals
                 .iter()
@@ -511,7 +524,7 @@ impl PacApiPack {
 
     /// Typed peripherals take only the transactions the typed backend
     /// renders; the affine W1C snapshot is every W1C register's own API.
-    fn validate_typed_operations(&self, typed: &BTreeSet<&str>) -> Result<()> {
+    pub(crate) fn validate_typed_operations(&self, typed: &BTreeSet<&str>) -> Result<()> {
         macro_rules! refuse {
             ($($operations:ident => $reason:literal),* $(,)?) => {
                 $(if let Some(operation) = self.$operations.iter().find(|operation| typed.contains(operation.peripheral.as_str())) {
@@ -1731,6 +1744,25 @@ impl<'a> TypedBlock<'a> {
                 output,
                 "impl<P: oer_mmio::Placement> {}<P> {{\n{body}}}\n",
                 view.name
+            );
+        }
+        if let Some(source) = policy
+            .interrupt_sources
+            .iter()
+            .find(|source| source.peripheral == self.peripheral.name)
+        {
+            // The handler holds the interrupt side of a divided block, or
+            // the whole block.
+            let holder = match self.split {
+                Some(_) => format!("{owner}{IRQ_SIDE}"),
+                None => owner.clone(),
+            };
+            let _ = writeln!(
+                output,
+                "impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for {holder}<P> {{\n\
+                 const SOURCE: u16 = {};\n\
+                 }}\n",
+                source.source
             );
         }
         if let Some(split) = self.split {

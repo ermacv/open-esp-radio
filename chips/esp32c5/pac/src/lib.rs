@@ -16,6 +16,9 @@ mod test_memory;
 #[cfg(test)]
 mod typed_register_tests;
 
+#[cfg(test)]
+mod soc_tests;
+
 // The generated capability catalog is intentionally broader than this crate's
 // restricted ownership facade. Reviewed leaves stay unreachable until an owner
 // transition exposes them.
@@ -24,6 +27,87 @@ mod typed_register_tests;
     reason = "generated capability catalog is wider than the restricted ownership facade"
 )]
 mod generated;
+
+/// Every peripheral of the vendor SVD the curated model does not describe,
+/// as typed register blocks with the chip's interrupt sources
+/// (`soc::Interrupt`); the PAC root claims them at once.
+pub use generated::soc;
+
+/// What the pinned ESP-IDF headers take away from the vendor SVD's API.
+///
+/// SOC_ETM's event status is write-one-to-clear (`soc_etm_reg.h:2297`): it is
+/// sampled and acknowledged,
+///
+/// ```
+/// use oer_esp32c5_pac::soc::soc_etm::SocEtm;
+/// fn acknowledge(etm: &mut SocEtm<oer_mmio::Host<'_>>) {
+///     let sample = etm.sample_evt_st0();
+///     etm.acknowledge_evt_st0(sample);
+/// }
+/// ```
+///
+/// never modified:
+///
+/// ```compile_fail
+/// use oer_esp32c5_pac::soc::soc_etm::SocEtm;
+/// fn modify(etm: &mut SocEtm<oer_mmio::Host<'_>>) {
+///     etm.modify_evt_st0(|_| {});
+/// }
+/// ```
+///
+/// PCR.CTRL_CLK_OUT_EN bit 6 is the 480 MHz output (`pcr_reg.h:2163`),
+///
+/// ```
+/// use oer_esp32c5_pac::soc::pcr::Pcr;
+/// fn enable(pcr: &mut Pcr<oer_mmio::Host<'_>>) {
+///     pcr.modify_ctrl_clk_out_en(|clocks| {
+///         clocks.set_clk_480m_oen(true);
+///     });
+/// }
+/// ```
+///
+/// not the SVD's 320 MHz one,
+///
+/// ```compile_fail
+/// use oer_esp32c5_pac::soc::pcr::Pcr;
+/// fn enable(pcr: &mut Pcr<oer_mmio::Host<'_>>) {
+///     pcr.modify_ctrl_clk_out_en(|clocks| {
+///         clocks.set_clk_320m_oen(true);
+///     });
+/// }
+/// ```
+///
+/// and its bits 7..9 are reserved (`pcr_reg.h:2170`, `:2177`, `:2184`):
+///
+/// ```compile_fail
+/// use oer_esp32c5_pac::soc::pcr::Pcr;
+/// fn enable(pcr: &mut Pcr<oer_mmio::Host<'_>>) {
+///     pcr.modify_ctrl_clk_out_en(|clocks| {
+///         clocks.set_clk_adc_inf_oen(true);
+///     });
+/// }
+/// ```
+///
+/// TIMG has one hardware timer (`timer_group_struct.h:607-608`): its first
+/// is read,
+///
+/// ```
+/// use oer_esp32c5_pac::soc::timg0::Timg0;
+/// fn config(timg: &Timg0<oer_mmio::Host<'_>>) -> bool {
+///     timg.read_t0config().t0_en()
+/// }
+/// ```
+///
+/// the vendor SVD's second has no API:
+///
+/// ```compile_fail
+/// use oer_esp32c5_pac::soc::timg0::Timg0;
+/// fn alarm(timg: &Timg0<oer_mmio::Host<'_>>) {
+///     let _ = timg.read_t1alarmlo();
+/// }
+/// ```
+#[cfg(doctest)]
+pub struct SocHeaderSemantics;
 
 pub(crate) mod ieee802154;
 pub(crate) mod modem;

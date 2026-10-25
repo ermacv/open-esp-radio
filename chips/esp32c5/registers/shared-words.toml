@@ -17,6 +17,7 @@
 #   shared-lock           both writers store only under the named lock
 #   disjoint-lifecycle    esp-hal stores only where no radio owner exists
 #   unreached-esp-hal-path  esp-hal's storing function has no caller here
+#   unreached-radio-writer  the radio PAC's writer has no caller; esp-hal alone writes
 #   whole-word-stores     both sides store whole words, no read-modify-write
 #   radio-reads-only      the radio view is read-only in the publication and no
 #                         API transaction stores to it (checked); esp-hal alone writes
@@ -146,24 +147,24 @@ address = 0x20801000
 words = 48
 radio = "CLIC.CTRL%s (typed block)"
 esp_hal = "CLIC.int_ie, int_ip, int_attr and int_ctl in init, init_vectoring and the CpuInterrupt methods (interrupt/riscv.rs, interrupt/riscv/clic.rs)"
-coordination = "radio-reads-only"
-reason = "The CLIC view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words. esp-hal is the only writer: init_vectoring, from esp_hal::init, gives each level its line; the CpuInterrupt and enable_direct writers have no caller in our images (chip.toml [interrupts] level-writers pins the level writers; esp-hal 1f646c5)."
+coordination = "unreached-radio-writer"
+reason = "The CLIC view is writable in the publication, but nothing calls the typed block's writers and no API transaction stores to the words. esp-hal is the only writer: init_vectoring, from esp_hal::init, gives each level its line; the CpuInterrupt and enable_direct writers have no caller in our images (chip.toml [interrupts] level-writers pins the level writers; esp-hal 1f646c5)."
 
 [[word]]
 address = 0x60010000
 words = 12
 radio = "INTERRUPT_CORE0.MAP_LOW%s (typed block)"
 esp_hal = "INTERRUPT_CORE0.core_0_intr_map in map_raw (interrupt/mod.rs)"
-coordination = "radio-reads-only"
-reason = "The interrupt-matrix view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
+coordination = "unreached-radio-writer"
+reason = "The interrupt-matrix view is writable in the publication, but nothing calls the typed block's writers and no API transaction stores to the words. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
 
 [[word]]
 address = 0x60010034
 words = 71
 radio = "INTERRUPT_CORE0.MAP_HIGH%s (typed block)"
 esp_hal = "INTERRUPT_CORE0.core_0_intr_map in map_raw (interrupt/mod.rs)"
-coordination = "radio-reads-only"
-reason = "The interrupt-matrix view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
+coordination = "unreached-radio-writer"
+reason = "The interrupt-matrix view is writable in the publication, but nothing calls the typed block's writers and no API transaction stores to the words. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
 
 [[word]]
 address = 0x6000a000
@@ -350,3 +351,10 @@ radio = "USB_SERIAL_JTAG_PADS.CONF0 (typed block)"
 esp_hal = "USB_DEVICE.conf0 in UsbPadControl::disconnect (usb/usb_serial_jtag.rs) and AnyPin::disable_usb_pads (gpio/mod.rs)"
 coordination = "disjoint-lifecycle"
 reason = "esp-hal 1f646c5 stores it only in its USB Serial/JTAG driver (usb/usb_serial_jtag.rs), whose every constructor takes the USB_DEVICE singleton. In the HIL images take_usb_serial_jtag consumes USB_DEVICE before the console's typed owner exists, so no esp-hal driver of the block is ever made; the applications that still run esp-hal's blocking console make no typed owner, as none calls the HAL's early writer, and the bootstrap's early writer runs in an image without esp-hal's driver. esp-hal's GPIO layer also clears the pad enable and pulls in AnyPin::disable_usb_pads, but only for the USB D- and D+ pins when one is set up as a GPIO or routed to a signal; no image sets those pins up, as they carry the console."
+
+[[word]]
+address = 0x20800000
+radio = "CLIC.INT_CONFIG (typed block)"
+esp_hal = "CLIC.int_config in init, from init_vectoring (interrupt/riscv/clic.rs, interrupt/riscv.rs)"
+coordination = "unreached-radio-writer"
+reason = "Nothing calls the typed block's writer. esp-hal's init_vectoring, through clic::init, from esp_hal::init, is the only runtime writer of the level-bit count (esp-hal 1f646c5)."
