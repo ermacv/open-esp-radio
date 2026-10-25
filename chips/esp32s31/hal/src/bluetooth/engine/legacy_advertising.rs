@@ -82,19 +82,19 @@ impl LinkStateStorage {
         self.layout
             .scheduler_head()
             .write(BleLinkStateSchedulerHead::from_bits(
-                first_item.controller_address().address(),
+                first_item.controller_address(),
             ));
         self.layout
             .rx_head()
             .write(BleLinkStateRxHead::from_bits(0));
         self.layout.tx_head().write(BleLinkStateTxHead::from_bits(
-            tx_header.controller_address().address(),
+            tx_header.controller_address(),
         ));
         self.layout
             .rx_tail()
             .write(BleLinkStateRxTail::from_bits(0));
         self.layout.tx_tail().write(BleLinkStateTxTail::from_bits(
-            tx_header.controller_address().address(),
+            tx_header.controller_address(),
         ));
         self.layout
             .rx_reserve()
@@ -154,7 +154,7 @@ impl LinkStateStorage {
         self.layout
             .scheduler_head()
             .write(BleLinkStateSchedulerHead::from_bits(
-                first_item.map_or(0, |item| item.controller_address().address()),
+                first_item.map_or(0, |item| item.controller_address()),
             ));
     }
 }
@@ -447,9 +447,7 @@ impl<'pool, 'epoch, const N: usize> LegacyAdvertisingPool<'pool, 'epoch, N> {
         let LegacyAdvertisingState::Reset(length) = *cpu.state else {
             return Err(LegacyAdvertisingError::State);
         };
-        if cpu.graph.link_state.scheduler_head()
-            != cpu.binding.items[0].controller_address().address()
-        {
+        if cpu.graph.link_state.scheduler_head() != cpu.binding.items[0].controller_address() {
             return Err(LegacyAdvertisingError::SchedulerHeadMismatch);
         }
         let mut event = LegacyAdvertisingEvent {

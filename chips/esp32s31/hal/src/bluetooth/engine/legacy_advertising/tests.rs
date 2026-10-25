@@ -183,7 +183,7 @@ fn finishing_an_event_restores_the_allocation_image() {
     let (graph, binding, _) = pool.shared(&instance).unwrap();
     assert_eq!(
         graph.link_state.scheduler_head(),
-        binding.items[0].controller_address().address()
+        binding.items[0].controller_address()
     );
 }
 

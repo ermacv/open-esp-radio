@@ -21,11 +21,14 @@
 //! The domain is not a coexistence grant: it serializes register access, not
 //! air time.
 
+mod btbb;
+
 use oer_esp32s31_pac::{
-    BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, BluetoothTaskRegisters, RadioPhyRegisters,
+    BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, RadioPhyRegisters,
     SharedRadioRegisters, WifiRadioRegisters,
 };
 
+use crate::bluetooth::registers::BluetoothTaskRegisters;
 pub use crate::clock::{
     BluetoothClient, CommonPower, CommonPowerExitFailure, CommonRadioPowerError, Ieee802154Client,
     RadioClient, RadioClientKind, WifiClient,
@@ -694,7 +697,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
             return Err(BtbbError::Stale);
         }
         let acquired = if state.btbb_clients == 0 {
-            state.registers.initialize_btbb_v2_arg_one(gain.value);
+            btbb::initialize_btbb_v2_arg_one(&mut state.registers, gain.value);
             BtbbAcquired::Initialized
         } else {
             BtbbAcquired::Joined

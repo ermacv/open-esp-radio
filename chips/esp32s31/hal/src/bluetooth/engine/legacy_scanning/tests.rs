@@ -99,7 +99,7 @@ fn the_reset_joins_the_scanning_chain() {
     // The free chain survives the reset.
     assert_eq!(
         graph.link_state.free_head(),
-        binding.items[2].controller_address().address()
+        binding.items[2].controller_address()
     );
 }
 
@@ -129,7 +129,7 @@ fn a_window_takes_the_free_head_and_finishing_returns_it() {
         assert_eq!(graph.items[2].header().hardware_next_image(), 0);
         assert_eq!(
             graph.link_state.free_head(),
-            binding.items[1].controller_address().address()
+            binding.items[1].controller_address()
         );
         assert_eq!(graph.link_state.image().window_ticks(), 0x5555);
         // The sequence starts one lead after the item and lasts its window;
@@ -172,7 +172,7 @@ fn a_window_takes_the_free_head_and_finishing_returns_it() {
     let (graph, binding, _) = pool.shared(&instance).unwrap();
     assert_eq!(
         graph.link_state.free_head(),
-        binding.items[2].controller_address().address()
+        binding.items[2].controller_address()
     );
     assert_eq!(
         graph.items[2].header().hardware_next_image(),
@@ -240,14 +240,8 @@ fn only_an_active_scanner_queues_its_scan_request() {
     let layout = &graph.link_state.layout;
     let header = binding.scan_request_header;
     assert_eq!(layout.tx_path().read().header(), header.compressed_image());
-    assert_eq!(
-        layout.tx_head().read().bits(),
-        header.controller_address().address()
-    );
-    assert_eq!(
-        layout.tx_tail().read().bits(),
-        header.controller_address().address()
-    );
+    assert_eq!(layout.tx_head().read().bits(), header.controller_address());
+    assert_eq!(layout.tx_tail().read().bits(), header.controller_address());
     // SCAN_REQ with a 12-octet payload the Controller fills.
     assert_eq!(graph.scan_request_packet.pdu_header(), [0x03, 12]);
 }

@@ -297,7 +297,7 @@ fn an_unselected_low_power_clock_cannot_be_deselected() {
 #[test]
 fn a_scanner_starts_only_on_the_scanning_list_of_its_own_epoch() {
     use super::{RxMemoryListPublished, ScanStartError};
-    use oer_esp32s31_pac::BluetoothMemoryListSelector;
+    use crate::bluetooth::BluetoothMemoryListSelector;
 
     let (_shared, _partitions, clocked) = clocked();
     let (task, interrupts) = clocked.separate_interrupt_owner();

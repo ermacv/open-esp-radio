@@ -6,7 +6,7 @@
 //! in-flight state beside the unique task owner, so cancelling a higher async
 //! worker cannot accidentally authorize a second request.
 
-use oer_esp32s31_pac::{BluetoothControllerLatchedTime, BluetoothTaskRegisters};
+use crate::bluetooth::registers::{BluetoothControllerLatchedTime, BluetoothTaskRegisters};
 
 /// A controller-time transaction has not yet been drained by software.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

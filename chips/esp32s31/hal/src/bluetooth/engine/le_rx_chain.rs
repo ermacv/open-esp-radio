@@ -21,7 +21,6 @@ use core::{marker::PhantomPinned, pin::Pin};
 
 use crate::bluetooth::BluetoothControllerReset;
 
-use crate::types::BluetoothControllerSramAddress;
 use pin_project::pin_project;
 
 use crate::bluetooth::engine::{
@@ -205,7 +204,7 @@ impl<const PACKETS: usize> LeRxRing<PACKETS> {
     }
 
     fn address(&self, header: Header) -> u32 {
-        self.link(header).controller_address().address()
+        self.link(header).controller_address()
     }
 
     fn link(&self, header: Header) -> ControllerSramLinkAddress {
@@ -381,7 +380,7 @@ impl<const PACKETS: usize> LeRxRingView<'_, PACKETS> {
             node.header.install(
                 self.ring.packets[index],
                 self.ring.headers.get(index + 1).copied(),
-                Some(previous.controller_address()),
+                Some(previous),
                 false,
             );
         }
@@ -558,7 +557,7 @@ impl<const PACKETS: usize> LeRxChain<PACKETS> {
 
     /// Header to publish as the class's current RX header, once, before any
     /// event of the class runs.
-    pub(crate) const fn initial_cursor(&self) -> BluetoothControllerSramAddress {
+    pub(crate) const fn initial_cursor(&self) -> u32 {
         self.ring.cursor().controller_address()
     }
 
@@ -574,7 +573,7 @@ impl<const PACKETS: usize> LeRxChain<PACKETS> {
             crate::bluetooth::RxChainHead::new(
                 self.class.selector(),
                 crate::bluetooth::engine::layout_reference::controller_reference(
-                    self.initial_cursor().address(),
+                    self.initial_cursor(),
                 ),
                 matches!(self.class, RxMemoryListClass::Scanning),
             )

@@ -24,7 +24,9 @@ pub(crate) struct WifiRadioPeripheralOwners {
 /// The HAL decides which protocol route currently holds it.
 #[must_use = "the shared PHY owner must remain inside its active radio route"]
 pub struct RadioPhyRegisters {
-    pub(crate) peripherals: generated::peripheral_ownership::RadioPhyPeripherals,
+    /// The radio PHY blocks; the HAL's BTBB baseband initialization writes
+    /// two of them.
+    pub peripherals: generated::peripheral_ownership::RadioPhyPeripherals,
     /// The PHY's copy of the MAC local-time read, for its SDM deadline.
     pub(crate) mac_local_time: MacLocalTime,
 }
@@ -75,26 +77,23 @@ impl MacLocalTime {
 /// arbiter serializes it between concurrently running routes.
 #[must_use = "the shared radio owner must remain inside its radio domain"]
 pub struct SharedRadioRegisters {
-    pub(crate) radio_phy: RadioPhyRegisters,
+    /// The radio PHY partition.
+    pub radio_phy: RadioPhyRegisters,
     pub(crate) coexistence: generated::peripheral_ownership::CoexistencePeripherals,
-    pub(crate) shared_radio: SharedRadioBlocks,
+    /// The shared radio blocks, which the HAL's BTBB baseband
+    /// initialization writes.
+    pub shared_radio: SharedRadioBlocks,
 }
 
 /// The shared radio partition's blocks, with the shared baseband less the
 /// receive-information read IEEE 802.15.4 holds ([`Ieee802154Partition`]).
-pub(crate) struct SharedRadioBlocks {
-    pub(crate) bt_v3_2_baseband: generated::bt_v3_2_baseband::BtV3_2BasebandRest,
-    pub(crate) shared_radio_init_control:
-        generated::shared_radio_init_control::SharedRadioInitControl,
-    #[expect(
-        dead_code,
-        reason = "the partition holds the shared reset word; no reviewed operation reaches it"
-    )]
-    pub(crate) shared_baseband_reset_idle_status:
+pub struct SharedRadioBlocks {
+    pub bt_v3_2_baseband: generated::bt_v3_2_baseband::BtV3_2BasebandRest,
+    pub shared_radio_init_control: generated::shared_radio_init_control::SharedRadioInitControl,
+    pub shared_baseband_reset_idle_status:
         generated::shared_baseband_reset_idle_status::SharedBasebandResetIdleStatus,
-    pub(crate) shared_baseband_tx_timing:
-        generated::shared_baseband_tx_timing::SharedBasebandTxTiming,
-    pub(crate) zbbb_radio_control: generated::zbbb_radio_control::ZbbbRadioControl,
+    pub shared_baseband_tx_timing: generated::shared_baseband_tx_timing::SharedBasebandTxTiming,
+    pub zbbb_radio_control: generated::zbbb_radio_control::ZbbbRadioControl,
 }
 
 /// Partitions consumed by the shared radio owner.
@@ -190,11 +189,28 @@ pub struct WifiRxDmaRegisters {
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct CoexistencePartition(generated::peripheral_ownership::CoexistencePeripherals);
 
-/// Opaque Bluetooth controller register partition.
+/// The Bluetooth controller register partition: the generated parts its HAL
+/// owns.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct BluetoothControllerPartition {
-    bluetooth: generated::peripheral_ownership::BluetoothControllerPeripherals,
-    etm: crate::modem::etm::BluetoothPhyEtmChannel,
+    /// The controller, baseband, accelerator and feature blocks.
+    pub controller: generated::peripheral_ownership::BluetoothControllerPeripherals,
+    /// Modem ETM channel two, which BLE PHY initialization programs: its
+    /// event and task words and its bits of the write-trigger set and clear
+    /// words.
+    pub phy_etm: generated::modem_etm::ModemEtmBluetoothPhy,
+}
+
+/// The Bluetooth modem low-power timer partition, transferred independently
+/// of the controller to the source-127 handler: the generated parts its HAL
+/// owns.
+#[must_use = "dropping a radio partition permanently loses its register authority"]
+pub struct BluetoothModemLpTimerPartition {
+    /// The runtime-control block of the timer.
+    pub runtime_control: generated::btdm_runtime_control::BtdmRuntimeControl,
+    /// Modem ETM channels four through seven, programmed by the low-power
+    /// component.
+    pub etm: generated::modem_etm::ModemEtmBluetooth,
 }
 
 /// Opaque shared-baseband register partition.
@@ -287,8 +303,8 @@ pub struct RadioPartitions {
     pub radio_phy: RadioPhyRegisters,
     pub coexistence: CoexistencePartition,
     pub bluetooth: BluetoothControllerPartition,
-    pub bluetooth_modem_lp_timer: BluetoothModemLpTimerRegisters,
-    pub bluetooth_interrupts: BluetoothInterruptSetup,
+    pub bluetooth_modem_lp_timer: BluetoothModemLpTimerPartition,
+    pub bluetooth_interrupts: generated::peripheral_ownership::BluetoothInterruptPeripherals,
     pub shared_radio: SharedRadioPartition,
     pub ieee802154: Ieee802154Partition,
 }
@@ -385,16 +401,14 @@ impl RadioPartitions {
             },
             coexistence: CoexistencePartition(coexistence),
             bluetooth: BluetoothControllerPartition {
-                bluetooth,
-                etm: bluetooth_phy_etm,
+                controller: bluetooth,
+                phy_etm: bluetooth_phy_etm,
             },
-            bluetooth_modem_lp_timer: BluetoothModemLpTimerRegisters::new(
-                bluetooth_modem_lp_timer,
-                bluetooth_etm,
-            ),
-            bluetooth_interrupts: BluetoothInterruptSetup {
-                peripherals: bluetooth_interrupts,
+            bluetooth_modem_lp_timer: BluetoothModemLpTimerPartition {
+                runtime_control: bluetooth_modem_lp_timer.btdm_runtime_control,
+                etm: bluetooth_etm,
             },
+            bluetooth_interrupts,
             shared_radio: SharedRadioPartition(shared_radio),
             ieee802154: Ieee802154Partition {
                 mac: ieee802154.ieee802154_mac,
@@ -814,88 +828,6 @@ impl WifiRadioRegisters {
         // The host-only catalog is limited to the custom modem/radio aperture.
         matches!(address, 0x2010_0000..=0x2010_ffff)
     }
-}
-
-/// Ordinary task-side owner of the Bluetooth controller partition.
-///
-/// It contains no shared radio partition: a transaction that also touches the
-/// radio PHY, coexistence or shared baseband borrows [`SharedRadioRegisters`]
-/// explicitly. Methods on this owner are individually reviewed register
-/// transactions; possessing it does not itself prove that common PHY, BTBB or
-/// controller lifecycle prerequisites have run.
-#[must_use = "the Bluetooth task owner must be reunited before release"]
-pub struct BluetoothTaskRegisters {
-    pub(crate) bluetooth: generated::peripheral_ownership::BluetoothControllerPeripherals,
-    /// Modem ETM channel two, which BLE PHY initialization programs.
-    pub(crate) etm: crate::modem::etm::BluetoothPhyEtmChannel,
-}
-
-impl BluetoothTaskRegisters {
-    /// Assemble the Bluetooth task register set. This performs no MMIO.
-    pub fn new(bluetooth: BluetoothControllerPartition) -> Self {
-        let BluetoothControllerPartition { bluetooth, etm } = bluetooth;
-        Self { bluetooth, etm }
-    }
-
-    /// Return the partition. This performs no MMIO.
-    pub fn into_partition(self) -> BluetoothControllerPartition {
-        BluetoothControllerPartition {
-            bluetooth: self.bluetooth,
-            etm: self.etm,
-        }
-    }
-
-    #[doc(hidden)]
-    pub fn bluetooth_shared_clock_observation(
-        &self,
-        shared: &SharedRadioRegisters,
-    ) -> (
-        SharedModemClockObservation,
-        BluetoothLowPowerClockObservation,
-    ) {
-        (
-            shared.radio_phy.shared_modem_clock_observation(),
-            shared.radio_phy.bluetooth_low_power_clock_observation(),
-        )
-    }
-
-    /// Reset the Bluetooth controller domains and fence the reset edge.
-    #[doc(hidden)]
-    pub fn reset_controller_domains(&mut self, shared: &mut SharedRadioRegisters) {
-        shared.radio_phy.reset_bluetooth_controller_domains();
-        device_fence();
-    }
-
-    /// Whether the Bluetooth controller domain resets read back released.
-    pub fn controller_resets_released(&self, shared: &SharedRadioRegisters) -> bool {
-        self.controller_clock_observation(shared)
-            .controller_resets_released
-    }
-
-    /// Read back the Bluetooth controller and APB clock sets and resets.
-    pub fn controller_clock_observation(
-        &self,
-        shared: &SharedRadioRegisters,
-    ) -> ModemSysconBluetoothObservation {
-        shared.radio_phy.bluetooth_clock_observation()
-    }
-}
-
-/// Inactive owner of the reviewed Bluetooth interrupt partition.
-#[must_use = "the Bluetooth interrupt setup must remain paired with its task owner"]
-pub struct BluetoothInterruptSetup {
-    pub(crate) peripherals: generated::peripheral_ownership::BluetoothInterruptPeripherals,
-}
-
-/// Bluetooth interrupt-bank capability staged for a future powered ISR epoch.
-///
-/// [`BluetoothInterruptOutputPrepared::stage_for_cpu_routes`] constructs this
-/// value only after the reviewed baseline masks and controller output have
-/// been prepared. The platform must retain it in stable storage shared by the
-/// primary and NRT handlers before enabling either CPU route.
-#[must_use = "the Bluetooth interrupt owner must be deactivated and reunited"]
-pub struct BluetoothInterruptRegisters {
-    pub(crate) peripherals: generated::peripheral_ownership::BluetoothInterruptPeripherals,
 }
 
 #[cfg(test)]

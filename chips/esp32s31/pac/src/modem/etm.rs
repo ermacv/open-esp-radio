@@ -14,55 +14,21 @@
 
 use crate::generated::modem_etm::{ModemEtmBluetooth, ModemEtmBluetoothPhy, ModemEtmIeee802154};
 
-/// ETM channel two, owned by the Bluetooth controller.
-///
-/// The pinned BLE PHY initialization routes modem event 8 to task 20 on a
-/// channel it reserves. The vendor library uses channel zero, which
-/// IEEE 802.15.4 owns here; the same route runs on this Bluetooth channel,
-/// and Direct Test Mode disables and restores it as the vendor does its
-/// channel zero.
-#[must_use = "dropping the ETM channel loses its register authority"]
-pub struct BluetoothPhyEtmChannel {
-    registers: ModemEtmBluetoothPhy,
-}
-
-impl BluetoothPhyEtmChannel {
-    /// Route event 8 to task 20 on channel two and enable the channel.
-    pub(crate) fn route_and_enable(&mut self) {
-        self.registers.route_bluetooth_phy_etm_channel2();
-        self.registers.enable_bluetooth_phy_etm_channel2();
-    }
-
-    /// Disable channel two, as a Direct Test Mode event without CTE
-    /// disables the vendor channel carrying this route.
-    pub(crate) fn disable(&mut self) {
-        self.registers.disable_bluetooth_phy_etm_channel2();
-    }
-}
-
-/// ETM channels four through seven, owned by the Bluetooth runtime.
-#[must_use = "dropping the ETM channels loses their register authority"]
-pub struct BluetoothEtmChannels {
-    pub(crate) registers: ModemEtmBluetooth,
-}
-
 /// Divide the unique modem ETM owner into the three channel capabilities,
-/// which are never reunited. IEEE 802.15.4's part is the generated one: its
-/// HAL drives it.
+/// which are never reunited. Every part is the generated one: the HAL drives
+/// IEEE 802.15.4's and the Bluetooth ones.
 pub(crate) fn split(
     peripherals: crate::generated::peripheral_ownership::ModemEtmPeripherals,
 ) -> (
     ModemEtmIeee802154,
-    BluetoothPhyEtmChannel,
-    BluetoothEtmChannels,
+    ModemEtmBluetoothPhy,
+    ModemEtmBluetooth,
 ) {
     let crate::generated::peripheral_ownership::ModemEtmPeripherals { modem_etm } = peripherals;
     let (ieee802154, phy, bluetooth) = modem_etm.divide();
     (
         ieee802154,
-        BluetoothPhyEtmChannel { registers: phy },
-        BluetoothEtmChannels {
-            registers: bluetooth,
-        },
+        phy,
+        bluetooth,
     )
 }

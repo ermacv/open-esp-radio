@@ -201,10 +201,10 @@ impl LinkStateStorage {
         crate::bluetooth::engine::shared_layout::clear_link_state(&self.layout);
         self.set_scheduler_head(Some(binding.items[0]));
         self.layout.tx_head().write(BleLinkStateTxHead::from_bits(
-            binding.adv_ind_header.controller_address().address(),
+            binding.adv_ind_header.controller_address(),
         ));
         self.layout.tx_tail().write(BleLinkStateTxTail::from_bits(
-            binding.scan_response_header.controller_address().address(),
+            binding.scan_response_header.controller_address(),
         ));
         self.layout
             .sequence_policy()
@@ -261,7 +261,7 @@ impl LinkStateStorage {
         self.layout
             .scheduler_head()
             .write(BleLinkStateSchedulerHead::from_bits(
-                item.map_or(0, |item| item.controller_address().address()),
+                item.map_or(0, |item| item.controller_address()),
             ));
     }
 
@@ -578,7 +578,7 @@ impl<'pool, 'epoch, const N: usize> LegacyConnectableAdvertisingPool<'pool, 'epo
                 .layout
                 .tx_tail()
                 .write(BleLinkStateTxTail::from_bits(
-                    cpu.binding.adv_ind_header.controller_address().address(),
+                    cpu.binding.adv_ind_header.controller_address(),
                 ));
         }
         graph.link_state.prepare_profile(
@@ -612,8 +612,7 @@ impl<'pool, 'epoch, const N: usize> LegacyConnectableAdvertisingPool<'pool, 'epo
             return Err(LegacyConnectableAdvertisingError::State);
         };
         let graph = &cpu.graph;
-        if graph.link_state.scheduler_head() != cpu.binding.items[0].controller_address().address()
-        {
+        if graph.link_state.scheduler_head() != cpu.binding.items[0].controller_address() {
             return Err(LegacyConnectableAdvertisingError::SchedulerHeadMismatch);
         }
         let mut event = LegacyAdvertisingEvent::empty(image.items().len() as u8);

@@ -48,7 +48,7 @@ fn btbb_joins_an_initialized_baseband_without_register_access() {
         ieee802154,
         ..
     } = RadioPartitions::for_host_test();
-    let bluetooth = oer_esp32s31_pac::BluetoothTaskRegisters::new(bluetooth);
+    let bluetooth = crate::bluetooth::registers::BluetoothTaskRegisters::new(bluetooth);
     let (ieee802154, _interrupts) = crate::ieee802154::mac::split(ieee802154);
     let mut radio = radio_domain();
     let domain = &mut radio;

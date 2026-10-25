@@ -113,11 +113,11 @@ fn preparation_chains_both_pdus_and_joins_the_non_scanning_chain() {
     );
     assert_eq!(
         layout.tx_head().read().bits(),
-        binding.adv_ind_header.controller_address().address()
+        binding.adv_ind_header.controller_address()
     );
     assert_eq!(
         layout.tx_tail().read().bits(),
-        binding.scan_response_header.controller_address().address()
+        binding.scan_response_header.controller_address()
     );
     let LegacyConnectableAdvertisingState::Prepared(prepared) = *state else {
         panic!("the instance holds its advertisement")
@@ -158,7 +158,7 @@ fn a_set_without_scan_response_transmits_one_node_and_still_receives() {
         assert_eq!(layout.scan_response().read().header(), 0);
         assert_eq!(
             layout.tx_tail().read().bits(),
-            binding.adv_ind_header.controller_address().address()
+            binding.adv_ind_header.controller_address()
         );
         // Receptions still join the non-scanning chain.
         assert_eq!(layout.rx_list().read().class(), 2);
@@ -175,7 +175,7 @@ fn a_set_without_scan_response_transmits_one_node_and_still_receives() {
     );
     assert_eq!(
         graph.link_state.layout.tx_tail().read().bits(),
-        binding.scan_response_header.controller_address().address()
+        binding.scan_response_header.controller_address()
     );
 }
 
@@ -260,7 +260,7 @@ fn an_event_lowers_one_item_per_channel_and_finishing_restores_them() {
     let (graph, binding, _) = pool.shared(&instance).unwrap();
     assert_eq!(
         graph.link_state.scheduler_head(),
-        binding.items[0].controller_address().address()
+        binding.items[0].controller_address()
     );
     assert!(
         graph

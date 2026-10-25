@@ -95,7 +95,7 @@ impl LinkStateStorage {
         self.layout
             .scheduler_head()
             .write(BleLinkStateSchedulerHead::from_bits(
-                head.map_or(0, |head| head.controller_address().address()),
+                head.map_or(0, |head| head.controller_address()),
             ));
     }
 
@@ -235,7 +235,7 @@ impl LegacyScanBinding {
     fn item_at(&self, address: u32) -> Option<usize> {
         self.items
             .iter()
-            .position(|item| item.controller_address().address() == address)
+            .position(|item| item.controller_address() == address)
     }
 }
 
@@ -418,12 +418,12 @@ impl<'pool, 'epoch, const N: usize> LegacyScanPool<'pool, 'epoch, N> {
                     .read()
                     .with_header_from(BleLinkStateTxPath::from_bits(header.compressed_image())),
             );
-            layout.tx_head().write(BleLinkStateTxHead::from_bits(
-                header.controller_address().address(),
-            ));
-            layout.tx_tail().write(BleLinkStateTxTail::from_bits(
-                header.controller_address().address(),
-            ));
+            layout
+                .tx_head()
+                .write(BleLinkStateTxHead::from_bits(header.controller_address()));
+            layout
+                .tx_tail()
+                .write(BleLinkStateTxTail::from_bits(header.controller_address()));
         }
         *cpu.state = LegacyScanState::Reset { event: None };
         Ok(())

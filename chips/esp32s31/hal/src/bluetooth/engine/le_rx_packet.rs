@@ -8,8 +8,6 @@
 
 use crate::bluetooth::engine::sram_link::ControllerSramLinkAddress;
 
-use crate::types::BluetoothControllerSramAddress;
-
 use crate::bluetooth::engine::rx_packet_bytes::{RxPacketBytes, result_not_produced};
 use crate::bluetooth::engine::shared_layout::BufferHeaderImage;
 use crate::layouts::*;
@@ -178,7 +176,7 @@ impl LeRxBufferHeaderStorage {
         &self,
         packet: LeRxPacketAddress,
         successor: Option<ControllerSramLinkAddress>,
-        predecessor: Option<BluetoothControllerSramAddress>,
+        predecessor: Option<ControllerSramLinkAddress>,
         rotates_into_successor: bool,
     ) {
         BufferHeaderImage {
@@ -190,7 +188,7 @@ impl LeRxBufferHeaderStorage {
                 .expect("the placed RX buffer address is encodable"),
             allocation: BleBufferHeaderAllocation::ZERO.with_terminal(rotates_into_successor),
             previous: BleBufferHeaderPrevious::from_bits(
-                predecessor.map_or(0, BluetoothControllerSramAddress::address),
+                predecessor.map_or(0, ControllerSramLinkAddress::controller_address),
             ),
             ..RX_HEADER
         }

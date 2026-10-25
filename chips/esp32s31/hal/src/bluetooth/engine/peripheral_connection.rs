@@ -89,7 +89,7 @@ impl LinkStateStorage {
     fn initialize(&self, binding: &PeripheralConnectionBinding) {
         crate::bluetooth::engine::shared_layout::clear_link_state(&self.layout);
         self.set_scheduler_head(binding.items[EVENT_ITEM]);
-        let sentinel = binding.tx_sentinel.controller_address().address();
+        let sentinel = binding.tx_sentinel.controller_address();
         self.layout
             .tx_head()
             .write(BleLinkStateTxHead::from_bits(sentinel));
@@ -102,7 +102,7 @@ impl LinkStateStorage {
         self.layout
             .scheduler_head()
             .write(BleLinkStateSchedulerHead::from_bits(
-                head.controller_address().address(),
+                head.controller_address(),
             ));
     }
 
@@ -795,7 +795,7 @@ impl<'pool, 'epoch, const N: usize> PeripheralConnectionPool<'pool, 'epoch, N> {
             .layout
             .tx_tail()
             .write(BleLinkStateTxTail::from_bits(
-                next_address.controller_address().address(),
+                next_address.controller_address(),
             ));
         cpu.state.tx_pending = true;
         Ok(true)
@@ -829,9 +829,7 @@ impl<'pool, 'epoch, const N: usize> PeripheralConnectionPool<'pool, 'epoch, N> {
             .link_state
             .layout
             .tx_head()
-            .write(BleLinkStateTxHead::from_bits(
-                address.controller_address().address(),
-            ));
+            .write(BleLinkStateTxHead::from_bits(address.controller_address()));
         cpu.state.tx_current_second = !cpu.state.tx_current_second;
         cpu.state.tx_pending = false;
         Ok(true)

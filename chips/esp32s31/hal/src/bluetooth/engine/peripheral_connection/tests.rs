@@ -176,7 +176,7 @@ fn the_first_event_uses_the_private_chain_and_takes_the_free_head() {
     assert_eq!(layout.rx_head().read().bits(), rx.snapshot().0);
     assert_eq!(
         layout.scheduler_head().read().bits(),
-        binding.items[0].controller_address().address()
+        binding.items[0].controller_address()
     );
     let header = graph.items[EVENT_ITEM].header();
     assert_eq!(header.hardware_next_image(), 0);
@@ -247,7 +247,7 @@ fn finishing_reports_the_capture_and_returns_the_item() {
     let (graph, binding, _) = pool.shared(&instance).unwrap();
     assert_eq!(
         graph.link_state.layout.scheduler_head().read().bits(),
-        binding.items[EVENT_ITEM].controller_address().address()
+        binding.items[EVENT_ITEM].controller_address()
     );
     assert_eq!(
         graph.items[EVENT_ITEM].header().hardware_next_image(),
@@ -407,7 +407,7 @@ fn release_returns_a_pristine_instance() {
     let (graph, binding, _) = pool.shared(&instance).unwrap();
     assert_eq!(
         graph.link_state.layout.scheduler_head().read().bits(),
-        binding.items[EVENT_ITEM].controller_address().address()
+        binding.items[EVENT_ITEM].controller_address()
     );
 }
 

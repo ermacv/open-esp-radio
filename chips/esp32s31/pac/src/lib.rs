@@ -5,6 +5,9 @@
 extern crate std;
 
 #[cfg(test)]
+mod bluetooth_typed_register_tests;
+
+#[cfg(test)]
 mod soc_tests;
 
 #[cfg(test)]
@@ -106,76 +109,24 @@ pub use phy::table_memory::{pbus_memory_parameter_002_data, pbus_memory_paramete
 
 pub use baseband::{RxDcoControlField, TxDcPwdetFields, TxIqToneControlFields};
 
-pub use bluetooth::{
-    controller::{
-        init::{
-            BluetoothControllerHalInitConfig, BluetoothControllerTimeScale, BluetoothHalInitPeriod,
-            BluetoothHalInitScale, BluetoothMicrosecondDeltaProjection,
-            BluetoothRawTickDeltaProjection,
-        },
-        time::BluetoothControllerLatchedTime,
-    },
-    device_table::BluetoothDeviceTablePublished,
-    direction_finding::BluetoothDirectionFindingDisabledBaselinePrepared,
-    interrupt::{
-        BluetoothInterruptOutputPrepared, BluetoothNrtInterruptAcknowledged,
-        BluetoothPrimaryFaultSources, BluetoothPrimaryInterruptEpoch,
-        BluetoothSchedulerRunInterruptsPrepared,
-        retirement::{BluetoothControllerOutputQuiesced, BluetoothControllerOutputReleaseError},
-    },
-    memory_lists::{
-        BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
-        BluetoothMemoryListPointerImage, BluetoothMemoryListSelector, BluetoothMemoryListSlot,
-    },
-    modem_timer::{
-        BluetoothLowPowerRuntimeControlObservation, BluetoothModemLpTimerCompareDisposition,
-        BluetoothModemLpTimerCounterObservation, BluetoothModemLpTimerEpoch,
-        BluetoothModemLpTimerHandlerRegisterObservation, BluetoothModemLpTimerInstant,
-        BluetoothModemLpTimerInterruptObservation, BluetoothModemLpTimerRegisters,
-    },
-    phy::{
-        BlePhyEtmRouteDisabled, BluetoothPhyEnvironmentAddress,
-        BluetoothPhyEnvironmentAddressError, BluetoothPhyRegisterInitInputs,
-    },
-    scan::BluetoothScanStartPublished,
-    scheduler::{
-        BluetoothSchedulerHardwareListHead, BluetoothSchedulerHardwareListHeadEmptyObserved,
-        BluetoothSchedulerHardwareListHeadError, BluetoothSchedulerHardwareListHeadPublished,
-        BluetoothSchedulerHardwareListHeadRetirementObservation,
-        BluetoothSchedulerHardwareListsCleared, BluetoothSchedulerHardwareRunCommandPublished,
-        BluetoothSchedulerInsertionCommand, BluetoothSchedulerInsertionCommandStartCleared,
-        BluetoothSchedulerRunEventPublished,
-        cancellation::{
-            BluetoothSchedulerCancellationDisposition, BluetoothSchedulerCancellationIndexed,
-            BluetoothSchedulerCancellationReleased, BluetoothSchedulerCancellationRequested,
-            BluetoothSchedulerCancellationSourceAcknowledged, BluetoothSchedulerSkipCleared,
-            BluetoothSchedulerSkipDisposition, BluetoothSchedulerSkipPublished,
-            BluetoothSchedulerSkipRequest, BluetoothSchedulerSkipResult,
-        },
-        insertion::{
-            BluetoothSchedulerExecutionLockDisposition, BluetoothSchedulerExecutionLockPublished,
-            BluetoothSchedulerExecutionLockRequest, BluetoothSchedulerExecutionModifyDisposition,
-            BluetoothSchedulerExecutionModifyPublished,
-        },
-        lock_modify::{
-            BluetoothSchedulerLockModifyInterruptObservation,
-            BluetoothSchedulerLockModifyObservation, BluetoothSchedulerLockModifyPublished,
-            BluetoothSchedulerLockModifyRequest, BluetoothSchedulerLockModifyTaskObservation,
-        },
-        runtime::{
-            BluetoothSchedulerBusyObservation, BluetoothSchedulerFinishedHardwareListObserved,
-            BluetoothSchedulerFinishedListObservation, BluetoothSchedulerFinishedListPop,
-            BluetoothSchedulerHardwareListIndex, BluetoothSchedulerReferenceCleared,
-            BluetoothSchedulerReferenceGateObservation, BluetoothSchedulerSoftwareListRemovalIdle,
-            BluetoothSchedulerSoftwareListRemovalInterruptStep,
-            BluetoothSchedulerSoftwareListRemovalJoin, BluetoothSchedulerSoftwareListRemovalReady,
-            BluetoothSchedulerWorkObservation,
-        },
-        stop::{
-            BluetoothSchedulerStopped, BluetoothSchedulerStoppedHeadRetirement,
-            BluetoothSchedulerStoppedItem,
-        },
-    },
+/// The generated blocks and parts the HAL's Bluetooth LE controller, its
+/// interrupt bank, its modem low-power timer, the modem ETM and the shared
+/// BTBB baseband initialization drive over their field accessors.
+pub use generated::{
+    ble_controller_address_slots, ble_hw_accelerator, ble_hw_cte_ring_control,
+    ble_hw_positional_word_1ff0, ble_hw_positional_word_891c, ble_hw_resolving_list,
+    ble_hw_runtime_control, ble_iso_scheduler_notify, ble_scan_backoff, ble_sync_publication,
+    bluetooth_controller_core, bluetooth_interrupt_bank, bluetooth_reset_idle_status_0,
+    bluetooth_scheduler_interrupt_runtime, bt_v3_2_cte, btdm_runtime_control,
+    btdm_scheduler_table, btmac_ble_phy_init, phy_baseband_config_oracle,
+    phy_btagc_recovered, shared_baseband_reset_idle_status, shared_baseband_tx_timing,
+    shared_radio_init_control, zbbb_radio_control,
+};
+
+/// The generated partitions the radio root hands the Bluetooth LE and shared
+/// radio owners.
+pub use generated::peripheral_ownership::{
+    BluetoothControllerPeripherals, BluetoothInterruptPeripherals, RadioPhyPeripherals,
 };
 
 pub use cfr::CfrValue;
@@ -296,16 +247,14 @@ pub use modem::clock_device::ModemClockDevice;
 pub use ownership::BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER;
 
 pub use ownership::{
-    BluetoothControllerPartition, BluetoothInterruptRegisters, BluetoothInterruptSetup,
-    BluetoothTaskRegisters, CoexistencePartition, Ieee802154Partition, MacInterruptEvents,
-    MacInterruptObservation, MacInterruptSnapshot, MacLocalTime, MacPowerInterruptObservation,
-    MacPowerInterruptSnapshot, RadioHandoff, RadioPartitions, RadioPhyRegisters,
-    SharedRadioPartition, SharedRadioParts, SharedRadioRegisters, WifiMacPartition,
-    WifiRadioRegisters, WifiRxDmaRegisters,
+    BluetoothControllerPartition, BluetoothModemLpTimerPartition, CoexistencePartition,
+    Ieee802154Partition, MacInterruptEvents, MacInterruptObservation, MacInterruptSnapshot,
+    MacLocalTime, MacPowerInterruptObservation, MacPowerInterruptSnapshot, RadioHandoff,
+    RadioPartitions, RadioPhyRegisters, SharedRadioPartition, SharedRadioParts,
+    SharedRadioRegisters, WifiMacPartition, WifiRadioRegisters, WifiRxDmaRegisters,
 };
 
 pub(crate) use ownership::device_fence;
-pub(crate) mod bluetooth;
 pub(crate) mod modem;
 /// Owner acquisition and register transactions of isolated probe images.
 #[cfg(oer_probe)]
@@ -316,3 +265,11 @@ pub(crate) mod wifi;
 
 // Generated analog-I2C identities, fields and transport routes.
 include!("analog_generated.rs");
+
+// TEMPORARY-D5-EQUIVALENCE
+#[doc(hidden)]
+pub use generated::{
+    BluetoothBasebandGainParameterByte, BluetoothHalInitByte, BluetoothHalSleepTimerShift,
+    BluetoothModemLpTimerCompareImage, BluetoothPhyInitTimingByte,
+    BluetoothSchedulerCancellationHardwareListIndex, BluetoothSchedulerLockModifyHardwareListIndex,
+};

@@ -136,12 +136,9 @@ fn instances_are_bound_at_their_offsets_and_reinitialized() {
     assert!(pool.acquire().is_none());
     let stride = core::mem::size_of::<TestStorage>() as u32;
     let space = SchedulerItemSpace::new().with(&pool);
+    assert_eq!(space.link(first.item(1)).controller_address(), 0x2f00_1060);
     assert_eq!(
-        space.link(first.item(1)).controller_address().address(),
-        0x2f00_1060
-    );
-    assert_eq!(
-        space.link(second.item(0)).controller_address().address(),
+        space.link(second.item(0)).controller_address(),
         0x2f00_1000 + stride
     ); // Connections are numbered after the advertising instances and one
     // reserved number.

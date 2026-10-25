@@ -20,9 +20,9 @@ use crate::power::PlatformClockBackend;
 
 use core::fmt;
 
-use oer_esp32s31_pac::{
+use registers::{
     BluetoothDirectionFindingDisabledBaselinePrepared, BluetoothInterruptRegisters,
-    BluetoothInterruptSetup as PacBluetoothInterruptSetup, BluetoothModemLpTimerRegisters,
+    BluetoothInterruptSetup as RegistersBluetoothInterruptSetup, BluetoothModemLpTimerRegisters,
     BluetoothPhyRegisterInitInputs, BluetoothTaskRegisters,
 };
 
@@ -36,6 +36,7 @@ use crate::{
 };
 
 mod controller_time;
+pub(crate) mod registers;
 mod scheduler_execution_lock;
 mod scheduler_execution_modify;
 mod scheduler_stop;
@@ -52,11 +53,14 @@ pub use scheduler_execution_modify::BluetoothSchedulerExecutionModify;
 pub use scheduler_stop::BluetoothSchedulerStop;
 pub use shutdown::{BluetoothControllerReset, BluetoothShutdownError, BluetoothShutdownFailure};
 
+pub use oer_esp32s31_pac::BluetoothLowPowerClockObservation;
 pub use oer_esp32s31_pac::{
+    ModemSysconBluetoothObservation, PlatformClockPowerObservation, SharedModemClockObservation,
+};
+pub use registers::{
     BlePhyEtmRouteDisabled, BluetoothControllerHalInitConfig, BluetoothControllerLatchedTime,
     BluetoothControllerOutputReleaseError, BluetoothControllerTimeScale,
-    BluetoothDeviceTableEntryCount, BluetoothDeviceTablePublished, BluetoothHalInitPeriod,
-    BluetoothHalInitScale, BluetoothLowPowerClockObservation,
+    BluetoothDeviceTablePublished, BluetoothHalInitPeriod, BluetoothHalInitScale,
     BluetoothLowPowerRuntimeControlObservation, BluetoothMemoryListSelector,
     BluetoothMemoryListSlot, BluetoothMicrosecondDeltaProjection,
     BluetoothModemLpTimerCompareDisposition, BluetoothModemLpTimerCounterObservation,
@@ -80,10 +84,9 @@ pub use oer_esp32s31_pac::{
     BluetoothSchedulerSkipDisposition, BluetoothSchedulerSkipPublished,
     BluetoothSchedulerSkipResult, BluetoothSchedulerSoftwareListRemovalIdle,
     BluetoothSchedulerSoftwareListRemovalInterruptStep, BluetoothSchedulerStopped,
-    BluetoothSchedulerWorkObservation, ModemSysconBluetoothObservation,
-    PlatformClockPowerObservation, SharedModemClockObservation,
+    BluetoothSchedulerWorkObservation,
 };
-use oer_esp32s31_pac::{
+use registers::{
     BluetoothMemoryListPointerImage, BluetoothSchedulerExecutionLockRequest,
     BluetoothSchedulerHardwareListHead, BluetoothSchedulerHardwareListHeadEmptyObserved,
     BluetoothSchedulerHardwareListHeadPublished,
@@ -97,7 +100,7 @@ use oer_esp32s31_pac::{
 struct Partition {
     task: BluetoothTaskRegisters,
     modem_lp_timer: BluetoothModemLpTimerRegisters,
-    interrupts: PacBluetoothInterruptSetup,
+    interrupts: RegistersBluetoothInterruptSetup,
 }
 
 /// Unpowered Bluetooth client holding its partition.
@@ -116,8 +119,8 @@ impl ColdOwner {
         Self {
             partition: Partition {
                 task: BluetoothTaskRegisters::new(controller),
-                modem_lp_timer,
-                interrupts,
+                modem_lp_timer: BluetoothModemLpTimerRegisters::new(modem_lp_timer),
+                interrupts: RegistersBluetoothInterruptSetup::new(interrupts),
             },
         }
     }
@@ -129,7 +132,11 @@ impl ColdOwner {
             modem_lp_timer,
             interrupts,
         } = self.partition;
-        BluetoothPartition::from_parts(task.into_partition(), modem_lp_timer, interrupts)
+        BluetoothPartition::from_parts(
+            task.into_partition(),
+            modem_lp_timer.into_partition(),
+            interrupts.into_partition(),
+        )
     }
 
     /// Enter common radio power as the Bluetooth client.
@@ -579,13 +586,15 @@ impl TaskOwner {
         self.reunitable = false;
         #[allow(
             unsafe_code,
-            reason = "the PAC transaction points the hardware at the storage"
+            reason = "the BLE PHY transaction points the hardware at the storage"
         )]
         // SAFETY: `storage` binds both pointed objects to `'static`,
         // volatile-only controller SRAM of the BLE PHY engine; the PAC contract's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
         unsafe {
-            self.registers
-                .enable_ble_base_stack_hardware(radio.registers_mut(), storage.inputs);
+            self.registers.enable_ble_base_stack_hardware(
+                &mut radio.registers_mut().shared_radio.bt_v3_2_baseband,
+                storage.inputs,
+            );
         }
     }
 
@@ -913,7 +922,7 @@ impl core::fmt::Debug for TaskOwnerReuniteFailure {
 /// Opaque inactive owner of the controller interrupt partition.
 #[must_use = "the inactive Bluetooth interrupt owner must be staged or reunited"]
 pub struct InterruptSetupOwner {
-    registers: PacBluetoothInterruptSetup,
+    registers: RegistersBluetoothInterruptSetup,
     reunitable: bool,
 }
 
@@ -939,7 +948,7 @@ impl InterruptSetupOwner {
 /// storage or bound to a CPU route.
 #[must_use = "the prepared Bluetooth output must be staged or released"]
 pub struct InterruptOutputPreparedOwner {
-    registers: oer_esp32s31_pac::BluetoothInterruptOutputPrepared,
+    registers: registers::BluetoothInterruptOutputPrepared,
 }
 
 impl InterruptOutputPreparedOwner {
@@ -1136,7 +1145,7 @@ impl InterruptRegistersOwner {
 /// scheduler/head/fault observations. No direct setup or cold conversion exists.
 #[must_use = "post-route interrupt ownership awaits dynamic-source quiescence"]
 pub struct InterruptOutputAfterRoutesOwner {
-    _registers: oer_esp32s31_pac::BluetoothInterruptOutputPrepared,
+    _registers: registers::BluetoothInterruptOutputPrepared,
 }
 
 impl InterruptOutputAfterRoutesOwner {
@@ -1230,7 +1239,7 @@ impl InterruptOutputAfterRoutesOwner {
 /// No active IRQ or setup conversion is exposed; retain it through RF close.
 #[must_use = "released output must remain paired with its stopped Controller"]
 pub struct InterruptOutputReleasedOwner {
-    registers: PacBluetoothInterruptSetup,
+    registers: RegistersBluetoothInterruptSetup,
 }
 
 /// Exclusive finite borrow of the Bluetooth controller task-side registers.
@@ -1365,7 +1374,7 @@ impl DirectionFindingDescriptor {
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub(crate) struct DeviceTablePublication {
     first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
-    count: BluetoothDeviceTableEntryCount,
+    count: u8,
 }
 
 impl DeviceTablePublication {
@@ -1377,7 +1386,7 @@ impl DeviceTablePublication {
     #[allow(unsafe_code, reason = "the HAL engine's codec vouches for the storage")]
     pub(crate) const unsafe fn new(
         first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
-        count: BluetoothDeviceTableEntryCount,
+        count: u8,
     ) -> Self {
         Self { first_entry, count }
     }
@@ -1390,7 +1399,7 @@ impl DeviceTablePublication {
     }
 
     /// Number of entries.
-    pub const fn count(&self) -> BluetoothDeviceTableEntryCount {
+    pub const fn count(&self) -> u8 {
         self.count
     }
 }

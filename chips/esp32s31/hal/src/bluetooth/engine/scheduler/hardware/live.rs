@@ -54,7 +54,7 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
             self.controller.admit_scheduler_execution_lock(
                 BluetoothSchedulerExecutionLockRequest::new(
                     crate::bluetooth::engine::layout_reference::controller_reference(
-                        at.controller_address().address(),
+                        at.controller_address(),
                     ),
                     LIST,
                 ),
@@ -93,7 +93,7 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
             self.controller
                 .publish_scheduler_lock_modify(BluetoothSchedulerLockModifyRequest::new(
                     crate::bluetooth::engine::layout_reference::controller_reference(
-                        at.controller_address().address(),
+                        at.controller_address(),
                     ),
                     LIST,
                 ))
@@ -108,7 +108,7 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
                 LIST,
                 at.map(|at| {
                     crate::bluetooth::engine::layout_reference::controller_reference(
-                        at.controller_address().address(),
+                        at.controller_address(),
                     )
                 }),
             )
@@ -157,7 +157,7 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
             self.controller
                 .publish_scheduler_skip(BluetoothSchedulerSkipRequest::new(
                     crate::bluetooth::engine::layout_reference::controller_reference(
-                        at.controller_address().address(),
+                        at.controller_address(),
                     ),
                     LIST,
                 ))
@@ -238,7 +238,7 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
                 LIST,
                 Some(
                     crate::bluetooth::engine::layout_reference::controller_reference(
-                        at.controller_address().address(),
+                        at.controller_address(),
                     ),
                 ),
             )
@@ -282,7 +282,7 @@ impl SchedulerHardware<HalPublications> {
         let head = match raw.address() {
             None => None,
             Some(address) => {
-                let link = ControllerSramLinkAddress::new(address.address())
+                let link = ControllerSramLinkAddress::new(address)
                     .map_err(|_| SchedulerHardwareError::ForeignHead)?;
                 Some(
                     items

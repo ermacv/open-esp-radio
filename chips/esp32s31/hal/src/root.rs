@@ -21,7 +21,7 @@ pub use oer_esp32s31_pac::pll_power::{
 
 use crate::power::PlatformClockBackend;
 use oer_esp32s31_pac::{
-    BluetoothControllerPartition, BluetoothInterruptSetup, BluetoothModemLpTimerRegisters,
+    BluetoothControllerPartition, BluetoothInterruptPeripherals, BluetoothModemLpTimerPartition,
     Ieee802154Partition, MacInterruptSetup, RadioPartitions, SharedRadioParts,
     SharedRadioRegisters, WifiMacPartition, WifiRxDmaRegisters,
 };
@@ -178,8 +178,8 @@ impl WifiPartition {
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct BluetoothPartition {
     controller: BluetoothControllerPartition,
-    modem_lp_timer: BluetoothModemLpTimerRegisters,
-    interrupts: BluetoothInterruptSetup,
+    modem_lp_timer: BluetoothModemLpTimerPartition,
+    interrupts: BluetoothInterruptPeripherals,
 }
 
 impl BluetoothPartition {
@@ -187,16 +187,16 @@ impl BluetoothPartition {
         self,
     ) -> (
         BluetoothControllerPartition,
-        BluetoothModemLpTimerRegisters,
-        BluetoothInterruptSetup,
+        BluetoothModemLpTimerPartition,
+        BluetoothInterruptPeripherals,
     ) {
         (self.controller, self.modem_lp_timer, self.interrupts)
     }
 
     pub(crate) const fn from_parts(
         controller: BluetoothControllerPartition,
-        modem_lp_timer: BluetoothModemLpTimerRegisters,
-        interrupts: BluetoothInterruptSetup,
+        modem_lp_timer: BluetoothModemLpTimerPartition,
+        interrupts: BluetoothInterruptPeripherals,
     ) -> Self {
         Self {
             controller,

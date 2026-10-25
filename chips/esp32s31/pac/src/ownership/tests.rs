@@ -1,6 +1,6 @@
 use super::{
-    BluetoothTaskRegisters, Ieee802154Partition, RadioPartitions, SharedRadioParts,
-    SharedRadioRegisters, WifiRadioRegisters,
+    Ieee802154Partition, RadioPartitions, SharedRadioParts, SharedRadioRegisters,
+    WifiRadioRegisters,
 };
 
 fn wifi_registers(partitions: RadioPartitions) -> (WifiRadioRegisters, super::MacInterruptSetup) {
@@ -29,13 +29,6 @@ fn shared_registers(partitions: RadioPartitions) -> SharedRadioRegisters {
 #[test]
 fn wifi_register_set_returns_its_mac_partition() {
     let (registers, _interrupts) = wifi_registers(RadioPartitions::for_host_test());
-    let _partition = registers.into_partition();
-}
-
-#[test]
-fn bluetooth_register_set_returns_its_controller_partition() {
-    let RadioPartitions { bluetooth, .. } = RadioPartitions::for_host_test();
-    let registers = BluetoothTaskRegisters::new(bluetooth);
     let _partition = registers.into_partition();
 }
 

@@ -17,8 +17,6 @@ use crate::bluetooth::engine::{
     sram_link::ControllerSramLinkAddress,
 };
 
-use crate::types::BluetoothControllerSramAddress;
-
 use super::{
     DtmExecutedWitness, DtmPositionalEventSeed, DtmPrepareError, DtmRxRotationError,
     DtmSchedulerItemCompletionStatus, DtmTxPacketPrepareError,
@@ -366,8 +364,8 @@ impl DtmRxHeaderBacklink {
         (address != 0).then_some(Self(address))
     }
 
-    const fn bound(address: BluetoothControllerSramAddress) -> Self {
-        Self(address.address())
+    const fn bound(link: ControllerSramLinkAddress) -> Self {
+        Self(link.controller_address())
     }
 
     const fn address(self) -> u32 {
@@ -556,9 +554,9 @@ impl DtmStorage {
     pub(super) fn initialize_reviewed_allocation(&mut self, binding: &DtmBinding) {
         let link_state = binding.link_state.compressed_image();
         let scheduler_context = binding.scheduler_context.compressed_image();
-        let rx_header_address = binding.rx_header.controller_address().address();
-        let rx_swap_address = binding.rx_swap_reserve.controller_address().address();
-        let tx_header_address = binding.tx_header.controller_address().address();
+        let rx_header_address = binding.rx_header.controller_address();
+        let rx_swap_address = binding.rx_swap_reserve.controller_address();
+        let tx_header_address = binding.tx_header.controller_address();
 
         let storage = self;
         storage.link_state.clear();
@@ -761,8 +759,8 @@ impl DtmStorage {
         if status != DtmSchedulerItemCompletionStatus::Zero {
             return Err(DtmRxRotationError::CompletionStatusMismatch);
         }
-        let primary_address = binding.rx_header.controller_address().address();
-        let swap_address = binding.rx_swap_reserve.controller_address().address();
+        let primary_address = binding.rx_header.controller_address();
+        let swap_address = binding.rx_swap_reserve.controller_address();
         let slot = |address| {
             if address == primary_address {
                 Some(DtmRxHeaderSlot::Primary)
@@ -786,12 +784,8 @@ impl DtmStorage {
             DtmRxHeaderSlot::Swap => DtmRxHeaderSuccessorLink::from_bound(binding.rx_swap_reserve),
         };
         let backlink = |slot| match slot {
-            DtmRxHeaderSlot::Primary => {
-                DtmRxHeaderBacklink::bound(binding.rx_header.controller_address())
-            }
-            DtmRxHeaderSlot::Swap => {
-                DtmRxHeaderBacklink::bound(binding.rx_swap_reserve.controller_address())
-            }
+            DtmRxHeaderSlot::Primary => DtmRxHeaderBacklink::bound(binding.rx_header),
+            DtmRxHeaderSlot::Swap => DtmRxHeaderBacklink::bound(binding.rx_swap_reserve),
         };
 
         let (returned, copy_target, steady) = if head == tail {
@@ -893,8 +887,8 @@ impl DtmStorage {
                     DtmRxHeaderSlot::Swap => swap,
                 };
                 let address = |slot| match slot {
-                    DtmRxHeaderSlot::Primary => binding.rx_header.controller_address().address(),
-                    DtmRxHeaderSlot::Swap => binding.rx_swap_reserve.controller_address().address(),
+                    DtmRxHeaderSlot::Primary => binding.rx_header.controller_address(),
+                    DtmRxHeaderSlot::Swap => binding.rx_swap_reserve.controller_address(),
                 };
                 let copy_link = match copy_target {
                     DtmRxHeaderSlot::Primary => {
@@ -905,12 +899,8 @@ impl DtmStorage {
                     }
                 };
                 let returned_backlink = match returned {
-                    DtmRxHeaderSlot::Primary => {
-                        DtmRxHeaderBacklink::bound(binding.rx_header.controller_address())
-                    }
-                    DtmRxHeaderSlot::Swap => {
-                        DtmRxHeaderBacklink::bound(binding.rx_swap_reserve.controller_address())
-                    }
+                    DtmRxHeaderSlot::Primary => DtmRxHeaderBacklink::bound(binding.rx_header),
+                    DtmRxHeaderSlot::Swap => DtmRxHeaderBacklink::bound(binding.rx_swap_reserve),
                 };
 
                 if steady {

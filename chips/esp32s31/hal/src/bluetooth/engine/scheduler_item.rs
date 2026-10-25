@@ -194,7 +194,7 @@ impl<'item> SchedulerItemHeader<'item> {
 
     /// Store the full address of the previous item, or zero for the head.
     pub(crate) fn link_previous(&self, previous: Option<ControllerSramLinkAddress>) {
-        self.set_previous(previous.map_or(0, |previous| previous.controller_address().address()));
+        self.set_previous(previous.map_or(0, |previous| previous.controller_address()));
     }
 
     /// Full address of the previous item; zero when the item is the head.
