@@ -82,7 +82,7 @@ impl ChipPolicy {
     ) -> Result<Self, Error> {
         let text = std::fs::read_to_string(path)
             .map_err(|error| Error::new(path, "", ErrorKind::Read(error)))?;
-        let file: PolicyFile = toml_edit::de::from_str(&text)
+        let mut file: PolicyFile = toml_edit::de::from_str(&text)
             .map_err(|error| Error::new(path, "", ErrorKind::Parse(error.to_string())))?;
         let ids = evidence.source_ids();
         let context = Context {
@@ -107,6 +107,7 @@ impl ChipPolicy {
                 },
             ));
         }
+        resolve_clears(context, model, &mut file.interrupt_snapshots)?;
         let index = Index::new(context, model)?;
         let coverage = ownership::check(context, &index, &file)?;
         let owners = transactions::check(context, &index, &coverage, &file)?;
@@ -154,6 +155,73 @@ impl ChipPolicy {
     pub fn owner(&self, transaction: &str) -> Option<PartId> {
         self.owners.get(transaction).copied()
     }
+}
+
+/// The clear element of each snapshot: the one its status register's type
+/// pairs with it, at the status element's index, or the status element
+/// itself when it holds only write-one-to-clear fields.
+fn resolve_clears(
+    context: Context<'_>,
+    model: &ChipModel,
+    snapshots: &mut [InterruptSnapshot],
+) -> Result<(), Error> {
+    for snapshot in snapshots {
+        let fail = |reason: String| context.error(&snapshot.name, ErrorKind::Snapshot(reason));
+        let status = model
+            .register(&snapshot.status)
+            .ok_or_else(|| fail(format!("{} is no register element", snapshot.status)))?;
+        let block = model
+            .instances()
+            .iter()
+            .find(|instance| instance.name == status.instance)
+            .and_then(|instance| model.types().get(&instance.block_type))
+            .ok_or_else(|| fail(format!("{} is no MMIO instance", status.instance)))?;
+        let elements = |key: &str| {
+            model
+                .registers()
+                .iter()
+                .filter(|register| register.instance == status.instance && register.key == key)
+                .collect::<Vec<_>>()
+        };
+        let clear = match block
+            .file
+            .interrupt_pairs
+            .iter()
+            .find(|pair| pair.status == status.key)
+        {
+            Some(pair) => {
+                let position = elements(&status.key)
+                    .iter()
+                    .position(|element| element.identity == status.identity);
+                position
+                    .and_then(|position| elements(&pair.clear).get(position).copied())
+                    .ok_or_else(|| {
+                        fail(format!(
+                            "{} has no element of {} at its index",
+                            snapshot.status, pair.clear
+                        ))
+                    })?
+                    .identity
+                    .clone()
+            }
+            None if !status.fields.is_empty()
+                && status
+                    .fields
+                    .iter()
+                    .all(|field| field.class == FieldClass::WriteOneToClear) =>
+            {
+                status.identity.clone()
+            }
+            None => {
+                return Err(fail(format!(
+                    "{} has no interrupt pair in its type and holds other fields than write-one-to-clear ones",
+                    snapshot.status
+                )));
+            }
+        };
+        snapshot.clear = clear;
+    }
+    Ok(())
 }
 
 /// Where a check runs: the policy file and the evidence catalogs' IDs.

@@ -1184,7 +1184,7 @@ sources = ["BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
 name = "LpTsensPeripheralClockEnable"
 description = "Reviewed enabled and disabled images for LP_PERICLKRST.TSENS_CTRL.LP_TSENS_CLK_EN."
 field = "LP_PERICLKRST.TSENS_CTRL.LP_TSENS_CLK_EN"
-left-shift = 30
+positioned = true
 
 [[enum-domains]]
 name = "LpTsensPhyReadoutEnable"
@@ -1210,7 +1210,7 @@ sources = ["BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
 name = "LpTsensPowerEnable"
 description = "Reviewed images for LP_TSENS.CTRL.POWER_UP."
 field = "LP_TSENS.CTRL.POWER_UP"
-left-shift = 22
+positioned = true
 
 [[enum-domains]]
 name = "BluetoothHalSleepTimerShift"
@@ -1250,21 +1250,10 @@ name = "PhyAdcRateSelection"
 description = "One of the two complete-ROM PHY ADC-rate selections."
 field = "FE.ADC_RATE_AND_FRONT_END_CONTROL.BIT_0_OPAQUE"
 
-[[enum-domains]]
+[[field-domains]]
 name = "PhyRxGainDcCalibrationState"
 description = "Reviewed direct-register state surrounding RX-gain DC calibration."
-
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "Clear the RX-gain DC calibration field during cleanup."
-sources = ["ROM_REV0_PHY_SET_RX_GAIN_CAL_DC"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 3
-description = "Set both reviewed RX-gain DC calibration bits before calibration."
-sources = ["ROM_REV0_PHY_SET_RX_GAIN_CAL_DC"]
+field = "FE.RX_GAIN_DC_CONTROL.BITS_5_6_OPAQUE"
 
 [[field-domains]]
 name = "PhyHardwareFrequencyControlState"
@@ -1372,86 +1361,30 @@ value = 1
 description = "Select the reviewed 40 MHz digital baseband state."
 sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
 
-[[enum-domains]]
+[[field-domains]]
 name = "WifiBasebandAgcUpdateMode"
 description = "Reviewed MODEM_SYSCON Wi-Fi baseband AGC update modes."
+field = "MODEM_SYSCON.WIFI_BB_CFG.BITS_11_13_OPAQUE"
 
-[[enum-domains.values]]
-name = "Initialization"
-value = 1
-description = "Select the initialization update mode."
-sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "RegisterUpdatesEnabled"
-value = 7
-description = "Enable subsequent baseband register updates."
-sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "PhyI2cBbpllCalibrationState"
 description = "Reviewed BBPLL calibration modes selected through the shared analog-I2C master."
+field = "I2C_ANA_MST.ANA_CONF0.BBPLL_CAL_MODE"
 
-[[enum-domains.values]]
-name = "Disabled"
-value = 1
-description = "Select the complete-ROM disabled BBPLL calibration mode."
-sources = ["ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 2
-description = "Select the complete-ROM enabled BBPLL calibration mode."
-sources = ["ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "PbusForceTxRxState"
 description = "Four complete-ROM force-TX/RX phase encodings."
-
-[[enum-domains.values]]
-name = "DisabledFinal"
-value = 0
-description = "Publish the final force-TX/RX disable phase."
-sources = ["ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "DisabledInitial"
-value = 2
-description = "Publish the initial force-TX/RX disable phase."
-sources = ["ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "EnabledInitial"
-value = 8
-description = "Publish the initial force-TX/RX enable phase."
-sources = ["ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "EnabledFinal"
-value = 0x0000000a
-description = "Publish the final force-TX/RX enable phase."
-sources = ["ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"]
+field = "FE.STATUS_CLOCK_FORCE.BITS_8_11_OPAQUE"
 
 [[field-domains]]
 name = "PbusEnableState"
 description = "Boolean state shared by reviewed one-bit PBus control transactions."
 field = "FE.MODE.WORK_MODE_ENABLE"
 
-[[enum-domains]]
+[[field-domains]]
 name = "PbusTxClockPairState"
 description = "Complete two-bit PBus TX clock-pair encodings."
-
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "Disable both recovered PBus TX clock bits."
-sources = ["ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 3
-description = "Enable both recovered PBus TX clock bits."
-sources = ["ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"]
+field = "FE.STATUS_CLOCK_FORCE.TX_CLOCK_ENABLE_PAIR"
 
 [[field-domains]]
 name = "IqEstimatorEnableState"
@@ -1473,21 +1406,10 @@ name = "CfrForceMode"
 description = "Boolean mode image published independently to both forced-ICCFR mode fields."
 field = "WIFI_BB.ICCFR_FORCE_CONTROL.FORCE_MODE_HIGH"
 
-[[enum-domains]]
+[[field-domains]]
 name = "IccfrGateState"
 description = "Complete two-image ICCFR gate domain with the reviewed inverted enable encoding."
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 0
-description = "Enable ICCFR through the zero gate image."
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Disabled"
-value = 3
-description = "Disable ICCFR through the all-ones gate image."
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"]
+field = "WIFI_BB.ICCFR_ENABLE_CONTROL.GATE"
 
 [[field-domains]]
 name = "AgcRuntimeEnableState"
@@ -2019,45 +1941,44 @@ output-mask = 0xffffffff
 sources = ["ROM_REV0_PHY_SET_PBUS_MEM"]
 
 [[interrupt-snapshots]]
+name = "usb_serial_jtag_interrupt"
+status = "USB_DEVICE.INT_ST"
+events = ["USB_DEVICE.INT_ST.SERIAL_OUT_RECV_PKT_INT_ST", "USB_DEVICE.INT_ST.SERIAL_IN_EMPTY_INT_ST"]
+sources = ["ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"]
+
+[[interrupt-snapshots]]
 name = "mac_interrupt"
 status = "WIFI_MAC.STATUS"
-clear = "WIFI_MAC.CLEAR"
 sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT"]
 
 [[interrupt-snapshots]]
 name = "mac_power_interrupt"
 status = "MODEM_PWR.POWER_INTERRUPT_STATUS"
-clear = "MODEM_PWR.CLEAR"
 sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT"]
 
 [[interrupt-snapshots]]
 name = "bluetooth_interrupt_bank_0"
 status = "BT_MAC.IRQ_STATUS_SNAPSHOT_0"
-clear = "BT_MAC.IRQ_CLEAR_0"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[interrupt-snapshots]]
 name = "bluetooth_interrupt_bank_1"
 status = "BT_MAC.IRQ_STATUS_SNAPSHOT_1"
-clear = "BT_MAC.IRQ_CLEAR_1"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[interrupt-snapshots]]
 name = "bluetooth_primary_interrupt_bank_0"
 status = "BT_MAC.IRQ_STATUS_0"
-clear = "BT_MAC.IRQ_CLEAR_0"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[interrupt-snapshots]]
 name = "bluetooth_primary_interrupt_bank_1"
 status = "BT_MAC.IRQ_STATUS_1"
-clear = "BT_MAC.IRQ_CLEAR_1"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[interrupt-snapshots]]
 name = "acknowledge_mac_tx_completion"
 status = "WIFI_MAC.COMPLETE_CLEAR"
-clear = "WIFI_MAC.COMPLETE_CLEAR"
 consumed-event = "The selected ordinary queue's completion, which the TX path read in COMPLETE_STATE."
 consumed-fields = ["WIFI_MAC.COMPLETE_CLEAR.QUEUE_0", "WIFI_MAC.COMPLETE_CLEAR.QUEUE_1", "WIFI_MAC.COMPLETE_CLEAR.QUEUE_2", "WIFI_MAC.COMPLETE_CLEAR.QUEUE_3"]
 sources = ["BLOB_LIBPP_HAL_MAC_TX", "PROMOTED_LMAC_TX"]

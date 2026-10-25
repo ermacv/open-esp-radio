@@ -18,7 +18,9 @@ enum Domain<'a> {
     Flag(&'a FlagDomain),
     Enum(&'a EnumDomain),
     Bounded(&'a BoundedDomain),
-    Field(&'a Field, u8),
+    /// A field's values, at the field's bits when the shift is nonzero,
+    /// with the field's word and lane.
+    Field(&'a Field, u8, (Target, u32)),
     Opaque(Target),
     Composed(&'a BitwiseComposedDomain, Target),
 }
@@ -28,7 +30,7 @@ impl<'a> Domain<'a> {
         match self {
             Self::Bounded(domain) => domain.min == 0,
             Self::Enum(_) => true,
-            Self::Field(field, _) => field
+            Self::Field(field, ..) => field
                 .value_range
                 .as_ref()
                 .is_none_or(|range| range.min == 0),
@@ -50,7 +52,7 @@ impl<'a> Domain<'a> {
             Self::Flag(domain) => or(&domain.values),
             Self::Enum(domain) => or(&domain.values),
             Self::Bounded(domain) => ones_through(domain.max),
-            Self::Field(field, shift) => {
+            Self::Field(field, shift, _) => {
                 field.value_range.as_ref().map_or_else(
                     || {
                         field
@@ -71,7 +73,7 @@ impl<'a> Domain<'a> {
         match self {
             Self::Enum(domain) => Values::List(&domain.values),
             Self::Bounded(domain) => Values::Range(domain.min, domain.max),
-            Self::Field(field, shift) => field
+            Self::Field(field, shift, _) => field
                 .value_range
                 .as_ref()
                 .map_or(Values::FieldList(&field.values, shift), |range| {
@@ -307,12 +309,19 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                 .values
                 .iter()
                 .fold(0u64, |bits, value| bits | u64::from(value.value));
-            if domain.left_shift >= 32
-                || (source.value_range.is_some() && domain.left_shift != 0)
-                || (bits << domain.left_shift) > u64::from(u32::MAX)
+            // A positioned domain's values stand at the field's own bits:
+            // the shift is the field's, never a copy of it.
+            let shift = if domain.positioned {
+                u8::try_from(field.low).unwrap_or(u8::MAX)
+            } else {
+                0
+            };
+            if (source.value_range.is_some() && domain.positioned)
+                || (bits << shift) > u64::from(u32::MAX)
             {
-                return Err(self.error(&domain.name, ErrorKind::Domain("left-shift must preserve every enum bit in a 32-bit image; bounded field domains are unshifted".into())));
+                return Err(self.error(&domain.name, ErrorKind::Domain("a positioned domain is an enum field's values at the field's bits; bounded field domains are unpositioned".into())));
             }
+            let lane = (target, field_mask(field));
             if let Some(description) = &domain.description {
                 self.context.description(&domain.name, description)?;
             }
@@ -324,7 +333,7 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
             }
             if self
                 .domains
-                .insert(&domain.name, Domain::Field(source, domain.left_shift))
+                .insert(&domain.name, Domain::Field(source, shift, lane))
                 .is_some()
             {
                 return Err(self.error(
@@ -731,7 +740,27 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                     ),
                 ));
             }
-            let mask = status_word.declared() & clear_word.declared();
+            let mut mask = status_word.declared() & clear_word.declared();
+            if !snapshot.events.is_empty() {
+                let mut events = 0;
+                for reference in &snapshot.events {
+                    let (target, field) = self.field(entity, reference)?;
+                    if target != Target::Word(status) || field_mask(field) & !mask != 0 {
+                        return Err(self.error(
+                            entity,
+                            ErrorKind::Snapshot(format!(
+                                "event {reference} is no field of {} its clear word acknowledges",
+                                snapshot.status
+                            )),
+                        ));
+                    }
+                    if events & field_mask(field) != 0 {
+                        return Err(self.error(entity, ErrorKind::Duplicate(reference.clone())));
+                    }
+                    events |= field_mask(field);
+                }
+                mask = events;
+            }
             if mask == 0 {
                 return Err(self.error(
                     entity,
@@ -902,7 +931,7 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
             match self.domain(entity, &operation.domain, target)? {
                 Domain::Opaque(_) => {}
                 Domain::Bounded(domain) if domain.min == 0 && domain.max == u32::MAX => {}
-                Domain::Field(field, 0)
+                Domain::Field(field, 0, _)
                     if field
                         .value_range
                         .as_ref()
@@ -1561,8 +1590,21 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                 ));
             }
             // An opaque domain is a raw word its input mask selects from;
-            // every other domain's values fit the input mask.
+            // every other domain's values fit the input mask. A positioned
+            // field domain's input is exactly its field's lane.
             let domain = self.domain(entity, &modify.domain, target)?;
+            if let Domain::Field(_, shift, (word, lane)) = domain
+                && shift != 0
+                && (word != target || modify.input_mask != lane)
+            {
+                return Err(self.error(
+                    entity,
+                    ErrorKind::Transaction(format!(
+                        "the positioned domain {} takes exactly its field's lane of {} as input",
+                        modify.domain, modify.register
+                    )),
+                ));
+            }
             if !matches!(domain, Domain::Opaque(_)) && domain.bits() & !modify.input_mask != 0 {
                 return Err(self.error(
                     entity,
@@ -1710,7 +1752,7 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
             let below = match self.domain(entity, &modify.domain, target)? {
                 Domain::Bounded(domain) => domain.min == 0 && domain.max < width,
                 Domain::Enum(domain) => domain.values.iter().all(|value| value.value < width),
-                Domain::Field(field, shift) => field.value_range.as_ref().map_or_else(
+                Domain::Field(field, shift, _) => field.value_range.as_ref().map_or_else(
                     || {
                         field
                             .values

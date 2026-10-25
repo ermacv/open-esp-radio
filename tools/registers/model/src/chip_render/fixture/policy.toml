@@ -99,7 +99,6 @@ reason = "Event channel three is unused."
 [[interrupt-snapshots]]
 name = "radio_events"
 status = "RADIO0.RAD_EVENTS"
-clear = "RADIO0.RAD_EVENT_CLR"
 consumed-event = "The auxiliary event the task consumed in its own status."
 consumed-fields = ["RADIO0.RAD_EVENT_CLR.AUX"]
 sources = ["SRC_DRIVER"]
@@ -107,7 +106,6 @@ sources = ["SRC_DRIVER"]
 [[pointer-fields]]
 name = "descriptor"
 field = "RADIO0.RAD_DESC.PTR"
-points-to = "RX_DESCRIPTOR"
 sources = ["SRC_DRIVER"]
 
 [[zero-register-writes]]

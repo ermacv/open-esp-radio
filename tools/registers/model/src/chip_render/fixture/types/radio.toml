@@ -242,6 +242,7 @@ offset = 0x5c
 name = "PTR"
 bits = "31:0"
 class = "plain"
+pointer = { points-to = "RX_DESCRIPTOR", placement = "dma-window", encoding = { width = 32, shift = 0 }, sources = ["SRC_DRIVER"] }
 
 [[registers]]
 name = "WORD_0060_OPAQUE"
@@ -317,3 +318,8 @@ commands = ["GO"]
 qualifiers = ["FAST"]
 held = ["BUSY"]
 sources = ["SRC_HEADER"]
+
+[[interrupt-pairs]]
+status = "RAD_EVENTS"
+clear = "RAD_EVENT_CLR"
+sources = ["SRC_DRIVER"]

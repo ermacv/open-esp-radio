@@ -278,6 +278,22 @@ fn render_snapshot(
             ) && field.mask() & !readable == 0
         })
         .fold(0, |mask, field| mask | field.mask());
+    // A snapshot naming its events samples those alone.
+    let events = if snapshot.events.is_empty() {
+        events
+    } else {
+        events
+            & status
+                .template
+                .fields
+                .iter()
+                .filter(|field| {
+                    snapshot.events.iter().any(|reference| {
+                        reference.rsplit('.').next() == Some(field.field.name.as_str())
+                    })
+                })
+                .fold(0, |mask, field| mask | field.mask())
+    };
     let consumed = snapshot
         .consumed_fields
         .iter()

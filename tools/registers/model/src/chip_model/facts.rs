@@ -16,10 +16,12 @@ pub(super) fn check(
             path: &block.path,
             ..context
         };
+        // The fixed address prefix each high field supplies, by field.
+        let mut prefixes = BTreeMap::new();
         for (key, register) in &block.templates {
             for field in &register.fields {
                 if field.pointer.is_some() {
-                    check_pointer(context, block, key, field, layouts, regions)?;
+                    check_pointer(context, block, key, field, layouts, regions, &mut prefixes)?;
                 }
             }
         }
@@ -28,13 +30,18 @@ pub(super) fn check(
     Ok(())
 }
 
-fn check_pointer(
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one pointer fact and the facts it is checked against"
+)]
+fn check_pointer<'b>(
     context: Context<'_>,
-    block: &BlockType,
+    block: &'b BlockType,
     key: &str,
-    field: &Field,
+    field: &'b Field,
     layouts: &[MemoryLayout],
     regions: &[RamRegion],
+    prefixes: &mut BTreeMap<&'b str, u64>,
 ) -> Result<(), Error> {
     let Some(pointer) = &field.pointer else {
         return Ok(());
@@ -130,6 +137,22 @@ fn check_pointer(
         {
             return Err(fail("high-field must supply the remaining address bits and be readable (plain for a writable pointer)".into()));
         }
+        // Its one value is the placement's prefix: no domain of its own.
+        if !high.values.is_empty()
+            || high.value_range.is_some()
+            || high.write_range.is_some()
+            || high.write_values_only
+        {
+            return Err(fail(format!(
+                "high-field {reference} takes the placement's address prefix alone and has no value domain"
+            )));
+        }
+        let prefix = region.base >> width;
+        if *prefixes.entry(reference.as_str()).or_insert(prefix) != prefix {
+            return Err(fail(format!(
+                "high-field {reference} supplies another pointer's different prefix"
+            )));
+        }
     }
     Ok(())
 }
@@ -186,9 +209,9 @@ fn check_pairs(context: Context<'_>, block: &BlockType) -> Result<(), Error> {
                     FieldClass::WriteOneToClear | FieldClass::WriteTrigger
                 )
             })
-            || bits(&status.fields)? != bits(&clear.fields)?
+            || bits(&status.fields)? & !bits(&clear.fields)? != 0
         {
-            return Err(fail("status must read without side effects and match the clear word's W1C/trigger lanes and repetition".into()));
+            return Err(fail("status must read without side effects, its lanes must be W1C/trigger lanes of the clear word, and both must repeat alike".into()));
         }
     }
     Ok(())

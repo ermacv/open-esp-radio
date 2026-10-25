@@ -247,9 +247,15 @@ pub struct InterruptSnapshot {
     pub name: String,
     /// `INSTANCE.REGISTER`: one element.
     pub status: String,
-    /// `INSTANCE.REGISTER`: one element of write-one-to-clear or
-    /// write-trigger fields; `status` itself when it holds only
-    /// write-one-to-clear fields.
+    /// `INSTANCE.REGISTER.FIELD`: the status fields the snapshot samples,
+    /// when not every field its clear word acknowledges.
+    #[serde(default)]
+    pub events: Vec<String>,
+    /// `INSTANCE.REGISTER`, not written in the file: the clear element the
+    /// status register's type pairs with it (`[[interrupt-pairs]]`), or
+    /// `status` itself when it holds only write-one-to-clear fields. The
+    /// loader resolves it.
+    #[serde(skip)]
     pub clear: String,
     /// The event the caller consumed elsewhere, whose one selected field of
     /// `consumed-fields` the acknowledgement writes beside the sample.
@@ -300,9 +306,10 @@ pub struct FieldDomain {
     #[serde(default)]
     pub description: Option<String>,
     pub field: String,
-    /// Position of enum images in a masked register input.
+    /// The domain's values stand at the field's own bits in a register
+    /// image (a masked register modify's input), not from bit zero.
     #[serde(default)]
-    pub left_shift: u8,
+    pub positioned: bool,
 }
 
 /// A write of the whole word from zero, using a domain or its field's pointer fact.

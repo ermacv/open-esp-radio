@@ -143,7 +143,7 @@ fn pointer_fields(
         .chain(
             file.full_register_writes
                 .iter()
-                .filter(|write| write.points_to.is_some() || write.placement.is_some())
+                .filter(|write| write.pointer)
                 .map(|write| write.field.as_str()),
         );
     let mut pointers: BTreeMap<String, std::collections::BTreeSet<(String, String)>> =

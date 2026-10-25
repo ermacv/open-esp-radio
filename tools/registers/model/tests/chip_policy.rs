@@ -159,6 +159,11 @@ offset = 0x30
 name = "KEY"
 bits = "7:0"
 class = "write-only"
+
+[[interrupt-pairs]]
+status = "INT_RAW"
+clear = "INT_CLR"
+sources = ["SRC_HEADER"]
 "#;
 
 const ETM: &str = r#"
@@ -550,7 +555,6 @@ sources = ["SRC_HEADER"]
 [[interrupt-snapshots]]
 name = "timer0_interrupt"
 status = "TIMER0.INT_RAW"
-clear = "TIMER0.INT_CLR"
 sources = ["SRC_DRIVER"]
 
 [[field-reads]]
@@ -1390,8 +1394,8 @@ rejects!(
     ErrorKind::Register(_)
 );
 rejects!(
-    snapshot_clear_word_class,
-    [("clear = \"TIMER0.INT_CLR\"", "clear = \"TIMER0.INT_ENA\"")],
+    snapshot_status_needs_an_interrupt_pair,
+    [("status = \"TIMER0.INT_RAW\"", "status = \"TIMER0.VALUE\"")],
     ErrorKind::Snapshot(_)
 );
 rejects!(
@@ -1400,7 +1404,7 @@ rejects!(
         "status = \"TIMER0.INT_RAW\"",
         "status = \"TIMER0.ALARM_%s\""
     )],
-    ErrorKind::Transaction(_)
+    ErrorKind::Snapshot(_)
 );
 rejects!(
     masks_names_an_enable_word,
@@ -1792,9 +1796,12 @@ fn snapshot_samples_only_readable_status_fields() -> TestResult {
             "name = \"INT_RAW\"\noffset = 0x08\n\n[[registers.fields]]\nname = \"T0\"\nbits = \"0\"\nclass = \"read-only\"",
             &format!("name = \"INT_RAW\"\noffset = 0x08\n\n[[registers.fields]]\nname = \"T0\"\nbits = \"0\"\nclass = \"{class}\""),
         )?;
-        let error = fixture.rejection()?;
-        assert_eq!(error.entity, "timer0_interrupt");
-        assert!(matches!(error.kind, ErrorKind::Snapshot(_)), "{error}");
+        // The type's interrupt pair already refuses an unreadable status.
+        let error = match fixture.load() {
+            Ok(_) => return Err("the fixture loaded".into()),
+            Err(error) => error.to_string(),
+        };
+        assert!(error.contains("interrupt pair"), "{error}");
     }
     Ok(())
 }
@@ -1958,7 +1965,7 @@ fn snapshot_acknowledgement_checks_unsampled_zero_lanes() -> TestResult {
         .edit(
             "types/timer.toml",
             "name = \"T1\"\nbits = \"1\"\nclass = \"write-one-to-clear\"",
-            "name = \"T1\"\nbits = \"2\"\nclass = \"write-one-to-clear\"\nwrite-range = { min = 1, max = 1 }",
+            "name = \"T1\"\nbits = \"1\"\nclass = \"write-one-to-clear\"\n\n[[registers.fields]]\nname = \"T2\"\nbits = \"2\"\nclass = \"write-one-to-clear\"\nwrite-range = { min = 1, max = 1 }",
         )?
         .remove("fixed-register-images", "acknowledge_timer0_masked")?
         .remove("fixed-register-images", "acknowledge_timer0_consumed")?;
@@ -2208,8 +2215,8 @@ fn consumed_snapshot(constraint: &str, event: &str, fields: &str) -> TestResult<
         )?
         .edit(
             "policy.toml",
-            "clear = \"TIMER0.INT_CLR\"\n",
-            &format!("clear = \"TIMER0.INT_CLR\"\n{event}{fields}"),
+            "status = \"TIMER0.INT_RAW\"\n",
+            &format!("status = \"TIMER0.INT_RAW\"\n{event}{fields}"),
         )?;
     Ok(fixture)
 }
@@ -2356,8 +2363,8 @@ fn whole_word_bits_belong_to_writes_from_zero_alone() -> TestResult {
         ),
         // A snapshot.
         (
-            "clear = \"TIMER0.INT_CLR\"\n",
-            "clear = \"TIMER0.INT_CLR\"\nwhole-word-bits = { value = 4, sources = [\"SRC_HEADER\"] }\n",
+            "status = \"TIMER0.INT_RAW\"\n",
+            "status = \"TIMER0.INT_RAW\"\nwhole-word-bits = { value = 4, sources = [\"SRC_HEADER\"] }\n",
         ),
     ] {
         let error = rejected(&[(from, to)])?;
@@ -2419,27 +2426,48 @@ fn shared_word_never_writes_one_to_a_write_one_to_clear_flag() -> TestResult {
 }
 
 #[test]
-fn shifted_enum_reference_supplies_masked_images_without_copying_values() -> TestResult {
+fn positioned_enum_reference_supplies_masked_images_at_its_field() -> TestResult {
     let fixture = Fixture::new()?;
     fixture.edit(
         "types/timer.toml",
-        "name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"",
-        "name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"\nvalues = [{ name = \"OFF\", value = 0 }, { name = \"ON\", value = 1 }]",
+        "name = \"EN\"\nbits = \"31\"\nclass = \"plain\"",
+        "name = \"EN\"\nbits = \"31\"\nclass = \"plain\"\nvalues = [{ name = \"OFF\", value = 0 }, { name = \"ON\", value = 1 }]",
     )?;
     fixture.append(
-        "\n[[field-domains]]\nname = \"ShiftedDivider\"\nfield = \"TIMER0.CONFIG.DIV\"\nleft-shift = 31\n\n[[masked-register-modifies]]\nname = \"shifted_mask_image\"\nregister = \"TIMER0.CONFIG\"\ndomain = \"ShiftedDivider\"\npreserve-mask = 0x7fffffff\ninput-mask = 0x80000000\nset-mask = 0\nsources = [\"SRC_DRIVER\"]\n",
+        "\n[[field-domains]]\nname = \"PositionedEnable\"\nfield = \"TIMER0.CONFIG.EN\"\npositioned = true\n\n[[masked-register-modifies]]\nname = \"positioned_mask_image\"\nregister = \"TIMER0.CONFIG\"\ndomain = \"PositionedEnable\"\npreserve-mask = 0x7fffffff\ninput-mask = 0x80000000\nset-mask = 0\nsources = [\"SRC_DRIVER\"]\n",
     )?;
     fixture.load()?;
-    fixture.edit("policy.toml", "left-shift = 31", "left-shift = 32")?;
-    assert!(matches!(kind_of(&fixture)?, ErrorKind::Domain(_)));
+    // The input is exactly the field's lane: a wider input is no copy of it.
+    fixture.edit(
+        "policy.toml",
+        "preserve-mask = 0x7fffffff\ninput-mask = 0x80000000",
+        "preserve-mask = 0x3fffffff\ninput-mask = 0xc0000000",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Transaction(_)));
+    // Without `positioned` the values stand at bit zero, outside the input.
     fixture
-        .edit("policy.toml", "left-shift = 32", "left-shift = 31")?
         .edit(
-            "types/timer.toml",
-            "name = \"ON\", value = 1",
-            "name = \"ON\", value = 2",
-        )?;
-    assert!(matches!(kind_of(&fixture)?, ErrorKind::Domain(_)));
+            "policy.toml",
+            "preserve-mask = 0x3fffffff\ninput-mask = 0xc0000000",
+            "preserve-mask = 0x7fffffff\ninput-mask = 0x80000000",
+        )?
+        .edit("policy.toml", "positioned = true\n", "")?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Transaction(_)));
+    Ok(())
+}
+
+#[test]
+fn positioned_domain_takes_only_its_own_register() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timer.toml",
+        "name = \"EN\"\nbits = \"31\"\nclass = \"plain\"",
+        "name = \"EN\"\nbits = \"31\"\nclass = \"plain\"\nvalues = [{ name = \"OFF\", value = 0 }, { name = \"ON\", value = 1 }]",
+    )?;
+    fixture.append(
+        "\n[[field-domains]]\nname = \"PositionedEnable\"\nfield = \"TIMER0.CONFIG.EN\"\npositioned = true\n\n[[masked-register-modifies]]\nname = \"positioned_mask_image\"\nregister = \"TIMER1.CONFIG\"\ndomain = \"PositionedEnable\"\npreserve-mask = 0x7fffffff\ninput-mask = 0x80000000\nset-mask = 0\nsources = [\"SRC_DRIVER\"]\n",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Transaction(_)));
     Ok(())
 }
 
@@ -2466,11 +2494,11 @@ fn referenced_ranges_bound_writes_and_cannot_be_shifted_or_redeclared() -> TestR
     fixture.remove("bounded-domains", "Divider")?.edit(
         "policy.toml",
         "[[field-domains]]",
-        "[[field-domains]]\nleft-shift = 1",
+        "[[field-domains]]\npositioned = true",
     )?;
     assert!(matches!(kind_of(&fixture)?, ErrorKind::Domain(_)));
     fixture
-        .edit("policy.toml", "left-shift = 1", "left-shift = 0")?
+        .edit("policy.toml", "positioned = true\n", "")?
         .edit("policy.toml", "domain = \"Divider\"", "value = 16")?;
     assert!(matches!(kind_of(&fixture)?, ErrorKind::WriteConstraint(_)));
     Ok(())

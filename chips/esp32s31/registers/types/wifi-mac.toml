@@ -9943,7 +9943,6 @@ description = "High 12 descriptor-address bits shared with the low-address RX po
 name = "ADDRESS_HIGH"
 bits = "31:20"
 class = "plain"
-write-range = { min = 0x0, max = 0xfff }
 
 [[registers]]
 name = "WORD_0C74_OPAQUE"
@@ -14508,3 +14507,8 @@ name = "BITS_29_31_OPAQUE"
 bits = "31:29"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
+
+[[interrupt-pairs]]
+status = "STATUS"
+clear = "CLEAR"
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT"]

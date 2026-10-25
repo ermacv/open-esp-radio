@@ -2176,3 +2176,8 @@ name = "BITS_30_31_OPAQUE"
 bits = "31:30"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
+
+[[interrupt-pairs]]
+status = "POWER_INTERRUPT_STATUS"
+clear = "CLEAR"
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT"]
