@@ -475,11 +475,15 @@ pub fn import(
         bases.add(path, &text);
     }
     let (interrupts_text, interrupts_pin) = pinned.idf(&spec.interrupts)?;
-    let sources = header::parse_interrupts(&spec.interrupts, &interrupts_text)?;
-    if sources.is_empty() {
+    let table = header::parse_interrupts(&spec.interrupts, &interrupts_text)?;
+    let sources = &table.sources;
+    if sources.len() as u64 != u64::from(table.count) {
         return Err(ImportError::new(
-            &spec.interrupts,
-            "holds no interrupt source enumeration",
+            format!("{}:{}", spec.interrupts, table.count_line),
+            format!(
+                "enumeration does not cover every interrupt source in 0..{}",
+                table.count
+            ),
         ));
     }
 
@@ -653,7 +657,7 @@ pub fn import(
         );
         files.insert(path, emit::type_file(out, &mut catalog)?);
     }
-    let root = emit::root_file(spec, &files, &instances, &interrupts, &mut catalog)?;
+    let root = emit::root_file(spec, &files, &instances, &interrupts, &table, &mut catalog)?;
     let evidence = catalog.render(pinned)?;
     Ok(ImportOutput {
         root,

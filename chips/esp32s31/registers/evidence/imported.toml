@@ -212,12 +212,244 @@ id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_EXT_MEM_DEFS_H_L76"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/ext_mem_defs.h:76 (file sha256 4985fd8699d6cacfa6d82ede88b0a999077dc21fb1f72ac59e7857e3b89aca18), Apache-2.0: the line an imported fact cites."
 
 [[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L100"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:100 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L101"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:101 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L102"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:102 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L103"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:103 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L104"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:104 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L105"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:105 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L106"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:106 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L107"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:107 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L108"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:108 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L109"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:109 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L110"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:110 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L111"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:111 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L112"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:112 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L113"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:113 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L114"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:114 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L115"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:115 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L116"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:116 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L117"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:117 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L118"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:118 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L119"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:119 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L120"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:120 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L121"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:121 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L122"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:122 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L123"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:123 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L124"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:124 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L125"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:125 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L126"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:126 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L127"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:127 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L128"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:128 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L129"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:129 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L130"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:130 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L131"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:131 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L132"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:132 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
 
 [[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L133"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:133 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L134"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:134 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L135"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:135 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L136"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:136 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L137"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:137 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L138"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:138 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L139"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:139 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L140"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:140 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L141"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:141 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L142"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:142 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L143"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:143 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L144"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:144 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L145"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:145 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L146"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:146 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L147"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:147 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L148"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:148 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L149"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:149 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L150"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:150 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L151"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:151 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L152"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:152 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L153"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:153 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L154"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:154 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L155"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:155 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L156"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:156 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L157"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:157 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L158"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:158 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L159"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:159 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L160"
@@ -232,20 +464,208 @@ id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L162"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:162 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
 
 [[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L163"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:163 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L164"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:164 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L165"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:165 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L166"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:166 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L167"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:167 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L168"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:168 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L169"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:169 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L170"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:170 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L171"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:171 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L172"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:172 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L173"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:173 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
 
 [[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L174"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:174 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L175"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:175 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L176"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:176 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L177"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:177 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L178"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:178 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L179"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:179 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L180"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:180 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L181"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:181 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L182"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:182 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L183"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:183 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L184"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:184 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L185"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:185 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L186"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:186 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L187"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:187 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L188"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:188 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L19"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:19 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L20"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:20 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L21"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:21 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
 
 [[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L22"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:22 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L23"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:23 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L24"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:24 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L25"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:25 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L26"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:26 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L27"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:27 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L28"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:28 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L29"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:29 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L30"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:30 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L31"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:31 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L32"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:32 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L33"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:33 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L34"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:34 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L35"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:35 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L36"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:36 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L37"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:37 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L38"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:38 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L39"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:39 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L40"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:40 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L41"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:41 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L42"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:42 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L43"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:43 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L44"
@@ -272,6 +692,14 @@ id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L49"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:49 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
 
 [[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L50"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:50 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L51"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:51 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L52"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:52 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
 
@@ -284,8 +712,184 @@ id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L54"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:54 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
 
 [[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L55"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:55 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L56"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:56 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L57"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:57 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L58"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:58 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L59"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:59 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L60"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:60 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L61"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:61 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L62"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:62 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L63"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:63 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L64"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:64 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L65"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:65 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L66"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:66 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L67"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:67 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L68"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:68 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L69"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:69 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L70"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:70 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L71"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:71 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L72"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:72 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L73"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:73 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L74"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:74 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L75"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:75 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L76"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:76 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L77"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:77 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L78"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:78 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L79"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:79 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L80"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:80 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L81"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:81 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L82"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:82 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L83"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:83 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L84"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:84 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L85"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:85 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L86"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:86 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L87"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:87 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L88"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:88 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L89"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:89 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L90"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:90 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L91"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:91 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L92"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:92 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L93"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:93 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L94"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:94 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L95"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:95 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L96"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:96 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L97"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:97 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L98"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:98 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L99"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/interrupts.h:99 (file sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d), Apache-2.0: the line an imported fact cites."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"

@@ -2,6 +2,7 @@
 # `cargo registers import` (registers/import.toml).
 schema = 4
 chip = "esp32s31"
+interrupt-sources = { count = 169, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L100", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L101", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L102", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L103", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L104", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L105", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L106", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L107", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L108", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L109", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L110", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L111", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L112", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L113", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L114", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L115", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L116", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L117", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L118", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L119", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L120", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L121", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L122", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L123", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L124", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L125", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L126", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L127", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L128", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L129", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L130", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L131", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L132", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L133", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L134", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L135", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L136", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L137", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L138", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L139", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L140", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L141", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L142", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L143", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L144", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L145", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L146", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L147", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L148", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L149", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L150", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L151", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L152", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L153", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L154", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L155", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L156", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L157", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L158", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L159", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L160", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L161", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L162", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L163", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L164", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L165", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L166", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L167", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L168", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L169", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L170", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L171", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L172", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L173", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L174", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L175", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L176", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L177", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L178", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L179", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L180", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L181", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L182", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L183", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L184", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L185", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L186", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L187", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L188", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L19", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L20", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L21", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L22", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L23", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L24", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L25", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L26", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L27", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L28", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L29", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L30", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L31", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L32", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L33", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L34", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L35", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L36", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L37", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L38", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L39", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L40", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L41", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L42", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L43", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L44", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L45", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L46", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L47", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L48", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L49", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L50", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L51", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L52", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L53", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L54", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L55", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L56", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L57", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L58", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L59", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L60", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L61", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L62", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L63", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L64", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L65", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L66", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L67", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L68", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L69", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L70", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L71", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L72", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L73", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L74", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L75", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L76", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L77", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L78", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L79", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L80", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L81", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L82", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L83", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L84", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L85", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L86", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L87", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L88", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L89", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L90", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L91", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L92", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L93", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L94", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L95", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L96", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L97", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L98", "ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L99"] }
 types = [
     "types/cache.toml",
     "types/efuse.toml",
@@ -340,3 +341,903 @@ name = "LP_TRNG"
 source = 154
 instance = "TRNG"
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L173", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[unbound-interrupts]]
+source = 0
+name = "SYS_ICM"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L19"]
+
+[[unbound-interrupts]]
+source = 1
+name = "AXI_PERF_MON"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L20"]
+
+[[unbound-interrupts]]
+source = 3
+name = "SDIO_HOST"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L22"]
+
+[[unbound-interrupts]]
+source = 4
+name = "SPI2"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L23"]
+
+[[unbound-interrupts]]
+source = 5
+name = "SPI3"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L24"]
+
+[[unbound-interrupts]]
+source = 6
+name = "I2S0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L25"]
+
+[[unbound-interrupts]]
+source = 7
+name = "I2S1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L26"]
+
+[[unbound-interrupts]]
+source = 8
+name = "UHCI0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L27"]
+
+[[unbound-interrupts]]
+source = 10
+name = "UART1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L29"]
+
+[[unbound-interrupts]]
+source = 11
+name = "UART2"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L30"]
+
+[[unbound-interrupts]]
+source = 12
+name = "UART3"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L31"]
+
+[[unbound-interrupts]]
+source = 13
+name = "LCD_CAM"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L32"]
+
+[[unbound-interrupts]]
+source = 14
+name = "PWM0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L33"]
+
+[[unbound-interrupts]]
+source = 15
+name = "PWM1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L34"]
+
+[[unbound-interrupts]]
+source = 16
+name = "PWM2"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L35"]
+
+[[unbound-interrupts]]
+source = 17
+name = "PWM3"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L36"]
+
+[[unbound-interrupts]]
+source = 18
+name = "TWAI0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L37"]
+
+[[unbound-interrupts]]
+source = 19
+name = "TWAI0_TIMER"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L38"]
+
+[[unbound-interrupts]]
+source = 20
+name = "TWAI1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L39"]
+
+[[unbound-interrupts]]
+source = 21
+name = "TWAI1_TIMER"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L40"]
+
+[[unbound-interrupts]]
+source = 22
+name = "RMT"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L41"]
+
+[[unbound-interrupts]]
+source = 23
+name = "I2C0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L42"]
+
+[[unbound-interrupts]]
+source = 24
+name = "I2C1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L43"]
+
+[[unbound-interrupts]]
+source = 31
+name = "LEDC0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L50"]
+
+[[unbound-interrupts]]
+source = 32
+name = "LEDC1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L51"]
+
+[[unbound-interrupts]]
+source = 36
+name = "AHB_PDMA_IN_CH0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L55"]
+
+[[unbound-interrupts]]
+source = 37
+name = "AHB_PDMA_IN_CH1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L56"]
+
+[[unbound-interrupts]]
+source = 38
+name = "AHB_PDMA_IN_CH2"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L57"]
+
+[[unbound-interrupts]]
+source = 39
+name = "AHB_PDMA_IN_CH3"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L58"]
+
+[[unbound-interrupts]]
+source = 40
+name = "AHB_PDMA_IN_CH4"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L59"]
+
+[[unbound-interrupts]]
+source = 41
+name = "AHB_PDMA_OUT_CH0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L60"]
+
+[[unbound-interrupts]]
+source = 42
+name = "AHB_PDMA_OUT_CH1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L61"]
+
+[[unbound-interrupts]]
+source = 43
+name = "AHB_PDMA_OUT_CH2"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L62"]
+
+[[unbound-interrupts]]
+source = 44
+name = "AHB_PDMA_OUT_CH3"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L63"]
+
+[[unbound-interrupts]]
+source = 45
+name = "AHB_PDMA_OUT_CH4"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L64"]
+
+[[unbound-interrupts]]
+source = 46
+name = "ASRC_CHNL0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L65"]
+
+[[unbound-interrupts]]
+source = 47
+name = "ASRC_CHNL1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L66"]
+
+[[unbound-interrupts]]
+source = 48
+name = "AXI_PDMA_IN_CH0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L67"]
+
+[[unbound-interrupts]]
+source = 49
+name = "AXI_PDMA_IN_CH1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L68"]
+
+[[unbound-interrupts]]
+source = 50
+name = "AXI_PDMA_IN_CH2"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L69"]
+
+[[unbound-interrupts]]
+source = 51
+name = "AXI_PDMA_OUT_CH0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L70"]
+
+[[unbound-interrupts]]
+source = 52
+name = "AXI_PDMA_OUT_CH1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L71"]
+
+[[unbound-interrupts]]
+source = 53
+name = "AXI_PDMA_OUT_CH2"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L72"]
+
+[[unbound-interrupts]]
+source = 54
+name = "RSA"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L73"]
+
+[[unbound-interrupts]]
+source = 55
+name = "AES"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L74"]
+
+[[unbound-interrupts]]
+source = 56
+name = "SHA"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L75"]
+
+[[unbound-interrupts]]
+source = 57
+name = "ECC"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L76"]
+
+[[unbound-interrupts]]
+source = 58
+name = "ECDSA"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L77"]
+
+[[unbound-interrupts]]
+source = 59
+name = "KM"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L78"]
+
+[[unbound-interrupts]]
+source = 60
+name = "RMA"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L79"]
+
+[[unbound-interrupts]]
+source = 61
+name = "GPIO_INTR0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L80"]
+
+[[unbound-interrupts]]
+source = 62
+name = "GPIO_INTR1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L81"]
+
+[[unbound-interrupts]]
+source = 63
+name = "GPIO_INTR2"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L82"]
+
+[[unbound-interrupts]]
+source = 64
+name = "GPIO_INTR3"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L83"]
+
+[[unbound-interrupts]]
+source = 65
+name = "CPU_INTR_FROM_CPU_0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L84"]
+
+[[unbound-interrupts]]
+source = 66
+name = "CPU_INTR_FROM_CPU_1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L85"]
+
+[[unbound-interrupts]]
+source = 67
+name = "CPU_INTR_FROM_CPU_2"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L86"]
+
+[[unbound-interrupts]]
+source = 68
+name = "CPU_INTR_FROM_CPU_3"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L87"]
+
+[[unbound-interrupts]]
+source = 70
+name = "CPU_APM_M0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L89"]
+
+[[unbound-interrupts]]
+source = 71
+name = "CPU_APM_M1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L90"]
+
+[[unbound-interrupts]]
+source = 72
+name = "CPU_APM_M2"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L91"]
+
+[[unbound-interrupts]]
+source = 73
+name = "CPU_APM_M3"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L92"]
+
+[[unbound-interrupts]]
+source = 74
+name = "HP_MEM_APM_M0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L93"]
+
+[[unbound-interrupts]]
+source = 75
+name = "HP_MEM_APM_M1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L94"]
+
+[[unbound-interrupts]]
+source = 76
+name = "HP_MEM_APM_M2"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L95"]
+
+[[unbound-interrupts]]
+source = 77
+name = "HP_MEM_APM_M3"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L96"]
+
+[[unbound-interrupts]]
+source = 78
+name = "HP_MEM_APM_M4"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L97"]
+
+[[unbound-interrupts]]
+source = 79
+name = "HP_MEM_APM_M5"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L98"]
+
+[[unbound-interrupts]]
+source = 80
+name = "CPU_PERI0_TIMEOUT"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L99"]
+
+[[unbound-interrupts]]
+source = 81
+name = "CPU_PERI1_TIMEOUT"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L100"]
+
+[[unbound-interrupts]]
+source = 82
+name = "HP_PERI0_TIMEOUT"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L101"]
+
+[[unbound-interrupts]]
+source = 83
+name = "HP_PERI1_TIMEOUT"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L102"]
+
+[[unbound-interrupts]]
+source = 84
+name = "HP_APM_M0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L103"]
+
+[[unbound-interrupts]]
+source = 85
+name = "HP_APM_M1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L104"]
+
+[[unbound-interrupts]]
+source = 86
+name = "HP_APM_M2"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L105"]
+
+[[unbound-interrupts]]
+source = 87
+name = "HP_APM_M3"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L106"]
+
+[[unbound-interrupts]]
+source = 88
+name = "HP_APM_M4"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L107"]
+
+[[unbound-interrupts]]
+source = 89
+name = "HP_APM_M5"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L108"]
+
+[[unbound-interrupts]]
+source = 90
+name = "HP_APM_M6"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L109"]
+
+[[unbound-interrupts]]
+source = 91
+name = "HP_PERI0_PMS"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L110"]
+
+[[unbound-interrupts]]
+source = 92
+name = "HP_PERI1_PMS"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L111"]
+
+[[unbound-interrupts]]
+source = 93
+name = "CPU0_PERI_PMS"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L112"]
+
+[[unbound-interrupts]]
+source = 94
+name = "CPU1_PERI_PMS"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L113"]
+
+[[unbound-interrupts]]
+source = 95
+name = "MSPI_FLASH"
+reason = "Raising instance is unresolved between SPI0 and SPI1."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L114"]
+
+[[unbound-interrupts]]
+source = 96
+name = "LPI"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L115"]
+
+[[unbound-interrupts]]
+source = 97
+name = "PMT"
+reason = "PMU alias uses PMT, while the SVD binds PMU to PMU_REG_0 and PMU_REG_1; source ownership is unresolved."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L116"]
+
+[[unbound-interrupts]]
+source = 98
+name = "SBD"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L117"]
+
+[[unbound-interrupts]]
+source = 99
+name = "USB_OTGHS"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L118"]
+
+[[unbound-interrupts]]
+source = 100
+name = "USB_OTGHS_ENDP_MULTI_PROC"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L119"]
+
+[[unbound-interrupts]]
+source = 101
+name = "JPEG"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L120"]
+
+[[unbound-interrupts]]
+source = 102
+name = "PPA"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L121"]
+
+[[unbound-interrupts]]
+source = 103
+name = "CORE0_TRACE"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L122"]
+
+[[unbound-interrupts]]
+source = 104
+name = "CORE1_TRACE"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L123"]
+
+[[unbound-interrupts]]
+source = 105
+name = "DMA2D_IN_CH0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L124"]
+
+[[unbound-interrupts]]
+source = 106
+name = "DMA2D_IN_CH1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L125"]
+
+[[unbound-interrupts]]
+source = 107
+name = "DMA2D_IN_CH2"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L126"]
+
+[[unbound-interrupts]]
+source = 108
+name = "DMA2D_OUT_CH0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L127"]
+
+[[unbound-interrupts]]
+source = 109
+name = "DMA2D_OUT_CH1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L128"]
+
+[[unbound-interrupts]]
+source = 110
+name = "DMA2D_OUT_CH2"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L129"]
+
+[[unbound-interrupts]]
+source = 111
+name = "DMA2D_OUT_CH3"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L130"]
+
+[[unbound-interrupts]]
+source = 112
+name = "MSPI_PSRAM"
+reason = "Raising instance is unresolved between PSRAM_MSPI0 and PSRAM_MSPI1."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L131"]
+
+[[unbound-interrupts]]
+source = 114
+name = "PCNT0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L133"]
+
+[[unbound-interrupts]]
+source = 115
+name = "PCNT1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L134"]
+
+[[unbound-interrupts]]
+source = 116
+name = "HP_PAU"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L135"]
+
+[[unbound-interrupts]]
+source = 117
+name = "HP_PARLIO_RX"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L136"]
+
+[[unbound-interrupts]]
+source = 118
+name = "HP_PARLIO_TX"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L137"]
+
+[[unbound-interrupts]]
+source = 119
+name = "ASSIST_DEBUG"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L138"]
+
+[[unbound-interrupts]]
+source = 120
+name = "MODEM_WIFI_MAC"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L139"]
+
+[[unbound-interrupts]]
+source = 121
+name = "MODEM_WIFI_MAC_NMI"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L140"]
+
+[[unbound-interrupts]]
+source = 122
+name = "MODEM_WIFI_PWR"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L141"]
+
+[[unbound-interrupts]]
+source = 123
+name = "MODEM_WIFI_BB"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L142"]
+
+[[unbound-interrupts]]
+source = 124
+name = "MODEM_BT_MAC"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L143"]
+
+[[unbound-interrupts]]
+source = 125
+name = "MODEM_BT_BB"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L144"]
+
+[[unbound-interrupts]]
+source = 126
+name = "MODEM_BT_BB_NMI"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L145"]
+
+[[unbound-interrupts]]
+source = 127
+name = "MODEM_LP_TIMER"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L146"]
+
+[[unbound-interrupts]]
+source = 128
+name = "MODEM_COEX"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L147"]
+
+[[unbound-interrupts]]
+source = 129
+name = "MODEM_BLE_TIMER"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L148"]
+
+[[unbound-interrupts]]
+source = 130
+name = "MODEM_BLE_SEC"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L149"]
+
+[[unbound-interrupts]]
+source = 131
+name = "MODEM_I2C_MST"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L150"]
+
+[[unbound-interrupts]]
+source = 132
+name = "MODEM_ZB_MAC"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L151"]
+
+[[unbound-interrupts]]
+source = 133
+name = "MODEM_BT_MAC_INT1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L152"]
+
+[[unbound-interrupts]]
+source = 134
+name = "CORDIC"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L153"]
+
+[[unbound-interrupts]]
+source = 135
+name = "ZERO_DET"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L154"]
+
+[[unbound-interrupts]]
+source = 137
+name = "LP_TIMER_REG_0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L156"]
+
+[[unbound-interrupts]]
+source = 138
+name = "LP_TIMER_REG_1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L157"]
+
+[[unbound-interrupts]]
+source = 139
+name = "MB_HP"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L158"]
+
+[[unbound-interrupts]]
+source = 140
+name = "MB_LP"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L159"]
+
+[[unbound-interrupts]]
+source = 144
+name = "LP_ADC"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L163"]
+
+[[unbound-interrupts]]
+source = 145
+name = "LP_DAC"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L164"]
+
+[[unbound-interrupts]]
+source = 146
+name = "LP_GPIO"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L165"]
+
+[[unbound-interrupts]]
+source = 147
+name = "LP_I2C"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L166"]
+
+[[unbound-interrupts]]
+source = 148
+name = "LP_SPI"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L167"]
+
+[[unbound-interrupts]]
+source = 149
+name = "LP_TOUCH"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L168"]
+
+[[unbound-interrupts]]
+source = 151
+name = "LP_UART"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L170"]
+
+[[unbound-interrupts]]
+source = 152
+name = "LP_EFUSE"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L171"]
+
+[[unbound-interrupts]]
+source = 153
+name = "LP_SW"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L172"]
+
+[[unbound-interrupts]]
+source = 155
+name = "LP_SYSREG"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L174"]
+
+[[unbound-interrupts]]
+source = 156
+name = "LP_APM_M0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L175"]
+
+[[unbound-interrupts]]
+source = 157
+name = "LP_APM_M1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L176"]
+
+[[unbound-interrupts]]
+source = 158
+name = "LP_APM_M2"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L177"]
+
+[[unbound-interrupts]]
+source = 159
+name = "LP_APM_M3"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L178"]
+
+[[unbound-interrupts]]
+source = 160
+name = "LP_PERI0_PMS"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L179"]
+
+[[unbound-interrupts]]
+source = 161
+name = "LP_PERI1_PMS"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L180"]
+
+[[unbound-interrupts]]
+source = 162
+name = "LP_HUK"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L181"]
+
+[[unbound-interrupts]]
+source = 163
+name = "LP_PERI_TIMEOUT"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L182"]
+
+[[unbound-interrupts]]
+source = 164
+name = "LP_AHB_PDMA_IN_CH0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L183"]
+
+[[unbound-interrupts]]
+source = 165
+name = "LP_AHB_PDMA_IN_CH1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L184"]
+
+[[unbound-interrupts]]
+source = 166
+name = "LP_AHB_PDMA_OUT_CH0"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L185"]
+
+[[unbound-interrupts]]
+source = 167
+name = "LP_AHB_PDMA_OUT_CH1"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L186"]
+
+[[unbound-interrupts]]
+source = 168
+name = "LP_SW_INVALID_SLEEP"
+reason = "No binding to an imported instance and output is established."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L187"]

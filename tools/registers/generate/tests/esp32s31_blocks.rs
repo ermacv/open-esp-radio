@@ -38,6 +38,28 @@ fn the_imported_esp32s31_root_loads_with_every_spec_block() {
         }
     }
     assert!(!model.interrupts().is_empty());
+    let mut covered = model
+        .interrupts()
+        .iter()
+        .map(|source| u32::from(source.source))
+        .chain(
+            model
+                .unbound_interrupts()
+                .iter()
+                .map(|source| u32::from(source.source)),
+        )
+        .collect::<Vec<_>>();
+    covered.sort();
+    assert_eq!(
+        covered,
+        (0..model.interrupt_sources().count).collect::<Vec<_>>()
+    );
+    assert!(
+        model
+            .unbound_interrupts()
+            .iter()
+            .all(|source| !source.reason.trim().is_empty())
+    );
 }
 
 #[test]

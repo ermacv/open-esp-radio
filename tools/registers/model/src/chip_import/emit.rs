@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 
 use super::{
     Cite, Cites, ImportError, ImportSpec, OutInstance, OutInterrupt, OutRegister, OutType, Pin,
-    PinnedFiles, Review,
+    PinnedFiles, Review, header::InterruptTable,
 };
 
 /// The file name of type `name`: `HP_SYS_CLKRST` is `hp-sys-clkrst.toml`.
@@ -376,23 +376,37 @@ fn register_text(
 }
 
 /// The chip root: the type includes, the instances and the interrupt
-/// sources bound to them.
+/// sources, each bound to an instance or explicitly unbound.
 pub(super) fn root_file(
     spec: &ImportSpec,
     types: &BTreeMap<String, String>,
     instances: &[OutInstance],
     interrupts: &[OutInterrupt],
+    table: &InterruptTable,
     catalog: &mut Catalog,
 ) -> Result<String, ImportError> {
     let mut text = String::new();
+    let count_cites = table
+        .sources
+        .iter()
+        .map(|source| source.line)
+        .chain(std::iter::once(table.count_line))
+        .map(|line| Cite::Line {
+            path: spec.interrupts.clone(),
+            line,
+        })
+        .collect();
+    let count_sources = catalog.ids(&count_cites, &[]);
     let paths = types.keys().cloned().collect::<Vec<_>>();
     let _ = write!(
         text,
         "# The {} chip root of the imported register blocks, written by\n\
          # `cargo registers import` (registers/import.toml).\n\
-         schema = 4\nchip = {}\ntypes = [\n",
+         schema = 4\nchip = {}\ninterrupt-sources = {{ count = {}, sources = {} }}\ntypes = [\n",
         spec.chip,
-        string(&spec.chip)
+        string(&spec.chip),
+        table.count,
+        list(&count_sources)
     );
     for path in &paths {
         let _ = writeln!(text, "    {},", string(path));
@@ -418,6 +432,38 @@ pub(super) fn root_file(
             string(&interrupt.name),
             interrupt.number,
             string(&interrupt.instance),
+            list(&sources)
+        );
+    }
+    let bound = interrupts
+        .iter()
+        .map(|interrupt| interrupt.number)
+        .collect::<BTreeSet<_>>();
+    for source in &table.sources {
+        if bound.contains(&source.number) {
+            continue;
+        }
+        let cites = Cites::from([Cite::Line {
+            path: spec.interrupts.clone(),
+            line: source.line,
+        }]);
+        let sources = catalog.ids(&cites, &[]);
+        let reason = match (spec.chip.as_str(), source.name.as_str()) {
+            ("esp32s31", "MSPI_FLASH") => "Raising instance is unresolved between SPI0 and SPI1.",
+            ("esp32s31", "MSPI_PSRAM") => {
+                "Raising instance is unresolved between PSRAM_MSPI0 and PSRAM_MSPI1."
+            }
+            ("esp32s31", "PMT") => {
+                "PMU alias uses PMT, while the SVD binds PMU to PMU_REG_0 and PMU_REG_1; source ownership is unresolved."
+            }
+            _ => "No binding to an imported instance and output is established.",
+        };
+        let _ = write!(
+            text,
+            "\n[[unbound-interrupts]]\nsource = {}\nname = {}\nreason = {}\nsources = {}\n",
+            source.number,
+            string(&source.name),
+            string(reason),
             list(&sources)
         );
     }

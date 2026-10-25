@@ -522,6 +522,15 @@ locator). The report,
 `target/registers-import/<chip>/report.md`, lists every disagreement and
 what the import made of it. The import owns its type directory.
 
+The root covers every source in the header's `0..ETS_MAX_INTR_SOURCE`:
+existing SVD bindings name imported instances, and every other source is
+explicitly unbound with a reason. Names remove `ETS_` and either
+`_INTR_SOURCE` or `_SOURCE`, preserving embedded `INTR` segments. Each
+enumerator, including `ETS_MAX_INTR_SOURCE`, has its own line evidence ID;
+the root's source count cites all those lines. Missing bounds, gaps and
+duplicate source identities are errors. For S31, unbound reasons name the
+unresolved flash/PSRAM controller pair and the PMT/PMU alias conflict.
+
 ## Analog-I2C space
 
 The chip manifest's `indirect-spaces = ["analog/phy.toml"]` selects one

@@ -334,7 +334,7 @@ impl Bases {
 }
 
 /// One source of the interrupt enumeration: its number, its name without
-/// `ETS_` and `_INTR_SOURCE`, and its line.
+/// `ETS_` and `_INTR_SOURCE` or `_SOURCE`, and its line.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct InterruptSource {
     pub(super) number: u16,
@@ -342,13 +342,18 @@ pub(super) struct InterruptSource {
     pub(super) line: usize,
 }
 
+/// The header's source enumeration and its exclusive upper bound.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct InterruptTable {
+    pub(super) sources: Vec<InterruptSource>,
+    pub(super) count: u32,
+    pub(super) count_line: usize,
+}
+
 /// The sources of `interrupts.h`'s `periph_interrupt_t`, up to
 /// `ETS_MAX_INTR_SOURCE`.
-pub(super) fn parse_interrupts(
-    path: &str,
-    text: &str,
-) -> Result<Vec<InterruptSource>, ImportError> {
-    let mut out = Vec::new();
+pub(super) fn parse_interrupts(path: &str, text: &str) -> Result<InterruptTable, ImportError> {
+    let mut out: Vec<InterruptSource> = Vec::new();
     let mut inside = false;
     let mut next = 0_u64;
     for (index, line) in text.lines().enumerate() {
@@ -369,19 +374,40 @@ pub(super) fn parse_interrupts(
         if identifier(name) != name || name.is_empty() {
             continue;
         }
-        if name == "ETS_MAX_INTR_SOURCE" {
-            break;
-        }
         let context = format!("{path}:{} {name}", index + 1);
         if let Some(value) = value {
             next = parse_literal(value).ok_or_else(|| {
                 ImportError::new(&context, format!("invalid enumeration value {value:?}"))
             })?;
         }
-        if let Some(short) = name
-            .strip_prefix("ETS_")
-            .and_then(|rest| rest.strip_suffix("_INTR_SOURCE"))
-        {
+        if name == "ETS_MAX_INTR_SOURCE" {
+            let count = u32::try_from(next)
+                .ok()
+                .filter(|count| *count <= u32::from(u16::MAX) + 1)
+                .ok_or_else(|| {
+                    ImportError::new(
+                        &context,
+                        format!("interrupt source count {next} exceeds 65536"),
+                    )
+                })?;
+            for source in &out {
+                if u32::from(source.number) >= count {
+                    return Err(ImportError::new(
+                        format!("{path}:{} {}", source.line, source.name),
+                        format!("interrupt source {} is outside 0..{count}", source.number),
+                    ));
+                }
+            }
+            return Ok(InterruptTable {
+                sources: out,
+                count,
+                count_line: index + 1,
+            });
+        }
+        if let Some(short) = name.strip_prefix("ETS_").and_then(|rest| {
+            rest.strip_suffix("_INTR_SOURCE")
+                .or_else(|| rest.strip_suffix("_SOURCE"))
+        }) {
             let number = u16::try_from(next).map_err(|_| {
                 ImportError::new(&context, format!("interrupt source {next} exceeds u16"))
             })?;
@@ -404,5 +430,5 @@ pub(super) fn parse_interrupts(
             .checked_add(1)
             .ok_or_else(|| ImportError::new(&context, "enumeration increment exceeds u64"))?;
     }
-    Ok(out)
+    Err(ImportError::new(path, "holds no ETS_MAX_INTR_SOURCE bound"))
 }

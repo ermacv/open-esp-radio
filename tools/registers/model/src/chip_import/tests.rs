@@ -234,6 +234,9 @@ fn derived_instances_share_one_type_and_load() -> TestResult {
         names,
         [("TG0_T0", 1, "TIMG0"), ("TIMERGRP1_T0", 2, "TIMG1")]
     );
+    assert_eq!(model.interrupt_sources().count, 3);
+    assert_eq!(model.unbound_interrupts().len(), 1);
+    assert_eq!(model.unbound_interrupts()[0].name, "ZERO");
     assert!(has(&output.report, "TIMG1", FindingKind::Interrupt));
     assert!(
         !output
@@ -604,8 +607,9 @@ fn header_parsers_read_both_formats_and_their_literals() {
         bases.resolve("DR_REG_SYSCON_BASE"),
         Some((0x4100, "reg_base.h".to_owned(), 4))
     );
-    let sources = header::parse_interrupts("interrupts.h", INTERRUPTS)
+    let table = header::parse_interrupts("interrupts.h", INTERRUPTS)
         .expect("the test interrupt enumeration parses");
+    let sources = &table.sources;
     assert_eq!(sources.len(), 3);
     assert_eq!(
         (sources[2].number, sources[2].name.as_str()),
@@ -754,18 +758,106 @@ fn hostile_interrupt_values_return_contextual_errors() {
 
 #[test]
 fn interrupt_enumeration_keeps_implicit_values_and_the_last_u16_source() -> TestResult {
-    let sources = header::parse_interrupts(
+    let table = header::parse_interrupts(
         "interrupts.h",
         "typedef enum {\nOTHER = 65533,\nETS_FIRST_INTR_SOURCE,\nETS_LAST_INTR_SOURCE,\nETS_MAX_INTR_SOURCE,\n} periph_interrupt_t;\n",
     )?;
     assert_eq!(
-        sources
+        table
+            .sources
             .iter()
             .map(|source| source.number)
             .collect::<Vec<_>>(),
         [u16::MAX - 1, u16::MAX]
     );
+    assert_eq!(table.count, u32::from(u16::MAX) + 1);
     Ok(())
+}
+
+#[test]
+fn every_header_source_is_bound_or_unbound_with_line_evidence() -> TestResult {
+    let header = "\
+typedef enum {
+ETS_CACHE_INTR_SOURCE = 0,
+ETS_GPIO_INTR0_SOURCE,
+ETS_GPIO_INTR1_SOURCE,
+ETS_CPU_INTR_FROM_CPU_0_SOURCE,
+ETS_CPU_INTR_FROM_CPU_1_SOURCE,
+ETS_MAX_INTR_SOURCE,
+} periph_interrupt_t;
+";
+    let svd = device(&[peripheral(
+        "TIMG0",
+        0x1000,
+        &[("CACHE", 0)],
+        &timg_registers(),
+    )]);
+    let output = import(
+        &spec(TIMG_ONLY),
+        None,
+        &files(svd, &[("interrupts.h", header)]),
+    )?;
+    let model = load(&output)?;
+    assert_eq!(model.interrupt_sources().count, 5);
+    assert_eq!(model.interrupts().len(), 1);
+    assert_eq!(model.interrupts()[0].name, "CACHE");
+    let unbound = model.unbound_interrupts();
+    assert_eq!(
+        unbound
+            .iter()
+            .map(|source| source.name.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "GPIO_INTR0",
+            "GPIO_INTR1",
+            "CPU_INTR_FROM_CPU_0",
+            "CPU_INTR_FROM_CPU_1"
+        ]
+    );
+    for (index, source) in unbound.iter().enumerate() {
+        assert_eq!(usize::from(source.source), index + 1);
+        assert!(!source.reason.trim().is_empty());
+        assert_eq!(
+            source.sources,
+            [format!("ESP_IDF_01234567_INTERRUPTS_H_L{}", index + 3)]
+        );
+    }
+    let mut expected = (2..=7)
+        .map(|line| format!("ESP_IDF_01234567_INTERRUPTS_H_L{line}"))
+        .collect::<Vec<_>>();
+    expected.sort();
+    assert_eq!(model.interrupt_sources().sources, expected);
+    for line in 2..=7 {
+        assert!(
+            output
+                .evidence
+                .contains(&format!("esp-idf:interrupts.h:{line} "))
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn incomplete_or_invalid_interrupt_bounds_return_errors() {
+    let svd = device(&[peripheral("TIMG0", 0x1000, &[], &timg_registers())]);
+    for declarations in [
+        "ETS_ZERO_INTR_SOURCE = 0,",
+        "ETS_ZERO_INTR_SOURCE = 0,\nETS_MAX_INTR_SOURCE = invalid,",
+        "ETS_ZERO_INTR_SOURCE = 0,\nETS_MAX_INTR_SOURCE = 65537,",
+        "ETS_ZERO_INTR_SOURCE = 0,\nETS_MAX_INTR_SOURCE = 0,",
+        "ETS_ZERO_INTR_SOURCE = 0,\nETS_MAX_INTR_SOURCE = 2,",
+        "ETS_ONE_INTR_SOURCE = 1,\nETS_MAX_INTR_SOURCE,",
+        "ETS_SAME_INTR_SOURCE = 0,\nETS_SAME_SOURCE,\nETS_MAX_INTR_SOURCE,",
+    ] {
+        let header = format!("typedef enum {{\n{declarations}\n}} periph_interrupt_t;\n");
+        let error = import(
+            &spec(TIMG_ONLY),
+            None,
+            &files(svd.clone(), &[("interrupts.h", &header)]),
+        )
+        .expect_err("the root requires a complete, bounded enumeration with unique names");
+        assert!(error.context.starts_with("interrupts.h"), "{error}");
+    }
 }
 
 #[test]
