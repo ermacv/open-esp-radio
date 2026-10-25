@@ -82,6 +82,14 @@ pub struct PacApiPack {
     /// Typed registers that are FIFO ports: a read takes an element out.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fifo_ports: Vec<FifoPort>,
+    /// One-bit fields of typed registers that software sets to start a
+    /// command and the hardware clears when it is done.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub command_fields: Vec<CommandField>,
+    /// Typed register arrays that are the data words of a command port: each
+    /// word read and stored whole, never modified.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub data_ports: Vec<DataPort>,
     /// Read-only owners given up from a typed block's writes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub read_capabilities: Vec<ReadCapability>,
@@ -155,6 +163,34 @@ pub struct WriteTriggerField {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct FifoPort {
+    pub peripheral: String,
+    pub register: String,
+    pub sources: Vec<String>,
+}
+
+/// A command field of a typed register: software writes one to start the
+/// command, and the hardware clears it when the command is done, so the
+/// field reads one while it runs. Every read-modify-write of the register
+/// writes zero there; only `start_<register>_<field>` writes one, and
+/// `<register>_<field>_busy` reads it. The `exclusive` commands of one
+/// register form one group: a start refuses while any of them runs.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct CommandField {
+    pub peripheral: String,
+    pub register: String,
+    pub field: String,
+    #[serde(default)]
+    pub exclusive: bool,
+    pub sources: Vec<String>,
+}
+
+/// The data words of a command port: one register (or array) with one
+/// field the hardware also writes. Each word is read and stored whole
+/// (`write_<register>`), never read-modify-written.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct DataPort {
     pub peripheral: String,
     pub register: String,
     pub sources: Vec<String>,
@@ -863,6 +899,27 @@ impl PacApiPack {
                 )));
             }
         }
+        let mut commands = BTreeSet::new();
+        for command in &self.command_fields {
+            if command.sources.is_empty()
+                || !commands.insert((&command.peripheral, &command.register, &command.field))
+                || triggers.contains(&(&command.peripheral, &command.register, &command.field))
+            {
+                return Err(Error::message(format!(
+                    "PAC API command field {}.{}.{} has no sources, is repeated or is also a write trigger",
+                    command.peripheral, command.register, command.field
+                )));
+            }
+        }
+        let mut data = BTreeSet::new();
+        for port in &self.data_ports {
+            if port.sources.is_empty() || !data.insert((&port.peripheral, &port.register)) {
+                return Err(Error::message(format!(
+                    "PAC API data port {}.{} has no sources or is repeated",
+                    port.peripheral, port.register
+                )));
+            }
+        }
         let mut ports = BTreeSet::new();
         for port in &self.fifo_ports {
             if port.sources.is_empty() || !ports.insert((&port.peripheral, &port.register)) {
@@ -1565,6 +1622,12 @@ impl PacApiPack {
                     )
                     .chain(self.fifo_ports.iter().map(|port| port.sources.as_slice()))
                     .chain(
+                        self.command_fields
+                            .iter()
+                            .map(|command| command.sources.as_slice()),
+                    )
+                    .chain(self.data_ports.iter().map(|port| port.sources.as_slice()))
+                    .chain(
                         self.read_capabilities
                             .iter()
                             .map(|capability| capability.sources.as_slice()),
@@ -2114,6 +2177,8 @@ impl PacApiPack {
             interrupt_sources: Vec::new(),
             write_trigger_fields: Vec::new(),
             fifo_ports: Vec::new(),
+            command_fields: Vec::new(),
+            data_ports: Vec::new(),
             read_capabilities: Vec::new(),
             register_divisions: Vec::new(),
             shared_blocks: Vec::new(),

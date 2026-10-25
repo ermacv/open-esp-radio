@@ -590,6 +590,10 @@ fn field_access_holds(rule: &FieldRule, header: &str) -> bool {
             header == "R/W" && access.is_none_or(|a| a == OverlayAccess::ReadWrite)
         }
         (Some(FieldKind::WriteTrigger), access) => header == "WT" && access.is_none_or(access_fits),
+        (Some(FieldKind::Command), access) => {
+            matches!(header, "R/W/SC" | "R/W/WTC")
+                && access.is_none_or(|a| a == OverlayAccess::ReadWrite)
+        }
         (None, Some(access)) => access_fits(access),
         (None, None) => false,
     }
@@ -801,8 +805,12 @@ fn check_register(
             }
         }
     }
-    let wants_header =
-        rule.access.is_some() || rule.write_one_to_clear || rule.raw_status_writable || rule.fifo;
+    let wants_header = rule.access.is_some()
+        || rule.write_one_to_clear
+        || rule.raw_status_writable
+        || rule.fifo
+        || rule.data_port
+        || !rule.exclusive_commands.is_empty();
     if wants_header && header.is_none() && failures.is_empty() {
         failures.push(format!("{subject}: cites no register definition"));
     }

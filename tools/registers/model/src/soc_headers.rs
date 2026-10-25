@@ -11,14 +11,17 @@
 //! vendor peripheral; this module finds every vendor register in it and
 //! derives the register's API from the header's classes:
 //!
-//! - `R/W` is a plain field, `RO`/`R`/`HRO` a read-only one, a one-bit `WT`
-//!   a write trigger;
+//! - `R/W` is a plain field, `RO`/`R`/`HRO` a read-only one, `WT` a write
+//!   trigger (a wider one written with its value);
+//! - a one-bit `R/W/SC` or `R/W/WTC` field is a command: software sets it to
+//!   start, the hardware clears it when done;
 //! - a register whose every field is write-one-to-clear (`WTC`, `W1C`) is
 //!   sampled and acknowledged, never modified;
-//! - a writable field the hardware also changes (`R/W/SC`, `R/W/SS`, ...),
-//!   a set-only one (`W1S`, `WTS`, `WS`), a multi-bit `WT`, a class this
+//! - any other writable field the hardware also changes (`R/W/SS`, a wider
+//!   `R/W/SC`, ...), a set-only one (`W1S`, `WTS`, `WS`), a class this
 //!   module does not know and a write-one-to-clear field beside others
-//!   leave the register read-only;
+//!   leave the register read-only, unless the overlay makes it a command
+//!   port's data word;
 //! - a field the header describes as `Reserved` is no field: its bits are
 //!   reserved and kept by every write;
 //! - a field a read clears ("cleared by a read", `R_SS_RC`) or a port read
@@ -44,6 +47,9 @@ pub(crate) enum Class {
     ReadOnly,
     /// `WT`: a write starts an action.
     Trigger,
+    /// `R/W/SC`, `R/W/WTC`: software sets it to start a command, and the
+    /// hardware clears it when the command is done.
+    Command,
     /// `WTC`, `W1C` without `W`: a one written clears it.
     OneToClear,
     /// `R/W` the hardware also changes (`SC`, `SS`, `WTC`): a
@@ -69,6 +75,7 @@ pub(crate) fn class(access: &str) -> Class {
         ["R", "W"] | ["RW"] | ["W", "R"] => Class::Plain,
         ["RO" | "R" | "HRO"] => Class::ReadOnly,
         ["WT"] => Class::Trigger,
+        ["R", "W", "SC" | "WTC"] => Class::Command,
         ["WO"] => Class::WriteOnly,
         _ if tokens
             .iter()
@@ -381,6 +388,9 @@ pub(crate) struct Derived {
     /// Vendor fields the header calls reserved.
     pub(crate) reserved_fields: BTreeSet<String>,
     pub(crate) fields: BTreeMap<String, DerivedField>,
+    /// The reasons in `narrow` that are only a field the hardware also
+    /// changes: a command port's data word lifts them.
+    pub(crate) hardware: BTreeSet<String>,
     /// Vendor fields the header names otherwise at the same bits: the
     /// header's name without its peripheral prefix, which the API takes.
     pub(crate) renamed: BTreeMap<String, String>,
@@ -515,19 +525,23 @@ pub(crate) fn derive_register(
             .map_or(1, |svd| svd.width);
         let reason = match field.class {
             Class::HardwareWritable => Some("the hardware also changes it"),
+            Class::Command if width > 1 => Some("the hardware also changes it"),
             Class::SetOnly => Some("a one written sets it"),
             Class::Unknown => Some("an access class without a rule"),
             Class::OneToClear if !one_to_clear => {
                 Some("write-one-to-clear beside fields that are not")
             }
-            Class::Trigger if width > 1 => Some("a multi-bit write trigger"),
             _ => None,
         };
         if let Some(reason) = reason {
-            derived.narrow.push(format!(
+            let text = format!(
                 "field {name} is {} ({}): {reason}",
                 field.access, field.source
-            ));
+            );
+            if matches!(field.class, Class::HardwareWritable | Class::Command) {
+                derived.hardware.insert(text.clone());
+            }
+            derived.narrow.push(text);
         }
     }
     derived

@@ -529,20 +529,126 @@ fn a_write_trigger_field_has_only_its_explicit_trigger() {
 }
 
 #[test]
-fn a_write_trigger_field_wider_than_one_bit_is_refused() {
+fn a_write_trigger_field_wider_than_one_bit_is_written_with_its_value() {
     let wide = register(
         "CONFIG",
         0,
         "read-write",
         "",
-        &(field("ENABLE", 0, 1, "") + &field("UPDATE", 30, 2, "<access>write-only</access>")),
+        &(field("ENABLE", 0, 1, "") + &field("UPDATE", 28, 4, "<access>write-only</access>")),
     );
     let mut pack = typed_pack();
     pack.write_trigger_fields.push(trigger("CONFIG", "UPDATE"));
-    let error = pack
+    let rust = pack
         .render_typed_rust(&svd(&wide), &Default::default())
+        .unwrap();
+    assert!(rust.contains("value: oer_mmio::Bits<4>"), "{rust}");
+    assert!(rust.contains("| (value.get() << 28)"), "{rust}");
+}
+
+fn command(register: &str, field: &str, exclusive: bool) -> crate::CommandField {
+    crate::CommandField {
+        peripheral: "RADIO".to_owned(),
+        register: register.to_owned(),
+        field: field.to_owned(),
+        exclusive,
+        sources: vec!["FIXTURE".to_owned()],
+    }
+}
+
+/// `CONFIG` with two one-bit commands, a plain field and a two-bit field.
+fn commanded() -> String {
+    register(
+        "CONFIG",
+        0,
+        "read-write",
+        "",
+        &(field("GO", 0, 1, "")
+            + &field("STOP", 1, 1, "")
+            + &field("LEVEL", 2, 2, "")
+            + &field("WIDE", 4, 2, "")),
+    )
+}
+
+#[test]
+fn a_command_field_is_started_and_read_but_never_set_or_replayed() {
+    let mut pack = typed_pack();
+    pack.command_fields.push(command("CONFIG", "GO", true));
+    pack.command_fields.push(command("CONFIG", "STOP", true));
+    let rust = pack
+        .render_typed_rust(&svd(&commanded()), &Default::default())
+        .unwrap();
+    for item in [
+        "pub const COMMANDS: u32 = 0x00000003;",
+        "pub const EXCLUSIVE: u32 = 0x00000003;",
+        "pub fn start_config_go(",
+        "-> Result<(), oer_mmio::CommandBusy>",
+        "return Err(oer_mmio::CommandBusy",
+        "pub fn config_stop_busy(",
+        "& !config::COMMANDS",
+        "pub const fn go(",
+        "pub fn set_level(",
+    ] {
+        assert!(
+            rust.contains(item),
+            "{item}
+{rust}"
+        );
+    }
+    assert!(!rust.contains("pub fn set_go("), "{rust}");
+}
+
+#[test]
+fn a_command_field_wider_than_one_bit_or_also_a_trigger_is_refused() {
+    let mut pack = typed_pack();
+    pack.command_fields.push(command("CONFIG", "WIDE", false));
+    let error = pack
+        .render_typed_rust(&svd(&commanded()), &Default::default())
         .unwrap_err();
-    assert!(error.to_string().contains("one writable bit"), "{error}");
+    assert!(
+        error.to_string().contains("one readable and writable bit"),
+        "{error}"
+    );
+    let mut pack = typed_pack();
+    pack.command_fields.push(command("CONFIG", "GO", false));
+    pack.write_trigger_fields.push(trigger("CONFIG", "GO"));
+    let error = pack.validate().unwrap_err();
+    assert!(
+        error.to_string().contains("also a write trigger"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_data_port_is_read_and_stored_whole_never_modified() {
+    let words = register("CONFIG", 0, "read-write", "", &field("BUF", 0, 32, ""));
+    let mut pack = typed_pack();
+    pack.data_ports.push(crate::DataPort {
+        peripheral: "RADIO".to_owned(),
+        register: "CONFIG".to_owned(),
+        sources: vec!["FIXTURE".to_owned()],
+    });
+    let rust = pack
+        .render_typed_rust(&svd(&words), &Default::default())
+        .unwrap();
+    assert!(rust.contains("pub fn write_config("), "{rust}");
+    assert!(rust.contains("pub fn read_config("), "{rust}");
+    assert!(!rust.contains("pub fn modify_config("), "{rust}");
+    let mut pack = typed_pack();
+    pack.data_ports.push(crate::DataPort {
+        peripheral: "RADIO".to_owned(),
+        register: "CONFIG".to_owned(),
+        sources: vec!["FIXTURE".to_owned()],
+    });
+    let error = pack
+        .render_typed_rust(&svd(&commanded()), &Default::default())
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("one readable and writable field"),
+        "{error}"
+    );
 }
 
 #[test]

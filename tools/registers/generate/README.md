@@ -186,13 +186,30 @@ the status register; the clear register has no other writer, and no
 transaction names it.
 
 `[[write-trigger-fields]]` (`peripheral`, `register`, `field`, `sources`)
-declares a one-bit field whose written one starts a hardware action (an
-update, a feed, a reset or a done strobe). The field has no getter and no
-setter; the register module holds `TRIGGERS`, every read-modify-write of
-the register (`modify_<register>` and each policy transaction) writes zero
-there, and only `trigger_<register>_<field>` writes one: the value read with
-every trigger zero and this field one, or, in a write-only register, this
-field alone. `[[fifo-ports]]` (`peripheral`, `register`, `sources`)
+declares a field whose written one starts a hardware action (an update, a
+feed, a reset or a done strobe). The field has no getter and no setter; the
+register module holds `TRIGGERS`, every read-modify-write of the register
+(`modify_<register>` and each policy transaction) writes zero there, and
+only `trigger_<register>_<field>` writes one: the value read with every
+trigger zero and this field one, or, in a write-only register, this field
+alone. A wider trigger (a mask of lines to strobe) takes its value,
+`trigger_<register>_<field>(value)`; a shared block and a division's
+shared trigger word hold one-bit triggers only. `[[command-fields]]`
+(`peripheral`, `register`, `field`, `exclusive`, `sources`) declares a
+one-bit readable and writable field software sets to start a command and
+the hardware clears when it is done (`R/W/SC`, `R/W/WTC`). The field keeps
+its getter but has no setter; the register module holds `COMMANDS`, every
+read-modify-write writes zero there (a running command is never started
+again), `start_<register>_<field>` writes the value read with every command
+and trigger zero and this field one, and `<register>_<field>_busy` reads
+it. The `exclusive` commands of a register form its group (`EXCLUSIVE`):
+their start returns `Result<(), oer_mmio::CommandBusy>` and refuses, writing
+nothing, while any of them reads one. `[[data-ports]]` (`peripheral`,
+`register`, `sources`) declares the data words of a command port: a
+register or array of one readable and writable field the hardware also
+writes. It is read (`read_<register>`) and stored whole
+(`write_<register>(value)`, zero in every other bit), never modified, and
+no policy transaction names it. `[[fifo-ports]] (`peripheral`, `register`, `sources`)
 declares a register of one field whose read takes an element out:
 `pop_<register>(&mut self)` returns the field and `push_<register>` writes
 it from zero. A FIFO port has no `read_`, `modify_` or `write_`, no side

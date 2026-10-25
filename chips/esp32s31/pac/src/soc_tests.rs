@@ -1,6 +1,6 @@
 //! The vendor SVD's blocks under the conservative defaults, over host memory.
 
-use crate::soc::{Interrupt, efuse::Efuse, soc_etm::SocEtm, uart0::Uart0};
+use crate::soc::{Interrupt, cache::Cache, efuse::Efuse, soc_etm::SocEtm, uart0::Uart0};
 
 #[test]
 fn a_fully_declared_plain_register_is_read_and_written_in_place() {
@@ -26,6 +26,32 @@ fn a_register_its_header_does_not_confirm_is_only_read() {
     // The header does not confirm every bit of RD_REPEAT_DATA0: its owner
     // reads it and has no write (`soc.report.toml` lists it as `read`).
     let _: crate::soc::efuse::rd_repeat_data0::R = efuse.read_rd_repeat_data0();
+}
+
+#[test]
+fn a_cache_sync_command_starts_once_and_its_group_refuses_a_second() {
+    let mut words = [0_u32; crate::soc::cache::SIZE / 4];
+    let mut cache = Cache::host(&mut words).expect("memory holds the block");
+    // CACHE.SYNC_CTRL's four sync commands are mutually exclusive
+    // (`cache_reg.h:1576`): the hardware runs one at a time.
+    assert_eq!(cache.start_sync_ctrl_writeback_ena(), Ok(()));
+    assert!(cache.sync_ctrl_writeback_ena_busy());
+    assert!(!cache.sync_ctrl_invalidate_ena_busy());
+    assert!(cache.start_sync_ctrl_invalidate_ena().is_err());
+    assert!(
+        !cache.read_sync_ctrl().invalidate_ena(),
+        "a refused start writes nothing"
+    );
+    // Changing the group id while the write-back runs starts nothing again.
+    cache.modify_sync_ctrl(|sync| {
+        sync.set_sync_rgid(oer_mmio::Bits::constant::<3>());
+    });
+    let sync = cache.read_sync_ctrl();
+    assert!(
+        !sync.writeback_ena(),
+        "a read-modify-write writes zero to every command"
+    );
+    assert_eq!(sync.sync_rgid().get(), 3);
 }
 
 #[test]

@@ -1106,6 +1106,14 @@ impl<const COUNT: usize> Index<COUNT> {
     }
 }
 
+/// A command start refused: a command of the register's exclusive group
+/// still runs, and the hardware takes one of them at a time.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CommandBusy {
+    /// The group's bits that read one: the commands still running.
+    pub running: u32,
+}
+
 /// An unsigned value of exactly `WIDTH` bits: a field without a narrower
 /// domain.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

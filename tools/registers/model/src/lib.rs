@@ -59,8 +59,8 @@ pub use soc_overlay::{HeaderTree, OverlayCheck, OverlayImport, check_overlay, im
 
 pub use pac_api::{
     BitwiseComposedDomain, BitwiseComposedDomainArgument, BitwiseComposedValueType, BoundedDomain,
-    DivisionElements, DivisionPart, DivisionTrigger, EnumDomain, EnumValue, FieldOrModify,
-    FifoPort, FixedRegisterImage, FixedRegisterSequence, FixedRegisterSequenceStep,
+    CommandField, DataPort, DivisionElements, DivisionPart, DivisionTrigger, EnumDomain, EnumValue,
+    FieldOrModify, FifoPort, FixedRegisterImage, FixedRegisterSequence, FixedRegisterSequenceStep,
     FixedRegisterWrite, FlagDomain, FlagValue, FullRegisterRead, FullRegisterValue,
     FullRegisterWrite, InterruptSnapshot, InterruptSource, MaskedRegisterModify, OpaqueDomain,
     OwnershipPartition, PacApiExposure, PacApiOptions, PacApiPack, PartitionImageRead,

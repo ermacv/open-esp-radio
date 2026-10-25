@@ -1,5 +1,5 @@
-//! Run the typed renderer's write-trigger field, FIFO port and shared block
-//! over host memory: the policy declares the kinds, the rendered blocks are compiled
+//! Run the typed renderer's write-trigger field, FIFO port, shared block,
+//! command field and data port over host memory: the policy declares the kinds, the rendered blocks are compiled
 //! against `oer-mmio` in its own directory and its tests observe the words.
 use std::fs;
 
@@ -31,12 +31,29 @@ const SVD: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 <field><name>LEVEL</name><bitOffset>0</bitOffset><bitWidth>1</bitWidth></field>
 </fields></register>
 </registers></peripheral>
+<peripheral><name>CACHE</name><baseAddress>0x60002000</baseAddress><registers>
+<register><name>CTRL</name><addressOffset>0x0</addressOffset><size>32</size><access>read-write</access><fields>
+<field><name>INVALIDATE</name><bitOffset>0</bitOffset><bitWidth>1</bitWidth></field>
+<field><name>CLEAN</name><bitOffset>1</bitOffset><bitWidth>1</bitWidth></field>
+<field><name>GO</name><bitOffset>2</bitOffset><bitWidth>1</bitWidth></field>
+<field><name>DONE</name><bitOffset>4</bitOffset><bitWidth>1</bitWidth><access>read-only</access></field>
+<field><name>RGID</name><bitOffset>5</bitOffset><bitWidth>4</bitWidth></field>
+</fields></register>
+<register><name>W%s</name><addressOffset>0x4</addressOffset><size>32</size><access>read-write</access>
+<dim>4</dim><dimIncrement>4</dimIncrement><fields>
+<field><name>BUF</name><bitOffset>0</bitOffset><bitWidth>32</bitWidth></field>
+</fields></register>
+<register><name>TIE</name><addressOffset>0x14</addressOffset><size>32</size><access>write-only</access><fields>
+<field><name>LOW</name><bitOffset>0</bitOffset><bitWidth>4</bitWidth></field>
+<field><name>HIGH</name><bitOffset>4</bitOffset><bitWidth>4</bitWidth></field>
+</fields></register>
+</registers></peripheral>
 </peripherals></device>"#;
 
 const POLICY: &str = r#"schema = 5
 
 [options]
-typed-peripherals = ["RADIO", "COUNTER"]
+typed-peripherals = ["RADIO", "COUNTER", "CACHE"]
 
 [[write-trigger-fields]]
 peripheral = "RADIO"
@@ -59,6 +76,43 @@ sources = ["FIXTURE"]
 peripheral = "COUNTER"
 register = "OP"
 field = "UPDATE"
+sources = ["FIXTURE"]
+
+[[command-fields]]
+peripheral = "CACHE"
+register = "CTRL"
+field = "INVALIDATE"
+exclusive = true
+sources = ["FIXTURE"]
+
+[[command-fields]]
+peripheral = "CACHE"
+register = "CTRL"
+field = "CLEAN"
+exclusive = true
+sources = ["FIXTURE"]
+
+[[command-fields]]
+peripheral = "CACHE"
+register = "CTRL"
+field = "GO"
+sources = ["FIXTURE"]
+
+[[data-ports]]
+peripheral = "CACHE"
+register = "W%s"
+sources = ["FIXTURE"]
+
+[[write-trigger-fields]]
+peripheral = "CACHE"
+register = "TIE"
+field = "LOW"
+sources = ["FIXTURE"]
+
+[[write-trigger-fields]]
+peripheral = "CACHE"
+register = "TIE"
+field = "HIGH"
 sources = ["FIXTURE"]
 
 [[shared-blocks]]
@@ -135,10 +189,75 @@ fn a_shared_block_strobes_and_stores_whole_words_through_shared_borrows() {
     drop(block);
     assert_eq!(memory, [1 << 30, u32::MAX, 0]);
 }
+
+const INVALIDATE: u32 = 1 << 0;
+const CLEAN: u32 = 1 << 1;
+const GO: u32 = 1 << 2;
+const RGID: u32 = 0b1111 << 5;
+const CTRL: usize = 0;
+
+#[test]
+fn a_read_modify_write_never_replays_a_command() {
+    let mut memory = vec![u32::MAX; cache::SIZE / 4];
+    let mut block = cache::Cache::host(&mut memory).expect("memory holds the block");
+    block.modify_ctrl(|writer| {
+        writer.set_rgid(oer_mmio::Bits::constant::<0b0101>());
+    });
+    drop(block);
+    assert_eq!(
+        memory[CTRL],
+        u32::MAX & !(INVALIDATE | CLEAN | GO) & !(0b1010 << 5),
+        "every command is zero, every other bit keeps the value read"
+    );
+}
+
+#[test]
+fn a_start_sets_only_its_command_and_its_busy_reads_it() {
+    let mut memory = vec![RGID | INVALIDATE; cache::SIZE / 4];
+    let mut block = cache::Cache::host(&mut memory).expect("memory holds the block");
+    assert!(block.ctrl_invalidate_busy());
+    assert!(!block.ctrl_go_busy());
+    block.start_ctrl_go();
+    assert!(block.ctrl_go_busy());
+    assert!(!block.ctrl_invalidate_busy(), "the running command is not replayed");
+    drop(block);
+    assert_eq!(memory[CTRL], RGID | GO);
+}
+
+#[test]
+fn an_exclusive_command_refuses_while_its_group_runs() {
+    let mut memory = vec![RGID | CLEAN; cache::SIZE / 4];
+    let mut block = cache::Cache::host(&mut memory).expect("memory holds the block");
+    assert_eq!(
+        block.start_ctrl_invalidate(),
+        Err(oer_mmio::CommandBusy { running: CLEAN })
+    );
+    drop(block);
+    assert_eq!(memory[CTRL], RGID | CLEAN, "a refused start writes nothing");
+    memory[CTRL] = RGID | GO;
+    let mut block = cache::Cache::host(&mut memory).expect("memory holds the block");
+    assert_eq!(block.start_ctrl_invalidate(), Ok(()), "GO is outside the group");
+    assert_eq!(block.start_ctrl_clean(), Err(oer_mmio::CommandBusy { running: INVALIDATE }));
+    drop(block);
+    assert_eq!(memory[CTRL], RGID | INVALIDATE);
+}
+
+#[test]
+fn a_data_port_stores_whole_words_and_a_wide_trigger_writes_its_value() {
+    let mut memory = vec![u32::MAX; cache::SIZE / 4];
+    let mut block = cache::Cache::host(&mut memory).expect("memory holds the block");
+    let index = oer_mmio::Index::constant::<2>();
+    block.write_w(index, 0x1234_5678);
+    assert_eq!(block.read_w(index).buf(), 0x1234_5678);
+    block.trigger_tie_high(oer_mmio::Bits::constant::<0b0101>());
+    drop(block);
+    assert_eq!(memory[1..5], [u32::MAX, u32::MAX, 0x1234_5678, u32::MAX]);
+    assert_eq!(memory[5], 0b0101 << 4, "a write-only trigger word is written from zero");
+}
 "#;
 
 #[test]
-fn write_trigger_fields_fifo_ports_and_shared_blocks_behave_over_host_memory() {
+fn write_triggers_fifo_ports_shared_blocks_commands_and_data_ports_behave_over_host_memory() {
     let directory = tempfile::tempdir().expect("typed-kind fixture directory");
     let path = |name| directory.path().join(name);
     fs::write(path("api.toml"), POLICY).unwrap();
