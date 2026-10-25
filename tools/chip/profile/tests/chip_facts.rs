@@ -3,23 +3,18 @@
 //! so the one that changes alone fails here.
 //!
 //! The sources are a chip's resolved facts (`oer-espressif-facts`: its
-//! layers from the ISA to the board), its `LAYOUT` (the linker scripts and
-//! the bootstrap read it), the stage-two header and the zeroed sections of
-//! `oer-espressif-staged-layout`, the `two-harts` feature of the images and
-//! the S31 reset-cause table of `oer-esp32s31-knowledge`.
+//! layers from the ISA to the board), its `LAYOUT` (generated from those
+//! facts and the chip's stack policy; the linker scripts and the bootstrap
+//! read it), the stage-two header and the zeroed sections of
+//! `oer-espressif-staged-layout` and the S31 reset-cause table of
+//! `oer-esp32s31-knowledge`.
 
-use std::{
-    collections::BTreeSet,
-    fs,
-    mem::offset_of,
-    path::{Path, PathBuf},
-};
+use std::{collections::BTreeSet, mem::offset_of};
 
 use oer_chip_profile::Profile;
 use oer_espressif_facts::{Facts, Region};
 use oer_espressif_staged_layout::{
     Layout, Region as LayoutRegion,
-    memory::BOOTSTRAP_PSRAM_BYTES,
     stage_two::{self, Header},
     zeroed::RUNTIME_ZEROED_REGIONS,
 };
@@ -62,6 +57,17 @@ fn memory_mismatches(profile: &Facts, layout: &Layout) -> Vec<String> {
         memory.runtime_psram,
         region(layout.runtime_psram()),
     );
+    check("retained", memory.retained, region(layout.retained));
+    let probe = profile
+        .staged
+        .as_ref()
+        .map(|staged| staged.bootstrap_psram_bytes);
+    if probe != Some(layout.bootstrap_psram_bytes) {
+        found.push(format!(
+            "bootstrap PSRAM page: facts {probe:x?}, LAYOUT {:#x}",
+            layout.bootstrap_psram_bytes
+        ));
+    }
 
     let placement = profile
         .placement
@@ -135,6 +141,8 @@ fn a_changed_memory_fact_on_either_side_is_reported() {
             !moved(&|p| p.memory.as_mut().unwrap().psram.as_mut().unwrap().length += 16).is_empty()
         );
         assert!(moved(&|p| p.memory.as_mut().unwrap().runtime_psram = None).len() == 1);
+        assert!(moved(&|p| p.memory.as_mut().unwrap().retained = None).len() == 1);
+        assert!(moved(&|p| p.staged.as_mut().unwrap().bootstrap_psram_bytes += 4).len() == 1);
         assert!(!moved(&|p| p.interrupts.as_mut().unwrap().irq_stack_bytes += 16).is_empty());
 
         let mut other = layout;
@@ -160,13 +168,6 @@ fn staged_mismatches(profile: &Facts) -> Vec<String> {
             "zeroed inputs: only in chip.toml {:?}, only in zeroed.rs {:?}",
             toml.difference(&code).collect::<Vec<_>>(),
             code.difference(&toml).collect::<Vec<_>>()
-        ));
-    }
-
-    if staged.bootstrap_psram_bytes != BOOTSTRAP_PSRAM_BYTES {
-        found.push(format!(
-            "bootstrap PSRAM page: facts {:#x}, memory.rs {BOOTSTRAP_PSRAM_BYTES:#x}",
-            staged.bootstrap_psram_bytes
         ));
     }
 
@@ -255,10 +256,6 @@ fn a_changed_staged_fact_on_either_side_is_reported() {
         1
     );
     assert_eq!(
-        changed(&|p| p.staged.as_mut().unwrap().bootstrap_psram_bytes += 4).len(),
-        1
-    );
-    assert_eq!(
         changed(&|p| p.staged.as_mut().unwrap().stage_two.abi_version += 1).len(),
         1
     );
@@ -284,58 +281,9 @@ fn a_changed_staged_fact_on_either_side_is_reported() {
     );
 }
 
-fn repository_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
-}
-
-/// Every `Cargo.toml` below `directory`.
-fn manifests(directory: &Path, found: &mut Vec<PathBuf>) {
-    for entry in fs::read_dir(directory).unwrap() {
-        let path = entry.unwrap().path();
-        if path.is_dir() {
-            manifests(&path, found);
-        } else if path.file_name().is_some_and(|name| name == "Cargo.toml") {
-            found.push(path);
-        }
-    }
-}
-
-/// The chip feature and whether `two-harts` is on, for each image manifest
-/// that depends on the staged runtime.
-fn runtime_features() -> Vec<(PathBuf, String, bool)> {
-    let mut manifests_found = Vec::new();
-    manifests(&repository_root().join("firmware"), &mut manifests_found);
-    let mut images = Vec::new();
-    for path in manifests_found {
-        let manifest: toml::Table = fs::read_to_string(&path).unwrap().parse().unwrap();
-        let Some(runtime) = manifest
-            .get("dependencies")
-            .and_then(|dependencies| dependencies.get("oer-espressif-staged-runtime"))
-            .and_then(|runtime| runtime.get("features"))
-            .and_then(|features| features.as_array())
-        else {
-            continue;
-        };
-        let features: Vec<&str> = runtime
-            .iter()
-            .filter_map(|feature| feature.as_str())
-            .collect();
-        let chip = features
-            .iter()
-            .find(|feature| CHIPS.iter().any(|(id, _)| id == *feature))
-            .unwrap_or_else(|| panic!("{}: no chip feature", path.display()));
-        images.push((path, chip.to_string(), features.contains(&"two-harts")));
-    }
-    images
-}
-
-/// What differs between a chip's core count, `LAYOUT.harts`, the interrupt
-/// contract's harts and the `two-harts` feature of its images.
-fn core_mismatches(
-    profile: &Facts,
-    layout: &Layout,
-    images: &[(PathBuf, String, bool)],
-) -> Vec<String> {
+/// What differs between a chip's core count, `LAYOUT.harts` and the
+/// interrupt contract's harts (from which the runtime generates its vectors).
+fn core_mismatches(profile: &Facts, layout: &Layout) -> Vec<String> {
     let mut found = Vec::new();
     let cores = u32::from(profile.properties.cores);
     if layout.harts != cores {
@@ -348,27 +296,14 @@ fn core_mismatches(
     if *harts != (0..cores).collect::<Vec<_>>() {
         found.push(format!("[interrupts] harts {harts:?} for {cores} cores"));
     }
-    for (path, chip, two_harts) in images {
-        if *chip == profile.id && *two_harts != (cores > 1) {
-            found.push(format!(
-                "{}: two-harts is {two_harts} on a chip with {cores} cores",
-                path.display()
-            ));
-        }
-    }
     found
 }
 
 #[test]
-fn cores_harts_and_the_two_harts_feature_agree() {
-    let images = runtime_features();
+fn cores_and_harts_agree() {
     for (id, layout) in CHIPS {
-        assert!(
-            images.iter().any(|(_, chip, _)| chip == id),
-            "{id}: no image uses the staged runtime"
-        );
         assert_eq!(
-            core_mismatches(&profile(id), &layout, &images),
+            core_mismatches(&profile(id), &layout),
             Vec::<String>::new(),
             "{id}"
         );
@@ -379,23 +314,19 @@ fn cores_harts_and_the_two_harts_feature_agree() {
 fn a_changed_core_fact_on_any_side_is_reported() {
     let (id, layout) = CHIPS[0];
     let base = profile(id);
-    let images = vec![(PathBuf::from("image"), id.to_string(), true)];
-    assert!(core_mismatches(&base, &layout, &images).is_empty());
+    assert!(core_mismatches(&base, &layout).is_empty());
 
     let mut cores = base.clone();
     cores.properties.cores = 1;
-    assert!(core_mismatches(&cores, &layout, &images).len() >= 2);
+    assert!(core_mismatches(&cores, &layout).len() >= 2);
 
     let mut harts = base.clone();
     harts.interrupts.as_mut().unwrap().harts.pop();
-    assert_eq!(core_mismatches(&harts, &layout, &images).len(), 1);
+    assert_eq!(core_mismatches(&harts, &layout).len(), 1);
 
     let mut one_hart = layout;
     one_hart.harts = 1;
-    assert_eq!(core_mismatches(&base, &one_hart, &images).len(), 1);
-
-    let feature = vec![(PathBuf::from("image"), id.to_string(), false)];
-    assert_eq!(core_mismatches(&base, &layout, &feature).len(), 1);
+    assert_eq!(core_mismatches(&base, &one_hart).len(), 1);
 }
 
 #[test]

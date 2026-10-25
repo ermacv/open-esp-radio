@@ -1,15 +1,16 @@
 # Espressif staged-boot layout
 
 `oer-espressif-staged-layout` is the chip-neutral contract of the staged
-boot: the `Layout` type each chip's platform (`chips/<chip>/layout`)
-states its address map with, the stage-two image header and checksum, the
+boot: the `Layout` type, in which each chip's layout crate
+(`chips/<chip>/layout`) generates its address map from the chip facts
+(`oer-espressif-facts`), the stage-two image header and checksum, the
 input sections the boot zeroes, and the linker binding. It is a `no_std`
 library without hardware access, shared by the bootstrap, the stage-two
 runtime, the chip layouts and the build scripts of every staged image.
 
 | Module | Owns |
 | --- | --- |
-| `memory` | `Region` and `Layout`: SRAM, Flash XIP, PSRAM and retained regions, the second-stage loader bound, the bootstrap PSRAM probe page, the stage-two PSRAM window, stack sizes, hart count and the chip's ROM script |
+| `memory` | `Region` and `Layout`: SRAM, Flash XIP, PSRAM and retained regions, the second-stage loader bound, the bootstrap PSRAM probe page, the MMU page, the image headers before the bootstrap's text, the handoff SRAM margin, the stage-two PSRAM window, stack sizes, hart count and the chip's ROM script |
 | `stage_two` | The little-endian image `Header`, its magic, ABI version and size, and the payload CRC-32 with the checksum field read as zero |
 | `zeroed` | The input sections the runtime linker script places in regions the boot zeroes |
 | `build` (feature `build`) | `configure_runtime` and `configure_bootstrap`, which link a binary with the shared scripts under [`linker`](linker) and the chip's ROM script, define every layout value as a `--defsym` symbol and keep the link's relocations (`--emit-relocs`) for the stack analysis |
@@ -20,9 +21,13 @@ uses the CU ranges and line tables retained in the ELF. The shared
 [`dwarf.x`](linker/dwarf.x) precedes scripts that place debug sections;
 allocated sections and their relocations are unaffected.
 
-The linker scripts contain no addresses or header constants of their own;
-they read `SRAM_ORIGIN`, `RUNTIME_PSRAM_ORIGIN`, `HART_COUNT`,
-`STAGE_TWO_MAGIC` and the other symbols emitted by `build`. Stage two has
+The linker scripts contain no addresses, sizes or header constants of their
+own; they read `SRAM_ORIGIN`, `RUNTIME_PSRAM_ORIGIN`, `HART_COUNT`,
+`MMU_PAGE_BYTES`, `HANDOFF_SRAM_MARGIN_BYTES`, `STAGE_TWO_MAGIC` and the other
+symbols emitted by `build`. The runtime script includes
+`oer-staged-runtime-vectors.x`, every line's default handler, which the
+staged runtime's build generates from the chip facts into its build
+directory, a library search path of every image that links it. Stage two has
 one placement: code, data and task stacks in PSRAM; interrupt entries,
 per-hart interrupt stacks, hot code, critical state and DMA state in
 internal SRAM. The shared panic handler and compiler panic entry helpers

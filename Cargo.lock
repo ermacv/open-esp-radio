@@ -2546,6 +2546,7 @@ dependencies = [
  "oer-analysis-riscv-model",
  "oer-analysis-riscv-program",
  "oer-chip-profile",
+ "oer-espressif-facts",
  "oer-riscv",
  "serde",
  "tempfile",
@@ -2709,6 +2710,7 @@ dependencies = [
 name = "oer-esp32c5-layout"
 version = "0.1.0"
 dependencies = [
+ "oer-espressif-facts",
  "oer-espressif-staged-layout",
 ]
 
@@ -2844,6 +2846,7 @@ dependencies = [
 name = "oer-esp32s31-layout"
 version = "0.1.0"
 dependencies = [
+ "oer-espressif-facts",
  "oer-espressif-staged-layout",
 ]
 
@@ -3056,6 +3059,7 @@ dependencies = [
  "critical-section",
  "esp-hal",
  "oer-diagnostics",
+ "oer-espressif-facts",
  "oer-espressif-staged-layout",
  "oer-interrupt-table",
  "oer-memory",
@@ -4042,8 +4046,6 @@ dependencies = [
  "oer-analysis-riscv-program",
  "oer-analysis-riscv-stack",
  "oer-chip-profile",
- "oer-esp32c5-layout",
- "oer-esp32s31-layout",
  "oer-espressif-facts",
  "oer-os-durable",
  "oer-os-process",

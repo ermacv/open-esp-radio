@@ -18,10 +18,13 @@
 //! routes and lines ([`Handoff::adopt`]), binds its interrupts through the
 //! [`Router`](oer_interrupt_table::Router) it gets back and enables
 //! interrupts ([`Adopted::enable_interrupts`]). A chip feature selects the
-//! chip; `two-harts` adds the second hart's interrupt stack and vectors.
+//! chip, and the build generates the vector tables, every hart's line
+//! entries, each line's default handler and the interrupt table's lines
+//! from its facts (`oer-espressif-facts`): its harts and CLIC lines.
 //!
 //! The runtime owns the traps ([`stacks`]: the vector tables, every entry
-//! and the checked exit, `vectors.s`), the image's `critical-section` (`critical`) and
+//! and the checked exit; the common entry and exit are `vectors.s`), the
+//! image's `critical-section` (`critical`) and
 //! the panic record ([`panic`]); the interrupt table's router writes the
 //! routes and the CLIC lines through the chip's controller.
 #[allow(unsafe_code, reason = "the CLIC threshold and mstatus.MIE")]
@@ -37,6 +40,12 @@ pub mod diagnostics;
 #[allow(unsafe_code, reason = "the stage-two reset entry is assembly")]
 mod entry;
 pub mod interrupts;
+/// The chip's CPU lines, harts and vector-table words, which the build
+/// generates from its facts.
+#[cfg(any(feature = "esp32s31", feature = "esp32c5"))]
+mod vectors {
+    include!(concat!(env!("OUT_DIR"), "/vectors.rs"));
+}
 #[cfg(target_arch = "riscv32")]
 pub mod layout;
 #[allow(

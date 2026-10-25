@@ -1,5 +1,7 @@
-//! The tracked layer files as this build compiled them in: a [`Source`] for
-//! host tests and for tools that detect a tree newer than themselves.
+//! The tracked layer files, and each chip's stack policy, as this build
+//! compiled them in: a [`Source`] for host tests, for the build scripts that
+//! generate from the facts and for tools that detect a tree newer than
+//! themselves.
 
 use alloc::{
     format,
@@ -9,7 +11,9 @@ use alloc::{
 
 use crate::{Result, Source};
 
-/// Every tracked layer file: its path relative to the root and its text.
+/// Every tracked layer file and each chip's stack policy
+/// (`chips/<id>/platform/stack.toml`, whose default task stack the layout
+/// takes): its path relative to the root and its text.
 pub const FILES: &[(&str, &str)] = &[
     (
         "chips/espressif/platform/family.toml",
@@ -28,6 +32,10 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../../esp32c5/platform/chip.toml"),
     ),
     (
+        "chips/esp32c5/platform/stack.toml",
+        include_str!("../../../esp32c5/platform/stack.toml"),
+    ),
+    (
         "chips/esp32c5/platform/modules/esp32-c5-wroom-1-n16r8.toml",
         include_str!("../../../esp32c5/platform/modules/esp32-c5-wroom-1-n16r8.toml"),
     ),
@@ -38,6 +46,10 @@ pub const FILES: &[(&str, &str)] = &[
     (
         "chips/esp32s31/platform/chip.toml",
         include_str!("../../../esp32s31/platform/chip.toml"),
+    ),
+    (
+        "chips/esp32s31/platform/stack.toml",
+        include_str!("../../../esp32s31/platform/stack.toml"),
     ),
     (
         "chips/esp32s31/platform/modules/esp32-s31-wroom.toml",
@@ -114,7 +126,7 @@ mod tests {
     }
 
     /// The layer files of the tree this crate is built from: the family's
-    /// and, for every chip, its chip layer, modules and boards.
+    /// and, for every chip, its chip layer, stack policy, modules and boards.
     #[test]
     fn the_tracked_files_are_every_layer_of_the_tree() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
@@ -125,6 +137,7 @@ mod tests {
             let platform = entry.expect("a readable entry").path().join("platform");
             if platform.join("chip.toml").is_file() {
                 found.push(platform.join("chip.toml"));
+                found.push(platform.join("stack.toml"));
                 toml_files(&platform.join("modules"), &mut found);
                 toml_files(&platform.join("boards"), &mut found);
             }

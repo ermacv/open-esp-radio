@@ -34,6 +34,11 @@ pub struct StackPolicy {
     /// (`-Z move-size-limit` with `-D large-assignments`). Larger values live
     /// in placed static storage; futures and task arguments borrow them.
     pub max_move_bytes: u64,
+    /// The CPU0 task stack of an image whose policy sets no `allocation_bytes`
+    /// and that does not declare it proven; a chip's own policy names it, and
+    /// the chip's layout links it.
+    #[serde(default)]
+    pub default_cpu0_task_stack_bytes: Option<u32>,
     /// Reviewed frames above the move limit, scoped to each ELF of the image.
     #[serde(default)]
     pub frame_exceptions: FrameExceptions,
@@ -143,7 +148,8 @@ pub struct TaskStack {
     /// Bytes the deepest call chain must leave unused; the runtime's stack
     /// painting holds every exercised workload to the same reserve.
     pub minimum_free_bytes: u32,
-    /// This image's CPU0 PSRAM stack allocation. Absent uses the chip layout.
+    /// This image's CPU0 PSRAM stack allocation. Absent uses the chip's
+    /// stack policy's `default_cpu0_task_stack_bytes`.
     #[serde(default)]
     pub allocation_bytes: Option<u32>,
     /// The bootstrap stack only: the symbol, in the stage-two ELF, of the
@@ -324,6 +330,12 @@ impl StackPolicy {
         }
         if self.max_move_bytes == 0 {
             return Err("the move limit must be positive".into());
+        }
+        if self
+            .default_cpu0_task_stack_bytes
+            .is_some_and(|bytes| bytes == 0 || bytes % 16 != 0)
+        {
+            return Err("the default task stack must be positive and aligned to 16 bytes".into());
         }
         let mut observed = std::collections::BTreeSet::new();
         for pattern in &self.observed_functions {
@@ -759,6 +771,8 @@ mod tests {
             "chips/esp32s31/platform/chip.toml",
             "chips/esp32s31/platform/modules/esp32-s31-wroom.toml",
             "chips/esp32s31/platform/boards/esp32-s31-function-coreboard-1.toml",
+            // The chip's stack policy sizes the default task stack.
+            "chips/esp32s31/platform/stack.toml",
         ]
         .map(|path| root.join(path));
         assert_eq!(digests.len(), layers.len() + 2);
@@ -869,6 +883,7 @@ mod tests {
             schema: SCHEMA,
             coverage_policy: Some("own-memory".into()),
             max_move_bytes: 4096,
+            default_cpu0_task_stack_bytes: None,
             frame_exceptions: FrameExceptions::default(),
             observed_functions: Vec::new(),
             core: BTreeMap::from([

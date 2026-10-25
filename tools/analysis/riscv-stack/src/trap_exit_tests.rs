@@ -1,20 +1,35 @@
-//! The staged runtime's own trap entries and exit (`vectors.s`), assembled
+//! The staged runtime's own trap entries and exit (`vectors.s`), with the
+//! entries and tables its build generates from each chip's facts, assembled
 //! by the repository's `rustc` as images assemble them: every entry passes
 //! the entry and exit checks, and each way of losing the interrupted state
 //! fails them.
 use super::*;
+use oer_espressif_facts::generate::{self, Vectors};
 
-/// The runtime's trap assembly.
+/// The runtime's hand-written trap assembly: the common entry and exit.
 const VECTORS: &str = include_str!("../../../../chips/espressif/staged-runtime/src/vectors.s");
 
-/// A program that assembles `vectors` for `harts` harts, raising the
-/// threshold on exit when `raise_threshold`, with every line's handler and
-/// the exception handler defined.
-fn runtime(vectors: &str, harts: u32, raise_threshold: bool) -> Vec<u8> {
+/// The vectors the runtime's build generates for chip `id`.
+fn chip(id: &str) -> Vectors {
+    let (facts, _) = generate::tracked(id).unwrap();
+    Vectors::of(&facts).unwrap()
+}
+
+/// The single-hart chip whose exit raises the threshold.
+fn c5() -> Vectors {
+    chip("esp32c5")
+}
+
+/// A program that assembles `chip`'s generated vectors and `vectors`,
+/// raising the threshold on exit when `raise_threshold`, with every line's
+/// handler and the exception handler defined.
+fn runtime(vectors: &str, chip: &Vectors, raise_threshold: bool) -> Vec<u8> {
     let build = tempfile::Builder::new()
         .prefix("vectors")
         .tempdir()
         .unwrap();
+    let generated = build.path().join("generated.s");
+    std::fs::write(&generated, chip.assembly()).unwrap();
     let path = build.path().join("vectors.s");
     std::fs::write(&path, vectors).unwrap();
     let source = format!(
@@ -23,11 +38,11 @@ fn runtime(vectors: &str, harts: u32, raise_threshold: bool) -> Vec<u8> {
 #![no_main]
 
 core::arch::global_asm!(
+    include_str!({generated:?}),
     include_str!({path:?}),
     fs = const 0x6000,
     mie = const 8,
     mintthresh = const 0x347,
-    harts = const {harts},
     raise_threshold = const {raise},
     tcontrol = const 0x7a5,
     mte = const 8,
@@ -64,9 +79,9 @@ fn panic(_: &core::panic::PanicInfo<'_>) -> ! {{
         "--defsym=__runtime_cpu0_task_stack_top=0x48010000".to_owned(),
         "--defsym=__runtime_cpu0_irq_stack_top=0x2f008000".to_owned(),
     ];
-    for hart in 0..harts {
-        for line in 1..48 {
-            link.push(format!("--defsym=__oer_interrupt_h{hart}_l{line}=handler"));
+    for hart in 0..chip.harts {
+        for line in 1..chip.lines {
+            link.push(format!("--defsym={}=handler", Vectors::handler(hart, line)));
         }
     }
     let link: Vec<&str> = link.iter().map(String::as_str).collect();
@@ -103,20 +118,25 @@ fn address(elf: &[u8], name: &str) -> u32 {
 
 #[test]
 fn every_runtime_entry_returns_through_the_checked_exit() {
-    for (harts, raise) in [(1, true), (2, false)] {
-        let elf = runtime(VECTORS, harts, raise);
+    for (id, raise) in [("esp32c5", true), ("esp32s31", false)] {
+        let chip = chip(id);
+        let elf = runtime(VECTORS, &chip, raise);
         let (vectors, exception) = checked(&elf).unwrap();
         let handler = address(&elf, "handler");
-        assert_eq!(vectors.len(), 64 * harts as usize);
+        let slots = chip.slots as usize;
+        assert_eq!(vectors.len(), slots * chip.harts as usize, "{id}");
         for (slot, vector) in vectors.iter().enumerate() {
-            let line = slot % 64;
+            let line = (slot % slots) as u32;
             match vector {
                 Some(vector) => {
-                    assert!((1..48).contains(&line), "slot {slot}");
+                    assert!((1..chip.lines).contains(&line), "{id} slot {slot}");
                     assert_eq!((vector.frame, vector.handler), (96, handler));
                 }
-                None => assert!(line == 0 || line >= 48, "slot {slot}"),
+                None => assert!(line == 0 || line >= chip.lines, "{id} slot {slot}"),
             }
+        }
+        for entry in generate::entry_symbols(&chip) {
+            address(&elf, &entry);
         }
         assert_eq!(exception.frame, 96);
         assert_eq!(exception.handler, address(&elf, "oer_exception_handler"));
@@ -132,7 +152,7 @@ fn broken(from: &str, to: &str) -> String {
 
 /// The first failure of the checks on `vectors`.
 fn failure(vectors: &str, raise: bool) -> String {
-    match checked(&runtime(vectors, 1, raise)) {
+    match checked(&runtime(vectors, &c5(), raise)) {
         Ok(_) => panic!("the broken entry passes"),
         Err(error) => error.message,
     }
@@ -222,7 +242,7 @@ fn an_entry_deeper_before_its_call_reports_its_deepest_frame() {
         "    csrsi mstatus, {mie}\n",
         "    addi sp, sp, -64\n    sw zero, 0(sp)\n    addi sp, sp, 64\n    csrsi mstatus, {mie}\n",
     );
-    let (vectors, _) = checked(&runtime(&deep, 1, false)).unwrap();
+    let (vectors, _) = checked(&runtime(&deep, &c5(), false)).unwrap();
     assert_eq!(vectors[16].map(|vector| vector.frame), Some(160));
 }
 

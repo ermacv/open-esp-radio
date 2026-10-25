@@ -175,16 +175,10 @@ impl Measurements {
             .as_ref()
             .ok_or("sizes: chip has no memory map")?;
         // Retained SRAM is outside the placement gate's application SRAM
-        // range; take it from the chip's canonical staged layout.
-        let retained = match profile.facts.id.as_str() {
-            "esp32s31" => oer_esp32s31_layout::LAYOUT.retained,
-            "esp32c5" => oer_esp32c5_layout::LAYOUT.retained,
-            _ => {
-                return Err(
-                    format!("sizes: no retained memory layout for {}", profile.facts.id).into(),
-                );
-            }
-        };
+        // range; the chip facts name it.
+        let retained = memory
+            .retained
+            .ok_or("sizes: chip has no retained memory")?;
         let mut out = Self::default();
         for section in file.sections().filter(|section| section.allocated) {
             let end = section

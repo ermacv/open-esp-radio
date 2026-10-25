@@ -18,7 +18,7 @@ esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt",
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal", features = ["bluetooth-engine"] }
 oer-esp32s31-bluetooth-driver = { path = "../../../chips/esp32s31/bluetooth/driver" }
-oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31"] }
 oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["esp32s31", "port-slots"] }
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-interrupt-table = { path = "../../../portable/interrupt-table" }
