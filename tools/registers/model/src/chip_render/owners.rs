@@ -15,7 +15,7 @@ use super::{
 use crate::{
     chip_model::{ChipModel, Location},
     chip_policy::{ChipPolicy, Claim, Holder, Part, PartId},
-    pac_api_render::push_doc,
+    chip_render::names::push_doc,
 };
 
 /// The words one part reaches, as byte offsets from its instance's base.
@@ -589,7 +589,7 @@ fn render_owner(
                         count,
                     },
                     mode,
-                ),
+                )?,
                 (_, true, false) => {
                     if let Some(offset) = held.first() {
                         render_methods(
@@ -598,7 +598,7 @@ fn render_owner(
                             &template.stem,
                             Call::Fixed(**offset),
                             mode,
-                        );
+                        )?;
                     }
                 }
                 _ => {
@@ -617,7 +617,7 @@ fn render_owner(
                             } else {
                                 mode
                             },
-                        );
+                        )?;
                     }
                 }
             }

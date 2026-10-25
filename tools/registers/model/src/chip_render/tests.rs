@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use super::{names, render, render_parts};
+use super::{names, render};
 use crate::{RegisterEvidenceSet, chip_model::ChipModel, chip_policy::ChipPolicy};
 
 fn fixture() -> PathBuf {
@@ -22,13 +22,17 @@ fn load(directory: &Path) -> (ChipModel, ChipPolicy) {
     (model, policy)
 }
 
-/// The fixture's blocks and owners, without the `layouts` module, which
-/// needs the PAC's `bytemuck`.
+/// The fixture's blocks, owners and layouts.
 fn rendered() -> String {
     let (model, policy) = load(&fixture());
-    render_parts(&model, &policy)
-        .unwrap_or_else(|error| panic!("the fixture renders: {error}"))
-        .0
+    render(&model, &policy).unwrap_or_else(|error| panic!("the fixture renders: {error}"))
+}
+
+/// The edited fixture's rendering.
+fn rendered_with(edits: &[(&str, &str, &str)]) -> String {
+    let directory = edited(edits);
+    let (model, policy) = load(directory.path());
+    render(&model, &policy).unwrap_or_else(|error| panic!("the edited fixture renders: {error}"))
 }
 
 /// A copy of the fixture in its own temporary directory, each edit
@@ -85,7 +89,9 @@ fn cargo(directory: &Path, rendered: &str, main: &str, command: &str) -> std::pr
         directory.join("Cargo.toml"),
         format!(
             "[package]\nname = \"rendered\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\
-             [dependencies]\noer-mmio = {{ path = {:?} }}\n[workspace]\n",
+             [dependencies]\noer-mmio = {{ path = {:?} }}\n\
+             bytemuck = {{ version = \"1.25.2\", default-features = false, features = [\"derive\", \"min_const_generics\"] }}\n\
+             [workspace]\n",
             mmio.display().to_string()
         ),
     )
@@ -476,10 +482,10 @@ const FORBIDDEN: &[(&str, &str)] = &[
         "fn state(task: &radio::Task<oer_mmio::Host<'_>>) { task.read_state(); }",
         "no method named `read_state`",
     ),
-    // An address field has no integer setter.
+    // An address field takes its typed address, never an integer.
     (
-        "fn pointer(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.modify_desc(|_| {}); }",
-        "no method named `modify_desc`",
+        "fn pointer(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.modify_desc(|w| { w.set_ptr(0x4080_0000); }); }",
+        "expected `DmaRef<RxDescriptor>`, found integer",
     ),
     // A field written only with its values takes no integer.
     (
@@ -530,4 +536,315 @@ fn owners_refuse_what_their_parts_and_field_classes_forbid() {
     for (case, message) in FORBIDDEN {
         assert!(stderr.contains(message), "{case}: {message}\n{stderr}");
     }
+}
+
+/// The fixture with the shapes the review of the first renderer found
+/// mishandled and the hardware facts of the second: a command word with a
+/// write-one-to-clear lane, a reserved bit beside write-one-to-clear
+/// fields, a whole-word image behind a masks proof, a write-only field no
+/// write may leave zero, a pointer's high field, a doorbell, a FIFO in a
+/// repeated group, a shared array and a wide shared trigger.
+const SHAPES: &[(&str, &str, &str)] = &[
+    (
+        "types/radio.toml",
+        "[[registers.fields]]\nname = \"CFG\"\nbits = \"7:4\"\nclass = \"plain\"",
+        "[[registers.fields]]\nname = \"CFG\"\nbits = \"7:4\"\nclass = \"plain\"\n\n[[registers.fields]]\nname = \"EVENT\"\nbits = \"8\"\nclass = \"write-one-to-clear\"",
+    ),
+    (
+        "types/radio.toml",
+        "name = \"RAD_STATUS\"\noffset = 0x08\n",
+        "name = \"RAD_STATUS\"\noffset = 0x08\nreserved = { mask = 0x80000000, sources = [\"SRC_HEADER\"] }\n",
+    ),
+    (
+        "types/radio.toml",
+        "name = \"ARGUMENT\"\nbits = \"15:8\"\nclass = \"write-only\"",
+        "name = \"ARGUMENT\"\nbits = \"15:8\"\nclass = \"write-only\"\nwrite-range = { min = 1, max = 255 }",
+    ),
+    (
+        "types/radio.toml",
+        "[[registers]]\nname = \"RAD_HALF%s\"",
+        "[[registers]]\nname = \"RAD_LOW\"\noffset = 0x68\n\n[[registers.fields]]\nname = \"ADDRESS\"\nbits = \"15:0\"\nclass = \"plain\"\npointer = { points-to = \"RX_DESCRIPTOR\", placement = \"dma-window\", encoding = { width = 16, shift = 0, low-bits = true, high-field = \"RAD_HIGH.ADDRESS_HIGH\" }, sources = [\"SRC_DRIVER\"] }\n\n[[registers]]\nname = \"RAD_HIGH\"\noffset = 0x6c\n\n[[registers.fields]]\nname = \"ADDRESS_HIGH\"\nbits = \"31:16\"\nclass = \"plain\"\n\n[[registers]]\nname = \"RAD_RXCTL\"\noffset = 0x78\n\n[[registers.fields]]\nname = \"APPEND\"\nbits = \"0\"\nclass = \"self-clearing\"\n\n[[registers.fields]]\nname = \"WALK\"\nbits = \"31\"\nclass = \"plain\"\n\n[[registers]]\nname = \"RAD_HALF%s\"",
+    ),
+    (
+        "types/radio.toml",
+        "name = \"CNT\"\noffset = 0x4\n",
+        "name = \"CNT\"\noffset = 0x4\nfifo = { sources = [\"SRC_HEADER\"] }\n",
+    ),
+    (
+        "types/radio.toml",
+        "[[commands]]",
+        "[[doorbells]]\nregister = \"RAD_RXCTL\"\nfield = \"APPEND\"\nsources = [\"SRC_DRIVER\"]\n\n[[commands]]",
+    ),
+    (
+        "types/counter.toml",
+        "name = \"UPDATE\"\nbits = \"0\"",
+        "name = \"UPDATE\"\nbits = \"3:0\"",
+    ),
+    (
+        "types/counter.toml",
+        "name = \"LATCH\"\noffset = 0x0c\n",
+        "name = \"LATCH%s\"\noffset = 0x0c\ndim = { count = 2, stride = 4 }\n",
+    ),
+    (
+        "policy.toml",
+        "\"RAD_CH%s.CONF\", \"RAD_CH1.CNT\"]",
+        "\"RAD_CH%s.CONF\", \"RAD_CH%s.CNT\", \"RAD_LOW\", \"RAD_HIGH\", \"RAD_RXCTL\"]",
+    ),
+    (
+        "policy.toml",
+        "registers = [\"RAD_HALF%s\", \"RAD_CH0.CNT\"]",
+        "registers = [\"RAD_HALF%s\"]",
+    ),
+    (
+        "policy.toml",
+        "\"RAD_HALF%s\", \"RAD_STATE\", \"RAD_CH%s.CONF\", \"RAD_CH%s.CNT\"]",
+        "\"RAD_HALF%s\", \"RAD_STATE\", \"RAD_CH%s.CONF\", \"RAD_CH%s.CNT\", \"RAD_LOW\", \"RAD_HIGH\", \"RAD_RXCTL\"]",
+    ),
+    (
+        "policy.toml",
+        "registers = [\"COUNT\", \"UPDATE\", \"LATCH\"]",
+        "registers = [\"COUNT\", \"UPDATE\", \"LATCH%s\"]",
+    ),
+    (
+        "policy.toml",
+        "masks = \"RADIO0.RAD_ENABLE\"\n",
+        "masks = \"RADIO0.RAD_ENABLE\"\nwhole-word = true\n",
+    ),
+    (
+        "policy.toml",
+        "[[zero-register-writes]]\nname = \"clear_command\"\nregister = \"RADIO0.RAD_COMMAND\"\nsources = [\"SRC_DRIVER\"]\n",
+        "",
+    ),
+];
+
+/// The shapes' accessors on host memory.
+const SHAPES_BEHAVIOUR: &str = r#"
+fn hex(word: u32) -> String {
+    format!("{word:08x}")
+}
+
+/// A typed address reaches the pointer's setter; never called, as only
+/// the hardware's placement makes one.
+fn publish(task: &mut radio::Task<oer_mmio::Host<'_>>, next: oer_mmio::DmaRef<layouts::RxDescriptor>) {
+    task.modify_low(|w| {
+        w.set_address(next);
+    });
+}
+
+fn main() {
+    let mut memory = [0_u32; 0x40];
+    memory[0x08 / 4] = 0x8000_0003;
+    memory[0x14 / 4] = 0x0000_0103;
+    memory[0x18 / 4] = 0x0000_0100;
+    memory[0x6c / 4] = 0x0000_1234;
+    memory[0x78 / 4] = 0x0000_0001;
+    memory[0x84 / 4] = 0x0000_0011;
+    memory[0x8c / 4] = 0x0000_0022;
+    {
+        let (mut task, mut irq) = radio::radio0_host(&mut memory).expect("memory holds the block");
+        // The command start zeroes the write-one-to-clear lane it read.
+        task.start_cmd_go(false).expect("nothing runs");
+        // The acknowledgement keeps the reserved bit it reads now.
+        let status = task.sample_status();
+        task.acknowledge_status(status.retain_error(false));
+        // A write from zero takes the argument no write may leave zero.
+        task.write_command(radio::command::ArgumentRange::new(7).expect("7 is writable"), |w| {
+            w.set_opcode(radio::command::Opcode::Run);
+        });
+        // The high field takes its placement's prefix alone.
+        task.modify_high(|w| {
+            w.set_address_high_prefix();
+        });
+        // The doorbell: pending, written back as read, rung alone.
+        println!("pending {}", task.rxctl_append_pending());
+        task.modify_rxctl(|w| {
+            w.set_walk(true);
+        });
+        println!("rxctl {}", hex(task.read_rxctl().append() as u32 | ((task.read_rxctl().walk() as u32) << 31)));
+        // The readable word with a write-only lane, written from zero.
+        task.write_mixed(|w| {
+            w.set_on(true).set_key(0x5a);
+        });
+        // The FIFO of a repeated group, by index.
+        println!("fifo {:x} {:x}", task.pop_ch_cnt(oer_mmio::Index::constant::<0>()), task.pop_ch_cnt(oer_mmio::Index::constant::<1>()));
+        // The whole-word image masks its sources first.
+        irq.mask_and_clear_events();
+    }
+    for (offset, what) in [
+        (0x18, "cmd"),
+        (0x08, "status"),
+        (0x04, "command"),
+        (0x6c, "high"),
+        (0x50, "mixed"),
+        (0x14, "enable"),
+        (0x10, "event clear"),
+    ] {
+        println!("{what} {}", hex(memory[offset / 4]));
+    }
+    memory[0x78 / 4] = 0;
+    {
+        let (mut task, _irq) = radio::radio0_host(&mut memory).expect("memory holds the block");
+        task.trigger_rxctl_append();
+    }
+    println!("rung {}", hex(memory[0x78 / 4]));
+
+    // The shared array's elements and the wide trigger, through `&self`.
+    let mut memory = [0_u32; 6];
+    {
+        let counter = counter::Counter::host(&mut memory).expect("memory holds the block");
+        let shared = &counter;
+        shared.trigger_update_update(oer_mmio::Bits::new(9).expect("4 bits"));
+        shared.store_latch1(5);
+    }
+    println!("counter {} {}", hex(memory[1]), hex(memory[4]));
+}
+"#;
+
+#[test]
+fn the_reviewed_shapes_keep_their_lanes_and_constraints() {
+    let output = run(&rendered_with(SHAPES), SHAPES_BEHAVIOUR);
+    let lines = output.lines().collect::<Vec<_>>();
+    assert_eq!(
+        lines,
+        [
+            "pending true",
+            // The pending doorbell written back as read beside WALK.
+            "rxctl 80000001",
+            "fifo 11 22",
+            // GO set; the write-one-to-clear EVENT lane zero.
+            "cmd 00000001",
+            // The reserved bit kept, the sampled DONE acknowledged.
+            "status 80000001",
+            // The reserved reset, ARGUMENT 7, RUN.
+            "command 01000701",
+            // The dma-window's prefix 0x4080 in bits 31:16; the bits of no
+            // field kept.
+            "high 40801234",
+            "mixed 00005a01",
+            // The masked sources cleared, the other enable kept.
+            "enable 00000100",
+            "event clear 00000003",
+            "rung 00000001",
+            "counter 00000009 00000005",
+        ]
+    );
+}
+
+#[test]
+fn the_reviewed_shapes_refuse_unadmitted_values() {
+    let program = [
+        // A data port's address takes its typed address.
+        "fn port(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.write_desc(0xdead_beef); }",
+        // ARGUMENT is never written zero: the write takes it.
+        "fn omitted(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.write_command(|w: &mut radio::command::W| { w.set_opcode(radio::command::Opcode::Run); }); }",
+        // The high field takes no integer.
+        "fn high(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.modify_high(|w| { w.set_address_high(0x1234); }); }",
+        // The doorbell is rung only by its trigger.
+        "fn ring(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.modify_rxctl(|w| { w.set_append(true); }); }",
+        // The step's write range wins over its complete enumeration.
+        "fn step(mode: &mut counter::Mode<oer_mmio::Host<'_>>) { mode.modify_mode(|w| { w.set_step(counter::mode::Step::Off); }); }",
+        // A zero-only trigger has no trigger.
+        "fn quiet(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.trigger_config_start(); }",
+        "fn main() {}",
+    ]
+    .join("\n");
+    let edits = SHAPES
+        .iter()
+        .copied()
+        .chain([
+            (
+                "policy.toml",
+                "[[pointer-fields]]\nname = \"descriptor\"",
+                "[[full-register-writes]]\nname = \"descriptor\"\npointer = true",
+            ),
+            (
+                "types/radio.toml",
+                "name = \"RAD_DESC\"\noffset = 0x5c\n",
+                "name = \"RAD_DESC\"\noffset = 0x5c\ndata-port = { sources = [\"SRC_HEADER\"] }\n",
+            ),
+            (
+                "types/counter.toml",
+                "name = \"STEP\"\nbits = \"3:0\"\nclass = \"plain\"",
+                "name = \"STEP\"\nbits = \"0\"\nclass = \"plain\"\nvalues = [{ name = \"OFF\", value = 0 }, { name = \"ON\", value = 1 }]\nwrite-range = { min = 1, max = 1 }",
+            ),
+            (
+                "types/radio.toml",
+                "name = \"START\"\nbits = \"16\"\nclass = \"write-trigger\"",
+                "name = \"START\"\nbits = \"16\"\nclass = \"write-trigger\"\nwrite-range = { min = 0, max = 0 }",
+            ),
+        ])
+        .collect::<Vec<_>>();
+    let stderr = refused(&rendered_with(&edits), &program);
+    for message in [
+        "expected `DmaRef<RxDescriptor>`, found integer",
+        "this method takes 2 arguments but 1 argument was supplied",
+        "no method named `set_address_high` found",
+        "no method named `set_append` found",
+        "expected `StepRange`, found `Step`",
+        "no method named `trigger_config_start` found",
+    ] {
+        assert!(stderr.contains(message), "{message}\n{stderr}");
+    }
+}
+
+#[test]
+fn a_word_with_an_unknown_lane_has_no_writer_from_zero() {
+    let rust = rendered_with(&[(
+        "types/radio.toml",
+        "name = \"ARGUMENT\"\nbits = \"15:8\"\nclass = \"write-only\"",
+        "name = \"ARGUMENT\"\nbits = \"15:8\"\nclass = \"write-only\"\n\n[[registers.fields]]\nname = \"UNRESOLVED\"\nbits = \"23:16\"\nclass = \"unknown\"",
+    )]);
+    assert!(!rust.contains("pub fn write_command("), "{rust}");
+}
+
+#[test]
+fn a_command_start_refuses_a_lane_it_can_neither_keep_nor_zero() {
+    let error = rejection(&[(
+        "types/radio.toml",
+        "[[registers.fields]]\nname = \"CFG\"\nbits = \"7:4\"\nclass = \"plain\"",
+        "[[registers.fields]]\nname = \"CFG\"\nbits = \"7:4\"\nclass = \"plain\"\n\n[[registers.fields]]\nname = \"SEEN\"\nbits = \"8\"\nclass = \"hardware-written\"",
+    )]);
+    assert_eq!(error.entity, "RAD_CMD.SEEN");
+    assert!(error.reason.contains("neither keep nor zero"), "{error}");
+}
+
+#[test]
+fn generated_names_never_collide() {
+    // A field's getter against another's `_variant` getter.
+    let error = rejection(&[(
+        "types/radio.toml",
+        "name = \"VERSION\"\nbits = \"31:24\"",
+        "name = \"MODE_VARIANT\"\nbits = \"31:24\"",
+    )]);
+    assert_eq!(error.entity, "RADIO.RAD_CONFIG.MODE_VARIANT");
+    assert!(error.reason.contains("mode_variant"), "{error}");
+    // Two types whose modules normalize alike.
+    let error = rejection(&[
+        ("types/etm.toml", "name = \"ETM\"", "name = \"RADIO_\""),
+        ("chip.toml", "type = \"ETM\"", "type = \"RADIO_\""),
+    ]);
+    assert!(error.reason.contains("module `radio`"), "{error}");
+}
+
+#[test]
+fn a_snapshot_samples_its_named_events_and_documents_its_consumed_event() {
+    let rust = rendered_with(&[
+        (
+            "policy.toml",
+            "status = \"RADIO0.RAD_EVENTS\"\n",
+            "status = \"RADIO0.RAD_EVENTS\"\nevents = [\"RADIO0.RAD_EVENTS.RX\"]\n",
+        ),
+        (
+            "policy.toml",
+            "masks = \"RADIO0.RAD_ENABLE\"\n",
+            "consumed-event = \"The task read both events.\\nIt has finished using the associated data.\"\n",
+        ),
+    ]);
+    assert!(
+        rust.contains("pub const EVENTS: u32 = 0x00000001;"),
+        "{rust}"
+    );
+    // Every line of the explanation stays documentation.
+    let output = run(&rust, "fn main() {}");
+    assert!(output.is_empty());
 }

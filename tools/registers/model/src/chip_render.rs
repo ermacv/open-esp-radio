@@ -33,8 +33,8 @@ use std::{collections::BTreeMap, fmt::Write as _};
 use crate::{
     chip_model::{ChipModel, Space},
     chip_policy::ChipPolicy,
-    pac_api_render::push_doc,
 };
+use names::push_doc;
 
 mod block;
 mod irreducible;
@@ -42,6 +42,7 @@ mod names;
 mod owners;
 #[cfg(test)]
 mod tests;
+mod unique;
 
 use block::{TypePlan, render_register_module};
 
@@ -77,16 +78,23 @@ pub fn render(model: &ChipModel, policy: &ChipPolicy) -> Result<String, Error> {
 
 /// The register blocks and ownership, and the `layouts` module apart.
 fn render_parts(model: &ChipModel, policy: &ChipPolicy) -> Result<(String, String), Error> {
-    let pointers = pointer_fields(model, policy)?;
     let mut plans = BTreeMap::new();
     for (name, block) in model.types() {
         if block.space() != Space::Mmio {
             continue;
         }
-        let empty = Default::default();
-        let plan = TypePlan::new(block, pointers.get(name.as_str()).unwrap_or(&empty))?;
+        let plan = TypePlan::new(block, model.ram_regions())?;
         if RESERVED_MODULES.contains(&plan.module.as_str()) {
             return Err(Error::new(name, "its module name is one the renderer uses"));
+        }
+        if let Some(other) = plans
+            .values()
+            .find(|other: &&TypePlan<'_>| other.module == plan.module)
+        {
+            return Err(Error::new(
+                name,
+                format!("its module `{}` is also type {}'s", plan.module, other.name),
+            ));
         }
         plans.insert(name.as_str(), plan);
     }
@@ -125,58 +133,9 @@ fn render_parts(model: &ChipModel, policy: &ChipPolicy) -> Result<(String, Strin
         .collect();
     let layouts = crate::layouts::render(model.layouts(), &regions)
         .map_err(|error| Error::new("layouts", error.to_string()))?;
+    unique::check(&output)?;
+    unique::check(&layouts)?;
     Ok((output, layouts))
-}
-
-/// The `(template key, field)` pairs of each type that some instance's
-/// policy reads as an address: pointer fields and the fields of address
-/// writes.
-fn pointer_fields(
-    model: &ChipModel,
-    policy: &ChipPolicy,
-) -> Result<BTreeMap<String, std::collections::BTreeSet<(String, String)>>, Error> {
-    let file = policy.file();
-    let references = file
-        .pointer_fields
-        .iter()
-        .map(|pointer| pointer.field.as_str())
-        .chain(
-            file.full_register_writes
-                .iter()
-                .filter(|write| write.pointer)
-                .map(|write| write.field.as_str()),
-        );
-    let mut pointers: BTreeMap<String, std::collections::BTreeSet<(String, String)>> =
-        BTreeMap::new();
-    for reference in references {
-        let resolved = reference.split_once('.').and_then(|(instance, rest)| {
-            let (register, field) = rest.rsplit_once('.')?;
-            let instance = model
-                .instances()
-                .iter()
-                .find(|candidate| candidate.name == instance)?;
-            let block = model.types().get(&instance.block_type)?;
-            let key = if block.templates.contains_key(register) {
-                register.to_owned()
-            } else {
-                block
-                    .elements
-                    .iter()
-                    .find(|element| element.name == register)?
-                    .key
-                    .clone()
-            };
-            Some((instance.block_type.clone(), key, field.to_owned()))
-        });
-        let Some((block, key, field)) = resolved else {
-            return Err(Error::new(
-                reference,
-                "the address field is no field of the root",
-            ));
-        };
-        pointers.entry(block).or_default().insert((key, field));
-    }
-    Ok(pointers)
 }
 
 fn render_interrupts(output: &mut String, model: &ChipModel) {

@@ -24,7 +24,7 @@ use super::{
 use crate::{
     chip_model::{ChipModel, FieldClass, Location},
     chip_policy::ChipPolicy,
-    pac_api_render::push_doc,
+    chip_render::names::push_doc,
 };
 
 /// How the owner reaches one element.
@@ -128,19 +128,16 @@ pub(super) fn render(
             .template
             .fields
             .iter()
-            .any(|field| field.pointer && field.mask() & image.value != 0)
+            .any(|field| field.pointer.is_some() && field.mask() & image.value != 0)
         {
             return Err(Error::new(entity, "a fixed image sets an address field"));
         }
         let value = format!("0x{:08x}", image.value);
         let write = target.write(entity, owner, &value, image.value)?;
+        // A masks proof disables the acknowledged sources first, whether or
+        // not the image is a whole word.
         let mut masking = String::new();
-        let summary = if image.whole_word {
-            format!(
-                "Write the vendor's whole-word image `0x{:08x}`, undeclared bits included",
-                image.value
-            )
-        } else if let Some(masks) = &image.masks {
+        if let Some(masks) = &image.masks {
             let enable = element(entity, plan, owner, model, masks)?;
             if !enable.template.modifiable() {
                 return Err(Error::new(
@@ -162,16 +159,26 @@ pub(super) fn render(
                 )?;
                 let _ = writeln!(masking, "let bits = {read};\n{cleared};");
             }
-            format!(
+        }
+        let summary = match (image.whole_word, &image.masks) {
+            (true, None) => format!(
+                "Write the vendor's whole-word image `0x{:08x}`, undeclared bits included",
+                image.value
+            ),
+            (true, Some(masks)) => format!(
+                "Mask the sources of `0x{:08x}` in `{masks}`, keeping every other bit, then write the vendor's whole-word image, undeclared bits included",
+                image.value
+            ),
+            (false, Some(masks)) => format!(
                 "Mask the sources of `0x{:08x}` in `{masks}`, keeping every other bit, then acknowledge them",
                 image.value
-            )
-        } else {
-            format!("Acknowledge the consumed events `0x{:08x}`", image.value)
+            ),
+            (false, None) => format!("Acknowledge the consumed events `0x{:08x}`", image.value),
         };
         doc(body, &summary, &image.register, &image.sources);
         if let Some(reason) = &image.consumed_event {
-            let _ = writeln!(body, "///\n/// The caller consumed these events: {reason}");
+            body.push_str("///\n/// The caller consumed these events:\n");
+            push_doc(body, reason, "");
         }
         let _ = writeln!(
             body,
@@ -387,10 +394,50 @@ fn render_snapshot(
             " | match consumed {\nSome(consumed) => consumed.bits(),\nNone => 0,\n}".to_owned();
     }
     let read = status.read(entity, owner)?;
+    // Every clear lane the acknowledgement leaves takes zero.
+    if let Some(field) = clear
+        .template
+        .fields
+        .iter()
+        .find(|field| field.mask() & (events | consumed_mask) == 0 && !field.zero_admitted())
+    {
+        return Err(Error::new(
+            entity,
+            format!(
+                "its acknowledgement writes zero to {}, which its write constraint forbids",
+                field.field.name
+            ),
+        ));
+    }
+    // The bits of no field keep their value: read back from a clear word
+    // whose every field reads, at their reset value otherwise.
+    let replayable = clear.template.readable()
+        && clear
+            .template
+            .fields
+            .iter()
+            .all(|field| field.class.readable());
+    let (kept, keep) = if replayable {
+        (
+            format!(
+                "let kept = {} & 0x{:08x};\n",
+                clear.read(entity, owner)?,
+                !clear.template.declared()
+            ),
+            "kept | ".to_owned(),
+        )
+    } else if clear.template.zero_image() != 0 {
+        (
+            String::new(),
+            format!("0x{:08x} | ", clear.template.zero_image()),
+        )
+    } else {
+        (String::new(), String::new())
+    };
     let write = clear.write(
         entity,
         owner,
-        &format!("snapshot.0{consumed_bits}"),
+        &format!("{keep}snapshot.0{consumed_bits}"),
         events | consumed_mask,
     )?;
     doc(
@@ -408,7 +455,7 @@ fn render_snapshot(
         "#[inline]\npub fn sample_{method}(&self) -> {token} {{\n{token}({read} & {token}::EVENTS)\n}}\n\n\
          /// Acknowledge exactly the sampled events{}: one to each such bit of\n\
          /// `{}`, zero to every other bit.\n\
-         #[inline]\npub fn acknowledge_{method}(&mut self, snapshot: {token}{consumed_parameter}) {{\n{write};\n}}\n",
+         #[inline]\npub fn acknowledge_{method}(&mut self, snapshot: {token}{consumed_parameter}) {{\n{kept}{write};\n}}\n",
         if consumed.is_empty() {
             ""
         } else {

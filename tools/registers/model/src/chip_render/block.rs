@@ -7,11 +7,9 @@ use std::{
     fmt::Write as _,
 };
 
+use super::names::push_doc;
 use super::{Error, names};
-use crate::{
-    chip_model::{BlockType, Field, FieldClass, Register},
-    pac_api_render::push_doc,
-};
+use crate::chip_model::{BlockType, Field, FieldClass, RamRegion, Register};
 
 /// What a bit of a command register is.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -41,6 +39,31 @@ pub(super) enum Setter {
     Enum,
     /// The field's bounded type: a write range narrower than its width.
     Range,
+    /// A typed address of the field's placement: `oer_mmio::DmaRef` of its
+    /// target layout, or the window's `DmaWindowAddress`.
+    Pointer,
+}
+
+/// What the hardware reads in an address field (`pointer` facts): the
+/// layout it points to, the member offset and the encoding.
+pub(super) struct PointerPlan {
+    /// The target layout's Rust type, if the pointer has one.
+    pub(super) target: Option<String>,
+    pub(super) member_offset: u32,
+    pub(super) shift: u32,
+}
+
+/// What a read-modify-write or a command start writes into a field it does
+/// not set itself.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(super) enum Replay {
+    /// The value read: writing it back changes nothing.
+    Keep,
+    /// Zero: no action (a trigger, a write-one-to-clear or set-only lane).
+    Zero,
+    /// Neither is safe: the write lane is unreadable, the hardware also
+    /// writes it, or its class is unknown.
+    Refuse,
 }
 
 pub(super) struct FieldPlan<'m> {
@@ -51,8 +74,13 @@ pub(super) struct FieldPlan<'m> {
     pub(super) width: u32,
     pub(super) class: FieldClass,
     pub(super) role: Option<Role>,
-    /// The hardware reads the field as an address: no integer setter.
-    pub(super) pointer: bool,
+    /// The hardware reads the field as an address: a typed setter.
+    pub(super) pointer: Option<PointerPlan>,
+    /// The field supplies the fixed high bits of a pointer's address: its
+    /// one value is the placement's prefix.
+    pub(super) prefix: Option<u32>,
+    /// A doorbell: set by its trigger alone, written back as read.
+    pub(super) doorbell: bool,
     /// The one permitted value is zero: zero in every write, no accessor.
     pub(super) zero: bool,
     pub(super) values: Option<Values>,
@@ -82,9 +110,36 @@ impl FieldPlan<'_> {
     /// A writer of the whole register (`W`) sets the field.
     pub(super) fn setter(&self) -> bool {
         matches!(self.class, FieldClass::Plain | FieldClass::WriteOnly)
-            && !self.pointer
             && !self.zero
             && self.role.is_none()
+            && self.prefix.is_none()
+    }
+
+    /// Zero is a value a write may give the field: no write range above
+    /// it, no value list without it, and no address it would forge.
+    pub(super) fn zero_admitted(&self) -> bool {
+        self.pointer.is_none()
+            && self.prefix.is_none_or(|prefix| prefix == 0)
+            && self.range.is_none_or(|(min, _)| min == 0)
+            && !(self.field.write_values_only
+                && self
+                    .values
+                    .as_ref()
+                    .is_some_and(|values| values.variants.iter().all(|(_, value, _)| *value != 0)))
+    }
+
+    /// What a write of the word that does not set this field gives it.
+    pub(super) fn replay(&self) -> Replay {
+        match self.class {
+            FieldClass::Plain | FieldClass::ReadOnly | FieldClass::DebugOnly => Replay::Keep,
+            FieldClass::SelfClearing if self.doorbell => Replay::Keep,
+            FieldClass::WriteTrigger | FieldClass::WriteOneToClear | FieldClass::SetOnly
+                if self.zero_admitted() =>
+            {
+                Replay::Zero
+            }
+            _ => Replay::Refuse,
+        }
     }
 
     pub(super) fn native(&self) -> String {
@@ -97,11 +152,11 @@ impl FieldPlan<'_> {
         }
     }
 
-    fn native_bits(&self) -> &'static str {
+    fn native_bits(&self, var: &str) -> String {
         match self.width {
-            32 => "value",
-            1 | 8 | 16 => "u32::from(value)",
-            _ => "value.get()",
+            32 => var.to_owned(),
+            1 | 8 | 16 => format!("u32::from({var})"),
+            _ => format!("{var}.get()"),
         }
     }
 
@@ -112,27 +167,57 @@ impl FieldPlan<'_> {
             Some(module) => format!("{module}::{name}"),
             None => name.to_owned(),
         };
-        match (self.setter, &self.values) {
-            (Setter::Enum, Some(values)) => qualify(&values.name),
-            (Setter::Range, _) => qualify(&self.range_name()),
+        let layouts = match module {
+            Some(_) => "super::layouts",
+            None => "super::super::layouts",
+        };
+        match (self.setter, &self.values, &self.pointer) {
+            (Setter::Pointer, _, Some(pointer)) => match &pointer.target {
+                Some(target) => format!("oer_mmio::DmaRef<{layouts}::{target}>"),
+                None => format!("{layouts}::DmaWindowAddress"),
+            },
+            (Setter::Enum, Some(values), _) => qualify(&values.name),
+            (Setter::Range, ..) => qualify(&self.range_name()),
             _ => self.native(),
         }
     }
 
-    /// The field's bits of the writer's `value`, unshifted.
-    pub(super) fn write_bits(&self) -> &'static str {
-        match self.setter {
-            Setter::Enum => "value.bits()",
-            Setter::Range => "value.get()",
-            Setter::Native => self.native_bits(),
+    /// The field's bits of the writer's argument `var`, unshifted.
+    pub(super) fn write_bits_of(&self, var: &str) -> String {
+        match (self.setter, &self.pointer) {
+            (Setter::Pointer, Some(pointer)) => {
+                let mut address = match pointer.target {
+                    Some(_) => format!("{var}.bits()"),
+                    None => format!("{var}.get()"),
+                };
+                if pointer.member_offset != 0 {
+                    address = format!("{address}.wrapping_add(0x{:x})", pointer.member_offset);
+                }
+                if pointer.shift != 0 {
+                    address = format!("({address} >> {})", pointer.shift);
+                }
+                if self.width == 32 {
+                    address
+                } else {
+                    format!("({address} & 0x{:x})", self.ones())
+                }
+            }
+            (Setter::Enum, _) => format!("{var}.bits()"),
+            (Setter::Range, _) => format!("{var}.get()"),
+            _ => self.native_bits(var),
         }
     }
 
     /// The writer's `value` in its register position.
     pub(super) fn positioned(&self) -> String {
-        let bits = self.write_bits();
+        self.positioned_of("value")
+    }
+
+    /// The writer's argument `var` in its register position.
+    pub(super) fn positioned_of(&self, var: &str) -> String {
+        let bits = self.write_bits_of(var);
         if self.low == 0 {
-            bits.to_owned()
+            bits
         } else {
             format!("({bits} << {})", self.low)
         }
@@ -262,7 +347,8 @@ impl Template<'_> {
     }
 
     /// Writing back what was read replays nothing: no command, port,
-    /// unreadable write lane or bit the hardware sets or clears.
+    /// unreadable write lane or bit the hardware sets or clears but a
+    /// doorbell, which the vendor writes back as read.
     pub(super) fn modifiable(&self) -> bool {
         self.readable()
             && !self.command
@@ -272,20 +358,73 @@ impl Template<'_> {
                     field.class,
                     FieldClass::WriteOnly
                         | FieldClass::WriteOneToClear
-                        | FieldClass::SelfClearing
                         | FieldClass::SetOnly
                         | FieldClass::HardwareWritten
-                )
+                ) || (field.class == FieldClass::SelfClearing && !field.doorbell)
             })
     }
 
+    /// A `W` has something to set: a field's value or a high field's prefix.
     pub(super) fn has_setters(&self) -> bool {
-        self.fields.iter().any(FieldPlan::setter)
+        self.fields
+            .iter()
+            .any(|field| field.setter() || field.prefix.is_some())
     }
 
-    /// Written from zero through `W`: a register with no readable field.
-    fn written_from_zero(&self) -> bool {
-        self.api() && !self.fifo && !self.port && !self.readable() && self.has_setters()
+    /// Written from zero through `W`: a register with no readable field, or
+    /// a readable one whose write-only lanes no read-modify-write can
+    /// replay and whose other fields a write from zero may leave zero
+    /// (plain, read-only, trigger and write-one-to-clear ones). A word with
+    /// an `unknown` or `debug-only` lane has no writer from zero.
+    pub(super) fn written_from_zero(&self) -> bool {
+        let unwritable = self
+            .fields
+            .iter()
+            .any(|field| matches!(field.class, FieldClass::Unknown | FieldClass::DebugOnly));
+        let lanes = self.fields.iter().all(|field| {
+            matches!(
+                field.class,
+                FieldClass::Plain
+                    | FieldClass::WriteOnly
+                    | FieldClass::ReadOnly
+                    | FieldClass::WriteTrigger
+                    | FieldClass::WriteOneToClear
+            )
+        });
+        let write_only = self
+            .fields
+            .iter()
+            .any(|field| field.class == FieldClass::WriteOnly);
+        self.api()
+            && !self.fifo
+            && !self.port
+            && !self.command
+            && !unwritable
+            && self.has_setters()
+            && (!self.readable() || (write_only && lanes && !self.modifiable()))
+    }
+
+    /// The fields a write from zero takes as arguments: setters whose zero
+    /// no write may give them.
+    pub(super) fn required(&self) -> Vec<&FieldPlan<'_>> {
+        self.fields
+            .iter()
+            .filter(|field| field.setter() && !field.zero_admitted())
+            .collect()
+    }
+
+    /// The image a write from zero starts from: the reserved bits at their
+    /// reset value and each high field's prefix.
+    pub(super) fn zero_image(&self) -> u32 {
+        self.fields
+            .iter()
+            .filter_map(|field| field.prefix.map(|prefix| prefix << field.low))
+            .fold(self.reserved_reset, |image, bits| image | bits)
+    }
+
+    /// The bits of the doorbells.
+    pub(super) fn doorbells(&self) -> u32 {
+        self.mask_of(|field| field.doorbell)
     }
 
     /// Changed through `W` by a read-modify-write.
@@ -303,6 +442,25 @@ impl Template<'_> {
         self.modified() || self.written_from_zero()
     }
 
+    /// The bits a write that sets none of them gives zero, and the fields
+    /// whose value it can neither keep nor zero: a read-modify-write's or a
+    /// command start's view of the word.
+    pub(super) fn replayed(&self) -> (u32, Vec<&FieldPlan<'_>>) {
+        let mut zero = self.write_zero();
+        let mut refused = Vec::new();
+        for field in &self.fields {
+            if field.role.is_some() {
+                continue;
+            }
+            match field.replay() {
+                Replay::Keep => {}
+                Replay::Zero => zero |= field.mask(),
+                Replay::Refuse => refused.push(field),
+            }
+        }
+        (zero, refused)
+    }
+
     /// The narrow (8- or 16-bit) word an owner cannot reach yet.
     pub(super) fn narrow(&self) -> bool {
         self.width != 32
@@ -318,14 +476,36 @@ pub(super) struct TypePlan<'m> {
 }
 
 impl<'m> TypePlan<'m> {
-    /// Plan the type `block`. `pointers` holds the `(template key, field)`
-    /// pairs some instance's policy reads as an address.
-    pub(super) fn new(
-        block: &'m BlockType,
-        pointers: &BTreeSet<(String, String)>,
-    ) -> Result<Self, Error> {
+    /// Plan the type `block`; `regions` are the root's RAM regions, which
+    /// give a pointer's high field its prefix.
+    pub(super) fn new(block: &'m BlockType, regions: &[RamRegion]) -> Result<Self, Error> {
         let name = block.name();
         let prefix = names::block_prefix(block);
+        // The fixed value of each high field: its pointers' placement
+        // prefix (the model's loader checked they agree).
+        let mut prefixes = BTreeMap::new();
+        for (key, register) in &block.templates {
+            for field in &register.fields {
+                let Some(pointer) = &field.pointer else {
+                    continue;
+                };
+                let Some(high) = &pointer.encoding.high_field else {
+                    continue;
+                };
+                let region = regions
+                    .iter()
+                    .find(|region| region.name == pointer.placement)
+                    .ok_or_else(|| {
+                        Error::new(
+                            &format!("{name}.{key}.{}", field.name),
+                            "its placement is no RAM region of the root",
+                        )
+                    })?;
+                let value = u32::try_from(region.base >> pointer.encoding.width)
+                    .map_err(|_| Error::new(high, "its prefix exceeds 32 bits"))?;
+                prefixes.insert(high.clone(), value);
+            }
+        }
         let mut commands = BTreeMap::new();
         for command in &block.file.commands {
             for (fields, role) in [
@@ -382,14 +562,19 @@ impl<'m> TypePlan<'m> {
             };
             let mut fields = Vec::new();
             for field in &register.fields {
-                fields.push(field_plan(
+                let mut plan = field_plan(
                     &entity,
-                    key,
                     field,
                     &prefix,
                     commands.get(&(key.as_str(), field.name.as_str())).copied(),
-                    pointers.contains(&(key.clone(), field.name.clone())),
-                )?);
+                )?;
+                plan.prefix = prefixes.get(&format!("{key}.{}", field.name)).copied();
+                plan.doorbell = block
+                    .file
+                    .doorbells
+                    .iter()
+                    .any(|doorbell| doorbell.register == *key && doorbell.field == field.name);
+                fields.push(plan);
             }
             let reserved = register
                 .reserved
@@ -447,13 +632,30 @@ impl<'m> TypePlan<'m> {
                     format!("its module `{}` is also {other}'s", template.stem),
                 ));
             }
-            let mut fields = BTreeSet::new();
+            // Every method a field gives the register's images, by name:
+            // getters, `_variant` getters, setters and `retain_` methods.
+            let mut methods: BTreeMap<String, &str> = BTreeMap::new();
             for field in &template.fields {
-                if !fields.insert(field.stem.as_str()) {
-                    return Err(Error::new(
-                        &format!("{}.{}.{}", self.name, template.key, field.field.name),
-                        format!("its method `{}` is another field's", field.stem),
-                    ));
+                let mut names = vec![field.method()];
+                if field.values.is_some() {
+                    names.push(format!("{}_variant", field.stem));
+                }
+                if field.setter() {
+                    names.push(format!("set_{}", field.stem));
+                }
+                if field.prefix.is_some() {
+                    names.push(format!("set_{}_prefix", field.stem));
+                }
+                if template.w1c() {
+                    names.push(format!("retain_{}", field.stem));
+                }
+                for method in names {
+                    if let Some(other) = methods.insert(method.clone(), &field.field.name) {
+                        return Err(Error::new(
+                            &format!("{}.{}.{}", self.name, template.key, field.field.name),
+                            format!("its method `{method}` is also {other}'s"),
+                        ));
+                    }
                 }
             }
         }
@@ -510,11 +712,9 @@ fn arithmetic(elements: &[Elem]) -> Option<(u64, u64, u64)> {
 
 fn field_plan<'m>(
     register: &str,
-    key: &str,
     field: &'m Field,
     prefix: &str,
     role: Option<Role>,
-    pointer: bool,
 ) -> Result<FieldPlan<'m>, Error> {
     let entity = format!("{register}.{}", field.name);
     let (low, width) = crate::chip_model::parse_bits(&field.bits)
@@ -577,9 +777,29 @@ fn field_plan<'m>(
             complete,
         })
     };
+    // A narrower write range wins over a complete enumeration: the
+    // enumeration still reads the field.
     let only_values = values.is_some()
+        && range.is_none()
         && (field.write_values_only || values.as_ref().is_some_and(|v| v.complete));
-    let setter = if only_values {
+    if field
+        .pointer
+        .as_ref()
+        .is_some_and(|pointer| pointer.placement != crate::layouts::DMA_REGION)
+    {
+        return Err(Error::new(
+            &entity,
+            "a pointer outside the DMA window has no typed address",
+        ));
+    }
+    let pointer = field.pointer.as_ref().map(|pointer| PointerPlan {
+        target: pointer.points_to.as_deref().map(crate::layouts::camel),
+        member_offset: pointer.member_offset,
+        shift: pointer.encoding.shift,
+    });
+    let setter = if pointer.is_some() {
+        Setter::Pointer
+    } else if only_values {
         Setter::Enum
     } else if range.is_some() && !zero {
         Setter::Range
@@ -592,7 +812,6 @@ fn field_plan<'m>(
             "a command register's bit is one self-clearing bit",
         ));
     }
-    let _ = key;
     Ok(FieldPlan {
         field,
         stem,
@@ -601,6 +820,8 @@ fn field_plan<'m>(
         class: field.class,
         role,
         pointer,
+        prefix: None,
+        doorbell: false,
         zero,
         values,
         range,
@@ -671,6 +892,11 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
             "The self-clearing bits: a start refuses while any reads one.",
         ),
         (
+            template.doorbells(),
+            "DOORBELLS",
+            "The doorbells: each set only by its trigger, written back as read.",
+        ),
+        (
             template.zeros(),
             "ZERO",
             "The bits of the fields whose one permitted value is zero.",
@@ -725,16 +951,31 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
         output.push_str("}\n\n");
     }
     if template.has_w() {
-        output.push_str(if template.readable() {
+        output.push_str(if template.modified() {
             "/// The register's value while it is changed.\n\
              pub struct W(pub(super) u32);\n\nimpl W {\n"
         } else {
             "/// The value written to the register.\n\
              pub struct W(pub(super) u32);\n\nimpl W {\n"
         });
-        if template.readable() {
+        if template.modified() {
             for field in template.fields.iter().filter(|field| field.getter()) {
                 render_getter(output, field, "&self");
+            }
+        }
+        for field in &template.fields {
+            if let Some(prefix) = field.prefix {
+                let _ = writeln!(
+                    output,
+                    "/// Set `{}` to the fixed high address bits of its pointers'\n\
+                     /// placement, `0x{prefix:x}`: its one value.\n\
+                     #[inline]\npub fn set_{}_prefix(&mut self) -> &mut Self {{\n\
+                     self.0 = (self.0 & 0x{:08x}) | 0x{:08x};\nself\n}}\n",
+                    field.field.name,
+                    field.stem,
+                    !field.mask(),
+                    prefix << field.low,
+                );
             }
         }
         for field in template.fields.iter().filter(|field| field.setter()) {
@@ -972,7 +1213,7 @@ pub(super) fn render_methods(
     stem: &str,
     call: Call,
     mode: Mode,
-) {
+) -> Result<(), Error> {
     let module = template.module();
     let index = call.parameter();
     let name = &template.key;
@@ -980,10 +1221,10 @@ pub(super) fn render_methods(
         if mode == Mode::Owned {
             render_fifo(body, template, stem, call);
         }
-        return;
+        return Ok(());
     }
     if !template.api() {
-        return;
+        return Ok(());
     }
     if template.readable() {
         let _ = writeln!(
@@ -1008,32 +1249,65 @@ pub(super) fn render_methods(
                 field.mask()
             );
         }
+        for field in template.fields.iter().filter(|field| field.doorbell) {
+            let _ = writeln!(
+                body,
+                "/// Whether the doorbell `{}` of `{name}` still waits: the hardware\n\
+                 /// clears it when it accepts the request.\n\
+                 #[inline]\npub fn {stem}_{}_pending(&self{index}) -> bool {{\n\
+                 (self.0.{} & 0x{:08x}) != 0\n}}\n",
+                field.field.name,
+                field.stem,
+                call.read(),
+                field.mask()
+            );
+        }
     }
     match mode {
-        Mode::Read => {}
+        Mode::Read => Ok(()),
         Mode::Shared => render_shared(body, template, stem, call),
         Mode::Owned => render_owned(body, template, stem, call),
     }
 }
 
-fn render_owned(body: &mut String, template: &Template<'_>, stem: &str, call: Call) {
+/// The entity of a template's field, for an error.
+fn entity(template: &Template<'_>, field: &FieldPlan<'_>) -> String {
+    format!("{}.{}", template.key, field.field.name)
+}
+
+fn render_owned(
+    body: &mut String,
+    template: &Template<'_>,
+    stem: &str,
+    call: Call,
+) -> Result<(), Error> {
     let module = template.module();
     let index = call.parameter();
     let name = &template.key;
     if template.w1c() && template.readable() {
+        // Each unsampled lane takes zero: no field may forbid it.
+        if let Some(field) = template.fields.iter().find(|field| !field.zero_admitted()) {
+            return Err(Error::new(
+                &entity(template, field),
+                "an acknowledgement writes zero to it, which its write constraint forbids",
+            ));
+        }
         let _ = writeln!(
             body,
             "/// Sample `{name}` once, keeping its declared fields, to acknowledge.\n\
              #[inline]\npub fn sample_{stem}(&self{index}) -> {module}::Snapshot {{\n\
              {module}::Snapshot(self.0.{} & {module}::FIELDS)\n}}\n\n\
              /// Acknowledge exactly the sampled set: one to each bit the snapshot\n\
-             /// holds, zero to every other bit.\n\
+             /// holds, zero to every other field; the bits of no field keep the\n\
+             /// value read now.\n\
              #[inline]\npub fn acknowledge_{stem}(&mut self{index}, snapshot: {module}::Snapshot) {{\n\
+             let kept = self.0.{} & !{module}::FIELDS;\n\
              self.0.{};\n}}\n",
             call.read(),
-            call.write("snapshot.0")
+            call.read(),
+            call.write("kept | snapshot.0")
         );
-        return;
+        return Ok(());
     }
     let zero = template.write_zero();
     let modify_read = if zero == 0 {
@@ -1042,56 +1316,13 @@ fn render_owned(body: &mut String, template: &Template<'_>, stem: &str, call: Ca
         format!("self.0.{} & 0x{:08x}", call.read(), !zero)
     };
     if template.command {
-        let qualifiers = template
-            .fields
-            .iter()
-            .filter(|field| field.role == Some(Role::Qualifier))
-            .collect::<Vec<_>>();
-        let parameters = qualifiers
-            .iter()
-            .map(|field| format!(", {}: bool", field.method()))
-            .collect::<String>();
-        let qualified = qualifiers
-            .iter()
-            .map(|field| {
-                format!(
-                    " | if {} {{ 0x{:08x} }} else {{ 0 }}",
-                    field.method(),
-                    field.mask()
-                )
-            })
-            .collect::<String>();
-        for field in template
-            .fields
-            .iter()
-            .filter(|field| field.role == Some(Role::Command))
-        {
-            let _ = writeln!(
-                body,
-                "/// Start the command `{}` of `{name}`: one write sets it and each\n\
-                 /// qualifier as given; every other field keeps the value read, every\n\
-                 /// other self-clearing bit is zero. It refuses, writing nothing, while\n\
-                 /// any self-clearing bit of the register reads one.\n\
-                 #[inline]\npub fn start_{stem}_{}(&mut self{index}{parameters}) -> Result<(), oer_mmio::CommandBusy> {{\n\
-                 let value = self.0.{};\n\
-                 if value & 0x{busy:08x} != 0 {{\n\
-                 return Err(oer_mmio::CommandBusy {{ running: value & 0x{busy:08x} }});\n}}\n\
-                 self.0.{};\nOk(())\n}}\n",
-                field.field.name,
-                field.stem,
-                call.read(),
-                call.write(&format!(
-                    "(value & 0x{:08x}) | 0x{:08x}{qualified}",
-                    !zero,
-                    field.mask()
-                )),
-                busy = template.busy(),
-            );
-        }
-        return;
+        render_command(body, template, stem, call)?;
+        return Ok(());
     }
     if template.port {
-        if let [field] = template.fields.as_slice() {
+        if let [field] = template.fields.as_slice()
+            && field.setter()
+        {
             let _ = writeln!(
                 body,
                 "/// Store the data word `{name}` whole: its one field `{}`, zero in every\n\
@@ -1103,13 +1334,15 @@ fn render_owned(body: &mut String, template: &Template<'_>, stem: &str, call: Ca
                 call.write(&field.positioned())
             );
         }
-        return;
+        return Ok(());
     }
-    if template.triggered() {
+    let from_zero = template.written_from_zero();
+    let required = template.required();
+    if template.triggered() || from_zero {
         for field in template
             .fields
             .iter()
-            .filter(|field| field.class == FieldClass::WriteTrigger)
+            .filter(|field| field.class == FieldClass::WriteTrigger && !field.zero)
         {
             let (parameter, bits) = if field.width == 1 {
                 (String::new(), format!("0x{:08x}", field.mask()))
@@ -1119,14 +1352,22 @@ fn render_owned(body: &mut String, template: &Template<'_>, stem: &str, call: Ca
                     field.positioned(),
                 )
             };
-            let image = if template.readable() {
+            let image = if template.modifiable() {
                 format!("{modify_read} | {bits}")
-            } else if template.reserved_reset == 0 {
+            } else if let Some(other) = required.first() {
+                return Err(Error::new(
+                    &entity(template, field),
+                    format!(
+                        "its trigger writes zero to {}, which no write may give it",
+                        other.field.name
+                    ),
+                ));
+            } else if template.zero_image() == 0 {
                 bits.strip_prefix('(')
                     .and_then(|bits| bits.strip_suffix(')'))
                     .map_or_else(|| bits.clone(), str::to_owned)
             } else {
-                format!("0x{:08x} | {bits}", template.reserved_reset)
+                format!("0x{:08x} | {bits}", template.zero_image())
             };
             let _ = writeln!(
                 body,
@@ -1135,13 +1376,28 @@ fn render_owned(body: &mut String, template: &Template<'_>, stem: &str, call: Ca
                  #[inline]\npub fn trigger_{stem}_{}(&mut self{index}{parameter}) {{\n\
                  self.0.{};\n}}\n",
                 field.field.name,
-                if template.readable() {
+                if template.modifiable() {
                     "every other field keeps the value read, every other trigger is zero"
                 } else {
-                    "every other bit is zero"
+                    "every other bit is zero or its fixed value"
                 },
                 field.stem,
                 call.write(&image)
+            );
+        }
+    }
+    if template.modifiable() {
+        for field in template.fields.iter().filter(|field| field.doorbell) {
+            let _ = writeln!(
+                body,
+                "/// Ring the doorbell `{}` of `{name}`: one there, every other field\n\
+                 /// keeps the value read, every trigger is zero. The hardware clears it\n\
+                 /// when it accepts the request.\n\
+                 #[inline]\npub fn trigger_{stem}_{}(&mut self{index}) {{\n\
+                 self.0.{};\n}}\n",
+                field.field.name,
+                field.stem,
+                call.write(&format!("{modify_read} | 0x{:08x}", field.mask()))
             );
         }
     }
@@ -1156,64 +1412,196 @@ fn render_owned(body: &mut String, template: &Template<'_>, stem: &str, call: Ca
              self.0.{};\n}}\n",
             call.write("value.0")
         );
-    } else if template.written_from_zero() {
+    } else if from_zero {
+        let mut parameters = String::new();
+        let mut image = format!("0x{:08x}", template.zero_image());
+        for field in &required {
+            let parameter = field.method();
+            let _ = write!(
+                parameters,
+                ", {parameter}: {}",
+                field.write_type(Some(&module))
+            );
+            let _ = write!(image, " | {}", field.positioned_of(&parameter));
+        }
         let _ = writeln!(
             body,
-            "/// Write `{name}` from zero: the fields set, the reserved bits at their\n\
-             /// reset value, zero in every other bit.\n\
-             #[inline]\npub fn write_{stem}(&mut self{index}, change: impl FnOnce(&mut {module}::W)) {{\n\
-             let mut value = {module}::W(0x{:08x});\n\
+            "/// Write `{name}` from zero: {}the fields set, the reserved bits at\n\
+             /// their reset value, every high field at its prefix, zero in every\n\
+             /// other bit.\n\
+             #[inline]\npub fn write_{stem}(&mut self{index}{parameters}, change: impl FnOnce(&mut {module}::W)) {{\n\
+             let mut value = {module}::W({image});\n\
              change(&mut value);\n\
              self.0.{};\n}}\n",
-            template.reserved_reset,
+            if required.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "the fields no write may leave zero ({}) as given, ",
+                    required
+                        .iter()
+                        .map(|field| format!("`{}`", field.field.name))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            },
             call.write("value.0")
         );
     }
+    Ok(())
 }
 
-/// A shared word's writes through `&self`: each strobe alone, or the one
-/// field stored whole; neither reads the word back.
-fn render_shared(body: &mut String, template: &Template<'_>, stem: &str, call: Call) {
-    let Call::Fixed(offset) = call else {
-        return;
-    };
+/// A command register's starts: one write sets the command and each
+/// qualifier as given; the other fields keep the value read, triggers,
+/// write-one-to-clear and set-only lanes are zero; a lane neither is safe
+/// for is refused.
+fn render_command(
+    body: &mut String,
+    template: &Template<'_>,
+    stem: &str,
+    call: Call,
+) -> Result<(), Error> {
+    let index = call.parameter();
     let name = &template.key;
-    let module = template.module();
+    let (zero, refused) = template.replayed();
+    if let Some(field) = refused.first() {
+        return Err(Error::new(
+            &entity(template, field),
+            format!(
+                "a start of its command register can neither keep nor zero this {} field",
+                field.class.label()
+            ),
+        ));
+    }
+    let qualifiers = template
+        .fields
+        .iter()
+        .filter(|field| field.role == Some(Role::Qualifier))
+        .collect::<Vec<_>>();
+    let parameters = qualifiers
+        .iter()
+        .map(|field| format!(", {}: bool", field.method()))
+        .collect::<String>();
+    let qualified = qualifiers
+        .iter()
+        .map(|field| {
+            format!(
+                " | if {} {{ 0x{:08x} }} else {{ 0 }}",
+                field.method(),
+                field.mask()
+            )
+        })
+        .collect::<String>();
     for field in template
         .fields
         .iter()
-        .filter(|field| field.class == FieldClass::WriteTrigger && field.width == 1)
+        .filter(|field| field.role == Some(Role::Command))
     {
         let _ = writeln!(
             body,
-            "/// Strobe the write-trigger field `{}` of `{name}` alone: one there,\n\
-             /// zero in every other bit, nothing read back.\n\
-             #[inline]\npub fn trigger_{stem}_{}(&self) {{\n\
-             self.0.write_shared::<0x{offset:x}>(0x{:08x});\n}}\n",
+            "/// Start the command `{}` of `{name}`: one write sets it and each\n\
+             /// qualifier as given; every other field keeps the value read, every\n\
+             /// other self-clearing bit, trigger and write-one-to-clear lane is\n\
+             /// zero. It refuses, writing nothing, while any self-clearing bit of\n\
+             /// the register reads one.\n\
+             #[inline]\npub fn start_{stem}_{}(&mut self{index}{parameters}) -> Result<(), oer_mmio::CommandBusy> {{\n\
+             let value = self.0.{};\n\
+             if value & 0x{busy:08x} != 0 {{\n\
+             return Err(oer_mmio::CommandBusy {{ running: value & 0x{busy:08x} }});\n}}\n\
+             self.0.{};\nOk(())\n}}\n",
             field.field.name,
             field.stem,
-            field.mask()
+            call.read(),
+            call.write(&format!(
+                "(value & 0x{:08x}) | 0x{:08x}{qualified}",
+                !zero,
+                field.mask()
+            )),
+            busy = template.busy(),
         );
     }
-    if let [field] = template.fields.as_slice()
-        && field.setter()
-    {
-        let _ = writeln!(
-            body,
-            "/// Store `{name}` whole: its one field `{}`, zero in every other bit,\n\
-             /// nothing read back.\n\
-             #[inline]\npub fn store_{stem}(&self, value: {}) {{\n\
-             self.0.write_shared::<0x{offset:x}>({});\n}}\n",
-            field.field.name,
-            field.write_type(Some(&module)),
-            field.positioned()
-        );
+    Ok(())
+}
+
+/// A shared word's writes through `&self`: each strobe alone, or the one
+/// field stored whole; neither reads the word back. An array's elements
+/// each have their own.
+fn render_shared(
+    body: &mut String,
+    template: &Template<'_>,
+    stem: &str,
+    call: Call,
+) -> Result<(), Error> {
+    let offsets = match call {
+        Call::Fixed(offset) => vec![(stem.to_owned(), offset)],
+        Call::Indexed {
+            offset,
+            stride,
+            count,
+        } => (0..count)
+            .map(|element| {
+                let name = template
+                    .elements
+                    .iter()
+                    .find(|candidate| candidate.offset == offset + element * stride)
+                    .map_or_else(|| format!("{stem}_{element}"), |found| found.stem.clone());
+                (name, offset + element * stride)
+            })
+            .collect(),
+    };
+    let name = &template.key;
+    let module = template.module();
+    for (stem, offset) in offsets {
+        for field in template
+            .fields
+            .iter()
+            .filter(|field| field.class == FieldClass::WriteTrigger && !field.zero)
+        {
+            let (parameter, bits) = if field.width == 1 {
+                (String::new(), format!("0x{:08x}", field.mask()))
+            } else {
+                (
+                    format!(", value: {}", field.write_type(Some(&module))),
+                    field.positioned(),
+                )
+            };
+            let _ = writeln!(
+                body,
+                "/// Strobe the write-trigger field `{}` of `{name}` alone: its value\n\
+                 /// there, zero in every other bit, nothing read back.\n\
+                 #[inline]\npub fn trigger_{stem}_{}(&self{parameter}) {{\n\
+                 self.0.write_shared::<0x{offset:x}>({bits});\n}}\n",
+                field.field.name, field.stem,
+            );
+        }
+        if let [field] = template.fields.as_slice()
+            && field.setter()
+        {
+            if !field.zero_admitted() && field.pointer.is_none() && field.range.is_none() {
+                return Err(Error::new(
+                    &entity(template, field),
+                    "a shared store of its word has no admitted value type",
+                ));
+            }
+            let _ = writeln!(
+                body,
+                "/// Store `{name}` whole: its one field `{}`, zero in every other bit,\n\
+                 /// nothing read back.\n\
+                 #[inline]\npub fn store_{stem}(&self, value: {}) {{\n\
+                 self.0.write_shared::<0x{offset:x}>({});\n}}\n",
+                field.field.name,
+                field.write_type(Some(&module)),
+                field.positioned()
+            );
+        }
     }
+    Ok(())
 }
 
 fn render_fifo(body: &mut String, template: &Template<'_>, stem: &str, call: Call) {
     let module = template.module();
     let name = &template.key;
+    let index = call.parameter();
     let [field] = template.fields.as_slice() else {
         return;
     };
@@ -1226,7 +1614,7 @@ fn render_fifo(body: &mut String, template: &Template<'_>, stem: &str, call: Cal
         let _ = writeln!(
             body,
             "/// Take the next element out of the FIFO port `{name}`.\n\
-             #[inline]\npub fn pop_{stem}(&mut self) -> {} {{\n{element}\n}}\n",
+             #[inline]\npub fn pop_{stem}(&mut self{index}) -> {} {{\n{element}\n}}\n",
             field.native(),
         );
     }
@@ -1234,7 +1622,7 @@ fn render_fifo(body: &mut String, template: &Template<'_>, stem: &str, call: Cal
         let _ = writeln!(
             body,
             "/// Put one element into the FIFO port `{name}`; every other bit is zero.\n\
-             #[inline]\npub fn push_{stem}(&mut self, value: {}) {{\n\
+             #[inline]\npub fn push_{stem}(&mut self{index}, value: {}) {{\n\
              self.0.{};\n}}\n",
             field.write_type(Some(&module)),
             call.write(&field.positioned())
@@ -1253,22 +1641,31 @@ pub(super) fn render_split_triggers(
     divided: bool,
 ) {
     let name = &template.key;
+    let module = template.module();
     for field in template
         .fields
         .iter()
-        .filter(|field| fields.contains(&field.field.name))
+        .filter(|field| fields.contains(&field.field.name) && !field.zero)
     {
-        let write = if divided {
-            format!("write_trigger::<0x{offset:x}>(0x{:08x})", field.mask())
+        let (parameter, bits) = if field.width == 1 {
+            (String::new(), format!("0x{:08x}", field.mask()))
         } else {
-            format!("write::<0x{offset:x}>(0x{:08x})", field.mask())
+            (
+                format!(", value: {}", field.write_type(Some(&module))),
+                field.positioned(),
+            )
+        };
+        let write = if divided {
+            format!("write_trigger::<0x{offset:x}>({bits})")
+        } else {
+            format!("write::<0x{offset:x}>({bits})")
         };
         let _ = writeln!(
             body,
-            "/// Write one to the write-trigger field `{}` of the split word `{name}`,\n\
+            "/// Write to the write-trigger field `{}` of the split word `{name}`,\n\
              /// starting its hardware action once; zero in every other bit, which\n\
              /// leaves the other holders' fields alone.\n\
-             #[inline]\npub fn trigger_{stem}_{}(&mut self) {{\n\
+             #[inline]\npub fn trigger_{stem}_{}(&mut self{parameter}) {{\n\
              self.0.{write};\n}}\n",
             field.field.name, field.stem,
         );

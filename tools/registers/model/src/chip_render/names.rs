@@ -97,9 +97,42 @@ pub(super) fn ident(snake: &str) -> String {
     }
 }
 
-/// The upper camel case of a model name, `%s` removed.
+/// The upper camel case of a model name, `%s` removed: each `_`- or
+/// `-`-separated part capitalized, a `_` kept between two parts where the
+/// first ends and the second starts with a digit.
 pub(super) fn camel(name: &str) -> String {
-    crate::pac_api_render::type_binding_name(&name.replace('.', "_"))
+    let name = name.replace("%s", "").replace('.', "_");
+    let mut output = String::new();
+    let mut previous_ended_with_digit = false;
+    for part in name.split(['_', '-']).filter(|part| !part.is_empty()) {
+        if previous_ended_with_digit
+            && part.starts_with(|character: char| character.is_ascii_digit())
+        {
+            output.push('_');
+        }
+        for (index, character) in part.chars().enumerate() {
+            if index == 0 {
+                output.push(character.to_ascii_uppercase());
+            } else {
+                output.push(character.to_ascii_lowercase());
+            }
+        }
+        previous_ended_with_digit = part.ends_with(|character: char| character.is_ascii_digit());
+    }
+    output
+}
+
+/// `description` as doc lines, each prefixed by `indent`.
+pub(super) fn push_doc(output: &mut String, description: &str, indent: &str) {
+    for line in description.lines() {
+        output.push_str(indent);
+        output.push_str("///");
+        if !line.is_empty() {
+            output.push(' ');
+            output.push_str(line);
+        }
+        output.push('\n');
+    }
 }
 
 /// Whether `name` is a usable Rust identifier stem.
