@@ -289,14 +289,12 @@ fn bring_up_on(model: &Shared) -> Result<PsramReady, BootFailure> {
     let mut clock_owner = Owner(Rc::clone(model));
     let mut active = Owner(Rc::clone(model));
     let mut psram = Owner(Rc::clone(model));
-    let mut mmu = Owner(Rc::clone(model));
     let mut cache = Owner(Rc::clone(model));
     bring_up(
         PsramOwners {
             clock: &mut clock_owner,
             active: &mut active,
             psram: &mut psram,
-            mmu: &mut mmu,
             cache: &mut cache,
         },
         PROFILE,

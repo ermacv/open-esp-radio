@@ -121,8 +121,8 @@ pub trait FlashCommandRegisters {
     fn start(&mut self, access: Access<'_>) -> Result<(), Busy>;
     /// Whether the user command still runs.
     fn busy(&self, access: Access<'_>) -> bool;
-    /// Data word `index` (below [`CHUNK_WORDS`]) of the last command.
-    fn data(&self, access: Access<'_>, index: usize) -> u32;
+    /// The data words of the last command.
+    fn data(&self, access: Access<'_>) -> [u32; CHUNK_WORDS];
 }
 
 /// Why a flash read or the flash timing was refused.
@@ -199,8 +199,9 @@ where
         registers.set_transfer(Access::new(), chunk_address, chunk_bytes);
         deadline.poll(wait, || registers.start(Access::new()).ok())?;
         deadline.poll(wait, || (!registers.busy(Access::new())).then_some(()))?;
-        for (index, word) in chunk.iter_mut().enumerate() {
-            *word = registers.data(Access::new(), index);
+        let data = registers.data(Access::new());
+        for (word, &read) in chunk.iter_mut().zip(&data) {
+            *word = read;
         }
         chunk_address += chunk_bytes;
     }

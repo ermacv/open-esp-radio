@@ -496,7 +496,9 @@ pub(crate) fn derive_register(
             }
             continue;
         };
-        if reserved_description(&header_field.description) {
+        // A field the overlay defines stands even where its header calls
+        // the bits reserved: the overlay cites the driver that writes them.
+        if reserved_description(&header_field.description) && !defined {
             derived.reserved_fields.insert(field.name.to_owned());
             continue;
         }

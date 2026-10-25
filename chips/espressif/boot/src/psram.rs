@@ -185,15 +185,13 @@ impl PsramFailure {
 }
 
 /// The owners the bring-up uses.
-pub struct PsramOwners<'a, K, A, P, M, S> {
+pub struct PsramOwners<'a, K, A, P, S> {
     /// The memory PLL, the supply and the controller's clocks.
     pub clock: &'a mut K,
     /// The PLLs' power in the PMU's active state.
     pub active: &'a mut A,
-    /// The controllers and the command port.
+    /// The controllers, the command port and the PSRAM's MMU table.
     pub psram: &'a mut P,
-    /// The PSRAM's MMU table.
-    pub mmu: &'a mut M,
     /// The cache sync engine.
     pub cache: &'a mut S,
 }
@@ -258,8 +256,8 @@ pub const fn density_bytes(code: u8) -> Option<u32> {
 
 /// Bring the board's octal PSRAM up cold and map it into `window` from its
 /// first page.
-pub fn bring_up<K, A, P, M, S, C>(
-    owners: PsramOwners<'_, K, A, P, M, S>,
+pub fn bring_up<K, A, P, S, C>(
+    owners: PsramOwners<'_, K, A, P, S>,
     profile: OctalPsramProfile<K::SupplyLevel>,
     window: MmuWindow,
     cache: CacheGeometry<S::Map>,
@@ -269,8 +267,7 @@ pub fn bring_up<K, A, P, M, S, C>(
 where
     K: MemoryClockRegisters,
     A: ActivePllPower,
-    P: PsramControllerRegisters + PsramCommandRegisters,
-    M: MmuRegisters,
+    P: PsramControllerRegisters + PsramCommandRegisters + MmuRegisters,
     S: CacheSyncRegisters,
     C: Clock + ?Sized,
 {
@@ -278,7 +275,6 @@ where
         clock,
         active,
         psram,
-        mmu: table,
         cache: sync,
     } = owners;
 
@@ -335,7 +331,7 @@ where
 
     psram.configure_cache_access(Access::new(), profile.cache);
     let mapped = mmu::map(
-        table,
+        psram,
         window,
         MmuTarget::Psram,
         window.virtual_base,

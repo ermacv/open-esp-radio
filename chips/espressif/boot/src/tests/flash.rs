@@ -174,8 +174,8 @@ impl FlashCommandRegisters for Port {
         let now = model.clock.now();
         model.running_until.is_some_and(|until| now < until)
     }
-    fn data(&self, _: Access<'_>, index: usize) -> u32 {
-        self.0.borrow().buffer[index]
+    fn data(&self, _: Access<'_>) -> [u32; 16] {
+        self.0.borrow().buffer
     }
 }
 

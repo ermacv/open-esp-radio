@@ -520,7 +520,10 @@ fn a_driver_written_debugging_register_keeps_its_header_access() {
     let error = soc(
         &svd,
         &header,
-        &entry(&format!("\"esp-idf:{REG}:{}\"", line(&header, "TIMER_PROBE"))),
+        &entry(&format!(
+            "\"esp-idf:{REG}:{}\"",
+            line(&header, "TIMER_PROBE")
+        )),
     )
     .err()
     .expect("a register header is no driver");
@@ -538,7 +541,10 @@ fn defined_fields_replace_the_vendor_fields_and_take_the_class_of_the_header_fie
             + &field("VALID", 12, 1, "read-write")
             + &field("OTHER", 12, 1, "read-write")),
     );
-    let header = reg_h(&[("ENTRY", 0x34, &[("CONTENT", "R/W", 0, 32, "The entry.")])]);
+    let header = reg_h(&[
+        ("ENTRY", 0x34, &[("CONTENT", "R/W", 0, 31, "The entry.")]),
+        ("CLOCK", 0x38, &[("EQU", "R/W", 31, 1, "reserved")]),
+    ]);
     let narrowed = soc(&svd, &header, "").expect("renders");
     assert_eq!(api(&narrowed, "ENTRY"), RegisterApi::Read);
     let source = format!("esp-idf:{REG}:{}", line(&header, "TIMER_ENTRY_REG ("));
@@ -562,13 +568,35 @@ fn defined_fields_replace_the_vendor_fields_and_take_the_class_of_the_header_fie
     ] {
         assert!(render.rust.contains(item), "{item}\n{}", render.rust);
     }
-    assert!(!render.rust.contains("pub const fn other("), "{}", render.rust);
+    assert!(
+        !render.rust.contains("pub const fn other("),
+        "{}",
+        render.rust
+    );
+    // A defined field stands where the header calls its bits reserved.
+    let clock = register(
+        "CLOCK",
+        0x38,
+        "read-write",
+        &field("DIV", 0, 8, "read-write"),
+    );
+    let clock_source = format!("esp-idf:{REG}:{}", line(&header, "TIMER_CLOCK_REG ("));
+    let defined_clock = format!(
+        "[[registers]]\nperipheral = \"TIMER\"\nregister = \"CLOCK\"\n\
+         define-fields = [{{ name = \"EQU\", offset = 31, width = 1, description = \"Undivided.\" }}]\n\
+         sources = [\"{clock_source}\"]\n"
+    );
+    let render = soc(&(svd.clone() + &clock), &header, &defined_clock).expect("renders");
+    assert!(render.rust.contains("pub fn set_equ("), "{}", render.rust);
     // Overlapping definitions are refused.
     let overlapping = entry.replace("offset = 12, width = 1", "offset = 10, width = 1");
     let error = soc(&svd, &header, &overlapping)
         .err()
         .expect("PAGE and VALID overlap");
-    assert!(error.to_string().contains("apart from the others"), "{error}");
+    assert!(
+        error.to_string().contains("apart from the others"),
+        "{error}"
+    );
 }
 
 #[test]

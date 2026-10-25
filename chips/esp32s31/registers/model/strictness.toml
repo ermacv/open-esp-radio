@@ -4782,7 +4782,15 @@ sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:368"]
 peripheral = "SPI1"
 register = "SPI_MEM_CLOCK"
 reserved = 0x7f000000
-sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:379", "esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_struct.h:415"]
+# The vendor SVD lacks CLK_EQU_SYSCLK, which the header calls reserved and
+# ESP-IDF's driver writes; the header's fields.
+define-fields = [
+    { name = "SPI_MEM_CLKCNT_L", offset = 0, width = 8, description = "The clock low period; equal to SPI_MEM_CLKCNT_N." },
+    { name = "SPI_MEM_CLKCNT_H", offset = 8, width = 8, description = "The clock high period: floor((SPI_MEM_CLKCNT_N + 1) / 2 - 1)." },
+    { name = "SPI_MEM_CLKCNT_N", offset = 16, width = 8, description = "The divider: the flash command port's clock runs at the system clock over SPI_MEM_CLKCNT_N + 1." },
+    { name = "SPI_MEM_CLK_EQU_SYSCLK", offset = 31, width = 1, description = "The clock is the system clock, undivided." },
+]
+sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_reg.h:379", "esp-idf:components/soc/esp32s31/register/soc/spi1_mem_c_struct.h:415", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:759"]
 
 [[registers]]
 peripheral = "SPI1"
@@ -5274,13 +5282,29 @@ peripheral = "MEMSPI2"
 register = "CACHE_SCTRL"
 reserved = 0xf0003000
 driver-writes = true
+# The header calls SRAM_OCT reserved, and ESP-IDF's PSRAM driver writes it;
+# the header's fields.
+define-fields = [
+    { name = "CACHE_USR_SADDR_4BYTE", offset = 0, width = 1, description = "The header's field CACHE_USR_SADDR_4BYTE." },
+    { name = "USR_SRAM_DIO", offset = 1, width = 1, description = "The header's field USR_SRAM_DIO." },
+    { name = "USR_SRAM_QIO", offset = 2, width = 1, description = "The header's field USR_SRAM_QIO." },
+    { name = "USR_WR_SRAM_DUMMY", offset = 3, width = 1, description = "The header's field USR_WR_SRAM_DUMMY." },
+    { name = "USR_RD_SRAM_DUMMY", offset = 4, width = 1, description = "The header's field USR_RD_SRAM_DUMMY." },
+    { name = "CACHE_SRAM_USR_RCMD", offset = 5, width = 1, description = "The header's field CACHE_SRAM_USR_RCMD." },
+    { name = "SRAM_RDUMMY_CYCLELEN", offset = 6, width = 6, description = "The read dummy phase's length minus one." },
+    { name = "SRAM_ADDR_BITLEN", offset = 14, width = 6, description = "The address phase's length minus one." },
+    { name = "CACHE_SRAM_USR_WCMD", offset = 20, width = 1, description = "The header's field CACHE_SRAM_USR_WCMD." },
+    { name = "SRAM_OCT", offset = 21, width = 1, description = "The cache's external RAM access uses eight lines." },
+    { name = "SRAM_WDUMMY_CYCLELEN", offset = 22, width = 6, description = "The write dummy phase's length minus one." },
+]
 sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:708", "esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_struct.h:753", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:74", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:107", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:120", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:134", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:149", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:244"]
 
 [[registers]]
 peripheral = "MEMSPI2"
 register = "SRAM_CMD"
 reserved = 0x30002000
-sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:807", "esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_struct.h:881"]
+driver-writes = true
+sources = ["esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_reg.h:807", "esp-idf:components/soc/esp32s31/register/soc/spi_mem_s_struct.h:881", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:179", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:245", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:246", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:247", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:248", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:261", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:262"]
 
 [[registers]]
 peripheral = "MEMSPI2"
@@ -5535,7 +5559,15 @@ sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:368"]
 peripheral = "MEMSPI3"
 register = "CLOCK"
 reserved = 0x7f000000
-sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:379", "esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_struct.h:413"]
+# The vendor SVD lacks CLK_EQU_SYSCLK, which the header calls reserved and
+# ESP-IDF's driver writes; the header's fields.
+define-fields = [
+    { name = "CLKCNT_L", offset = 0, width = 8, description = "The clock low period; equal to CLKCNT_N." },
+    { name = "CLKCNT_H", offset = 8, width = 8, description = "The clock high period: floor((CLKCNT_N + 1) / 2 - 1)." },
+    { name = "CLKCNT_N", offset = 16, width = 8, description = "The divider: the PSRAM command port's clock runs at the system clock over CLKCNT_N + 1." },
+    { name = "CLK_EQU_SYSCLK", offset = 31, width = 1, description = "The clock is the system clock, undivided." },
+]
+sources = ["esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_reg.h:379", "esp-idf:components/soc/esp32s31/register/soc/spi1_mem_s_struct.h:413", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:498", "esp-idf:components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:500"]
 
 [[registers]]
 peripheral = "MEMSPI3"

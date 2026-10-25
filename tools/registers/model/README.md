@@ -96,7 +96,9 @@ header (`soc_headers.rs`):
   harmless, so no command is inferred from a class;
 - a field the header keeps to internal debugging ("Do not use it in
   applications") is never written: read only, and a write trigger among
-  them a lane every write leaves zero;
+  them a lane every write leaves zero, unless the overlay's
+  `driver-writes = true` cites the vendor driver (a source outside
+  `components/soc/`) that writes the register;
 - a field the header describes as `Reserved`, and bits no header field
   declares, are reserved: no accessor, kept by every write;
 - a field a read clears ("cleared by a read", "cleared when read",
@@ -128,7 +130,12 @@ chip's `model/strictness.toml` ([`StrictnessOverlay`]) also states what the
 headers do not, per register (`offset`, `add`, `access`, `reserved`,
 `read-side-effect`, `fifo`, `write-one-to-clear`, `raw-status-writable`,
 `data-port`: a command port's data words, one field the hardware also
-writes, read and stored whole) and per field (`rename`, `access`,
+writes, read and stored whole; `driver-writes`; `define-fields`: the
+register's fields where the SVD and its header disagree, each `name`,
+`offset`, `width` and `description` from the cited source, replacing the
+SVD's; each takes the class of the header field whose bits hold it, also
+one the header calls reserved, and the bits no defined field holds are
+reserved) and per field (`rename`, `access`,
 `kind = "plain" | "write-trigger"`, `values`), the command registers
 (`[[commands]]`: `fields`, optional `qualifiers`, `sources`) and the
 interrupt sources the SVD does not. A command register's `fields` are
