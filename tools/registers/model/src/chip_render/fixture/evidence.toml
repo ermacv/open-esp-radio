@@ -1,0 +1,13 @@
+schema = 1
+
+[[sources]]
+id = "SRC_HEADER"
+description = "Synthetic register header."
+
+[[sources]]
+id = "SRC_DRIVER"
+description = "Synthetic driver."
+
+[[sources]]
+id = "SRC_VENDOR"
+description = "Synthetic vendor routine storing whole words."

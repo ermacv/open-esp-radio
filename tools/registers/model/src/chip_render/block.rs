@@ -154,8 +154,8 @@ impl FieldPlan<'_> {
         };
         match self.width {
             32 => shifted,
-            8 => format!("({shifted}) as u8"),
-            16 => format!("({shifted}) as u16"),
+            8 => format!("{shifted} as u8"),
+            16 => format!("{shifted} as u16"),
             _ => format!(
                 "oer_mmio::Bits::truncate({})",
                 shifted.trim_start_matches('(').trim_end_matches(')')
@@ -505,7 +505,7 @@ fn arithmetic(elements: &[Elem]) -> Option<(u64, u64, u64)> {
     let even = elements
         .windows(2)
         .all(|pair| matches!(pair, [a, b] if b.offset.checked_sub(a.offset) == Some(stride)));
-    (even && stride > 0).then(|| (first.offset, stride, elements.len() as u64))
+    (even && stride > 0).then_some((first.offset, stride, elements.len() as u64))
 }
 
 fn field_plan<'m>(
@@ -716,10 +716,10 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
                 output,
                 "/// The snapshot without `{}` unless `keep`: it is then not acknowledged.\n\
                  pub const fn retain_{}(self, keep: bool) -> Self {{\n\
-                 if keep {{ self }} else {{ Self(self.0 & 0x{:08x}) }}\n}}\n",
+                 if keep {{ self }} else {{ Self({}) }}\n}}\n",
                 field.field.name,
                 field.stem,
-                !field.mask()
+                without("self.0", field.mask())
             );
         }
         output.push_str("}\n\n");
@@ -925,7 +925,7 @@ impl Call {
     fn parameter(self) -> String {
         match self {
             Self::Fixed(_) => String::new(),
-            Self::Indexed { count, .. } => format!("index: oer_mmio::Index<{count}>, "),
+            Self::Indexed { count, .. } => format!(", index: oer_mmio::Index<{count}>"),
         }
     }
 
@@ -988,7 +988,7 @@ pub(super) fn render_methods(
     if template.readable() {
         let _ = writeln!(
             body,
-            "/// Read `{name}`.\n#[inline]\npub fn read_{stem}(&self, {index}) -> {module}::R {{\n{module}::R(self.0.{})\n}}\n",
+            "/// Read `{name}`.\n#[inline]\npub fn read_{stem}(&self{index}) -> {module}::R {{\n{module}::R(self.0.{})\n}}\n",
             call.read()
         );
         for field in template
@@ -1000,7 +1000,7 @@ pub(super) fn render_methods(
                 body,
                 "/// Whether the command `{}` of `{name}` still runs: the hardware\n\
                  /// clears the field when the command is done.\n\
-                 #[inline]\npub fn {stem}_{}_busy(&self, {index}) -> bool {{\n\
+                 #[inline]\npub fn {stem}_{}_busy(&self{index}) -> bool {{\n\
                  (self.0.{} & 0x{:08x}) != 0\n}}\n",
                 field.field.name,
                 field.stem,
@@ -1024,11 +1024,11 @@ fn render_owned(body: &mut String, template: &Template<'_>, stem: &str, call: Ca
         let _ = writeln!(
             body,
             "/// Sample `{name}` once, keeping its declared fields, to acknowledge.\n\
-             #[inline]\npub fn sample_{stem}(&self, {index}) -> {module}::Snapshot {{\n\
+             #[inline]\npub fn sample_{stem}(&self{index}) -> {module}::Snapshot {{\n\
              {module}::Snapshot(self.0.{} & {module}::FIELDS)\n}}\n\n\
              /// Acknowledge exactly the sampled set: one to each bit the snapshot\n\
              /// holds, zero to every other bit.\n\
-             #[inline]\npub fn acknowledge_{stem}(&mut self, {index}snapshot: {module}::Snapshot) {{\n\
+             #[inline]\npub fn acknowledge_{stem}(&mut self{index}, snapshot: {module}::Snapshot) {{\n\
              self.0.{};\n}}\n",
             call.read(),
             call.write("snapshot.0")
@@ -1049,7 +1049,7 @@ fn render_owned(body: &mut String, template: &Template<'_>, stem: &str, call: Ca
             .collect::<Vec<_>>();
         let parameters = qualifiers
             .iter()
-            .map(|field| format!("{}: bool, ", field.method()))
+            .map(|field| format!(", {}: bool", field.method()))
             .collect::<String>();
         let qualified = qualifiers
             .iter()
@@ -1072,7 +1072,7 @@ fn render_owned(body: &mut String, template: &Template<'_>, stem: &str, call: Ca
                  /// qualifier as given; every other field keeps the value read, every\n\
                  /// other self-clearing bit is zero. It refuses, writing nothing, while\n\
                  /// any self-clearing bit of the register reads one.\n\
-                 #[inline]\npub fn start_{stem}_{}(&mut self, {index}{parameters}) -> Result<(), oer_mmio::CommandBusy> {{\n\
+                 #[inline]\npub fn start_{stem}_{}(&mut self{index}{parameters}) -> Result<(), oer_mmio::CommandBusy> {{\n\
                  let value = self.0.{};\n\
                  if value & 0x{busy:08x} != 0 {{\n\
                  return Err(oer_mmio::CommandBusy {{ running: value & 0x{busy:08x} }});\n}}\n\
@@ -1096,7 +1096,7 @@ fn render_owned(body: &mut String, template: &Template<'_>, stem: &str, call: Ca
                 body,
                 "/// Store the data word `{name}` whole: its one field `{}`, zero in every\n\
                  /// other bit; the hardware also writes it, so it is never modified.\n\
-                 #[inline]\npub fn write_{stem}(&mut self, {index}value: {}) {{\n\
+                 #[inline]\npub fn write_{stem}(&mut self{index}, value: {}) {{\n\
                  self.0.{};\n}}\n",
                 field.field.name,
                 field.write_type(Some(&module)),
@@ -1115,12 +1115,16 @@ fn render_owned(body: &mut String, template: &Template<'_>, stem: &str, call: Ca
                 (String::new(), format!("0x{:08x}", field.mask()))
             } else {
                 (
-                    format!("value: {}", field.write_type(Some(&module))),
+                    format!(", value: {}", field.write_type(Some(&module))),
                     field.positioned(),
                 )
             };
             let image = if template.readable() {
                 format!("{modify_read} | {bits}")
+            } else if template.reserved_reset == 0 {
+                bits.strip_prefix('(')
+                    .and_then(|bits| bits.strip_suffix(')'))
+                    .map_or_else(|| bits.clone(), str::to_owned)
             } else {
                 format!("0x{:08x} | {bits}", template.reserved_reset)
             };
@@ -1128,7 +1132,7 @@ fn render_owned(body: &mut String, template: &Template<'_>, stem: &str, call: Ca
                 body,
                 "/// Write to the write-trigger field `{}` of `{name}`, starting its\n\
                  /// hardware action once; {}.\n\
-                 #[inline]\npub fn trigger_{stem}_{}(&mut self, {index}{parameter}) {{\n\
+                 #[inline]\npub fn trigger_{stem}_{}(&mut self{index}{parameter}) {{\n\
                  self.0.{};\n}}\n",
                 field.field.name,
                 if template.readable() {
@@ -1146,7 +1150,7 @@ fn render_owned(body: &mut String, template: &Template<'_>, stem: &str, call: Ca
             body,
             "/// Read `{name}`, change fields and write it back; every other bit keeps\n\
              /// the value read, every write-trigger field is zero.\n\
-             #[inline]\npub fn modify_{stem}(&mut self, {index}change: impl FnOnce(&mut {module}::W)) {{\n\
+             #[inline]\npub fn modify_{stem}(&mut self{index}, change: impl FnOnce(&mut {module}::W)) {{\n\
              let mut value = {module}::W({modify_read});\n\
              change(&mut value);\n\
              self.0.{};\n}}\n",
@@ -1157,7 +1161,7 @@ fn render_owned(body: &mut String, template: &Template<'_>, stem: &str, call: Ca
             body,
             "/// Write `{name}` from zero: the fields set, the reserved bits at their\n\
              /// reset value, zero in every other bit.\n\
-             #[inline]\npub fn write_{stem}(&mut self, {index}change: impl FnOnce(&mut {module}::W)) {{\n\
+             #[inline]\npub fn write_{stem}(&mut self{index}, change: impl FnOnce(&mut {module}::W)) {{\n\
              let mut value = {module}::W(0x{:08x});\n\
              change(&mut value);\n\
              self.0.{};\n}}\n",
@@ -1268,6 +1272,15 @@ pub(super) fn render_split_triggers(
              self.0.{write};\n}}\n",
             field.field.name, field.stem,
         );
+    }
+}
+
+/// `expression` without the bits of `mask`, as an expression.
+pub(super) fn without(expression: &str, mask: u32) -> String {
+    if mask == u32::MAX {
+        "0".to_owned()
+    } else {
+        format!("{expression} & 0x{:08x}", !mask)
     }
 }
 

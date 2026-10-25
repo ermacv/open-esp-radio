@@ -110,3 +110,16 @@ pub(super) fn valid(name: &str) -> bool {
             .chars()
             .all(|character| character.is_ascii_alphanumeric() || character == '_')
 }
+
+/// The snake case of an upper-camel-case name: `SecondEvents` →
+/// `second_events`.
+pub(super) fn camel_snake(name: &str) -> String {
+    let mut snake = String::new();
+    for (index, character) in name.chars().enumerate() {
+        if character.is_ascii_uppercase() && index > 0 {
+            snake.push('_');
+        }
+        snake.push(character.to_ascii_lowercase());
+    }
+    snake
+}

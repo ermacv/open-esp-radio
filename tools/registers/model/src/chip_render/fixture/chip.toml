@@ -1,0 +1,61 @@
+schema = 4
+chip = "testchip"
+interrupt-sources = { count = 3, sources = ["SRC_HEADER"] }
+types = ["types/radio.toml", "types/etm.toml", "types/counter.toml"]
+layouts = ["layouts/rx-descriptor.toml"]
+
+[[instances]]
+name = "RADIO0"
+type = "RADIO"
+base = 0x60000000
+extent = { size = 0x1000 }
+sources = ["SRC_HEADER"]
+
+[[instances]]
+name = "RADIO1"
+type = "RADIO"
+base = 0x60001000
+extent = { size = 0x1000 }
+sources = ["SRC_HEADER"]
+
+[[instances]]
+name = "ETM"
+type = "ETM"
+base = 0x60003000
+extent = { size = 0x1000 }
+sources = ["SRC_HEADER"]
+
+[[instances]]
+name = "COUNTER"
+type = "COUNTER"
+base = 0x60004000
+extent = { size = 0x1000 }
+sources = ["SRC_HEADER"]
+
+[[interrupts]]
+name = "RADIO0_INTR"
+source = 0
+instance = "RADIO0"
+sources = ["SRC_HEADER"]
+
+[[interrupts]]
+name = "RADIO1_INTR"
+source = 1
+instance = "RADIO1"
+sources = ["SRC_HEADER"]
+
+[[unbound-interrupts]]
+name = "SPARE"
+source = 2
+reason = "No block of the fixture raises it."
+sources = ["SRC_HEADER"]
+
+[[ram-regions]]
+name = "dma-window"
+base = 0x40800000
+size = 0x10000
+sources = ["SRC_HEADER"]
+
+[[layout-placements]]
+layout = "RX_DESCRIPTOR"
+regions = ["dma-window"]

@@ -550,6 +550,16 @@ fn render_owner(
     // The accessors.
     let mut body = String::new();
     let mode = owner.mode();
+    // A snapshot's clear word is written only by its acknowledgement.
+    let mut acknowledged = BTreeSet::new();
+    for snapshot in &policy.file().interrupt_snapshots {
+        if policy.owner(&snapshot.name) == Some(owner.id)
+            && let Some(register) = model.register(&snapshot.clear)
+            && let Location::Mmio { address } = register.location
+        {
+            acknowledged.insert(address.wrapping_sub(owner.base));
+        }
+    }
     for template in &plan.templates {
         let offsets = template
             .elements
@@ -567,11 +577,9 @@ fn render_owner(
             if held.is_empty() {
                 continue;
             }
-            match (
-                template.array,
-                held.len() == offsets.len(),
-                template.templated(),
-            ) {
+            let whole = held.len() == offsets.len()
+                && !held.iter().any(|offset| acknowledged.contains(*offset));
+            match (template.array, whole, template.templated()) {
                 (Some((offset, stride, count)), true, _) => render_methods(
                     &mut body,
                     template,
@@ -605,14 +613,20 @@ fn render_owner(
                             template,
                             &element.stem,
                             Call::Fixed(element.offset),
-                            mode,
+                            if acknowledged.contains(&element.offset) {
+                                Mode::Read
+                            } else {
+                                mode
+                            },
                         );
                     }
                 }
             }
         }
         for element in &template.elements {
-            if let Some(fields) = owner.words.triggers.get(&element.offset) {
+            if let Some(fields) = owner.words.triggers.get(&element.offset)
+                && !acknowledged.contains(&element.offset)
+            {
                 let stem = if template.templated() {
                     &element.stem
                 } else {
@@ -662,7 +676,7 @@ fn render_division(output: &mut String, division: &Division, owners: &[Owner<'_>
         .join(", ");
     let bindings = members
         .iter()
-        .map(|owner| names::snake(owner.name()))
+        .map(|owner| names::camel_snake(owner.name()))
         .collect::<Vec<_>>();
     let wrapped = members
         .iter()
@@ -754,7 +768,7 @@ pub(super) fn render_root(
             .iter()
             .filter(|owner| owner.partition == partition.name)
         {
-            let field = names::ident(&names::snake(owner.name()));
+            let field = names::ident(&names::camel_snake(owner.name()));
             if !fields.insert(field.clone()) {
                 return Err(Error::new(
                     &format!("{}.{}", partition.name, owner.name()),
@@ -851,7 +865,7 @@ pub(super) fn render_root(
             let _ = writeln!(
                 built,
                 "{}: owner_{position},",
-                names::ident(&names::snake(owner.name()))
+                names::ident(&names::camel_snake(owner.name()))
             );
         }
         built.push_str("},\n");

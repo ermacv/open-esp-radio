@@ -1,0 +1,142 @@
+schema = 6
+chip = "testchip"
+
+[[partitions]]
+name = "RadioPeripherals"
+member = "radio"
+description = "Radio 0: its task and its interrupt handler."
+
+[[partitions.parts]]
+name = "Task"
+instance = "RADIO0"
+registers = ["RAD_CONFIG", "RAD_COMMAND", "RAD_STATUS", "RAD_CMD", "RAD_FIFO", "RAD_PORT", "RAD_SLOT%s", "RAD_MIXED", "RAD_VAGUE", "RAD_HW", "RAD_DESC", "WORD_0060_OPAQUE", "RAD_PUBLISH", "RAD_STATE", "RAD_CH%s.CONF", "RAD_CH1.CNT"]
+
+[[partitions.parts]]
+name = "Irq"
+instance = "RADIO0"
+registers = ["RAD_EVENTS", "RAD_EVENT_CLR", "RAD_ENABLE"]
+observes = ["RAD_CONFIG"]
+irq-side = true
+description = "The handler samples and acknowledges the events and reads the configuration."
+sources = ["SRC_DRIVER"]
+
+[[partitions]]
+name = "SecondPeripherals"
+member = "second"
+description = "Radio 1's configuration and its read-only event view."
+
+[[partitions.parts]]
+name = "Second"
+instance = "RADIO1"
+registers = ["RAD_CONFIG"]
+
+[[partitions.parts]]
+name = "SecondEvents"
+instance = "RADIO1"
+registers = ["RAD_EVENTS"]
+read-only = true
+copy = true
+description = "Radio 1's events, read from every context."
+sources = ["SRC_DRIVER"]
+
+[[partitions]]
+name = "EtmPeripherals"
+member = "etm"
+description = "Event channels zero to two."
+
+[[partitions.parts]]
+name = "EtmLow"
+instance = "ETM"
+registers = ["CHANNEL_ENABLE"]
+elements = [{ register = "CH%s_EVENT", first = 0, count = 2 }]
+triggers = [{ register = "CHANNEL_ENABLE_SET", fields = ["CH0", "CH1"] }]
+description = "Event channels zero and one."
+sources = ["SRC_DRIVER"]
+
+[[partitions.parts]]
+name = "EtmHigh"
+instance = "ETM"
+elements = [{ register = "CH%s_EVENT", first = 2, count = 1 }]
+triggers = [{ register = "CHANNEL_ENABLE_SET", fields = ["CH2"] }]
+observes = ["CHANNEL_ENABLE"]
+description = "Event channel two."
+sources = ["SRC_DRIVER"]
+
+[[partitions]]
+name = "TimePeripherals"
+member = "time"
+description = "The free-running counter every context reads."
+
+[[partitions.parts]]
+name = "Counter"
+instance = "COUNTER"
+registers = ["COUNT", "UPDATE", "LATCH"]
+shared = true
+description = "Read, latched and stored from every context."
+sources = ["SRC_DRIVER"]
+
+[[partitions.parts]]
+name = "Mode"
+instance = "COUNTER"
+registers = ["MODE"]
+
+[[unclaimed]]
+instance = "RADIO0"
+registers = ["RAD_HALF%s", "RAD_CH0.CNT"]
+reason = "No driver reaches these words."
+
+[[unclaimed]]
+instance = "RADIO1"
+registers = ["RAD_COMMAND", "RAD_STATUS", "RAD_EVENT_CLR", "RAD_ENABLE", "RAD_CMD", "RAD_FIFO", "RAD_PORT", "RAD_SLOT%s", "RAD_MIXED", "RAD_VAGUE", "RAD_HW", "RAD_DESC", "WORD_0060_OPAQUE", "RAD_PUBLISH", "RAD_HALF%s", "RAD_STATE", "RAD_CH%s.CONF", "RAD_CH%s.CNT"]
+reason = "Radio 1 has no driver for these words."
+
+[[unclaimed]]
+instance = "ETM"
+registers = ["CH3_EVENT"]
+triggers = [{ register = "CHANNEL_ENABLE_SET", fields = ["CH3"] }]
+reason = "Event channel three is unused."
+
+[[interrupt-snapshots]]
+name = "radio_events"
+status = "RADIO0.RAD_EVENTS"
+clear = "RADIO0.RAD_EVENT_CLR"
+consumed-event = "The auxiliary event the task consumed in its own status."
+consumed-fields = ["RADIO0.RAD_EVENT_CLR.AUX"]
+sources = ["SRC_DRIVER"]
+
+[[pointer-fields]]
+name = "descriptor"
+field = "RADIO0.RAD_DESC.PTR"
+points-to = "RX_DESCRIPTOR"
+sources = ["SRC_DRIVER"]
+
+[[zero-register-writes]]
+name = "clear_command"
+register = "RADIO0.RAD_COMMAND"
+sources = ["SRC_DRIVER"]
+
+[[zero-based-field-writes]]
+name = "publish_low"
+fields = ["RADIO0.RAD_PUBLISH.LOW"]
+whole-word-bits = { value = 0xff000000, sources = ["SRC_VENDOR"] }
+sources = ["SRC_DRIVER"]
+
+[[fixed-register-images]]
+name = "mask_and_clear_events"
+register = "RADIO0.RAD_EVENT_CLR"
+value = 0x00000003
+masks = "RADIO0.RAD_ENABLE"
+sources = ["SRC_DRIVER"]
+
+[[fixed-register-images]]
+name = "store_vendor_word"
+register = "RADIO0.WORD_0060_OPAQUE"
+value = 0x12345678
+whole-word = true
+sources = ["SRC_VENDOR"]
+
+[[fixed-register-images]]
+name = "set_slow_mode"
+register = "RADIO0.RAD_ENABLE"
+value = 0x00000001
+sources = ["SRC_DRIVER"]

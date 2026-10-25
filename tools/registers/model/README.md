@@ -807,6 +807,56 @@ register with a `readAction` that is no FIFO port is `read-clears`, and a
 field whose access no level of the SVD states is `read-only`. Any other
 modified-write value is refused.
 
+### Thin PAC renderer
+
+`chip_render::render(model, policy)` renders the thin PAC from a loaded
+`ChipModel` and `ChipPolicy`, over `oer-mmio` and without `unsafe`. It is
+not wired to `cargo registers generate`. It uses the accessor convention
+above, with these rules of its own:
+
+- **Modules.** Each MMIO block type is one module holding a register module
+  per template (its masks, offsets, `R`, `W`, `Snapshot` and value types)
+  and the owners of the parts on its instances. `instances` holds each
+  instance's base and bound interrupt sources, and `Interrupt` lists every
+  source of the root. `ownership` holds the partitions, `Claims`,
+  `partition` and the check that no two claimed blocks share a word.
+- **Names.** A type's vendor prefix is cut from its register, group and
+  field names. The prefix is the longest run of whole `_` segments that
+  every named (not `_OPAQUE`) top-level register and group starts with.
+  The cut never applies when a type has fewer than two such names, and a
+  name that would become empty or start with a digit keeps its prefix. A
+  `%s` template whose stem is also a single register's keeps its index
+  place as `_n` (`STATUS%s` beside `STATUS` is `status_n`). A part that
+  holds every element of an even array gets indexed accessors; one that
+  holds only some elements gets one accessor per element, named after the
+  element (`ch4_event`, `t1_config`).
+- **Owners.** A part is one owner type: a block of its own, or one part
+  of an instance's division when its parts observe or split each other's
+  words (two to four parts). `shared` parts reach their words through
+  `&self`, and a `read-only` part only reads; with `copy` it is `Copy`. A
+  snapshot's clear word is written only by its acknowledgement. An
+  interrupt handler's part implements `InterruptSource` when its instance
+  has exactly one bound source.
+- **Writes.** A register is read, modified and written back only when the
+  write-back replays nothing. Such a register has no command, data port,
+  `write-only`, `write-one-to-clear`, `self-clearing`, `set-only` or
+  `hardware-written` field. The read-modify-write and the triggers of a
+  readable register zero the triggers and the zero-only fields, and keep
+  every other bit. A register with no readable field is written from zero,
+  with its reserved bits at their reset value.
+- **Field values.** A field limited to its `values` by `write-values-only`,
+  or one whose `values` cover its width, takes its enum. A field whose
+  `write-range` is narrower than its width takes a bounded `<Field>Range`.
+  A field with `values` has a `<field>_variant()` getter.
+- **Fields without a setter.** A field the policy reads as an address has
+  no setter until its type states the pointer facts. A part that reaches
+  an 8- or 16-bit word is refused: owners reach 32-bit words only.
+- **Policy items.** Only the items field accessors cannot express render:
+  `whole-word` fixed images, fixed images with a `masks` or
+  `consumed-event` proof, interrupt snapshots (with the consumed field as
+  an `Option` argument) and zero-based writes with `whole-word-bits`. Each
+  becomes a method of the part that owns it.
+
 ## Analog-I2C space
 
 The chip manifest's `indirect-spaces = ["analog/phy.toml"]` selects one

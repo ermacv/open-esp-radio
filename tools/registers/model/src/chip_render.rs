@@ -69,6 +69,14 @@ const RESERVED_MODULES: &[&str] = &["instances", "ownership", "layouts"];
 /// Render the PAC of `model` under `policy`. The output is deterministic:
 /// it follows the root's, the types' and the policy's order.
 pub fn render(model: &ChipModel, policy: &ChipPolicy) -> Result<String, Error> {
+    let (mut output, layouts) = render_parts(model, policy)?;
+    output.push('\n');
+    output.push_str(&layouts);
+    Ok(output)
+}
+
+/// The register blocks and ownership, and the `layouts` module apart.
+fn render_parts(model: &ChipModel, policy: &ChipPolicy) -> Result<(String, String), Error> {
     let pointers = pointer_fields(model, policy)?;
     let mut plans = BTreeMap::new();
     for (name, block) in model.types() {
@@ -117,9 +125,7 @@ pub fn render(model: &ChipModel, policy: &ChipPolicy) -> Result<String, Error> {
         .collect();
     let layouts = crate::layouts::render(model.layouts(), &regions)
         .map_err(|error| Error::new("layouts", error.to_string()))?;
-    output.push('\n');
-    output.push_str(&layouts);
-    Ok(output)
+    Ok((output, layouts))
 }
 
 /// The `(template key, field)` pairs of each type that some instance's

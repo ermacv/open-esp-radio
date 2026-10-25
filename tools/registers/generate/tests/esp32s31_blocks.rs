@@ -520,7 +520,21 @@ fn the_thin_renderer_renders_the_esp32s31_root_and_policy() {
         .unwrap_or_else(|error| panic!("the policy loads: {error}"));
     let rendered = oer_registers_model::chip_render::render(&model, &policy)
         .unwrap_or_else(|error| panic!("the thin PAC renders: {error}"));
-    if let Some(path) = std::env::var_os("OER_SCRATCH_RENDER") {
-        std::fs::write(path, &rendered).expect("scratch");
+    // The interrupt handlers' parts name their instances' one source.
+    for (part, source) in [("Ieee802154MacIrq", 132), ("UsbSerialJtagIrq", 2)] {
+        let item = format!(
+            "impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for {part}<P> {{\nconst SOURCE: u16 = {source};"
+        );
+        assert!(rendered.contains(&item), "{item}");
     }
+    // The irreducible acknowledgements render; ordinary transactions do not.
+    for item in [
+        "pub fn mac_interrupt_clear(&mut self)",
+        "pub fn sample_mac_interrupt(&self)",
+        "pub fn acknowledge_acknowledge_mac_tx_completion(",
+        "pub fn frequency_parameter_0(&mut self)",
+    ] {
+        assert!(rendered.contains(item), "{item}");
+    }
+    assert!(!rendered.contains("fn configure_bluetooth_cte_six_buffer_limit"));
 }

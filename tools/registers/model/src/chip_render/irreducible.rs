@@ -148,15 +148,20 @@ pub(super) fn render(
                     format!("its enable word {masks} is not read and written back"),
                 ));
             }
-            let zero = enable.template.write_zero();
-            let read = enable.read(entity, owner)?;
-            let cleared = enable.write(
-                entity,
-                owner,
-                &format!("bits & 0x{:08x}", !(zero | image.value)),
-                u32::MAX,
-            )?;
-            let _ = writeln!(masking, "let bits = {read};\n{cleared};");
+            let zero = enable.template.write_zero() | image.value;
+            if zero == u32::MAX {
+                let cleared = enable.write(entity, owner, "0", u32::MAX)?;
+                let _ = writeln!(masking, "{cleared};");
+            } else {
+                let read = enable.read(entity, owner)?;
+                let cleared = enable.write(
+                    entity,
+                    owner,
+                    &super::block::without("bits", zero),
+                    u32::MAX,
+                )?;
+                let _ = writeln!(masking, "let bits = {read};\n{cleared};");
+            }
             format!(
                 "Mask the sources of `0x{:08x}` in `{masks}`, keeping every other bit, then acknowledge them",
                 image.value
@@ -215,7 +220,7 @@ pub(super) fn render(
             let parameter = field.method();
             let _ = write!(
                 parameters,
-                "{parameter}: {}, ",
+                ", {parameter}: {}",
                 field.write_type(Some(&target.template.module()))
             );
             let _ = write!(
@@ -238,7 +243,7 @@ pub(super) fn render(
         );
         let _ = writeln!(
             body,
-            "#[inline]\npub fn {}(&mut self, {parameters}) {{\n{call};\n}}\n",
+            "#[inline]\npub fn {}(&mut self{parameters}) {{\n{call};\n}}\n",
             names::ident(&write.name)
         );
     }
@@ -321,14 +326,14 @@ fn render_snapshot(
             "/// The `{}` field.\n#[inline]\npub const fn {}(&self) -> {} {{\n{}\n}}\n\n\
              /// The snapshot without `{}` unless `keep`: it is then not acknowledged.\n\
              pub const fn retain_{}(self, keep: bool) -> Self {{\n\
-             if keep {{ self }} else {{ Self(self.0 & 0x{:08x}) }}\n}}\n",
+             if keep {{ self }} else {{ Self({}) }}\n}}\n",
             field.field.name,
             field.method(),
             field.native(),
             field.read_expression("self.0"),
             field.field.name,
             field.stem,
-            !field.mask()
+            super::block::without("self.0", field.mask())
         );
     }
     output.push_str("}\n\n");

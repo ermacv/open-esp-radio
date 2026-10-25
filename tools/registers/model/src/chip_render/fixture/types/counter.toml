@@ -1,0 +1,49 @@
+schema = 3
+
+[type]
+name = "COUNTER"
+description = "Synthetic free-running counter."
+sources = ["SRC_HEADER"]
+
+[review]
+sources = ["SRC_HEADER"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "COUNT"
+offset = 0x00
+
+[[registers.fields]]
+name = "COUNT"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "UPDATE"
+offset = 0x04
+
+[[registers.fields]]
+name = "UPDATE"
+bits = "0"
+class = "write-trigger"
+
+[[registers]]
+name = "MODE"
+offset = 0x08
+
+[[registers.fields]]
+name = "STEP"
+bits = "3:0"
+class = "plain"
+
+[[registers]]
+name = "LATCH"
+offset = 0x0c
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "plain"

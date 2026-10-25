@@ -1,0 +1,71 @@
+schema = 3
+
+[type]
+name = "ETM"
+description = "Synthetic event-task matrix."
+sources = ["SRC_HEADER"]
+
+[review]
+sources = ["SRC_HEADER"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "CHANNEL_ENABLE"
+offset = 0x00
+
+[[registers.fields]]
+name = "CH0"
+bits = "0"
+class = "read-only"
+
+[[registers.fields]]
+name = "CH1"
+bits = "1"
+class = "read-only"
+
+[[registers.fields]]
+name = "CH2"
+bits = "2"
+class = "read-only"
+
+[[registers.fields]]
+name = "CH3"
+bits = "3"
+class = "read-only"
+
+[[registers]]
+name = "CHANNEL_ENABLE_SET"
+offset = 0x04
+
+[[registers.fields]]
+name = "CH0"
+bits = "0"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "CH1"
+bits = "1"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "CH2"
+bits = "2"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "CH3"
+bits = "3"
+class = "write-trigger"
+
+[[registers]]
+name = "CH%s_EVENT"
+offset = 0x10
+dim = { count = 4, stride = 4 }
+
+[[registers.fields]]
+name = "ID"
+bits = "7:0"
+class = "plain"
