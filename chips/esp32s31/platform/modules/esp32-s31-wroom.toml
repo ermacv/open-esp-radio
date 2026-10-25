@@ -4,10 +4,12 @@
 schema = 2
 extends = "../chip.toml"
 
+# The module is the ESP32-S31-WROOM-3 (PCB antenna) in its N16R16 variant.
+# SOURCE: owner, 2026-10-25 (the stand boards carry ESP32-S31-WROOM-3-N16R16).
 # The fitted memories as every S31 image has run with them: the 16-MiB flash
 # the application image header names and the 16-MiB PSRAM the bootstrap maps
 # (chips/esp32s31/board).
 [module]
-name = "ESP32-S31-WROOM"
+name = "ESP32-S31-WROOM-3-N16R16"
 flash = { size-mib = 16 }
 psram = { size-mib = 16 }
