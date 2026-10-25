@@ -17,16 +17,26 @@ pub(crate) struct WifiRadioPeripheralOwners {
     pub(crate) wifi_mac_interface: generated::peripheral_ownership::WifiMacInterfacePeripherals,
 }
 
-/// Unique restricted owner of the shared radio-PHY register partition.
+/// Unique owner of the shared radio-PHY register partition.
 ///
-/// The type exposes only reviewed, named PHY transactions. It contains no
-/// Wi-Fi MAC, Bluetooth controller, coexistence, or shared-baseband owner.
-/// The HAL decides which protocol route currently holds it.
+/// It holds the partition's generated blocks; the HAL drives the PHY blocks
+/// through their field accessors. It contains no Wi-Fi MAC, Bluetooth
+/// controller, coexistence, or shared-baseband owner. The HAL decides which
+/// protocol route currently holds it.
 #[must_use = "the shared PHY owner must remain inside its active radio route"]
 pub struct RadioPhyRegisters {
-    pub(crate) peripherals: generated::peripheral_ownership::RadioPhyPeripherals,
+    /// The partition's generated blocks.
+    pub peripherals: generated::peripheral_ownership::RadioPhyPeripherals,
     /// The PHY's copy of the MAC local-time read, for its SDM deadline.
     pub(crate) mac_local_time: MacLocalTime,
+}
+
+impl RadioPhyRegisters {
+    /// The MAC local-time read this owner holds a copy of: the counter the
+    /// PHY's SDM-stability deadline measures.
+    pub const fn mac_local_time(&self) -> MacLocalTime {
+        self.mac_local_time
+    }
 }
 
 /// Read-only capability for the free-running Wi-Fi MAC local-time counter.

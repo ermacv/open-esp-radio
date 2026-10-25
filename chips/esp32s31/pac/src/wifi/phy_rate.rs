@@ -17,6 +17,19 @@ const fn phy_low_rate_state(enabled: bool) -> PhyLowRateState {
     }
 }
 
+const fn decode_noise_floor_quarter_db(raw_low_twelve: u16) -> i32 {
+    // Complete ROM `phy_read_hw_noisefloor` subtracts 0x1000 from the
+    // generated twelve-bit field unconditionally and shifts by two.
+    let signed_sixteenth_db = raw_low_twelve as i32 - 0x1000;
+    signed_sixteenth_db >> 2
+}
+
+const fn quarter_db_to_dbm(quarter_db: i32) -> i8 {
+    // Complete blob `wDev_GetNoiseFloor` consumes the quarter-dB ROM result,
+    // adds two, shifts by two and stores a byte.
+    ((quarter_db + 2) >> 2) as i8
+}
+
 impl WifiRadioRegisters {
     /// Enable or disable the complete three-edge PHY low-rate path.
     ///
@@ -47,7 +60,7 @@ impl WifiRadioRegisters {
     /// `libpp[wdev.o]::wDev_GetNoiseFloor`, size `0x36`, applies
     /// `(quarter_db + 2) >> 2` and retains the result as a signed byte.
     pub fn read_noise_floor_dbm(&self) -> i8 {
-        crate::phy::baseband::quarter_db_to_dbm(self.read_noise_floor_quarter_db())
+        quarter_db_to_dbm(self.read_noise_floor_quarter_db())
     }
 
     /// Read the exact signed quarter-dB result returned by complete rev0 ROM
@@ -56,7 +69,7 @@ impl WifiRadioRegisters {
         let raw = crate::svd::field_read::observe_phy_noise_floor_sixteenth_db_code(
             &self.peripherals.wifi_mac.wifi_phy_rate_oracle,
         );
-        crate::phy::baseband::decode_noise_floor_quarter_db(raw)
+        decode_noise_floor_quarter_db(raw)
     }
 }
 
@@ -68,7 +81,23 @@ impl WifiRadioRegisters {
         );
         (
             raw,
-            crate::phy::baseband::decode_noise_floor_quarter_db(raw),
+            decode_noise_floor_quarter_db(raw),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decode_noise_floor_quarter_db, quarter_db_to_dbm};
+
+    #[test]
+    fn noise_floor_decode_reproduces_both_complete_arithmetic_shifts() {
+        // -96 dBm is encoded as -1536 sixteenth-dB, or low twelve bits 0xa00.
+        assert_eq!(decode_noise_floor_quarter_db(0x0a00), -384);
+        assert_eq!(decode_noise_floor_quarter_db(0x0fff), -1);
+        assert_eq!(decode_noise_floor_quarter_db(0x0000), -1024);
+        assert_eq!(quarter_db_to_dbm(-384), -96);
+        assert_eq!(quarter_db_to_dbm(-1), 0);
+        assert_eq!(quarter_db_to_dbm(-1024), 0);
     }
 }

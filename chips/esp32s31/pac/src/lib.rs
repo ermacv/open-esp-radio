@@ -15,11 +15,6 @@ mod ieee802154_typed_register_tests;
 
 pub(crate) use modem::coex;
 
-pub(crate) use phy::{baseband, cfr};
-
-pub use phy::clock;
-
-pub(crate) use phy::frequency;
 // The generated capability catalog is intentionally broader than this crate's
 // restricted ownership facade. Some reviewed leaves stay unreachable until an
 // owner transition exposes them; do not reopen full-block access to make them
@@ -65,8 +60,22 @@ pub use generated::{bt_v3_2_baseband, ieee802154_mac, modem_etm};
 #[cfg(doctest)]
 pub struct SocHeaderSemantics;
 
-pub use phy::pbus;
-pub mod phy;
+/// The generated blocks of the radio-PHY partition
+/// ([`RadioPhyRegisters::peripherals`]) the HAL drives through their field
+/// accessors: the PHY's baseband, AGC, clock, frequency, front-end, IQ
+/// estimator, PBus, table-memory and RX-DCO blocks, the analog-I2C master
+/// with its command memory, and the LP temperature-sensor and power-detector
+/// controls.
+pub use generated::{
+    i2c_ana_mst, lp_aon_clkrst, lp_periclkrst, lp_tsens, modem_syscon_radio, phy_agc_oracle,
+    phy_baseband_config_oracle, phy_clock_oracle, phy_fedata_recovered,
+    phy_frequency_channel_oracle, phy_i2c_command_ram, phy_iq_estimator_oracle, phy_memory,
+    phy_pbus, phy_rx_dco_oracle, pmu_radio,
+};
+
+/// The generated blocks of the radio-PHY partition, as
+/// [`RadioPhyRegisters`] holds them.
+pub use generated::peripheral_ownership::RadioPhyPeripherals;
 
 /// A field of at most eight bits read back, as the byte the shared
 /// IEEE 802.15.4 value types take.
@@ -82,7 +91,6 @@ pub(crate) const fn field_halfword<const WIDTH: u32>(bits: oer_mmio::Bits<WIDTH>
     u16::from_le_bytes([low, high])
 }
 
-pub(crate) use phy::table_memory;
 
 /// Reviewed writable MAC interrupt mask.
 ///
@@ -101,10 +109,6 @@ pub use generated::WifiRxCsiControlMask;
 /// model's `layouts/` (`docs/hardware-memory.md`).
 pub use generated::layouts;
 
-pub use phy::frequency::frequency_cap_correction_word;
-pub use phy::table_memory::{pbus_memory_parameter_002_data, pbus_memory_parameter_014_data};
-
-pub use baseband::{RxDcoControlField, TxDcPwdetFields, TxIqToneControlFields};
 
 pub use bluetooth::{
     controller::{
@@ -178,13 +182,9 @@ pub use bluetooth::{
     },
 };
 
-pub use cfr::CfrValue;
-
 pub use coex::{COEX_TIMER_COUNT, CoexTimerBankRegisters, CoexTimerRegister};
 pub use generated::{ExternalCoexGrantDelay, WifiDescriptorAddressLow};
 pub use modem::coex_external::{ExternalCoexPriority, ExternalCoexRole, ExternalCoexWires};
-
-pub use frequency::PhyFrequencyI2cNumberAddresses;
 
 pub use oer_espressif_ieee80211_pac::MacInterface;
 
@@ -217,17 +217,6 @@ pub use modem::syscon::{
 };
 
 use oer_esp32s31_pac_raw as svd;
-
-pub use phy::{
-    agc::runtime::ForcedRxGain,
-    i2c::{
-        BluetoothTxPowerControlRegister, PhyAdcRate, PhyFilterDcapInputs, PhyI2cAccessError,
-        PhyI2cCommandMemoryInputs, PhyI2cConfigurationCommand, PhyI2cConfigurationOperation,
-        PhyI2cInitializationStageOneInputs, PhyI2cParallelWrite,
-    },
-};
-
-pub use table_memory::{PbusMemoryGroupBoundary, PhyGainMemoryEntry, PhyMemoryError};
 
 pub use wifi::mac::{
     block_ack::{
