@@ -536,9 +536,17 @@ fn check_parts(
                     .iter()
                     .filter(|field| field.class.written())
                     .collect::<Vec<_>>();
+                // A strobe writes from zero: it leaves zero, no
+                // acknowledgement, in the word's write-one-to-clear fields.
                 let strobes = written
                     .iter()
-                    .all(|field| field.class == FieldClass::WriteTrigger);
+                    .any(|field| field.class == FieldClass::WriteTrigger)
+                    && written.iter().all(|field| {
+                        matches!(
+                            field.class,
+                            FieldClass::WriteTrigger | FieldClass::WriteOneToClear
+                        )
+                    });
                 let stored = matches!(word.fields(), [field]
                     if matches!(field.class, FieldClass::Plain | FieldClass::WriteOnly));
                 let side_effects = word.template.fifo.is_some()
@@ -546,12 +554,12 @@ fn check_parts(
                     || word.template.data_port.is_some()
                     || word.command
                     || word.has(FieldClass::ReadClears)
-                    || word.has(FieldClass::WriteOneToClear);
+                    || (word.has(FieldClass::WriteOneToClear) && !strobes);
                 if side_effects || !(written.is_empty() || strobes || stored) {
                     return Err(context.error(
                         &entity,
                         ErrorKind::Shared(format!(
-                            "{} is no side-effect-free read, write-trigger strobe or one field stored whole",
+                            "{} is no side-effect-free read, write-trigger strobe beside zero write-one-to-clear lanes or one field stored whole",
                             word.identity()
                         )),
                     ));

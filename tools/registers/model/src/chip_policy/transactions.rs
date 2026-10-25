@@ -6,9 +6,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
     BitwiseComposedDomain, BoundedDomain, Constraint, Context, DomainValue, EnumDomain, Error,
-    ErrorKind, FlagDomain, Holder, Index, InputTransform, PartId, PointerEncoding, PolicyFile,
-    Projection, Target, Word, field_mask, field_ones, lower_snake, ownership::Coverage, stored,
-    upper_camel, upper_snake,
+    ErrorKind, FlagDomain, Holder, Index, InputTransform, InterruptSnapshot, PartId,
+    PointerEncoding, PolicyFile, Projection, Target, WholeWordBits, Word, field_mask, field_ones,
+    lower_snake, ownership::Coverage, stored, upper_camel, upper_snake,
 };
 use crate::chip_model::{ChipModel, ExpandedField, FieldClass};
 
@@ -637,7 +637,17 @@ impl<'a> Checker<'a, '_> {
             let clear = self.element(entity, &snapshot.clear)?;
             let status_word = self.word(entity, Target::Word(status))?;
             let clear_word = self.word(entity, Target::Word(clear))?;
-            if !status_word.reads_freely() || status_word.has(FieldClass::WriteOneToClear) {
+            // One word of write-one-to-clear fields is its own status: the
+            // sample reads it and the acknowledgement writes back ones.
+            let own_status = status == clear;
+            if !status_word.reads_freely()
+                || (status_word.has(FieldClass::WriteOneToClear) && !own_status)
+                || (own_status
+                    && status_word
+                        .fields()
+                        .iter()
+                        .any(|field| field.class != FieldClass::WriteOneToClear))
+            {
                 return Err(self.error(
                     entity,
                     ErrorKind::Snapshot(
@@ -677,7 +687,29 @@ impl<'a> Checker<'a, '_> {
                     ));
                 }
             }
-            self.write_word(entity, Target::Word(clear), WordWrite::Acknowledge { mask })?;
+            // A write-trigger clear field acknowledges sampled bits only:
+            // it lies wholly inside the sample or outside it.
+            if let Some(field) = clear_word.fields().iter().find(|field| {
+                field.class == FieldClass::WriteTrigger
+                    && field_mask(field) & mask != 0
+                    && field_mask(field) & !mask != 0
+            }) {
+                return Err(self.error(
+                    entity,
+                    ErrorKind::Snapshot(format!(
+                        "clear field {} acknowledges bits no status field samples",
+                        field.identity
+                    )),
+                ));
+            }
+            let consumed = self.consumed(entity, snapshot, clear)?;
+            self.write_word(
+                entity,
+                Target::Word(clear),
+                WordWrite::Acknowledge {
+                    mask: mask | consumed,
+                },
+            )?;
             // The part holding the clear word acknowledges; it reads the
             // status word as its own or an observed one.
             let owner = self.owner(entity, Target::Word(clear), None)?;
@@ -697,6 +729,56 @@ impl<'a> Checker<'a, '_> {
             }
         }
         Ok(())
+    }
+
+    /// The bits of a snapshot's consumed fields: one-bit acknowledging
+    /// fields of its clear word, one of which the acknowledgement writes
+    /// beside the sample for an event the caller consumed elsewhere.
+    fn consumed(
+        &self,
+        entity: &str,
+        snapshot: &InterruptSnapshot,
+        clear: usize,
+    ) -> Result<u32, Error> {
+        match (
+            &snapshot.consumed_event,
+            snapshot.consumed_fields.is_empty(),
+        ) {
+            (None, true) => return Ok(0),
+            (Some(event), false) => self.context.description(entity, event)?,
+            _ => {
+                return Err(self.error(
+                    entity,
+                    ErrorKind::Snapshot(
+                        "names consumed-event and consumed-fields together".to_owned(),
+                    ),
+                ));
+            }
+        }
+        let mut bits = 0u32;
+        for reference in &snapshot.consumed_fields {
+            let (target, field) = self.field(entity, reference)?;
+            if target != Target::Word(clear)
+                || field.width != 1
+                || !matches!(
+                    field.class,
+                    FieldClass::WriteOneToClear | FieldClass::WriteTrigger
+                )
+            {
+                return Err(self.error(
+                    entity,
+                    ErrorKind::Snapshot(format!(
+                        "consumed field {reference} is no one-bit acknowledging field of {}",
+                        snapshot.clear
+                    )),
+                ));
+            }
+            if bits & field_mask(field) != 0 {
+                return Err(self.error(entity, ErrorKind::Duplicate(reference.clone())));
+            }
+            bits |= field_mask(field);
+        }
+        Ok(bits)
     }
 
     fn reads(&mut self) -> Result<(), Error> {
@@ -828,15 +910,18 @@ impl<'a> Checker<'a, '_> {
         if matches!(write, WordWrite::Acknowledge { .. })
             && (!word.storable()
                 || word.fields().is_empty()
-                || word
-                    .fields()
-                    .iter()
-                    .any(|field| field.class != FieldClass::WriteOneToClear))
+                || word.fields().iter().any(|field| {
+                    !matches!(
+                        field.class,
+                        FieldClass::WriteOneToClear | FieldClass::WriteTrigger
+                    )
+                }))
         {
             return Err(self.error(
                 entity,
                 ErrorKind::Snapshot(
-                    "its clear word holds only write-one-to-clear fields".to_owned(),
+                    "its clear word holds only write-one-to-clear or write-trigger fields"
+                        .to_owned(),
                 ),
             ));
         }
@@ -844,7 +929,7 @@ impl<'a> Checker<'a, '_> {
             return Err(self.error(
                 entity,
                 ErrorKind::WriteOneToClear(
-                    "a word of write-one-to-clear fields is written only by an acknowledgement"
+                    "a snapshot's clear word or a word of write-one-to-clear fields is written only by an acknowledgement"
                         .to_owned(),
                 ),
             ));
@@ -1160,7 +1245,11 @@ impl<'a> Checker<'a, '_> {
                 mask |= bits;
             }
             if let Some(target) = register {
-                self.store(entity, target, mask, false)?;
+                let whole = match &write.whole_word_bits {
+                    Some(bits) => self.whole_word_bits(entity, target, mask, bits)?,
+                    None => 0,
+                };
+                self.store(entity, target, mask | whole, false)?;
             }
         }
         for write in &file.sampled_bit_zero_writes {
@@ -1187,6 +1276,46 @@ impl<'a> Checker<'a, '_> {
             self.store(entity, target, 0, false)?;
         }
         Ok(())
+    }
+
+    /// The fixed ones a write from zero stores outside its fields: sourced,
+    /// nonzero and only bits of `read-only` fields or of no field, each
+    /// such field's value one its constraint admits.
+    fn whole_word_bits(
+        &self,
+        entity: &str,
+        target: Target,
+        fields: u32,
+        bits: &WholeWordBits,
+    ) -> Result<u32, Error> {
+        self.context.sources(entity, &bits.sources)?;
+        if bits.value == 0 || bits.value & fields != 0 {
+            return Err(self.error(
+                entity,
+                ErrorKind::Transaction(
+                    "whole-word bits are nonzero and lie outside its fields".to_owned(),
+                ),
+            ));
+        }
+        let word = self.word(entity, target)?;
+        for field in word
+            .fields()
+            .iter()
+            .filter(|field| field_mask(field) & bits.value != 0)
+        {
+            self.class(
+                entity,
+                field,
+                field.class == FieldClass::ReadOnly,
+                "whole-word bits",
+            )?;
+            let value = (bits.value & field_mask(field))
+                .checked_shr(field.low)
+                .unwrap_or(0);
+            self.constrained(entity, word, field, Values::Fixed(value))?;
+        }
+        self.no_dma(entity, target, bits.value)?;
+        Ok(bits.value)
     }
 
     /// Every field of one transaction is in one register.

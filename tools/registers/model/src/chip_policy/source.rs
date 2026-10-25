@@ -245,8 +245,18 @@ pub struct InterruptSnapshot {
     pub name: String,
     /// `INSTANCE.REGISTER`: one element.
     pub status: String,
-    /// `INSTANCE.REGISTER`: one element of write-one-to-clear fields.
+    /// `INSTANCE.REGISTER`: one element of write-one-to-clear or
+    /// write-trigger fields; `status` itself when it holds only
+    /// write-one-to-clear fields.
     pub clear: String,
+    /// The event the caller consumed elsewhere, whose one selected field of
+    /// `consumed-fields` the acknowledgement writes beside the sample.
+    #[serde(default)]
+    pub consumed_event: Option<String>,
+    /// `INSTANCE.REGISTER.FIELD`: one-bit fields of the clear word, one of
+    /// which the caller selects.
+    #[serde(default)]
+    pub consumed_fields: Vec<String>,
     pub sources: Vec<String>,
 }
 
@@ -330,6 +340,19 @@ pub struct ZeroBasedFieldWrite {
     pub name: String,
     /// `INSTANCE.REGISTER.FIELD`, all of one register.
     pub fields: Vec<String>,
+    /// Ones the source stores beside the fields: bits of `read-only`
+    /// fields or of no field.
+    #[serde(default)]
+    pub whole_word_bits: Option<WholeWordBits>,
+    pub sources: Vec<String>,
+}
+
+/// The fixed ones a write from zero stores outside its fields, with the
+/// sources that show the store.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct WholeWordBits {
+    pub value: u32,
     pub sources: Vec<String>,
 }
 
