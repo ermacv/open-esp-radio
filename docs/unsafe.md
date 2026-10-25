@@ -39,6 +39,11 @@ prerequisites hold. A forwarding call inside an `unsafe fn` names the
 `#[allow(unsafe_code, ...)]` attribute: Clippy 1.97 does not accept a comment
 above an attribute that spans several lines.
 
+An extern declaration without a memory-safety precondition is declared
+`safe fn` or `safe static`. Use `#[derive(Zeroable)]` when it expresses the
+zero-initialization contract; an `unsafe impl Zeroable` is reserved for types
+the derive cannot express.
+
 `cargo clippy --all-targets` (the default members) applies these lints on the
 host. Generated PAC code has no crate-root unsafe attribute.
 
