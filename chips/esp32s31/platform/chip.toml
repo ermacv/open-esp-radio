@@ -150,11 +150,11 @@ package = "oer-firmware-probes-esp32s31-register"
 
 # Why the core last reset, which the host reads through JTAG after a power
 # cycle: the board lost power only if it reads a power-on reset. The field is
-# the platform publication's (chips/esp32s31/registers/publication/platform.toml), with
-# its evidence; cause 1 is the power-on reset of ESP-IDF 4d59230d's
+# the chip root's (chips/esp32s31/registers/chip.toml), with its evidence;
+# cause 1 is the power-on reset of ESP-IDF 4d59230d's
 # `components/soc/esp32s31/register/soc/lp_clkrst_reg.h`.
 [reset-cause]
-field = "LP_AON_RESET_CAUSE.HPCORE0_RESET_CAUSE.HPCORE0_RESET_CAUSE"
+field = "LP_AON_CLKRST.LP_AONCLKRST_HPCORE0_RESET_CAUSE.LP_AONCLKRST_HPCORE0_RESET_CAUSE"
 power-on = 1
 
 [hil]

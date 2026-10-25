@@ -244,7 +244,7 @@ chip's JTAG. A port that only drops the board from the bus keeps it powered:
 the board returns with the cause of its previous reset. The ROM prints its
 reset reason before the board's USB enumerates, so the stand reads the
 chip's reset-cause field instead (`[reset-cause]` of its chip profile, a
-field of `chips/<chip>/registers/publication/platform.toml`); the read halts the
+field of the chip root `chips/<chip>/registers/chip.toml`); the read halts the
 core for a moment and lets it run on. Only the verification of a port takes
 that proof: the stand's own power cycles (the power-on start of a written
 image, the download-mode entry of the reset ladder) require the board to leave

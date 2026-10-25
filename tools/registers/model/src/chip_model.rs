@@ -14,9 +14,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{
-    MemoryLayout, NamingRequirement, RegisterEvidenceSet, ReviewAnnotation, analog::AnalogAddress,
-};
+use crate::{MemoryLayout, RegisterEvidenceSet, ReviewAnnotation, analog::AnalogAddress};
 
 mod block_type;
 mod controls;
@@ -287,13 +285,8 @@ fn load_layouts(
     if includes.is_empty() {
         return Ok(Vec::new());
     }
-    let layouts = crate::layouts::parse_layouts(
-        base,
-        includes,
-        &mut BTreeMap::new(),
-        NamingRequirement::Complete,
-    )
-    .map_err(|error| context.error("", ErrorKind::Layouts(Box::new(error))))?;
+    let layouts = crate::layouts::parse_layouts(base, includes, &mut BTreeMap::new())
+        .map_err(|error| context.error("", ErrorKind::Layouts(Box::new(error))))?;
     for layout in &layouts {
         if !layout.placement.is_empty() {
             return Err(context.error(

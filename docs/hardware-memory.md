@@ -62,8 +62,8 @@ it; the HAL says in which order and who owns it.
 ### 1. Layout: the register model and the generated PAC
 
 A new kind of model entry, a **memory layout**, beside peripherals:
-`chips/<chip>/registers/model/layouts/<name>.toml` (and in a register library when
-several chips share it, as `chips/espressif/registers/ieee80211/` does for MAC blocks).
+`chips/<chip>/registers/layouts/<name>.toml`, included by the chip root
+`chip.toml`, whose `[[layout-placements]]` place it in RAM regions.
 
 ```toml
 [layout]
@@ -71,7 +71,6 @@ name = "WIFI_DMA_DESCRIPTOR"
 description = "The 12-byte node the Wi-Fi DMA walker follows."
 size = 12
 align = 4
-placement = ["dma-window"]          # regions from model/memory.toml
 
 [[layout.words]]
 name = "CONTROL"
@@ -197,26 +196,10 @@ requires a complete resolved review for every entity. Unknown keys,
 reviews for nonexistent entities, duplicate reviews and an explicit review
 identical to its applicable default are errors.
 
-MMIO peripheral fragments use the same whole-record resolver with separate
-`[[peripheral-review]]` tables outside SVD declarations. Each table names one
-peripheral in `entity`, with optional `peripheral`, `register`, `field` and
-`opaque` metadata tables. The register level includes clusters and reusable
-`dim` templates. `opaque-entities` lists exact register or field review paths;
-it selects the independent opaque template only for those entities, without
-inferring opacity from names or propagating it to children. Without an opaque
-template, the entity uses its own level. Explicit records replace the selected
-template, including missing keys. Scopes never cross peripherals or files.
-Every peripheral, cluster, register and field in a scope needs a resolved
-record; an empty template makes no evidence claim, and existing publication
-checks still apply. Chip review files for shared peripherals accept the same
-form; shared library geometry does not.
-See the [peripheral format and example](../tools/registers/generate/README.md#peripheral-review-defaults).
+The root's `[[ram-regions]]` hold the RAM regions the layouts name
+(`dma-window`), so the DMA window has one source.
 
-`memory.toml` gains the RAM regions the layouts name (`dma-window`,
-`internal-sram`), so the DMA window has one source instead of three.
-
-The generator emits, in the chip's PAC (`generated.rs`, not the raw PAC,
-since svd2rust has no notion of an unplaced layout):
+The generator emits, in the chip's PAC (`generated.rs`):
 
 - a `#[repr(C, align(N))]` type of the layout's words, `Zeroable` by derive
   over `oer-mmio`'s volatile cells, with compile-time size and alignment

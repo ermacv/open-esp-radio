@@ -29,7 +29,7 @@ fn register(
 #[test]
 fn reserved_sources_follow_byte_lanes_across_word_boundaries() {
     let mut declaration = register(0x100e, 64, "WIDE", vec![]);
-    declaration.reserved = Some(oer_registers_model::ReservedBits {
+    declaration.reserved = Some(DeclaredReserved {
         mask: 0x10002,
         sources: vec!["vendor-header".into()],
     });
@@ -148,23 +148,6 @@ fn indexed(base: u32, stride: i32, count: Option<u32>) -> IndexedAddress {
         stride,
         count,
     }
-}
-
-#[test]
-fn inherited_reset_and_mask_reach_every_expanded_register() {
-    let xml = r#"<device schemaVersion="1.3"><name>TEST</name><version>1</version><description>fixture</description><addressUnitBits>8</addressUnitBits><width>32</width><size>32</size><resetValue>165</resetValue><resetMask>255</resetMask><peripherals><peripheral><name>DEV</name><baseAddress>4096</baseAddress><registers><register><dim>2</dim><dimIncrement>4</dimIncrement><dimIndex>0,1</dimIndex><name>VALUE%s</name><addressOffset>0</addressOffset></register></registers></peripheral></peripherals></device>"#;
-    let registers: Vec<_> = oer_registers_model::svd_geometry(xml)
-        .expect("synthetic geometry")
-        .into_iter()
-        .map(DeclaredRegister::from)
-        .collect();
-    let words = declared_words(&registers);
-    assert_eq!(words.len(), 2);
-    assert!(
-        words
-            .values()
-            .all(|word| word.reset_value == 165 && word.reset_known == 255)
-    );
 }
 
 #[test]

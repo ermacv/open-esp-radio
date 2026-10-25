@@ -161,40 +161,33 @@ moves; ownership, orchestration and wiring are rebuilt.
   elsewhere, and new platform code goes into our HAL and PAC crates. Each
   domain that moves to our code removes its lines. Our HAL owns the radio blocks after the
   handoff, taken through a safe constructor that consumes esp-hal's radio
-  singletons. Each word both sides can write has one runtime writer, listed in
-  `chips/esp32s31/registers/shared-words.toml` and checked by `cargo
-  registers check shared-words`. `embassy-sync`, `embassy-futures`,
+  singletons. `embassy-sync`, `embassy-futures`,
   `embassy-net` and `embassy-time` stay; tasks run on our own static
   executor (`chips/espressif/executor`): each executor's tasks are declared
   when the image compiles, live in static slots, are polled by a direct call
   and wake through one waker vtable whose data names the executor and the
   task.
-- **Register model.** Registers, analog-I2C bytes (a separate space addressed
-  by block and index) and the memory the hardware reads and writes (DMA
+- **Register model.** The chip is block types (one hardware block each,
+  offsets from its base) placed by a root at their addresses, with its
+  interrupt sources, analog-I2C bytes (a separate space addressed by block
+  and index), RAM regions and the memory the hardware reads and writes (DMA
   descriptors, the RX control prefix, TX descriptor words, BLE exchange
-  memory) are described in `chips/<chip>/registers/` and generated into the
-  PAC ([hardware memory](hardware-memory.md)). A bit is described, opaque (a
-  use observed, meaning unknown), reserved or absent; only described and
-  opaque bits are fields. Pointer fields take typed references; placement is
-  proved by the linker; each block's handover protocol is its HAL engine. Every
-  peripheral of the vendor SVD the model does not describe is a typed block
-  of the PAC's `soc` module whose API the pinned ESP-IDF register headers
-  decide (access classes, reserved lanes and words, offsets, names); what
-  no header states is read-only, and the chip's sourced overlay
-  (`model/strictness.toml`) adds and corrects what they lack.
-- **PAC and HAL.** The PAC's generated boundary provides typed blocks
-  taken once, field accessors by class, typed value domains and DMA
-  addresses, memory layouts and ownership parts. The current renderer
-  consumes the published SVD and API policy and also emits that policy's
-  named transactions, whole-word images and snapshot acknowledgements.
-  Handwritten PAC domain modules assemble owned register parts and expose
-  register-local operations, analog-host operations and straight-line
-  transactions. They keep no in-flight state between calls. Phased
-  sequencing, polls, retries, interrupt routing and lifecycle policy belong
-  to the HAL, each vendor step with its `SOURCE:`. API-policy blocks use the
-  reviewed model's field names; `soc` blocks retain the vendor's prefixes
-  ([PAC](../chips/esp32s31/pac/README.md),
-  [field accessors](../tools/registers/model/README.md#field-accessors)).
+  memory), all in `chips/<chip>/registers/` with an ownership policy over
+  them ([hardware memory](hardware-memory.md)). A bit is described, opaque
+  (a use observed, meaning unknown), reserved or absent; only described and
+  opaque bits are fields, each of one access class. Pointer fields state
+  their target and encoding and take typed references; placement is proved
+  by the linker; each block's handover protocol is its HAL engine.
+- **PAC and HAL.** The PAC is the exact model, generated whole by `cargo
+  registers generate`: typed blocks taken once by its root, field accessors
+  by class, typed value domains and DMA pointers, interrupt sources,
+  ownership parts, memory layouts, the analog-I2C dictionary and the few
+  policy items accessors cannot express (whole-word images, masked
+  acknowledgements, interrupt snapshots). It has no handwritten module and
+  no logic. Register sets, phased sequencing, polls, retries, interrupt
+  routing and lifecycle policy belong to the HAL, each vendor step with its
+  `SOURCE:` ([PAC](../chips/esp32s31/pac/README.md),
+  [the thin PAC](../tools/registers/model/README.md#the-thin-pac)).
 - **Radio access.** The S31 Wi-Fi handoff returns one `RadioAccess` by value;
   the driver owns it through the runtime epoch and lends it with `&mut`. No
   shared register arena or dynamic borrow guard.

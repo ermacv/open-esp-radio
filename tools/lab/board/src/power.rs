@@ -233,42 +233,39 @@ pub struct ResetCauseField {
 }
 
 impl ResetCauseField {
-    /// The field `profile` names, from the platform binding index of `chip`
-    /// in the repository at `root`.
+    /// The field `profile` names (`INSTANCE.REGISTER.FIELD` of the chip
+    /// root), from the register model of `chip` in the repository at `root`.
     pub fn resolve(
         root: &std::path::Path,
         chip: &str,
         profile: &oer_espressif_facts::ResetCause,
     ) -> crate::power::Result<Self> {
-        let path = root.join(format!(
-            "chips/{chip}/registers/published/platform.bindings.toml"
-        ));
-        let index = oer_registers_bindings::BindingIndex::load(&path)?;
-        Self::of(&index, profile).map_err(|error| format!("{}: {error}", path.display()).into())
+        let loaded = oer_registers_model::Chip::load(root, chip)?;
+        Self::of(&loaded.model, profile)
+            .map_err(|error| format!("{chip}'s register model: {error}").into())
     }
 
     fn of(
-        index: &oer_registers_bindings::BindingIndex,
+        model: &oer_registers_model::chip_model::ChipModel,
         profile: &oer_espressif_facts::ResetCause,
     ) -> std::result::Result<Self, String> {
-        let (register, field) = profile
+        let (register, _) = profile
             .field
             .rsplit_once('.')
-            .ok_or_else(|| format!("`{}` is not PERIPHERAL.REGISTER.FIELD", profile.field))?;
-        let binding = index
-            .registers
-            .iter()
-            .find(|binding| binding.identity == register)
-            .ok_or_else(|| format!("no register {register}"))?;
-        let field = binding
-            .fields
-            .iter()
-            .find(|candidate| candidate.svd_name == field)
-            .ok_or_else(|| format!("register {register} has no field {field}"))?;
+            .ok_or_else(|| format!("`{}` is not INSTANCE.REGISTER.FIELD", profile.field))?;
+        let field = model
+            .field(&profile.field)
+            .ok_or_else(|| format!("no field {}", profile.field))?;
+        let address = match model.register(register).map(|register| register.location) {
+            Some(oer_registers_model::chip_model::Location::Mmio { address }) => {
+                u32::try_from(address).map_err(|_| format!("{register} lies above 4 GiB"))?
+            }
+            _ => return Err(format!("no MMIO register {register}")),
+        };
         Ok(Self {
-            address: binding.address,
-            bit_offset: field.bit_offset,
-            bit_width: field.bit_width,
+            address,
+            bit_offset: field.low,
+            bit_width: field.width,
             power_on: profile.power_on,
         })
     }

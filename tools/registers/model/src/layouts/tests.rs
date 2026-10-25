@@ -1,55 +1,6 @@
 use std::{collections::BTreeMap, fs};
 
-use crate::{LayoutKind, RegisterModel};
-
-const DEVICE: &str = r#"schema = 3
-chip = "fixture-chip"
-address-space = "cpu"
-fragments = ["radio.toml"]
-layouts = ["layouts/node.toml"]
-
-[device]
-name = "device"
-version = "1"
-description = "device"
-address-unit-bits = 8
-width = 32
-"#;
-
-const FRAGMENT: &str = r#"schema = 2
-
-[[peripherals]]
-name = "RADIO"
-baseAddress = 0x1000
-
-[[peripherals.registers]]
-[peripherals.registers.register]
-name = "STATUS"
-addressOffset = 0
-size = 32
-access = "read-write"
-
-[[peripherals.registers.register.fields]]
-name = "FLAG"
-bitOffset = 3
-bitWidth = 1
-
-[[review]]
-entity = "RADIO.STATUS"
-sources = ["fixture"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "RADIO.STATUS.FLAG"
-sources = ["fixture"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-"#;
+use crate::{LayoutKind, MemoryLayout};
 
 /// A reviewed two-word node: a control word with a flag, an opaque bit and
 /// a length, and a link to the next node.
@@ -226,25 +177,30 @@ fn prefix_reviewed() -> String {
     text
 }
 
-/// Load a fixture model whose layouts are `files` (name, text).
-fn load(files: &[(&str, &str)]) -> crate::Result<RegisterModel> {
+/// The layouts `files` (name, text), parsed and checked as a chip root
+/// includes them.
+struct Loaded(Vec<MemoryLayout>);
+
+impl Loaded {
+    fn layouts(&self) -> &[MemoryLayout] {
+        &self.0
+    }
+}
+
+/// Load the layouts `files` (name, text) from their own directory.
+fn load(files: &[(&str, &str)]) -> crate::Result<Loaded> {
     let directory = tempfile::tempdir().unwrap();
-    let names = files
-        .iter()
-        .map(|(name, _)| format!("\"layouts/{name}\""))
-        .collect::<Vec<_>>()
-        .join(", ");
-    fs::write(
-        directory.path().join("device.toml"),
-        DEVICE.replace("[\"layouts/node.toml\"]", &format!("[{names}]")),
-    )
-    .unwrap();
-    fs::write(directory.path().join("radio.toml"), FRAGMENT).unwrap();
     fs::create_dir(directory.path().join("layouts")).unwrap();
     for (name, text) in files {
         fs::write(directory.path().join("layouts").join(name), text).unwrap();
     }
-    RegisterModel::load_for_publication(&directory.path().join("device.toml"))
+    let names = files
+        .iter()
+        .map(|(name, _)| format!("layouts/{name}"))
+        .collect::<Vec<_>>();
+    let layouts = super::parse_layouts(directory.path(), &names, &mut BTreeMap::new())?;
+    super::validate_layout_set(&layouts)?;
+    Ok(Loaded(layouts))
 }
 
 fn error(files: &[(&str, &str)]) -> String {
@@ -309,11 +265,26 @@ fn a_positional_review_keeps_a_field_opaque_without_claiming_its_meaning() {
 }
 
 #[test]
-fn the_model_lists_its_layout_files_as_inputs() {
+fn the_parsed_layout_files_are_listed_as_inputs() {
     let directory = tempfile::tempdir().unwrap();
-    fs::write(directory.path().join("device.toml"), DEVICE).unwrap();
-    let paths = RegisterModel::input_paths(&directory.path().join("device.toml")).unwrap();
-    assert!(paths.ends_with(&[directory.path().join("layouts/node.toml")]));
+    fs::create_dir(directory.path().join("layouts")).unwrap();
+    fs::write(directory.path().join("layouts/node.toml"), NODE).unwrap();
+    let mut inputs = BTreeMap::new();
+    super::parse_layouts(
+        directory.path(),
+        &["layouts/node.toml".to_owned()],
+        &mut inputs,
+    )
+    .unwrap();
+    assert!(
+        inputs.contains_key(
+            &directory
+                .path()
+                .join("layouts/node.toml")
+                .canonicalize()
+                .unwrap()
+        )
+    );
 }
 
 #[test]
@@ -391,7 +362,6 @@ fn malformed_layouts_are_rejected_with_their_reason() {
             node_with("name = \"OWNER\"", "name = \"BITS\""),
             "generated method",
         ),
-        (NODE.replace("NODE", "RADIO"), "name of a peripheral"),
         (
             node_with(
                 "[[layout.words]]\nname = \"NEXT\"",

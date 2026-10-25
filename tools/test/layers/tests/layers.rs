@@ -74,7 +74,6 @@ fn compiler_imports_stay_in_the_reporter_and_its_private_bridge() {
 /// stand, and the bootstrap and probe images. Every other package forbids
 /// unsafe code.
 const BELOW_THE_BOUNDARY: &[&str] = &[
-    "chips/esp32s31/pac-raw",
     "chips/esp32s31/pac",
     "chips/esp32s31/hal",
     "chips/esp32s31/board",

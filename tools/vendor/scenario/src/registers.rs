@@ -1,10 +1,9 @@
-//! Register and field names of the chip's published register bindings.
+//! Register and field names of the chip's register model.
 //!
 //! The triage report names the addresses and bit masks it resolves from the
-//! published model, so a reviewer reads `MAC.TX_CONFIG` and its fields rather
-//! than an upper immediate and a shift. The index is read through the
-//! register publication's own reader ([`BindingIndex`]).
-use oer_registers_bindings::BindingIndex;
+//! chip root (`chips/<chip>/registers/chip.toml`), so a reviewer reads
+//! `MAC.TX_CONFIG` and its fields rather than an upper immediate and a
+//! shift. The root is read through the register model's own loader.
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -13,7 +12,7 @@ const WORD: u32 = 4;
 /// Bits of one byte.
 const BYTE_BITS: u32 = 8;
 
-/// One published register.
+/// One register of the model.
 #[derive(Clone, Debug)]
 pub struct Register {
     pub identity: String,
@@ -21,45 +20,53 @@ pub struct Register {
     pub fields: Vec<(String, u32, u32)>,
 }
 
-/// Published registers by word address.
+/// The model's MMIO registers by word address.
 #[derive(Default)]
 pub struct Registers {
     by_address: BTreeMap<u32, Register>,
 }
 
 impl Registers {
-    /// The registers of the bindings file at `path`.
-    pub fn load(path: &Path) -> crate::harness::Result<Self> {
-        Self::parse(&std::fs::read_to_string(path)?)
+    /// The MMIO registers of `chip`'s register model in the checkout `root`.
+    pub fn load(root: &Path, chip: &str) -> crate::harness::Result<Self> {
+        let loaded = oer_registers_model::Chip::load(root, chip)?;
+        Ok(Self::from_registers(
+            loaded
+                .model
+                .registers()
+                .iter()
+                .filter_map(|register| match register.location {
+                    oer_registers_model::chip_model::Location::Mmio { address } => Some((
+                        u32::try_from(address).ok()?,
+                        register.identity.clone(),
+                        register
+                            .fields
+                            .iter()
+                            .map(|field| (field.name.clone(), field.low, field.width))
+                            .collect(),
+                    )),
+                    oer_registers_model::chip_model::Location::AnalogI2c(_) => None,
+                }),
+        ))
     }
 
-    /// The registers of bindings `text`. A word two published registers
+    /// The registers `(address, identity, fields)`. A word two registers
     /// share names both.
-    pub fn parse(text: &str) -> crate::harness::Result<Self> {
-        let bindings = BindingIndex::parse(text)?;
+    pub fn from_registers(
+        registers: impl IntoIterator<Item = (u32, String, Vec<(String, u32, u32)>)>,
+    ) -> Self {
         let mut by_address: BTreeMap<u32, Register> = BTreeMap::new();
-        for bound in bindings.registers {
-            let fields = bound
-                .fields
-                .into_iter()
-                .map(|f| (f.svd_name, f.bit_offset, f.bit_width))
-                .collect();
-            match by_address.get_mut(&bound.address) {
+        for (address, identity, fields) in registers {
+            match by_address.get_mut(&address) {
                 Some(register) => {
-                    register.identity = format!("{}|{}", register.identity, bound.identity);
+                    register.identity = format!("{}|{identity}", register.identity);
                 }
                 None => {
-                    by_address.insert(
-                        bound.address,
-                        Register {
-                            identity: bound.identity,
-                            fields,
-                        },
-                    );
+                    by_address.insert(address, Register { identity, fields });
                 }
             }
         }
-        Ok(Self { by_address })
+        Self { by_address }
     }
 
     /// The register holding byte `address`, and the bit its byte starts at.
@@ -131,35 +138,13 @@ fn bit_list(mask: u32, base: u32) -> String {
 mod tests {
     use super::*;
 
-    const BINDINGS: &str = r#"
-schema = 2
-crate-name = "oer_chip_pac_raw"
-[[registers]]
-address = 0x20104020
-width = 32
-access = "read-write"
-identity = "MAC.TX_CONFIG"
-peripheral = "MAC"
-peripheral-type = "Mac"
-peripheral-module = "mac"
-register-method = "tx_config"
-[[registers.fields]]
-svd-name = "ENABLE"
-method = "enable"
-bit-offset = 0
-bit-width = 1
-access = "read-write"
-[[registers.fields]]
-svd-name = "COLOR"
-method = "color"
-bit-offset = 16
-bit-width = 6
-access = "read-write"
-"#;
-
     #[test]
     fn masks_are_named_by_the_fields_they_touch() {
-        let registers = Registers::parse(BINDINGS).unwrap();
+        let registers = Registers::from_registers([(
+            0x2010_4020,
+            "MAC.TX_CONFIG".to_owned(),
+            vec![("ENABLE".to_owned(), 0, 1), ("COLOR".to_owned(), 16, 6)],
+        )]);
         assert_eq!(registers.name(0x2010_4020), "0x20104020 MAC.TX_CONFIG");
         assert_eq!(
             registers.name(0x2010_4022),

@@ -9,7 +9,6 @@ use std::path::{Path, PathBuf};
 
 use oer_registers_model::{
     RegisterEvidenceSet,
-    chip_import::ImportSpec,
     chip_model::{ChipModel, ControlKind, FieldClass, Location},
     chip_policy::{ChipPolicy, Claim, Holder},
 };
@@ -32,28 +31,8 @@ fn model() -> ChipModel {
 }
 
 #[test]
-fn the_esp32s31_root_loads_with_every_spec_block() {
-    let registers = registers();
-    let spec = ImportSpec::parse(
-        &std::fs::read_to_string(registers.join("import.toml")).expect("the import spec reads"),
-    )
-    .expect("the import spec parses");
+fn the_esp32s31_root_binds_every_interrupt_source() {
     let model = model();
-    for block in &spec.types {
-        assert!(
-            model.types().contains_key(&block.name),
-            "type {}",
-            block.name
-        );
-        for instance in &block.instances {
-            let placed = model
-                .instances()
-                .iter()
-                .find(|placed| placed.name == instance.name)
-                .unwrap_or_else(|| panic!("the root places {}", instance.name));
-            assert_eq!(placed.block_type, block.name);
-        }
-    }
     let mut covered = model
         .interrupts()
         .iter()
@@ -520,8 +499,17 @@ fn the_thin_renderer_renders_the_esp32s31_root_and_policy() {
         .unwrap_or_else(|error| panic!("the policy loads: {error}"));
     let rendered = oer_registers_model::chip_render::render(&model, &policy)
         .unwrap_or_else(|error| panic!("the thin PAC renders: {error}"));
-    // The interrupt handlers' parts name their instances' one source.
-    for (part, source) in [("Ieee802154MacIrq", 132), ("UsbSerialJtagIrq", 2)] {
+    // Each part the policy gives an interrupt serves its source: the
+    // handlers', the software lines', the Bluetooth bank's (source 124,
+    // whose owner also serves 133) and the modem low-power timer's.
+    for (part, source) in [
+        ("Ieee802154MacIrq", 132),
+        ("UsbSerialJtagIrq", 2),
+        ("FromCpu0", 65),
+        ("FromCpu3", 68),
+        ("BluetoothInterruptBank", 124),
+        ("BtdmRuntimeControl", 127),
+    ] {
         let item = format!(
             "impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for {part}<P> {{\nconst SOURCE: u16 = {source};"
         );
@@ -537,4 +525,30 @@ fn the_thin_renderer_renders_the_esp32s31_root_and_policy() {
         assert!(rendered.contains(item), "{item}");
     }
     assert!(!rendered.contains("fn configure_bluetooth_cte_six_buffer_limit"));
+    // The hardware facts the types state: typed DMA pointers, the RX
+    // window's prefix, the RX append doorbell, the analog-I2C host words
+    // written from zero and the console's own snapshot events.
+    for item in [
+        "pub fn set_address(&mut self, value: oer_mmio::DmaRef<super::super::layouts::WifiRxDmaDescriptor>) -> &mut Self",
+        "pub fn set_address_high_prefix(&mut self) -> &mut Self",
+        "self.0 = (self.0 & 0x000fffff) | 0x2f000000;",
+        "pub fn rx_control_append_descriptor_reload_pending(&self) -> bool",
+        "pub fn trigger_rx_control_append_descriptor_reload(&mut self)",
+        "pub fn modify_rx_control(&mut self, change: impl FnOnce(&mut rx_control::W))",
+        "pub fn write_i2c0_ctrl(",
+        "pub fn sample_usb_serial_jtag_interrupt(&self)",
+        "pub const EVENTS: u32 = 0x0000000c;",
+        "pub mod analog_i2c {",
+        "pub const BBPLL: Block = Block::new(0x66);",
+    ] {
+        assert!(rendered.contains(item), "{item}");
+    }
+    let linker = oer_registers_model::chip_render::dma_window(&model).expect("the window renders");
+    for item in [
+        "DMA_WINDOW_ORIGIN = 0x2f000000;",
+        "DMA_WINDOW_LENGTH = 0x00080000;",
+        "DMA_ADDRESS_LOW_BITS = 20;",
+    ] {
+        assert!(linker.contains(item), "{item}\n{linker}");
+    }
 }

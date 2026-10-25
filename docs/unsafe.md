@@ -40,7 +40,6 @@ Below it are, by directory (`/` ends a domain):
 
 | Kind | Directories |
 | --- | --- |
-| Generated register access | `chips/esp32s31/pac-raw` |
 | The volatile register-access core | `portable/mmio` |
 | Semantic PACs and the HAL | `chips/esp32c5/pac`, `chips/esp32s31/pac`, `chips/esp32c5/hal`, `chips/esp32s31/hal` |
 | Platform, executor and framework bindings | `chips/esp32c5/board`, `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `chips/espressif/esp-hal/`, `chips/esp32c5/esp-hal-soc`, `portable/embassy/` |
@@ -51,34 +50,19 @@ Below it are, by directory (`/` ends a domain):
 
 ## Generated access and trusted handwritten code
 
-Typed register blocks are generated without `unsafe`. The register
-generator renders the peripherals a chip's API policy lists in
-`typed-peripherals` into the chip PAC's `generated.rs`, which starts with
-`#![forbid(unsafe_code)]`; svd2rust renders a chip's other peripherals into
-its `pac-raw` package. A register library's layouts are typed blocks without
-an address in the library crate's `generated.rs`, likewise forbidding unsafe
-code; a chip that places one names its address and claims it like its own
-typed blocks. On the ESP32-C5 every exposed peripheral is typed and
-the chip has no `pac-raw`; the policy's `unexposed-peripherals` (observation
-views kept for bit-use coverage) have no owner. Every other peripheral of the
-chip's vendor SVD is a typed block of the PAC's `soc` module, with the same
-renderer and no `unsafe`; its one partition's `Claims` has no caller while
-esp-hal owns the platform. The unsafe code under a
-typed block is `oer-mmio` (`portable/mmio`) alone:
+Typed register blocks are generated without `unsafe`: `cargo registers
+generate` renders every MMIO block type of the chip's register model, with
+the owners of its policy's parts, into the chip PAC's `generated.rs`. The
+unsafe code under a typed block is `oer-mmio` (`portable/mmio`) alone, and
+the PAC root's one claim:
 
 - `oer_mmio::assume_owned`, the promise that the claimed blocks' words are
   the caller's alone. A block's authority is the list of its declared words,
-  not the address range they span, so blocks whose ranges interleave and
-  radio views of platform blocks claim only their own words. Only the chip
-  PAC's root makes the promise, once for each domain's typed blocks, from
-  that domain's platform handoff: the radio root for the radio blocks, and
-  one handoff per platform domain (such as the eFuse, entropy,
-  reset-cause and watchdog blocks, the system timer, each software
-  interrupt line and the interrupt matrix with the CLIC) that the domain's
-  owner makes after
-  consuming the domain's esp-hal singletons (clippy `disallowed-methods` refuses it
-  elsewhere); a probe image may claim a block again after dropping the
-  block's owner. The USB Serial/JTAG console's block has an owner before
+  not the address range they span, so blocks whose ranges interleave claim
+  only their own words. Only the chip PAC's root makes the promise: its
+  `take()` claims every part of the policy once and hands out the
+  partitions (clippy `disallowed-methods` refuses `assume_owned`
+  elsewhere). The USB Serial/JTAG console's block has an owner before
   esp-hal exists: each chip HAL's `usb_serial_jtag` keeps the block's
   holder (`oer-espressif-usb-serial-jtag`'s `Ownership`), which one
   compare-and-swap changes and nothing waits for. The early writer makes
@@ -100,9 +84,7 @@ typed block is `oer-mmio` (`portable/mmio`) alone:
   masking the hart for good), and only that proof makes a `StopTheWorld`,
   which gives no right to another owner's block.
   The generated `const` assertion beside the claim checks that no two
-  blocks list the same word. A word esp-hal also writes is claimed only
-  with its reviewed coordination in the chip's
-  `registers/shared-words.toml` (`cargo registers check shared-words`).
+  blocks list the same word.
 - The volatile reads and writes of a `Block` and of a `Part`. Every word
   offset, stride and element count is a const generic, checked against the
   block's word list at compile time; an array index is an `Index<N>` from a
@@ -149,16 +131,9 @@ transaction asserts its masks against the register's declared fields in a
 `whole-word`: the vendor's store of a whole word, with its evidence
 sources, which also writes the bits the model leaves undeclared.
 
-`esp32s31/pac-raw/` is the `oer-esp32s31-pac-raw` package. It contains only
-SVD-generated register access, checked through the generator/publisher
-pipeline. The publisher has no declaration for handwritten modules in this
-package.
-
-`esp32s31/pac/` contains the handwritten semantic radio PAC and its
-generated capability catalog in `src/generated.rs`. The
-[PAC provenance map](../chips/esp32s31/pac/README.md) distinguishes both generated
-Rust outputs from its handwritten ownership and domain modules,
-including the IEEE 802.15.4 task/interrupt split. Non-radio register
+`esp32s31/pac/` is the generated PAC (`src/generated.rs`) and its root
+(`src/lib.rs`, the one claim); it has no handwritten module
+([PAC](../chips/esp32s31/pac/README.md)). Non-radio register
 access through upstream `esp-hal`/`esp-pacs` belongs to
 `adapters/esp-hal/soc/`, which also contains cache/MMU and GDMA
 transactions. Its Cargo package is `oer-espressif-esp-hal-soc`; its implementation
@@ -437,11 +412,9 @@ each unsafe attribute in them carries its `// SAFETY:` comment as well.
 
 ## PAC dependency authority
 
-Direct dependencies on the semantic radio PAC are restricted independently
-of unsafe syntax. The only allowed consumers are the chip's `pac-raw`, `pac`
-and `hal` under `esp32s31/`, and the chip-neutral Wi-Fi MAC register
-crate `espressif/ieee80211-pac/` whose blocks those PACs place: drivers and
-adapters reach registers through HAL owners. Check the executable list when changing this boundary.
+Direct dependencies on the PAC are restricted independently of unsafe
+syntax. The only allowed consumer is the chip's `hal` under `esp32s31/`:
+drivers and adapters reach registers through HAL owners. Check the executable list when changing this boundary.
 
 Upper layers use opaque, finite capabilities rather than raw pointers,
 unchecked lifetimes, generic PAC callbacks or independently reusable interrupt

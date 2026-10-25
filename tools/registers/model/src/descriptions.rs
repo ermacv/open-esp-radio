@@ -7,12 +7,13 @@ use std::path::{Path, PathBuf};
 use crate::{Error, Result};
 
 /// The directories of `chip`'s register model whose descriptions cite
-/// vendor code, relative to the repository root: the evidence sources and
-/// the model's peripherals, registers and fields.
-pub fn description_directories(chip: &str) -> [PathBuf; 2] {
+/// vendor code, relative to the repository root: the evidence sources, the
+/// block types and the memory layouts.
+pub fn description_directories(chip: &str) -> [PathBuf; 3] {
     [
         PathBuf::from(format!("chips/{chip}/registers/evidence")),
-        PathBuf::from(format!("chips/{chip}/registers/model")),
+        PathBuf::from(format!("chips/{chip}/registers/types")),
+        PathBuf::from(format!("chips/{chip}/registers/layouts")),
     ]
 }
 
@@ -102,9 +103,10 @@ mod tests {
     #[test]
     fn descriptions_are_found_at_any_depth_and_names_are_not() {
         let root = tempfile::tempdir().unwrap();
-        let model = root.path().join("chips/chip/registers/model/peripherals");
+        let model = root.path().join("chips/chip/registers/types/radio");
         std::fs::create_dir_all(&model).unwrap();
         std::fs::create_dir_all(root.path().join("chips/chip/registers/evidence")).unwrap();
+        std::fs::create_dir_all(root.path().join("chips/chip/registers/layouts")).unwrap();
         std::fs::write(
             model.join("a.toml"),
             "[[sources]]\ndescription = \"complete bt_bb_v2_init_cmplx\"\n\
@@ -120,7 +122,7 @@ mod tests {
             "[[source]]\nid = \"x\"\ndescription = \"libpp[pm.o]::pm_on\"\n",
         )
         .unwrap();
-        let model = PathBuf::from("chips/chip/registers/model/peripherals/a.toml");
+        let model = PathBuf::from("chips/chip/registers/types/radio/a.toml");
         let evidence = PathBuf::from("chips/chip/registers/evidence/e.toml");
         assert_eq!(
             descriptions(root.path(), "chip").unwrap(),

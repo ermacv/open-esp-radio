@@ -1,123 +1,33 @@
 # ESP32-S31 PAC
 
 The PAC is the exact model of the hardware, generated from the
-[register model](../registers/README.md) and its ownership policy:
+[register model](../registers/README.md) and its ownership policy by
+`cargo registers generate --chip esp32s31`
+([renderer](../../../tools/registers/model/README.md#the-thin-pac)). It
+holds no logic: every sequence, poll, retry, routing and lifecycle decision
+over it is the HAL's, each vendor step with its `SOURCE:`.
 
-- typed register blocks, each taken once by the PAC root;
-- the field accessors of each field's class, in the one naming convention
-  of the [model's renderers](../../../tools/registers/model/README.md#field-accessors):
-  reads, read-modify-writes, writes from zero, triggers, command starts
-  refusing while busy (`CommandBusy`), write-one-to-clear samples and their
-  acknowledgements, FIFO pops and pushes;
-- the value domains of whole fields (enums, widths);
-- typed DMA pointers: a field the hardware reads as an address is set only
-  from a `DmaRef` or a DMA-window address, never from an integer;
-- the memory layouts the hardware reads and writes, and the analog-I2C
-  vocabulary;
-- ownership parts: the word sets (interrupt and task sides, divisions, read
-  capabilities, shared blocks) that split one block between owners. Without
-  them the HAL could split a block only with `unsafe`.
-
-The generated boundary consists of register-local field accessors, typed
-values, layouts and ownership parts. The current renderer reads the
-published SVD and the API policy. It also generates the policy's named
-transactions, including sourced whole-word images and snapshot
-acknowledgements. The `soc` pass retains the vendor's field prefixes;
-API-policy blocks use the field names declared in the reviewed model.
-
-The PAC exports the handwritten domain modules `bluetooth`, `wifi`, `phy`,
-`modem`, `boot`, `platform`, `watchdog` and `pll_power`. They assemble owned
-register parts and provide the register-local operations and straight-line
-transactions described below. IEEE 802.15.4 has no domain module: its
-partition (`Ieee802154Partition`) holds the generated parts, the MAC block,
-the modem ETM's channels zero and one and the baseband's receive-information
-read, from the public `ieee802154_mac`, `modem_etm` and `bt_v3_2_baseband`
-modules, and the HAL performs every IEEE 802.15.4 operation over their field
-accessors. The analog-host operations
-are in `phy/i2c.rs`. Sequencing with phases, polling, retries, interrupt
-routing and lifecycle policy belongs to the HAL; a PAC domain operation
-keeps no in-flight state between calls.
-
-## Radio partitions
-
-`RadioPartitions::from_handoff` consumes the platform's `RadioHandoff`, the
-proof that every radio singleton was handed over, and returns the radio
-registers once as opaque register partitions; register
-sets such as `WifiRadioRegisters` and `BluetoothTaskRegisters` are assembled
-from those partitions and carry the reviewed domain transactions. Protocol
-register sets contain only their protocol's partitions. The radio PHY,
-coexistence arbitration and shared baseband partitions, including the BTBB
-baseband that Bluetooth and IEEE 802.15.4 both initialize, form the separate
-`SharedRadioRegisters` owner; a transaction touching both protocol and shared
-registers takes it as an explicit argument, and the coexistence timer bank
-belongs to it. Per-protocol coexistence priority registers stay with that
-protocol's partition. The PAC holds no protocol route: the HAL owns the
-neutral radio root, decides which partitions each route consumes and where
-the shared owner lives, retains the others and supplies multi-register
-sequencing, polling, delay, recovery and lifecycle policy.
-
-A handwritten PAC operation of the domain modules is a single transaction:
-it keeps no state between calls, has no phases, never polls and never
-routes. A straight-line multi-register sequence and the affine receipt it
-returns (for example a stopped-scheduler or rollback token) are allowed;
-pending/step machines, in-flight flags and retry loops belong to the HAL.
-There, every poll, compare or retry-until-stable loop carries an explicit
-time or attempt budget and returns a typed error the caller handles when the
-budget runs out; no loop is unbounded, even where the vendor's is. A
-handwritten PAC module has no loop other than a walk over a fixed-length
-table. The HAL is the only production crate that depends on this package.
-
-## Sources and generated outputs
-
-The [source-only publication configuration](../registers/publication/registers.toml)
-declares the outputs below. Generation belongs to the host-side
-[`cargo registers` publisher](../../../tools/registers/generate/README.md), with shared schemas
-and invariants in `tools/registers/model`. Reviewed model, ownership policy and provenance live together under
-[`chips/esp32s31/registers`](../registers/README.md). There is no runtime
-`pac-gen` dependency or additional generator crate in the production dependency graph.
-
-| Artifact | Source and responsibility |
+| File | What it holds |
 | --- | --- |
-| [Radio SVD](../registers/published/radio.svd) | Published from the reviewed chip register model and project policy |
-| [raw/src/lib.rs](../pac-raw/src/lib.rs) | Generated svd2rust register accessors from that SVD |
-| [src/generated.rs](src/generated.rs) | Generated semantic capability catalog selected by [PAC API policy](../registers/policy/api.toml), the `layouts` module of the model's memory layouts (`chips/esp32s31/registers/model/layouts/`), re-exported as `oer_esp32s31_pac::layouts`, and the policy's typed register blocks over `oer-mmio` with their field accessors, partitions and `Claims`, which `RadioPartitions::from_handoff` claims once; `IEEE802154_MAC` (split into its generated interrupt and task sides) is a typed block, its interrupt route word the interrupt matrix's; the eighteen Bluetooth LE blocks of the controller, low-power timer and interrupt partitions are typed blocks too (the interrupt bank names source 124, MODEM_BT_MAC, and the low-power timer source 127; source 133, MODEM_BT_MAC_INT1, samples and acknowledges the same bank, so its one interrupt owner serves both); the thirty-six blocks of the radio PHY, coexistence, shared-radio and modem ETM partitions are typed blocks: the modem ETM is divided into channel-disjoint owners (IEEE 802.15.4 channels zero and one, the Bluetooth PHY channel two, the Bluetooth runtime channels four to seven, each strobing only its own bits of the set and clear words), and IEEE 802.15.4's read of the shared baseband's receive information is a read capability split off that block; `WIFI_MAC_INTERFACE_ADDRESS` is the [shared library's block](../../espressif/ieee80211-pac/README.md) at this chip's address |
-| [Radio bindings](../registers/published/radio.bindings.toml) | Published register-to-raw-PAC binding metadata |
-| [src/ownership.rs](src/ownership.rs) and domain modules | Handwritten authority, register-local operations and restricted access |
-| [src/pll_power.rs](src/pll_power.rs) | The bootstrap's epoch of the CPLL and MPLL power fields of the PMU's radio view, claimed before the radio root and dropped before it claims the view |
-| [src/platform.rs](src/platform.rs) | The per-domain handoffs and read-only owners of the typed platform blocks (eFuse MAC words, TRNG, reset causes), in `platform/usb_serial_jtag.rs` the USB Serial/JTAG console's handoff and its endpoint, interrupt and pad owners, and in `platform/core_control.rs` the core-control handoff and owner (stall request and status, core 1's clocks and reset, the CPU reset triggers, UART0's function clock) |
+| [`src/generated.rs`](src/generated.rs) | Generated, never edited: a module per block type with its register modules (masks, offsets, `R`, `W`, `Snapshot`, value types) and the owners of its parts; the field accessors of each field's class; typed DMA pointers; `Interrupt` and `instances` (bases, sizes, bound sources); `ownership` (the partitions, `Claims`, `partition`); the irreducible policy items (whole-word images, masked acknowledgements, interrupt snapshots, whole-word-bits writes); `layouts`; `analog_i2c` |
+| [`src/lib.rs`](src/lib.rs) | The root: `take()` claims every part once and returns the partitions |
 
-Both Rust generated outputs are regenerated through the publisher. Do not
-edit them by hand or extend their lint exceptions to handwritten files. The
-semantic catalog may contain reviewed leaves that no current owner exposes;
-that does not authorize a broad register escape hatch.
+- **Accessors by class.** Reads, read-modify-writes that keep every bit
+  they do not set, writes from zero that take the fields no write may leave
+  zero, triggers, doorbells, command starts refusing while busy
+  (`oer_mmio::CommandBusy`), write-one-to-clear samples and their
+  acknowledgements, FIFO pops and pushes, data-port stores and the strobes
+  and stores of shared parts.
+- **Typed pointers.** A field the hardware reads as an address is set only
+  from an `oer_mmio::DmaRef` of its target layout or a `DmaWindowAddress`,
+  never from an integer; a pointer's high field only to its placement's
+  prefix.
+- **Ownership.** Each part of the policy is one owner type over its words:
+  the interrupt and task sides of a block, the parts of a divided block,
+  read-only and `Copy` views and shared blocks. A part that serves an
+  interrupt names its source (`oer_mmio::InterruptSource`). `take()` is the
+  one place the claimed words are assumed exclusive; the generated
+  `disjoint_blocks` check proves no two claimed blocks list one word.
 
-## Upstream PAC and esp-hal
-
-The separate upstream chain is the pinned `esp-pacs` dependency used by
-`esp-hal`. The [`soc` adapter](../../espressif/esp-hal/soc/README.md) owns
-typed upstream-register operations, cache/MMU and GDMA transactions. It is
-the handwritten `oer-espressif-esp-hal-soc` package. It neither generates
-nor replaces this radio PAC.
-
-The two chains use their reviewed dependency revisions. A capability exposed
-by either PAC is not itself hardware qualification of a radio operation.
-
-Some owned ranges share 32-bit words with registers ESP-HAL writes. Bits
-ESP-HAL reference-counts, the 160 MHz reference gate and every
-`MODEM_LPCON.CLK_CONF` gate, are not published here; the radio requests them
-through `PlatformClockProvider`. The adopted PSRAM mapping holds a permanent
-MPLL reference through ESP-HAL's clock tree (`Psram::from_existing_mapping`),
-and the radio holds another while powered, so ESP-HAL never powers MPLL down
-through `PMU.HP_ACTIVE_HP_CK_POWER` while the radio writes it. The
-remaining shared words rely on ESP-HAL writing them only inside
-`esp_hal::init`, before any radio exists. The
-[shared-word list](../registers/README.md#words-shared-with-esp-hal)
-names each word and its guarantee.
-
-## Validation
-
-`cargo registers generate --check` validates register sources. Publication checks also cover source-only publication
-reproducibility unconditionally. Artifact-scoped publication is additionally
-checked when its review report is present. Generated addresses, masks and
-field positions are not regression test oracles; ownership and memory
-protocols are tested through behavior and typed contracts.
+`tests/` exercises the generated layouts over host memory; the renderer's
+own tests prove the accessors' behaviour and what they refuse.

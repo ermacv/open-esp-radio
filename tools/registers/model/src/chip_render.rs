@@ -21,12 +21,15 @@
 //!   proven write-one-to-clear acknowledgements, interrupt snapshots and
 //!   writes with sourced whole-word bits; every other transaction is HAL
 //!   code over the accessors;
+//! - the analog-I2C dictionary ([`analog`]): block codes, routes, byte
+//!   addresses, fields and register facts;
 //! - the memory layouts of the root, by the layouts renderer.
 //!
 //! A field the policy reads as an address has no setter until the type
 //! states its pointer facts. A narrow (8- or 16-bit) register has its
 //! register module but no owner accessor: a part that reaches one is
-//! refused. Analog-I2C types are not rendered here.
+//! refused. Analog-I2C types have no owners: their bytes are reached through
+//! the HAL's analog host.
 
 use std::{collections::BTreeMap, fmt::Write as _};
 
@@ -36,8 +39,10 @@ use crate::{
 };
 use names::push_doc;
 
+mod analog;
 mod block;
 mod irreducible;
+mod linker;
 mod names;
 mod owners;
 #[cfg(test)]
@@ -45,6 +50,7 @@ mod tests;
 mod unique;
 
 use block::{TypePlan, render_register_module};
+pub use linker::dma_window;
 
 /// Why the renderer refused the model or the policy: the entity and the
 /// reason.
@@ -65,7 +71,7 @@ impl Error {
 }
 
 /// Top-level module names the renderer itself uses.
-const RESERVED_MODULES: &[&str] = &["instances", "ownership", "layouts"];
+const RESERVED_MODULES: &[&str] = &["instances", "ownership", "layouts", "analog_i2c"];
 
 /// Render the PAC of `model` under `policy`. The output is deterministic:
 /// it follows the root's, the types' and the policy's order.
@@ -121,6 +127,7 @@ fn render_parts(model: &ChipModel, policy: &ChipPolicy) -> Result<(String, Strin
         output.push_str("}\n\n");
     }
     owners::render_root(&mut output, &ownership, policy, &plans)?;
+    output.push_str(&analog::render(model)?);
     let regions = model
         .ram_regions()
         .iter()

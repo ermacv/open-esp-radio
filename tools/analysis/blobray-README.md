@@ -156,7 +156,7 @@ Register source publication belongs to the independent
 policies, without loading an investigation or executing vendor code.
 
 ```console
-cargo registers generate --manifest chips/esp32s31/registers/publication/registers.toml --check
+cargo registers generate --chip esp32s31 --check
 ```
 
 Concrete execution supports phased RV32 integer/stack arguments, atomics, explicit

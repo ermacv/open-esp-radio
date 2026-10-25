@@ -23,7 +23,7 @@ serialport = { version = "4.8.1", default-features = false }
 oer-os-serial = { path = "../../os/serial" }
 tempfile = { version = "3" }
 oer-lab-router = { path = "../router" }
-oer-registers-bindings = { path = "../../registers/bindings" }
+oer-registers-model = { path = "../../registers/model" }
 
 [dev-dependencies]
 tempfile = "3"

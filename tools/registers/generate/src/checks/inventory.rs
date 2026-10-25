@@ -1,7 +1,7 @@
 //! Compare vendor bit uses with declared register fields.
 //!
 //! `cargo registers check inventory` runs Blobray on every pinned vendor
-//! binary in the publication's owned MMIO ranges, using `riscv-integer`
+//! binary in the chip root's MMIO instance windows, using `riscv-integer`
 //! and call summaries. The typed consumer in [`uses`] rejects uses of
 //! absent bits and reports unknown bits and coverage limits separately.
 //! This module supplies expanded geometry, inherited resets, and the same
@@ -34,8 +34,15 @@ pub struct DeclaredRegister {
     pub template: String,
     pub reset_value: Option<u64>,
     pub reset_mask: Option<u64>,
-    pub reserved: Option<oer_registers_model::ReservedBits>,
+    pub reserved: Option<DeclaredReserved>,
     pub fields: Vec<DeclaredField>,
+}
+
+/// The bits a source marks reserved in a register.
+#[derive(Clone, Debug)]
+pub struct DeclaredReserved {
+    pub mask: u128,
+    pub sources: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -254,50 +261,65 @@ fn region_of(regions: &[Region], address: u32) -> Option<&str> {
         .map(|r| r.name.as_str())
 }
 
-/// The chip's register model and owned MMIO ranges, through its
-/// publication manifest `chips/<chip>/registers/publication/registers.toml`.
+/// The chip's register model and its MMIO instance windows: every
+/// register element of the chip root (`chips/<chip>/registers/chip.toml`)
+/// and every instance's window.
 pub fn model(root: &Path, chip: &str) -> Result<(Vec<DeclaredRegister>, Vec<Region>)> {
-    let manifest = root.join(format!("chips/{chip}/registers/publication/registers.toml"));
-    let publication = crate::ChipSources::load(&manifest)?;
-    let regions = publication
-        .owned_mmio()?
-        .into_iter()
-        .map(|(name, start, end)| -> Result<Region> {
+    let chip = oer_registers_model::Chip::load(root, chip)?;
+    let model = &chip.model;
+    let regions = model
+        .instances()
+        .iter()
+        .map(|instance| -> Result<Region> {
+            let start = u32::try_from(instance.base).map_err(|_| "instance above 4 GiB")?;
+            let end = instance
+                .base
+                .checked_add(instance.extent.size)
+                .and_then(|end| u32::try_from(end).ok())
+                .ok_or("instance window above 4 GiB")?;
             Ok(Region {
-                name,
-                start: u32::try_from(start).map_err(|_| "owned range above 4 GiB")?,
-                end: u32::try_from(end).map_err(|_| "owned range above 4 GiB")?,
+                name: instance.name.clone(),
+                start,
+                end,
             })
         })
         .collect::<Result<Vec<_>>>()?;
-    let model = oer_registers_model::RegisterModel::load(&publication.model)?;
-    let registers = model
-        .register_geometry()?
-        .into_iter()
-        .map(DeclaredRegister::from)
-        .collect();
-    Ok((registers, regions))
-}
-
-impl From<oer_registers_model::RegisterGeometry> for DeclaredRegister {
-    fn from(r: oer_registers_model::RegisterGeometry) -> Self {
-        Self {
-            address: r.address,
-            width_bits: r.width.unwrap_or(WORD_BITS),
-            name: r.name,
-            template: r.template,
-            reset_value: r.declaration.properties.reset_value,
-            reset_mask: r.declaration.properties.reset_mask,
-            reserved: r.reserved,
-            fields: r
+    let mut registers = Vec::new();
+    for register in model.registers() {
+        let oer_registers_model::chip_model::Location::Mmio { address } = register.location else {
+            continue;
+        };
+        let template = model
+            .instances()
+            .iter()
+            .find(|instance| instance.name == register.instance)
+            .and_then(|instance| model.types().get(&instance.block_type))
+            .and_then(|block| block.templates.get(&register.key));
+        let reserved = (register.reserved != 0).then(|| DeclaredReserved {
+            mask: u128::from(register.reserved),
+            sources: template
+                .and_then(|template| template.reserved.as_ref())
+                .map(|reserved| reserved.sources.clone())
+                .unwrap_or_default(),
+        });
+        registers.push(DeclaredRegister {
+            address,
+            width_bits: register.width,
+            name: register.identity.clone(),
+            template: format!("{}.{}", register.instance, register.key),
+            reset_value: register.reset.map(|reset| u64::from(reset.value)),
+            reset_mask: register.reset.and_then(|reset| reset.mask).map(u64::from),
+            reserved,
+            fields: register
                 .fields
-                .into_iter()
-                .map(|f| DeclaredField {
-                    name: f.name,
-                    offset: f.offset,
-                    width: f.width,
+                .iter()
+                .map(|field| DeclaredField {
+                    name: field.name.clone(),
+                    offset: field.low,
+                    width: field.width,
                 })
                 .collect(),
-        }
+        });
     }
+    Ok((registers, regions))
 }

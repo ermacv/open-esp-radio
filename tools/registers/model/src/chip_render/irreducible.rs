@@ -230,11 +230,7 @@ pub(super) fn render(
                 ", {parameter}: {}",
                 field.write_type(Some(&target.template.module()))
             );
-            let _ = write!(
-                image,
-                " | {}",
-                field.positioned().replace("value", &parameter)
-            );
+            let _ = write!(image, " | {}", field.positioned_of(&parameter));
             mask |= field.mask();
         }
         let call = target.write(entity, owner, &image, mask)?;
@@ -412,6 +408,7 @@ fn render_snapshot(
     // The bits of no field keep their value: read back from a clear word
     // whose every field reads, at their reset value otherwise.
     let replayable = clear.template.readable()
+        && clear.template.declared() != u32::MAX
         && clear
             .template
             .fields

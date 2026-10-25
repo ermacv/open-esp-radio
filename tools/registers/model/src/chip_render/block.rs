@@ -1292,6 +1292,17 @@ fn render_owned(
                 "an acknowledgement writes zero to it, which its write constraint forbids",
             ));
         }
+        // The bits of no field keep the value read now; a word whose every
+        // bit is a field has none to keep.
+        let acknowledgement = if template.declared() == u32::MAX {
+            format!("self.0.{};", call.write("snapshot.0"))
+        } else {
+            format!(
+                "let kept = self.0.{} & !{module}::FIELDS;\nself.0.{};",
+                call.read(),
+                call.write("kept | snapshot.0")
+            )
+        };
         let _ = writeln!(
             body,
             "/// Sample `{name}` once, keeping its declared fields, to acknowledge.\n\
@@ -1301,11 +1312,8 @@ fn render_owned(
              /// holds, zero to every other field; the bits of no field keep the\n\
              /// value read now.\n\
              #[inline]\npub fn acknowledge_{stem}(&mut self{index}, snapshot: {module}::Snapshot) {{\n\
-             let kept = self.0.{} & !{module}::FIELDS;\n\
-             self.0.{};\n}}\n",
+             {acknowledgement}\n}}\n",
             call.read(),
-            call.read(),
-            call.write("kept | snapshot.0")
         );
         return Ok(());
     }
@@ -1363,9 +1371,7 @@ fn render_owned(
                     ),
                 ));
             } else if template.zero_image() == 0 {
-                bits.strip_prefix('(')
-                    .and_then(|bits| bits.strip_suffix(')'))
-                    .map_or_else(|| bits.clone(), str::to_owned)
+                unparenthesized(&bits)
             } else {
                 format!("0x{:08x} | {bits}", template.zero_image())
             };
@@ -1414,7 +1420,10 @@ fn render_owned(
         );
     } else if from_zero {
         let mut parameters = String::new();
-        let mut image = format!("0x{:08x}", template.zero_image());
+        let mut terms = Vec::new();
+        if template.zero_image() != 0 || required.is_empty() {
+            terms.push(format!("0x{:08x}", template.zero_image()));
+        }
         for field in &required {
             let parameter = field.method();
             let _ = write!(
@@ -1422,8 +1431,12 @@ fn render_owned(
                 ", {parameter}: {}",
                 field.write_type(Some(&module))
             );
-            let _ = write!(image, " | {}", field.positioned_of(&parameter));
+            terms.push(field.positioned_of(&parameter));
         }
+        let image = match terms.as_slice() {
+            [single] => unparenthesized(single),
+            _ => terms.join(" | "),
+        };
         let _ = writeln!(
             body,
             "/// Write `{name}` from zero: {}the fields set, the reserved bits at\n\
@@ -1670,6 +1683,28 @@ pub(super) fn render_split_triggers(
             field.field.name, field.stem,
         );
     }
+}
+
+/// `expression` without the parentheses around all of it, if it has them.
+fn unparenthesized(expression: &str) -> String {
+    let Some(inner) = expression
+        .strip_prefix('(')
+        .and_then(|inner| inner.strip_suffix(')'))
+    else {
+        return expression.to_owned();
+    };
+    let mut depth = 0_i32;
+    for character in inner.chars() {
+        depth += match character {
+            '(' => 1,
+            ')' => -1,
+            _ => 0,
+        };
+        if depth < 0 {
+            return expression.to_owned();
+        }
+    }
+    inner.to_owned()
 }
 
 /// `expression` without the bits of `mask`, as an expression.

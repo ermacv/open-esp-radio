@@ -24,7 +24,7 @@ pub(crate) fn prepare_calibration(
     fill: u8,
 ) -> crate::harness::Result<oer_analysis_blobray_domain::Invocation> {
     use crate::layout::{fill_word, register_bank};
-    // SOURCE: registers/model/peripherals/{pmu-radio,lp-periclkrst,lp-tsens}.toml;
+    // SOURCE: registers/types/{pmu,lp-peri-clkrst,tsens}.toml;
     // HAL phy/temperature.rs::acquire touches these three resource words.
     let model = register_bank(
         "temperature-owner",
