@@ -8,7 +8,7 @@
 
 use crate::power::PlatformClockBackend;
 
-use oer_esp32s31_pac::{BluetoothInterruptSetup, BluetoothModemLpTimerRegisters};
+use crate::bluetooth::registers::{BluetoothInterruptSetup, BluetoothModemLpTimerRegisters};
 
 use super::{ClockedOwner, Partition, TaskOwner};
 use crate::domain::{RadioClient, RadioDomain};

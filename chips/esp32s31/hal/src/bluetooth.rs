@@ -20,22 +20,20 @@ use crate::power::PlatformClockBackend;
 
 use core::fmt;
 
-use oer_esp32s31_pac::{
+use registers::{
     BluetoothDirectionFindingDisabledBaselinePrepared, BluetoothInterruptRegisters,
-    BluetoothInterruptSetup as PacBluetoothInterruptSetup, BluetoothModemLpTimerRegisters,
+    BluetoothInterruptSetup as RegistersBluetoothInterruptSetup, BluetoothModemLpTimerRegisters,
     BluetoothPhyRegisterInitInputs, BluetoothTaskRegisters,
 };
 
-use crate::{
-    domain::{
-        BluetoothClient, BtbbAcquired, BtbbError, CoexAbsent, CommonPower, CommonPowerExitFailure,
-        CommonRadioPowerError, LowPowerClockError, ModemClockError, PlatformClockProvider,
-        RadioDomain,
-    },
-    root::BluetoothPartition,
+use crate::domain::{
+    BluetoothClient, BtbbAcquired, BtbbError, CoexAbsent, CommonPower, CommonPowerExitFailure,
+    CommonRadioPowerError, LowPowerClockError, ModemClockError, PlatformClockProvider, RadioDomain,
 };
+pub use registers::{BluetoothControllerParts, BluetoothModemLpTimerParts};
 
 mod controller_time;
+pub(crate) mod registers;
 mod scheduler_execution_lock;
 mod scheduler_execution_modify;
 mod scheduler_stop;
@@ -52,11 +50,13 @@ pub use scheduler_execution_modify::BluetoothSchedulerExecutionModify;
 pub use scheduler_stop::BluetoothSchedulerStop;
 pub use shutdown::{BluetoothControllerReset, BluetoothShutdownError, BluetoothShutdownFailure};
 
-pub use oer_esp32s31_pac::{
+pub use crate::modem::{
+    BluetoothLowPowerClockObservation, ModemSysconBluetoothObservation, SharedModemClockObservation,
+};
+pub use registers::{
     BlePhyEtmRouteDisabled, BluetoothControllerHalInitConfig, BluetoothControllerLatchedTime,
     BluetoothControllerOutputReleaseError, BluetoothControllerTimeScale,
-    BluetoothDeviceTableEntryCount, BluetoothDeviceTablePublished, BluetoothHalInitPeriod,
-    BluetoothHalInitScale, BluetoothLowPowerClockObservation,
+    BluetoothDeviceTablePublished, BluetoothHalInitPeriod, BluetoothHalInitScale,
     BluetoothLowPowerRuntimeControlObservation, BluetoothMemoryListSelector,
     BluetoothMemoryListSlot, BluetoothMicrosecondDeltaProjection,
     BluetoothModemLpTimerCompareDisposition, BluetoothModemLpTimerCounterObservation,
@@ -80,10 +80,9 @@ pub use oer_esp32s31_pac::{
     BluetoothSchedulerSkipDisposition, BluetoothSchedulerSkipPublished,
     BluetoothSchedulerSkipResult, BluetoothSchedulerSoftwareListRemovalIdle,
     BluetoothSchedulerSoftwareListRemovalInterruptStep, BluetoothSchedulerStopped,
-    BluetoothSchedulerWorkObservation, ModemSysconBluetoothObservation,
-    PlatformClockPowerObservation, SharedModemClockObservation,
+    BluetoothSchedulerWorkObservation,
 };
-use oer_esp32s31_pac::{
+use registers::{
     BluetoothMemoryListPointerImage, BluetoothSchedulerExecutionLockRequest,
     BluetoothSchedulerHardwareListHead, BluetoothSchedulerHardwareListHeadEmptyObserved,
     BluetoothSchedulerHardwareListHeadPublished,
@@ -92,12 +91,25 @@ use oer_esp32s31_pac::{
     BluetoothSchedulerSoftwareListRemovalJoin, BluetoothSchedulerStoppedHeadRetirement,
 };
 
+/// The Bluetooth parts of the PAC root: the controller with modem ETM
+/// channel two, the modem low-power timer with modem ETM channels four
+/// through seven, and the interrupt bank.
+#[must_use = "dropping a radio partition permanently loses its register authority"]
+pub struct BluetoothPartition {
+    /// The controller partition and modem ETM channel two.
+    pub controller: BluetoothControllerParts,
+    /// The modem low-power timer and modem ETM channels four through seven.
+    pub modem_lp_timer: BluetoothModemLpTimerParts,
+    /// The interrupt bank and the scheduler's diagnostic pair.
+    pub interrupts: oer_esp32s31_pac::ownership::BluetoothInterruptPeripherals,
+}
+
 /// The Bluetooth partition split into its task registers, modem low-power
 /// timer and inactive interrupt bank.
 struct Partition {
     task: BluetoothTaskRegisters,
     modem_lp_timer: BluetoothModemLpTimerRegisters,
-    interrupts: PacBluetoothInterruptSetup,
+    interrupts: RegistersBluetoothInterruptSetup,
 }
 
 /// Unpowered Bluetooth client holding its partition.
@@ -112,12 +124,16 @@ pub struct ColdOwner {
 impl ColdOwner {
     /// Take the partition of a concurrent split. This performs no MMIO.
     pub fn from_partition(partition: BluetoothPartition) -> Self {
-        let (controller, modem_lp_timer, interrupts) = partition.into_parts();
+        let BluetoothPartition {
+            controller,
+            modem_lp_timer,
+            interrupts,
+        } = partition;
         Self {
             partition: Partition {
                 task: BluetoothTaskRegisters::new(controller),
-                modem_lp_timer,
-                interrupts,
+                modem_lp_timer: BluetoothModemLpTimerRegisters::new(modem_lp_timer),
+                interrupts: RegistersBluetoothInterruptSetup::new(interrupts),
             },
         }
     }
@@ -129,7 +145,11 @@ impl ColdOwner {
             modem_lp_timer,
             interrupts,
         } = self.partition;
-        BluetoothPartition::from_parts(task.into_partition(), modem_lp_timer, interrupts)
+        BluetoothPartition {
+            controller: task.into_parts(),
+            modem_lp_timer: modem_lp_timer.into_parts(),
+            interrupts: interrupts.into_partition(),
+        }
     }
 
     /// Enter common radio power as the Bluetooth client.
@@ -579,20 +599,22 @@ impl TaskOwner {
         self.reunitable = false;
         #[allow(
             unsafe_code,
-            reason = "the PAC transaction points the hardware at the storage"
+            reason = "the BLE PHY transaction points the hardware at the storage"
         )]
         // SAFETY: `storage` binds both pointed objects to `'static`,
-        // volatile-only controller SRAM of the BLE PHY engine; the PAC contract's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
+        // volatile-only controller SRAM of the BLE PHY engine; the transaction's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
         unsafe {
-            self.registers
-                .enable_ble_base_stack_hardware(radio.registers_mut(), storage.inputs);
+            self.registers.enable_ble_base_stack_hardware(
+                &mut radio.registers_mut().shared_radio.bt_v32_baseband,
+                storage.inputs,
+            );
         }
     }
 
     /// Execute the complete reviewed 49-operation controller HAL-init body
     /// at the upper controller lifecycle's verified transition.
     ///
-    /// The SRAM prefix it publishes is the fixed `0x2f` of the PAC's register
+    /// The SRAM prefix it publishes is the fixed `0x2f` of its register
     /// image, so every compressed address the Controller follows resolves
     /// into that SRAM window. The caller does not infer scheduler, PHY, BTBB,
     /// Link-Layer or HCI readiness from return.
@@ -718,7 +740,7 @@ impl ModemLpTimerCounterStartedOwner {
 
     /// Transfer the unique started timer into stable source-127 ISR storage.
     ///
-    /// This transition performs no MMIO and exposes no raw PAC owner. The
+    /// This transition performs no MMIO and exposes no raw register owner. The
     /// platform must store the returned value before enabling the CPU route
     /// and recover it only after that route is disabled and no hard handler
     /// remains in flight.
@@ -789,7 +811,7 @@ pub enum ModemLpTimerHandlerRegisterStep {
 
 /// Opaque HAL owner retained while source-127 software work is pending.
 ///
-/// This owner has no raw PAC escape and cannot be rearmed until the no-RTOS
+/// This owner has no raw register escape and cannot be rearmed until the no-RTOS
 /// timer runtime supplies the missing software transition and final register
 /// read.
 #[must_use = "software timer work and the final hardware read remain pending"]
@@ -913,7 +935,7 @@ impl core::fmt::Debug for TaskOwnerReuniteFailure {
 /// Opaque inactive owner of the controller interrupt partition.
 #[must_use = "the inactive Bluetooth interrupt owner must be staged or reunited"]
 pub struct InterruptSetupOwner {
-    registers: PacBluetoothInterruptSetup,
+    registers: RegistersBluetoothInterruptSetup,
     reunitable: bool,
 }
 
@@ -939,7 +961,7 @@ impl InterruptSetupOwner {
 /// storage or bound to a CPU route.
 #[must_use = "the prepared Bluetooth output must be staged or released"]
 pub struct InterruptOutputPreparedOwner {
-    registers: oer_esp32s31_pac::BluetoothInterruptOutputPrepared,
+    registers: registers::BluetoothInterruptOutputPrepared,
 }
 
 impl InterruptOutputPreparedOwner {
@@ -992,7 +1014,7 @@ impl InterruptRegistersOwner {
 
     /// Capture and acknowledge one complete opaque NRT source-133 epoch.
     ///
-    /// This preserves the PAC sample/sample/acknowledge/acknowledge order. It
+    /// This preserves the sample/sample/acknowledge/acknowledge order. It
     /// deliberately performs no feature dispatch and publishes no task wake.
     pub fn capture_nrt_and_acknowledge(&mut self) -> BluetoothNrtInterruptAcknowledged {
         self.registers.capture_nrt_and_acknowledge()
@@ -1017,7 +1039,7 @@ impl InterruptRegistersOwner {
 
     /// Clear the scheduler reference selected by the source-124 gate.
     ///
-    /// The returned affine token proves the ordered PAC write and device fence.
+    /// The returned affine token proves the ordered write and device fence.
     /// The open scheduler's software consistency is structural and does not
     /// reproduce the vendor's intrusive-list callback.
     pub fn clear_scheduler_reference(&mut self) -> BluetoothSchedulerReferenceCleared {
@@ -1136,7 +1158,7 @@ impl InterruptRegistersOwner {
 /// scheduler/head/fault observations. No direct setup or cold conversion exists.
 #[must_use = "post-route interrupt ownership awaits dynamic-source quiescence"]
 pub struct InterruptOutputAfterRoutesOwner {
-    _registers: oer_esp32s31_pac::BluetoothInterruptOutputPrepared,
+    _registers: registers::BluetoothInterruptOutputPrepared,
 }
 
 impl InterruptOutputAfterRoutesOwner {
@@ -1230,13 +1252,13 @@ impl InterruptOutputAfterRoutesOwner {
 /// No active IRQ or setup conversion is exposed; retain it through RF close.
 #[must_use = "released output must remain paired with its stopped Controller"]
 pub struct InterruptOutputReleasedOwner {
-    registers: PacBluetoothInterruptSetup,
+    registers: RegistersBluetoothInterruptSetup,
 }
 
 /// Exclusive finite borrow of the Bluetooth controller task-side registers.
 ///
-/// This type deliberately exposes neither `Deref`, a raw PAC accessor nor a
-/// constructor. New operations belong here only after their PAC transaction
+/// This type deliberately exposes neither `Deref`, a raw register accessor nor a
+/// constructor. New operations belong here only after their register transaction
 /// and lifecycle prerequisites are independently bounded.
 pub struct ControllerHal<'registers> {
     registers: &'registers mut BluetoothTaskRegisters,
@@ -1365,7 +1387,7 @@ impl DirectionFindingDescriptor {
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub(crate) struct DeviceTablePublication {
     first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
-    count: BluetoothDeviceTableEntryCount,
+    count: u8,
 }
 
 impl DeviceTablePublication {
@@ -1377,7 +1399,7 @@ impl DeviceTablePublication {
     #[allow(unsafe_code, reason = "the HAL engine's codec vouches for the storage")]
     pub(crate) const unsafe fn new(
         first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
-        count: BluetoothDeviceTableEntryCount,
+        count: u8,
     ) -> Self {
         Self { first_entry, count }
     }
@@ -1390,7 +1412,7 @@ impl DeviceTablePublication {
     }
 
     /// Number of entries.
-    pub const fn count(&self) -> BluetoothDeviceTableEntryCount {
+    pub const fn count(&self) -> u8 {
         self.count
     }
 }
@@ -1427,7 +1449,7 @@ impl RxChainHead {
 
 /// HAL ownership of the controller-global disabled-CTE publication.
 ///
-/// The restricted PAC proof remains private, so upper Controller layers can
+/// The register-level proof remains private, so upper Controller layers can
 /// retain the hardware epoch without depending on a register-level type.
 #[must_use = "the disabled-CTE publication must retain its pinned workspace"]
 pub struct DirectionFindingDisabledBaselineOwner {
@@ -1574,10 +1596,10 @@ impl ControllerHal<'_> {
     ) -> DirectionFindingDisabledBaselineOwner {
         #[allow(
             unsafe_code,
-            reason = "the PAC transaction points the hardware at the descriptor"
+            reason = "the register transaction points the hardware at the descriptor"
         )]
         // SAFETY: `descriptor` binds it to the `'static`, volatile-only
-        // direction-finding workspace in controller SRAM; the PAC contract's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
+        // direction-finding workspace in controller SRAM; the transaction's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
         let prepared = unsafe {
             self.registers
                 .prepare_direction_finding_disabled_baseline(descriptor.address)
@@ -1690,11 +1712,11 @@ impl ControllerHal<'_> {
         }
         #[allow(
             unsafe_code,
-            reason = "the PAC scanner start relies on the published RX list"
+            reason = "the scanner start relies on the published RX list"
         )]
         // SAFETY: the scanning RX list of this epoch is published from a
         // memory-crate chain in `'static`, volatile-only controller SRAM
-        // (`RxChainHead`); the PAC contract's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
+        // (`RxChainHead`); the transaction's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
         Ok(unsafe { self.registers.publish_scan_start() })
     }
 
@@ -1711,10 +1733,10 @@ impl ControllerHal<'_> {
     ) -> BluetoothDeviceTablePublished {
         #[allow(
             unsafe_code,
-            reason = "the PAC transaction points the hardware at the table"
+            reason = "the register transaction points the hardware at the table"
         )]
         // SAFETY: `table` binds `count` entries from `first_entry` to the
-        // `'static`, volatile-only device table in controller SRAM; the PAC contract's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
+        // `'static`, volatile-only device table in controller SRAM; the transaction's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
         unsafe {
             self.registers
                 .publish_device_table(table.first_entry, table.count)
@@ -1764,13 +1786,13 @@ impl ControllerHal<'_> {
     }
 
     /// Order prior descriptor writes and publish one scheduler hardware-list
-    /// head through the restricted PAC.
+    /// head through the register owner.
     ///
     /// # Safety
     ///
     /// The caller must retain the scheduler insertion epoch, completed
     /// descriptor initialization, graph lifetime and task/interrupt
-    /// serialization required by the underlying PAC transaction. The PAC
+    /// serialization required by the underlying register transaction. It
     /// orders those prior SRAM writes before the MMIO head update.
     #[doc(hidden)]
     #[allow(
@@ -1783,7 +1805,7 @@ impl ControllerHal<'_> {
         head: Option<crate::layouts::DmaRef<crate::layouts::BleSchedulerItem>>,
     ) -> BluetoothSchedulerHardwareListHeadPublished {
         // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the PAC transaction's prerequisites.
+        // which states the register transaction's prerequisites.
         unsafe {
             self.registers
                 .publish_scheduler_hardware_list_head(index, head)
@@ -1806,7 +1828,7 @@ impl ControllerHal<'_> {
         command: BluetoothSchedulerInsertionCommand,
     ) -> BluetoothSchedulerInsertionCommandStartCleared {
         // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the PAC transaction's prerequisites.
+        // which states the register transaction's prerequisites.
         unsafe {
             self.registers
                 .clear_scheduler_insertion_command_start(command)
@@ -1919,7 +1941,7 @@ impl ControllerHal<'_> {
         }
     }
 
-    /// Publish one scheduler skip request through the restricted PAC.
+    /// Publish one scheduler skip request through the register owner.
     ///
     /// # Safety
     ///
@@ -1936,7 +1958,7 @@ impl ControllerHal<'_> {
         request: BluetoothSchedulerSkipRequest,
     ) -> BluetoothSchedulerSkipPublished {
         // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the PAC transaction's prerequisites.
+        // which states the register transaction's prerequisites.
         unsafe { self.registers.publish_scheduler_skip(request) }
     }
 
@@ -1974,7 +1996,7 @@ impl ControllerHal<'_> {
         index: BluetoothSchedulerHardwareListIndex,
     ) -> BluetoothSchedulerCancellationIndexed {
         // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the PAC transaction's prerequisites.
+        // which states the register transaction's prerequisites.
         unsafe { self.registers.index_scheduler_cancellation(index) }
     }
 
@@ -2007,8 +2029,8 @@ impl ControllerHal<'_> {
         self.registers.release_scheduler_cancellation(requested)
     }
 
-    /// Publish the synchronous BTMAC scheduler event through the restricted
-    /// PAC after the matching head and dynamic interrupts are prepared.
+    /// Publish the synchronous BTMAC scheduler event through the register
+    /// owner after the matching head and dynamic interrupts are prepared.
     #[doc(hidden)]
     pub(crate) fn publish_scheduler_run_event(
         &mut self,
@@ -2019,7 +2041,7 @@ impl ControllerHal<'_> {
     }
 
     /// Publish the final scheduler hardware RUN command through the
-    /// restricted PAC. The consumed event retains the complete run prologue.
+    /// register owner. The consumed event retains the complete run prologue.
     #[doc(hidden)]
     pub fn publish_scheduler_hardware_run_command(
         &mut self,
@@ -2110,7 +2132,7 @@ impl ControllerHal<'_> {
         request: BluetoothSchedulerLockModifyRequest,
     ) -> BluetoothSchedulerLockModifyPublished {
         // SAFETY: this method forwards the identical descriptor-lifetime and
-        // serialization obligations to the restricted PAC transaction.
+        // serialization obligations to the register transaction.
         unsafe { self.registers.publish_scheduler_lock_modify(request) }
     }
 
@@ -2167,7 +2189,7 @@ mod sealed {
     }
 }
 
-/// Sealed conversion from the exclusive PAC task owner to one finite
+/// Sealed conversion from the exclusive task owner to one finite
 /// controller HAL borrow.
 ///
 /// This conversion proves aliasing only. It deliberately does not manufacture
@@ -2188,7 +2210,7 @@ mod sealed {
 /// ```
 #[doc(hidden)]
 pub trait ControllerHalBorrow: sealed::ControllerHalBorrow {
-    /// Borrow the controller registers without exposing their PAC owner.
+    /// Borrow the controller registers without exposing their register owner.
     fn borrow_bluetooth_controller(&mut self) -> ControllerHal<'_> {
         let owner = sealed::ControllerHalBorrow::bluetooth_task_owner_mut(self);
         owner.reunitable = false;

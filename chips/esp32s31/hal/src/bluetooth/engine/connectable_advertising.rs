@@ -34,7 +34,7 @@ use crate::bluetooth::engine::{
         SchedulerPoolError, SchedulerRoleInstance, SchedulerRoleKind, SchedulerRolePool,
         SchedulerRoleStorage, sealed,
     },
-    sram_link::ControllerSramLinkAddress,
+    sram_link::{ControllerSramLink, SchedulerItemLink},
 };
 
 const LEGACY_ADVERTISING_MAX_PAYLOAD_BYTES: usize = 37;
@@ -200,12 +200,12 @@ impl LinkStateStorage {
     fn initialize(&self, binding: &LegacyConnectableAdvertisingBinding) {
         crate::bluetooth::engine::shared_layout::clear_link_state(&self.layout);
         self.set_scheduler_head(Some(binding.items[0]));
-        self.layout.tx_head().write(BleLinkStateTxHead::from_bits(
-            binding.adv_ind_header.controller_address().address(),
-        ));
-        self.layout.tx_tail().write(BleLinkStateTxTail::from_bits(
-            binding.scan_response_header.controller_address().address(),
-        ));
+        self.layout
+            .tx_head()
+            .write(BleLinkStateTxHead::ZERO.with_address(Some(binding.adv_ind_header.reference())));
+        self.layout.tx_tail().write(
+            BleLinkStateTxTail::ZERO.with_address(Some(binding.scan_response_header.reference())),
+        );
         self.layout
             .sequence_policy()
             .write(LINK_STATE_ALLOCATION_CONFIG_IMAGE);
@@ -257,11 +257,11 @@ impl LinkStateStorage {
         self.layout.scheduler_head().read().bits()
     }
 
-    fn set_scheduler_head(&self, item: Option<ControllerSramLinkAddress>) {
+    fn set_scheduler_head(&self, item: Option<SchedulerItemLink>) {
         self.layout
             .scheduler_head()
             .write(BleLinkStateSchedulerHead::from_bits(
-                item.map_or(0, |item| item.controller_address().address()),
+                item.map_or(0, |item| item.controller_address()),
             ));
     }
 
@@ -285,11 +285,11 @@ impl LinkStateStorage {
         // set without one keeps it empty.
         words.word_04 = words.word_04.with_header(None).expect("empty link fits");
         if scan_response {
-            words.word_04 = words
-                .word_04
-                .with_header_from(BleLinkStateScanResponse::from_bits(
-                    binding.scan_response_header.compressed_image(),
-                ));
+            words.word_04 = words.word_04.with_header_from(
+                BleLinkStateScanResponse::ZERO
+                    .with_header(Some(binding.scan_response_header.reference()))
+                    .expect("a bound link is encodable"),
+            );
         }
         // adv_alloc_rxbuf prepares an empty private RX link before reset.
         // The later memory-manager broker selects the global RX class and
@@ -334,11 +334,11 @@ impl ItemStorage {
         self.layout
             .hardware_next()
             .write(SCHEDULER_ITEM_ALLOCATION_PREFIX);
-        self.layout
-            .context()
-            .write(BleSchedulerItemContext::from_bits(
-                binding.scheduler_context.compressed_image(),
-            ));
+        self.layout.context().write(
+            BleSchedulerItemContext::ZERO
+                .with_address(Some(binding.scheduler_context.reference()))
+                .expect("a bound link is encodable"),
+        );
         self.layout
             .word_001c_opaque()
             .write(SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE);
@@ -348,7 +348,9 @@ impl ItemStorage {
                 binding.number,
             )));
         self.layout.link_state().write(
-            BleSchedulerItemLinkState::from_bits(binding.link_state.compressed_image())
+            BleSchedulerItemLinkState::ZERO
+                .with_address(Some(binding.link_state.reference()))
+                .expect("a bound link is encodable")
                 .with_kind(6)
                 .expect("reviewed role prefix fits"),
         );
@@ -396,11 +398,11 @@ pub struct LegacyConnectableAdvertisingStorage {
 #[doc(hidden)]
 #[derive(Clone, Copy)]
 pub struct LegacyConnectableAdvertisingBinding {
-    link_state: ControllerSramLinkAddress,
-    scheduler_context: ControllerSramLinkAddress,
-    items: [ControllerSramLinkAddress; ITEMS],
-    adv_ind_header: ControllerSramLinkAddress,
-    scan_response_header: ControllerSramLinkAddress,
+    link_state: ControllerSramLink<BleLinkState>,
+    scheduler_context: ControllerSramLink<BleSchedulerContext>,
+    items: [SchedulerItemLink; ITEMS],
+    adv_ind_header: ControllerSramLink<BleBufferHeader>,
+    scan_response_header: ControllerSramLink<BleBufferHeader>,
     adv_ind_packet: AdvertisingTxPacketAddress,
     scan_response_packet: AdvertisingTxPacketAddress,
     number: u16,
@@ -452,18 +454,18 @@ impl SchedulerRoleStorage for LegacyConnectableAdvertisingStorage {
         number: u16,
     ) -> LegacyConnectableAdvertisingBinding {
         LegacyConnectableAdvertisingBinding {
-            link_state: ControllerSramLinkAddress::from_placed(placement.address(&self.link_state)),
-            scheduler_context: ControllerSramLinkAddress::from_placed(
-                placement.address(&self.scheduler_context),
+            link_state: ControllerSramLink::new(placement.reference(&self.link_state.layout)),
+            scheduler_context: ControllerSramLink::new(
+                placement.reference(self.scheduler_context.layout()),
             ),
-            adv_ind_header: ControllerSramLinkAddress::from_placed(
-                placement.address(&self.adv_ind_header),
+            adv_ind_header: ControllerSramLink::new(
+                placement.reference(&self.adv_ind_header.layout),
             ),
-            scan_response_header: ControllerSramLinkAddress::from_placed(
-                placement.address(&self.scan_response_header),
+            scan_response_header: ControllerSramLink::new(
+                placement.reference(&self.scan_response_header.layout),
             ),
             items: core::array::from_fn(|index| {
-                ControllerSramLinkAddress::from_placed(placement.address(&self.items[index]))
+                ControllerSramLink::new(placement.reference(&self.items[index].layout))
             }),
             adv_ind_packet: AdvertisingTxPacketAddress::from_placed(
                 placement,
@@ -481,10 +483,7 @@ impl SchedulerRoleStorage for LegacyConnectableAdvertisingStorage {
         &self.items[item].layout
     }
 
-    fn item_link(
-        binding: &LegacyConnectableAdvertisingBinding,
-        item: usize,
-    ) -> ControllerSramLinkAddress {
+    fn item_link(binding: &LegacyConnectableAdvertisingBinding, item: usize) -> SchedulerItemLink {
         binding.items[item]
     }
 
@@ -573,13 +572,9 @@ impl<'pool, 'epoch, const N: usize> LegacyConnectableAdvertisingPool<'pool, 'epo
             graph
                 .adv_ind_header
                 .initialize_bound_tx_with_successor(cpu.binding.adv_ind_packet, None);
-            graph
-                .link_state
-                .layout
-                .tx_tail()
-                .write(BleLinkStateTxTail::from_bits(
-                    cpu.binding.adv_ind_header.controller_address().address(),
-                ));
+            graph.link_state.layout.tx_tail().write(
+                BleLinkStateTxTail::ZERO.with_address(Some(cpu.binding.adv_ind_header.reference())),
+            );
         }
         graph.link_state.prepare_profile(
             cpu.binding,
@@ -612,8 +607,7 @@ impl<'pool, 'epoch, const N: usize> LegacyConnectableAdvertisingPool<'pool, 'epo
             return Err(LegacyConnectableAdvertisingError::State);
         };
         let graph = &cpu.graph;
-        if graph.link_state.scheduler_head() != cpu.binding.items[0].controller_address().address()
-        {
+        if graph.link_state.scheduler_head() != cpu.binding.items[0].controller_address() {
             return Err(LegacyConnectableAdvertisingError::SchedulerHeadMismatch);
         }
         let mut event = LegacyAdvertisingEvent::empty(image.items().len() as u8);

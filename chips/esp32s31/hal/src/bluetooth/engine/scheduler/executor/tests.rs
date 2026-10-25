@@ -1,8 +1,9 @@
+use crate::bluetooth::engine::sram_link::model_link;
 use core::num::NonZeroU32;
 use std::vec::Vec;
 
 use crate::bluetooth::BluetoothSchedulerBusyObservation;
-use crate::bluetooth::engine::{ControllerSramLinkAddress, SchedulerItemCompletionStatus};
+use crate::bluetooth::engine::{SchedulerItemCompletionStatus, SchedulerItemLink};
 
 use super::{SchedulerExecutor, SchedulerItemAccess, SchedulerSubmitError};
 use crate::bluetooth::engine::scheduler::{
@@ -11,8 +12,8 @@ use crate::bluetooth::engine::scheduler::{
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct Item {
-    next: Option<ControllerSramLinkAddress>,
-    previous: Option<ControllerSramLinkAddress>,
+    next: Option<SchedulerItemLink>,
+    previous: Option<SchedulerItemLink>,
     status: Option<SchedulerItemCompletionStatus>,
     prepared: bool,
     deleted: bool,
@@ -33,7 +34,7 @@ impl Items {
         ));
     }
 
-    fn chain(&self, head: ControllerSramLinkAddress) -> Vec<u8> {
+    fn chain(&self, head: SchedulerItemLink) -> Vec<u8> {
         let mut order = Vec::new();
         let mut cursor = Some(head);
         while let Some(link) = cursor {
@@ -45,27 +46,26 @@ impl Items {
     }
 }
 
-fn link(id: u8) -> ControllerSramLinkAddress {
-    ControllerSramLinkAddress::new(0x2f00_1000 + 0x100 * u32::from(id))
-        .expect("test link is representable")
+fn link(id: u8) -> SchedulerItemLink {
+    model_link(0x2f00_1000 + 0x100 * u32::from(id))
 }
 
-fn id_of(link: ControllerSramLinkAddress) -> u8 {
+fn id_of(link: SchedulerItemLink) -> u8 {
     (0..8)
         .find(|id| self::link(*id) == link)
         .expect("test link names an item")
 }
 
 impl SchedulerItemAccess<u8> for Items {
-    fn link(&self, id: u8) -> ControllerSramLinkAddress {
+    fn link(&self, id: u8) -> SchedulerItemLink {
         link(id)
     }
 
     fn prepare_for_list(
         &mut self,
         id: u8,
-        previous: Option<ControllerSramLinkAddress>,
-        next: Option<ControllerSramLinkAddress>,
+        previous: Option<SchedulerItemLink>,
+        next: Option<SchedulerItemLink>,
     ) {
         self.0[usize::from(id)] = Item {
             next,
@@ -76,11 +76,11 @@ impl SchedulerItemAccess<u8> for Items {
         };
     }
 
-    fn set_next(&mut self, id: u8, next: Option<ControllerSramLinkAddress>) {
+    fn set_next(&mut self, id: u8, next: Option<SchedulerItemLink>) {
         self.0[usize::from(id)].next = next;
     }
 
-    fn set_previous(&mut self, id: u8, previous: Option<ControllerSramLinkAddress>) {
+    fn set_previous(&mut self, id: u8, previous: Option<SchedulerItemLink>) {
         self.0[usize::from(id)].previous = previous;
     }
 
@@ -830,9 +830,9 @@ mod pools {
 
 #[test]
 fn public_step_debug_never_prints_the_physical_actions() {
-    use crate::bluetooth::engine::{ControllerSramLinkAddress, scheduler::SchedulerAction};
-    let a = ControllerSramLinkAddress::new(0x2f00_1000).expect("fixture link");
-    let b = ControllerSramLinkAddress::new(0x2f00_2000).expect("fixture link");
+    use crate::bluetooth::engine::scheduler::SchedulerAction;
+    let a = model_link(0x2f00_1000);
+    let b = model_link(0x2f00_2000);
     let first = super::SchedulerStep::<u8, 1>::new(
         &[SchedulerAction::PublishHead(Some(a))],
         super::SchedulerNext::Finished,

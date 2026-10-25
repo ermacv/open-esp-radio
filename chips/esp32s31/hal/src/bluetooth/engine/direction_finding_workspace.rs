@@ -10,7 +10,7 @@
 
 use core::{marker::PhantomPinned, pin::Pin};
 
-use crate::bluetooth::engine::{ControllerDmaSpace, ControllerSramLinkAddress, Placement};
+use crate::bluetooth::engine::{ControllerDmaSpace, ControllerSramLink, Placement};
 use crate::dma_static::Placed;
 
 use crate::bluetooth::BluetoothControllerReset;
@@ -41,19 +41,20 @@ const _: () = {
 /// access to the allocation nor CTE-register publication authority.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct DirectionFindingWorkspaceLink {
-    link_state_configuration: ControllerSramLinkAddress,
+    link_state_configuration: ControllerSramLink<BleDirectionFindingConfiguration>,
 }
 
 impl DirectionFindingWorkspaceLink {
-    /// Private descriptor projection consumed only by sibling SRAM codecs.
-    pub(crate) const fn compressed_link_state_configuration(self) -> u32 {
-        self.link_state_configuration.compressed_image()
+    /// The configuration a link state's direction-finding word points at,
+    /// consumed only by sibling SRAM codecs.
+    pub(crate) const fn link_state_configuration(self) -> DmaRef<BleDirectionFindingConfiguration> {
+        self.link_state_configuration.reference()
     }
 }
 
 /// Immutable geometry retained with one workspace allocation.
 pub(crate) struct DirectionFindingWorkspaceBinding {
-    link_state_configuration: ControllerSramLinkAddress,
+    link_state_configuration: ControllerSramLink<BleDirectionFindingConfiguration>,
     disabled_cte_descriptor: DmaRef<BleDirectionFindingDescriptor>,
 }
 
@@ -81,10 +82,22 @@ impl DirectionFindingWorkspaceBinding {
         let disabled_cte_descriptor = unsafe {
             crate::bluetooth::engine::layout_reference::controller_reference(descriptor.get())
         };
+        let configuration = placement.address(storage.layout.word_0008_opaque());
+        let configuration =
+            placement.offset(configuration, 0, BleDirectionFindingConfiguration::SIZE);
+        #[allow(
+            unsafe_code,
+            reason = "the reviewed configuration word lies within this placed workspace"
+        )]
+        // SAFETY: the configuration is the workspace's word at +8, a word of
+        // this allocation whose extent was checked above; it has word
+        // alignment. Placed proves placement; the owner retains it for every
+        // epoch a link state may follow it.
+        let link_state_configuration = unsafe {
+            crate::bluetooth::engine::layout_reference::controller_reference(configuration.get())
+        };
         Self {
-            link_state_configuration: ControllerSramLinkAddress::from_placed(
-                placement.address(storage.layout.word_0008_opaque()),
-            ),
+            link_state_configuration: ControllerSramLink::new(link_state_configuration),
             disabled_cte_descriptor,
         }
     }

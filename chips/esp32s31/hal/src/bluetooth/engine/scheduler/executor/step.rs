@@ -1,6 +1,6 @@
 //! Hardware actions, waits and observations shared by the list transactions.
 
-use crate::bluetooth::engine::{ControllerSramLinkAddress, SchedulerItemCompletionStatus};
+use crate::bluetooth::engine::{SchedulerItemCompletionStatus, SchedulerItemLink};
 use crate::bluetooth::{
     BluetoothSchedulerCancellationDisposition, BluetoothSchedulerExecutionLockDisposition,
     BluetoothSchedulerExecutionModifyDisposition, BluetoothSchedulerLockModifyObservation,
@@ -12,7 +12,7 @@ use crate::bluetooth::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SchedulerAction {
     /// Publish the execution lock at this listed item.
-    PublishExecutionLock(ControllerSramLinkAddress),
+    PublishExecutionLock(SchedulerItemLink),
     /// Clear the execution-lock START.
     ReleaseExecutionLock,
     /// Publish execution modify for the list in insertion mode.
@@ -22,9 +22,9 @@ pub(crate) enum SchedulerAction {
     /// Clear the execution-modify START.
     ReleaseExecutionModify,
     /// Publish a lock-modify request for this item.
-    PublishLockModify(ControllerSramLinkAddress),
+    PublishLockModify(SchedulerItemLink),
     /// Publish this item as the list head, or clear the head.
-    PublishHead(Option<ControllerSramLinkAddress>),
+    PublishHead(Option<SchedulerItemLink>),
     /// Publish the list index of the cancellation hold.
     IndexCancellation,
     /// Acknowledge the cancellation interrupt source through the interrupt
@@ -33,7 +33,7 @@ pub(crate) enum SchedulerAction {
     /// Open the cancellation hold.
     RequestCancellation,
     /// Publish a skip request for this detached item.
-    PublishSkip(ControllerSramLinkAddress),
+    PublishSkip(SchedulerItemLink),
     /// Clear the skip request after its terminal observation.
     ClearSkip,
     /// Close the cancellation hold.

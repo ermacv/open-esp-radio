@@ -14,7 +14,7 @@ use core::num::NonZeroU32;
 
 use crate::layouts::*;
 
-use crate::bluetooth::engine::sram_link::ControllerSramLinkAddress;
+use crate::bluetooth::engine::sram_link::ControllerSramLink;
 
 /// Status of an item that hardware has not executed.
 pub const SCHEDULER_ITEM_UNEXECUTED: u32 = u32::MAX;
@@ -52,20 +52,20 @@ impl<'item> SchedulerItemHeader<'item> {
             .write(BleSchedulerItemHardwareNext::from_bits(value));
     }
 
-    /// Compressed hardware next link; zero terminates the list.
-    pub(crate) fn hardware_next_image(&self) -> u32 {
-        self.layout.hardware_next().read().address()
+    /// The address the hardware next link decodes to; `None` terminates the
+    /// list.
+    pub(crate) fn hardware_next_address(&self) -> Option<u32> {
+        self.layout.hardware_next().read().address_address()
     }
 
     /// Link `next` while preserving bits 31:20.
-    pub(crate) fn link_hardware_next(&self, next: Option<ControllerSramLinkAddress>) {
+    pub(crate) fn link_hardware_next(&self, next: Option<ControllerSramLink<BleSchedulerItem>>) {
         let original = self.layout.hardware_next().read();
-        let pointer = BleSchedulerItemHardwareNext::from_bits(
-            next.map_or(0, ControllerSramLinkAddress::compressed_image),
+        self.layout.hardware_next().write(
+            original
+                .with_address(next.map(ControllerSramLink::reference))
+                .expect("a bound link is encodable"),
         );
-        self.layout
-            .hardware_next()
-            .write(original.with_address_from(pointer));
     }
 
     #[cfg(test)]
@@ -159,8 +159,8 @@ impl<'item> SchedulerItemHeader<'item> {
     /// state of `+0x4f`, mark the item unexecuted and install both links.
     pub(crate) fn prepare_for_list(
         &self,
-        previous: Option<ControllerSramLinkAddress>,
-        next: Option<ControllerSramLinkAddress>,
+        previous: Option<ControllerSramLink<BleSchedulerItem>>,
+        next: Option<ControllerSramLink<BleSchedulerItem>>,
     ) {
         self.link_hardware_next(next);
         self.layout
@@ -193,8 +193,11 @@ impl<'item> SchedulerItemHeader<'item> {
     }
 
     /// Store the full address of the previous item, or zero for the head.
-    pub(crate) fn link_previous(&self, previous: Option<ControllerSramLinkAddress>) {
-        self.set_previous(previous.map_or(0, |previous| previous.controller_address().address()));
+    pub(crate) fn link_previous(&self, previous: Option<ControllerSramLink<BleSchedulerItem>>) {
+        self.layout.previous().write(
+            BleSchedulerItemPrevious::ZERO
+                .with_address(previous.map(ControllerSramLink::reference)),
+        );
     }
 
     /// Full address of the previous item; zero when the item is the head.
@@ -203,21 +206,17 @@ impl<'item> SchedulerItemHeader<'item> {
         self.layout.previous().read().bits()
     }
 
-    pub(crate) fn set_previous(&self, address: u32) {
-        self.layout
-            .previous()
-            .write(BleSchedulerItemPrevious::from_bits(address));
-    }
-
     #[cfg(test)]
     pub(crate) fn completion_link(&self) -> u32 {
         self.layout.completion_next().read().bits()
     }
 
-    pub(crate) fn set_completion_link(&self, address: u32) {
-        self.layout
-            .completion_next()
-            .write(BleSchedulerItemCompletionNext::from_bits(address));
+    /// Store the full address of the next completed item, or zero.
+    pub(crate) fn link_completion(&self, next: Option<ControllerSramLink<BleSchedulerItem>>) {
+        self.layout.completion_next().write(
+            BleSchedulerItemCompletionNext::ZERO
+                .with_address(next.map(ControllerSramLink::reference)),
+        );
     }
 }
 

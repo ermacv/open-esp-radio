@@ -2,7 +2,7 @@
 
 #![forbid(unsafe_code)]
 
-use crate::types::BluetoothMemoryListSelector;
+use crate::bluetooth::BluetoothMemoryListSelector;
 
 /// One of the two global RX list classes activated by the current S31 memory
 /// manager.

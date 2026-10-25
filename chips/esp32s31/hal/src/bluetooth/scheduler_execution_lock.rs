@@ -8,7 +8,7 @@
 //! idle or command zero reports its result. The vendor polls inside one
 //! critical section; here every step is finite, sequenced through durable P3 replies, and the caller owns the deadline.
 
-use oer_esp32s31_pac::{
+use crate::bluetooth::registers::{
     BluetoothSchedulerExecutionLockDisposition, BluetoothSchedulerExecutionLockPublished,
     BluetoothSchedulerExecutionLockRequest, BluetoothSchedulerInsertionCommand,
     BluetoothTaskRegisters,

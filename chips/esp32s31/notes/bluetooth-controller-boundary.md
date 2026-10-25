@@ -51,7 +51,7 @@ The same review closes the HAL body's runtime-input question. Complete
 selector in the same internal object, and the complete helper uses that
 selector to scale the two bytes. For the standalone caller the resulting
 hardware images are sleep-timer shift `3`, byte zero `22`, byte one `66` and
-SRAM prefix `0x2f00_0000`. The restricted PAC represents these accepted
+SRAM prefix `0x2f00_0000`. The HAL represents these accepted
 domains directly and executes the complete 49-operation MMIO body. It does
 not reproduce the vendor object layout, task, event primitive or IRQ allocator.
 
@@ -80,8 +80,8 @@ without requesting IRAM placement. The public OSAL installs all three on the
 configured Controller core. The primary setup clears and enables
 baseline groups `0x0000_8000` in bank 0 and `0x0000_1300` in bank 1 before the
 output strobe. Its handler samples masked status; the NRT handler samples its
-dedicated snapshot status. Both acknowledge through the same two W1C clear banks. The restricted
-PAC therefore exposes a transition that stages a single shared register owner
+dedicated snapshot status. Both acknowledge through the same two W1C clear banks. The HAL
+therefore exposes a transition that stages a single shared register owner
 before either CPU route is bound and preserves the distinct snapshot modes.
 
 This closes route identity, level, residency policy, baseline masks and the
@@ -108,7 +108,7 @@ primitives stay crate-private until the staged ISR owner, feature-specific NRT
 policy, typed selector-4/6 actions, open completion queue and lost-wake-safe
 waker can make a lossless live epoch. The
 baseline groups are classified by the complete
-source-124 prefix proves four fault/assert lanes, and the restricted PAC
+source-124 prefix proves four fault/assert lanes, and the HAL
 performs their conditional diagnostic reads at the reviewed temporal points
 without exporting the opaque words. Bluetooth policy then selects fail-stop
 over any simultaneous scheduler wake.
@@ -231,7 +231,8 @@ those adapters.
 The ownership direction is:
 
 ```text
-SVD / restricted PAC
+SVD / generated PAC blocks
+  -> HAL register owners over their field accessors
   -> shared clock, reset, PHY and BTBB leases
   -> BLE Controller HAL: primary/timer/NRT IRQs + scheduler + packet memory + radio command
   -> Lower Link Layer (hard-deadline radio-event engine)

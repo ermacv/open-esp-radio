@@ -36,7 +36,7 @@ fn published_entries_retain_device_identity_and_address_type() {
     assert!(entry(&table, 1).flags_and_address.random());
     let publication = table.publication();
     assert_eq!(publication.first_entry().bits(), 0x2f07_e508);
-    assert_eq!(publication.count().get(), 2);
+    assert_eq!(publication.count(), 2);
 }
 
 #[test]
@@ -52,8 +52,8 @@ fn a_device_is_added_once_and_the_list_is_bounded() {
     }
     assert_eq!(table.add(RANDOM_DEVICE), Err(LeDeviceTableError::Full));
     assert_eq!(
-        table.publication().count().get(),
-        BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY as u32
+        table.publication().count(),
+        BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY as u8
     );
 }
 
@@ -70,5 +70,5 @@ fn removal_keeps_the_members_packed_and_clear_empties_the_table() {
     table.clear();
     assert!(table.is_empty());
     assert_eq!(entry(&table, 0), DeviceEntryImage::ZERO);
-    assert_eq!(table.publication().count().get(), 0);
+    assert_eq!(table.publication().count(), 0);
 }

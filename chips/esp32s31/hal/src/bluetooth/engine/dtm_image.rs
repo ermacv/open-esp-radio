@@ -11,7 +11,7 @@
 use crate::layouts::*;
 
 use crate::bluetooth::engine::{
-    ControllerSramLinkAddress,
+    ControllerSramLink,
     le_phy_packet::{LeAccessAddress, LeCrcInit},
     le_tx_power::LeTxPower,
 };
@@ -25,8 +25,12 @@ use crate::bluetooth::engine::{
 pub struct DtmTxHeaderHeadProjection(BleLinkStateTxPath);
 
 impl DtmTxHeaderHeadProjection {
-    pub(super) const fn from_bound(address: ControllerSramLinkAddress) -> Self {
-        Self(BleLinkStateTxPath::from_bits(address.compressed_image()))
+    pub(super) const fn from_bound(address: ControllerSramLink<BleBufferHeader>) -> Self {
+        Self(
+            BleLinkStateTxPath::ZERO
+                .with_header(Some(address.reference()))
+                .expect("a bound link is encodable"),
+        )
     }
     const fn from_link_state_word(word: BleLinkStateTxPath) -> Self {
         Self(BleLinkStateTxPath::from_bits(word.header()))
@@ -45,8 +49,12 @@ impl DtmTxHeaderHeadProjection {
 pub struct DtmRxHeaderTailProjection(BleLinkStateRxPath);
 
 impl DtmRxHeaderTailProjection {
-    pub(super) const fn from_bound(address: ControllerSramLinkAddress) -> Self {
-        Self(BleLinkStateRxPath::from_bits(address.compressed_image()))
+    pub(super) const fn from_bound(address: ControllerSramLink<BleBufferHeader>) -> Self {
+        Self(
+            BleLinkStateRxPath::ZERO
+                .with_header(Some(address.reference()))
+                .expect("a bound link is encodable"),
+        )
     }
     const fn from_link_state_word(word: BleLinkStateRxPath) -> Self {
         Self(BleLinkStateRxPath::from_bits(word.header()))
@@ -396,9 +404,9 @@ impl DtmPositionalEventWords {
 
     pub(super) const fn scheduler_item_retains_link_state(
         self,
-        link_state: ControllerSramLinkAddress,
+        link_state: ControllerSramLink<BleLinkState>,
     ) -> bool {
-        self.scheduler_item.word_08.address() == link_state.compressed_image()
+        link_state.is(self.scheduler_item.word_08.address_address())
     }
 }
 

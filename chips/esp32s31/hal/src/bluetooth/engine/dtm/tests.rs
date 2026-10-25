@@ -68,10 +68,10 @@ fn return_packet(
 ) {
     let (graph, binding, _) = pool.shared(instance).unwrap();
     let tail = graph.link_state.layout.rx_tail().read().bits();
-    let header = if tail == binding.rx_header.controller_address().address() {
+    let header = if tail == binding.rx_header.controller_address() {
         &graph.rx_header
     } else {
-        assert_eq!(tail, binding.rx_swap_reserve.controller_address().address());
+        assert_eq!(tail, binding.rx_swap_reserve.controller_address());
         &graph.rx_swap_reserve
     };
     header.model_controller_completion_observed();

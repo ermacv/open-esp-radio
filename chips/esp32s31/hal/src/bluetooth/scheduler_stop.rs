@@ -8,11 +8,11 @@
 use super::engine::scheduler::interrupt::{
     SchedulerDoorbell, SchedulerInterruptError, SchedulerTaskHalf,
 };
-use core::task::{Context, Poll, ready};
 #[cfg(feature = "bluetooth-engine")]
-use oer_esp32s31_pac::{
+use crate::bluetooth::registers::{
     BluetoothSchedulerBusyObservation, BluetoothSchedulerStopped, BluetoothTaskRegisters,
 };
+use core::task::{Context, Poll, ready};
 #[cfg(test)]
 use oer_time::settle::Unsettled;
 

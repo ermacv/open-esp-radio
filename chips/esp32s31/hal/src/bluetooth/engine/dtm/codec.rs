@@ -14,10 +14,8 @@ use crate::bluetooth::engine::{
     },
     scheduler_context::SchedulerContextStorage,
     scheduler_item::{SchedulerItemCompletionStatus, SchedulerItemHeader},
-    sram_link::ControllerSramLinkAddress,
+    sram_link::{ControllerSramLink, SchedulerItemLink},
 };
-
-use crate::types::BluetoothControllerSramAddress;
 
 use super::{
     DtmExecutedWitness, DtmPositionalEventSeed, DtmPrepareError, DtmRxRotationError,
@@ -82,9 +80,8 @@ impl DtmRxPacketAddress {
         Self { base }
     }
 
-    const fn compressed_image(self) -> u32 {
-        ble_word_index(self.base.get())
-            .expect("a placed DTM RX packet has a nonzero encodable address")
+    const fn address(self) -> u32 {
+        self.base.get()
     }
 }
 
@@ -262,22 +259,27 @@ impl DtmRxBufferHeaderStorage {
         DTM_RX_HEADER.write(&self.layout);
     }
     fn rx_successor_link(&self) -> Option<DtmRxHeaderSuccessorLink> {
-        DtmRxHeaderSuccessorLink::from_image(self.layout.next().read().address())
-    }
-    fn set_rx_successor_link(&self, link: Option<DtmRxHeaderSuccessorLink>) {
         self.layout
             .next()
-            .write(
-                self.layout
-                    .next()
-                    .read()
-                    .with_address_from(BleBufferHeaderNext::from_bits(
-                        link.map_or(0, DtmRxHeaderSuccessorLink::image),
-                    )),
-            );
+            .read()
+            .address_address()
+            .map(DtmRxHeaderSuccessorLink)
+    }
+    fn set_rx_successor_link(&self, link: Option<ControllerSramLink<BleBufferHeader>>) {
+        self.layout.next().write(
+            self.layout
+                .next()
+                .read()
+                .with_address(link.map(ControllerSramLink::reference))
+                .expect("a bound link is encodable"),
+        );
     }
     fn rx_packet_link(&self) -> Option<DtmRxPacketLink> {
-        DtmRxPacketLink::from_image(self.layout.packet_base().read().address())
+        self.layout
+            .packet_base()
+            .read()
+            .address_address()
+            .map(DtmRxPacketLink)
     }
     fn clear_rx_packet_link(&self) {
         self.layout
@@ -306,12 +308,10 @@ impl DtmRxBufferHeaderStorage {
     fn rx_backlink(&self) -> Option<DtmRxHeaderBacklink> {
         DtmRxHeaderBacklink::from_address(self.layout.previous().read().address())
     }
-    fn set_rx_backlink(&self, backlink: Option<DtmRxHeaderBacklink>) {
-        self.layout
-            .previous()
-            .write(BleBufferHeaderPrevious::from_bits(
-                backlink.map_or(0, DtmRxHeaderBacklink::address),
-            ));
+    fn set_rx_backlink(&self, backlink: Option<ControllerSramLink<BleBufferHeader>>) {
+        self.layout.previous().write(
+            BleBufferHeaderPrevious::ZERO.with_address(backlink.map(ControllerSramLink::reference)),
+        );
     }
     fn copy_complete_rx_image_from(&self, source: &Self) {
         crate::bluetooth::engine::shared_layout::copy_buffer_header(&self.layout, &source.layout);
@@ -328,33 +328,23 @@ impl DtmRxBufferHeaderStorage {
     }
 }
 
+/// The address a header's successor link decodes to.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct DtmRxHeaderSuccessorLink(u32);
 
 impl DtmRxHeaderSuccessorLink {
-    fn from_image(image: u32) -> Option<Self> {
-        (image != 0).then_some(Self(image))
-    }
-
-    const fn from_bound(address: ControllerSramLinkAddress) -> Self {
-        Self(address.compressed_image())
-    }
-
-    const fn image(self) -> u32 {
-        self.0
+    const fn from_bound(link: ControllerSramLink<BleBufferHeader>) -> Self {
+        Self(link.controller_address())
     }
 }
 
+/// The address a header's packet link decodes to.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct DtmRxPacketLink(u32);
 
 impl DtmRxPacketLink {
-    fn from_image(image: u32) -> Option<Self> {
-        (image != 0).then_some(Self(image))
-    }
-
     const fn from_bound(packet: DtmRxPacketAddress) -> Self {
-        Self(packet.compressed_image())
+        Self(packet.address())
     }
 }
 
@@ -366,8 +356,8 @@ impl DtmRxHeaderBacklink {
         (address != 0).then_some(Self(address))
     }
 
-    const fn bound(address: BluetoothControllerSramAddress) -> Self {
-        Self(address.address())
+    const fn bound(link: ControllerSramLink<BleBufferHeader>) -> Self {
+        Self(link.controller_address())
     }
 
     const fn address(self) -> u32 {
@@ -464,12 +454,12 @@ pub struct DtmStorage {
 #[doc(hidden)]
 #[derive(Clone, Copy)]
 pub struct DtmBinding {
-    link_state: ControllerSramLinkAddress,
-    scheduler_context: ControllerSramLinkAddress,
-    scheduler_item: ControllerSramLinkAddress,
-    pub(super) rx_header: ControllerSramLinkAddress,
-    pub(super) rx_swap_reserve: ControllerSramLinkAddress,
-    tx_header: ControllerSramLinkAddress,
+    link_state: ControllerSramLink<BleLinkState>,
+    scheduler_context: ControllerSramLink<BleSchedulerContext>,
+    scheduler_item: SchedulerItemLink,
+    pub(super) rx_header: ControllerSramLink<BleBufferHeader>,
+    pub(super) rx_swap_reserve: ControllerSramLink<BleBufferHeader>,
+    tx_header: ControllerSramLink<BleBufferHeader>,
     pub(super) tx_packet: DtmTxPacketAddress,
     pub(super) rx_packet: DtmRxPacketAddress,
     number: u16,
@@ -481,21 +471,26 @@ impl DtmBinding {
         placement: &crate::bluetooth::engine::Placement<S>,
         number: u16,
     ) -> Self {
-        let link = |address| ControllerSramLinkAddress::from_placed(address);
         Self {
-            link_state: link(placement.address(&storage.link_state)),
-            scheduler_context: link(placement.address(&storage.scheduler_context)),
-            scheduler_item: link(placement.address(&storage.scheduler_item)),
-            rx_header: link(placement.address(&storage.rx_header)),
-            rx_swap_reserve: link(placement.address(&storage.rx_swap_reserve)),
-            tx_header: link(placement.address(&storage.tx_header)),
+            link_state: ControllerSramLink::new(placement.reference(&storage.link_state.layout)),
+            scheduler_context: ControllerSramLink::new(
+                placement.reference(storage.scheduler_context.layout()),
+            ),
+            scheduler_item: ControllerSramLink::new(
+                placement.reference(&storage.scheduler_item.layout),
+            ),
+            rx_header: ControllerSramLink::new(placement.reference(&storage.rx_header.layout)),
+            rx_swap_reserve: ControllerSramLink::new(
+                placement.reference(&storage.rx_swap_reserve.layout),
+            ),
+            tx_header: ControllerSramLink::new(placement.reference(&storage.tx_header.layout)),
             tx_packet: DtmTxPacketAddress::from_placed(placement, &storage.tx_packet),
             rx_packet: DtmRxPacketAddress::from_placed(placement.address(&storage.rx_packet)),
             number,
         }
     }
 
-    pub(super) const fn scheduler_item_address(&self) -> ControllerSramLinkAddress {
+    pub(super) const fn scheduler_item_address(&self) -> SchedulerItemLink {
         self.scheduler_item
     }
 }
@@ -554,11 +549,9 @@ impl DtmStorage {
     }
 
     pub(super) fn initialize_reviewed_allocation(&mut self, binding: &DtmBinding) {
-        let link_state = binding.link_state.compressed_image();
-        let scheduler_context = binding.scheduler_context.compressed_image();
-        let rx_header_address = binding.rx_header.controller_address().address();
-        let rx_swap_address = binding.rx_swap_reserve.controller_address().address();
-        let tx_header_address = binding.tx_header.controller_address().address();
+        let rx_header = Some(binding.rx_header.reference());
+        let rx_swap = Some(binding.rx_swap_reserve.reference());
+        let tx_header = Some(binding.tx_header.reference());
 
         let storage = self;
         storage.link_state.clear();
@@ -575,27 +568,27 @@ impl DtmStorage {
             .link_state
             .layout
             .rx_head()
-            .write(BleLinkStateRxHead::from_bits(rx_header_address));
+            .write(BleLinkStateRxHead::ZERO.with_address(rx_header));
         storage
             .link_state
             .layout
             .tx_head()
-            .write(BleLinkStateTxHead::from_bits(tx_header_address));
+            .write(BleLinkStateTxHead::ZERO.with_address(tx_header));
         storage
             .link_state
             .layout
             .rx_tail()
-            .write(BleLinkStateRxTail::from_bits(rx_header_address));
+            .write(BleLinkStateRxTail::ZERO.with_address(rx_header));
         storage
             .link_state
             .layout
             .tx_tail()
-            .write(BleLinkStateTxTail::from_bits(tx_header_address));
+            .write(BleLinkStateTxTail::ZERO.with_address(tx_header));
         storage
             .link_state
             .layout
             .rx_reserve()
-            .write(BleLinkStateRxReserve::from_bits(rx_swap_address));
+            .write(BleLinkStateRxReserve::ZERO.with_address(rx_swap));
         storage
             .link_state
             .layout
@@ -606,16 +599,16 @@ impl DtmStorage {
             .layout
             .hardware_next()
             .write(SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE);
-        storage
-            .scheduler_item
-            .layout
-            .context()
-            .write(BleSchedulerItemContext::from_bits(scheduler_context));
-        storage
-            .scheduler_item
-            .layout
-            .link_state()
-            .write(BleSchedulerItemLinkState::from_bits(link_state));
+        storage.scheduler_item.layout.context().write(
+            BleSchedulerItemContext::ZERO
+                .with_address(Some(binding.scheduler_context.reference()))
+                .expect("a bound link is encodable"),
+        );
+        storage.scheduler_item.layout.link_state().write(
+            BleSchedulerItemLinkState::ZERO
+                .with_address(Some(binding.link_state.reference()))
+                .expect("a bound link is encodable"),
+        );
         storage
             .scheduler_item
             .layout
@@ -652,7 +645,7 @@ impl DtmStorage {
 
     pub(super) fn commit_scheduler_recycle(&mut self) {
         let scheduler_item = &self.scheduler_item;
-        scheduler_item.header().set_completion_link(0);
+        scheduler_item.header().link_completion(None);
         let _ = scheduler_item.terminate_hardware_chain();
     }
 
@@ -682,9 +675,10 @@ impl DtmStorage {
         let previous = self.reviewed_event_words();
         let tx_head_address = self.link_state.layout.tx_head().read().bits();
         let rx_tail_address = self.link_state.layout.rx_tail().read().bits();
-        let tx_head = ControllerSramLinkAddress::new(tx_head_address)
-            .map_err(|_| DtmPrepareError::CurrentTxHeadUnbound)?;
-        if tx_head != binding.tx_header {
+        if ble_word_index(tx_head_address).is_none() {
+            return Err(DtmPrepareError::CurrentTxHeadUnbound);
+        }
+        if !binding.tx_header.is(Some(tx_head_address)) {
             return Err(DtmPrepareError::CurrentTxHeadIdentityMismatch);
         }
         if self.tx_header.packet_base_link() != Some(binding.tx_packet.base_link()) {
@@ -696,15 +690,17 @@ impl DtmStorage {
         if !self.tx_header.retains_allocation_extent(binding.tx_packet) {
             return Err(DtmPrepareError::CurrentTxHeaderAllocationExtentMismatch);
         }
-        let rx_tail = ControllerSramLinkAddress::new(rx_tail_address)
-            .map_err(|_| DtmPrepareError::CurrentRxTailUnbound)?;
-        if rx_tail != binding.rx_header && rx_tail != binding.rx_swap_reserve {
+        if ble_word_index(rx_tail_address).is_none() {
+            return Err(DtmPrepareError::CurrentRxTailUnbound);
+        }
+        let rx_tail = Some(rx_tail_address);
+        if !binding.rx_header.is(rx_tail) && !binding.rx_swap_reserve.is(rx_tail) {
             return Err(DtmPrepareError::CurrentRxTailIdentityMismatch);
         }
-        let selected_rx_tail = if rx_tail == binding.rx_header {
-            &self.rx_header
+        let (selected_rx_tail, rx_tail) = if binding.rx_header.is(rx_tail) {
+            (&self.rx_header, binding.rx_header)
         } else {
-            &self.rx_swap_reserve
+            (&self.rx_swap_reserve, binding.rx_swap_reserve)
         };
         if selected_rx_tail.rx_packet_link() != Some(DtmRxPacketLink::from_bound(binding.rx_packet))
         {
@@ -712,7 +708,7 @@ impl DtmStorage {
         }
         Ok(DtmPositionalEventSeed {
             words: previous,
-            tx_header_head: DtmTxHeaderHeadProjection::from_bound(tx_head),
+            tx_header_head: DtmTxHeaderHeadProjection::from_bound(binding.tx_header),
             rx_header_tail: DtmRxHeaderTailProjection::from_bound(rx_tail),
         })
     }
@@ -761,8 +757,8 @@ impl DtmStorage {
         if status != DtmSchedulerItemCompletionStatus::Zero {
             return Err(DtmRxRotationError::CompletionStatusMismatch);
         }
-        let primary_address = binding.rx_header.controller_address().address();
-        let swap_address = binding.rx_swap_reserve.controller_address().address();
+        let primary_address = binding.rx_header.controller_address();
+        let swap_address = binding.rx_swap_reserve.controller_address();
         let slot = |address| {
             if address == primary_address {
                 Some(DtmRxHeaderSlot::Primary)
@@ -786,12 +782,8 @@ impl DtmStorage {
             DtmRxHeaderSlot::Swap => DtmRxHeaderSuccessorLink::from_bound(binding.rx_swap_reserve),
         };
         let backlink = |slot| match slot {
-            DtmRxHeaderSlot::Primary => {
-                DtmRxHeaderBacklink::bound(binding.rx_header.controller_address())
-            }
-            DtmRxHeaderSlot::Swap => {
-                DtmRxHeaderBacklink::bound(binding.rx_swap_reserve.controller_address())
-            }
+            DtmRxHeaderSlot::Primary => DtmRxHeaderBacklink::bound(binding.rx_header),
+            DtmRxHeaderSlot::Swap => DtmRxHeaderBacklink::bound(binding.rx_swap_reserve),
         };
 
         let (returned, copy_target, steady) = if head == tail {
@@ -892,38 +884,25 @@ impl DtmStorage {
                     DtmRxHeaderSlot::Primary => primary,
                     DtmRxHeaderSlot::Swap => swap,
                 };
-                let address = |slot| match slot {
-                    DtmRxHeaderSlot::Primary => binding.rx_header.controller_address().address(),
-                    DtmRxHeaderSlot::Swap => binding.rx_swap_reserve.controller_address().address(),
+                let link = |slot| match slot {
+                    DtmRxHeaderSlot::Primary => binding.rx_header,
+                    DtmRxHeaderSlot::Swap => binding.rx_swap_reserve,
                 };
-                let copy_link = match copy_target {
-                    DtmRxHeaderSlot::Primary => {
-                        DtmRxHeaderSuccessorLink::from_bound(binding.rx_header)
-                    }
-                    DtmRxHeaderSlot::Swap => {
-                        DtmRxHeaderSuccessorLink::from_bound(binding.rx_swap_reserve)
-                    }
-                };
-                let returned_backlink = match returned {
-                    DtmRxHeaderSlot::Primary => {
-                        DtmRxHeaderBacklink::bound(binding.rx_header.controller_address())
-                    }
-                    DtmRxHeaderSlot::Swap => {
-                        DtmRxHeaderBacklink::bound(binding.rx_swap_reserve.controller_address())
-                    }
-                };
+                let address = |slot| Some(link(slot).reference());
+                let copy_link = link(copy_target);
+                let returned_backlink = link(returned);
 
                 if steady {
                     storage
                         .link_state
                         .layout
                         .rx_reserve()
-                        .write(BleLinkStateRxReserve::from_bits(address(copy_target)));
+                        .write(BleLinkStateRxReserve::ZERO.with_address(address(copy_target)));
                     storage
                         .link_state
                         .layout
                         .rx_head()
-                        .write(BleLinkStateRxHead::from_bits(address(returned)));
+                        .write(BleLinkStateRxHead::ZERO.with_address(address(returned)));
                     returned_header.set_rx_backlink(None);
                 }
                 returned_header.set_rx_software_terminal(false);
@@ -933,7 +912,7 @@ impl DtmStorage {
                     .link_state
                     .layout
                     .rx_reserve()
-                    .write(BleLinkStateRxReserve::from_bits(0));
+                    .write(BleLinkStateRxReserve::ZERO.with_address(None));
                 copy_header.set_rx_backlink(None);
                 storage.rx_packet.rearm_reviewed_packet_fields();
                 copy_header.clear_rx_completion_observation();
@@ -944,7 +923,7 @@ impl DtmStorage {
                     .link_state
                     .layout
                     .rx_tail()
-                    .write(BleLinkStateRxTail::from_bits(address(copy_target)));
+                    .write(BleLinkStateRxTail::ZERO.with_address(address(copy_target)));
                 returned_header.set_rx_software_terminal(true);
                 copy_header.set_rx_backlink(Some(returned_backlink));
             }

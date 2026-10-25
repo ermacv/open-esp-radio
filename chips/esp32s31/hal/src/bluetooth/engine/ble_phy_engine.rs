@@ -224,7 +224,7 @@ impl BlePhyEngineCpuOwned {
         // resolving list, and both are `VolatileCell` arrays the CPU reaches
         // only through volatile accesses.
         unsafe {
-            let inputs = crate::types::BluetoothPhyRegisterInitInputs::normal_controller_profile(
+            let inputs = crate::bluetooth::registers::BluetoothPhyRegisterInitInputs::normal_controller_profile(
                 self.binding.environment_address(),
                 self.binding.resolving_list_address(),
             );
