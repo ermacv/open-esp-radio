@@ -1,29 +1,5 @@
-# The review of every function the staged images of the Espressif chips link
-# without a compiler frame record: the staged runtime's assembly and the
-# pinned esp-hal and riscv-rt entries. Each chip's stack policy
-# (`chips/<chip>/platform/stack.toml`) names this file. A symbol need not be
-# linked by every image, but a symbol no HIL image of any chip sharing this
-# file links without a frame record is stale: `cargo hil images check --all`
-# fails on it.
+# Assembly entries owned by the staged platform. Each chip stack policy names this file.
 schema = 1
-
-[[reviewed]]
-symbols = ["esp_hal::interrupt::__rtos_implementation::local::stub"]
-category = "assembly"
-source = "esp-hal@1f646c5 esp-hal/src/interrupt/__rtos_implementation.rs local::stub #[naked]"
-reason = "Naked context-switch stub retained by esp-hal initialization on ESP32-C5. The staged runtime replaces its vector with the SRAM stack-switching entries and uses its own executor, so the stub is not dispatched. No compiler frame or call-chain bound is claimed."
-
-[[reviewed]]
-symbols = ["_mtvt_table", "_runtime_mtvt", "_mtvt_table2", "_vector_table"]
-category = "vector-data"
-source = "chips/espressif/staged-runtime/src/vectors.s; esp-hal@1f646c5 esp-hal/src/interrupt/riscv/clic.rs and esp-riscv-rt/src/lib.rs"
-reason = "Dispatch tables emitted as text symbols, not compiler-generated function bodies. The interrupt-stack gate bounds what they dispatch to."
-
-[[reviewed]]
-symbols = ["Trap1", "Trap2", "Trap3", "Trap4", "Trap5", "Trap6", "Trap7", "Trap8", "Trap9", "Trap10", "Trap11", "Trap12", "Trap13", "Trap14", "Trap15", "Trap16", "Trap17", "Trap18", "Trap19", "Trap20", "Trap21", "Trap22", "Trap23", "Trap24", "Trap25", "Trap26", "Trap27", "Trap28", "Trap29", "Trap30", "Trap31", "Trap32", "Trap33", "Trap34", "Trap35", "Trap36", "Trap37", "Trap38", "Trap39", "Trap40", "Trap41", "Trap42", "Trap43", "Trap44", "Trap45", "Trap46", "Trap47"]
-category = "assembly"
-source = "esp-hal@1f646c5 esp-riscv-rt/src/lib.rs define_interrupt! naked_asm entries"
-reason = "Assembly dispatch entries have no compiler frame record; the interrupt-stack gate bounds them from their machine code. Exact names exclude arbitrary unmeasured functions."
 
 [[reviewed]]
 symbols = ["_runtime_irq_h0_l1", "_runtime_irq_h0_l2", "_runtime_irq_h0_l3", "_runtime_irq_h0_l4", "_runtime_irq_h0_l5", "_runtime_irq_h0_l6", "_runtime_irq_h0_l7", "_runtime_irq_h0_l8", "_runtime_irq_h0_l9", "_runtime_irq_h0_l10", "_runtime_irq_h0_l11", "_runtime_irq_h0_l12", "_runtime_irq_h0_l13", "_runtime_irq_h0_l14", "_runtime_irq_h0_l15", "_runtime_irq_h0_l16", "_runtime_irq_h0_l17", "_runtime_irq_h0_l18", "_runtime_irq_h0_l19", "_runtime_irq_h0_l20", "_runtime_irq_h0_l21", "_runtime_irq_h0_l22", "_runtime_irq_h0_l23", "_runtime_irq_h0_l24", "_runtime_irq_h0_l25", "_runtime_irq_h0_l26", "_runtime_irq_h0_l27", "_runtime_irq_h0_l28", "_runtime_irq_h0_l29", "_runtime_irq_h0_l30", "_runtime_irq_h0_l31", "_runtime_irq_h0_l32", "_runtime_irq_h0_l33", "_runtime_irq_h0_l34", "_runtime_irq_h0_l35", "_runtime_irq_h0_l36", "_runtime_irq_h0_l37", "_runtime_irq_h0_l38", "_runtime_irq_h0_l39", "_runtime_irq_h0_l40", "_runtime_irq_h0_l41", "_runtime_irq_h0_l42", "_runtime_irq_h0_l43", "_runtime_irq_h0_l44", "_runtime_irq_h0_l45", "_runtime_irq_h0_l46", "_runtime_irq_h0_l47", "_runtime_irq_h1_l1", "_runtime_irq_h1_l2", "_runtime_irq_h1_l3", "_runtime_irq_h1_l4", "_runtime_irq_h1_l5", "_runtime_irq_h1_l6", "_runtime_irq_h1_l7", "_runtime_irq_h1_l8", "_runtime_irq_h1_l9", "_runtime_irq_h1_l10", "_runtime_irq_h1_l11", "_runtime_irq_h1_l12", "_runtime_irq_h1_l13", "_runtime_irq_h1_l14", "_runtime_irq_h1_l15", "_runtime_irq_h1_l16", "_runtime_irq_h1_l17", "_runtime_irq_h1_l18", "_runtime_irq_h1_l19", "_runtime_irq_h1_l20", "_runtime_irq_h1_l21", "_runtime_irq_h1_l22", "_runtime_irq_h1_l23", "_runtime_irq_h1_l24", "_runtime_irq_h1_l25", "_runtime_irq_h1_l26", "_runtime_irq_h1_l27", "_runtime_irq_h1_l28", "_runtime_irq_h1_l29", "_runtime_irq_h1_l30", "_runtime_irq_h1_l31", "_runtime_irq_h1_l32", "_runtime_irq_h1_l33", "_runtime_irq_h1_l34", "_runtime_irq_h1_l35", "_runtime_irq_h1_l36", "_runtime_irq_h1_l37", "_runtime_irq_h1_l38", "_runtime_irq_h1_l39", "_runtime_irq_h1_l40", "_runtime_irq_h1_l41", "_runtime_irq_h1_l42", "_runtime_irq_h1_l43", "_runtime_irq_h1_l44", "_runtime_irq_h1_l45", "_runtime_irq_h1_l46", "_runtime_irq_h1_l47", "_runtime_irq_exit", "_runtime_stack_bootstrap", "_start_trap"]
@@ -44,19 +20,19 @@ source = "rustc 1.97.1 library/compiler-builtins/compiler-builtins/src/mem/mod.r
 reason = "Pinned compiler memory builtin wrapper lacks emitted frame metadata in the final image. Review does not assign zero usage; runtime stack headroom remains independent."
 
 [[reviewed]]
-symbols = ["_start_Trap1_trap", "_start_Trap2_trap", "_start_Trap3_trap", "_start_Trap4_trap", "_start_Trap5_trap", "_start_Trap6_trap", "_start_Trap7_trap", "_start_Trap8_trap", "_start_Trap9_trap", "_start_Trap10_trap", "_start_Trap11_trap", "_start_Trap12_trap", "_start_Trap13_trap", "_start_Trap14_trap", "_start_Trap15_trap", "_start_Trap16_trap", "_start_Trap17_trap", "_start_Trap18_trap", "_start_Trap19_trap", "_start_Trap20_trap", "_start_Trap21_trap", "_start_Trap22_trap", "_start_Trap23_trap", "_start_Trap24_trap", "_start_Trap25_trap", "_start_Trap26_trap", "_start_Trap27_trap", "_start_Trap28_trap", "_start_Trap29_trap", "_start_Trap30_trap", "_start_Trap31_trap", "_start_Trap32_trap", "_start_Trap33_trap", "_start_Trap34_trap", "_start_Trap35_trap", "_start_Trap36_trap", "_start_Trap37_trap", "_start_Trap38_trap", "_start_Trap39_trap", "_start_Trap40_trap", "_start_Trap41_trap", "_start_Trap42_trap", "_start_Trap43_trap", "_start_Trap44_trap", "_start_Trap45_trap", "_start_Trap46_trap", "_start_Trap47_trap", "_start_DefaultHandler_trap", "_continue_interrupt_trap", "_pre_default_start_trap", "_pre_default_start_trap_ret", "_default_start_trap"]
+symbols = ["_start", "_bootstrap_trap", "_bootstrap_enable_fpu"]
 category = "assembly"
-source = "esp-hal@1f646c5 esp-riscv-rt/src/lib.rs define_interrupt! and trap entry global_asm; esp-hal/ld/riscv/hal-defaults.x PROVIDE(_start_DefaultHandler_trap = _start_trap)"
-reason = "Untyped global labels of the pinned esp-riscv-rt trap entries, functions in the stack analysis's inventory without a compiler frame record. The interrupt-stack gate bounds the entries from their machine code; no frame size is claimed."
+source = "chips/espressif/staged-bootstrap/src/entry.rs"
+reason = "Reset installs the stack, clears BSS and enters bootstrap_main. The trap stops the hart; no compiler frame is claimed."
 
 [[reviewed]]
-symbols = ["_start", "__pre_init", "_default_abort", "abort", "_pre_init_trap", "ExceptionHandler"]
-category = "assembly"
-source = "riscv-rt 0.16.0 src/asm.rs _start and _default_abort; esp-hal@1f646c5 esp-riscv-rt/src/lib.rs __pre_init; esp-hal/ld/riscv/hal-defaults.x PROVIDE aliases of _default_abort"
-reason = "Reset entry, pre-init hook and the abort loop of the pinned runtime crates, written in assembly; abort, _pre_init_trap and ExceptionHandler are linker aliases of the loop. No frame size is claimed."
+symbols = ["_runtime_mtvt"]
+category = "vector-data"
+source = "chips/espressif/staged-runtime/src/vectors.s"
+reason = "The staged runtime's own dispatch table is data, not a compiler-generated function. The interrupt-stack gate bounds its handlers."
 
 [[reviewed]]
 symbols = ["_trap_section_origin", "_rwtext_start"]
 category = "linker-label"
-source = "esp-hal@1f646c5 esp-hal/ld/sections/rwtext.x"
-reason = "Section boundaries the bootstrap's linker script defines at the start of `.trap` and `.rwtext`: no code of their own, so no frame is claimed; the code they precede is analysed under its own symbols."
+source = "chips/espressif/staged-layout/linker/bootstrap/sections.x"
+reason = "Bootstrap SRAM section boundaries contain no instructions of their own. The code they precede is analysed under its own symbols."

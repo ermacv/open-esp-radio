@@ -175,9 +175,9 @@ mod chip {
     pub fn add_wait(executor: usize) {
         let counter = &IDLE.0[executor];
         counter.waiting.store(true, Ordering::Release);
-        let before = riscv::register::mcycle::read64();
+        let before = oer_riscv::cycle64();
         crate::chip::wait_for_interrupt();
-        let after = riscv::register::mcycle::read64();
+        let after = oer_riscv::cycle64();
         // Cleared before the update, so a sampler that sees the wait
         // always sees the update that ends it.
         counter.waiting.store(false, Ordering::Release);
@@ -224,7 +224,7 @@ mod chip {
         pub fn begin() -> Self {
             let start = sample();
             Self {
-                started_cycle: riscv::register::mcycle::read64(),
+                started_cycle: oer_riscv::cycle64(),
                 start,
                 _local: PhantomData,
             }
@@ -232,7 +232,7 @@ mod chip {
 
         /// Close the window now.
         pub fn finish(self) -> Report {
-            let ended_cycle = riscv::register::mcycle::read64();
+            let ended_cycle = oer_riscv::cycle64();
             Report::between(self.started_cycle, self.start, ended_cycle, sample())
         }
     }

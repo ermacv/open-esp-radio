@@ -43,7 +43,7 @@ Below it are, by directory (`/` ends a domain):
 | Generated register access | `chips/esp32s31/pac-raw` |
 | The volatile register-access core | `portable/mmio` |
 | Semantic PACs and the HAL | `chips/esp32c5/pac`, `chips/esp32s31/pac`, `chips/esp32c5/hal`, `chips/esp32s31/hal` |
-| Platform, executor and framework bindings | `chips/esp32c5/board`, `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `chips/espressif/esp-hal/`, `chips/esp32c5/esp-hal-soc`, `portable/embassy/` |
+| Platform, executor, architectural instructions and framework bindings | `chips/esp32c5/board`, `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `chips/esp32c5/esp-hal-soc`, `portable/embassy/`, `portable/riscv` |
 | Cores of memory the hardware shares | `portable/memory`, `portable/interrupt-table`, `chips/espressif/staged-layout` |
 | The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
 | The C-driver stand | `tools/vendor/ieee802154-esp32s31` |
@@ -62,47 +62,17 @@ typed blocks. On the ESP32-C5 every exposed peripheral is typed and
 the chip has no `pac-raw`; the policy's `unexposed-peripherals` (observation
 views kept for bit-use coverage) have no owner. Every other peripheral of the
 chip's vendor SVD is a typed block of the PAC's `soc` module, with the same
-renderer and no `unsafe`; its one partition's `Claims` has no caller while
-esp-hal owns the platform. The unsafe code under a
-typed block is `oer-mmio` (`portable/mmio`) alone:
+renderer and no `unsafe`. The unsafe code under a typed block is
+`oer-mmio` (`portable/mmio`) alone:
 
-- `oer_mmio::assume_owned`, the promise that the claimed blocks' words are
-  the caller's alone. A block's authority is the list of its declared words,
-  not the address range they span, so blocks whose ranges interleave and
-  radio views of platform blocks claim only their own words. Only the chip
-  PAC's root makes the promise, once for each domain's typed blocks, from
-  that domain's platform handoff: the radio root for the radio blocks, and
-  one handoff per platform domain (such as the eFuse, entropy,
-  reset-cause and watchdog blocks, the system timer, each software
-  interrupt line and the interrupt matrix with the CLIC) that the domain's
-  owner makes after
-  consuming the domain's esp-hal singletons (clippy `disallowed-methods` refuses it
-  elsewhere); a probe image may claim a block again after dropping the
-  block's owner. The USB Serial/JTAG console's block has an owner before
-  esp-hal exists: each chip HAL's `usb_serial_jtag` keeps the block's
-  holder (`oer-espressif-usb-serial-jtag`'s `Ownership`), which one
-  compare-and-swap changes and nothing waits for. The early writer makes
-  the handoff for each record it holds the block for, and a record that
-  finds the block held is dropped and counted; the esp-hal adapter's
-  `take_usb_serial_jtag` takes only a free block and consumes `USB_DEVICE`
-  to make the driver's owner. The ESP32-S31's `fatal_note` makes the
-  handoff once more, only from a free block, which it keeps for good; it
-  never takes the block from the driver or an early record, so every owner
-  of the block lives alone. Its driver's endpoint and pads are not `Send`.
-  The core-control words (S31: each core's stall request and status, core
-  1's clocks and reset and the CPU reset triggers) are claimed by the chip
-  HAL's `cores` after one compare-and-swap of their holder: the cores'
-  owner for one operation, or a fatal path, for good. The S31's UART0
-  function clock has its own handoff, claimed by the software reset after
-  its own holder's compare-and-swap; the C5's core-control word is that
-  clock, which only the software reset claims. Only the staged runtime's fatal
-  paths make the HAL's `Fatal` proof (the `unsafe` `cores::fatal`, after
-  masking the hart for good), and only that proof makes a `StopTheWorld`,
-  which gives no right to another owner's block.
-  The generated `const` assertion beside the claim checks that no two
-  blocks list the same word. A word esp-hal also writes is claimed only
-  with its reviewed coordination in the chip's
-  `registers/shared-words.toml` (`cargo registers check shared-words`).
+- `oer_mmio::assume_owned` promises exclusive ownership of the declared
+  words, rather than every word of an overlapping address range. The chip's
+  reset root claims those words once and splits domain owners. No vendor
+  singleton, handoff adapter or shared-word inventory authorizes a claim.
+  A probe may reclaim a block only after dropping its previous owner.
+  Generated const assertions exclude overlapping claims. Fatal paths mask
+  their hart permanently and use the HAL's `StopTheWorld` proof to prepare
+  reset; they do not revoke or take over another owner's peripheral.
 - The volatile reads and writes of a `Block` and of a `Part`. Every word
   offset, stride and element count is a const generic, checked against the
   block's word list at compile time; an array index is an `Index<N>` from a
@@ -158,11 +128,10 @@ package.
 generated capability catalog in `src/generated.rs`. The
 [PAC provenance map](../chips/esp32s31/pac/README.md) distinguishes both generated
 Rust outputs from its handwritten ownership and domain modules,
-including the IEEE 802.15.4 task/interrupt split. Non-radio register
-access through upstream `esp-hal`/`esp-pacs` belongs to
-`adapters/esp-hal/soc/`, which also contains cache/MMU and GDMA
-transactions. Its Cargo package is `oer-espressif-esp-hal-soc`; its implementation
-is handwritten code.
+including the IEEE 802.15.4 task/interrupt split. Non-radio register access
+uses the same typed PAC and its single reset root. Architectural CSR and
+wait instructions live in `portable/riscv`, each with its instruction's
+safety contract; no vendor runtime supplies them.
 
 The crates below cover distinct obligations: singleton acquisition and MMIO
 serialization, stable addresses and CPU/DMA transfer, target ABI and placement,

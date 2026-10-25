@@ -29,7 +29,7 @@ pub const RUNTIME_ZEROED_REGIONS: &[ZeroedRegion] = &[
         output: ".dram2_uninit.unsupported",
         start: "_dram2_uninit_bss_start",
         end: "_dram2_uninit_bss_end",
-        zeroed_by: "esp-riscv-rt at reset",
+        zeroed_by: "unsupported: the linker requires an empty region",
         inputs: &[
             ".dram2_uninit.bss",
             ".dram2_uninit.bss.*",
@@ -41,7 +41,7 @@ pub const RUNTIME_ZEROED_REGIONS: &[ZeroedRegion] = &[
         output: ".rtc_fast.bss",
         start: "_rtc_fast_bss_start",
         end: "_rtc_fast_bss_end",
-        zeroed_by: "esp-hal at reset",
+        zeroed_by: "unsupported: the linker requires an empty region",
         inputs: &[".rtc_fast.bss", ".rtc_fast.bss.*"],
     },
     ZeroedRegion {

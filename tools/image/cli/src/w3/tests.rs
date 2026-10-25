@@ -8,7 +8,14 @@ fn console_of(image: &oer_firmware_apps_w3::report::Report) -> String {
         wire.extend_from_slice(bytes);
         Ok::<(), core::convert::Infallible>(())
     });
-    image.notes(|note| console.note(note)).unwrap();
+    {
+        let mut notes = core::pin::pin!(image.notes(async |note| console.note(note)));
+        let mut context = core::task::Context::from_waker(core::task::Waker::noop());
+        assert!(matches!(
+            core::future::Future::poll(notes.as_mut(), &mut context),
+            core::task::Poll::Ready(Ok(()))
+        ));
+    }
     let mut decoder = crate::diagnostics::Decoder::default();
     let mut text = String::new();
     for line in wire.split(|&byte| byte == b'\n') {

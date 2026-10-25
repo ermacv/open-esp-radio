@@ -1,6 +1,15 @@
 //! Typed radio-root observations, shared by the boot console and trace.
 
-use oer_esp32s31_hal::power::PlatformClock;
+/// The platform clock named in a radio-root diagnostic record.
+/// Wire identities are independent of a chip's clock owner.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlatformClock {
+    Pll160m,
+    AnalogI2cMaster,
+    Mpll,
+    ModemCoexistence,
+    ModemLowPowerTimer,
+}
 use oer_trace::{Channel, Domain, Event, Kind};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -21,11 +21,8 @@
 //!   programs that executor's comparator. A torn read is skipped: the
 //!   publisher pends the writer again after every write.
 //!
-//! [`init`] consumes esp-hal's SYSTIMER singleton through [`ComparatorWriter`],
-//! which claims the system timer's typed blocks: the comparators, their
-//! acknowledgements and the counter latch every context reads for the time
-//! ([`crate::counter`]). The counter counts 16 ticks per microsecond on both
-//! chips.
+//! [`init`] owns the running timer's blocks from the reset root without
+//! resetting its counter or clock. The HAL supplies the source identities.
 
 use core::{cell::UnsafeCell, task::Waker};
 
@@ -34,7 +31,7 @@ use oer_interrupt_table::Entry;
 use portable_atomic::{AtomicBool, AtomicU8, Ordering};
 
 use crate::{
-    chip::{Cpu, Interrupt, Priority, SOFTWARE_INTERRUPT_COUNT, SYSTIMER},
+    chip::{SOFTWARE_INTERRUPT_COUNT, alarm_source},
     deadline_cell::DeadlineCell,
     executor::{NO_EXECUTOR, pend, ready, running},
     systimer::{Comparator, ComparatorAcknowledger, ComparatorWriter},
@@ -148,12 +145,12 @@ fn with_slot<R>(swi: u8, f: impl FnOnce(&mut Slot) -> R) -> Option<R> {
 use crate::chip::now;
 
 /// The comparator whose alarm interrupt is `source`.
-const fn comparator_of_source(source: Interrupt) -> u8 {
-    if source as u16 == Interrupt::SYSTIMER_TARGET0 as u16 {
+const fn comparator_of_source(source: u16) -> u8 {
+    if source as u16 == alarm_source(0) {
         0
-    } else if source as u16 == Interrupt::SYSTIMER_TARGET1 as u16 {
+    } else if source as u16 == alarm_source(1) {
         1
-    } else if source as u16 == Interrupt::SYSTIMER_TARGET2 as u16 {
+    } else if source as u16 == alarm_source(2) {
         2
     } else {
         NO_COMPARATOR
@@ -171,9 +168,14 @@ const fn comparator_of_source(source: Interrupt) -> u8 {
 ///
 /// When the time driver was installed already, or the table routes the
 /// source to another core.
-pub fn init<const WRITER_SWI: u8, A>(systimer: SYSTIMER<'static>, alarm: A)
-where
-    A: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
+pub fn init<const WRITER_SWI: u8, A, C>(
+    systimer: crate::systimer::SystemTimer,
+    router: &mut oer_interrupt_table::Router<C>,
+    alarm: A,
+    part: A::Part,
+) where
+    A: Entry,
+    C: oer_interrupt_table::Controller,
 {
     let (bank, zero, one, two) = ComparatorWriter::adopt(systimer);
     assert!(
@@ -196,7 +198,7 @@ where
             .is_ok(),
         "the time driver is installed already"
     );
-    bind::<WRITER_SWI, A>(alarm);
+    bind::<WRITER_SWI, A, C>(router, alarm, part);
 }
 
 /// Give executor `SWI` the comparator of `alarm`'s source, whose table entry
@@ -208,12 +210,17 @@ where
 ///
 /// When the executor or the comparator is bound already, or the table routes
 /// the source to another core.
-pub fn bind<const SWI: u8, A>(alarm: A)
-where
-    A: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
+pub fn bind<const SWI: u8, A, C>(
+    router: &mut oer_interrupt_table::Router<C>,
+    alarm: A,
+    part: A::Part,
+) where
+    A: Entry,
+    C: oer_interrupt_table::Controller,
 {
     let comparator = const {
-        let comparator = comparator_of_source(A::SOURCE);
+        let comparator =
+            comparator_of_source(<A::Part as oer_interrupt_table::InterruptSource>::SOURCE);
         assert!(
             comparator != NO_COMPARATOR,
             "the token is not a SYSTIMER alarm"
@@ -256,7 +263,12 @@ where
         .is_some(),
         "the SYSTIMER bank is installed before binding"
     );
-    if let Err(error) = oer_espressif_esp_hal_irq::enable(&alarm) {
+    assert_eq!(
+        A::HART as usize,
+        crate::chip::current_core(),
+        "alarm route is on this hart"
+    );
+    if let Err(error) = router.bind(alarm, part) {
         panic!("time driver alarm {comparator}: {error:?}");
     }
 }

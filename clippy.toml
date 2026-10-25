@@ -1,35 +1,15 @@
 disallowed-methods = [
-    { path = "esp_hal::rng::Rng::new", reason = "random reads require the unique RNG owner" },
-    { path = "esp_hal::rng::Trng::try_new", reason = "TRNG reads borrow the entropy source owner (S31 only)", allow-invalid = true },
-    { path = "esp_hal::peripherals::SYSTIMER::regs", reason = "the system timer belongs to the executor's typed SYSTIMER blocks" },
-    { path = "esp_hal::peripherals::USB_DEVICE::regs", reason = "USB register access belongs to the endpoint and pad owners" },
-    { path = "esp_hal::peripherals::PMU::regs", reason = "PMU supply snapshots borrow the PSRAM owner" },
-    { path = "esp_hal::peripherals::RNG::regs", reason = "entropy status borrows the source owner" },
-    { path = "esp_hal::peripherals::LP_PERI::regs", reason = "entropy clock status borrows the source owner" },
     { path = "core::hint::spin_loop", reason = "production radio code must yield through its executor or platform" },
     # A core other than core 0 runs code only from a root that the image's
     # stack policy declares and the image gate proves (docs/memory.md, Stacks).
-    { path = "esp_hal::system::CpuControl::start_app_core", reason = "a core starts only from a root the stack policy declares and the image gate proves", allow-invalid = true },
-    { path = "esp_hal::system::CpuControl::start_app_core_with_stack_guard_offset", reason = "a core starts only from a root the stack policy declares and the image gate proves", allow-invalid = true },
-    { path = "esp_hal::system::CpuControl::unpark_core", reason = "a core starts only from a root the stack policy declares and the image gate proves", allow-invalid = true },
     { path = "oer_esp32s31_hal::cores::Cores::start_hart1", reason = "a core starts only from a root the stack policy declares and the image gate proves", allow-invalid = true },
-    # The chip resets from a fatal path through the chip HAL's cores module
-    # (the staged runtime's `reset`), which restores what the boot ROM needs.
-    { path = "esp_hal::system::software_reset", reason = "the chip resets through the staged runtime's fatal reset and the chip HAL's cores module" },
-    # esp-hal's `regs()` reaches a block without its singleton; these blocks
-    # pass to the radio HAL at the handoff (oer-espressif-esp-hal-radio).
-    { path = "esp_hal::peripherals::IEEE802154::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, Hardware)" },
-    { path = "esp_hal::peripherals::MODEM_SYSCON::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, Hardware)" },
-    { path = "esp_hal::peripherals::MODEM_LPCON::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, Hardware)" },
-    { path = "esp_hal::peripherals::I2C_ANA_MST::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, Hardware)" },
-    { path = "esp_hal::peripherals::LP_TSENS::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, Hardware)", allow-invalid = true },
     # A typed DMA address comes from placed storage or a loan, made only in
     # the chip's HAL `dma_address` module (docs/hardware-memory.md).
     { path = "oer_mmio::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
     { path = "oer_mmio::DmaRef::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
     # Typed register blocks are claimed once, by the chip PAC's root from
-    # each domain's handoff (docs/unsafe.md, Generated access).
-    { path = "oer_mmio::assume_owned", reason = "register blocks are claimed by the chip PAC's root from a domain handoff" },
+    # the single reset root (docs/unsafe.md, Generated access).
+    { path = "oer_mmio::assume_owned", reason = "register blocks are claimed by the chip PAC's root from the single reset root" },
 ]
 
 # The workspace panic lints (`unwrap_used`, `expect_used`, `panic`,

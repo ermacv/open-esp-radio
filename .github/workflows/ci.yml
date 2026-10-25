@@ -109,12 +109,8 @@ jobs:
               | select(.manifest_path | test("/chips/(esp32s31/board|espressif/staged-(runtime|bootstrap))/") | not) | "-p " + .name')
           cargo check --locked --target riscv32imafc-unknown-none-elf $packages
       - name: Clippy for the chip target
-        # The esp-hal halves of the adapters exist only for the chip, so the
-        # host clippy never sees them, nor the firmware images. Each chip's
-        # firmware is checked apart: esp-hal takes one chip feature per build.
+        # Firmware chip APIs are checked separately from host packages.
         run: |
-          cargo clippy --locked --target riscv32imafc-unknown-none-elf \
-            -p oer-espressif-esp-hal-radio --features esp32s31
           : > "$RUNNER_TEMP/empty-runtime.bin"
           export PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin"
           meta=$(cargo metadata --format-version 1 --no-deps --locked)
@@ -163,21 +159,6 @@ jobs:
               | "-p " + .name' <<<"$meta"
           }
           cargo check --locked --target riscv32imafc-unknown-none-elf $(firmware)
-      - name: Shared words with esp-hal
-        # Every MMIO word the radio PAC and the pinned esp-hal both write has a
-        # reviewed entry (chips/<chip>/registers/shared-words.toml). Cargo resolves
-        # the pinned esp-hal, esp-metadata-generated and PAC sources of the
-        # workspace.
-        run: |
-          meta="$RUNNER_TEMP/firmware-metadata.json"
-          cargo metadata --locked --format-version 1 > "$meta"
-          source_of() {
-            dirname "$(jq -er --arg name "$1" '.packages[] | select(.name == $name) | .manifest_path' "$meta")"
-          }
-          cargo registers check shared-words --chip esp32s31 \
-            --esp-hal-src "$(source_of esp-hal)/src" \
-            --esp-metadata-generated-src "$(source_of esp-metadata-generated)/src" \
-            --pac-src "$(source_of esp32s31)/src"
       - name: Image build
         # Build unconfigured and fixed configured images for analysis without a board.
         run: |

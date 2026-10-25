@@ -20,7 +20,6 @@ owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 embassy-sync = "0.8.0"
-esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 heapless = "0.9.3"
 static_cell = { workspace = true }
 xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "ed9bf37f25c610566033e31abd14d7eb5096d93f", features = ["async"] }
@@ -32,8 +31,6 @@ oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
 oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31"] }
 oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["esp32s31", "port-slots"] }
-oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }
-oer-espressif-esp-hal-soc.workspace = true
 oer-espressif-usb-serial-jtag.workspace = true
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-interrupt-table = { path = "../../../portable/interrupt-table" }
@@ -66,5 +63,5 @@ task-stack = "proven"
 
 [package.metadata.open-radio.panic-budget]
 # Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
-runtime = { pac = 11, hal = 39, chips = 488, portable = 49, protocols = 187, firmware = 80, core = 17, embassy = 34, esp-hal = 7, third-party = 63, unnamed = 13, hardware = 11 }
-bootstrap = { esp-hal = 8, unnamed = 2 }
+runtime = { pac = 11, hal = 39, chips = 488, portable = 49, protocols = 187, firmware = 80, core = 17, embassy = 34, third-party = 63, unnamed = 13, hardware = 11 }
+bootstrap = { unnamed = 2 }

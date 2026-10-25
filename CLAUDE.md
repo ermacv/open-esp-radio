@@ -19,12 +19,12 @@ system these rules serve.
   method accesses, not only its type name.
 - **No compatibility layers.** Change an interface together with all its
   callers: no deprecated aliases, re-export shims or fallback paths.
-- **No esp-hal, no bridges.** esp-hal, esp-pacs, esp-riscv-rt and
-  esp-metadata are being removed, and nothing is built on them: no adapter
-  that takes their singletons (`take_*`, `assume_exclusive` handoffs), no
-  `handoff = true` partitions, no shared-word inventory, no allowlist entry.
-  New code is written against our own PAC, HAL and root as if they were
-  already gone; existing bridges are deleted, not extended.
+- **No esp-* crates or bridges.** The S31 workspace has no esp-hal,
+  esp-pacs, esp-riscv-rt, esp-rom-sys or their companion crates. Host
+  `espflash` and its transitive image-format dependency remain host tools.
+  The reset root and the typed PAC/HAL own the chip; no vendor-singleton
+  adapter, `take_*` handoff, `handoff = true` partition, shared-word inventory
+  or platform allowlist is permitted. C5 stays outside the workspace.
 - **Compile time first.** Every check that can run at compile time runs there.
 - **Panics.** Input from outside never panics: frames from the air, any peer
   value (counters, PNs, sequence numbers, lengths, indices), host and API
@@ -56,7 +56,7 @@ system these rules serve.
   and unknown bits; the one exception is a PAC policy fixed image marked
   `whole-word`, a vendor's store of a whole word with its `SOURCE:`. Generated register code has no `unsafe`: volatile access
   lives in `portable/mmio` alone (svd2rust-rendered PAC domains keep theirs
-  until they move). `unsafe` stays in `portable/mmio`, the PAC (svd2rust-rendered
+  until they move). `unsafe` stays in `portable/mmio`, architectural instructions in `portable/riscv`, the PAC (svd2rust-rendered
   domains and hand-written roots), probe images, the placement constructor and
   the HAL's protocol core, narrow and with `// SAFETY:`
   ([docs/unsafe.md](docs/unsafe.md)); crates above the HAL forbid it.

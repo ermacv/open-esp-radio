@@ -58,8 +58,8 @@ fn human_panic_text_preserves_static_formatted_empty_and_interrupt_fields() {
 
 #[test]
 fn radio_root_round_trip_renders_every_clock_and_failure_as_before() {
-    use oer_espressif_esp_hal_radio::diagnostics::RadioRoot;
-    use oer_espressif_esp_hal_radio::diagnostics::RadioRoot::*;
+    use oer_diagnostics::radio_root::RadioRoot;
+    use oer_diagnostics::radio_root::RadioRoot::*;
     use oer_trace::Event;
     // The same explicit wire ids must decode as the original semantic event.
     let mut events = vec![Handoff];
