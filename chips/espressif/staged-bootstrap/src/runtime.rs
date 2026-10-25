@@ -13,9 +13,7 @@
 //! The library also owns the bootstrap's panic entry: a panic prints
 //! `OER_BOOT bootstrap=PANIC` and halts.
 
-use core::{arch::asm, mem::size_of, ptr};
-
-use oer_riscv::machine::status;
+use core::{mem::size_of, ptr};
 
 use oer_espressif_staged_layout::{
     Layout,
@@ -34,12 +32,7 @@ fn panic(_info: &core::panic::PanicInfo<'_>) -> ! {
 /// Report the bootstrap's start on the USB Serial/JTAG console. Call first.
 /// Any hart but [`oer_espressif_staged_layout::boot::BOOT_HART`] stops here.
 pub fn start() {
-    let hart: usize;
-    // SAFETY: reading `mhartid` touches no memory.
-    #[allow(unsafe_code, reason = "reads mhartid")]
-    unsafe {
-        asm!("csrr {hart}, mhartid", hart = out(reg) hart, options(nomem, nostack))
-    };
+    let hart = oer_riscv::hart_id();
     if !oer_espressif_staged_layout::boot::may_boot(hart) {
         fail("OER_BOOT bootstrap=FAIL reason=not-boot-hart\r\n");
     }
@@ -192,6 +185,8 @@ pub fn hand_off<const ENTRY: usize>(
     }
     print("OER_BOOT bootstrap=PASS handoff=stage2\r\n");
     finish_boot();
+    oer_riscv::disable_interrupts();
+    oer_riscv::synchronize_instructions();
     // SAFETY: the entry equals the build's constant and lies in the checked
     // executable range of the image.
     unsafe { jump_to_runtime::<ENTRY>() }
@@ -292,21 +287,11 @@ fn payload_crc32(address: *const u8, len: usize) -> u32 {
 /// # Safety
 /// `ENTRY` must be the checked entry of a published stage-two image.
 #[allow(unsafe_code, reason = "the jump into stage two")]
-unsafe fn jump_to_runtime<const ENTRY: usize>() -> ! {
-    // SAFETY: the caller's contract; interrupts stay disabled across the jump.
-    unsafe {
-        asm!(
-            "csrci mstatus, {mie}",
-            "fence rw, rw",
-            "fence.i",
-            // t1, not t0: `jr t0` is a return to the analysis (the alternate link register).
-            "li t1, {entry}",
-            "jr t1",
-            entry = const ENTRY,
-            mie = const status::MIE,
-            options(noreturn),
-        )
-    }
+// SAFETY: the naked body preserves the incoming stack until ENTRY installs its own.
+#[unsafe(naked)]
+unsafe extern "C" fn jump_to_runtime<const ENTRY: usize>() -> ! {
+    // t1, not t0: `jr t0` is a return to the analysis (the alternate link register).
+    core::arch::naked_asm!("li t1, {entry}", "jr t1", entry = const ENTRY);
 }
 
 /// Print one `OER_BOOT` line through the early USB writer, which drops what
@@ -346,10 +331,8 @@ pub fn fail(message: &'static str) -> ! {
     halt()
 }
 
-#[allow(unsafe_code, reason = "the wfi instruction")]
 fn halt() -> ! {
     loop {
-        // SAFETY: `wfi` stalls the hart until an interrupt; it touches no memory.
-        unsafe { asm!("wfi", options(nomem, nostack)) };
+        oer_riscv::wait_for_interrupt();
     }
 }

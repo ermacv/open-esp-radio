@@ -109,7 +109,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         load.modify_tsf_load_control(|w| {
             w.set_load_station_tsf(true);
         });
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 
     /// Enable the station TSF scheduler.
@@ -125,7 +125,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         control.modify_sta_tsf_control(|w| {
             w.set_sta_tsf_mode(StaTsfMode::Enabled);
         });
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 
     /// Program the station TBTT schedule and enable its interrupt.
@@ -174,7 +174,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .modify_wakeup_signal_clear(|w| {
                 w.set_clear(true);
             });
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 
     /// Stop the station TBTT.
@@ -187,7 +187,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .modify_sta_tsf_control(|w| {
                 w.set_sta_tbtt_enable(false);
             });
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 
     /// Replace the station TBTT lead and the light-sleep wake lead beside it.

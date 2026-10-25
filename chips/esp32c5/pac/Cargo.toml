@@ -12,6 +12,7 @@ description = "Closed typed ESP32-C5 radio peripheral access crate"
 test-support = []
 
 [dependencies]
+oer-riscv = { path = "../../../portable/riscv" }
 oer-espressif-analog = { path = "../../espressif/analog" }
 oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-values" }
 oer-mmio = { path = "../../../portable/mmio" }

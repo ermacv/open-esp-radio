@@ -120,13 +120,8 @@ pub(crate) fn install(
 
 /// The hart this code runs on.
 #[cfg(target_arch = "riscv32")]
-#[allow(unsafe_code, reason = "reads mhartid")]
 fn current_hart() -> HpCore {
-    let hart: usize;
-    // SAFETY: reading mhartid touches no memory and changes nothing.
-    unsafe {
-        core::arch::asm!("csrr {hart}, mhartid", hart = out(reg) hart, options(nomem, nostack, preserves_flags))
-    };
+    let hart = oer_riscv::hart_id();
     if hart == 0 {
         HpCore::Core0
     } else {
@@ -164,10 +159,10 @@ fn confirm<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
     stalled: bool,
     polls: u32,
 ) -> Result<(), Unconfirmed> {
-    oer_mmio::fence();
+    oer_riscv::fence();
     for _ in 0..polls {
         if words.is_stalled(hart) == stalled {
-            oer_mmio::fence();
+            oer_riscv::fence();
             return Ok(());
         }
     }

@@ -436,7 +436,7 @@ impl BluetoothModemLpTimerRegisters {
 
 /// Order SRAM descriptor writes and MMIO at a hardware ownership boundary.
 pub(crate) fn device_fence() {
-    oer_mmio::fence();
+    oer_riscv::fence();
 }
 
 /// A field of at most eight bits read back, as a byte.

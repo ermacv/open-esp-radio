@@ -59,10 +59,7 @@ pub(crate) fn release(mask: &mut impl Mask, token: u32) {
 
 #[cfg(target_arch = "riscv32")]
 pub(crate) mod hart {
-    use core::arch::asm;
     use core::sync::atomic::{Ordering, compiler_fence};
-
-    use oer_riscv::{clic::MINTTHRESH, machine::status};
 
     /// The current hart's CSRs.
     struct Csrs;
@@ -70,62 +67,22 @@ pub(crate) mod hart {
     impl super::Mask for Csrs {
         #[inline(always)]
         fn swap_threshold(&mut self, threshold: u8) -> u8 {
-            let previous: usize;
-            // SAFETY: raising the threshold only masks interrupts; it
-            // touches no memory.
-            unsafe {
-                asm!(
-                    "csrrw {previous}, {csr}, {threshold}",
-                    previous = out(reg) previous,
-                    threshold = in(reg) usize::from(threshold),
-                    csr = const MINTTHRESH,
-                    options(nomem, nostack),
-                )
-            };
-            // The threshold is the CSR's low byte.
-            previous.to_le_bytes()[0]
+            oer_riscv::swap_interrupt_threshold(threshold)
         }
 
         #[inline(always)]
         fn take_interrupts(&mut self) -> bool {
-            let previous: usize;
-            // SAFETY: clearing MIE only masks this hart's interrupts.
-            unsafe {
-                asm!(
-                    "csrrci {previous}, mstatus, {mie}",
-                    previous = out(reg) previous,
-                    mie = const status::MIE,
-                    options(nomem, nostack),
-                )
-            };
-            previous & status::MIE != 0
+            oer_riscv::take_interrupts()
         }
 
         #[inline(always)]
         fn give_interrupts(&mut self) {
-            // SAFETY: the release of a section that found MIE set gives it
-            // back; the caller's `critical-section` contract orders it.
-            unsafe {
-                asm!("csrsi mstatus, {mie}", mie = const status::MIE, options(nomem, nostack))
-            };
+            oer_riscv::enable_interrupts();
         }
 
         #[inline(always)]
         fn restore_threshold(&mut self, threshold: u8) {
-            // SAFETY: the threshold the matching acquire found; then three
-            // instructions in which a pending interrupt that it unmasks is
-            // taken before the section's caller continues.
-            unsafe {
-                asm!(
-                    "csrw {csr}, {threshold}",
-                    "nop",
-                    "nop",
-                    "nop",
-                    threshold = in(reg) usize::from(threshold),
-                    csr = const MINTTHRESH,
-                    options(nomem, nostack),
-                )
-            };
+            oer_riscv::restore_interrupt_threshold(threshold);
         }
     }
 

@@ -323,7 +323,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             interface_control(interface),
             matches!(mode, MacSppMode::Authenticated),
         );
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 
     /// Encode and install one semantic STA CCMP key into an invalid entry.
@@ -426,7 +426,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         publish_key_entry_validity(control, validity);
         let spp = control.read_interface_control(control_index).spp_amsdu();
         enable_ccmp(control, control_index, spp);
-        oer_mmio::fence();
+        oer_riscv::fence();
 
         if key_entry_validity(control)
             .get(position)
@@ -448,7 +448,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         }
         publish_key_entry_validity(control, validity);
         clear_key_entry_words(&mut self.mac.wifi_mac_key_table, key_entry(index));
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 }
 

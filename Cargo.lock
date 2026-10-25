@@ -3381,6 +3381,7 @@ dependencies = [
 name = "oer-test-layers"
 version = "0.1.0"
 dependencies = [
+ "proc-macro2",
  "tempfile",
  "toml",
 ]

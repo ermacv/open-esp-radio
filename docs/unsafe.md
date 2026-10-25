@@ -106,10 +106,28 @@ model, with the owners of its policy's parts, into the chip PAC's
   `write_shared`: a device word is not Rust memory, and the block's writes
   are whole-word stores that read nothing back, so every execution context
   reaches its one owner through `&self`.
-- `oer_mmio::fence`, the device-access ordering instruction.
 - `VolatileCell`, the volatile word of the generated memory layouts; both
   the cell and the layouts derive `Zeroable`. The constructors of
   `DmaWindowAddress` and `DmaRef` are `unsafe`.
+
+`oer-riscv` (`portable/riscv`) is the only crate with `asm!` for architectural
+operations: CSR access, hart and cycle reads, interrupt masking, CLIC threshold,
+debug triggers, waits and barriers. Its safe functions have no memory
+precondition. Installing trap vectors and `mscratch` is unsafe because the
+entries, table and exclusive interrupt stack must implement a live trap ABI.
+Every instruction site has one narrow `// SAFETY:` proof. Moving instructions
+into this crate may increase its unsafe count only while the branch total
+decreases and no caller's count increases; runtime panic counts never increase.
+Device ordering is `oer_riscv::fence`, including the host compiler fence;
+`oer-mmio` contains no architectural instruction or barrier API.
+
+Outside `oer-riscv`, firmware assembly is only `global_asm!`/`naked_asm!` for
+entry/trap ABI work: staged-bootstrap's `entry.rs` and its stage-two jump in
+`runtime.rs`, staged-runtime's `entry.rs` and trap-frame/stack entries in
+`stacks.rs`, and bootstrap/probe images. The layer test
+`architectural_instructions_stay_in_oer_riscv` lists these owners and locations
+and rejects inline operations even there. Host compiler fixtures are test
+inputs, not firmware instruction owners.
 
 A generated register writer takes typed field values only: `bool`, a value
 enum, an exact-width integer or `oer_mmio::Bits<WIDTH>`; a reader returns

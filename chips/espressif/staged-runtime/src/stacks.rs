@@ -31,7 +31,6 @@
 
 #[cfg(target_arch = "riscv32")]
 use core::{
-    arch::asm,
     ptr,
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -56,7 +55,7 @@ mod watermark;
 use oer_riscv::{
     clic,
     machine::{self, status},
-    trigger::{self, mcontrol},
+    trigger,
 };
 
 /// The harts with an interrupt stack: the chip facts' harts.
@@ -146,10 +145,7 @@ pub fn cpu0_task_stack_bytes() -> usize {
 #[cfg(target_arch = "riscv32")]
 #[inline(always)]
 fn current_hart() -> usize {
-    let hart: usize;
-    // SAFETY: reading `mhartid` touches no memory.
-    unsafe { asm!("csrr {hart}, mhartid", hart = out(reg) hart, options(nomem, nostack)) };
-    hart
+    oer_riscv::hart_id()
 }
 
 /// The vector registers `hart` dispatches through: `mtvec` (the exception
@@ -185,28 +181,14 @@ pub unsafe fn install_current_hart_interrupt_stack() {
         unsafe { watermark::paint(bottom as *mut u32, stack.len() / 4) };
         painted.store(true, Ordering::Release);
     }
-    // SAFETY: interrupts are disabled on this hart and the trigger is the
-    // interrupt stack's own.
-    unsafe { guard_interrupt_stack(bottom, interrupt_stack_guard_bytes(hart)) };
+    guard_interrupt_stack(bottom, interrupt_stack_guard_bytes(hart));
     let (mtvec, mtvt) = vectors_of(hart);
     // SAFETY: `mtvec` names `_start_trap`, which the assembly aligns to 64
     // bytes, and `mtvt` this hart's 256-byte-aligned table in SRAM; `top` is
     // this hart's interrupt stack top, which every entry expects in
     // `mscratch`. Interrupts stay disabled, so no trap sees the registers
     // change.
-    unsafe {
-        asm!(
-            "csrw mtvec, {mtvec}",
-            "csrw {mtvt_csr}, {mtvt}",
-            "csrw mscratch, {top}",
-            "fence.i",
-            mtvec = in(reg) mtvec,
-            mtvt = in(reg) mtvt,
-            top = in(reg) top,
-            mtvt_csr = const clic::MTVT,
-            options(nostack),
-        )
-    };
+    unsafe { oer_riscv::install_trap_stack(mtvec, mtvt, top) };
 }
 
 /// Panic unless the current hart dispatches through the runtime's vectors:
@@ -217,18 +199,8 @@ pub unsafe fn install_current_hart_interrupt_stack() {
 /// the hart dispatches through.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn verify_current_hart_vectors() {
-    let (mtvec, mtvt): (usize, usize);
-    // SAFETY: CSR reads only.
-    unsafe {
-        asm!(
-            "csrr {mtvec}, mtvec",
-            "csrr {mtvt}, {mtvt_csr}",
-            mtvec = out(reg) mtvec,
-            mtvt = out(reg) mtvt,
-            mtvt_csr = const clic::MTVT,
-            options(nomem, nostack),
-        )
-    };
+    let mtvec = oer_riscv::read_mtvec();
+    let mtvt = oer_riscv::read_mtvt();
     if (mtvec, mtvt) != vectors_of(current_hart()) {
         foreign_vectors_installed();
     }
@@ -237,16 +209,13 @@ pub(crate) fn verify_current_hart_vectors() {
 /// Arm trigger 0 as a store watchpoint on the word at `address`, the bottom
 /// of the task stack; a trigger a connected debugger owns stays its own.
 ///
-/// # Safety
-///
-/// Interrupts must be disabled on the calling hart, `address` must be word
-/// aligned, and no other code may own trigger 0.
+/// Call with local interrupts disabled and the runtime's word-aligned task
+/// stack bottom; the runtime reserves trigger 0 for this guard.
 #[cfg(target_arch = "riscv32")]
-pub(crate) unsafe fn watch_task_stack(address: usize) {
+pub(crate) fn watch_task_stack(address: usize) {
     // A NAPOT region of four bytes: the word's address with one trailing one.
     let data2 = guard::napot_guard(address, 4);
-    // SAFETY: the caller's contract.
-    unsafe { arm_store_trigger(TASK_STACK_GUARD_TRIGGER, data2) };
+    oer_riscv::arm_store_trigger(TASK_STACK_GUARD_TRIGGER, data2);
 }
 
 /// Stop on a hart id with no interrupt stack.
@@ -277,61 +246,12 @@ fn foreign_vectors_installed() -> ! {
 /// the exception entry clears `tcontrol.mte` and the entry leaves it clear,
 /// so its own frame below the guard does not retrigger.
 ///
-/// # Safety
-///
-/// Interrupts must be disabled on the calling hart, and no other code may own
-/// debug trigger [`IRQ_STACK_GUARD_TRIGGER`].
+/// Called with local interrupts disabled; the runtime reserves trigger 2
+/// for this hart's interrupt-stack guard.
 #[cfg(target_arch = "riscv32")]
-unsafe fn guard_interrupt_stack(bottom: usize, bytes: usize) {
+fn guard_interrupt_stack(bottom: usize, bytes: usize) {
     let data2 = guard::napot_guard(bottom, bytes);
-    // SAFETY: the caller's contract.
-    unsafe { arm_store_trigger(IRQ_STACK_GUARD_TRIGGER, data2) };
-}
-
-/// Arm trigger `select` to raise a breakpoint exception on a machine-mode
-/// store into the NAPOT region `data2`, unless a connected debugger owns
-/// the trigger (`tdata1.dmode`, which ignores machine-mode writes).
-///
-/// # Safety
-///
-/// Interrupts must be disabled on the calling hart, and no other code may
-/// own trigger `select`.
-#[cfg(target_arch = "riscv32")]
-unsafe fn arm_store_trigger(select: usize, data2: usize) {
-    // mcontrol: machine mode, store, NAPOT match.
-    const TDATA1_M_STORE_NAPOT: usize = mcontrol::M | mcontrol::STORE | mcontrol::MATCH_NAPOT;
-    let current: usize;
-    // SAFETY: selecting a trigger and reading its control touch no memory.
-    unsafe {
-        asm!(
-            "csrw {tselect}, {select}",
-            "csrr {current}, {tdata1}",
-            tselect = const trigger::TSELECT,
-            tdata1 = const trigger::TDATA1,
-            select = in(reg) select,
-            current = out(reg) current,
-            options(nomem, nostack),
-        )
-    };
-    if current & mcontrol::DMODE != 0 {
-        return;
-    }
-    // SAFETY: the caller's contract: interrupts are disabled and trigger
-    // `select` is the caller's; programming it touches no memory.
-    unsafe {
-        asm!(
-            "csrw {tcontrol}, {control}",
-            "csrw {tdata1}, {data1}",
-            "csrw {tdata2}, {data2}",
-            tcontrol = const trigger::TCONTROL,
-            tdata1 = const trigger::TDATA1,
-            tdata2 = const trigger::TDATA2,
-            control = in(reg) trigger::TCONTROL_MTE,
-            data1 = in(reg) TDATA1_M_STORE_NAPOT,
-            data2 = in(reg) data2,
-            options(nostack),
-        )
-    };
+    oer_riscv::arm_store_trigger(IRQ_STACK_GUARD_TRIGGER, data2);
 }
 
 /// Whether `sp` lies in `hart`'s dedicated interrupt stack. Reads no memory,
@@ -350,12 +270,8 @@ pub(crate) fn on_interrupt_stack(hart: usize, sp: usize) -> bool {
 /// Painting measures observed writes, not a worst-case call-chain bound.
 #[cfg(target_arch = "riscv32")]
 pub fn current_hart_interrupt_stack_free_bytes() -> usize {
-    let hart: usize;
-    let sp: usize;
-    // SAFETY: reads `mhartid` and `sp`; touches no memory.
-    unsafe {
-        asm!("csrr {hart}, mhartid", "mv {sp}, sp", hart = out(reg) hart, sp = out(reg) sp, options(nomem, nostack))
-    };
+    let hart = oer_riscv::hart_id();
+    let sp = oer_riscv::stack_pointer();
     let (Some(stack), Some(painted)) = (interrupt_stack(hart), IRQ_PAINTED.get(hart)) else {
         invalid_hart()
     };
@@ -365,22 +281,12 @@ pub fn current_hart_interrupt_stack_free_bytes() -> usize {
         !(stack.start..=stack.end).contains(&sp),
         "IRQ stack sampling requires thread mode"
     );
-    let previous: usize;
     // MIE is hart-local. Do not acquire a cross-core lock or scan a foreign stack.
-    // SAFETY: clearing MIE only masks this hart's interrupts; the prior state
-    // is restored below.
-    unsafe {
-        asm!("csrrci {previous}, mstatus, {mie}", previous = out(reg) previous, mie = const status::MIE, options(nostack))
-    };
-    // SAFETY: own painted stack, thread mode, local interrupts masked. No other
-    // hart uses this allocation; the scanner has a finite capacity and cannot panic.
-    let free = unsafe { watermark::free_words(bottom, stack.len() / 4) } * 4;
-    if previous & status::MIE != 0 {
-        // SAFETY: restores the MIE state observed on entry; handlers were
-        // already enabled then, so no new dispatch becomes possible.
-        unsafe { asm!("csrsi mstatus, {mie}", mie = const status::MIE, options(nostack)) };
-    }
-    free
+    oer_riscv::interrupt_free(|| {
+        // SAFETY: own painted stack, thread mode, local interrupts masked. No other
+        // hart uses this allocation; the scanner has a finite capacity and cannot panic.
+        (unsafe { watermark::free_words(bottom, stack.len() / 4) }) * 4
+    })
 }
 
 #[cfg(target_arch = "riscv32")]

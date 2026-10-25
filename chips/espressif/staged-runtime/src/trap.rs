@@ -3,12 +3,6 @@
 //! last dispatched through and the stack watchpoint. Every read is inlined,
 //! so a caller placed in SRAM stays there.
 
-#[cfg(target_arch = "riscv32")]
-use core::arch::asm;
-
-#[cfg(target_arch = "riscv32")]
-use oer_riscv::{clic, trigger};
-
 /// The frame every trap entry saves on the hart's SRAM interrupt stack
 /// (`vectors.s`): the interrupted caller registers and the trap CSRs, as the
 /// exception handler receives it.
@@ -85,28 +79,13 @@ impl TrapRegisters {
     /// Read the current hart's trap CSRs.
     #[inline(always)]
     pub fn read() -> Self {
-        let (hart, mcause, mepc, mtval, mscratch, mtvec, mtvt);
-        // SAFETY: CSR reads only.
-        unsafe {
-            asm!(
-                "csrr {hart}, mhartid",
-                "csrr {mcause}, mcause",
-                "csrr {mepc}, mepc",
-                "csrr {mtval}, mtval",
-                "csrr {mscratch}, mscratch",
-                "csrr {mtvec}, mtvec",
-                "csrr {mtvt}, {mtvt_csr}",
-                hart = out(reg) hart,
-                mcause = out(reg) mcause,
-                mepc = out(reg) mepc,
-                mtval = out(reg) mtval,
-                mscratch = out(reg) mscratch,
-                mtvec = out(reg) mtvec,
-                mtvt = out(reg) mtvt,
-                mtvt_csr = const clic::MTVT,
-                options(nomem, nostack),
-            )
-        };
+        let hart = oer_riscv::hart_id();
+        let mcause = oer_riscv::read_mcause();
+        let mepc = oer_riscv::read_mepc();
+        let mtval = oer_riscv::read_mtval();
+        let mscratch = oer_riscv::read_mscratch();
+        let mtvec = oer_riscv::read_mtvec();
+        let mtvt = oer_riscv::read_mtvt();
         Self {
             hart,
             mcause,
@@ -127,11 +106,7 @@ pub fn current_hart_vector_slot(vector: usize) -> Option<u32> {
     if vector >= VECTORS {
         return None;
     }
-    let table: *const u32;
-    // SAFETY: a CSR read only.
-    unsafe {
-        asm!("csrr {table}, {mtvt}", table = out(reg) table, mtvt = const clic::MTVT, options(nomem, nostack))
-    };
+    let table = oer_riscv::read_mtvt() as *const u32;
     // SAFETY: MTVT addresses the hart's word-aligned table of `VECTORS`
     // entries in SRAM, which the runtime installed; reading one entry calls
     // nothing.
@@ -143,28 +118,12 @@ pub fn current_hart_vector_slot(vector: usize) -> Option<u32> {
 #[cfg(target_arch = "riscv32")]
 #[inline(always)]
 pub fn stack_watchpoint() -> (usize, usize) {
-    let (control, address);
-    // SAFETY: CSR reads only.
-    unsafe {
-        asm!(
-            "csrr {control}, {tdata1}",
-            "csrr {address}, {tdata2}",
-            tdata1 = const trigger::TDATA1,
-            tdata2 = const trigger::TDATA2,
-            control = out(reg) control,
-            address = out(reg) address,
-            options(nomem, nostack),
-        )
-    };
-    (control, address)
+    oer_riscv::stack_watchpoint()
 }
 
 /// The current stack pointer.
 #[cfg(target_arch = "riscv32")]
 #[inline(always)]
 pub fn stack_pointer() -> usize {
-    let value;
-    // SAFETY: a register read only.
-    unsafe { asm!("mv {value}, sp", value = out(reg) value, options(nomem, nostack)) };
-    value
+    oer_riscv::stack_pointer()
 }

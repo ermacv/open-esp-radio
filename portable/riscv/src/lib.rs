@@ -11,8 +11,8 @@
     clippy::arithmetic_side_effects
 )]
 
-//! Architectural RISC-V constants that firmware and analysis share: CSR
-//! numbers and the fields of the CSRs this repository programs or decodes.
+//! Architectural RISC-V instructions and constants: CSR access, local interrupt
+//! admission, waits, barriers, and the definitions firmware and analysis share.
 //!
 //! The crate holds architectural definitions and instructions, with no chip parameter (a chip's
 //! interrupt-line count or trigger budget lives with the chip). CSR numbers
@@ -203,4 +203,19 @@ pub mod trigger {
 #[allow(unsafe_code, reason = "architectural CSR and wait instructions")]
 mod instructions;
 #[cfg(target_arch = "riscv32")]
-pub use instructions::{cycle32, cycle64, hart_id, interrupt_free, wait_for_interrupt};
+pub use instructions::*;
+
+/// Order every device-memory access before this call against every one
+/// after it: the fence a driver places at a hardware ownership boundary.
+#[inline]
+pub fn fence() {
+    #[cfg(target_arch = "riscv32")]
+    #[allow(unsafe_code, reason = "an ordering instruction")]
+    // SAFETY: the instruction only orders memory and device accesses; it
+    // reads and writes no memory and changes no register Rust relies on.
+    unsafe {
+        core::arch::asm!("fence iorw, iorw", options(nostack, preserves_flags))
+    }
+    #[cfg(not(target_arch = "riscv32"))]
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+}

@@ -23,7 +23,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                     oer_esp32s31_pac::wifi_mac::control::TxBlockStopRequestHigh::StopAll.bits(),
                 ));
         });
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 
     /// Block or unblock the TX queues for station power management.
@@ -39,7 +39,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 PowerSaveTxBlock::Run
             });
         });
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 
     /// Sample the three activity bits polled by the vendor channel switch.
@@ -57,7 +57,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                     oer_esp32s31_pac::wifi_mac::control::TxBlockStopRequestHigh::Run.bits(),
                 ));
         });
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 
     /// Select the Wi-Fi no-power-save REGDMA link.
@@ -65,7 +65,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         self.mac.wifi_mac_regdma_control.modify_regdma_control(|w| {
             w.set_active_link(ActiveLink::WifiNoPowerSave);
         });
-        oer_mmio::fence();
+        oer_riscv::fence();
     }
 
     /// Read the active REGDMA link for diagnostics and hardware assertions.

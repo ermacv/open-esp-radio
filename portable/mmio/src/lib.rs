@@ -312,21 +312,6 @@ pub unsafe fn assume_owned<C: Claim>() -> C {
     C::claimed(&sealed::Promise(()))
 }
 
-/// Order every device-memory access before this call against every one
-/// after it: the fence a driver places at a hardware ownership boundary.
-#[inline]
-pub fn fence() {
-    #[cfg(target_arch = "riscv32")]
-    #[allow(unsafe_code, reason = "an ordering instruction")]
-    // SAFETY: the instruction only orders memory and device accesses; it
-    // reads and writes no memory and changes no register Rust relies on.
-    unsafe {
-        core::arch::asm!("fence iorw, iorw", options(nostack, preserves_flags))
-    }
-    #[cfg(not(target_arch = "riscv32"))]
-    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-}
-
 /// The exclusive authority over the words `R` lists of one register block.
 ///
 /// Its reads and writes take the word's byte offset as a const generic;

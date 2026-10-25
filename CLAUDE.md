@@ -29,7 +29,10 @@ system these rules serve.
   A `const fn` alone does not enforce this: fixed values use const items or
   blocks, and generic geometry uses inline const checks at monomorphization.
 - **Panics and unsafe.** A change introduces no new runtime panic sites or
-  `unsafe` code. Compile-time checks and test assertions are allowed.
+  `unsafe` code. Moving architectural instructions into `oer-riscv` may
+  increase unsafe constructs there only when the branch's total decreases
+  and no calling crate's count increases; each site retains its narrow
+  contract and `// SAFETY:` proof. Compile-time checks and test assertions are allowed.
   Remove existing runtime panics from image crates, including probes and
   HIL; image panic budgets only shrink to 0. `const` panics evaluated at
   compile time are allowed. Air, peer, host and API input return a handled
@@ -70,6 +73,9 @@ system these rules serve.
   instructions in `portable/riscv`, the PAC's one root claim, probe images,
   the placement constructor and the HAL's protocol core, narrow and with `// SAFETY:`
   ([docs/unsafe.md](docs/unsafe.md)); crates above the HAL forbid it.
+  Only `oer-riscv` contains `asm!` for architectural operations. Entry/trap
+  ABI assembly uses `global_asm!` or `naked_asm!` only in staged entry/trap
+  code, bootstrap and probes; host compiler fixtures are test inputs.
 - **Hardware dictionaries and geometry.** Field codes and opcodes are named
   values in the register model, including analog-I2C and hardware-consumed
   memory layouts; HAL selects the generated names. Field widths, maxima,
