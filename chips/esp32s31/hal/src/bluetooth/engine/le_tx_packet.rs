@@ -103,14 +103,14 @@ const TX_HEADER: BufferHeaderImage = BufferHeaderImage {
 const EMPTY_TX_CURSOR: BufferHeaderImage = BufferHeaderImage {
     completion: BleBufferHeaderCompletion::ZERO.with_done(true),
     allocation: BleBufferHeaderAllocation::ZERO
-        .with_llid(1)
+        .with_llid(crate::layouts::BleBufferHeaderAllocation::LLID_DATA_CONTINUATION)
         .expect("reviewed LLID fits"),
     ..BufferHeaderImage::ZERO
 };
 /// SOURCE: pinned `memMgmt_3.o` common TX packet allocation class and initial state.
 const TX_PACKET_ALLOCATION: BleTxPacketPrefixAllocation = BleTxPacketPrefixAllocation::from_bits(0)
-    .with_class(2)
-    .with_state(0);
+    .with_class(crate::layouts::BleTxPacketPrefixAllocation::CLASS_COMMON_TX)
+    .with_state(crate::layouts::BleTxPacketPrefixAllocation::STATE_INITIAL);
 
 impl LeTxBufferHeaderStorage {
     pub(super) const fn new() -> Self {

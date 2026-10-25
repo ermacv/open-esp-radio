@@ -8,8 +8,8 @@
 
 use crate::modem::values::{
     ExternalCoexFlag, ExternalCoexGrantDelay, ExternalCoexNibble, ExternalCoexSync,
-    ExternalCoexWorkMode,
 };
+use oer_esp32s31_pac::coex::pti::WorkMode;
 
 /// Signal wires between the chip and the external radio
 /// (`external_coex_wire_t`).
@@ -27,9 +27,9 @@ pub enum ExternalCoexWires {
 #[repr(u8)]
 pub enum ExternalCoexRole {
     /// The chip arbitrates: the external radio requests and the chip grants.
-    Leader = 0,
+    Leader,
     /// The external radio arbitrates: the chip requests and it grants.
-    Follower = 2,
+    Follower,
 }
 
 /// One four-bit external priority.
@@ -79,9 +79,14 @@ impl<'a, P: oer_mmio::Placement> ExternalCoexControl<'a, P> {
             w.set_sync(oer_mmio::Bits::truncate((sync(0)).get()));
         });
         block.modify_pti(|w| {
-            w.set_work_mode(oer_mmio::Bits::truncate(
-                (ExternalCoexWorkMode::new(role as u32).expect("a role fits the work mode")).get(),
-            ));
+            w.set_work_mode(match role {
+                ExternalCoexRole::Leader => {
+                    oer_mmio::Bits::constant::<{ WorkMode::Leader.bits() }>()
+                }
+                ExternalCoexRole::Follower => {
+                    oer_mmio::Bits::constant::<{ WorkMode::Follower.bits() }>()
+                }
+            });
         });
         match role {
             ExternalCoexRole::Leader => block.modify_control(|w| {

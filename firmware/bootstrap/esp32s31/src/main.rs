@@ -73,7 +73,6 @@ extern "C" fn bootstrap_main() -> ! {
         boot::CLOCK_WAITS,
         &deadline,
     ));
-    hardware.soc.update_rom_delay(rates);
     print("OER_BOOT bootstrap=INIT\r\n");
     let memory = checked(psram::bring_up(
         psram::PsramOwners {

@@ -42,16 +42,6 @@ sram = [
 # Only entry points declared and called by our code. libc and vendor radio
 # ROM scripts are not link inputs; compiler_builtins supplies memory routines.
 [[rom.functions]]
-name = "ets_delay_us"
-address = 0x2f80003c
-source = "SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/esp_rom/esp32s31/ld/esp32s31.rom.ld:30"
-
-[[rom.functions]]
-name = "ets_update_cpu_frequency"
-address = 0x2f800044
-source = "SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/esp_rom/esp32s31/ld/esp32s31.rom.ld:32"
-
-[[rom.functions]]
 name = "software_reset"
 address = 0x2f800094
 source = "SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/esp_rom/esp32s31/ld/esp32s31.rom.ld:52"

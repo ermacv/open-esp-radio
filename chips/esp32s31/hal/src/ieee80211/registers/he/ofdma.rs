@@ -6,7 +6,6 @@ use crate::ieee80211::registers::{
     MacPlacement, ORDINARY_QUEUE_COUNT, WifiRadioRegisters, bits, byte, element, halfword,
     ordinary_bank,
 };
-const MPDU_LENGTH_LINK_END: u8 = 0x7f;
 
 /// One IEEE 802.11 traffic identifier accepted by the recovered HE BSR block.
 ///
@@ -16,7 +15,7 @@ const MPDU_LENGTH_LINK_END: u8 = 0x7f;
 pub struct MacHeTid(u8);
 
 impl MacHeTid {
-    pub const COUNT: usize = 8;
+    pub const COUNT: usize = oer_esp32s31_pac::wifi_mac::hardware_bsr::COUNT;
 
     pub const fn new(value: u8) -> Option<Self> {
         if value < Self::COUNT as u8 {
@@ -134,7 +133,7 @@ impl MacHeTbLinkReservation {
         if position >= self.count {
             None
         } else if position + 1 == self.count {
-            Some(MPDU_LENGTH_LINK_END)
+            Some(oer_esp32s31_pac::wifi_mac::he_scratch::NextLink::End.bits() as u8)
         } else {
             Some(self.first + position + 1)
         }
@@ -331,7 +330,9 @@ impl MacBeamformingAverageSnr {
         Self {
             raw_code,
             quarter_db: raw_code as u16 + 88,
-            is_lower_bound: raw_code == 0x7f,
+            is_lower_bound: raw_code
+                == oer_esp32s31_pac::wifi_mac::average_snr::Stream0Code::SaturatedOrInvalid.bits()
+                    as u8,
         }
     }
 }
@@ -513,7 +514,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 w.set_mpdu_length(bits(u32::from(length)))
                     .set_next_link(bits(u32::from(next)));
             });
-        if next == MPDU_LENGTH_LINK_END {
+        if next == oer_esp32s31_pac::wifi_mac::he_scratch::NextLink::End.bits() as u8 {
             self.mac
                 .wifi_mac_tx_queue_vector
                 .modify_he_mpdu_length_tail(reservation_bank(reservation), |w| {
@@ -780,7 +781,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_value(bits(if disabled { 0x000f_ffff } else { 0 }));
         });
         registers.modify_he_obss_narrow_band_ru_control(|w| {
-            w.set_class_disable(bits(if disabled { 0x1f } else { 0 }));
+            w.set_class_disable(bits(if disabled { oer_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllDisabled.bits() } else { oer_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllEnabled.bits() }));
         });
         registers.modify_he_obss_narrow_band_ru_control(|w| {
             w.set_global_disable(disabled);

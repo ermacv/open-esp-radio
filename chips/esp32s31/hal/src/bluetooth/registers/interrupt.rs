@@ -103,19 +103,19 @@ impl<B: oer_mmio::Placement> BluetoothInterruptControl for HardwareInterruptCont
 
     fn prepare_output(&mut self) {
         self.bank.write_irq_control_0(|w| {
-            w.set_command(0x1);
+            w.set_command(oer_esp32s31_pac::bt_mac::irq_control_0::Command::Command1.bits());
         });
     }
 
     fn release_output_0(&mut self) {
         self.bank.write_irq_control_1(|w| {
-            w.set_command(0x1);
+            w.set_command(oer_esp32s31_pac::bt_mac::irq_control_1::Command::Command1.bits());
         });
     }
 
     fn release_output_1(&mut self) {
         self.bank.write_irq_control_2(|w| {
-            w.set_command(0x1);
+            w.set_command(oer_esp32s31_pac::bt_mac::irq_control_2::Command::Command1.bits());
         });
     }
 

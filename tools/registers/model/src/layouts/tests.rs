@@ -859,3 +859,26 @@ fn default_resolution_preserves_rendered_layout_output() {
         super::render(compact.layouts(), &regions).expect("a valid layout review fixture")
     );
 }
+
+#[test]
+fn layout_field_values_and_geometry_follow_the_field() {
+    let text = NODE.replace(
+        "name = \"LENGTH\"",
+        "name = \"LENGTH\"\nvalues = [{ name = \"SHORT\", value = 3 }]",
+    );
+    let model = load(&[("node.toml", &text)]).expect("named layout field");
+    let rust = super::render(model.layouts(), &regions()).expect("layout values render");
+    assert!(rust.contains("pub const LENGTH_SHORT: u16 = 3;"));
+    assert!(rust.contains("pub const LENGTH_WIDTH: u32 = 14;"));
+    assert!(rust.contains("pub const LENGTH_MAX: u32 = 0x3fff;"));
+    for values in [
+        "[{ name = \"SHORT\", value = 3 }, { name = \"SHORT\", value = 4 }]",
+        "[{ name = \"TOO_WIDE\", value = 16384 }]",
+    ] {
+        let text = NODE.replace(
+            "name = \"LENGTH\"",
+            &format!("name = \"LENGTH\"\nvalues = {values}"),
+        );
+        assert!(load(&[("node.toml", &text)]).is_err());
+    }
+}

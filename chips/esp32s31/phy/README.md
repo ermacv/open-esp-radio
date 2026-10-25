@@ -269,8 +269,9 @@ registration and common tracking. Borrowed typed step tokens carry each
 hardware command directly to one poll loop; consuming a completion updates
 that same cursor and coefficient bank. Short ready leaves share a bounded
 poll, while an incomplete DC/IQ observation waits on the caller's timer.
-Required 1–20 us hardware settles use the ESP32-S31 ROM `ets_delay_us`
-primitive, and PBus/I2C leaves retain their bounded direct observation policy.
+Required 1–20 us hardware settles count machine cycles through `oer-riscv`,
+using the stable frequency adopted by the HAL clock owner at runtime handover.
+PBus/I2C leaves retain their bounded direct observation policy.
 TXDC/PWDET retains its direct transaction on the borrowed radio domain;
 runtime SAR readiness uses its timer-backed 40 µs deadline. Interrupts remain
 enabled and the physical owner remains held until terminal restoration.

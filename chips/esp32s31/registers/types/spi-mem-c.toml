@@ -5922,3 +5922,9 @@ name = "SPI_MEM_DATE"
 bits = "27:0"
 class = "plain"
 description = "SPI0 register version."
+
+[[geometry]]
+name = "MMU_ENTRIES"
+value = 1024
+sources = ["S31_MMU_TABLE_GEOMETRY"]
+description = "Entries in this controller's MMU table."

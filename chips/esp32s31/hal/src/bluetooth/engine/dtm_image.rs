@@ -307,7 +307,10 @@ impl DtmSchedulerItemReviewedWords {
                 .expect("role image fits")
                 .with_flexible_start(!transmitter),
             word_04: self.word_04.with_event_ready(true),
-            word_08: self.word_08.with_kind(0).expect("zero fits"),
+            word_08: self
+                .word_08
+                .with_kind(crate::layouts::BleSchedulerItemLinkState::KIND_DIRECT_TEST)
+                .expect("zero fits"),
             word_0c: self.word_0c,
             word_14: self
                 .word_14
@@ -456,7 +459,9 @@ const DTM_RESET: DtmLinkStateReviewedWords = DtmLinkStateReviewedWords {
     word_60: BleLinkStateEvent::ZERO,
     profile_word_14: DtmLinkStateProfileWord(
         BleLinkStatePacketPolicy::ZERO
-            .with_bits_26_27_opaque(0x3)
+            .with_bits_26_27_opaque(
+                crate::layouts::BleLinkStatePacketPolicy::BITS_26_27_OPAQUE_DIRECT_TEST,
+            )
             .expect("reviewed field image fits"),
     ),
     crc_init: LeCrcInit::LE_PRESET,

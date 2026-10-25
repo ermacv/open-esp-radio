@@ -26,11 +26,13 @@ system these rules serve.
   adapter, `take_*` handoff, `handoff = true` partition, shared-word inventory
   or platform allowlist is permitted. C5 stays outside the workspace.
 - **Compile time first.** Every check that can run at compile time runs there.
-- **Panics.** Input from outside never panics: frames from the air, any peer
+- **Panics and unsafe.** A change introduces no new runtime panic sites or
+  `unsafe` code. Compile-time checks and test assertions are allowed.
+  Input from outside never panics: frames from the air, any peer
   value (counters, PNs, sequence numbers, lengths, indices), host and API
-  input return a handled error. Elsewhere `todo!`, `unreachable!`, `panic!`
-  and `expect` (never a bare `unwrap()`) are allowed, each with a static
-  message. Panic lints warn; a crate moves to `deny` when its contract
+  input return a handled error. Existing `todo!`, `unreachable!`, `panic!`
+  and `expect` (never a bare `unwrap()`) keep their static messages.
+  Panic lints warn; a crate moves to `deny` when its contract
   freezes.
 - **Execution.** An interrupt handler never shares a lock with a task. Driver
   code never blocks or spins; it yields to its executor. The one exception is
@@ -60,6 +62,13 @@ system these rules serve.
   domains and hand-written roots), probe images, the placement constructor and
   the HAL's protocol core, narrow and with `// SAFETY:`
   ([docs/unsafe.md](docs/unsafe.md)); crates above the HAL forbid it.
+- **Hardware dictionaries and geometry.** Field codes and opcodes are named
+  values in the register model, including analog-I2C and hardware-consumed
+  memory layouts; HAL selects the generated names. Field widths, maxima,
+  register-array counts and block geometry come from generated constants.
+  Sequence settings remain HAL constants with `SOURCE:`. An observed image
+  without an established code meaning stays cited configuration, not a model
+  dictionary entry.
 - **Air formats** use the `oer-wire` field macro and its bounded cursor; each
   field names its clause of the standard. No hand-written masks or shifts.
 - **Tests.** Every behavioral change gets a focused regression test beside its

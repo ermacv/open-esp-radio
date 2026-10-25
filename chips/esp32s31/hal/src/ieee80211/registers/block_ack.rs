@@ -234,7 +234,7 @@ fn store_rx_block_ack_peer<P: Placement>(
     });
     block.modify_rx_block_ack_entry_peer_tail_and_policy(entry, |w| {
         w.set_peer_address_tail(tail)
-            .set_interface(interface.field())
+            .set_interface(oer_esp32s31_pac::wifi_mac::rx_block_ack_entry_peer_tail_and_policy::Interface::from_field(interface.bits()))
             .set_window(bits(window.get()))
             .set_bits_25_31_opaque(bits(0));
     });
@@ -484,7 +484,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         });
         block.modify_extra_softap_rx_block_ack_peer_tail_and_policy(|w| {
             w.set_peer_address_tail(peer_tail)
-                .set_interface(interface.field())
+                .set_interface(oer_esp32s31_pac::wifi_mac::extra_softap_rx_block_ack_peer_tail_and_policy::Interface::from_field(interface.bits()))
                 .set_window(bits(window.get()))
                 .set_bits_25_31_opaque(bits(0));
         });

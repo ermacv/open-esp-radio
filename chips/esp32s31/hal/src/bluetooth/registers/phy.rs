@@ -70,15 +70,6 @@ where
     }
 }
 
-/// The modem event BLE PHY initialization routes.
-///
-/// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS.
-const BLE_PHY_ETM_EVENT: u32 = 8;
-/// The modem task BLE PHY initialization routes the event to.
-///
-/// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS.
-const BLE_PHY_ETM_TASK: u32 = 0x14;
-
 /// Route modem event 8 to task 20 on channel two, the event first, and
 /// enable the channel.
 ///
@@ -89,10 +80,10 @@ const BLE_PHY_ETM_TASK: u32 = 0x14;
 /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS.
 fn route_and_enable<E: Placement>(etm: &mut ModemEtmBluetoothPhy<E>) {
     etm.modify_ch2_event(|w| {
-        w.set_id(BLE_PHY_ETM_EVENT);
+        w.set_id(oer_esp32s31_pac::modem_etm::ch_event::Id::BlePhyEvent08.bits());
     });
     etm.modify_ch2_task(|w| {
-        w.set_id(BLE_PHY_ETM_TASK);
+        w.set_id(oer_esp32s31_pac::modem_etm::ch_task::Id::BlePhyTask14.bits());
     });
     etm.trigger_channel_enable_set_ch2();
 }

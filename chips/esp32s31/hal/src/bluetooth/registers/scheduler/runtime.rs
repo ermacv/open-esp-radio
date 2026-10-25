@@ -358,9 +358,12 @@ trait BluetoothDiagnosticControl {
 /// One complete diagnostic-value sample, compared field by field.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct DiagnosticValue {
-    value_0_low_7: u8,
+    progress_state: u8,
+    value_0_high_4: u8,
     value_0_bit_7: bool,
-    value_1: u8,
+    stage: u8,
+    value_1_low_4: u8,
+    value_1_high_2: u8,
     value_2: u8,
     value_3: u8,
 }
@@ -390,16 +393,22 @@ fn agreed_diagnostic_value(
 /// selector, lane-zero bits 2:0 hold 2, or hold 3 while lane-one bits 5:4
 /// hold 1 (complete-word bits 13:12 of the vendor comparison).
 const fn execution_modify_repeats(value: DiagnosticValue) -> bool {
-    let state = value.value_0_low_7 & 0x7;
-    state == 2 || (state == 3 && (value.value_1 >> 4) & 0x3 == 1)
+    use oer_esp32s31_pac::bt_mac::diagnostic_value::{ProgressState, Stage};
+    value.progress_state == ProgressState::ProgressState2.bits() as u8
+        || (value.progress_state == ProgressState::ProgressState3.bits() as u8
+            && value.stage == Stage::Stage1.bits() as u8)
 }
 
 /// Whether execution modify settled: with the settle selector, the complete
 /// value differs from 9.
 const fn execution_modify_settled(value: DiagnosticValue) -> bool {
-    !(value.value_0_low_7 == 9
+    use oer_esp32s31_pac::bt_mac::diagnostic_value::{ProgressState, Value0High4};
+    !(value.progress_state == ProgressState::UnsettledLow.bits() as u8
+        && value.value_0_high_4 == Value0High4::UnsettledHigh.bits() as u8
         && !value.value_0_bit_7
-        && value.value_1 == 0
+        && value.stage == 0
+        && value.value_1_low_4 == 0
+        && value.value_1_high_2 == 0
         && value.value_2 == 0
         && value.value_3 == 0)
 }
@@ -423,9 +432,12 @@ impl<B: oer_mmio::Placement> BluetoothDiagnosticControl for HardwareDiagnosticCo
     fn read_diagnostic_value(&mut self) -> DiagnosticValue {
         let value = self.registers.read_diagnostic_value();
         DiagnosticValue {
-            value_0_low_7: crate::bluetooth::registers::field_byte(value.value_0_low_7()),
+            progress_state: crate::bluetooth::registers::field_byte(value.progress_state()),
+            value_0_high_4: crate::bluetooth::registers::field_byte(value.value_0_high_4()),
             value_0_bit_7: value.value_0_bit_7(),
-            value_1: value.value_1(),
+            stage: crate::bluetooth::registers::field_byte(value.stage()),
+            value_1_low_4: crate::bluetooth::registers::field_byte(value.value_1_low_4()),
+            value_1_high_2: crate::bluetooth::registers::field_byte(value.value_1_high_2()),
             value_2: value.value_2(),
             value_3: value.value_3(),
         }

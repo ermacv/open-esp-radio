@@ -4,7 +4,7 @@ use super::values::{CoexTimerClientValue, CoexTimerPtiValue};
 use oer_esp32s31_pac::{coex::CoexHwTimer, instances};
 use oer_mmio::{Bits, Fixed, Index, Placement};
 
-pub const COEX_TIMER_COUNT: u8 = 6;
+pub const COEX_TIMER_COUNT: u8 = oer_esp32s31_pac::coex::configuration::COUNT as u8;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum CoexTimerRegister {
@@ -16,7 +16,7 @@ pub enum CoexTimerRegister {
     Timer5,
 }
 impl CoexTimerRegister {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; oer_esp32s31_pac::coex::configuration::COUNT] = [
         Self::Timer0,
         Self::Timer1,
         Self::Timer2,
@@ -35,7 +35,7 @@ impl CoexTimerRegister {
             _ => None,
         }
     }
-    const fn index(self) -> Index<6> {
+    const fn index(self) -> Index<{ oer_esp32s31_pac::coex::configuration::COUNT }> {
         match self {
             Self::Timer0 => Index::constant::<0>(),
             Self::Timer1 => Index::constant::<1>(),

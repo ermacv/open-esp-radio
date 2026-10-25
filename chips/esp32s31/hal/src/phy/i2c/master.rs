@@ -345,13 +345,14 @@ pub fn configure_master_registers<P: Placement>(master: &mut I2cAnaMst<P>) {
 ///
 /// SOURCE: ROM_REV0_PHY_I2C, BLOB_LIBPHY_PHY_I2C.
 pub fn set_bbpll_calibration<P: Placement>(master: &mut I2cAnaMst<P>, enabled: bool) {
+    use oer_esp32s31_pac::i2c_ana_mst::ana_conf0::BbpllCalMode;
     let mode = if enabled {
-        Bits::constant::<2>()
+        BbpllCalMode::Enabled
     } else {
-        Bits::constant::<1>()
+        BbpllCalMode::Disabled
     };
     master.modify_ana_conf0(|w| {
-        w.set_bbpll_cal_mode(mode);
+        w.set_bbpll_cal_mode(Bits::truncate(mode.bits()));
     });
 }
 

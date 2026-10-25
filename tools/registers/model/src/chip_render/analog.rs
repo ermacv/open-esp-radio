@@ -92,6 +92,34 @@ pub(super) fn render(model: &ChipModel) -> Result<String, Error> {
                 } else {
                     described |= mask;
                 }
+                let field_constant = constant(names::strip(&field.name, &prefix));
+                let maximum = u32::MAX >> (32 - field.width);
+                let _ = writeln!(
+                    output,
+                    "/// Width of `{}`.\npub const {field_constant}_WIDTH: u32 = {};\n/// Greatest field image.\npub const {field_constant}_MAX: u8 = {maximum};",
+                    field.name, field.width
+                );
+                if let Some(source) = template
+                    .fields
+                    .iter()
+                    .find(|source| source.name == field.name)
+                {
+                    for value in &source.values {
+                        let sources = if value.sources.is_empty() {
+                            &field.review.sources
+                        } else {
+                            &value.sources
+                        };
+                        let _ = writeln!(
+                            output,
+                            "/// Named image of `{}`. SOURCE: {}.\npub const {field_constant}_{}: u8 = {};",
+                            field.name,
+                            sources.join(", "),
+                            value.name,
+                            value.value
+                        );
+                    }
+                }
                 push_field(
                     &mut output,
                     &mut field_names,

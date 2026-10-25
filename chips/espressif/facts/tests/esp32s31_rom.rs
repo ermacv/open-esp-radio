@@ -87,14 +87,14 @@ fn every_declared_rom_function_and_only_those_functions_has_a_fact() {
 }
 
 #[test]
-fn rom_delays_export_their_clock_calibration_without_exporting_rom_state() {
+fn short_settles_need_no_rom_delay_or_calibration_exports() {
     let (facts, _) = oer_espressif_facts::generate::tracked("esp32s31").expect("S31 facts");
     let rom = facts.rom.expect("S31 ROM");
     let script = oer_espressif_facts::generate::rom_script(&rom).expect("S31 ROM script");
     for name in ["ets_delay_us", "ets_update_cpu_frequency"] {
-        assert!(rom.functions.iter().any(|function| function.name == name));
+        assert!(!rom.functions.iter().any(|function| function.name == name));
         assert!(
-            script
+            !script
                 .lines()
                 .any(|line| line.starts_with(&format!("{name} = ")))
         );

@@ -587,16 +587,16 @@ completeness = "partial"
 sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
 completeness = "partial"
 
-[review.entity."DIAGNOSTIC_VALUE.VALUE_0_LOW_7"]
-sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
+[review.entity."DIAGNOSTIC_VALUE.PROGRESS_STATE"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_EXECUTION_MODIFY", "BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
 completeness = "partial"
 
 [review.entity."DIAGNOSTIC_VALUE.VALUE_0_BIT_7"]
 sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
 completeness = "partial"
 
-[review.entity."DIAGNOSTIC_VALUE.VALUE_1"]
-sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
+[review.entity."DIAGNOSTIC_VALUE.STAGE"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_EXECUTION_MODIFY", "BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
 completeness = "partial"
 
 [review.entity."DIAGNOSTIC_VALUE.VALUE_2"]
@@ -1648,6 +1648,7 @@ description = "The scheduler lifecycle function reached from both BTDM task disa
 
 [[registers.fields]]
 name = "VALUE"
+values = [{ name = "REQUEST", value = 1 }]
 bits = "31:0"
 class = "write-only"
 description = "Complete lifecycle-request image."
@@ -1659,6 +1660,7 @@ description = "BTDM interrupt setup and the complete reset leaf write the finite
 
 [[registers.fields]]
 name = "COMMAND"
+values = [{ name = "COMMAND_1", value = 1 }]
 bits = "31:0"
 class = "write-only"
 
@@ -1669,6 +1671,7 @@ description = "BTDM interrupt teardown and the complete reset leaf write the fin
 
 [[registers.fields]]
 name = "COMMAND"
+values = [{ name = "COMMAND_1", value = 1 }]
 bits = "31:0"
 class = "write-only"
 
@@ -1679,6 +1682,7 @@ description = "BTDM interrupt teardown and the complete reset leaf write the fin
 
 [[registers.fields]]
 name = "COMMAND"
+values = [{ name = "COMMAND_1", value = 1 }]
 bits = "31:0"
 class = "write-only"
 
@@ -2548,8 +2552,9 @@ offset = 0x1ec
 description = "Diagnostic-signal values for the four DIAGNOSTIC_SELECT lanes. The value crosses from the MAC clock domain: readers accept a sample only when two consecutive complete reads are equal."
 
 [[registers.fields]]
-name = "VALUE_0_LOW_7"
-bits = "6:0"
+name = "PROGRESS_STATE"
+values = [{ name = "UNSETTLED_LOW", value = 1 }, { name = "PROGRESS_STATE_2", value = 2 }, { name = "PROGRESS_STATE_3", value = 3 }]
+bits = "2:0"
 class = "read-only"
 
 [[registers.fields]]
@@ -2559,8 +2564,9 @@ class = "read-only"
 description = "Bit 7 of the lane-zero signal. With SCHEDULER_STATUS selected it is scheduler BUSY, with the polarity of SCHEDULER_STATE.BUSY."
 
 [[registers.fields]]
-name = "VALUE_1"
-bits = "15:8"
+name = "STAGE"
+values = [{ name = "STAGE_1", value = 1 }]
+bits = "13:12"
 class = "read-only"
 
 [[registers.fields]]
@@ -2571,6 +2577,22 @@ class = "read-only"
 [[registers.fields]]
 name = "VALUE_3"
 bits = "31:24"
+class = "read-only"
+
+[[registers.fields]]
+name = "VALUE_0_HIGH_4"
+values = [{ name = "UNSETTLED_HIGH", value = 1 }]
+bits = "6:3"
+class = "read-only"
+
+[[registers.fields]]
+name = "VALUE_1_LOW_4"
+bits = "11:8"
+class = "read-only"
+
+[[registers.fields]]
+name = "VALUE_1_HIGH_2"
+bits = "15:14"
 class = "read-only"
 
 [[registers]]
@@ -4455,3 +4477,15 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 status = "IRQ_STATUS_SNAPSHOT_1"
 clear = "IRQ_CLEAR_1"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+
+[review.entity."DIAGNOSTIC_VALUE.VALUE_0_HIGH_4"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_EXECUTION_MODIFY"]
+completeness = "partial"
+
+[review.entity."DIAGNOSTIC_VALUE.VALUE_1_LOW_4"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_EXECUTION_MODIFY"]
+completeness = "partial"
+
+[review.entity."DIAGNOSTIC_VALUE.VALUE_1_HIGH_2"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_EXECUTION_MODIFY"]
+completeness = "partial"

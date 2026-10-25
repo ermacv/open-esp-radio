@@ -90,8 +90,6 @@ impl SchedulerAllocationNumbers {
 const SCANNER_NUMBERS: u16 = 3;
 /// Numbers between the scanner and DTM that the vendor reserves privately.
 const PRIVATE_NUMBERS_BEFORE_DTM: u16 = 5 + 4;
-/// Largest number that fits item word `+0x20[11:0]`.
-const MAX_ALLOCATION_NUMBER: u32 = 0x0fff;
 
 impl SchedulerAllocationConfig {
     /// Capture the product limits. `None` when the DTM number would not fit
@@ -106,7 +104,7 @@ impl SchedulerAllocationConfig {
             + connections as u32
             + PRIVATE_NUMBERS_BEFORE_DTM as u32
             + periodic_syncs as u32;
-        if dtm > MAX_ALLOCATION_NUMBER {
+        if dtm > crate::layouts::BleSchedulerItemAllocationNumber::VALUE_MAX {
             return None;
         }
         Some(Self {

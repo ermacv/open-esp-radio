@@ -56,8 +56,8 @@ pub const FLASH_MMU_WINDOW: MmuWindow = MmuWindow {
     virtual_base: 0x4000_0000,
     page_bytes: 0x1_0000,
     first_entry: 0,
-    entries: 1024,
-    physical_pages: 2048,
+    entries: oer_esp32s31_pac::spi_mem_c::MMU_ENTRIES as u16,
+    physical_pages: oer_esp32s31_pac::spi_mem_c::mmu_item_content::PADDR_MAX + 1,
 };
 
 /// The PSRAM MMU's window: 64-KiB pages from `0x5000_0000`, 1024 entries of
@@ -72,8 +72,8 @@ pub const PSRAM_MMU_WINDOW: MmuWindow = MmuWindow {
     virtual_base: 0x5000_0000,
     page_bytes: 0x1_0000,
     first_entry: 0,
-    entries: 1024,
-    physical_pages: 1024,
+    entries: oer_esp32s31_pac::spi_mem_s::MMU_ENTRIES as u16,
+    physical_pages: oer_esp32s31_pac::spi_mem_s::mmu_item_content::PADDR_MAX + 1,
 };
 
 /// The flash tuning region as instruction fetch maps it: the bootstrap's
@@ -269,8 +269,9 @@ pub const CLOCK_WAITS: ClockWaits = ClockWaits {
 /// `components/soc/esp32s31/register/soc/cache_reg.h:1633-1660`
 /// (`SYNC_MAP`; `SYNC_SIZE` 28 bits).
 pub const CACHE_GEOMETRY: CacheGeometry<CacheMap> = CacheGeometry {
-    line_bytes: 64,
-    max_range_bytes: (1 << 28) - 64,
+    line_bytes: oer_esp32s31_pac::cache::LINE_BYTES,
+    max_range_bytes: oer_esp32s31_pac::cache::sync_size::SYNC_SIZE_MAX
+        & !(oer_esp32s31_pac::cache::LINE_BYTES - 1),
     data: CacheMap::Data,
     writeback_passes: 2,
     instruction: Some(CacheMap::BothInstructionCaches),
@@ -330,12 +331,36 @@ const fn read_command(opcode: u8, address_bits: u8, dummy_cycles: u8) -> FlashRe
 /// `components/bootloader_support/bootloader_flash/src/bootloader_flash_config_esp32s31.c`
 /// (the S31 bootloader sets no `dummy_len_plus`).
 pub const FLASH_READ_COMMANDS: FlashReadCommands = FlashReadCommands {
-    qio: read_command(0xeb, 24 + 8, 4),
-    dio: read_command(0xbb, 24 + 4, 2),
-    qout: read_command(0x6b, 24, 8),
-    dout: read_command(0x3b, 24, 8),
-    fast_read: read_command(0x0b, 24, 8),
-    slow_read: read_command(0x03, 24, 0),
+    qio: read_command(
+        oer_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::QioRead.bits() as u8,
+        24 + 8,
+        4,
+    ),
+    dio: read_command(
+        oer_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::DioRead.bits() as u8,
+        24 + 4,
+        2,
+    ),
+    qout: read_command(
+        oer_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::QoutRead.bits() as u8,
+        24,
+        8,
+    ),
+    dout: read_command(
+        oer_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::DoutRead.bits() as u8,
+        24,
+        8,
+    ),
+    fast_read: read_command(
+        oer_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::FastRead.bits() as u8,
+        24,
+        8,
+    ),
+    slow_read: read_command(
+        oer_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::SlowRead.bits() as u8,
+        24,
+        0,
+    ),
 };
 
 /// The flash of `capacity` bytes, the module's.

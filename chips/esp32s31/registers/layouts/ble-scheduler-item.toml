@@ -102,6 +102,7 @@ encoding = "ble-compressed"
 
 [[layout.words.fields]]
 name = "KIND"
+values = [{ name = "DIRECT_TEST", value = 0 }, { name = "CONNECTION", value = 2 }, { name = "SCAN_REQUEST_RESPONSE", value = 4 }, { name = "LEGACY_ADVERTISING", value = 6 }, { name = "SCAN_LISTEN", value = 12 }]
 bits = "23:20"
 writer = "cpu"
 description = "Role kind supplied by the scanner type or the advertising, connection and DTM item producers."
@@ -144,12 +145,14 @@ description = "Index copied from the link-state transmit-power byte."
 
 [[layout.words.fields]]
 name = "PHY_CODE_28_29"
+values = [{ name = "LE_1M", value = 0 }]
 bits = "29:28"
 writer = "cpu"
 description = "First two-bit PHY code supplied by the role's mode-to-rate conversion; no TX/RX direction is assigned."
 
 [[layout.words.fields]]
 name = "PHY_CODE_30_31"
+values = [{ name = "LE_1M", value = 0 }]
 bits = "31:30"
 writer = "cpu"
 description = "Second two-bit PHY code supplied by the role's mode-to-rate conversion; no TX/RX direction is assigned."
@@ -301,6 +304,7 @@ description = "Observed word position; unassigned bits retain their exact image.
 
 [[layout.words.fields]]
 name = "BITS_0_10_OPAQUE"
+values = [{ name = "UNEXECUTED_LOW", value = 2047 }]
 opaque = true
 bits = "10:0"
 writer = "phased"
@@ -309,6 +313,7 @@ description = "Unassigned execution-result lanes. CPU arms all ones; hardware wr
 
 [[layout.words.fields]]
 name = "CAPTURE_AVAILABLE"
+values = [{ name = "UNEXECUTED", value = 1 }]
 bits = "11"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
@@ -316,6 +321,7 @@ description = "Peripheral-connection completion makes the captured anchor availa
 
 [[layout.words.fields]]
 name = "BITS_12_31_OPAQUE"
+values = [{ name = "UNEXECUTED_HIGH", value = 1048575 }]
 opaque = true
 bits = "31:12"
 writer = "phased"
@@ -376,6 +382,7 @@ description = "Role event byte, cleared when preparing a new item."
 
 [[layout.words.fields]]
 name = "KIND"
+values = [{ name = "CONNECTION", value = 3 }]
 bits = "15:8"
 writer = "cpu"
 description = "Role allocation kind: advertising, scanning, connection or DTM."

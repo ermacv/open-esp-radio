@@ -47,7 +47,7 @@ const fn tsf_words(value: u64) -> (u32, u32) {
 
 /// TSF bits 35:10 of a station TSF, the station TBTT target's field value.
 const fn tsf_bits_35_10(value: u64) -> u32 {
-    ((value >> 10) as u32) & 0x03ff_ffff
+    ((value >> 10) as u32) & oer_esp32s31_pac::modem_pwr::target::TSF_BITS_35_10_MAX
 }
 
 impl<M: MacPlacement> WifiRadioRegisters<M> {

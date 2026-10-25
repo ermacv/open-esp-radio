@@ -24,7 +24,8 @@ pub enum PhyI2cAccessError {
     UnroutedAddress,
 }
 
-pub(crate) const PHY_I2C_COMMAND_MEMORY_ENTRY_COUNT: usize = 45;
+pub(crate) const PHY_I2C_COMMAND_MEMORY_ENTRY_COUNT: usize =
+    oer_esp32s31_pac::i2c_ana_mst_mem::command_memory::COUNT;
 
 // Complete command order recovered from
 // `libphy.a[phy_i2c.o]::phy_i2c_master_cmd_mem_init`. Values which depend on
@@ -278,8 +279,8 @@ pub enum PhyAdcRate {
 impl PhyAdcRate {
     const fn analog_configuration_field_value(self) -> u8 {
         match self {
-            Self::Low => 2,
-            Self::High => 0,
+            Self::Low => analog_i2c::bbpll::rstb_div_adc::ADC_RATE_CONFIGURATION_LOW,
+            Self::High => analog_i2c::bbpll::rstb_div_adc::ADC_RATE_CONFIGURATION_HIGH,
         }
     }
 }

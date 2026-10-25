@@ -40,7 +40,7 @@ use crate::bluetooth::engine::{
 pub struct LeRxTag(u16);
 
 impl LeRxTag {
-    pub(crate) const MAX: u16 = 0x0fff;
+    pub(crate) const MAX: u16 = crate::layouts::BleSchedulerItemAllocationNumber::VALUE_MAX as u16;
 
     pub(crate) const fn new(number: u16) -> Option<Self> {
         if number <= Self::MAX {

@@ -19,7 +19,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_no_retention_stop_request(true)
                 .set_tx_block_stop_request_low(true)
                 .set_power_save_tx_block(PowerSaveTxBlock::Blocked)
-                .set_tx_block_stop_request_high(Bits::constant::<0xf>());
+                .set_tx_block_stop_request_high(Bits::truncate(
+                    oer_esp32s31_pac::wifi_mac::control::TxBlockStopRequestHigh::StopAll.bits(),
+                ));
         });
         oer_mmio::fence();
     }
@@ -51,7 +53,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_no_retention_stop_request(false)
                 .set_tx_block_stop_request_low(false)
                 .set_power_save_tx_block(PowerSaveTxBlock::Run)
-                .set_tx_block_stop_request_high(Bits::constant::<0>());
+                .set_tx_block_stop_request_high(Bits::truncate(
+                    oer_esp32s31_pac::wifi_mac::control::TxBlockStopRequestHigh::Run.bits(),
+                ));
         });
         oer_mmio::fence();
     }

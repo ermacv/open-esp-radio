@@ -7,14 +7,21 @@
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ModemSysconClockGateState {
     /// The selected MODEM_SYSCON clock gate is disabled.
-    Disabled = 0x00000000,
+    Disabled,
     /// The selected MODEM_SYSCON clock gate is enabled.
-    Enabled = 0x00000001,
+    Enabled,
 }
 impl ModemSysconClockGateState {
     /// Numeric image for diagnostics and HAL diagnostics.
     pub const fn bits(self) -> u32 {
-        self as u32
+        match self {
+            Self::Disabled => {
+                oer_esp32s31_pac::modem_syscon::clk_conf::ClkI2cMstSel160m::Disabled.bits()
+            }
+            Self::Enabled => {
+                oer_esp32s31_pac::modem_syscon::clk_conf::ClkI2cMstSel160m::Enabled.bits()
+            }
+        }
     }
 }
 
@@ -24,14 +31,21 @@ impl ModemSysconClockGateState {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ModemSysconEnableState {
     /// The selected MODEM_SYSCON function is disabled.
-    Disabled = 0x00000000,
+    Disabled,
     /// The selected MODEM_SYSCON function is enabled.
-    Enabled = 0x00000001,
+    Enabled,
 }
 impl ModemSysconEnableState {
     /// Numeric image for diagnostics and HAL diagnostics.
     pub const fn bits(self) -> u32 {
-        self as u32
+        match self {
+            Self::Disabled => {
+                oer_esp32s31_pac::modem_syscon::clk_conf::ClkI2cMstSel160m::Disabled.bits()
+            }
+            Self::Enabled => {
+                oer_esp32s31_pac::modem_syscon::clk_conf::ClkI2cMstSel160m::Enabled.bits()
+            }
+        }
     }
 }
 
@@ -41,14 +55,21 @@ impl ModemSysconEnableState {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ModemSysconResetState {
     /// The selected MODEM_SYSCON reset is released.
-    Released = 0x00000000,
+    Released,
     /// The selected MODEM_SYSCON reset is asserted.
-    Asserted = 0x00000001,
+    Asserted,
 }
 impl ModemSysconResetState {
     /// Numeric image for diagnostics and HAL diagnostics.
     pub const fn bits(self) -> u32 {
-        self as u32
+        match self {
+            Self::Released => {
+                oer_esp32s31_pac::modem_syscon::modem_rst_conf::RstWifibb::Released.bits()
+            }
+            Self::Asserted => {
+                oer_esp32s31_pac::modem_syscon::modem_rst_conf::RstWifibb::Asserted.bits()
+            }
+        }
     }
 }
 
@@ -58,14 +79,21 @@ impl ModemSysconResetState {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum WifiBaseband40MhzState {
     /// Select the reviewed non-40-MHz digital baseband state.
-    Disabled = 0x00000000,
+    Disabled,
     /// Select the reviewed 40 MHz digital baseband state.
-    Enabled = 0x00000001,
+    Enabled,
 }
 impl WifiBaseband40MhzState {
     /// Numeric image for diagnostics and HAL diagnostics.
     pub const fn bits(self) -> u32 {
-        self as u32
+        match self {
+            Self::Disabled => {
+                oer_esp32s31_pac::modem_syscon::wifi_bb_cfg::BssCbw40Digital::Disabled.bits()
+            }
+            Self::Enabled => {
+                oer_esp32s31_pac::modem_syscon::wifi_bb_cfg::BssCbw40Digital::Enabled.bits()
+            }
+        }
     }
 }
 
@@ -75,14 +103,22 @@ impl WifiBaseband40MhzState {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum WifiBasebandAgcUpdateMode {
     /// Select the initialization update mode.
-    Initialization = 0x00000001,
+    Initialization,
     /// Enable subsequent baseband register updates.
-    RegisterUpdatesEnabled = 0x00000007,
+    RegisterUpdatesEnabled,
 }
 impl WifiBasebandAgcUpdateMode {
     /// Numeric image for diagnostics and HAL diagnostics.
     pub const fn bits(self) -> u32 {
-        self as u32
+        match self {
+            Self::Initialization => {
+                oer_esp32s31_pac::modem_syscon::wifi_bb_cfg::Bits11_13Opaque::Initialization.bits()
+            }
+            Self::RegisterUpdatesEnabled => {
+                oer_esp32s31_pac::modem_syscon::wifi_bb_cfg::Bits11_13Opaque::RegisterUpdatesEnabled
+                    .bits()
+            }
+        }
     }
 }
 
@@ -92,11 +128,11 @@ impl WifiBasebandAgcUpdateMode {
 pub struct ModemLowPowerClockDivider(u32);
 impl ModemLowPowerClockDivider {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = 0x00000fff;
+    pub const MAX: u32 = oer_esp32s31_pac::modem_lpcon::lp_timer_conf::CLK_LP_TIMER_DIV_NUM_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= 0x00000fff {
+        if value <= Self::MAX {
             Some(Self(value))
         } else {
             None
@@ -104,7 +140,11 @@ impl ModemLowPowerClockDivider {
     }
 
     /// The value of a 12-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<12>) -> Self {
+    pub const fn from_bits(
+        bits: oer_mmio::Bits<
+            { oer_esp32s31_pac::modem_lpcon::lp_timer_conf::CLK_LP_TIMER_DIV_NUM_WIDTH },
+        >,
+    ) -> Self {
         Self(bits.get())
     }
 
@@ -120,11 +160,11 @@ impl ModemLowPowerClockDivider {
 pub struct CoexTimerClockDividerMinusOne(u32);
 impl CoexTimerClockDividerMinusOne {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = 0x00000fff;
+    pub const MAX: u32 = oer_esp32s31_pac::modem_lpcon::coex_lp_clk_conf::CLK_COEX_LP_DIV_NUM_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= 0x00000fff {
+        if value <= Self::MAX {
             Some(Self(value))
         } else {
             None
@@ -132,7 +172,11 @@ impl CoexTimerClockDividerMinusOne {
     }
 
     /// The value of a 12-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<12>) -> Self {
+    pub const fn from_bits(
+        bits: oer_mmio::Bits<
+            { oer_esp32s31_pac::modem_lpcon::coex_lp_clk_conf::CLK_COEX_LP_DIV_NUM_WIDTH },
+        >,
+    ) -> Self {
         Self(bits.get())
     }
 
@@ -169,11 +213,11 @@ impl CoexTimerClockSource {
 pub struct CoexTimerClientValue(u32);
 impl CoexTimerClientValue {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = 0x00000003;
+    pub const MAX: u32 = oer_esp32s31_pac::coex::configuration::PARAMETER_1_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= 0x00000003 {
+        if value <= Self::MAX {
             Some(Self(value))
         } else {
             None
@@ -181,7 +225,9 @@ impl CoexTimerClientValue {
     }
 
     /// The value of a 2-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<2>) -> Self {
+    pub const fn from_bits(
+        bits: oer_mmio::Bits<{ oer_esp32s31_pac::coex::configuration::PARAMETER_1_WIDTH }>,
+    ) -> Self {
         Self(bits.get())
     }
 
@@ -197,11 +243,11 @@ impl CoexTimerClientValue {
 pub struct CoexTimerPtiValue(u32);
 impl CoexTimerPtiValue {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = 0x0000000f;
+    pub const MAX: u32 = oer_esp32s31_pac::coex::configuration::PARAMETER_2_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= 0x0000000f {
+        if value <= Self::MAX {
             Some(Self(value))
         } else {
             None
@@ -209,7 +255,9 @@ impl CoexTimerPtiValue {
     }
 
     /// The value of a 4-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<4>) -> Self {
+    pub const fn from_bits(
+        bits: oer_mmio::Bits<{ oer_esp32s31_pac::coex::configuration::PARAMETER_2_WIDTH }>,
+    ) -> Self {
         Self(bits.get())
     }
 
@@ -225,11 +273,11 @@ impl CoexTimerPtiValue {
 pub struct ExternalCoexFlag(u32);
 impl ExternalCoexFlag {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = 0x00000001;
+    pub const MAX: u32 = oer_esp32s31_pac::coex::control::VALIDATE_HIGH_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= 0x00000001 {
+        if value <= Self::MAX {
             Some(Self(value))
         } else {
             None
@@ -237,7 +285,9 @@ impl ExternalCoexFlag {
     }
 
     /// The value of a 1-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<1>) -> Self {
+    pub const fn from_bits(
+        bits: oer_mmio::Bits<{ oer_esp32s31_pac::coex::control::VALIDATE_HIGH_WIDTH }>,
+    ) -> Self {
         Self(bits.get())
     }
 
@@ -253,11 +303,11 @@ impl ExternalCoexFlag {
 pub struct ExternalCoexGrantDelay(u32);
 impl ExternalCoexGrantDelay {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = 0x0000000f;
+    pub const MAX: u32 = oer_esp32s31_pac::coex::control::GRANT_DELAY_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= 0x0000000f {
+        if value <= Self::MAX {
             Some(Self(value))
         } else {
             None
@@ -265,7 +315,9 @@ impl ExternalCoexGrantDelay {
     }
 
     /// The value of a 4-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<4>) -> Self {
+    pub const fn from_bits(
+        bits: oer_mmio::Bits<{ oer_esp32s31_pac::coex::control::GRANT_DELAY_WIDTH }>,
+    ) -> Self {
         Self(bits.get())
     }
 
@@ -281,11 +333,11 @@ impl ExternalCoexGrantDelay {
 pub struct ExternalCoexNibble(u32);
 impl ExternalCoexNibble {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = 0x0000000f;
+    pub const MAX: u32 = oer_esp32s31_pac::coex::pti::PRIORITY_0_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= 0x0000000f {
+        if value <= Self::MAX {
             Some(Self(value))
         } else {
             None
@@ -293,7 +345,9 @@ impl ExternalCoexNibble {
     }
 
     /// The value of a 4-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<4>) -> Self {
+    pub const fn from_bits(
+        bits: oer_mmio::Bits<{ oer_esp32s31_pac::coex::pti::PRIORITY_0_WIDTH }>,
+    ) -> Self {
         Self(bits.get())
     }
 
@@ -309,11 +363,11 @@ impl ExternalCoexNibble {
 pub struct ExternalCoexSync(u32);
 impl ExternalCoexSync {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = 0x000003ff;
+    pub const MAX: u32 = oer_esp32s31_pac::coex::control::SYNC_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= 0x000003ff {
+        if value <= Self::MAX {
             Some(Self(value))
         } else {
             None
@@ -321,7 +375,9 @@ impl ExternalCoexSync {
     }
 
     /// The value of a 10-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<10>) -> Self {
+    pub const fn from_bits(
+        bits: oer_mmio::Bits<{ oer_esp32s31_pac::coex::control::SYNC_WIDTH }>,
+    ) -> Self {
         Self(bits.get())
     }
 
@@ -337,11 +393,11 @@ impl ExternalCoexSync {
 pub struct ExternalCoexWorkMode(u32);
 impl ExternalCoexWorkMode {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = 0x00000003;
+    pub const MAX: u32 = oer_esp32s31_pac::coex::pti::WORK_MODE_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= 0x00000003 {
+        if value <= Self::MAX {
             Some(Self(value))
         } else {
             None
@@ -349,7 +405,9 @@ impl ExternalCoexWorkMode {
     }
 
     /// The value of a 2-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<2>) -> Self {
+    pub const fn from_bits(
+        bits: oer_mmio::Bits<{ oer_esp32s31_pac::coex::pti::WORK_MODE_WIDTH }>,
+    ) -> Self {
         Self(bits.get())
     }
 
@@ -365,11 +423,11 @@ impl ExternalCoexWorkMode {
 pub struct PhyForcedPowerIndex(u32);
 impl PhyForcedPowerIndex {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = 0x0000003f;
+    pub const MAX: u32 = oer_esp32s31_pac::fe::table_memory_index_source::FORCED_POWER_INDEX_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= 0x0000003f {
+        if value <= Self::MAX {
             Some(Self(value))
         } else {
             None
@@ -377,7 +435,11 @@ impl PhyForcedPowerIndex {
     }
 
     /// The value of a 6-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<6>) -> Self {
+    pub const fn from_bits(
+        bits: oer_mmio::Bits<
+            { oer_esp32s31_pac::fe::table_memory_index_source::FORCED_POWER_INDEX_WIDTH },
+        >,
+    ) -> Self {
         Self(bits.get())
     }
 
@@ -393,11 +455,11 @@ impl PhyForcedPowerIndex {
 pub struct CfrValue(u32);
 impl CfrValue {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = 0x00000fff;
+    pub const MAX: u32 = oer_esp32s31_pac::wifi_bb::hccfr_value::VALUE_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= 0x00000fff {
+        if value <= Self::MAX {
             Some(Self(value))
         } else {
             None
@@ -405,7 +467,9 @@ impl CfrValue {
     }
 
     /// The value of a 12-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<12>) -> Self {
+    pub const fn from_bits(
+        bits: oer_mmio::Bits<{ oer_esp32s31_pac::wifi_bb::hccfr_value::VALUE_WIDTH }>,
+    ) -> Self {
         Self(bits.get())
     }
 
@@ -421,11 +485,11 @@ impl CfrValue {
 pub struct ForcedRxGain(u32);
 impl ForcedRxGain {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = 0x000000ff;
+    pub const MAX: u32 = oer_esp32s31_pac::wifi_bb::agc_shared_control::FORCED_GAIN_INDEX_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= 0x000000ff {
+        if value <= Self::MAX {
             Some(Self(value))
         } else {
             None
@@ -433,7 +497,11 @@ impl ForcedRxGain {
     }
 
     /// The value of a 8-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<8>) -> Self {
+    pub const fn from_bits(
+        bits: oer_mmio::Bits<
+            { oer_esp32s31_pac::wifi_bb::agc_shared_control::FORCED_GAIN_INDEX_WIDTH },
+        >,
+    ) -> Self {
         Self(bits.get())
     }
 

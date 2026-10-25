@@ -108,6 +108,7 @@ value-range = { min = 0x0, max = 0xf, sources = ["BLOB_LIBCOEX_HW_TIMER"] }
 
 [[registers.fields]]
 name = "PARAMETER_1"
+values = [{ name = "PHY_GRANT_PROTECT", value = 0 }]
 bits = "29:28"
 class = "plain"
 description = "Low two bits of the second libcoexist[coexist_hw.o]::coex_hw_timer_set argument. Bits 31:30 are preserved by the complete vendor RMW."
@@ -214,6 +215,7 @@ value-range = { min = 0x0, max = 0xf, sources = ["BLOB_LIBCOEX_EXTERNAL"] }
 
 [[registers.fields]]
 name = "WORK_MODE"
+values = [{ name = "LEADER", value = 0 }, { name = "FOLLOWER", value = 2 }]
 bits = "29:28"
 class = "plain"
 description = "Low two bits of the hal_set_extern_coex_mode argument: the external work mode (0 leader, 1 one-wire leader variant, 2 follower)."

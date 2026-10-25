@@ -94,7 +94,7 @@ completeness = "partial"
 sources = ["S31_MMIO_MANUAL_2010D044"]
 completeness = "partial"
 
-[review.entity."WORD_0048_OPAQUE.BITS_0_31_OPAQUE"]
+[review.entity."WORD_0048_OPAQUE.COUNTER_LOW"]
 sources = ["S31_MMIO_DECLARED_2010D048"]
 accuracy = "unknown"
 completeness = "unknown"
@@ -910,6 +910,7 @@ description = "State word whose low byte is sampled independently; complete writ
 
 [[registers.fields]]
 name = "LOW_BYTE"
+values = [{ name = "SOFTWARE_PENDING", value = 1 }]
 bits = "7:0"
 class = "plain"
 
@@ -983,8 +984,13 @@ offset = 0x48
 description = "Complete word read by multiple runtime functions."
 
 [[registers.fields]]
-name = "BITS_0_31_OPAQUE"
-bits = "31:0"
+name = "COUNTER_LOW"
+bits = "23:0"
+class = "read-only"
+
+[[registers.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
 class = "read-only"
 
 [[registers]]
@@ -1845,6 +1851,7 @@ description = "Complete hal_clear_rx_beacon_pti sets bit zero through a fresh-re
 
 [[registers.fields]]
 name = "BITS_0_31_OPAQUE"
+values = [{ name = "RX_BEACON", value = 1 }]
 bits = "31:0"
 class = "plain"
 write-range = { min = 0x0, max = 0xffffffff }

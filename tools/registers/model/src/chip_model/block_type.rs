@@ -215,6 +215,18 @@ impl BlockType {
         }
         context.sources(&name, &file.header.sources)?;
         let space = file.header.space;
+        let mut geometry = BTreeSet::new();
+        for value in &file.geometry {
+            let entity = format!("{name}.{}", value.name);
+            check_name(&value.name, false).map_err(|kind| context.error(&entity, kind))?;
+            if value.value == 0 || !geometry.insert(&value.name) {
+                return Err(context.error(
+                    &entity,
+                    ErrorKind::Values("geometry must be positive with unique names".to_owned()),
+                ));
+            }
+            context.sources(&entity, &value.sources)?;
+        }
 
         let mut outputs = BTreeSet::new();
         for output in &file.interrupt_outputs {
@@ -459,11 +471,10 @@ fn check_register(
 fn check_values(field: &Field, width: u32) -> Result<(), ErrorKind> {
     let invalid = |reason: String| Err(ErrorKind::Values(reason));
     let mut names = BTreeSet::new();
-    let mut values = BTreeSet::new();
     for value in &field.values {
         check_name(&value.name, false)?;
-        if !names.insert(value.name.as_str()) || !values.insert(value.value) {
-            return invalid(format!("value {} is named or numbered twice", value.name));
+        if !names.insert(value.name.as_str()) {
+            return invalid(format!("value {} is named twice", value.name));
         }
         if !fits(value.value, width) {
             return invalid(format!(

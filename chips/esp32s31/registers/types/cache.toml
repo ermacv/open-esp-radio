@@ -5032,3 +5032,9 @@ description = "version control register. Note that this default value stored is 
 register = "SYNC_CTRL"
 commands = ["INVALIDATE_ENA", "CLEAN_ENA", "WRITEBACK_ENA", "WRITEBACK_INVALIDATE_ENA"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H_L1574"]
+
+[[geometry]]
+name = "LINE_BYTES"
+value = 64
+sources = ["S31_CACHE_LINE_GEOMETRY"]
+description = "Bytes per instruction or data cache line."

@@ -17,6 +17,42 @@ use oer_esp32s31_pac::{
     pmu::PmuBootClock,
 };
 
+/// CPU rate captured by the clock owner before its runtime handover.
+/// Zero means no supported, stable integer clock has been adopted.
+#[cfg(target_arch = "riscv32")]
+static RUNTIME_CPU_HZ: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// The chip's supported crystal, used by the clock owner's divider calculation.
+/// SOURCE: ESP-IDF 4d59230d `soc/esp32s31/include/soc/clk_tree_defs.h:125-127`.
+#[cfg(any(target_arch = "riscv32", test))]
+const XTAL_HZ: u32 = 40_000_000;
+
+/// A stable CPU rate, derived from the owned clock registers, never ROM state.
+#[cfg(any(target_arch = "riscv32", test))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct CpuFrequency(u32);
+
+#[cfg(any(target_arch = "riscv32", test))]
+impl CpuFrequency {
+    fn from_dividers(root: CpuRoot, cpu: u8, pll: CpllDividers) -> Option<Self> {
+        let root_hz = match root {
+            CpuRoot::Xtal => XTAL_HZ,
+            CpuRoot::Cpll => XTAL_HZ
+                .checked_mul(u32::from(pll.feedback))?
+                .checked_div(pll.reference.get())?,
+            // The bootstrap profiles use XTAL or the calibrated CPLL. No
+            // guessed oscillator rate is admitted for a short settle.
+            CpuRoot::RcFast | CpuRoot::PllF240m => return None,
+        };
+        let hz = root_hz / (u32::from(cpu) + 1);
+        (hz != 0).then_some(Self(hz))
+    }
+
+    fn cycles(self, micros: u32) -> Option<u32> {
+        u32::try_from((u64::from(self.0) * u64::from(micros)).div_ceil(1_000_000)).ok()
+    }
+}
+
 /// The CPU's root clocks (`SOC_CLK_SEL`).
 ///
 /// SOURCE: ESP-IDF 4d59230d
@@ -31,21 +67,22 @@ pub enum CpuRoot {
 }
 
 impl CpuRoot {
-    const fn code(self) -> Bits<2> {
+    const fn code(self) -> oer_esp32s31_pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel {
+        use oer_esp32s31_pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel;
         match self {
-            Self::Xtal => Bits::constant::<0>(),
-            Self::Cpll => Bits::constant::<1>(),
-            Self::RcFast => Bits::constant::<2>(),
-            Self::PllF240m => Bits::constant::<3>(),
+            Self::Xtal => RegSocClkSel::Xtal,
+            Self::Cpll => RegSocClkSel::Cpll,
+            Self::RcFast => RegSocClkSel::RcFast,
+            Self::PllF240m => RegSocClkSel::PllF240m,
         }
     }
-
     const fn from_code(code: Bits<2>) -> Self {
-        match code.get() {
-            0 => Self::Xtal,
-            1 => Self::Cpll,
-            2 => Self::RcFast,
-            _ => Self::PllF240m,
+        use oer_esp32s31_pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel;
+        match RegSocClkSel::from_field(code.get()) {
+            RegSocClkSel::Xtal => Self::Xtal,
+            RegSocClkSel::Cpll => Self::Cpll,
+            RegSocClkSel::RcFast => Self::RcFast,
+            RegSocClkSel::PllF240m => Self::PllF240m,
         }
     }
 }
@@ -104,6 +141,37 @@ pub struct ClockRegisters<
 }
 
 impl ClockRegisters {
+    /// Adopt the bootstrap's stable CPU rate before any runtime PHY settle.
+    /// Clock writes remain exclusively in the bootstrap; runtime has no CPU
+    /// clock owner. A fractional or unsupported rate refuses short settles.
+    #[cfg(target_arch = "riscv32")]
+    pub(crate) fn adopt_short_settle_clock(self) {
+        use core::sync::atomic::Ordering;
+        let cpu = self.hp_sys_clkrst.read_cpu_freq_ctrl0();
+        let root = CpuRoot::from_code(self.hp_sys_clkrst.read_soc_clk_sel().reg_soc_clk_sel());
+        let pll = self.lp_aon_clkrst.read_cpll_div();
+        let rate = (cpu.reg_cpu_clk_div_numerator().get() == 0)
+            .then(|| {
+                CpuFrequency::from_dividers(
+                    root,
+                    cpu.reg_cpu_clk_div_num(),
+                    CpllDividers {
+                        feedback: pll.cpll_fb_div(),
+                        reference: pll.cpll_ref_div(),
+                    },
+                )
+            })
+            .flatten();
+        RUNTIME_CPU_HZ.store(rate.map_or(0, |rate| rate.0), Ordering::Release);
+    }
+
+    /// The settle length in machine cycles at the adopted CPU rate.
+    #[cfg(target_arch = "riscv32")]
+    pub(crate) fn short_settle_cycles(micros: u32) -> Option<u32> {
+        let hz = RUNTIME_CPU_HZ.load(core::sync::atomic::Ordering::Acquire);
+        (hz != 0).then_some(CpuFrequency(hz))?.cycles(micros)
+    }
+
     /// Own the bootstrap's clock parts.
     pub(crate) fn new(
         hp_sys_clkrst: HpSysClkrstBootClock,
@@ -452,5 +520,37 @@ impl<'a, 'b, 'c, 'd>
             pmu: PmuBootClock::host(pmu)?,
             hp_alive_sys: HpAliveSysPllClock::host(hp_alive_sys)?,
         })
+    }
+}
+
+#[cfg(test)]
+mod frequency_tests {
+    use super::*;
+
+    #[test]
+    fn short_settles_follow_the_adopted_profile_and_round_up() {
+        for profile in [
+            super::super::CpuProfile::Mhz160,
+            super::super::CpuProfile::Mhz320,
+        ] {
+            let profile = profile.clock();
+            let rate = CpuFrequency::from_dividers(
+                profile.root,
+                profile.dividers.cpu,
+                profile.pll.expect("CPLL profile"),
+            )
+            .expect("supported CPU profile");
+            assert_eq!(rate.0, profile.rates.cpu_hz);
+            assert_eq!(rate.cycles(20), Some(profile.rates.cpu_hz / 50_000));
+        }
+        assert_eq!(CpuFrequency(1_500_001).cycles(1), Some(2));
+    }
+
+    #[test]
+    fn an_unmeasured_or_invalid_source_cannot_supply_a_delay_rate() {
+        let mut pll = super::super::CPLL_320;
+        assert_eq!(CpuFrequency::from_dividers(CpuRoot::RcFast, 0, pll), None);
+        pll.reference = Bits::constant::<0>();
+        assert_eq!(CpuFrequency::from_dividers(CpuRoot::Cpll, 0, pll), None);
     }
 }

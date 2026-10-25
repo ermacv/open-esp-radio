@@ -2,11 +2,6 @@
 
 use super::super::{MacItwtClearIndex, MacPlacement, MacPti, WifiRadioRegisters, bits};
 
-/// The receive-beacon clear request: bit zero of `CLEAR_REQUEST`.
-///
-/// SOURCE: complete pinned `libpp.a[hal_coex.o]::hal_clear_rx_beacon_pti`.
-const RX_BEACON_CLEAR_REQUEST_BIT: u32 = 0;
-
 impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Publish receive-beacon and shared receive PTI in vendor instruction order.
     ///
@@ -47,7 +42,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// SOURCE: complete pinned
     /// `libpp.a[hal_coex.o]::hal_clear_rx_beacon_pti`.
     pub fn clear_rx_beacon_pti(&mut self) {
-        self.set_clear_request_bit(RX_BEACON_CLEAR_REQUEST_BIT);
+        self.mac.wifi_mac_coex_runtime.modify_clear_request(|w| {
+            let requests = w.bits_0_31_opaque()
+                | oer_esp32s31_pac::modem_pwr::clear_request::Bits0_31Opaque::RxBeacon.bits();
+            w.set_bits_0_31_opaque(requests);
+        });
     }
 
     /// Publish the two complete `hal_set_itwt_pti` register edges.

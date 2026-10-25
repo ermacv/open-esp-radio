@@ -246,16 +246,66 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // (format, encoded rate, table lookup rate). The blob replaces these
         // three fields through three separate RMWs for every command word.
         const RESPONSE: [(u8, u8, u8); 10] = [
-            (0, 0, 0),
-            (0, 1, 0),
-            (0, 5, 5),
-            (0, 11, 11),
-            (0, 10, 10),
-            (0, 9, 9),
-            (2, 16, 16),
-            (2, 17, 17),
-            (2, 18, 18),
-            (2, 18, 18),
+            (
+                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format0.bits()
+                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate00.bits() as u8,
+                0,
+            ),
+            (
+                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format0.bits()
+                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate01.bits() as u8,
+                0,
+            ),
+            (
+                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format0.bits()
+                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate05.bits() as u8,
+                5,
+            ),
+            (
+                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format0.bits()
+                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate0b.bits() as u8,
+                11,
+            ),
+            (
+                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format0.bits()
+                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate0a.bits() as u8,
+                10,
+            ),
+            (
+                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format0.bits()
+                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate09.bits() as u8,
+                9,
+            ),
+            (
+                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format2.bits()
+                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate10.bits() as u8,
+                16,
+            ),
+            (
+                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format2.bits()
+                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate11.bits() as u8,
+                17,
+            ),
+            (
+                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format2.bits()
+                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate12.bits() as u8,
+                18,
+            ),
+            (
+                oer_esp32s31_pac::wifi_mac::immediate_response::Bits22_23Opaque::Format2.bits()
+                    as u8,
+                oer_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate12.bits() as u8,
+                18,
+            ),
         ];
         for (word, (format, encoded_rate, lookup_rate)) in RESPONSE.into_iter().enumerate() {
             let response = element::<10>(word);
