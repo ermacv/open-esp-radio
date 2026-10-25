@@ -2,6 +2,7 @@
 //! block drops and counts instead of waiting, the driver takes only a free
 //! block, and the fatal path takes only a free block, for good.
 
+use std::sync::Barrier;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::vec::Vec;
 
@@ -30,16 +31,47 @@ impl<R: EndpointRegisters> Console for Parts<R> {
 
 /// An endpoint that always has room and counts the bytes pushed to it.
 #[derive(Default)]
-struct Counting {
+struct Counting<'a> {
     pushed: AtomicUsize,
+    /// With this probe, `[` and `]` delimit an actual endpoint record.
+    holders: Option<&'a Occupancy>,
 }
 
-impl EndpointRegisters for Counting {
+#[derive(Default)]
+struct Occupancy {
+    active: AtomicUsize,
+    most: AtomicUsize,
+}
+
+impl Occupancy {
+    fn enter(&self) {
+        let now = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+        self.most.fetch_max(now, Ordering::SeqCst);
+    }
+
+    fn leave(&self) {
+        self.active.fetch_sub(1, Ordering::SeqCst);
+    }
+
+    fn assert_exclusive(&self) {
+        assert_eq!(self.active.load(Ordering::SeqCst), 0);
+        assert_eq!(self.most.load(Ordering::SeqCst), 1, "one block holder");
+    }
+}
+
+impl EndpointRegisters for Counting<'_> {
     fn has_room(&self) -> bool {
         true
     }
 
-    fn push(&mut self, _: u8) {
+    fn push(&mut self, byte: u8) {
+        if let Some(holders) = self.holders {
+            match byte {
+                b'[' => holders.enter(),
+                b']' => holders.leave(),
+                _ => panic!("a probed record uses delimiters only"),
+            }
+        }
         self.pushed.fetch_add(1, Ordering::SeqCst);
     }
 
@@ -159,37 +191,105 @@ fn the_driver_is_refused_while_a_record_holds_the_block() {
 
 #[test]
 fn records_of_two_harts_and_the_driver_never_hold_the_block_together() {
+    let holders = Occupancy::default();
     let early = Ownership::new();
-    assert!(early.install(Parts(Counting::default())).is_ok());
-    let holders = AtomicUsize::new(0);
-    let most = AtomicUsize::new(0);
+    assert!(
+        early
+            .install(Parts(Counting {
+                holders: Some(&holders),
+                ..Counting::default()
+            }))
+            .is_ok()
+    );
+    // Ensure at least one early record reaches the endpoint even when the
+    // driver wins the concurrent race immediately.
+    assert!(early.write(|writer| writer.text(b"[]")));
+    let start = Barrier::new(3);
+    let finished = Barrier::new(3);
     let driver = AtomicBool::new(false);
     std::thread::scope(|scope| {
         for _ in 0..2 {
             scope.spawn(|| {
+                start.wait();
                 for _ in 0..2_000 {
                     early.write(|writer| {
-                        let now = holders.fetch_add(1, Ordering::SeqCst) + 1;
-                        most.fetch_max(now, Ordering::SeqCst);
-                        writer.text(b"boot");
-                        holders.fetch_sub(1, Ordering::SeqCst);
+                        // Refused callbacks use an empty FIFO and never
+                        // enter the endpoint's occupancy interval.
+                        writer.text(b"[");
+                        std::thread::yield_now();
+                        writer.text(b"]");
                     });
                 }
+                finished.wait();
             });
         }
         scope.spawn(|| {
-            loop {
+            start.wait();
+            let _parts = loop {
                 match early.retire() {
-                    Ok(_parts) => break,
+                    Ok(parts) => break parts,
                     Err(RetireError::Busy) => std::thread::yield_now(),
                     Err(error) => panic!("the block is installed and free later: {error:?}"),
                 }
-            }
+            };
+            holders.enter();
             driver.store(true, Ordering::SeqCst);
+            // Count the driver's ownership until both harts finish trying.
+            finished.wait();
+            holders.leave();
         });
     });
     assert!(driver.load(Ordering::SeqCst));
-    assert!(most.load(Ordering::SeqCst) <= 1, "one record at a time");
+    holders.assert_exclusive();
+    assert!(!early.write(|_| panic!("the driver keeps the block")));
+}
+
+#[test]
+fn overlapping_callbacks_lend_only_one_endpoint_and_count_every_refused_byte() {
+    const HARTS: usize = 8;
+    const RECORDS: usize = 64;
+    let holders = Occupancy::default();
+    let callbacks = Occupancy::default();
+    let early = Ownership::new();
+    assert!(
+        early
+            .install(Parts(Counting {
+                holders: Some(&holders),
+                ..Counting::default()
+            }))
+            .is_ok()
+    );
+    let barrier = Barrier::new(HARTS);
+    std::thread::scope(|scope| {
+        for _ in 0..HARTS {
+            scope.spawn(|| {
+                for _ in 0..RECORDS {
+                    // Every previous write has returned before the next
+                    // round; exactly one callback gets the real endpoint.
+                    barrier.wait();
+                    assert!(early.write(|writer| {
+                        callbacks.enter();
+                        writer.text(b"[");
+                        // Keep the winning loan until every refused
+                        // callback is also running, without using time.
+                        barrier.wait();
+                        writer.text(b"]");
+                        callbacks.leave();
+                    }));
+                }
+            });
+        }
+    });
+    assert_eq!(callbacks.active.load(Ordering::SeqCst), 0);
+    assert_eq!(callbacks.most.load(Ordering::SeqCst), HARTS);
+    holders.assert_exclusive();
+    let Parts(endpoint) = early.retire().expect("all records ended");
+    assert_eq!(endpoint.pushed.load(Ordering::SeqCst), 2 * RECORDS);
+    assert_eq!(
+        early.take_lost(),
+        u32::try_from(2 * (HARTS - 1) * RECORDS).expect("the stress loss count fits"),
+        "only refused callbacks lose their two bytes"
+    );
 }
 
 #[test]
