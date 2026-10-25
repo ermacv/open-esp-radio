@@ -127,7 +127,12 @@ the same type, so a value read back is written again without a
 conversion. A read-modify-write keeps every other bit, reserved and
 undeclared ones included; a write-one-to-clear register, or the clear
 register of a status-to-clear snapshot, is acknowledged with exactly one
-affine sample; a DMA address field is written only from a typed DMA
+affine sample. A policy fixed image on a snapshot's clear register
+acknowledges events no sample captured, so it names its proof: `masks`,
+its enable register, whose bits of the image the same transaction clears
+before the store, so no enabled event is acknowledged unsampled; or
+`consumed-event`, the reviewed reason its one caller consumes that event
+itself. A DMA address field is written only from a typed DMA
 reference: its policy transaction or the field's image of a `DmaRef`. Each rendered
 transaction asserts its masks against the register's declared fields in a
 `const` item beside it. The one exception is a policy fixed image marked

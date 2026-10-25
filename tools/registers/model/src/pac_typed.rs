@@ -1236,13 +1236,54 @@ impl<'a> TypedBlock<'a> {
         }
         // A reviewed fixed image is the one other store of a clear register:
         // the vendor's acknowledgement of named sources, never a writer of
-        // arbitrary bits.
-        let fixed_images = policy
+        // arbitrary bits. No sample captured those events, so the image
+        // names its proof: the enable register it masks them in first, or
+        // why its caller consumes the event itself.
+        let mut fixed_images = BTreeSet::new();
+        for image in policy
             .fixed_register_images
             .iter()
             .filter(|image| image.peripheral == name)
-            .map(|image| image.name.as_str())
-            .collect::<BTreeSet<_>>();
+        {
+            let on_clear = cleared.contains(image.register.as_str());
+            match (on_clear, &image.masks, &image.consumed_event) {
+                (true, Some(_), None) | (true, None, Some(_)) => {}
+                (true, None, None) => {
+                    return Err(Error::message(format!(
+                        "fixed-register-image {:?} acknowledges events of {name}.{} that no sample captured: it masks them first or names the caller that consumes them",
+                        image.name, image.register
+                    )));
+                }
+                (true, Some(_), Some(_)) => {
+                    return Err(Error::message(format!(
+                        "fixed-register-image {:?} names one proof: masks or consumed-event",
+                        image.name
+                    )));
+                }
+                (false, None, None) => {}
+                (false, _, _) => {
+                    return Err(Error::message(format!(
+                        "fixed-register-image {:?} names an acknowledgement proof but {name}.{} is no snapshot's clear register",
+                        image.name, image.register
+                    )));
+                }
+            }
+            if let Some(masks) = &image.masks {
+                let enable = registers
+                    .iter()
+                    .find(|register| register.info.name == *masks);
+                if cleared.contains(masks.as_str())
+                    || fifos.contains(&masks.as_str())
+                    || !enable.is_some_and(|enable| enable.array.is_none())
+                {
+                    return Err(Error::message(format!(
+                        "fixed-register-image {:?} masks {name}.{masks}, which is no plain enable register of the block",
+                        image.name
+                    )));
+                }
+            }
+            fixed_images.insert(image.name.as_str());
+        }
         if let Some((operation, register)) =
             policy
                 .typed_register_operations(name)
@@ -2332,6 +2373,11 @@ impl<'a> TypedBlock<'a> {
                         "Write the vendor's whole-word image `0x{:08x}`, undeclared bits included",
                         operation.value
                     )
+                } else if let Some(masks) = &operation.masks {
+                    format!(
+                        "Mask the sources of `0x{:08x}` in `{masks}`, keeping every other bit, then acknowledge them",
+                        operation.value
+                    )
                 } else {
                     format!("Write the fixed image `0x{:08x}`", operation.value)
                 },
@@ -2347,9 +2393,40 @@ impl<'a> TypedBlock<'a> {
                     register.offset, operation.value
                 )
             };
+            // An acknowledgement of events no sample captured: their enable
+            // bits are cleared first, so no enabled event is lost to it.
+            let masking = match &operation.masks {
+                None => String::new(),
+                Some(masks) => {
+                    if !view.owns(masks) {
+                        return Err(Error::message(format!(
+                            "typed fixed-register-image {:?} masks {name}.{masks}, which its owner does not own",
+                            operation.name
+                        )));
+                    }
+                    let enable = reached(masks)?;
+                    if first_view {
+                        let _ = writeln!(
+                            asserts,
+                            "const _: () = assert!(oer_mmio::check::within(0x{:08x}, {}), \"{} masks declared enable fields only\");",
+                            operation.value,
+                            enable.settable_fields(),
+                            operation.name
+                        );
+                    }
+                    format!(
+                        "let bits = self.0.{};\nself.0.{};\n",
+                        enable.modify_read_call(),
+                        enable.write_call(&format!("bits & !0x{:08x}", operation.value))
+                    )
+                }
+            };
+            if let Some(reason) = &operation.consumed_event {
+                let _ = writeln!(body, "///\n/// The caller consumes these events: {reason}");
+            }
             let _ = writeln!(
                 body,
-                "#[inline]\npub fn {}(&mut self, {}) {{\nself.0.{write};\n}}\n",
+                "#[inline]\npub fn {}(&mut self, {}) {{\n{masking}self.0.{write};\n}}\n",
                 operation.name,
                 register.index_parameter(),
             );

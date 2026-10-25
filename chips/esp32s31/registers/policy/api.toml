@@ -1326,22 +1326,24 @@ register = "CLEAR"
 value = 0xFFFFFFFF
 sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT"]
 
-# A store on the primary snapshot clear register: it acknowledges only baseline
-# source 15, which is not enabled yet; the controller output is enabled after it.
+# A store on the primary snapshot clear register: it masks baseline source 15,
+# then acknowledges its stale event; the controller output is enabled after it.
 [[fixed-register-images]]
 name = "clear_bluetooth_primary_baseline_bank_0"
 peripheral = "BLUETOOTH_INTERRUPT_BANK"
 register = "IRQ_CLEAR_0"
 value = 0x00008000
+masks = "IRQ_ENABLE_0"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
-# A store on the primary snapshot clear register: it acknowledges only baseline
-# sources 8, 9 and 12, which are not enabled yet.
+# A store on the primary snapshot clear register: it masks baseline sources 8,
+# 9 and 12, then acknowledges their stale events.
 [[fixed-register-images]]
 name = "clear_bluetooth_primary_baseline_bank_1"
 peripheral = "BLUETOOTH_INTERRUPT_BANK"
 register = "IRQ_CLEAR_1"
 value = 0x00001300
+masks = "IRQ_ENABLE_1"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[full-register-writes]]
@@ -1936,25 +1938,28 @@ domain = "BluetoothModemLpTimerCompareImage"
 exposure = "facade"
 sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
 
-# A store on the snapshot clear register: it acknowledges only the stale
-# scheduler-run sources 21, 27 and 28 before their enable is set again.
+# A store on the snapshot clear register: it masks scheduler-run sources 21,
+# 27 and 28, then acknowledges their stale events before their enable is set
+# again.
 [[fixed-register-images]]
 name = "clear_bluetooth_scheduler_run_interrupts_bank_0"
 peripheral = "BLUETOOTH_INTERRUPT_BANK"
 register = "IRQ_CLEAR_0"
 value = 0x18200000
+masks = "IRQ_ENABLE_0"
 sources = [
     "BLOB_LIBBTDM_CONTROLLER_IRQ",
     "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES",
 ]
 
-# A store on the snapshot clear register: it acknowledges only the stale
-# scheduler-run source 3 before its enable is set again.
+# A store on the snapshot clear register: it masks scheduler-run source 3,
+# then acknowledges its stale event before its enable is set again.
 [[fixed-register-images]]
 name = "clear_bluetooth_scheduler_run_interrupts_bank_1"
 peripheral = "BLUETOOTH_INTERRUPT_BANK"
 register = "IRQ_CLEAR_1"
 value = 0x00000008
+masks = "IRQ_ENABLE_1"
 sources = [
     "BLOB_LIBBTDM_CONTROLLER_IRQ",
     "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES",
@@ -10519,6 +10524,7 @@ name = "acknowledge_bluetooth_scheduler_cancellation_source"
 peripheral = "BLUETOOTH_INTERRUPT_BANK"
 register = "IRQ_CLEAR_0"
 value = 0x00000080
+consumed-event = "the indexed cancellation path is the one consumer of source 7 and acknowledges it once per cancellation."
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
 
 [[zero-based-field-writes]]

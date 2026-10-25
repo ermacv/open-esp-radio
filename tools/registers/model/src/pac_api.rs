@@ -590,6 +590,11 @@ common_operation!(FixedRegisterWrite {
 /// Its value sets declared field bits only, unless `whole-word` names it the
 /// vendor's store of the whole word: then the image, with its evidence
 /// sources, also writes the bits the model leaves undeclared.
+///
+/// On the clear register of a status-to-clear snapshot an image
+/// acknowledges events no sample captured, so it names its proof: `masks`,
+/// the enable register whose image bits the same transaction clears first,
+/// or `consumed-event`, why the reviewed caller consumes that event itself.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct FixedRegisterImage {
@@ -599,6 +604,10 @@ pub struct FixedRegisterImage {
     pub value: u32,
     #[serde(default, skip_serializing_if = "core::ops::Not::not")]
     pub whole_word: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub masks: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumed_event: Option<String>,
     pub sources: Vec<String>,
 }
 /// One reviewed ordered transaction composed only of fixed complete-register images.

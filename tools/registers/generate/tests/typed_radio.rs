@@ -143,6 +143,7 @@ name = "clear_stale_error"
 peripheral = "RADIO"
 register = "CLEAR"
 value = 0x00000002
+masks = "INTERRUPT_ENABLE"
 sources = ["FIXTURE"]
 
 [[interrupt-snapshots]]
@@ -323,11 +324,19 @@ fn a_pointer_field_is_cleared_and_then_ored_with_an_image() {
 #[test]
 fn a_fixed_image_acknowledges_its_named_source_beside_the_snapshot() {
     let mut memory = memory();
+    // ERROR is enabled and pending: the clear masks it before acknowledging.
+    memory[STATUS] = 0b11;
+    memory[INTERRUPT_ENABLE] = 0xffff_ffff;
     let block = radio::Radio::host(&mut memory).expect("memory holds the block");
     let (mut rest, _time) = block.split_time();
     rest.clear_stale_error();
     drop(rest);
     assert_eq!(memory[CLEAR], 0b10, "exactly the reviewed image");
+    assert_eq!(
+        memory[INTERRUPT_ENABLE],
+        0xffff_fffd,
+        "its source masked, every other bit kept"
+    );
 }
 
 #[test]

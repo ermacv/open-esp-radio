@@ -142,6 +142,29 @@ fn a_stale_source_clear_stores_its_reviewed_image_beside_the_snapshot() {
 }
 
 #[test]
+fn a_stale_source_clear_never_acknowledges_an_enabled_event() {
+    // Scheduler-run source 21 and baseline source 15 are enabled and every
+    // source is pending, as on a repeated scheduler-run preparation.
+    let mut words = memory(bank::SIZE, u32::MAX);
+    let mut block = BluetoothInterruptBank::host(&mut words).expect("memory holds the block");
+    let pending = block.sample_bluetooth_primary_interrupt_bank_0();
+    assert!(pending.source_21(), "source 21 is pending");
+    block.clear_bluetooth_scheduler_run_interrupts_bank_0();
+    let enable = block.read_irq_enable_0();
+    assert!(
+        !enable.source_21() && enable.sources_27_28().get() == 0,
+        "the acknowledged sources are masked first: no enabled event is acknowledged unsampled"
+    );
+    assert!(
+        enable.source_15() && enable.source_0(),
+        "the other enabled sources keep their events"
+    );
+    block.enable_bluetooth_scheduler_run_interrupts_bank_0();
+    let enable = block.read_irq_enable_0();
+    assert!(enable.source_21() && enable.sources_27_28().get() == 0b11);
+}
+
+#[test]
 fn a_diagnostic_selector_is_written_whole_from_zero() {
     let before = memory(runtime::SIZE, u32::MAX);
     let mut after = before.clone();

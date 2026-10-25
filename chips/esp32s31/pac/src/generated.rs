@@ -29858,35 +29858,43 @@ pub mod bluetooth_interrupt_bank {
             self.0.write::<0x64>(snapshot.0);
         }
 
-        /// Write the fixed image `0x00008000` (`IRQ_CLEAR_0`).
+        /// Mask the sources of `0x00008000` in `IRQ_ENABLE_0`, keeping every other bit, then acknowledge them (`IRQ_CLEAR_0`).
         ///
         /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ.
         #[inline]
         pub fn clear_bluetooth_primary_baseline_bank_0(&mut self) {
+            let bits = self.0.read::<0x54>();
+            self.0.write::<0x54>(bits & !0x00008000);
             self.0.write::<0x58>(0x00008000);
         }
 
-        /// Write the fixed image `0x00001300` (`IRQ_CLEAR_1`).
+        /// Mask the sources of `0x00001300` in `IRQ_ENABLE_1`, keeping every other bit, then acknowledge them (`IRQ_CLEAR_1`).
         ///
         /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ.
         #[inline]
         pub fn clear_bluetooth_primary_baseline_bank_1(&mut self) {
+            let bits = self.0.read::<0x60>();
+            self.0.write::<0x60>(bits & !0x00001300);
             self.0.write::<0x64>(0x00001300);
         }
 
-        /// Write the fixed image `0x18200000` (`IRQ_CLEAR_0`).
+        /// Mask the sources of `0x18200000` in `IRQ_ENABLE_0`, keeping every other bit, then acknowledge them (`IRQ_CLEAR_0`).
         ///
         /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ, PUBLIC_ESP32S31_BT_SCHEDULER_ROLES.
         #[inline]
         pub fn clear_bluetooth_scheduler_run_interrupts_bank_0(&mut self) {
+            let bits = self.0.read::<0x54>();
+            self.0.write::<0x54>(bits & !0x18200000);
             self.0.write::<0x58>(0x18200000);
         }
 
-        /// Write the fixed image `0x00000008` (`IRQ_CLEAR_1`).
+        /// Mask the sources of `0x00000008` in `IRQ_ENABLE_1`, keeping every other bit, then acknowledge them (`IRQ_CLEAR_1`).
         ///
         /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ, PUBLIC_ESP32S31_BT_SCHEDULER_ROLES.
         #[inline]
         pub fn clear_bluetooth_scheduler_run_interrupts_bank_1(&mut self) {
+            let bits = self.0.read::<0x60>();
+            self.0.write::<0x60>(bits & !0x00000008);
             self.0.write::<0x64>(0x00000008);
         }
 
@@ -29917,6 +29925,8 @@ pub mod bluetooth_interrupt_bank {
         /// Write the fixed image `0x00000080` (`IRQ_CLEAR_0`).
         ///
         /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ, BLOB_LIBBTDM_SCHEDULER_CANCELLATION, PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES.
+        ///
+        /// The caller consumes these events: the indexed cancellation path is the one consumer of source 7 and acknowledges it once per cancellation.
         #[inline]
         pub fn acknowledge_bluetooth_scheduler_cancellation_source(&mut self) {
             self.0.write::<0x58>(0x00000080);
@@ -31177,16 +31187,32 @@ pub mod bluetooth_interrupt_bank {
     }
 
     const _: () = assert!(
+        oer_mmio::check::within(0x00008000, irq_enable_0::FIELDS),
+        "clear_bluetooth_primary_baseline_bank_0 masks declared enable fields only"
+    );
+    const _: () = assert!(
         oer_mmio::check::within(0x00008000, irq_clear_0::FIELDS),
         "clear_bluetooth_primary_baseline_bank_0 writes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00001300, irq_enable_1::FIELDS),
+        "clear_bluetooth_primary_baseline_bank_1 masks declared enable fields only"
     );
     const _: () = assert!(
         oer_mmio::check::within(0x00001300, irq_clear_1::FIELDS),
         "clear_bluetooth_primary_baseline_bank_1 writes declared fields only"
     );
     const _: () = assert!(
+        oer_mmio::check::within(0x18200000, irq_enable_0::FIELDS),
+        "clear_bluetooth_scheduler_run_interrupts_bank_0 masks declared enable fields only"
+    );
+    const _: () = assert!(
         oer_mmio::check::within(0x18200000, irq_clear_0::FIELDS),
         "clear_bluetooth_scheduler_run_interrupts_bank_0 writes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000008, irq_enable_1::FIELDS),
+        "clear_bluetooth_scheduler_run_interrupts_bank_1 masks declared enable fields only"
     );
     const _: () = assert!(
         oer_mmio::check::within(0x00000008, irq_clear_1::FIELDS),

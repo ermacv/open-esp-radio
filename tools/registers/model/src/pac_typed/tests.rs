@@ -133,6 +133,8 @@ fn a_fixed_image_becomes_a_method_with_its_mask_asserted() {
     let mut pack = typed_pack();
     pack.fixed_register_images.push(FixedRegisterImage {
         whole_word: false,
+        masks: None,
+        consumed_event: None,
         name: "issue_start".to_owned(),
         peripheral: "RADIO".to_owned(),
         register: "COMMAND".to_owned(),
@@ -196,6 +198,8 @@ fn the_svd2rust_policy_loses_everything_bound_to_a_typed_peripheral() {
     ];
     pack.fixed_register_images.push(FixedRegisterImage {
         whole_word: false,
+        masks: None,
+        consumed_event: None,
         name: "issue_start".to_owned(),
         peripheral: "RADIO".to_owned(),
         register: "COMMAND".to_owned(),
@@ -247,6 +251,8 @@ fn only_a_whole_word_vendor_image_skips_the_declared_field_assertion() {
     for (name, whole_word) in [("set_declared", false), ("set_vendor_word", true)] {
         pack.fixed_register_images.push(FixedRegisterImage {
             whole_word,
+            masks: None,
+            consumed_event: None,
             name: name.to_owned(),
             peripheral: "RADIO".to_owned(),
             register: "CONTROL".to_owned(),
@@ -754,6 +760,8 @@ fn a_fifo_port_is_never_observed_or_named_by_a_transaction() {
     pack.fifo_ports.push(fifo("DATA"));
     pack.fixed_register_images.push(FixedRegisterImage {
         whole_word: false,
+        masks: None,
+        consumed_event: None,
         name: "push_fixed".to_owned(),
         peripheral: "RADIO".to_owned(),
         register: "DATA".to_owned(),
@@ -805,6 +813,8 @@ fn library_pack() -> PacApiPack {
     let mut pack = empty_pack();
     pack.fixed_register_images.push(FixedRegisterImage {
         whole_word: false,
+        masks: None,
+        consumed_event: None,
         name: "enable_level_two".to_owned(),
         peripheral: "RADIO".to_owned(),
         register: "CONTROL".to_owned(),
@@ -1023,6 +1033,8 @@ fn only_a_typed_reference_changes_a_pointer_field() {
     let mut pack = pointer_pack(Some(crate::RegisterPointerEncoding::LowBits));
     pack.fixed_register_images.push(FixedRegisterImage {
         whole_word: false,
+        masks: None,
+        consumed_event: None,
         name: "head_image".to_owned(),
         peripheral: "RADIO".to_owned(),
         register: "HEAD".to_owned(),
@@ -1165,23 +1177,91 @@ fn a_snapshot_acknowledges_through_its_clear_register_alone() {
     );
 }
 
-#[test]
-fn a_reviewed_fixed_image_is_the_one_other_store_of_a_clear_register() {
+fn stale_clear_pack(masks: Option<&str>, consumed_event: Option<&str>) -> PacApiPack {
     let mut pack = snapshot_pack();
     pack.fixed_register_images.push(FixedRegisterImage {
         whole_word: false,
+        masks: masks.map(str::to_owned),
+        consumed_event: consumed_event.map(str::to_owned),
         name: "clear_stale_done".to_owned(),
         peripheral: "RADIO".to_owned(),
         register: "CLEAR".to_owned(),
         value: 0x1,
         sources: vec!["SOURCE".to_owned()],
     });
-    let rust = pack
-        .render_typed_rust(&svd(&events(&field("DONE", 0, 1, ""))), &Default::default())
-        .expect("the fixed image on the clear register renders");
-    assert!(rust.contains("pub fn clear_stale_done(&mut self"), "{rust}");
+    pack
+}
+
+/// The events block with the enable register of its sources.
+fn enabled_events() -> String {
+    events(&field("DONE", 0, 1, ""))
+        + &register(
+            "ENABLE",
+            8,
+            "read-write",
+            "",
+            &(field("DONE", 0, 1, "") + &field("ERROR", 1, 1, "")),
+        )
+}
+
+#[test]
+fn a_stale_source_clear_masks_its_sources_before_it_acknowledges_them() {
+    let rust = stale_clear_pack(Some("ENABLE"), None)
+        .render_typed_rust(&svd(&enabled_events()), &Default::default())
+        .expect("the masking fixed image on the clear register renders");
+    assert!(
+        rust.contains(
+            "pub fn clear_stale_done(&mut self, ) {\nlet bits = self.0.read::<0x8>();\nself.0.write::<0x8>(bits & !0x00000001);\nself.0.write::<0x4>(0x00000001);\n}"
+        ),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("within(0x00000001, enable::FIELDS)"),
+        "{rust}"
+    );
     assert!(rust.contains("pub fn acknowledge_events("), "{rust}");
     assert!(!rust.contains("pub fn write_clear("), "{rust}");
+}
+
+#[test]
+fn a_consumed_event_acknowledgement_stores_its_image_alone() {
+    let rust = stale_clear_pack(None, Some("the one consumer of DONE."))
+        .render_typed_rust(&svd(&enabled_events()), &Default::default())
+        .expect("the consumed acknowledgement renders");
+    assert!(
+        rust.contains(
+            "pub fn clear_stale_done(&mut self, ) {\nself.0.write::<0x4>(0x00000001);\n}"
+        ),
+        "{rust}"
+    );
+    assert!(rust.contains("the one consumer of DONE."), "{rust}");
+}
+
+#[test]
+fn a_clear_register_image_without_its_proof_is_refused() {
+    refused(
+        &stale_clear_pack(None, None),
+        &enabled_events(),
+        "that no sample captured",
+    );
+    refused(
+        &stale_clear_pack(Some("ENABLE"), Some("both.")),
+        &enabled_events(),
+        "names one proof",
+    );
+    refused(
+        &stale_clear_pack(Some("CLEAR"), None),
+        &enabled_events(),
+        "no plain enable register",
+    );
+    refused(
+        &stale_clear_pack(Some("MISSING"), None),
+        &enabled_events(),
+        "no plain enable register",
+    );
+    let mut pack = stale_clear_pack(Some("ENABLE"), None);
+    pack.fixed_register_images[0].register = "ENABLE".to_owned();
+    refused(&pack, &enabled_events(), "is no snapshot's clear register");
 }
 
 #[test]

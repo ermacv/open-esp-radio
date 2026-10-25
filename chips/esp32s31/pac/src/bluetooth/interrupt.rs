@@ -231,7 +231,8 @@ impl BluetoothInterruptSetup {
     /// ORs those same baseline sources into the two enable banks, writes one
     /// to `0x2010_100c`, then the outer path calls the platform interrupt
     /// allocator for source 124. The earlier HAL-init part of that composite
-    /// remains a separate lifecycle prerequisite.
+    /// remains a separate lifecycle prerequisite. Each clear first masks its
+    /// baseline sources in their enable bank.
     pub fn prepare_controller_output(mut self) -> BluetoothInterruptOutputPrepared {
         let mut control = HardwareInterruptControl {
             bank: &mut self.peripherals.bluetooth_interrupt_bank,
@@ -505,7 +506,9 @@ impl BluetoothInterruptRegisters {
     /// `r_sym_bt_6lAYUFKOuBLyOZ6Kvsv5`; same-chip named
     /// `r_btdm_hal_link_basic_irq_clear` and
     /// `r_btdm_hal_link_basic_irq_enable`. The exact order is W1C bank zero,
-    /// W1C bank one, enable bank zero, enable bank one.
+    /// W1C bank one, enable bank zero, enable bank one. Each W1C first masks
+    /// its sources in its enable bank, so an event of a group still enabled
+    /// by an earlier preparation is never acknowledged without a sample.
     pub fn prepare_scheduler_run_interrupts(&mut self) -> BluetoothSchedulerRunInterruptsPrepared {
         let mut control = HardwareInterruptControl {
             bank: &mut self.peripherals.bluetooth_interrupt_bank,
