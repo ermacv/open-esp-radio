@@ -122192,6 +122192,19 @@ pub mod pmu {
             self.0.write::<0xf4>(value.get() << 27);
         }
 
+        /// Write to the write-trigger fields of `IMM_HP_CK_POWER_1` the change sets, in one
+        /// write, starting each one's hardware action once; every other bit is
+        /// zero or its fixed value.
+        #[inline]
+        pub fn trigger_imm_hp_ck_power_1(
+            &mut self,
+            change: impl FnOnce(&mut imm_hp_ck_power_1::T),
+        ) {
+            let mut triggers = imm_hp_ck_power_1::T(0);
+            change(&mut triggers);
+            self.0.write::<0xf4>(triggers.0);
+        }
+
         /// Read `PSRAM_CFG`.
         #[inline]
         pub fn read_psram_cfg(&self) -> psram_cfg::R {
