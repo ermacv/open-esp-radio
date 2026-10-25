@@ -172781,11 +172781,11 @@ pub mod trng {
     pub struct TrngWords;
 
     impl oer_mmio::Registers for TrngWords {
-        const WORDS: &'static [usize] = &[0x0, 0x4, 0x2c, 0x48];
+        const WORDS: &'static [usize] = &[0x0, 0x4, 0x2c, 0x48, 0xfc];
     }
 
     impl oer_mmio::Words for TrngWords {
-        const OWNED: &'static [usize] = &[0x0, 0x4, 0x2c, 0x48];
+        const OWNED: &'static [usize] = &[0x0, 0x4, 0x2c, 0x48, 0xfc];
         const OBSERVED: &'static [usize] = &[];
     }
 
@@ -172887,6 +172887,21 @@ pub mod trng {
         #[inline]
         pub fn read_crc_sync_data(&self) -> crc_sync_data::R {
             crc_sync_data::R(self.0.read::<0x48>())
+        }
+
+        /// Read `DATE`.
+        #[inline]
+        pub fn read_date(&self) -> date::R {
+            date::R(self.0.read::<0xfc>())
+        }
+
+        /// Read `DATE`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_date(&mut self, change: impl FnOnce(&mut date::W)) {
+            let mut value = date::W(self.0.read::<0xfc>());
+            change(&mut value);
+            self.0.write::<0xfc>(value.0);
         }
     }
 }
@@ -217708,7 +217723,7 @@ pub mod ownership {
         pub efuse: super::efuse::Efuse,
     }
 
-    /// The true random number generator and its clock and reset word, read by the entropy owner.
+    /// The true random number generator and its clock and reset word: the bootstrap enables it, the entropy owner reads it.
     pub struct EntropyPeripherals {
         /// The `Trng` part.
         pub trng: super::trng::Trng,

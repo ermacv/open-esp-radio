@@ -77,12 +77,12 @@ registers = ["RD_MAC_SYS0", "RD_MAC_SYS1", "RD_MAC_SYS3"]
 [[partitions]]
 name = "EntropyPeripherals"
 member = "entropy"
-description = "The true random number generator and its clock and reset word, read by the entropy owner."
+description = "The true random number generator and its clock and reset word: the bootstrap enables it, the entropy owner reads it."
 
 [[partitions.parts]]
 name = "Trng"
 instance = "TRNG"
-registers = ["CONF", "DEBUG_CONF", "INT_RAW", "CRC_SYNC_DATA"]
+registers = ["CONF", "DEBUG_CONF", "INT_RAW", "CRC_SYNC_DATA", "DATE"]
 
 [[partitions.parts]]
 name = "LpPericlkrstRng"
@@ -1202,7 +1202,7 @@ reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "TRNG"
-registers = ["CONDITION_KEY0", "CONDITION_KEY1", "CONDITION_KEY2", "CONDITION_KEY3", "CONDITION_KEY4", "CONDITION_KEY5", "CONDITION_KEY6", "CONDITION_KEY7", "INT_ENA", "INT_CLR", "INT_ST", "ARBIT_CFG", "SW_READ", "SW_READ_ST", "CRC_DATA", "DATE"]
+registers = ["CONDITION_KEY0", "CONDITION_KEY1", "CONDITION_KEY2", "CONDITION_KEY3", "CONDITION_KEY4", "CONDITION_KEY5", "CONDITION_KEY6", "CONDITION_KEY7", "INT_ENA", "INT_CLR", "INT_ST", "ARBIT_CFG", "SW_READ", "SW_READ_ST", "CRC_DATA"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
