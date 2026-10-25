@@ -139,7 +139,8 @@ moves; ownership, orchestration and wiring are rebuilt.
   staged runtime's: its vector tables, entries and checked exit, the direct
   call of each line's handler and the image's `critical-section`. The
   interrupt table's router writes the routes and CPU lines through the
-  chip's controller. The executor's time, software interrupt lines and
+  chip HAL's interrupt controller on the typed interrupt matrix and CLIC,
+  every source's route word included (the IEEE 802.15.4 MAC's too). The executor's time, software interrupt lines and
   timer comparators run on our typed platform blocks. esp-hal, esp-pacs, esp-riscv-rt and
   esp-metadata are used only at the sites listed in
   `tools/test/layers/tests/platform_crates.allowlist`; a test fails on any use

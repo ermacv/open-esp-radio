@@ -49,7 +49,9 @@ as `__OER_INTERRUPT_TABLE` for the tools that read the image: source `u16` at
 word at 8, 12 bytes on the chip.
 
 `Router` is the one writer of a hart's routes and lines, over the chip's
-`Controller` (the hart's interrupt-matrix bank and CLIC):
+`Controller` (the hart's interrupt-matrix bank and CLIC; each chip HAL's
+`platform::interrupt_controller` implements it on the typed blocks and
+gives the CLIC three level bits):
 
 - `Router::install` silences every source and disables every line of the
   hart, then verifies;

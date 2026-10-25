@@ -266,9 +266,9 @@ handoff!(
 );
 handoff!(
     /// Proof that the interrupt controller's owner consumed esp-hal's
-    /// interrupt-matrix singletons after `esp_hal::init`.
+    /// interrupt-matrix singletons after esp-hal's `init`.
     InterruptMatrixHandoff => InterruptMatrixPeripherals: InterruptMatrixPeripheralsClaims,
-    "The caller consumed esp-hal's `INTERRUPT_CORE0` singleton for good after `esp_hal::init`, whose `setup_interrupts` is esp-hal's last write of the route and line words; no image calls esp-hal's interrupt API, as `shared-words.toml` reviews. The chip HAL's interrupt controller is the words' one writer afterwards."
+    "The caller consumed esp-hal's `INTERRUPT_CORE0` singleton for good after esp-hal's `init`, whose `setup_interrupts` is esp-hal's last write of the route and line words; no image calls esp-hal's interrupt API, as `shared-words.toml` reviews. The chip HAL's interrupt controller is the words' one writer afterwards."
 );
 
 #[cfg(any(test, feature = "test-support"))]

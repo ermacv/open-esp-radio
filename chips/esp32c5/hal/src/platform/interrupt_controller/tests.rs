@@ -228,14 +228,15 @@ fn the_router_silences_boot_leftovers_then_binds_the_mac_on_its_line_and_level()
             controller.set_line(number, LineState::bound(1, LEVEL_BITS));
         }
     }
-    let mut router =
-        Router::install(memory.controller(), INTERRUPT_TABLE).expect("a host controller installs");
-    let tokens = Interrupts::take().expect("the test takes the tokens once");
-    let _bound = router
-        .bind(tokens.mac, MacIrq)
-        .expect("the MAC's entry is the table's");
-    assert_eq!(router.verify(), Ok(()));
-    drop(router);
+    {
+        let mut router = Router::install(memory.controller(), INTERRUPT_TABLE)
+            .expect("a host controller installs");
+        let tokens = Interrupts::take().expect("the test takes the tokens once");
+        let _bound = router
+            .bind(tokens.mac, MacIrq)
+            .expect("the MAC's entry is the table's");
+        assert_eq!(router.verify(), Ok(()));
+    }
 
     let controller = memory.controller();
     for number in 0..InterruptController::<Host<'_>, Host<'_>>::SOURCES {
