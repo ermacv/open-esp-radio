@@ -604,9 +604,8 @@ members are the SVD's fields) and the enumerator of `interrupts.h` (its
 position is the source number). An access class decides what an entry may
 state: `R/W` a plain field, `WT` a write trigger, `HRO` a hardware-modified
 read-only field, a hardware-modified field (`SC`, `SS`, ...) a read-only
-register, all fields `WTC` a write-one-to-clear register. `trm:` and
-`esp-hal:` sources, `read-side-effect` and enumerated values are counted as
-unchecked.
+register, all fields `WTC` a write-one-to-clear register. `trm:` sources,
+`read-side-effect` and enumerated values are counted as unchecked.
 The checkout must be at the overlay's `esp-idf` pin.
 
 `cargo registers overlay import --chip <chip> --idf <checkout>

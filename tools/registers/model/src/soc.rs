@@ -57,9 +57,6 @@ pub struct StrictnessOverlay {
     pub schema: u32,
     /// The pinned ESP-IDF revision `esp-idf:` sources cite.
     pub esp_idf: String,
-    /// The pinned esp-hal fork revision `esp-hal:` sources cite.
-    #[serde(default)]
-    pub esp_hal: Option<String>,
     /// The pinned header of each vendor peripheral.
     #[serde(default)]
     pub headers: Vec<HeaderRule>,
@@ -345,13 +342,6 @@ impl StrictnessOverlay {
                 "the overlay's esp-idf pin is a hexadecimal revision",
             ));
         }
-        if let Some(esp_hal) = &self.esp_hal
-            && !is_revision(esp_hal)
-        {
-            return Err(Error::message(
-                "the overlay's esp-hal pin is a hexadecimal revision",
-            ));
-        }
         let mut seen = BTreeSet::new();
         for rule in &self.headers {
             if !seen.insert(rule.peripheral.clone()) {
@@ -554,8 +544,8 @@ impl StrictnessOverlay {
         Ok(())
     }
 
-    /// Each source is `esp-idf:<path>:<line>`, `esp-hal:<path>:<line>` (with
-    /// the overlay's pin) or `trm:<document and section>`.
+    /// Each source is `esp-idf:<path>:<line>` (with the overlay's pin) or
+    /// `trm:<document and section>`.
     fn validate_sources(&self, subject: &str, sources: &[String]) -> Result<()> {
         if sources.is_empty() {
             return Err(Error::message(format!(
@@ -565,8 +555,6 @@ impl StrictnessOverlay {
         for source in sources {
             let cited = if let Some(rest) = source.strip_prefix("esp-idf:") {
                 file_line(rest)
-            } else if let Some(rest) = source.strip_prefix("esp-hal:") {
-                self.esp_hal.is_some() && file_line(rest)
             } else if let Some(rest) = source.strip_prefix("trm:") {
                 !rest.trim().is_empty()
             } else {
@@ -574,7 +562,7 @@ impl StrictnessOverlay {
             };
             if !cited {
                 return Err(Error::message(format!(
-                    "overlay entry {subject} cites {source:?}: a source is esp-idf:<path>:<line>, esp-hal:<path>:<line> with the esp-hal pin, or trm:<section>"
+                    "overlay entry {subject} cites {source:?}: a source is esp-idf:<path>:<line> or trm:<section>"
                 )));
             }
         }

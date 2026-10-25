@@ -21,8 +21,8 @@
 //! plain field, `WT` a write trigger, `HRO` a hardware-modified read-only
 //! field, a register with a hardware-modified field (`SC`, `SS`, ...) is
 //! read-only, and a register whose fields are all `WTC` is write-one-to-clear.
-//! `trm:` and `esp-hal:` sources, `read-side-effect` and enumerated values
-//! are not in the headers: `check` counts them as unchecked.
+//! `trm:` sources, `read-side-effect` and enumerated values are not in the
+//! headers: `check` counts them as unchecked.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -47,7 +47,7 @@ pub trait HeaderTree {
 pub struct OverlayCheck {
     /// Entries verified against the headers.
     pub checked: usize,
-    /// Entries or claims no header states: `trm:`, `esp-hal:` sources,
+    /// Entries or claims no header states: `trm:` sources,
     /// `read-side-effect` and enumerated values.
     pub unchecked: Vec<String>,
     /// Entries that do not match their source or the SVD.

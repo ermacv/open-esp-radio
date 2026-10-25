@@ -449,9 +449,8 @@ one-bit `R/W/SC`/`R/W/WTC` field, held at zero): the zero a start writes
 never lands on a running command. Every other field of it is only read.
 Every entry
 names existing vendor geometry and cites `esp-idf:<path>:<line>` (at the
-overlay's `esp-idf` pin, which must be the chip's pinned ESP-IDF),
-`esp-hal:<path>:<line>` (at its `esp-hal` pin) or `trm:<section>`. An
-`esp-idf:` citation is checked against the pinned file
+overlay's `esp-idf` pin, which must be the chip's pinned ESP-IDF) or
+`trm:<section>`. An `esp-idf:` citation is checked against the pinned file
 (`check_overlay`): a register definition line names the register at its
 offset, a field line the field (its words in order) with its bits and an
 access class that justifies the entry, a register union's reserved members
