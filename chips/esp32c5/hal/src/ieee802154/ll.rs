@@ -42,6 +42,7 @@ use oer_espressif_ieee802154_engine::{
         Ieee802154TxAbortReasonObservation,
     },
 };
+use oer_interrupt_table::Silent;
 
 use crate::ieee802154::mac::{Ieee802154InterruptOwner, Ieee802154TaskOwner};
 
@@ -293,27 +294,73 @@ fn mac_pti(pti: CoexPti) -> PacPti {
     proven(PacPti::new(pti.value()))
 }
 
-/// The task owner and its active interrupt owner, held together for the
-/// life of an interrupt-driven MAC epoch.
+/// The task owner and its armed interrupt owner, held together for the
+/// life of a polled MAC epoch.
 ///
 /// The public driver runs its operation starts, stops and interrupt handler
 /// under one critical section over the complete MAC register block, so this
 /// pair is the only implementation of [`Ieee802154LowLevel`] over hardware.
+/// The engine enables the MAC's events and polls them, so the pair holds the
+/// router's [`Silent`] proof that no CPU line receives the MAC's source:
+///
+/// ```no_run
+/// use oer_esp32c5_hal::ieee802154::{ll::Ieee802154MacOwners, mac::*};
+/// use oer_esp32c5_hal::platform::InterruptController;
+/// use oer_interrupt_table::Router;
+/// fn poll(
+///     router: &Router<InterruptController>,
+///     mut task: Ieee802154TaskOwner,
+///     setup: Ieee802154InterruptSetupOwner,
+/// ) -> Option<Ieee802154MacOwners> {
+///     // Refused when the table binds the MAC's source or it is routed.
+///     let silent = router.silent::<Ieee802154InterruptOwner>().ok()?;
+///     let interrupts = setup.arm(&mut task);
+///     Some(Ieee802154MacOwners::new(task, interrupts, silent))
+/// }
+/// # fn main() {}
+/// ```
+///
+/// ```compile_fail,E0061
+/// # use oer_esp32c5_hal::ieee802154::{ll::Ieee802154MacOwners, mac::*};
+/// fn poll(mut task: Ieee802154TaskOwner, setup: Ieee802154InterruptSetupOwner) {
+///     let interrupts = setup.arm(&mut task);
+///     // Enabling the events by polling takes the silent route's proof.
+///     let _mac = Ieee802154MacOwners::new(task, interrupts);
+/// }
+/// ```
 #[must_use = "the MAC owners must be separated and returned to their route"]
 pub struct Ieee802154MacOwners {
     task: Ieee802154TaskOwner,
     interrupts: Ieee802154InterruptOwner,
+    silent: Silent<Ieee802154InterruptOwner>,
 }
 
 impl Ieee802154MacOwners {
-    /// Hold the task owner with the interrupt owner it armed.
-    pub const fn new(task: Ieee802154TaskOwner, interrupts: Ieee802154InterruptOwner) -> Self {
-        Self { task, interrupts }
+    /// Hold the task owner with the interrupt owner it armed and the proof
+    /// that no line receives the MAC's source
+    /// (`oer_interrupt_table::Router::silent`).
+    pub const fn new(
+        task: Ieee802154TaskOwner,
+        interrupts: Ieee802154InterruptOwner,
+        silent: Silent<Ieee802154InterruptOwner>,
+    ) -> Self {
+        Self {
+            task,
+            interrupts,
+            silent,
+        }
     }
 
-    /// Separate the owners, for the interrupt owner's deactivation.
-    pub fn into_parts(self) -> (Ieee802154TaskOwner, Ieee802154InterruptOwner) {
-        (self.task, self.interrupts)
+    /// Separate the owners and the proof, for the interrupt owner's
+    /// deactivation.
+    pub fn into_parts(
+        self,
+    ) -> (
+        Ieee802154TaskOwner,
+        Ieee802154InterruptOwner,
+        Silent<Ieee802154InterruptOwner>,
+    ) {
+        (self.task, self.interrupts, self.silent)
     }
 
     /// Borrow the task owner, for example to prove quiescence while the MAC
@@ -497,11 +544,13 @@ impl Ieee802154LowLevel for Ieee802154MacOwners {
     }
 
     fn enable_all_events(&mut self) {
-        self.task.lease().enable_all_events();
+        self.task.lease().enable_all_events(&self.silent);
     }
 
     fn enable_event(&mut self, event: Ieee802154Event) {
-        self.task.lease().enable_event(event_into_pac(event));
+        self.task
+            .lease()
+            .enable_event(event_into_pac(event), &self.silent);
     }
 
     fn disable_event(&mut self, event: Ieee802154Event) {

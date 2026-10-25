@@ -5,7 +5,9 @@
 //! hart; [`Router::bind`] places an entry's interrupt part where only its
 //! handler reaches it, configures and enables the entry's line, and only
 //! then routes the source to it; [`Router::verify`] checks the hart's
-//! routes and lines against the table before interrupts are enabled.
+//! routes and lines against the table before interrupts are enabled;
+//! [`Router::silent`] proves a source no entry binds is routed nowhere, for
+//! a driver that polls its events.
 
 use oer_mmio::InterruptSource;
 
@@ -60,8 +62,10 @@ impl LineState {
 }
 
 /// A hart's interrupt matrix bank and CLIC, as the table writes them. The
-/// chip implements it on its typed blocks; each method is one word's read
-/// or write, never a wait.
+/// chip implements it on its typed blocks; each method is a few word reads
+/// or writes, never a wait. A write of a source or line outside the
+/// controller writes nothing and returns [`Error::NoSuchSource`] or
+/// [`Error::NoSuchLine`].
 pub trait Controller {
     /// The sources of the chip's interrupt matrix: `0..SOURCES`.
     const SOURCES: u16;
@@ -73,14 +77,27 @@ pub trait Controller {
     /// The hart whose bank and CLIC this controller writes.
     fn hart(&self) -> u8;
     /// Route `source` to `line` on this hart.
-    fn route(&mut self, source: u16, line: u8);
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NoSuchSource`] or [`Error::NoSuchLine`]; nothing is written.
+    fn route(&mut self, source: u16, line: u8) -> Result<(), Error>;
     /// Route `source` nowhere on this hart.
-    fn silence(&mut self, source: u16);
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NoSuchSource`]; nothing is written.
+    fn silence(&mut self, source: u16) -> Result<(), Error>;
     /// The line `source` is routed to on this hart; `None` when silent.
     fn routed(&self, source: u16) -> Option<u8>;
     /// Write `line`'s enable, attributes and control, keeping its pending
-    /// bit.
-    fn set_line(&mut self, line: u8, state: LineState);
+    /// bit. The line is never enabled with another attribute or control
+    /// than `state`'s.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NoSuchLine`]; nothing is written.
+    fn set_line(&mut self, line: u8, state: LineState) -> Result<(), Error>;
     /// Read `line`'s enable, attributes and control.
     fn line(&self, line: u8) -> LineState;
 }
@@ -101,6 +118,15 @@ pub enum Error {
         state: LineState,
         expected: LineState,
     },
+    /// `source` is no source of the controller's matrix (`0..SOURCES`).
+    NoSuchSource { source: u16 },
+    /// `line` is no line of the controller's CLIC (`0..LINES`).
+    NoSuchLine { line: u8 },
+    /// `level` is no level of the controller's lines
+    /// (`1..=1 << LEVEL_BITS`).
+    NoSuchLevel { level: u8 },
+    /// An entry of the table binds `source`, so no silence of it holds.
+    Bindable { source: u16 },
 }
 
 /// The proof that an entry's handler holds its interrupt part and its line
@@ -120,6 +146,39 @@ impl<P> core::fmt::Debug for Bound<P> {
 impl<P: InterruptSource> Bound<P> {
     /// The bound source.
     pub const SOURCE: u16 = P::SOURCE;
+}
+
+/// The proof that the source of `P` is routed nowhere on the router's hart
+/// and that no entry of the table binds it, so the router never routes it:
+/// a driver that polls `P`'s events may enable them without a handler.
+/// Neither `Copy` nor `Clone`; only [`Router::silent`] makes one.
+///
+/// On a chip of several harts each hart's router silences its own bank at
+/// its install; the table binds the source on none of them.
+#[must_use = "the polled part's events are enabled only with this proof"]
+pub struct Silent<P> {
+    _part: core::marker::PhantomData<fn() -> P>,
+}
+
+impl<P> core::fmt::Debug for Silent<P> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("Silent")
+    }
+}
+
+/// What a driver takes before it enables the interrupt events of a part of
+/// source `P::SOURCE`: [`Bound<P>`] (a handler holds the part and its line
+/// is routed) or [`Silent<P>`] (no line receives the source). Sealed: only
+/// the router makes either.
+pub trait EventAuthority<P: InterruptSource>: sealed::Sealed {}
+
+impl<P: InterruptSource> EventAuthority<P> for Bound<P> {}
+impl<P: InterruptSource> EventAuthority<P> for Silent<P> {}
+
+mod sealed {
+    pub trait Sealed {}
+    impl<P> Sealed for super::Bound<P> {}
+    impl<P> Sealed for super::Silent<P> {}
 }
 
 /// What [`Router::bind`] refused, with the token and the part it gives back.
@@ -158,14 +217,20 @@ impl<C: Controller> Router<C> {
     ///
     /// # Errors
     ///
-    /// As [`verify`](Self::verify): the controller did not take a write.
+    /// [`Error::NoSuchSource`], [`Error::NoSuchLine`] or
+    /// [`Error::NoSuchLevel`] when an entry of the hart lies outside the
+    /// controller, before any write; otherwise as
+    /// [`verify`](Self::verify): the controller did not take a write.
     pub fn install(mut controller: C, table: &'static Table) -> Result<Self, Error> {
         const { assert!(C::LINES <= 64, "a controller has at most 64 lines") };
+        for binding in present(table, controller.hart()) {
+            Self::inside(binding.source, binding.line, binding.level)?;
+        }
         for source in 0..C::SOURCES {
-            controller.silence(source);
+            controller.silence(source)?;
         }
         for line in 0..C::LINES {
-            controller.set_line(line, LineState::DISABLED);
+            controller.set_line(line, LineState::DISABLED)?;
         }
         let router = Self { controller, table };
         router.verify()?;
@@ -180,12 +245,67 @@ impl<C: Controller> Router<C> {
     ///
     /// [`Error::WrongHart`] when the entry belongs to another hart and
     /// [`Error::NotInTable`] when the router's table lacks the entry;
-    /// nothing changes and the token and the part come back.
+    /// nothing changes and the token and the part come back. An entry whose
+    /// source, line or level lies outside the controller fails to compile:
+    ///
+    /// ```compile_fail,E0080
+    /// # oer_interrupt_table::__fake_parts!();
+    /// # oer_interrupt_table::__fake_controller!();
+    /// # pub fn on_timer(_: &mut TimerIrq) {}
+    /// // The table's lines reach past the controller's 48.
+    /// const WIDE: oer_interrupt_table::Lines =
+    ///     oer_interrupt_table::Lines { first: 16, count: 64, levels: 8, harts: 1 };
+    /// oer_interrupt_table::interrupt_table! {
+    ///     lines: WIDE,
+    ///     handler_attributes: [];
+    ///     timer: TimerToken = TimerIrq => on_timer, line 60, level 3, hart 0, Hardware;
+    /// }
+    /// fn bind(router: &mut oer_interrupt_table::Router<FakeController>) {
+    ///     let tokens = Interrupts::take().unwrap();
+    ///     let _ = router.bind(tokens.timer, TimerIrq::default());
+    /// }
+    /// # bind(&mut oer_interrupt_table::Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap());
+    /// ```
+    ///
+    /// ```compile_fail,E0080
+    /// # oer_interrupt_table::__fake_parts!();
+    /// # oer_interrupt_table::__fake_controller!();
+    /// /// A source past the fake controller's eight.
+    /// pub struct FarIrq;
+    /// impl oer_interrupt_table::InterruptSource for FarIrq {
+    ///     const SOURCE: u16 = 84;
+    /// }
+    /// # pub fn on_far(_: &mut FarIrq) {}
+    /// oer_interrupt_table::interrupt_table! {
+    ///     lines: FAKE_LINES,
+    ///     handler_attributes: [];
+    ///     far: FarToken = FarIrq => on_far, line 20, level 3, hart 0, Hardware;
+    /// }
+    /// fn bind(router: &mut oer_interrupt_table::Router<FakeController>) {
+    ///     let tokens = Interrupts::take().unwrap();
+    ///     let _ = router.bind(tokens.far, FarIrq);
+    /// }
+    /// # bind(&mut oer_interrupt_table::Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap());
+    /// ```
     pub fn bind<E: Entry>(
         &mut self,
         token: E,
         part: E::Part,
     ) -> Result<Bound<E::Part>, Refused<E>> {
+        const {
+            assert!(
+                <E::Part as InterruptSource>::SOURCE < C::SOURCES,
+                "the entry's source is no source of the controller"
+            );
+            assert!(
+                E::LINE < C::LINES,
+                "the entry's line is no line of the controller"
+            );
+            assert!(
+                E::LEVEL >= 1 && E::LEVEL as u32 <= 1u32 << C::LEVEL_BITS,
+                "the entry's level is no level of the controller's lines"
+            );
+        };
         let source = <E::Part as InterruptSource>::SOURCE;
         let current = self.controller.hart();
         let refuse = |error, token, part| Err(Refused { error, token, part });
@@ -215,12 +335,68 @@ impl<C: Controller> Router<C> {
             .install(place)
             .ok()
             .expect("an entry's part is installed once");
-        self.controller
-            .set_line(E::LINE, LineState::bound(E::LEVEL, C::LEVEL_BITS));
-        self.controller.route(source, E::LINE);
+        #[expect(
+            clippy::expect_used,
+            reason = "the entry's source, line and level lie inside the controller (checked at compile time)"
+        )]
+        {
+            self.controller
+                .set_line(E::LINE, LineState::bound(E::LEVEL, C::LEVEL_BITS))
+                .expect("the entry's line is a line of the controller");
+            self.controller
+                .route(source, E::LINE)
+                .expect("the entry's source and line are the controller's");
+        }
         Ok(Bound {
             _part: core::marker::PhantomData,
         })
+    }
+
+    /// Prove that `P`'s source is routed nowhere on this hart and that no
+    /// entry of the table binds it: the router, its one writer, never
+    /// routes it then. A driver that polls `P`'s events takes the proof
+    /// before it enables them.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Bindable`] when an entry of the table, on any hart, binds the
+    /// source; [`Error::ForeignRoute`] when the source is routed.
+    pub fn silent<P: InterruptSource>(&self) -> Result<Silent<P>, Error> {
+        const {
+            assert!(
+                P::SOURCE < C::SOURCES,
+                "the part's source is no source of the controller"
+            );
+        };
+        let source = P::SOURCE;
+        if self
+            .table
+            .iter()
+            .any(|binding| binding.handler.is_some() && binding.source == source)
+        {
+            return Err(Error::Bindable { source });
+        }
+        if let Some(line) = self.controller.routed(source) {
+            return Err(Error::ForeignRoute { source, line });
+        }
+        Ok(Silent {
+            _part: core::marker::PhantomData,
+        })
+    }
+
+    /// Check that an entry's source, line and level lie inside the
+    /// controller.
+    fn inside(source: u16, line: u8, level: u8) -> Result<(), Error> {
+        if source >= C::SOURCES {
+            return Err(Error::NoSuchSource { source });
+        }
+        if line >= C::LINES {
+            return Err(Error::NoSuchLine { line });
+        }
+        if level == 0 || u32::from(level) > 1u32 << C::LEVEL_BITS {
+            return Err(Error::NoSuchLevel { level });
+        }
+        Ok(())
     }
 
     /// Check the hart's routes and lines against the table: every routed

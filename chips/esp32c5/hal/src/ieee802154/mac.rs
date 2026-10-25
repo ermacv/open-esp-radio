@@ -82,8 +82,9 @@ impl Ieee802154InterruptSetupOwner {
     /// [`Bound`] proof is what [`Ieee802154TaskOwner::enable_events`] takes,
     /// so no event reaches the CPU before the handler holds the owner. The
     /// engine pair ([`Ieee802154MacOwners`](crate::ieee802154::ll::Ieee802154MacOwners))
-    /// holds the owner itself instead: its source is never bound, so the
-    /// matrix never routes it and the engine polls its events.
+    /// holds the owner itself instead, with the router's
+    /// [`Silent`](oer_interrupt_table::Silent) proof that no entry binds its
+    /// source and the matrix routes it nowhere; the engine polls its events.
     pub fn arm(self, task: &mut Ieee802154TaskOwner) -> Ieee802154InterruptOwner {
         Ieee802154InterruptOwner {
             registers: self.registers.arm(&mut task.registers),
@@ -118,8 +119,7 @@ impl Ieee802154TaskOwner {
     /// }
     /// ```
     pub fn enable_events(&mut self, bound: &Bound<Ieee802154InterruptOwner>) {
-        let _bound = bound;
-        self.registers.enable_runtime_events();
+        self.registers.enable_runtime_events(bound);
     }
 }
 

@@ -15,6 +15,7 @@ test-support = []
 oer-espressif-analog = { path = "../../espressif/analog" }
 oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-values" }
 oer-mmio = { path = "../../../portable/mmio" }
+oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 oer-espressif-watchdog = { path = "../../espressif/watchdog" }
 oer-espressif-ieee80211-pac = { path = "../../espressif/ieee80211-pac" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }

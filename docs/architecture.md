@@ -79,8 +79,10 @@ moves; ownership, orchestration and wiring are rebuilt.
   source, to one CPU line (16 to 47) at a level on a hart: the line's vector
   calls the entry's handler directly, the handler holds the part, and
   binding it returns the `Bound` proof a driver takes before it enables the
-  peripheral's interrupt. The table fails to compile when two entries share
-  a line or a source.
+  peripheral's interrupt; a driver that polls a source no entry binds takes
+  the router's `Silent` proof instead. The table fails to compile when two
+  entries share a line or a source, and a binding when its entry lies
+  outside the chip's interrupt controller.
 - Each interrupt table entry declares its class: `Hardware` (capture,
   acknowledge, latch, raise a signal; never on its core's executor level),
   `Executor` (one per level and core; strict up to its task polls) or

@@ -53,15 +53,24 @@ word at 8, 12 bytes on the chip.
 `platform::interrupt_controller` implements it on the typed blocks and
 gives the CLIC three level bits):
 
-- `Router::install` silences every source and disables every line of the
-  hart, then verifies;
+- `Router::install` refuses an entry of the hart whose source, line or level
+  lies outside the controller (`Error::NoSuchSource`, `NoSuchLine`,
+  `NoSuchLevel`) before any write, silences every source and disables every
+  line of the hart, then verifies;
 - `Router::bind` consumes an entry's token and its part, moves the part where
   only the entry's handler reaches it, writes the entry's line (enabled,
   hardware-vectored, positive-level-triggered, its level in the control
   byte, `line_control`) and only then routes the source to it, and returns
   `Bound<Part>`, the proof a driver takes before it enables the peripheral's
   interrupt; an entry of another hart or one the table lacks comes back with
-  its token and part;
+  its token and part, and an entry outside the controller fails to compile;
+- `Router::silent` returns `Silent<Part>`, the proof that the part's source is
+  routed nowhere and no entry of the table binds it, which a driver that
+  polls the part's events takes instead of `Bound` (both implement the
+  sealed `EventAuthority`);
+- a controller refuses a source or line outside it and writes nothing; it
+  writes a line's enable apart from its attributes and control, so a line is
+  never enabled with another level or trigger than the router's;
 - `Router::verify` checks that every routed source is an entry of the hart
   on its line, every routed line holds its entry's level, and every other
   line is disabled.

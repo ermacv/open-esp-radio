@@ -58,7 +58,9 @@
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 mod router;
-pub use router::{Bound, Controller, Error, LineState, Refused, Router, Trigger};
+pub use router::{
+    Bound, Controller, Error, EventAuthority, LineState, Refused, Router, Silent, Trigger,
+};
 
 pub mod signal;
 
@@ -664,14 +666,12 @@ macro_rules! __fake_parts {
 }
 
 /// A host model of one hart's matrix bank and CLIC (`FakeController`,
-/// which records every write in order), and an interrupt table over the
-/// fake parts; once per binary, as [`interrupt_table!`].
+/// which records every write in order), for this crate's tests and
+/// examples.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __fake_table {
+macro_rules! __fake_controller {
     () => {
-        $crate::__fake_parts!();
-
         /// One write of the fake controller.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum Write {
@@ -708,25 +708,56 @@ macro_rules! __fake_table {
             fn hart(&self) -> u8 {
                 self.hart
             }
-            fn route(&mut self, source: u16, line: u8) {
-                self.routes[usize::from(source)] = Some(line);
+            fn route(&mut self, source: u16, line: u8) -> Result<(), $crate::Error> {
+                if line >= Self::LINES {
+                    return Err($crate::Error::NoSuchLine { line });
+                }
+                *self
+                    .routes
+                    .get_mut(usize::from(source))
+                    .ok_or($crate::Error::NoSuchSource { source })? = Some(line);
                 self.writes.push(Write::Route { source, line });
+                Ok(())
             }
-            fn silence(&mut self, source: u16) {
-                self.routes[usize::from(source)] = None;
+            fn silence(&mut self, source: u16) -> Result<(), $crate::Error> {
+                *self
+                    .routes
+                    .get_mut(usize::from(source))
+                    .ok_or($crate::Error::NoSuchSource { source })? = None;
                 self.writes.push(Write::Silence { source });
+                Ok(())
             }
             fn routed(&self, source: u16) -> Option<u8> {
                 self.routes[usize::from(source)]
             }
-            fn set_line(&mut self, line: u8, state: $crate::LineState) {
-                self.lines[usize::from(line)] = state;
+            fn set_line(
+                &mut self,
+                line: u8,
+                state: $crate::LineState,
+            ) -> Result<(), $crate::Error> {
+                *self
+                    .lines
+                    .get_mut(usize::from(line))
+                    .ok_or($crate::Error::NoSuchLine { line })? = state;
                 self.writes.push(Write::Line { line, state });
+                Ok(())
             }
             fn line(&self, line: u8) -> $crate::LineState {
                 self.lines[usize::from(line)]
             }
         }
+    };
+}
+
+/// The fake parts and controller and an interrupt table over the fake
+/// parts; once per binary, as [`interrupt_table!`].
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __fake_table {
+    () => {
+        $crate::__fake_parts!();
+
+        $crate::__fake_controller!();
 
         /// The handler of the timer's entry: one more call on its part.
         pub fn on_timer(part: &mut TimerIrq) {

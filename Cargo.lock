@@ -2724,6 +2724,7 @@ dependencies = [
  "oer-espressif-ieee80211-pac",
  "oer-espressif-ieee802154-mac-values",
  "oer-espressif-watchdog",
+ "oer-interrupt-table",
  "oer-mmio",
 ]
 

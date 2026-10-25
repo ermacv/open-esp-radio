@@ -2,17 +2,17 @@
 //! which the interrupt table's router (`oer_interrupt_table::Router`)
 //! writes through the typed blocks.
 //!
-//! Each method of [`Controller`] is one word's read or one read-modify-write
-//! of it: a route keeps its source's `PASS_IN_SEC` flag and the reserved bits
-//! of its word, a line keeps its pending bit and its privilege mode. An index
-//! outside the bank or the CLIC names no word: nothing is written and it
-//! reads as silent or disabled. The router passes only indices below
-//! [`Controller::SOURCES`] and [`Controller::LINES`].
+//! Each method of [`Controller`] reads or read-modify-writes one word: a
+//! route keeps its source's `PASS_IN_SEC` flag and the reserved bits
+//! of its word, a line keeps its pending bit and its privilege mode. A source
+//! outside the bank or a line outside the CLIC is refused
+//! ([`Error::NoSuchSource`], [`Error::NoSuchLine`]) and nothing is written;
+//! it reads as silent or disabled.
 
 use oer_esp32c5_pac::platform::{
     Clic, InterruptCore0, InterruptCore0Status, InterruptMatrixPeripherals, clic, interrupt_core0,
 };
-use oer_interrupt_table::{Controller, LineState, Trigger};
+use oer_interrupt_table::{Controller, Error, LineState, Trigger};
 use oer_mmio::{Bits, Fixed, Index, Placement};
 
 #[cfg(test)]
@@ -53,7 +53,32 @@ impl InterruptBlocks {
 }
 
 /// Hart 0's interrupt-matrix bank and CLIC, the router's
-/// [`Controller`].
+/// [`Controller`]. A table entry outside its sources or lines fails to
+/// compile where the router binds it:
+///
+/// ```compile_fail,E0080
+/// use oer_esp32c5_hal::platform::InterruptController;
+/// use oer_interrupt_table::Router;
+/// pub struct FarIrq;
+/// impl oer_mmio::InterruptSource for FarIrq {
+///     const SOURCE: u16 = 84;
+/// }
+/// pub fn on_far(_: &mut FarIrq) {}
+/// // `Lines` wider than the chip's: lines up to 63.
+/// const WIDE: oer_interrupt_table::Lines =
+///     oer_interrupt_table::Lines { first: 16, count: 64, levels: 8, harts: 1 };
+/// oer_interrupt_table::interrupt_table! {
+///     lines: WIDE,
+///     handler_attributes: [];
+///     far: FarToken = FarIrq => on_far, line 60, level 3, hart 0, Hardware;
+/// }
+/// pub fn bind(router: &mut Router<InterruptController>, token: FarToken) {
+///     let _ = router.bind(token, FarIrq);
+/// }
+/// # fn main() {
+/// #     let _: fn(&mut Router<InterruptController>, FarToken) = bind;
+/// # }
+/// ```
 #[must_use = "dropping the interrupt controller permanently loses the routes and lines"]
 pub struct InterruptController<
     M: Placement = Fixed<{ interrupt_core0::BASE }>,
@@ -115,23 +140,26 @@ impl<M: Placement, C: Placement> Controller for InterruptController<M, C> {
         0
     }
 
-    fn route(&mut self, source: u16, line: u8) {
-        let (Ok(index), Ok(line)) = (Index::new(usize::from(source)), Bits::new(u32::from(line)))
-        else {
-            return;
-        };
+    fn route(&mut self, source: u16, line: u8) -> Result<(), Error> {
+        let index = Index::new(usize::from(source)).map_err(|_| Error::NoSuchSource { source })?;
+        // MAP is wider than the CLIC's lines: a line past them is refused,
+        // not written.
+        let map = (line < Self::LINES)
+            .then(|| Bits::new(u32::from(line)).ok())
+            .flatten()
+            .ok_or(Error::NoSuchLine { line })?;
         self.matrix.modify_route(index, |route| {
-            route.set_map(line);
+            route.set_map(map);
         });
+        Ok(())
     }
 
-    fn silence(&mut self, source: u16) {
-        let Ok(index) = Index::new(usize::from(source)) else {
-            return;
-        };
+    fn silence(&mut self, source: u16) -> Result<(), Error> {
+        let index = Index::new(usize::from(source)).map_err(|_| Error::NoSuchSource { source })?;
         self.matrix.modify_route(index, |route| {
             route.set_map(Bits::constant::<0>());
         });
+        Ok(())
     }
 
     fn routed(&self, source: u16) -> Option<u8> {
@@ -141,16 +169,36 @@ impl<M: Placement, C: Placement> Controller for InterruptController<M, C> {
         (line != 0).then_some(line)
     }
 
-    fn set_line(&mut self, line: u8, state: LineState) {
-        let Ok(index) = Index::new(usize::from(line)) else {
-            return;
-        };
+    /// Three writes of the line's word, each changing one kind of byte: the
+    /// enable off, then the attributes and control, then the enable on. The
+    /// word holds `clicintie` (bit 8), `clicintattr` (bits 16 to 23) and
+    /// `clicintctl` (bits 24 to 31), and a word write takes effect in no
+    /// specified byte order, so one write could enable the line before its
+    /// new level and trigger hold.
+    ///
+    /// SOURCE: RISC-V CLIC specification 3f8ee744 `clic.adoc:377` (a word
+    /// write's byte updates take effect in no specified order); ESP-IDF
+    /// 4d59230d `components/soc/esp32c5/include/soc/clic_reg.h`
+    /// `:82,:104,:110` (`CLIC_INT_CTL_S` 24, `CLIC_INT_ATTR_SHV_S` 16,
+    /// `CLIC_INT_IE_S` 8).
+    fn set_line(&mut self, line: u8, state: LineState) -> Result<(), Error> {
+        let index = Index::new(usize::from(line)).map_err(|_| Error::NoSuchLine { line })?;
+        if self.clic.read_ctrl(index).ie() {
+            self.clic.modify_ctrl(index, |word| {
+                word.set_ie(false);
+            });
+        }
         self.clic.modify_ctrl(index, |word| {
-            word.set_ie(state.enabled)
-                .set_attr_shv(state.vectored)
+            word.set_attr_shv(state.vectored)
                 .set_attr_trig(trigger_bits(state.trigger))
                 .set_ctl(state.control);
         });
+        if state.enabled {
+            self.clic.modify_ctrl(index, |word| {
+                word.set_ie(true);
+            });
+        }
+        Ok(())
     }
 
     fn line(&self, line: u8) -> LineState {

@@ -2,7 +2,9 @@ use std::vec;
 use std::vec::Vec;
 
 use oer_esp32s31_pac::platform::{Clic, InterruptCore0, clic, interrupt_core0};
-use oer_interrupt_table::{Controller, LineState, Lines, Router, Trigger, line_control};
+use oer_interrupt_table::{
+    Binding, Class, Controller, Error, LineState, Lines, Router, Table, Trigger, line_control,
+};
 use oer_mmio::{Bits, Host, Index, InterruptSource};
 
 use super::{InterruptController, LEVEL_BITS};
@@ -61,10 +63,17 @@ fn taking_the_controller_sets_three_level_bits_and_keeps_the_other_configuration
 #[test]
 fn a_route_writes_its_source_s_line_alone_and_keeps_the_rest_of_its_word() {
     let mut memory = Memory::filled(u32::MAX);
+    // Every other bit set, source 12 on the CLIC's last line.
+    memory.matrix().modify_route(source(12), |route| {
+        route.set_map(Bits::constant::<47>());
+    });
+    let before = memory.matrix.clone();
     let mut controller = memory.controller();
     let neighbour = controller.routed(11);
     let routed_before = controller.routed(12);
-    controller.route(12, 20);
+    controller
+        .route(12, 20)
+        .expect("source 12 and line 20 are the controller's");
     assert_eq!(controller.routed(12), Some(20));
     assert_eq!(
         controller.routed(11),
@@ -78,32 +87,51 @@ fn a_route_writes_its_source_s_line_alone_and_keeps_the_rest_of_its_word() {
         "the route keeps its source's PASS_LEVEL"
     );
     let mut controller = memory.controller();
-    controller.route(
-        12,
-        routed_before.expect("the filled word routes the source"),
-    );
+    controller
+        .route(
+            12,
+            routed_before.expect("the filled word routes the source"),
+        )
+        .expect("the filled word's line is a line of the CLIC");
     drop(controller);
     assert!(
-        memory.matrix.iter().all(|&word| word == u32::MAX),
+        memory.matrix == before,
         "routing back restores every word, reserved bits included"
     );
 }
 
 #[test]
-fn a_silenced_source_is_routed_nowhere_and_an_index_past_the_bank_names_no_word() {
+fn a_silenced_source_is_routed_nowhere_and_an_index_past_the_bank_is_refused() {
+    type Ours = InterruptController<Host<'static>, Host<'static>>;
     let mut memory = Memory::filled(u32::MAX);
     let mut controller = memory.controller();
-    controller.silence(5);
+    controller.silence(5).expect("source 5 is the bank's");
     assert_eq!(controller.routed(5), None);
-    controller.route(InterruptController::<Host<'_>, Host<'_>>::SOURCES, 20);
-    controller.silence(InterruptController::<Host<'_>, Host<'_>>::SOURCES);
+    assert_eq!(
+        controller.route(Ours::SOURCES, 20),
+        Err(Error::NoSuchSource {
+            source: Ours::SOURCES
+        })
+    );
+    assert_eq!(
+        controller.silence(Ours::SOURCES),
+        Err(Error::NoSuchSource {
+            source: Ours::SOURCES
+        })
+    );
     assert_eq!(
         controller.routed(InterruptController::<Host<'_>, Host<'_>>::SOURCES),
         None
     );
-    controller.set_line(
-        InterruptController::<Host<'_>, Host<'_>>::LINES,
-        LineState::DISABLED,
+    // MAP holds 63, the CLIC has 48 lines: line 48 is refused, not written.
+    assert_eq!(Ours::LINES, 48);
+    assert_eq!(
+        controller.route(12, 48),
+        Err(Error::NoSuchLine { line: 48 })
+    );
+    assert_eq!(
+        controller.set_line(Ours::LINES, LineState::DISABLED),
+        Err(Error::NoSuchLine { line: Ours::LINES })
     );
     assert_eq!(
         controller.line(InterruptController::<Host<'_>, Host<'_>>::LINES),
@@ -138,11 +166,15 @@ fn a_line_reads_back_as_written_and_keeps_its_pending_bit_and_mode() {
             trigger,
             control: 0x5f,
         };
-        controller.set_line(30, state);
+        controller
+            .set_line(30, state)
+            .expect("line 30 is the CLIC's");
         assert_eq!(controller.line(30), state);
     }
     let bound = LineState::bound(3, LEVEL_BITS);
-    controller.set_line(30, bound);
+    controller
+        .set_line(30, bound)
+        .expect("line 30 is the CLIC's");
     assert_eq!(controller.line(30), bound);
     assert_eq!(bound.control, line_control(3, 3));
     drop(controller);
@@ -150,15 +182,17 @@ fn a_line_reads_back_as_written_and_keeps_its_pending_bit_and_mode() {
     assert!(word.ip(), "the pending bit stays");
     assert_eq!(word.attr_mode().get(), 3, "the privilege mode stays");
     let mut controller = memory.controller();
-    controller.set_line(
-        30,
-        LineState {
-            enabled: true,
-            vectored: true,
-            trigger: Trigger::NegativeEdge,
-            control: 0xff,
-        },
-    );
+    controller
+        .set_line(
+            30,
+            LineState {
+                enabled: true,
+                vectored: true,
+                trigger: Trigger::NegativeEdge,
+                control: 0xff,
+            },
+        )
+        .expect("line 30 is the CLIC's");
     drop(controller);
     assert!(
         memory.clic.iter().skip(1).all(|&word| word == u32::MAX),
@@ -217,10 +251,14 @@ fn the_router_silences_boot_leftovers_then_binds_a_line_on_its_level() {
     {
         let mut controller = memory.controller();
         for number in 0..InterruptController::<Host<'_>, Host<'_>>::SOURCES {
-            controller.route(number, 20);
+            controller
+                .route(number, 20)
+                .expect("every source of the bank routes to line 20");
         }
         for number in 0..InterruptController::<Host<'_>, Host<'_>>::LINES {
-            controller.set_line(number, LineState::bound(1, LEVEL_BITS));
+            controller
+                .set_line(number, LineState::bound(1, LEVEL_BITS))
+                .expect("every line of the CLIC takes a binding");
         }
     }
     {
@@ -253,4 +291,51 @@ fn the_router_silences_boot_leftovers_then_binds_a_line_on_its_level() {
     let state = controller.line(20);
     assert!(state.vectored && state.trigger == Trigger::PositiveLevel);
     assert_eq!(state.control, line_control(3, 3));
+}
+
+extern "C" fn no_handler() {}
+
+/// A table of one entry of hart 0, as a table of wider `Lines` than the
+/// chip's would hold it.
+fn table_of(source: u16, line: u8) -> &'static Table {
+    std::boxed::Box::leak(std::boxed::Box::new([Binding {
+        source,
+        line,
+        level: 3,
+        class: Class::Hardware,
+        hart: 0,
+        handler: Some(no_handler),
+    }]))
+}
+
+#[test]
+fn the_router_refuses_a_table_outside_the_matrix_or_the_clic_before_any_write() {
+    // A table of `Lines { count: 64, .. }`: line 60 lies outside the CLIC.
+    let sources = InterruptController::<Host<'_>, Host<'_>>::SOURCES;
+    for (table, error) in [
+        (
+            table_of(sources, 60),
+            Error::NoSuchSource { source: sources },
+        ),
+        (
+            table_of(sources, 20),
+            Error::NoSuchSource { source: sources },
+        ),
+        (table_of(12, 60), Error::NoSuchLine { line: 60 }),
+        (table_of(12, 48), Error::NoSuchLine { line: 48 }),
+    ] {
+        let mut memory = Memory::filled(u32::MAX);
+        assert_eq!(
+            Router::install(memory.controller(), table).err(),
+            Some(error)
+        );
+        assert!(
+            memory.matrix.iter().all(|&word| word == u32::MAX),
+            "no route changed"
+        );
+        assert!(
+            memory.clic.iter().skip(1).all(|&word| word == u32::MAX),
+            "no line changed"
+        );
+    }
 }
