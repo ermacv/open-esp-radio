@@ -1,5 +1,5 @@
 use super::{
-    BluetoothTaskRegisters, Ieee802154TaskRegisters, RadioPartitions, SharedRadioParts,
+    BluetoothTaskRegisters, Ieee802154Partition, RadioPartitions, SharedRadioParts,
     SharedRadioRegisters, WifiRadioRegisters,
 };
 
@@ -46,8 +46,13 @@ fn shared_radio_owner_returns_every_shared_partition() {
 }
 
 #[test]
-fn ieee802154_register_set_reunites_its_interrupt_owner() {
+fn ieee802154_partition_rejoins_the_mac_its_parts_split() {
     let RadioPartitions { ieee802154, .. } = RadioPartitions::for_host_test();
-    let (task, interrupts) = Ieee802154TaskRegisters::new(ieee802154);
-    let _partition = task.into_partition(interrupts);
+    let Ieee802154Partition { mac, etm, rx_info } = ieee802154;
+    let (task, interrupts) = mac.split();
+    let _partition = Ieee802154Partition {
+        mac: crate::generated::ieee802154_mac::Ieee802154Mac::join(task, interrupts),
+        etm,
+        rx_info,
+    };
 }

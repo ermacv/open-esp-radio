@@ -43,14 +43,13 @@ fn registration_epoch_persists_in_the_domain() {
 #[test]
 fn btbb_joins_an_initialized_baseband_without_register_access() {
     use crate::owner::PhyInitializationAccess;
-    use oer_esp32s31_pac::Ieee802154TaskRegisters;
     let RadioPartitions {
         bluetooth,
         ieee802154,
         ..
     } = RadioPartitions::for_host_test();
     let bluetooth = oer_esp32s31_pac::BluetoothTaskRegisters::new(bluetooth);
-    let (ieee802154, _interrupts) = Ieee802154TaskRegisters::new(ieee802154);
+    let (ieee802154, _interrupts) = crate::ieee802154::mac::split(ieee802154);
     let mut radio = radio_domain();
     let domain = &mut radio;
 
@@ -82,7 +81,7 @@ fn btbb_joins_an_initialized_baseband_without_register_access() {
 fn only_the_latest_gain_of_the_current_registration_admits_btbb() {
     use crate::owner::PhyInitializationAccess;
     let RadioPartitions { ieee802154, .. } = RadioPartitions::for_host_test();
-    let (ieee802154, _interrupts) = oer_esp32s31_pac::Ieee802154TaskRegisters::new(ieee802154);
+    let (ieee802154, _interrupts) = crate::ieee802154::mac::split(ieee802154);
     let mut radio = radio_domain();
     let first = radio.phy_hal().begin_registration();
     let earlier = radio.btbb_publisher().1.publish(&first, 0x4e).unwrap();

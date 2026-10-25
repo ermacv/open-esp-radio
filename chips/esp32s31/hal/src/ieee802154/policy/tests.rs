@@ -1,9 +1,8 @@
 use std::vec::Vec;
 
-use oer_esp32s31_pac::{
-    Ieee802154FoundationSnapshot, Ieee802154MultipanEnableState as PacMultipanEnableState,
-    Ieee802154Pti,
-};
+use oer_espressif_ieee802154_engine::types::Ieee802154MultipanEnableState;
+
+use crate::ieee802154::mac::{Ieee802154FoundationSnapshot, Ieee802154Pti};
 
 use super::{
     COEX_DISABLED_PTI, IEEE802154_MAX_ACK_TIMEOUT_MICROSECONDS, Ieee802154AckTimeout,
@@ -321,7 +320,7 @@ fn every_checkpoint_fails_closed_and_preserves_the_owner() {
                 snapshot.ack_timeout = Ieee802154AckTimeout::from_units(0)
             }
             Ieee802154MacPolicyCheckpoint::PrimaryPanEnabled => {
-                snapshot.multipan_enable_state = PacMultipanEnableState::NONE
+                snapshot.multipan_enable_state = Ieee802154MultipanEnableState::NONE
             }
             Ieee802154MacPolicyCheckpoint::PanId => snapshot.identity.pan_id ^= 1,
             Ieee802154MacPolicyCheckpoint::ShortAddress => snapshot.identity.short_address ^= 1,

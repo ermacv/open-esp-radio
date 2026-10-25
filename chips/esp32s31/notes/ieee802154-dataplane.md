@@ -155,16 +155,16 @@ snapshot, then dispatches in this order:
 4. one deferred `next_operation` decision.
 
 That order remains represented and exhaustively tested as pure logic, and the
-production path connects it to a restricted PAC interrupt port. The target
+production path connects it to the HAL's interrupt owner. The target
 reviewed fact assigns read-write W1C semantics to `EVENT_STATUS`; the published
 SVD carries `oneToClear`, and the generated code samples the complete
 fourteen-bit field into a non-`Copy` token consumed by acknowledgement. No
 caller can supply, narrow, clone, or replay the write image.
 
-The whole-radio PAC route separates `Ieee802154TaskRegisters` from inactive
-`Ieee802154InterruptSetup`. Activation masks delivery, consumes one complete
-stale W1C snapshot, publishes the named runtime event mask, and returns a
-disjoint `Ieee802154InterruptRegisters` owner. Its hard-IRQ transaction samples
+The HAL splits the PAC's generated MAC block into the task owner
+`Ieee802154TaskOwner` and the inactive `Ieee802154InterruptSetupOwner`.
+Activation masks delivery, consumes one complete stale W1C snapshot, publishes
+the named runtime event mask, and returns a disjoint `Ieee802154InterruptOwner`. Its hard-IRQ transaction samples
 the complete event image plus selected RX/TX abort and ED/CCA sidebands before
 consuming the exact W1C token. A production port adapter posts the resulting
 non-replayable value to the bounded Embassy queue; task code never receives

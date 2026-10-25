@@ -51,7 +51,7 @@ fn strobe(
 #[test]
 fn each_etm_part_strobes_only_its_own_channel_bits() {
     assert_eq!(
-        strobe(|ieee802154, _, _| ieee802154.enable_ieee802154_etm_channel1()),
+        strobe(|ieee802154, _, _| ieee802154.trigger_channel_enable_set_ch1()),
         1 << 1
     );
     assert_eq!(
@@ -76,8 +76,8 @@ fn an_etm_enable_and_its_disable_strobe_different_words() {
         let (mut ieee802154, _, _) = ModemEtm::host(&mut after)
             .expect("memory holds the block")
             .divide();
-        ieee802154.enable_ieee802154_etm_channel0();
-        ieee802154.disable_ieee802154_etm_channel1();
+        ieee802154.trigger_channel_enable_set_ch0();
+        ieee802154.trigger_channel_enable_clear_ch1();
     }
     let difference = changed(&before, &after);
     assert_eq!(difference.len(), 2);
@@ -105,30 +105,6 @@ fn the_bluetooth_low_power_routes_reach_channels_four_to_seven_only() {
         assert_eq!(ieee802154.read_ch_task(index).id(), 0);
     }
     assert_eq!(phy.read_ch_event(Index::constant::<0>()).id(), 0);
-}
-
-#[test]
-fn the_ieee802154_routes_program_its_two_channels() {
-    let mut memory = vec![0; etm::SIZE / 4];
-    let (mut ieee802154, _, _) = ModemEtm::host(&mut memory)
-        .expect("memory holds the block")
-        .divide();
-    ieee802154.route_ieee802154_etm_timer0_to_tx_start();
-    ieee802154.route_ieee802154_etm_timer1_to_rx_start();
-    let channel0 = Index::constant::<0>();
-    let channel1 = Index::constant::<1>();
-    assert_eq!(
-        ieee802154.read_ch_event(channel0).id_variant(),
-        Some(etm::ch_event::Id::Ieee802154Timer0Overflow)
-    );
-    assert_eq!(
-        ieee802154.read_ch_event(channel1).id_variant(),
-        Some(etm::ch_event::Id::Ieee802154Timer1Overflow)
-    );
-    assert_ne!(
-        ieee802154.read_ch_task(channel0).id(),
-        ieee802154.read_ch_task(channel1).id()
-    );
 }
 
 #[test]

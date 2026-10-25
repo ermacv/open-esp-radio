@@ -9,7 +9,7 @@ description = "Closed typed ESP32-S31 radio peripheral access crate"
 
 [features]
 # Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
-test-support = ["oer-espressif-ieee802154-mac-values/test-support"]
+test-support = []
 
 [dependencies]
 oer-espressif-analog = { path = "../../espressif/analog" }
@@ -18,7 +18,6 @@ oer-mmio = { path = "../../../portable/mmio" }
 oer-espressif-efuse = { path = "../../espressif/efuse" }
 oer-espressif-watchdog = { path = "../../espressif/watchdog" }
 oer-espressif-boot = { path = "../../espressif/boot" }
-oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-values" }
 oer-memory = { path = "../../../portable/memory" }
 oer-espressif-ieee80211-pac = { path = "../../espressif/ieee80211-pac" }
 oer-esp32s31-pac-raw = { path = "../pac-raw", features = ["critical-section"] }

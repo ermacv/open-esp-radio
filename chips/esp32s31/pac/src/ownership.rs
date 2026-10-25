@@ -17,18 +17,6 @@ pub(crate) struct WifiRadioPeripheralOwners {
     pub(crate) wifi_mac_interface: generated::peripheral_ownership::WifiMacInterfacePeripherals,
 }
 
-/// Physical owners used by one IEEE 802.15.4 task register set.
-///
-/// The MAC, its ETM channels and the read of the BTBB receive information
-/// are the whole IEEE 802.15.4 authority; its interrupt route words are the
-/// interrupt matrix's. Clocks, resets, the common PHY and the rest of the
-/// shared BTBB baseband it depends on belong to the shared radio partition.
-pub(crate) struct Ieee802154TaskPeripheralOwners {
-    pub(crate) ieee802154_mac: crate::ieee802154::ownership::TaskRegisters,
-    pub(crate) etm: crate::modem::etm::Ieee802154EtmChannels,
-    pub(crate) rx_info: crate::ieee802154::baseband::Ieee802154BasebandRxInfo,
-}
-
 /// Unique restricted owner of the shared radio-PHY register partition.
 ///
 /// The type exposes only reviewed, named PHY transactions. It contains no
@@ -93,8 +81,7 @@ pub struct SharedRadioRegisters {
 }
 
 /// The shared radio partition's blocks, with the shared baseband less the
-/// receive-information read IEEE 802.15.4 holds
-/// ([`crate::ieee802154::baseband`]).
+/// receive-information read IEEE 802.15.4 holds ([`Ieee802154Partition`]).
 pub(crate) struct SharedRadioBlocks {
     pub(crate) bt_v3_2_baseband: generated::bt_v3_2_baseband::BtV3_2BasebandRest,
     pub(crate) shared_radio_init_control:
@@ -214,12 +201,27 @@ pub struct BluetoothControllerPartition {
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct SharedRadioPartition(SharedRadioBlocks);
 
-/// Opaque IEEE 802.15.4 MAC register partition.
+/// The IEEE 802.15.4 register partition: the generated parts its HAL owns.
+///
+/// The MAC, its ETM channels and the read of the BTBB receive information
+/// are the whole IEEE 802.15.4 authority; its interrupt route word is the
+/// interrupt matrix's. Clocks, resets, the common PHY and the rest of the
+/// shared BTBB baseband it depends on belong to the shared radio partition.
+/// The HAL splits the MAC into its generated task and interrupt sides.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct Ieee802154Partition {
-    peripherals: generated::peripheral_ownership::Ieee802154Peripherals,
-    etm: crate::modem::etm::Ieee802154EtmChannels,
-    rx_info: crate::ieee802154::baseband::Ieee802154BasebandRxInfo,
+    /// The MAC block, whole.
+    pub mac: generated::ieee802154_mac::Ieee802154Mac,
+    /// Modem ETM channels zero and one, the channel-enable word and their
+    /// bits of the write-trigger set and clear words. The Bluetooth parts of
+    /// the matrix strobe only their own bits, so IEEE 802.15.4 may use its
+    /// channels from its interrupt handler.
+    pub etm: generated::modem_etm::ModemEtmIeee802154,
+    /// The read of the shared baseband's current receive information, whose
+    /// low byte the vendor driver reports as its recent RSSI
+    /// (`ieee802154_get_recent_rssi` over `bt_bb_get_cur_rx_info`). The
+    /// shared radio owner keeps every other baseband register.
+    pub rx_info: generated::bt_v3_2_baseband::BtV3_2BasebandRxInfo,
 }
 
 /// Proof that the platform transferred every ESP32-S31 radio singleton.
@@ -359,8 +361,7 @@ impl RadioPartitions {
             shared_baseband_tx_timing,
             zbbb_radio_control,
         } = shared_radio;
-        let (bt_v3_2_baseband, ieee802154_rx_info) =
-            crate::ieee802154::baseband::split(bt_v3_2_baseband);
+        let (bt_v3_2_baseband, ieee802154_rx_info) = bt_v3_2_baseband.split_rx_info();
         let shared_radio = SharedRadioBlocks {
             bt_v3_2_baseband,
             shared_radio_init_control,
@@ -396,7 +397,7 @@ impl RadioPartitions {
             },
             shared_radio: SharedRadioPartition(shared_radio),
             ieee802154: Ieee802154Partition {
-                peripherals: ieee802154,
+                mac: ieee802154.ieee802154_mac,
                 etm: ieee802154_etm,
                 rx_info: ieee802154_rx_info,
             },
@@ -815,83 +816,6 @@ impl WifiRadioRegisters {
     }
 }
 
-/// Ordinary task-side owner of the IEEE 802.15.4 MAC partition.
-///
-/// It contains no shared radio partition: the modem clocks and resets, the
-/// common PHY and the shared BTBB baseband the MAC depends on are reached
-/// through [`SharedRadioRegisters`]. Possessing this owner does not itself
-/// prove that any of those prerequisites have run.
-#[must_use = "the IEEE 802.15.4 task owner must be reunited before release"]
-pub struct Ieee802154TaskRegisters {
-    pub(crate) peripherals: Ieee802154TaskPeripheralOwners,
-}
-
-impl Ieee802154TaskRegisters {
-    /// Assemble the task register set and split the MAC block into its
-    /// disjoint task and interrupt owners. This performs no MMIO.
-    pub fn new(partition: Ieee802154Partition) -> (Self, Ieee802154InterruptSetup) {
-        let Ieee802154Partition {
-            peripherals: generated::peripheral_ownership::Ieee802154Peripherals { ieee802154_mac },
-            etm,
-            rx_info,
-        } = partition;
-        let (task_mac, interrupt_mac) = crate::ieee802154::ownership::split(ieee802154_mac);
-        (
-            Self {
-                peripherals: Ieee802154TaskPeripheralOwners {
-                    ieee802154_mac: task_mac,
-                    etm,
-                    rx_info,
-                },
-            },
-            Ieee802154InterruptSetup {
-                registers: interrupt_mac,
-            },
-        )
-    }
-
-    /// Reunite the MAC block with its inactive interrupt owner and return the
-    /// partition. This performs no MMIO.
-    pub fn into_partition(self, interrupts: Ieee802154InterruptSetup) -> Ieee802154Partition {
-        let Ieee802154TaskPeripheralOwners {
-            ieee802154_mac: task_mac,
-            etm,
-            rx_info,
-        } = self.peripherals;
-        let ieee802154_mac = crate::ieee802154::ownership::reunite(task_mac, interrupts.registers);
-        Ieee802154Partition {
-            peripherals: generated::peripheral_ownership::Ieee802154Peripherals { ieee802154_mac },
-            etm,
-            rx_info,
-        }
-    }
-
-    /// Order descriptor memory and MMIO at a hardware ownership boundary.
-    pub fn order_device_accesses(&mut self) {
-        device_fence();
-    }
-}
-
-/// Task-side setup token before one IEEE 802.15.4 hard-IRQ epoch.
-///
-/// The raw interrupt handle is already disjoint from
-/// [`Ieee802154TaskRegisters`], but remains inactive until the reviewed setup
-/// transaction consumes this value.
-#[must_use = "the IEEE 802.15.4 interrupt setup must remain paired with its task owner"]
-pub struct Ieee802154InterruptSetup {
-    pub(crate) registers: crate::ieee802154::ownership::InterruptRegisters,
-}
-
-/// Disjoint IEEE 802.15.4 event/status capability for the hard ISR.
-///
-/// Task command, DMA, policy, and event-enable operations are absent from this
-/// type. It must be deactivated after the platform CPU route is disabled and
-/// reunited with the task owner before the whole radio can be released.
-#[must_use = "the IEEE 802.15.4 interrupt owner must be deactivated and reunited"]
-pub struct Ieee802154InterruptRegisters {
-    pub(crate) registers: crate::ieee802154::ownership::InterruptRegisters,
-}
-
 /// Ordinary task-side owner of the Bluetooth controller partition.
 ///
 /// It contains no shared radio partition: a transaction that also touches the
@@ -973,9 +897,6 @@ pub struct BluetoothInterruptSetup {
 pub struct BluetoothInterruptRegisters {
     pub(crate) peripherals: generated::peripheral_ownership::BluetoothInterruptPeripherals,
 }
-
-#[cfg(test)]
-pub(crate) mod test_support;
 
 #[cfg(test)]
 mod tests;

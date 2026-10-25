@@ -14,12 +14,6 @@
 
 use crate::generated::modem_etm::{ModemEtmBluetooth, ModemEtmBluetoothPhy, ModemEtmIeee802154};
 
-/// ETM channels zero and one, owned by IEEE 802.15.4.
-#[must_use = "dropping the ETM channels loses their register authority"]
-pub struct Ieee802154EtmChannels {
-    pub(crate) registers: ModemEtmIeee802154,
-}
-
 /// ETM channel two, owned by the Bluetooth controller.
 ///
 /// The pinned BLE PHY initialization routes modem event 8 to task 20 on a
@@ -53,20 +47,19 @@ pub struct BluetoothEtmChannels {
 }
 
 /// Divide the unique modem ETM owner into the three channel capabilities,
-/// which are never reunited.
+/// which are never reunited. IEEE 802.15.4's part is the generated one: its
+/// HAL drives it.
 pub(crate) fn split(
     peripherals: crate::generated::peripheral_ownership::ModemEtmPeripherals,
 ) -> (
-    Ieee802154EtmChannels,
+    ModemEtmIeee802154,
     BluetoothPhyEtmChannel,
     BluetoothEtmChannels,
 ) {
     let crate::generated::peripheral_ownership::ModemEtmPeripherals { modem_etm } = peripherals;
     let (ieee802154, phy, bluetooth) = modem_etm.divide();
     (
-        Ieee802154EtmChannels {
-            registers: ieee802154,
-        },
+        ieee802154,
         BluetoothPhyEtmChannel { registers: phy },
         BluetoothEtmChannels {
             registers: bluetooth,
