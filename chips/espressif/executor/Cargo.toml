@@ -28,6 +28,7 @@ chip = [
 
 [dependencies]
 static_cell = "2.1.1"
+pin-project-lite = "0.2.17"
 oer-cooperate = { path = "../../../portable/cooperate" }
 oer-time = { path = "../../../portable/time" }
 bytemuck = { version = "1.25.2", default-features = false }

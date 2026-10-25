@@ -5,28 +5,30 @@ use core::ops::Range;
 use core::ptr::addr_of;
 
 #[allow(unsafe_code, reason = "the linker script symbols")]
+// SAFETY: the runtime linker script defines these symbols; only their
+// addresses are used, with no memory-safety precondition on the caller.
 unsafe extern "C" {
-    static __runtime_image_start: u8;
-    static __runtime_payload_end: u8;
-    static __runtime_bss_start: u8;
-    static __runtime_bss_end: u8;
-    static __runtime_data_load_start: u8;
-    static __runtime_data_start: u8;
-    static __runtime_data_end: u8;
-    static __runtime_data_bss_start: u8;
-    static __runtime_data_bss_end: u8;
-    static __runtime_isr_start: u8;
-    static __runtime_isr_end: u8;
-    static __runtime_dma_data_start: u8;
-    static __runtime_dma_data_end: u8;
-    static __runtime_dma_bss_start: u8;
-    static __runtime_dma_bss_end: u8;
-    static __runtime_cpu0_irq_stack_bottom: u8;
-    static __runtime_cpu0_irq_stack_top: u8;
-    static __runtime_cpu1_irq_stack_bottom: u8;
-    static __runtime_cpu1_irq_stack_top: u8;
-    static _stack_end: u8;
-    static _stack_start: u8;
+    safe static __runtime_image_start: u8;
+    safe static __runtime_payload_end: u8;
+    safe static __runtime_bss_start: u8;
+    safe static __runtime_bss_end: u8;
+    safe static __runtime_data_load_start: u8;
+    safe static __runtime_data_start: u8;
+    safe static __runtime_data_end: u8;
+    safe static __runtime_data_bss_start: u8;
+    safe static __runtime_data_bss_end: u8;
+    safe static __runtime_isr_start: u8;
+    safe static __runtime_isr_end: u8;
+    safe static __runtime_dma_data_start: u8;
+    safe static __runtime_dma_data_end: u8;
+    safe static __runtime_dma_bss_start: u8;
+    safe static __runtime_dma_bss_end: u8;
+    safe static __runtime_cpu0_irq_stack_bottom: u8;
+    safe static __runtime_cpu0_irq_stack_top: u8;
+    safe static __runtime_cpu1_irq_stack_bottom: u8;
+    safe static __runtime_cpu1_irq_stack_top: u8;
+    safe static _stack_end: u8;
+    safe static _stack_start: u8;
 }
 
 /// The linked image's sections and stacks, as address ranges.

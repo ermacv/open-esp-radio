@@ -82,17 +82,19 @@ const IRQ_STACK_GUARD_TRIGGER: usize = 2;
 const TASK_STACK_GUARD_TRIGGER: usize = 0;
 
 #[cfg(target_arch = "riscv32")]
+// SAFETY: the runtime linker script and generated vectors define these
+// symbols with the declared layout; only their addresses are used here.
 unsafe extern "C" {
-    static _runtime_mtvt: [u32; VECTOR_TABLE_WORDS];
-    static _start_trap: u8;
-    static __runtime_cpu0_irq_stack_bottom: u8;
-    static __runtime_cpu0_irq_stack_top: u8;
-    static __runtime_cpu0_irq_stack_guard_bytes: u8;
-    static __runtime_cpu1_irq_stack_bottom: u8;
-    static __runtime_cpu1_irq_stack_top: u8;
-    static __runtime_cpu1_irq_stack_guard_bytes: u8;
-    static __runtime_cpu0_task_stack_bottom: u8;
-    static __runtime_cpu0_task_stack_top: u8;
+    safe static _runtime_mtvt: [u32; VECTOR_TABLE_WORDS];
+    safe static _start_trap: u8;
+    safe static __runtime_cpu0_irq_stack_bottom: u8;
+    safe static __runtime_cpu0_irq_stack_top: u8;
+    safe static __runtime_cpu0_irq_stack_guard_bytes: u8;
+    safe static __runtime_cpu1_irq_stack_bottom: u8;
+    safe static __runtime_cpu1_irq_stack_top: u8;
+    safe static __runtime_cpu1_irq_stack_guard_bytes: u8;
+    safe static __runtime_cpu0_task_stack_bottom: u8;
+    safe static __runtime_cpu0_task_stack_top: u8;
 }
 
 /// `hart`'s interrupt stack as `bottom..top`; `None` for a hart without one.

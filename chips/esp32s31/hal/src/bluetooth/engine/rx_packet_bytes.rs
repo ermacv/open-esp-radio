@@ -2,7 +2,7 @@
 
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 use crate::layouts::*;
-use vcell::VolatileCell;
+use oer_mmio::VolatileCell;
 
 /// SOURCE: pinned `memMgmt_3.o` receive allocator and receive-recycling bodies.
 const REARMED_RESULT: BleRxPacketPrefixResult = BleRxPacketPrefixResult::from_bits(0)
@@ -49,18 +49,11 @@ pub(crate) const fn result_rejected(result: BleRxPacketPrefixResult) -> bool {
 
 /// Bytes after the completion gate, including the generated prefix and bounded payload.
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 pub(crate) struct RxPacketBytes {
     prefix: [VolatileCell<u8>; BleRxPacketPrefix::SIZE],
     pub(crate) payload: [VolatileCell<u8>; u8::MAX as usize],
 }
-
-#[allow(
-    unsafe_code,
-    reason = "volatile bytes admit every bit pattern, including zero"
-)]
-// SAFETY: VolatileCell<u8> is a transparent UnsafeCell<u8>; each byte may
-// start at zero. This promises initialization only, without shared access.
-unsafe impl bytemuck::Zeroable for RxPacketBytes {}
 
 impl RxPacketBytes {
     pub(crate) const fn zeroed() -> Self {

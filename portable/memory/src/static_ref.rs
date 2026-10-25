@@ -12,6 +12,8 @@ use core::sync::atomic::{AtomicPtr, Ordering};
 /// handler or the panic path among them, reads without a lock. It is a
 /// single atomic pointer, so a static of it can live in the SRAM sections
 /// such paths reach without a cache.
+#[derive(bytemuck::Zeroable)]
+#[zeroable(bound = "")]
 pub struct StaticRef<T: 'static> {
     pointer: AtomicPtr<T>,
 }
@@ -47,9 +49,6 @@ impl<T: Sync + 'static> Default for StaticRef<T> {
         Self::new()
     }
 }
-
-// SAFETY: all zero bytes are the null pointer `new` stores.
-unsafe impl<T> bytemuck::Zeroable for StaticRef<T> {}
 
 /// A function bound at link time: a crate declares the symbol it calls and
 /// the image defines it once, so every call is a direct call that the stack

@@ -1197,6 +1197,7 @@ impl<const WIDTH: u32> From<Bits<WIDTH>> for u32 {
 ///
 /// It is not `Sync`; its zero bytes are a valid value.
 #[repr(transparent)]
+#[derive(bytemuck::Zeroable)]
 pub struct VolatileCell<T: Copy>(UnsafeCell<T>);
 
 #[allow(unsafe_code, reason = "the volatile accesses of a cell's own value")]
@@ -1222,11 +1223,6 @@ impl<T: Copy> VolatileCell<T> {
         unsafe { self.0.get().write_volatile(value) }
     }
 }
-
-#[allow(unsafe_code, reason = "a transparent cell of a zeroable value")]
-// SAFETY: `VolatileCell<T>` is a transparent `UnsafeCell<T>`, which has the
-// layout and validity of `T`; all-zero bytes are a valid `T: Zeroable`.
-unsafe impl<T: Copy + bytemuck::Zeroable> bytemuck::Zeroable for VolatileCell<T> {}
 
 /// The RAM region a chip's DMA engines reach, as the generated `layouts`
 /// module of its PAC names it.

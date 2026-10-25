@@ -22,17 +22,8 @@ pub use bytemuck::Zeroable;
 
 /// The all-zero value of `T`, its initial state; usable in a `static`
 /// initializer, where `Zeroable::zeroed` is not.
-#[allow(
-    unsafe_code,
-    reason = "Zeroable guarantees the zero bit pattern is valid"
-)]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "Zeroable proves all-zero bytes valid for this const initializer"
-)]
 pub const fn zeroed<T: Zeroable>() -> T {
-    // SAFETY: `T: Zeroable` guarantees that all-zero bytes are a valid `T`.
-    unsafe { core::mem::zeroed() }
+    bytemuck::zeroed()
 }
 
 /// A static, in a region the boot zeroes, that one owner claims once.
@@ -40,6 +31,7 @@ pub const fn zeroed<T: Zeroable>() -> T {
 /// It starts as [`zeroed`]; [`Self::take`] hands out the value the first
 /// time. A value set at runtime is a `ZeroedStatic<MaybeUninit<T>>` that the
 /// claimant writes.
+#[derive(Zeroable)]
 pub struct ZeroedStatic<T> {
     taken: AtomicBool,
     value: UnsafeCell<T>,
@@ -52,10 +44,6 @@ pub struct ZeroedStatic<T> {
 // by the claimant; handing the `&'static mut T` on needs `T: Send` by the
 // ordinary rules. `static_cell::StaticCell` rests on the same argument.
 unsafe impl<T> Sync for ZeroedStatic<T> {}
-
-#[allow(unsafe_code, reason = "a flag and a zero-valid value")]
-// SAFETY: `taken` is false at zero and `value` is zero-valid.
-unsafe impl<T: Zeroable> Zeroable for ZeroedStatic<T> {}
 
 impl<T: Zeroable> ZeroedStatic<T> {
     /// The unclaimed cell with the zero value.
@@ -114,6 +102,8 @@ const ONCE_READY: u8 = 2;
 /// `MaybeUninit` until [`Self::get_or_init`] writes it, so a type without a
 /// zero representation (a waker, a mutex) can live in a zeroed static that an
 /// interrupt reads with [`Self::get`].
+#[derive(Zeroable)]
+#[zeroable(bound = "")]
 pub struct ZeroedOnce<T> {
     state: AtomicU8,
     value: UnsafeCell<MaybeUninit<T>>,
@@ -124,10 +114,6 @@ pub struct ZeroedOnce<T> {
 // cell shares a `T` across threads (`T: Sync`) that one thread wrote and
 // others may drop never (`T: Send` for the writer's hand-over).
 unsafe impl<T: Send + Sync> Sync for ZeroedOnce<T> {}
-
-#[allow(unsafe_code, reason = "a zero state and uninitialized storage")]
-// SAFETY: state 0 is `ONCE_EMPTY` and `MaybeUninit` accepts any bytes.
-unsafe impl<T> Zeroable for ZeroedOnce<T> {}
 
 impl<T> ZeroedOnce<T> {
     /// The empty cell: all zero bytes.
@@ -260,7 +246,7 @@ mod tests {
         use std::rc::Rc;
         let shared = Rc::new(());
         {
-            let cell = ZeroedOnce::new();
+            let cell: ZeroedOnce<Rc<()>> = zeroed();
             cell.get_or_init(|| Rc::clone(&shared));
             assert_eq!(Rc::strong_count(&shared), 2);
         }

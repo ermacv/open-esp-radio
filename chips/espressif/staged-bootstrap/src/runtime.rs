@@ -207,13 +207,9 @@ struct ValidatedLayout {
     expected_crc32: u32,
 }
 
-#[allow(unsafe_code, reason = "an unaligned header read from the payload")]
 fn read_header(payload: &[u8]) -> RuntimeHeader {
-    if payload.len() < size_of::<RuntimeHeader>() {
-        fail("OER_BOOT bootstrap=FAIL reason=short-header\r\n");
-    }
-    // SAFETY: the payload holds at least one header, read without alignment.
-    unsafe { payload.as_ptr().cast::<RuntimeHeader>().read_unaligned() }
+    RuntimeHeader::from_le_bytes(payload)
+        .unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=short-header\r\n"))
 }
 
 fn validate_header(

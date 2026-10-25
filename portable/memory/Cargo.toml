@@ -9,14 +9,13 @@ description = "Audited buffer ownership boundaries for open ESP radio drivers"
 
 [dependencies]
 oer-sync = { path = "../sync" }
-bytemuck = { version = "1.25.2", default-features = false, features = ["min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
+bytemuck = { version = "1.25.2", default-features = false, features = ["const_zeroed", "derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
 
 [features]
 default = []
 
 [dev-dependencies]
 oer-test-ui-cases = { path = "../../tools/test/ui-cases" }
-bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 
 [lints]
 workspace = true

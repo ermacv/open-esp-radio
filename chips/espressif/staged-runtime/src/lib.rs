@@ -147,8 +147,10 @@ impl Handoff {
                 panic!("the hart's routes and lines disagree with the image's table: {error:?}")
             }
         };
+        // SAFETY: the runtime linker script defines this stack boundary;
+        // taking its address has no memory-safety precondition.
         unsafe extern "C" {
-            static _stack_end: u8;
+            safe static _stack_end: u8;
         }
         // SAFETY: interrupts are disabled and trigger 0 is the runtime's;
         // `_stack_end` is the word-aligned bottom of the CPU0 task stack the
@@ -246,13 +248,11 @@ macro_rules! entry {
     };
 }
 
-/// The stack-protector guard that `esp_hal::init` arms its watchpoint on.
-/// esp-hal's `linkall.x` defines it; stage two links its own scripts, so the
-/// runtime owns it, in SRAM critical data.
+/// The stack-protector ABI's read-only guard, in SRAM critical data.
 #[allow(
     unsafe_code,
-    reason = "the stack-protector guard symbol esp-hal links against"
+    reason = "the runtime defines the stack-protector guard symbol"
 )]
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".critical.data.stack_guard")]
-static mut __stack_chk_guard: u32 = 0xDEED_BAAD;
+static __stack_chk_guard: u32 = 0xDEED_BAAD;

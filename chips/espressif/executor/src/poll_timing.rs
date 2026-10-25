@@ -211,11 +211,15 @@ impl CycleSource for Mcycle {
     }
 }
 
-/// The future `F`, each poll's cycles from `C` recorded in a histogram.
-pub struct Timed<F, C> {
-    future: F,
-    histogram: &'static CycleHistogram,
-    source: C,
+pin_project_lite::pin_project! {
+    /// The future `F`, each poll's cycles from `C` recorded in a histogram.
+    pub struct Timed<F, C> {
+        #[pin]
+        future: F,
+        histogram: &'static CycleHistogram,
+        #[pin]
+        source: C,
+    }
 }
 
 impl<F: Future, C: CycleSource> Timed<F, C> {
@@ -234,17 +238,9 @@ impl<F: Future, C: CycleSource> Future for Timed<F, C> {
     type Output = F::Output;
 
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<F::Output> {
-        #[allow(unsafe_code, reason = "structural pinning of the wrapped future")]
-        // SAFETY: `future` is pinned structurally: it is never moved out of
-        // `Timed` or replaced, `Timed` has no `Drop` and is `Unpin` only when
-        // `F` is, so the pin of `Timed` covers `future`. `histogram` and
-        // `source` are only read through the unpinned reference.
-        let this = unsafe { self.get_unchecked_mut() };
-        #[allow(unsafe_code, reason = "structural pinning of the wrapped future")]
-        // SAFETY: as above, `future` stays where the pin of `Timed` put it.
-        let future = unsafe { Pin::new_unchecked(&mut this.future) };
+        let this = self.project();
         let started = this.source.now();
-        let poll = future.poll(context);
+        let poll = this.future.poll(context);
         this.histogram
             .record(this.source.now().wrapping_sub(started));
         poll

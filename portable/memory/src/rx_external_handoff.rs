@@ -21,11 +21,8 @@ const SLOT_RELEASING: u8 = 4;
 
 /// The DMA owner's return edge of one detachable buffer.
 #[repr(transparent)]
+#[derive(bytemuck::Zeroable)]
 pub struct ExternalRxReturn(AtomicU8);
-
-#[allow(unsafe_code, reason = "zero is the Attached return state")]
-// SAFETY: AtomicU8 is zeroable, and zero represents Attached.
-unsafe impl bytemuck::Zeroable for ExternalRxReturn {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ExternalRxReturnState {
@@ -203,6 +200,7 @@ impl Drop for ExternalRxBuffer {
 // transfer the affine buffer's access between cores.
 unsafe impl Send for ExternalRxBuffer {}
 
+#[derive(bytemuck::Zeroable)]
 struct ExternalRxHandoffSlot {
     /// Initialized exactly while `state` is not `SLOT_FREE`: a free slot's
     /// bytes are zero, which no `ExternalRxBuffer` is.
@@ -211,11 +209,6 @@ struct ExternalRxHandoffSlot {
     length: UnsafeCell<usize>,
     state: AtomicU8,
 }
-
-#[allow(unsafe_code, reason = "a free slot is zero bytes")]
-// SAFETY: state 0 is `SLOT_FREE`, whose binding is uninitialized;
-// offset and length are zero integers.
-unsafe impl bytemuck::Zeroable for ExternalRxHandoffSlot {}
 
 impl Drop for ExternalRxHandoffSlot {
     fn drop(&mut self) {
@@ -386,15 +379,9 @@ impl ExternalRxHandoffSlot {
 unsafe impl Sync for ExternalRxHandoffSlot {}
 
 /// Bounded index pool for DMA buffers retained above the descriptor ring.
+#[derive(bytemuck::Zeroable)]
 pub struct ExternalRxHandoffPool<const FRAME_CAPACITY: usize, const SLOT_COUNT: usize> {
     slots: [ExternalRxHandoffSlot; SLOT_COUNT],
-}
-
-#[allow(unsafe_code, reason = "the free pool is zero bytes")]
-// SAFETY: an array of free slots.
-unsafe impl<const FRAME_CAPACITY: usize, const SLOT_COUNT: usize> bytemuck::Zeroable
-    for ExternalRxHandoffPool<FRAME_CAPACITY, SLOT_COUNT>
-{
 }
 
 impl<const FRAME_CAPACITY: usize, const SLOT_COUNT: usize>

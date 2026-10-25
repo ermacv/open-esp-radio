@@ -38,6 +38,8 @@ const BUSY: u8 = 3;
 /// // `Rc` cannot leave the context that made it.
 /// static CELL: HandlerCell<std::rc::Rc<()>> = HandlerCell::new();
 /// ```
+#[derive(Zeroable)]
+#[zeroable(bound = "")]
 pub struct HandlerCell<T> {
     state: AtomicU8,
     value: AtomicPtr<T>,
@@ -56,11 +58,6 @@ unsafe impl<T: Send> Sync for HandlerCell<T> {}
 // SAFETY: moving the cell moves the access to a `&'static mut T` with it,
 // which `T: Send` permits.
 unsafe impl<T: Send> Send for HandlerCell<T> {}
-
-#[allow(unsafe_code, reason = "an empty state and a null pointer")]
-// SAFETY: state 0 is `EMPTY`, in which the null pointer is never read, and
-// zero bytes are the null `AtomicPtr`.
-unsafe impl<T> Zeroable for HandlerCell<T> {}
 
 impl<T> HandlerCell<T> {
     /// The empty cell: all zero bytes.
