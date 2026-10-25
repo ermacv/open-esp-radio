@@ -148,11 +148,30 @@ description = "The counter latch of system timer unit zero, which every context 
 sources = ["ESP_IDF_4D59230D_S31_SYSTIMER", "ESP_IDF_4D59230D_S31_SYSTIMER_LL"]
 
 [[partitions.parts]]
-name = "SystimerAcknowledge"
+name = "SystimerAlarm0"
 instance = "SYSTIMER"
-registers = ["INT_CLR"]
-shared = true
-description = "The comparators' acknowledgements: each alarm handler strobes its own bit from its own context."
+triggers = [{ register = "INT_CLR", fields = ["TARGET0_INT_CLR"] }]
+interrupt = "SYSTIMER_TARGET0"
+irq-side = true
+description = "Comparator 0's alarm handler strobes its own acknowledgement bit, zero in the others; the time driver owns the comparator's configuration and enable."
+sources = ["ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[[partitions.parts]]
+name = "SystimerAlarm1"
+instance = "SYSTIMER"
+triggers = [{ register = "INT_CLR", fields = ["TARGET1_INT_CLR"] }]
+interrupt = "SYSTIMER_TARGET1"
+irq-side = true
+description = "Comparator 1's alarm handler strobes its own acknowledgement bit, zero in the others; the time driver owns the comparator's configuration and enable."
+sources = ["ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[[partitions.parts]]
+name = "SystimerAlarm2"
+instance = "SYSTIMER"
+triggers = [{ register = "INT_CLR", fields = ["TARGET2_INT_CLR"] }]
+interrupt = "SYSTIMER_TARGET2"
+irq-side = true
+description = "Comparator 2's alarm handler strobes its own acknowledgement bit, zero in the others; the time driver owns the comparator's configuration and enable."
 sources = ["ESP_IDF_4D59230D_S31_SYSTIMER"]
 
 [[partitions]]
