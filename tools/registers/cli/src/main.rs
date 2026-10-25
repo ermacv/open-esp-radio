@@ -69,9 +69,10 @@ enum Command {
 
 #[derive(Subcommand)]
 enum Overlay {
-    /// Rebuild the overlay entries of PERIPHERAL (all the overlay states,
-    /// by default) from the pinned ESP-IDF register headers and write them
-    /// to `chips/<chip>/registers/model/strictness.toml`.
+    /// Pin the ESP-IDF register headers of PERIPHERAL (those the overlay
+    /// pins, by default) in `chips/<chip>/registers/model/strictness.toml`
+    /// and print the registers the headers place at another offset than the
+    /// vendor SVD as correction entries.
     Import {
         #[arg(long)]
         chip: String,
@@ -80,6 +81,9 @@ enum Overlay {
         idf: PathBuf,
         #[arg(long)]
         peripheral: Vec<String>,
+        /// Append the proposed corrections to the overlay.
+        #[arg(long)]
+        write: bool,
     },
     /// Verify every overlay entry against the file and line it cites in the
     /// pinned ESP-IDF headers and against the vendor SVD.
@@ -215,7 +219,8 @@ fn run() -> oer_registers_generate::Result<()> {
             chip,
             idf,
             peripheral,
-        }) => oer_registers_generate::overlay::import(&ctx.root, &chip, &idf, &peripheral)?,
+            write,
+        }) => oer_registers_generate::overlay::import(&ctx.root, &chip, &idf, &peripheral, write)?,
         Command::Overlay(Overlay::Check { chip, idf }) => {
             oer_registers_generate::overlay::check(&ctx.root, &chip, &idf)?;
         }

@@ -109,12 +109,19 @@ pub fn check(root: &Path, chip: &str, idf: &Path) -> Result<()> {
     .into())
 }
 
-/// Rebuild the overlay of `chip` from the headers of `idf` for
-/// `peripherals` (every peripheral the overlay states, when empty) and write
-/// it back to the overlay file.
-pub fn import(root: &Path, chip: &str, idf: &Path, peripherals: &[String]) -> Result<()> {
+/// Pin the headers of `peripherals` (every peripheral the overlay pins, when
+/// empty) in the overlay file of `chip` and print what the headers and the
+/// vendor SVD disagree on, as correction entries; `write` also appends the
+/// corrections to the overlay file.
+pub fn import(
+    root: &Path,
+    chip: &str,
+    idf: &Path,
+    peripherals: &[String],
+    write: bool,
+) -> Result<()> {
     let inputs = load(root, chip, idf)?;
-    let text = oer_registers_model::import_overlay(
+    let import = oer_registers_model::import_overlay(
         &inputs.overlay_text,
         &inputs.overlay,
         chip,
@@ -122,11 +129,28 @@ pub fn import(root: &Path, chip: &str, idf: &Path, peripherals: &[String]) -> Re
         peripherals,
         &IdfTree(idf.to_owned()),
     )?;
-    StrictnessOverlay::parse(&text)?;
-    fs::write(&inputs.overlay_path, text)?;
+    let text = if write {
+        &import.text_with_corrections
+    } else {
+        &import.text
+    };
+    if *text != inputs.overlay_text {
+        fs::write(&inputs.overlay_path, text)?;
+    }
     println!(
-        "overlay of {chip} written to {}",
-        inputs.overlay_path.display()
+        "overlay of {chip}: {} headers pinned, {} corrections {}, {} field mismatches",
+        import.pins.len(),
+        import.corrections.len(),
+        if write { "written" } else { "proposed" },
+        import.mismatches.len()
     );
+    if !write {
+        for correction in &import.corrections {
+            println!("{correction}");
+        }
+    }
+    for line in &import.mismatches {
+        println!("  mismatch: {line}");
+    }
     Ok(())
 }

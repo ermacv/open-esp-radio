@@ -1,6 +1,7 @@
 //! The strictness overlay against the pinned ESP-IDF register headers:
-//! `import` builds overlay entries from them, `check` verifies every entry
-//! against the file and line it cites and against the vendor SVD.
+//! `import` pins the headers of a peripheral and proposes the offset
+//! corrections they imply, `check` verifies every entry against the file and
+//! line it cites and against the vendor SVD.
 //!
 //! An `esp-idf:<path>:<line>` source is one of
 //!
@@ -25,9 +26,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use svd_rs::{Access, MaybeArray, RegisterCluster};
+use svd_rs::{MaybeArray, RegisterCluster};
 
-use crate::soc::{raw_status, trigger_candidate};
+use crate::soc_headers::Lookup;
 use crate::{
     Error, FieldKind, FieldRule, InterruptRule, OverlayAccess, RegisterRule, Result,
     StrictnessOverlay,
@@ -431,14 +432,12 @@ struct SvdField {
     name: String,
     low: u32,
     width: u32,
-    access: Access,
 }
 
 #[derive(Clone, Debug)]
 struct SvdRegister {
     name: String,
     offset: u64,
-    access: Access,
     fields: Vec<SvdField>,
 }
 
@@ -462,17 +461,11 @@ fn corrected_device(
 fn svd_of(device: &svd_rs::Device) -> Svd {
     let mut svd = Svd::default();
     for peripheral in &device.peripherals {
-        let default = peripheral
-            .default_register_properties
-            .access
-            .or(device.default_register_properties.access)
-            .unwrap_or(Access::ReadWrite);
         let mut registers = Vec::new();
         for child in peripheral.registers.as_deref().unwrap_or_default() {
             let RegisterCluster::Register(register) = child else {
                 continue;
             };
-            let access = register.properties.access.unwrap_or(default);
             let fields = register
                 .fields
                 .as_deref()
@@ -483,7 +476,6 @@ fn svd_of(device: &svd_rs::Device) -> Svd {
                         name: info.name.clone(),
                         low: info.bit_range.offset,
                         width: info.bit_range.width,
-                        access: info.access.unwrap_or(access),
                     }),
                     MaybeArray::Array(..) => None,
                 })
@@ -491,7 +483,6 @@ fn svd_of(device: &svd_rs::Device) -> Svd {
             registers.push(SvdRegister {
                 name: register.name.clone(),
                 offset: u64::from(register.address_offset),
-                access,
                 fields,
             });
         }
@@ -618,14 +609,6 @@ fn split_source(source: &str) -> Option<Source<'_>> {
         path,
         line: line.parse().ok()?,
     })
-}
-
-fn mask(low: u32, width: u32) -> u32 {
-    if width == 0 || width > 32 || low >= 32 {
-        0
-    } else {
-        (u32::MAX >> (32 - width)) << low
-    }
 }
 
 /// Verify every entry of `overlay` against `tree` and `vendor_svd`.
@@ -1002,14 +985,33 @@ fn check_interrupt(
 
 // ----------------------------------------------------------------- import
 
-/// Build the overlay's entries for `peripherals` (all those the existing
-/// overlay states, when empty) from the headers of `chip`, and render the
-/// overlay file: `existing` text up to its first entry, the interrupt
-/// sources the SVD lacks, then the entries per peripheral in the SVD's order.
+/// What [`import_overlay`] proposes for an overlay.
+#[derive(Debug)]
+pub struct OverlayImport {
+    /// The overlay text with the `[[headers]]` pins of the peripherals that
+    /// had none; the text itself when every peripheral is pinned.
+    pub text: String,
+    /// The pins added to `text`.
+    pub pins: Vec<String>,
+    /// Correction entries for the registers the headers place at another
+    /// offset than the vendor SVD, as overlay text.
+    pub corrections: Vec<String>,
+    /// Header fields the vendor SVD lacks, one line each.
+    pub mismatches: Vec<String>,
+    /// `text` with the `corrections` appended.
+    pub text_with_corrections: String,
+}
+
+/// Pin the headers of `peripherals` (all those the overlay already pins,
+/// when empty) and compare them with the vendor SVD.
 ///
-/// What the headers cannot state is kept from `existing`: `fifo` and
-/// `read-side-effect` flags, enumerated values and the entries that cite
-/// `trm:` or `esp-hal:` only.
+/// A peripheral without a `[[headers]]` entry gets the `*_reg.h` of
+/// `components/soc/<chip>/register/soc` that holds most of its registers,
+/// and the `*_struct.h` beside it. The registers the headers place at another
+/// offset than the SVD come back as correction entries. Everything else the
+/// overlay needs (access classes, reserved bits, reserved words) is derived
+/// from the pinned headers when the model is generated, so no per-register
+/// entry is written.
 pub fn import_overlay(
     existing_text: &str,
     existing: &StrictnessOverlay,
@@ -1017,24 +1019,16 @@ pub fn import_overlay(
     vendor_svd: &str,
     peripherals: &[String],
     tree: &dyn HeaderTree,
-) -> Result<String> {
+) -> Result<OverlayImport> {
     let svd = svd_of(&corrected_device(vendor_svd, existing, tree)?);
-    let mut headers = Headers::new(tree);
-    let directory = format!("components/soc/{chip}/register/soc");
-    let files: Vec<String> = tree
-        .list(&directory)?
-        .into_iter()
-        .filter(|name| name.ends_with("_reg.h"))
-        .collect();
-    let selected: BTreeSet<String> = if peripherals.is_empty() {
+    let selected: Vec<String> = if peripherals.is_empty() {
         existing
-            .registers
+            .headers
             .iter()
-            .map(|r| r.peripheral.clone())
-            .chain(existing.fields.iter().map(|f| f.peripheral.clone()))
+            .map(|h| h.peripheral.clone())
             .collect()
     } else {
-        peripherals.iter().cloned().collect()
+        peripherals.to_vec()
     };
     for name in &selected {
         if !svd.peripherals.contains_key(name) {
@@ -1043,169 +1037,156 @@ pub fn import_overlay(
             )));
         }
     }
-    let mut out = String::new();
-    // Everything before the first entry the headers derive: the pins, the
-    // `[[headers]]` and `[[no-api]]` tables.
-    let prefix_end = ["\n[[registers]]", "\n[[fields]]", "\n[[interrupts]]"]
-        .iter()
-        .filter_map(|table| existing_text.find(table))
-        .min()
-        .map_or(existing_text.len(), |i| i + 1);
-    out.push_str(existing_text.get(..prefix_end).unwrap_or(""));
-    // Interrupt sources the SVD lacks.
-    let interrupts_path = format!("components/soc/{chip}/include/soc/interrupts.h");
-    for rule in derive_interrupts(&svd, &mut headers, &interrupts_path, existing)? {
-        render_interrupt(&mut out, &rule);
+    let directory = format!("components/soc/{chip}/register/soc");
+    let files = tree.list(&directory)?;
+    let mut headers = Headers::new(tree);
+    let mut text = existing_text.to_owned();
+    let mut pins = Vec::new();
+    for name in &selected {
+        if existing.headers.iter().any(|h| &h.peripheral == name) {
+            continue;
+        }
+        let registers = svd.peripherals.get(name).map_or(&[][..], Vec::as_slice);
+        let candidates: Vec<String> = files
+            .iter()
+            .filter(|file| file.ends_with("_reg.h"))
+            .cloned()
+            .collect();
+        let best = best_files(registers, &candidates, &directory, &mut headers)?;
+        let Some(registers_path) = best.into_iter().next() else {
+            return Err(Error::message(format!(
+                "no register header of {directory} holds the registers of {name}"
+            )));
+        };
+        let layout = registers_path
+            .strip_suffix("_reg.h")
+            .map(|stem| format!("{stem}_struct.h"))
+            .filter(|path| {
+                path.rsplit('/')
+                    .next()
+                    .is_some_and(|file| files.iter().any(|f| f == file))
+            });
+        let mut block = format!(
+            "[[headers]]\nperipheral = {}\nregisters = {}\n",
+            quote(name),
+            quote(&registers_path)
+        );
+        if let Some(layout) = &layout {
+            block.push_str(&format!("layout = {}\n", quote(layout)));
+        }
+        block.push('\n');
+        insert_pin(&mut text, name, &block);
+        pins.push(block);
     }
-    // The peripherals in the order the overlay already states them, then
-    // the others in the SVD's.
-    let mut order: Vec<&String> = Vec::new();
-    for line in existing_text.lines() {
-        let Some(name) = line
-            .strip_prefix("peripheral = \"")
-            .and_then(|rest| rest.strip_suffix('"'))
-        else {
+    let pinned = StrictnessOverlay::parse(&text)?;
+    let (device, facts) = crate::soc::corrected_vendor(vendor_svd, &pinned, tree)?;
+    let svd = svd_of(&device);
+    let mut corrections = Vec::new();
+    let mut mismatches = Vec::new();
+    for name in &selected {
+        let Some(registers) = svd.peripherals.get(name) else {
             continue;
         };
-        if let Some((name, _)) = svd.peripherals.get_key_value(name)
-            && !order.contains(&name)
-        {
-            order.push(name);
-        }
-    }
-    order.extend(
-        svd.order
-            .iter()
-            .filter(|name| !order.contains(name))
-            .collect::<Vec<_>>(),
-    );
-    for name in order {
-        if selected.contains(name) {
-            let all = svd.peripherals.get(name).map_or(&[][..], Vec::as_slice);
-            // The registers the overlay states, or all of an explicitly
-            // named peripheral.
-            let stated: Vec<SvdRegister> = all
-                .iter()
-                .filter(|register| {
-                    !peripherals.is_empty()
-                        || existing
-                            .registers
-                            .iter()
-                            .any(|r| r.peripheral == *name && r.register == register.name)
-                        || existing
-                            .fields
-                            .iter()
-                            .any(|f| f.peripheral == *name && f.register == register.name)
-                })
-                .cloned()
-                .collect();
-            let registers = stated.as_slice();
-            let cited = cited_files(existing, name);
-            let file_paths = best_files(registers, &files, &directory, &cited, &mut headers)?;
-            let (reg_rules, field_rules) =
-                derive_peripheral(name, registers, &file_paths, &mut headers)?;
-            let mut block = String::new();
-            render_peripheral(
-                &mut block,
-                name,
-                registers,
-                existing,
-                reg_rules,
-                field_rules,
-            );
-            push_peripheral(&mut out, name, &block);
-        } else {
-            let mut block = String::new();
-            for rule in existing.registers.iter().filter(|r| &r.peripheral == name) {
-                render_register(&mut block, rule);
-                for field in existing
-                    .fields
-                    .iter()
-                    .filter(|f| f.peripheral == rule.peripheral && f.register == rule.register)
-                {
-                    render_field(&mut block, field);
+        for register in registers {
+            match facts.lookup(name, &register.name, register.offset, false) {
+                Lookup::Moved {
+                    path,
+                    register: header,
+                } => corrections.push(format!(
+                    "[[registers]]\nperipheral = {}\nregister = {}\noffset = {:#x}\n\
+                     sources = [{}]\n\n",
+                    quote(name),
+                    quote(&register.name),
+                    header.offset,
+                    quote(&format!("esp-idf:{path}:{}", header.line)),
+                )),
+                Lookup::Matched {
+                    path,
+                    register: header,
+                    ..
+                } => {
+                    mismatches.extend(field_mismatches(name, register, header, path));
                 }
+                Lookup::Unmapped | Lookup::Absent { .. } => {}
             }
-            push_peripheral(&mut out, name, &block);
         }
     }
-    Ok(out)
-}
-
-/// Append the entries of one peripheral, headed by the files they cite.
-fn push_peripheral(out: &mut String, peripheral: &str, block: &str) {
-    let Some(first) = block
-        .split("sources = [\"esp-idf:")
-        .nth(1)
-        .and_then(|rest| rest.split(['"', ':']).next())
-    else {
-        out.push_str(block);
-        return;
-    };
-    let name = first.rsplit('/').next().unwrap_or(first);
-    let struct_name = name.replace("_reg.h", "_struct.h");
-    out.push_str(&format!("\n# {peripheral}: {first} and {struct_name}.\n\n"));
-    out.push_str(block);
-}
-
-fn derive_interrupts(
-    svd: &Svd,
-    headers: &mut Headers<'_>,
-    path: &str,
-    existing: &StrictnessOverlay,
-) -> Result<Vec<InterruptRule>> {
-    let blocks = headers.enums(path)?;
-    let Some((_, items)) = blocks.iter().find(|(name, _)| name == "periph_interrupt_t") else {
-        return Ok(existing.interrupts.clone());
-    };
-    let mut rules = Vec::new();
-    for item in items {
-        if svd.interrupts.contains(&item.ordinal) {
-            continue;
+    let mut text_with_corrections = text.clone();
+    for correction in &corrections {
+        if !text_with_corrections.ends_with("\n\n") {
+            text_with_corrections.push('\n');
         }
-        // The count of sources, not a source.
-        if item.name == "ETS_MAX_INTR_SOURCE" {
-            continue;
-        }
-        let Some(name) = interrupt_name(&item.name) else {
-            continue;
-        };
-        let Ok(source) = u16::try_from(item.ordinal) else {
-            continue;
-        };
-        let description = existing
-            .interrupts
-            .iter()
-            .find(|r| r.name == name)
-            .and_then(|r| r.description.clone());
-        rules.push(InterruptRule {
-            name,
-            source,
-            description,
-            sources: vec![format!("esp-idf:{path}:{}", item.line)],
-        });
+        text_with_corrections.push_str(correction);
     }
-    Ok(rules)
+    StrictnessOverlay::parse(&text_with_corrections)?;
+    Ok(OverlayImport {
+        text,
+        pins,
+        corrections,
+        mismatches,
+        text_with_corrections,
+    })
 }
 
-/// The `*_reg.h` files the overlay already cites for `peripheral`.
-fn cited_files(existing: &StrictnessOverlay, peripheral: &str) -> BTreeSet<String> {
-    existing
-        .registers
+/// Insert the `[[headers]]` block of `peripheral` among the existing ones,
+/// which are in the order of their peripherals.
+fn insert_pin(text: &mut String, peripheral: &str, block: &str) {
+    // (start, end, peripheral) of each block, the end after its blank line.
+    let mut blocks: Vec<(usize, usize, String)> = Vec::new();
+    let mut offset = 0;
+    let mut open: Option<(usize, String)> = None;
+    for line in text.split_inclusive('\n') {
+        let trimmed = line.trim_end();
+        if trimmed == "[[headers]]" {
+            open = Some((offset, String::new()));
+        } else if let Some((_, name)) = open.as_mut()
+            && let Some(value) = trimmed
+                .strip_prefix("peripheral = \"")
+                .and_then(|rest| rest.strip_suffix('"'))
+        {
+            *name = value.to_owned();
+        }
+        offset += line.len();
+        if trimmed.is_empty()
+            && let Some((start, name)) = open.take()
+        {
+            blocks.push((start, offset, name));
+        }
+    }
+    let position = blocks
         .iter()
-        .filter(|r| r.peripheral == peripheral)
-        .flat_map(|r| &r.sources)
-        .chain(
-            existing
-                .fields
-                .iter()
-                .filter(|f| f.peripheral == peripheral)
-                .flat_map(|f| &f.sources),
-        )
-        .filter_map(|source| split_source(source))
-        .filter(|source| source.path.ends_with("_reg.h"))
-        .map(|source| source.path.to_owned())
-        .collect()
+        .find(|(_, _, name)| name.as_str() > peripheral)
+        .map(|(start, _, _)| *start)
+        .or_else(|| blocks.last().map(|(_, end, _)| *end))
+        .unwrap_or_else(|| text.find("\n[[").map_or(text.len(), |i| i + 1));
+    text.insert_str(position, block);
+}
+
+/// The header's fields the SVD register lacks.
+fn field_mismatches(
+    peripheral: &str,
+    register: &SvdRegister,
+    header: &HeaderRegister,
+    path: &str,
+) -> Vec<String> {
+    let from_svd: BTreeSet<(u32, u32)> = register.fields.iter().map(|f| (f.low, f.width)).collect();
+    let from_header: BTreeSet<(u32, u32)> = header
+        .fields
+        .iter()
+        .filter(|f| !crate::soc_headers::reserved_description(&f.description))
+        .map(|f| (f.low, f.width()))
+        .collect();
+    let mut out = Vec::new();
+    for field in &header.fields {
+        let bits = (field.low, field.width());
+        if from_header.contains(&bits) && !from_svd.contains(&bits) {
+            out.push(format!(
+                "{peripheral}.{}: esp-idf:{path}:{} states {} [{}:{}], the vendor SVD has no field there",
+                register.name, field.line, field.name, field.high, field.low
+            ));
+        }
+    }
+    out
 }
 
 /// Whether the header register has exactly the SVD register's fields.
@@ -1220,13 +1201,11 @@ fn same_fields(header: &HeaderRegister, register: &SvdRegister) -> bool {
 }
 
 /// The header files that hold the `registers`, the best match first: most
-/// registers with the SVD's fields, then the files the overlay cites, then
-/// by name.
+/// registers with the SVD's fields, then by name.
 fn best_files(
     registers: &[SvdRegister],
     files: &[String],
     directory: &str,
-    cited: &BTreeSet<String>,
     headers: &mut Headers<'_>,
 ) -> Result<Vec<String>> {
     let mut scored = Vec::new();
@@ -1242,293 +1221,15 @@ fn best_files(
             })
             .count();
         if hits > 0 {
-            scored.push((hits, !cited.contains(&path), path));
+            scored.push((hits, path));
         }
     }
-    scored.sort();
-    scored.sort_by(|a, b| {
-        b.0.cmp(&a.0)
-            .then(a.1.cmp(&b.1))
-            .then_with(|| a.2.cmp(&b.2))
-    });
-    Ok(scored.into_iter().map(|(_, _, path)| path).collect())
-}
-
-type Derived = (BTreeMap<String, RegisterRule>, Vec<FieldRule>);
-
-fn derive_peripheral(
-    peripheral: &str,
-    registers: &[SvdRegister],
-    files: &[String],
-    headers: &mut Headers<'_>,
-) -> Result<Derived> {
-    let mut register_rules = BTreeMap::new();
-    let mut field_rules = Vec::new();
-    for register in registers {
-        let mut found: Option<(String, HeaderRegister)> = None;
-        for exact in [true, false] {
-            for path in files {
-                if let Some(h) = headers
-                    .registers(path)?
-                    .iter()
-                    .find(|h| same_register(h, register) && (!exact || same_fields(h, register)))
-                {
-                    found = Some((path.clone(), h.clone()));
-                    break;
-                }
-            }
-            if found.is_some() {
-                break;
-            }
-        }
-        let Some((path, header)) = found else {
-            continue;
-        };
-        let mut rule = RegisterRule {
-            peripheral: peripheral.to_owned(),
-            register: register.name.clone(),
-            offset: None,
-            add: false,
-            access: None,
-            reserved: None,
-            read_side_effect: None,
-            fifo: false,
-            write_one_to_clear: false,
-            raw_status_writable: false,
-            sources: vec![format!("esp-idf:{path}:{}", header.line)],
-        };
-        if write_one_to_clear(&header.fields) {
-            rule.write_one_to_clear = true;
-            rule.raw_status_writable = raw_status(&register.name);
-        } else if register.access != Access::ReadOnly
-            && header.fields.iter().any(|f| hardware_modified(&f.access))
-        {
-            rule.access = Some(OverlayAccess::ReadOnly);
-        }
-        // A read-only register is never written: no reserved bits to keep.
-        if rule.access.is_none() {
-            // The union of the register: reserved bits, when its members are
-            // the SVD's fields.
-            let struct_path = path.replace("_reg.h", "_struct.h");
-            if struct_path != path
-                && let Ok(structs) = headers.structs(&struct_path)
-            {
-                let expected = format!("{}_reg_t", header.name.to_lowercase());
-                if let Some(layout) = structs.iter().find(|s| s.type_name == expected)
-                    && !layout.ambiguous
-                    && layout.reserved != 0
-                {
-                    let header_fields: BTreeSet<(u32, u32)> =
-                        layout.members.iter().map(|(_, l, w)| (*l, *w)).collect();
-                    let svd_fields: BTreeSet<(u32, u32)> =
-                        register.fields.iter().map(|f| (f.low, f.width)).collect();
-                    let declared = register
-                        .fields
-                        .iter()
-                        .fold(0, |bits, f| bits | mask(f.low, f.width));
-                    if header_fields == svd_fields && layout.reserved & declared == 0 {
-                        rule.reserved = Some(layout.reserved);
-                        rule.sources
-                            .push(format!("esp-idf:{struct_path}:{}", layout.close_line));
-                    }
-                }
-            }
-        }
-        if rule.access.is_some() || rule.reserved.is_some() || rule.write_one_to_clear {
-            register_rules.insert(register.name.clone(), rule);
-        }
-        for field in &register.fields {
-            let Some(h) = header.fields.iter().find(|h| {
-                same_field(&h.name, &field.name)
-                    && h.low == field.low
-                    && h.high + 1 - h.low == field.width
-            }) else {
-                continue;
-            };
-            let mut rule = FieldRule {
-                peripheral: peripheral.to_owned(),
-                register: register.name.clone(),
-                field: field.name.clone(),
-                rename: None,
-                access: None,
-                kind: None,
-                values: Vec::new(),
-                sources: vec![format!("esp-idf:{path}:{}", h.line)],
-            };
-            match h.access.as_str() {
-                "WT" => {
-                    rule.kind = Some(FieldKind::WriteTrigger);
-                    rule.access = Some(OverlayAccess::ReadWrite);
-                }
-                "R/W" if trigger_candidate(&field.name) || field.access != Access::ReadWrite => {
-                    rule.kind = Some(FieldKind::Plain);
-                    if field.access != Access::ReadWrite {
-                        rule.access = Some(OverlayAccess::ReadWrite);
-                    }
-                }
-                "HRO" if field.access != Access::ReadOnly => {
-                    rule.access = Some(OverlayAccess::ReadOnly);
-                }
-                _ => continue,
-            }
-            field_rules.push(rule);
-        }
-    }
-    Ok((register_rules, field_rules))
-}
-
-fn render_peripheral(
-    out: &mut String,
-    peripheral: &str,
-    registers: &[SvdRegister],
-    existing: &StrictnessOverlay,
-    mut derived: BTreeMap<String, RegisterRule>,
-    fields: Vec<FieldRule>,
-) {
-    for register in registers {
-        let kept = existing
-            .registers
-            .iter()
-            .find(|r| r.peripheral == peripheral && r.register == register.name);
-        let rule = match (derived.remove(&register.name), kept) {
-            (Some(mut rule), Some(kept)) => {
-                rule.fifo = kept.fifo;
-                rule.read_side_effect = kept.read_side_effect;
-                rule.offset = kept.offset;
-                rule.add = kept.add;
-                Some(rule)
-            }
-            (Some(rule), None) => Some(rule),
-            (None, Some(kept))
-                if kept.fifo || kept.read_side_effect.is_some() || kept.offset.is_some() =>
-            {
-                Some(kept.clone())
-            }
-            (None, _) => None,
-        };
-        if let Some(rule) = rule {
-            render_register(out, &rule);
-        }
-        for field in fields.iter().filter(|f| f.register == register.name) {
-            let mut field = field.clone();
-            if let Some(kept) = existing.fields.iter().find(|f| {
-                f.peripheral == peripheral && f.register == register.name && f.field == field.field
-            }) {
-                field.values = kept.values.clone();
-                field.rename.clone_from(&kept.rename);
-            }
-            render_field(out, &field);
-        }
-        for kept in existing.fields.iter().filter(|f| {
-            f.peripheral == peripheral
-                && f.register == register.name
-                && !fields.iter().any(|d| d.field == f.field)
-                && (!f.values.is_empty() || f.sources.iter().all(|s| !s.starts_with("esp-idf:")))
-        }) {
-            render_field(out, kept);
-        }
-    }
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    Ok(scored.into_iter().map(|(_, path)| path).collect())
 }
 
 fn quote(value: &str) -> String {
-    format!("{value:?}")
-}
-
-fn access_name(access: OverlayAccess) -> &'static str {
-    match access {
-        OverlayAccess::ReadOnly => "read-only",
-        OverlayAccess::ReadWrite => "read-write",
-        OverlayAccess::WriteOnly => "write-only",
-    }
-}
-
-fn sources_line(sources: &[String]) -> String {
-    format!(
-        "sources = [{}]\n\n",
-        sources
-            .iter()
-            .map(|s| quote(s))
-            .collect::<Vec<_>>()
-            .join(", ")
-    )
-}
-
-fn render_interrupt(out: &mut String, rule: &InterruptRule) {
-    out.push_str("[[interrupts]]\n");
-    out.push_str(&format!(
-        "name = {}\nsource = {}\n",
-        quote(&rule.name),
-        rule.source
-    ));
-    if let Some(description) = &rule.description {
-        out.push_str(&format!("description = {}\n", quote(description)));
-    }
-    out.push_str(&sources_line(&rule.sources));
-}
-
-fn render_register(out: &mut String, rule: &RegisterRule) {
-    out.push_str("[[registers]]\n");
-    out.push_str(&format!(
-        "peripheral = {}\nregister = {}\n",
-        quote(&rule.peripheral),
-        quote(&rule.register)
-    ));
-    if let Some(offset) = rule.offset {
-        out.push_str(&format!("offset = {offset:#x}\n"));
-    }
-    if rule.add {
-        out.push_str("add = true\n");
-    }
-    if let Some(access) = rule.access {
-        out.push_str(&format!("access = {}\n", quote(access_name(access))));
-    }
-    if let Some(effect) = rule.read_side_effect {
-        out.push_str(&format!("read-side-effect = {effect}\n"));
-    }
-    if rule.fifo {
-        out.push_str("fifo = true\n");
-    }
-    if rule.write_one_to_clear {
-        out.push_str("write-one-to-clear = true\n");
-    }
-    if rule.raw_status_writable {
-        out.push_str("raw-status-writable = true\n");
-    }
-    if let Some(reserved) = rule.reserved {
-        out.push_str(&format!("reserved = {reserved:#010x}\n"));
-    }
-    out.push_str(&sources_line(&rule.sources));
-}
-
-fn render_field(out: &mut String, rule: &FieldRule) {
-    out.push_str("[[fields]]\n");
-    out.push_str(&format!(
-        "peripheral = {}\nregister = {}\nfield = {}\n",
-        quote(&rule.peripheral),
-        quote(&rule.register),
-        quote(&rule.field)
-    ));
-    if let Some(rename) = &rule.rename {
-        out.push_str(&format!("rename = {}\n", quote(rename)));
-    }
-    if let Some(kind) = rule.kind {
-        let kind = match kind {
-            FieldKind::Plain => "plain",
-            FieldKind::WriteTrigger => "write-trigger",
-        };
-        out.push_str(&format!("kind = {}\n", quote(kind)));
-    }
-    if let Some(access) = rule.access {
-        out.push_str(&format!("access = {}\n", quote(access_name(access))));
-    }
-    out.push_str(&sources_line(&rule.sources));
-    for value in &rule.values {
-        out.push_str(&format!(
-            "[[fields.values]]\nname = {}\nvalue = {}\n",
-            quote(&value.name),
-            value.value
-        ));
-    }
+    format!("\"{value}\"")
 }
 
 #[cfg(test)]

@@ -234,39 +234,93 @@ fn an_interrupt_number_must_be_its_position_in_the_enum() {
     assert!(found.iter().any(|f| f.contains("EXTRA")), "{found:?}");
 }
 
+const BARE: &str = "schema = 1\nesp-idf = \"4d59230ddff16327812782151ef0afef202dc6d7\"\n\n";
+
+fn tree() -> Tree {
+    Tree::new(REG_H, STRUCT_H)
+}
+
 #[test]
-fn import_rebuilds_the_entries_the_headers_state() {
-    let text = overlay_text();
-    let existing = StrictnessOverlay::parse(&text).unwrap();
-    // Import from an overlay that states only the peripheral's registers
-    // with a wrong reserved mask and a missing field.
-    let stale = text
-        .replace("reserved = 0xfffffff0", "reserved = 0xffffff00")
-        .replace("kind = \"write-trigger\"\n", "kind = \"plain\"\n");
-    let stale_overlay = StrictnessOverlay::parse(&stale).unwrap();
-    let rebuilt = import_overlay(
-        &stale,
-        &stale_overlay,
+fn import_pins_the_headers_of_a_named_peripheral_and_nothing_else() {
+    let existing = StrictnessOverlay::parse(BARE).unwrap();
+    let import =
+        import_overlay(BARE, &existing, "chip", SVD, &["TIMER".to_owned()], &tree()).unwrap();
+    let pinned = StrictnessOverlay::parse(&import.text).unwrap();
+    assert_eq!(pinned.headers.len(), 1);
+    assert_eq!(pinned.headers[0].peripheral, "TIMER");
+    assert_eq!(pinned.headers[0].registers, REG);
+    assert_eq!(pinned.headers[0].layout.as_deref(), Some(STRUCT));
+    assert!(pinned.registers.is_empty() && pinned.fields.is_empty());
+    assert!(import.corrections.is_empty());
+}
+
+#[test]
+fn importing_a_pinned_peripheral_changes_nothing() {
+    let existing = StrictnessOverlay::parse(BARE).unwrap();
+    let first =
+        import_overlay(BARE, &existing, "chip", SVD, &["TIMER".to_owned()], &tree()).unwrap();
+    let pinned = StrictnessOverlay::parse(&first.text).unwrap();
+    for peripherals in [vec!["TIMER".to_owned()], Vec::new()] {
+        let again =
+            import_overlay(&first.text, &pinned, "chip", SVD, &peripherals, &tree()).unwrap();
+        assert_eq!(again.text, first.text);
+        assert_eq!(again.text_with_corrections, first.text);
+        assert!(again.pins.is_empty() && again.corrections.is_empty());
+    }
+}
+
+#[test]
+fn pins_keep_the_order_of_the_peripherals() {
+    let text = format!(
+        "{BARE}[[headers]]\nperipheral = \"AAA\"\nregisters = \"{REG}\"\n\n\
+[[headers]]\nperipheral = \"ZZZ\"\nregisters = \"{REG}\"\n\n"
+    );
+    let mut out = text.clone();
+    super::insert_pin(
+        &mut out,
+        "MMM",
+        &format!("[[headers]]\nperipheral = \"MMM\"\nregisters = \"{REG}\"\n\n"),
+    );
+    let order: Vec<_> = StrictnessOverlay::parse(&out)
+        .map(|o| o.headers.into_iter().map(|h| h.peripheral).collect())
+        .unwrap_or_default();
+    assert_eq!(order, ["AAA", "MMM", "ZZZ"]);
+}
+
+#[test]
+fn a_register_the_header_places_elsewhere_is_proposed_as_a_correction() {
+    let moved = REG_H.replace("DR_REG_TIMER_BASE + 0x8", "DR_REG_TIMER_BASE + 0xc");
+    let existing = StrictnessOverlay::parse(BARE).unwrap();
+    let import = import_overlay(
+        BARE,
+        &existing,
+        "chip",
+        SVD,
+        &["TIMER".to_owned()],
+        &Tree::new(&moved, STRUCT_H),
+    )
+    .unwrap();
+    assert_eq!(import.corrections.len(), 1);
+    let with = StrictnessOverlay::parse(&import.text_with_corrections).unwrap();
+    assert_eq!(with.registers.len(), 1);
+    assert_eq!(with.registers[0].register, "STATUS");
+    assert_eq!(with.registers[0].offset, Some(0xc));
+    // Without `write` the pins are the only change.
+    assert!(
+        StrictnessOverlay::parse(&import.text)
+            .unwrap()
+            .registers
+            .is_empty()
+    );
+    // With the correction in the overlay the register is no longer proposed.
+    let again = import_overlay(
+        &import.text_with_corrections,
+        &with,
         "chip",
         SVD,
         &[],
-        &Tree::new(REG_H, STRUCT_H),
+        &Tree::new(&moved, STRUCT_H),
     )
     .unwrap();
-    let rebuilt = StrictnessOverlay::parse(&rebuilt).unwrap();
-    assert_eq!(
-        format!("{:?}", rebuilt.registers),
-        format!("{:?}", existing.registers)
-    );
-    assert_eq!(
-        format!("{:?}", rebuilt.fields),
-        format!("{:?}", existing.fields)
-    );
-    assert_eq!(
-        format!("{:?}", rebuilt.interrupts),
-        format!("{:?}", existing.interrupts)
-    );
-    // And what it built passes the check.
-    let verdict = check_overlay(&rebuilt, SVD, &Tree::new(REG_H, STRUCT_H)).unwrap();
-    assert!(verdict.failures.is_empty(), "{:?}", verdict.failures);
+    assert!(again.corrections.is_empty());
 }

@@ -585,10 +585,16 @@ unchecked.
 The checkout must be at the overlay's `esp-idf` pin.
 
 `cargo registers overlay import --chip <chip> --idf <checkout>
-[--peripheral <name>]...` rebuilds the entries from the headers and writes
-the overlay: for the registers it already states, or for all registers of the
-named peripherals. It keeps `fifo` and `read-side-effect`, which no header
-states, and writes the interrupt sources the SVD lacks.
+[--peripheral <name>]... [--write]` pins the headers of the named
+peripherals: a peripheral without a `[[headers]]` entry gets the `*_reg.h`
+that holds most of its registers and the `*_struct.h` beside it. It prints
+the registers the headers place at another offset than the vendor SVD as
+`[[registers]]` correction entries (`--write` appends them to the overlay)
+and the header fields the SVD lacks. Without `--peripheral` it
+looks at every pinned peripheral. Access classes, reserved bits and
+reserved words are derived from the pinned headers when the model is
+generated, so import writes no per-register entry; running it on a pinned
+peripheral changes nothing.
 
 ## Pinned header function signatures
 
