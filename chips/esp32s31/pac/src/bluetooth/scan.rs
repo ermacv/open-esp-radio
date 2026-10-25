@@ -25,22 +25,21 @@ fn execute_scan_start_transaction(transaction: &mut impl BluetoothScanStartTrans
 }
 
 struct PacBluetoothScanStartTransaction<'registers> {
-    registers: &'registers crate::svd::BleScanBackoff,
+    registers: &'registers mut crate::generated::ble_scan_backoff::BleScanBackoff,
 }
 
 impl BluetoothScanStartTransaction for PacBluetoothScanStartTransaction<'_> {
     fn initialize_backoff_state_1(&mut self) {
-        crate::svd::fixed_register_image::initialize_bluetooth_scan_backoff_state_1(self.registers);
+        self.registers.initialize_bluetooth_scan_backoff_state_1();
     }
 
     fn initialize_backoff_state_0(&mut self) {
-        crate::svd::fixed_register_image::initialize_bluetooth_scan_backoff_state_0(self.registers);
+        self.registers.initialize_bluetooth_scan_backoff_state_0();
     }
 
     fn publish_standard_upper_limit_max(&mut self) {
-        crate::svd::fixed_register_image::publish_bluetooth_scan_standard_upper_limit_max(
-            self.registers,
-        );
+        self.registers
+            .publish_bluetooth_scan_standard_upper_limit_max();
     }
 }
 
@@ -64,7 +63,7 @@ impl BluetoothTaskRegisters {
     pub unsafe fn publish_scan_start(&mut self) -> BluetoothScanStartPublished {
         device_fence();
         let mut transaction = PacBluetoothScanStartTransaction {
-            registers: &self.bluetooth.ble_scan_backoff,
+            registers: &mut self.bluetooth.ble_scan_backoff,
         };
         execute_scan_start_transaction(&mut transaction);
         device_fence();

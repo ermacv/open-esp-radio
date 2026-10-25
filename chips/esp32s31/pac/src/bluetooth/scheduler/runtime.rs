@@ -5,7 +5,6 @@
 use crate::{
     BluetoothInterruptRegisters, BluetoothSchedulerHardwareListHead,
     BluetoothSchedulerHardwareListHeadEmptyObserved, BluetoothTaskRegisters, device_fence,
-    svd::{zero_based_field_write, zero_register_write},
 };
 
 /// Scheduler BUSY sampled through the diagnostic pair for bank-one source 3.
@@ -233,6 +232,19 @@ impl BluetoothSchedulerHardwareListIndex {
     pub const fn get(self) -> u8 {
         self.0
     }
+
+    /// The index of the list's scheduler-table entry.
+    pub(crate) const fn register_index(self) -> oer_mmio::Index<16> {
+        match oer_mmio::Index::new(self.0 as usize) {
+            Ok(index) => index,
+            Err(_) => panic!("a hardware-list index is below sixteen by construction"),
+        }
+    }
+
+    /// The index as the four-bit request fields take it.
+    pub(crate) const fn field_bits(self) -> oer_mmio::Bits<4> {
+        oer_mmio::Bits::truncate(self.0 as u32)
+    }
 }
 
 /// Result of consuming at most one list from a captured finished-list set.
@@ -393,39 +405,31 @@ const fn execution_modify_settled(value: DiagnosticValue) -> bool {
 }
 
 struct HardwareDiagnosticControl<'a> {
-    registers: &'a crate::svd::BluetoothSchedulerInterruptRuntime,
+    registers: &'a mut crate::generated::bluetooth_scheduler_interrupt_runtime::BluetoothSchedulerInterruptRuntime,
 }
 
 impl BluetoothDiagnosticControl for HardwareDiagnosticControl<'_> {
     fn select(&mut self, selector: DiagnosticSelector) {
-        match selector {
-            DiagnosticSelector::SchedulerStatus => {
-                crate::svd::fixed_register_write::select_bluetooth_scheduler_status_diagnostic(
-                    self.registers,
-                );
-            }
-            DiagnosticSelector::ExecutionModifyProgress => {
-                crate::svd::fixed_register_write::select_bluetooth_scheduler_execution_modify_progress_diagnostic(
-                    self.registers,
-                );
-            }
-            DiagnosticSelector::ExecutionModifySettle => {
-                crate::svd::fixed_register_write::select_bluetooth_scheduler_execution_modify_settle_diagnostic(
-                    self.registers,
-                );
-            }
-        }
+        use crate::generated::bluetooth_scheduler_interrupt_runtime::diagnostic_select::Selection;
+        let selection = match selector {
+            DiagnosticSelector::SchedulerStatus => Selection::SchedulerStatus,
+            DiagnosticSelector::ExecutionModifyProgress => Selection::ExecutionModifyProgress,
+            DiagnosticSelector::ExecutionModifySettle => Selection::ExecutionModifySettle,
+        };
+        // The complete selector image, written from zero.
+        self.registers.write_diagnostic_select(|writer| {
+            writer.set_selection(selection);
+        });
     }
 
     fn read_diagnostic_value(&mut self) -> DiagnosticValue {
-        let (value_0_low_7, value_0_bit_7, value_1, value_2, value_3) =
-            crate::svd::field_snapshot_read::observe_bluetooth_diagnostic_value(self.registers);
+        let value = self.registers.read_diagnostic_value();
         DiagnosticValue {
-            value_0_low_7,
-            value_0_bit_7,
-            value_1,
-            value_2,
-            value_3,
+            value_0_low_7: crate::field_byte(value.value_0_low_7()),
+            value_0_bit_7: value.value_0_bit_7(),
+            value_1: value.value_1(),
+            value_2: value.value_2(),
+            value_3: value.value_3(),
         }
     }
 }
@@ -433,7 +437,7 @@ impl BluetoothDiagnosticControl for HardwareDiagnosticControl<'_> {
 /// Sample scheduler BUSY once through the diagnostic pair of the interrupt
 /// owner; `None` when the two reads disagree.
 pub(crate) fn sample_scheduler_busy(
-    registers: &crate::svd::BluetoothSchedulerInterruptRuntime,
+    registers: &mut crate::generated::bluetooth_scheduler_interrupt_runtime::BluetoothSchedulerInterruptRuntime,
 ) -> Option<bool> {
     execute_scheduler_status_sample(&mut HardwareDiagnosticControl { registers })
 }
@@ -441,7 +445,7 @@ pub(crate) fn sample_scheduler_busy(
 /// Select the execution-modify progress signal, as the vendor does before it
 /// publishes the request.
 pub(crate) fn select_execution_modify_progress(
-    registers: &crate::svd::BluetoothSchedulerInterruptRuntime,
+    registers: &mut crate::generated::bluetooth_scheduler_interrupt_runtime::BluetoothSchedulerInterruptRuntime,
 ) {
     HardwareDiagnosticControl { registers }.select(DiagnosticSelector::ExecutionModifyProgress);
 }
@@ -449,7 +453,7 @@ pub(crate) fn select_execution_modify_progress(
 /// Read the already selected progress signal twice and report whether
 /// execution modify must repeat its request; `None` when the reads disagree.
 pub(crate) fn sample_execution_modify_repeats(
-    registers: &crate::svd::BluetoothSchedulerInterruptRuntime,
+    registers: &mut crate::generated::bluetooth_scheduler_interrupt_runtime::BluetoothSchedulerInterruptRuntime,
 ) -> Option<bool> {
     agreed_diagnostic_value(&mut HardwareDiagnosticControl { registers })
         .map(execution_modify_repeats)
@@ -457,7 +461,7 @@ pub(crate) fn sample_execution_modify_repeats(
 
 /// Select the execution-modify settle signal.
 pub(crate) fn select_execution_modify_settle(
-    registers: &crate::svd::BluetoothSchedulerInterruptRuntime,
+    registers: &mut crate::generated::bluetooth_scheduler_interrupt_runtime::BluetoothSchedulerInterruptRuntime,
 ) {
     HardwareDiagnosticControl { registers }.select(DiagnosticSelector::ExecutionModifySettle);
 }
@@ -465,7 +469,7 @@ pub(crate) fn select_execution_modify_settle(
 /// Read the already selected settle signal twice and report whether
 /// execution modify settled; `None` when the reads disagree.
 pub(crate) fn sample_execution_modify_settled(
-    registers: &crate::svd::BluetoothSchedulerInterruptRuntime,
+    registers: &mut crate::generated::bluetooth_scheduler_interrupt_runtime::BluetoothSchedulerInterruptRuntime,
 ) -> Option<bool> {
     agreed_diagnostic_value(&mut HardwareDiagnosticControl { registers })
         .map(execution_modify_settled)
@@ -479,7 +483,7 @@ struct SchedulerStateObservation {
 }
 
 struct HardwareSchedulerInterruptControl<'a> {
-    registers: &'a crate::svd::BluetoothSchedulerInterruptRuntime,
+    registers: &'a mut crate::generated::bluetooth_scheduler_interrupt_runtime::BluetoothSchedulerInterruptRuntime,
 }
 
 impl BluetoothSchedulerInterruptControl for HardwareSchedulerInterruptControl<'_> {
@@ -488,19 +492,18 @@ impl BluetoothSchedulerInterruptControl for HardwareSchedulerInterruptControl<'_
     }
 
     fn read_scheduler_state(&mut self) -> SchedulerStateObservation {
-        let (busy, state_29, current_link_index) =
-            crate::svd::field_snapshot_read::observe_bluetooth_scheduler_interrupt_state(
-                self.registers,
-            );
+        let state = self.registers.read_scheduler_state();
         SchedulerStateObservation {
-            busy,
-            state_29,
-            current_hardware_list: BluetoothSchedulerHardwareListIndex(current_link_index),
+            busy: state.busy(),
+            state_29: state.state_29(),
+            current_hardware_list: BluetoothSchedulerHardwareListIndex(crate::field_byte(
+                state.current_link_index(),
+            )),
         }
     }
 
     fn clear_scheduler_reference(&mut self) {
-        zero_register_write::clear_bluetooth_scheduler_reference(self.registers);
+        self.registers.clear_bluetooth_scheduler_reference();
     }
 }
 
@@ -515,36 +518,35 @@ trait BluetoothSchedulerSoftwareListRemovalControl {
 }
 
 struct HardwareSchedulerSoftwareListRemovalControl<'a> {
-    registers: &'a crate::svd::BluetoothControllerCore,
+    registers: &'a mut crate::generated::bluetooth_controller_core::BluetoothControllerCore,
 }
 
 impl BluetoothSchedulerSoftwareListRemovalControl
     for HardwareSchedulerSoftwareListRemovalControl<'_>
 {
     fn read_command_0_status_26(&mut self) -> bool {
-        crate::svd::field_read::observe_bluetooth_scheduler_software_list_command_0_status_26(
-            self.registers,
-        )
+        self.registers.read_scheduler_command_0().status_26()
     }
 
     fn read_command_1_status_18(&mut self) -> bool {
-        crate::svd::field_read::observe_bluetooth_scheduler_software_list_command_1_status_18(
-            self.registers,
-        )
+        self.registers.read_scheduler_command_1().status_18()
     }
 }
 
 struct HardwareSchedulerFinishedListControl<'a> {
-    registers: &'a crate::svd::BluetoothControllerCore,
+    registers: &'a mut crate::generated::bluetooth_controller_core::BluetoothControllerCore,
 }
 
 impl BluetoothSchedulerFinishedListControl for HardwareSchedulerFinishedListControl<'_> {
     fn read_finished_list_status(&mut self) -> u16 {
-        crate::svd::field_read::observe_bluetooth_scheduler_finished_lists(self.registers)
+        self.registers
+            .read_scheduler_finished_list_status()
+            .finished_list_mask()
     }
 
     fn write_finished_list_report(&mut self, value: u16) {
-        zero_based_field_write::bluetooth_scheduler_finished_list_report(self.registers, value);
+        self.registers
+            .bluetooth_scheduler_finished_list_report(value);
     }
 }
 
@@ -621,7 +623,7 @@ impl BluetoothInterruptRegisters {
         &mut self,
     ) -> Option<BluetoothSchedulerReferenceGateObservation> {
         let mut control = HardwareSchedulerInterruptControl {
-            registers: &self.peripherals.bluetooth_scheduler_interrupt_runtime,
+            registers: &mut self.peripherals.bluetooth_scheduler_interrupt_runtime,
         };
         execute_reference_gate_observation(&mut control)
     }
@@ -635,7 +637,7 @@ impl BluetoothInterruptRegisters {
     /// representation.
     pub fn clear_scheduler_reference(&mut self) -> BluetoothSchedulerReferenceCleared {
         let mut control = HardwareSchedulerInterruptControl {
-            registers: &self.peripherals.bluetooth_scheduler_interrupt_runtime,
+            registers: &mut self.peripherals.bluetooth_scheduler_interrupt_runtime,
         };
         execute_clear_scheduler_reference(&mut control);
         device_fence();
@@ -645,7 +647,7 @@ impl BluetoothInterruptRegisters {
     /// Read the later scheduler-state image used to classify deferred work.
     pub fn capture_scheduler_work(&mut self) -> BluetoothSchedulerWorkObservation {
         let mut control = HardwareSchedulerInterruptControl {
-            registers: &self.peripherals.bluetooth_scheduler_interrupt_runtime,
+            registers: &mut self.peripherals.bluetooth_scheduler_interrupt_runtime,
         };
         execute_work_observation(&mut control)
     }
@@ -653,7 +655,7 @@ impl BluetoothInterruptRegisters {
     /// Sample scheduler BUSY once through the diagnostic pair for a
     /// task-side scheduler decision; `None` when the two reads disagreed.
     pub fn capture_scheduler_busy(&mut self) -> Option<BluetoothSchedulerBusyObservation> {
-        sample_scheduler_busy(&self.peripherals.bluetooth_scheduler_interrupt_runtime)
+        sample_scheduler_busy(&mut self.peripherals.bluetooth_scheduler_interrupt_runtime)
             .map(BluetoothSchedulerBusyObservation::new)
     }
 }
@@ -671,7 +673,7 @@ impl BluetoothTaskRegisters {
         head: BluetoothSchedulerHardwareListHeadEmptyObserved,
     ) -> BluetoothSchedulerSoftwareListRemovalJoin {
         let mut control = HardwareSchedulerSoftwareListRemovalControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         };
         join_software_list_removal(head, execute_software_list_removal_finish(&mut control))
     }
@@ -690,7 +692,7 @@ impl BluetoothTaskRegisters {
         &mut self,
     ) -> BluetoothSchedulerFinishedListObservation {
         let mut control = HardwareSchedulerFinishedListControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         };
         let observation = execute_finished_list_transfer(&mut control);
         device_fence();

@@ -4,12 +4,8 @@
 
 pub(crate) mod retirement;
 
-use crate::{
-    BluetoothInterruptRegisters, BluetoothInterruptSetup, device_fence,
-    svd::{
-        field_or_modify, field_read, field_replace_modify, fixed_register_image, interrupt_snapshot,
-    },
-};
+use crate::generated::bluetooth_interrupt_bank as bank;
+use crate::{BluetoothInterruptRegisters, BluetoothInterruptSetup, device_fence};
 
 trait BluetoothSchedulerRunInterruptControl {
     fn clear_scheduler_run_bank_0(&mut self);
@@ -20,19 +16,19 @@ trait BluetoothSchedulerRunInterruptControl {
 
 impl BluetoothSchedulerRunInterruptControl for HardwareInterruptControl<'_> {
     fn clear_scheduler_run_bank_0(&mut self) {
-        fixed_register_image::clear_bluetooth_scheduler_run_interrupts_bank_0(self.bank);
+        self.bank.clear_bluetooth_scheduler_run_interrupts_bank_0();
     }
 
     fn clear_scheduler_run_bank_1(&mut self) {
-        fixed_register_image::clear_bluetooth_scheduler_run_interrupts_bank_1(self.bank);
+        self.bank.clear_bluetooth_scheduler_run_interrupts_bank_1();
     }
 
     fn enable_scheduler_run_bank_0(&mut self) {
-        field_or_modify::enable_bluetooth_scheduler_run_interrupts_bank_0(self.bank);
+        self.bank.enable_bluetooth_scheduler_run_interrupts_bank_0();
     }
 
     fn enable_scheduler_run_bank_1(&mut self) {
-        field_or_modify::enable_bluetooth_scheduler_run_interrupts_bank_1(self.bank);
+        self.bank.enable_bluetooth_scheduler_run_interrupts_bank_1();
     }
 }
 
@@ -67,44 +63,44 @@ trait BluetoothInterruptControl {
 }
 
 struct HardwareInterruptControl<'a> {
-    bank: &'a crate::svd::BluetoothInterruptBank,
+    bank: &'a mut crate::generated::bluetooth_interrupt_bank::BluetoothInterruptBank,
 }
 
 impl BluetoothInterruptControl for HardwareInterruptControl<'_> {
     fn clear_primary_baseline_bank_0(&mut self) {
-        fixed_register_image::clear_bluetooth_primary_baseline_bank_0(self.bank);
+        self.bank.clear_bluetooth_primary_baseline_bank_0();
     }
 
     fn clear_primary_baseline_bank_1(&mut self) {
-        fixed_register_image::clear_bluetooth_primary_baseline_bank_1(self.bank);
+        self.bank.clear_bluetooth_primary_baseline_bank_1();
     }
 
     fn enable_primary_baseline_bank_0(&mut self) {
-        field_or_modify::enable_bluetooth_primary_baseline_bank_0(self.bank);
+        self.bank.enable_bluetooth_primary_baseline_bank_0();
     }
 
     fn enable_primary_baseline_bank_1(&mut self) {
-        field_or_modify::enable_bluetooth_primary_baseline_bank_1(self.bank);
+        self.bank.enable_bluetooth_primary_baseline_bank_1();
     }
 
     fn prepare_output(&mut self) {
-        fixed_register_image::prepare_bluetooth_interrupt_output(self.bank);
+        self.bank.prepare_bluetooth_interrupt_output();
     }
 
     fn release_output_0(&mut self) {
-        fixed_register_image::release_bluetooth_interrupt_output_0(self.bank);
+        self.bank.release_bluetooth_interrupt_output_0();
     }
 
     fn release_output_1(&mut self) {
-        fixed_register_image::release_bluetooth_interrupt_output_1(self.bank);
+        self.bank.release_bluetooth_interrupt_output_1();
     }
 
     fn mask_primary_baseline_bank_0(&mut self) {
-        field_replace_modify::mask_bluetooth_primary_baseline_bank_0(self.bank);
+        self.bank.mask_bluetooth_primary_baseline_bank_0();
     }
 
     fn mask_primary_baseline_bank_1(&mut self) {
-        field_replace_modify::mask_bluetooth_primary_baseline_bank_1(self.bank);
+        self.bank.mask_bluetooth_primary_baseline_bank_1();
     }
 }
 
@@ -141,26 +137,26 @@ trait BluetoothPrimaryInterruptControl {
 }
 
 impl BluetoothPrimaryInterruptControl for HardwareInterruptControl<'_> {
-    type Bank0Snapshot = interrupt_snapshot::BluetoothPrimaryInterruptBank0Snapshot;
-    type Bank1Snapshot = interrupt_snapshot::BluetoothPrimaryInterruptBank1Snapshot;
+    type Bank0Snapshot = bank::BluetoothPrimaryInterruptBank0Snapshot;
+    type Bank1Snapshot = bank::BluetoothPrimaryInterruptBank1Snapshot;
 
     fn sample_bank_0(&mut self) -> Self::Bank0Snapshot {
-        interrupt_snapshot::sample_bluetooth_primary_interrupt_bank_0(self.bank)
+        self.bank.sample_bluetooth_primary_interrupt_bank_0()
     }
 
     fn sample_bank_1(&mut self) -> Self::Bank1Snapshot {
-        interrupt_snapshot::sample_bluetooth_primary_interrupt_bank_1(self.bank)
+        self.bank.sample_bluetooth_primary_interrupt_bank_1()
     }
 
     fn bank_0_status(&self, snapshot: &Self::Bank0Snapshot) -> BluetoothPrimaryBank0Status {
         BluetoothPrimaryBank0Status {
             source_15_pending: snapshot.source_15(),
             source_21_pending: snapshot.source_21(),
-            sources_27_or_28_pending: snapshot.sources_27_28() != 0,
-            unclassified_pending: snapshot.bits_0_14_opaque() != 0
-                || snapshot.bits_16_20_opaque() != 0
-                || snapshot.bits_22_26_opaque() != 0
-                || snapshot.bits_29_31_opaque() != 0,
+            sources_27_or_28_pending: snapshot.sources_27_28().get() != 0,
+            unclassified_pending: snapshot.bits_0_14_opaque().get() != 0
+                || snapshot.bits_16_20_opaque().get() != 0
+                || snapshot.bits_22_26_opaque().get() != 0
+                || snapshot.bits_29_31_opaque().get() != 0,
         }
     }
 
@@ -170,31 +166,33 @@ impl BluetoothPrimaryInterruptControl for HardwareInterruptControl<'_> {
             source_8_pending: snapshot.source_8(),
             source_9_pending: snapshot.source_9(),
             source_12_pending: snapshot.source_12(),
-            unclassified_pending: snapshot.bits_0_2_opaque() != 0
-                || snapshot.bits_4_7_opaque() != 0
-                || snapshot.bits_10_11_opaque() != 0
-                || snapshot.bits_13_31_opaque() != 0,
+            unclassified_pending: snapshot.bits_0_2_opaque().get() != 0
+                || snapshot.bits_4_7_opaque().get() != 0
+                || snapshot.bits_10_11_opaque().get() != 0
+                || snapshot.bits_13_31_opaque().get() != 0,
         }
     }
 
     fn acknowledge_bank_0(&mut self, snapshot: Self::Bank0Snapshot) {
-        interrupt_snapshot::acknowledge_bluetooth_primary_interrupt_bank_0(self.bank, snapshot);
+        self.bank
+            .acknowledge_bluetooth_primary_interrupt_bank_0(snapshot);
     }
 
     fn acknowledge_bank_1(&mut self, snapshot: Self::Bank1Snapshot) {
-        interrupt_snapshot::acknowledge_bluetooth_primary_interrupt_bank_1(self.bank, snapshot);
+        self.bank
+            .acknowledge_bluetooth_primary_interrupt_bank_1(snapshot);
     }
 
     fn capture_diagnostic_detail_0(&mut self) {
-        let _ = field_read::capture_bluetooth_irq_diagnostic_detail_0(self.bank);
+        let _ = self.bank.read_irq_diagnostic_detail_0();
     }
 
     fn capture_diagnostic_detail_1(&mut self) {
-        let _ = field_read::capture_bluetooth_irq_diagnostic_detail_1(self.bank);
+        let _ = self.bank.read_irq_diagnostic_detail_1();
     }
 
     fn capture_diagnostic_state(&mut self) {
-        let _ = field_read::capture_bluetooth_irq_diagnostic_state(self.bank);
+        let _ = self.bank.read_irq_diagnostic_state();
     }
 }
 
@@ -221,7 +219,7 @@ fn execute_primary_release(control: &mut impl BluetoothInterruptControl) {
 /// must share one staged ISR owner before either route is enabled.
 #[must_use = "the prepared Bluetooth interrupt output must be routed or released"]
 pub struct BluetoothInterruptOutputPrepared {
-    peripherals: crate::svd::peripheral_ownership::BluetoothInterruptPeripherals,
+    peripherals: crate::generated::peripheral_ownership::BluetoothInterruptPeripherals,
 }
 
 impl BluetoothInterruptSetup {
@@ -234,9 +232,9 @@ impl BluetoothInterruptSetup {
     /// to `0x2010_100c`, then the outer path calls the platform interrupt
     /// allocator for source 124. The earlier HAL-init part of that composite
     /// remains a separate lifecycle prerequisite.
-    pub fn prepare_controller_output(self) -> BluetoothInterruptOutputPrepared {
+    pub fn prepare_controller_output(mut self) -> BluetoothInterruptOutputPrepared {
         let mut control = HardwareInterruptControl {
-            bank: &self.peripherals.bluetooth_interrupt_bank,
+            bank: &mut self.peripherals.bluetooth_interrupt_bank,
         };
         execute_primary_prepare(&mut control);
         device_fence();
@@ -254,9 +252,9 @@ impl BluetoothInterruptOutputPrepared {
     /// writes image one to `0x2010_1010` and then `0x2010_1014`, and finally
     /// clears the same baseline enable groups. Dynamic Link-Layer sources must
     /// already have been quiesced by their own owners.
-    pub fn release_controller_output(self) -> BluetoothInterruptSetup {
+    pub fn release_controller_output(mut self) -> BluetoothInterruptSetup {
         let mut control = HardwareInterruptControl {
-            bank: &self.peripherals.bluetooth_interrupt_bank,
+            bank: &mut self.peripherals.bluetooth_interrupt_bank,
         };
         execute_primary_release(&mut control);
         device_fence();
@@ -510,7 +508,7 @@ impl BluetoothInterruptRegisters {
     /// W1C bank one, enable bank zero, enable bank one.
     pub fn prepare_scheduler_run_interrupts(&mut self) -> BluetoothSchedulerRunInterruptsPrepared {
         let mut control = HardwareInterruptControl {
-            bank: &self.peripherals.bluetooth_interrupt_bank,
+            bank: &mut self.peripherals.bluetooth_interrupt_bank,
         };
         execute_scheduler_run_interrupt_prepare(&mut control);
         device_fence();
@@ -527,7 +525,7 @@ impl BluetoothInterruptRegisters {
     /// and the special scheduler-event suffix remain higher-layer work.
     pub fn capture_primary_and_acknowledge(&mut self) -> BluetoothPrimaryInterruptEpoch {
         let mut control = HardwareInterruptControl {
-            bank: &self.peripherals.bluetooth_interrupt_bank,
+            bank: &mut self.peripherals.bluetooth_interrupt_bank,
         };
         let epoch = execute_primary_interrupt_epoch(&mut control);
         device_fence();
@@ -546,20 +544,20 @@ impl BluetoothInterruptRegisters {
     /// Separate sample or acknowledgement methods are deliberately absent:
     /// the reviewed vendor body does not authorize another ordering.
     pub fn capture_nrt_and_acknowledge(&mut self) -> BluetoothNrtInterruptAcknowledged {
-        let bank_0 = interrupt_snapshot::sample_bluetooth_interrupt_bank_0(
-            &self.peripherals.bluetooth_interrupt_bank,
-        );
-        let bank_1 = interrupt_snapshot::sample_bluetooth_interrupt_bank_1(
-            &self.peripherals.bluetooth_interrupt_bank,
-        );
-        interrupt_snapshot::acknowledge_bluetooth_interrupt_bank_0(
-            &self.peripherals.bluetooth_interrupt_bank,
-            bank_0,
-        );
-        interrupt_snapshot::acknowledge_bluetooth_interrupt_bank_1(
-            &self.peripherals.bluetooth_interrupt_bank,
-            bank_1,
-        );
+        let bank_0 = self
+            .peripherals
+            .bluetooth_interrupt_bank
+            .sample_bluetooth_interrupt_bank_0();
+        let bank_1 = self
+            .peripherals
+            .bluetooth_interrupt_bank
+            .sample_bluetooth_interrupt_bank_1();
+        self.peripherals
+            .bluetooth_interrupt_bank
+            .acknowledge_bluetooth_interrupt_bank_0(bank_0);
+        self.peripherals
+            .bluetooth_interrupt_bank
+            .acknowledge_bluetooth_interrupt_bank_1(bank_1);
         device_fence();
         BluetoothNrtInterruptAcknowledged { _private: () }
     }

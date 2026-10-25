@@ -9,25 +9,20 @@
 
 use crate::{BluetoothTaskRegisters, device_fence};
 
-const PUBLIC_DEVICE_ADDRESS_SLOT: usize = 0;
-const RANDOM_DEVICE_ADDRESS_SLOT: usize = 1;
+const PUBLIC_DEVICE_ADDRESS_SLOT: oer_mmio::Index<3> = oer_mmio::Index::constant::<0>();
+const RANDOM_DEVICE_ADDRESS_SLOT: oer_mmio::Index<3> = oer_mmio::Index::constant::<1>();
 
 fn program_controller_address_slot(
-    registers: &crate::svd::BleControllerAddressSlots,
-    slot: usize,
+    registers: &mut crate::generated::ble_controller_address_slots::BleControllerAddressSlots,
+    slot: oer_mmio::Index<3>,
     wire_octets: [u8; 6],
 ) {
     let [octet_0, octet_1, octet_2, octet_3, octet_4, octet_5] = wire_octets;
-    crate::svd::zero_based_field_write::ble_controller_address_slot_low(
-        registers,
+    registers.ble_controller_address_slot_low(
         slot,
         u32::from_le_bytes([octet_0, octet_1, octet_2, octet_3]),
     );
-    crate::svd::zero_based_field_write::ble_controller_address_slot_high(
-        registers,
-        slot,
-        u16::from_le_bytes([octet_4, octet_5]),
-    );
+    registers.ble_controller_address_slot_high(slot, u16::from_le_bytes([octet_4, octet_5]));
     device_fence();
 }
 
@@ -45,7 +40,7 @@ impl BluetoothTaskRegisters {
     #[doc(hidden)]
     pub fn program_bluetooth_public_device_address(&mut self, wire_octets: [u8; 6]) {
         program_controller_address_slot(
-            &self.bluetooth.ble_controller_address_slots,
+            &mut self.bluetooth.ble_controller_address_slots,
             PUBLIC_DEVICE_ADDRESS_SLOT,
             wire_octets,
         );
@@ -64,7 +59,7 @@ impl BluetoothTaskRegisters {
     #[doc(hidden)]
     pub fn program_bluetooth_random_device_address(&mut self, wire_octets: [u8; 6]) {
         program_controller_address_slot(
-            &self.bluetooth.ble_controller_address_slots,
+            &mut self.bluetooth.ble_controller_address_slots,
             RANDOM_DEVICE_ADDRESS_SLOT,
             wire_octets,
         );

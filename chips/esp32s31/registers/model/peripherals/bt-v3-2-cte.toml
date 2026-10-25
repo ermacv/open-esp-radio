@@ -172,28 +172,6 @@ maximum = 0xFF
 [[peripherals.registers]]
 
 [peripherals.registers.register]
-dim = 16
-dimIncrement = 0x2
-dimIndex = "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15"
-name = "ANTENNA_MAP_ENTRY%s"
-description = "First sixteen halfword slots of the indexed antenna-map window. The complete setter copies caller-provided halfwords from index zero up to its input count; sixteen slots are the exact finite effects recovered under the current analysis bound, not a claim that the hardware window ends here."
-addressOffset = 0x130
-size = 16
-access = "write-only"
-
-[[peripherals.registers.register.fields]]
-name = "VALUE"
-description = "Complete 16-bit antenna-map element; the encoding remains unknown."
-bitOffset = 0
-bitWidth = 16
-
-[peripherals.registers.register.fields.writeConstraint.range]
-minimum = 0
-maximum = 0xFFFF
-
-[[peripherals.registers]]
-
-[peripherals.registers.register]
 name = "SAMPLE_LIMIT"
 description = "Three independently readable and writable CTE sampling-limit fields."
 addressOffset = 0x150
@@ -624,3 +602,56 @@ naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
+
+[[peripherals]]
+name = "BT_V3_2_CTE_ANTENNA_MAP"
+description = """
+The halfword antenna-map window of the Bluetooth direction-finding block, which
+the vendor CTE setter stores halfword by halfword. Kept for bit-use coverage:
+its registers are not 32 bits wide, so no typed owner exists."""
+baseAddress = 0x20102130
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 16
+dimIncrement = 0x2
+dimIndex = "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15"
+name = "ANTENNA_MAP_ENTRY%s"
+description = "First sixteen halfword slots of the indexed antenna-map window. The complete setter copies caller-provided halfwords from index zero up to its input count; sixteen slots are the exact finite effects recovered under the current analysis bound, not a claim that the hardware window ends here."
+addressOffset = 0x0
+size = 16
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+description = "Complete 16-bit antenna-map element; the encoding remains unknown."
+bitOffset = 0
+bitWidth = 16
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFFFF
+
+[[peripheral-review]]
+entity = "BT_V3_2_CTE_ANTENNA_MAP"
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBBTBB_BT_CTE_ACCESSORS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBBTBB_BT_CTE_ACCESSORS"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBBTBB_BT_CTE_ACCESSORS"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

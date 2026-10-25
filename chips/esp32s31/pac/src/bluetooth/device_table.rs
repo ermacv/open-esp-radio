@@ -33,20 +33,23 @@ fn execute_device_table_publication(
 }
 
 struct PacBluetoothDeviceTableTransaction<'registers> {
-    registers: &'registers crate::svd::BtmacBlePhyInit,
+    registers: &'registers mut crate::generated::btmac_ble_phy_init::BtmacBlePhyInit,
 }
 
 impl BluetoothDeviceTableTransaction for PacBluetoothDeviceTableTransaction<'_> {
     fn publish_entry_count(&mut self, count: BluetoothDeviceTableEntryCount) {
-        crate::generated::publish_bluetooth_device_table_entry_count(self.registers, count);
+        self.registers
+            .publish_bluetooth_device_table_entry_count(count);
     }
 
     fn publish_first_entry(&mut self, first_entry: DmaRef<BleDeviceTable>) {
-        crate::svd::zero_based_field_write::publish_bluetooth_device_table_first_entry(
-            self.registers,
-            crate::generated::bluetooth_device_table_pointer_image(Some(first_entry))
-                .expect("the placed layout has a nonzero BLE encoding"),
-        );
+        let image =
+            crate::generated::btmac_ble_phy_init::device_table_first_entry::CompressedAddressImage::new(
+                first_entry,
+            )
+            .expect("the placed layout has a nonzero BLE encoding");
+        self.registers
+            .publish_bluetooth_device_table_first_entry(image);
     }
 }
 
@@ -72,7 +75,7 @@ impl BluetoothTaskRegisters {
     ) -> BluetoothDeviceTablePublished {
         device_fence();
         let mut transaction = PacBluetoothDeviceTableTransaction {
-            registers: &self.bluetooth.btmac_ble_phy_init,
+            registers: &mut self.bluetooth.btmac_ble_phy_init,
         };
         execute_device_table_publication(&mut transaction, first_entry, count);
         device_fence();

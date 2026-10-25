@@ -106,40 +106,32 @@ trait BluetoothSchedulerInsertionExecutionObservationControl {
 }
 
 struct HardwareBluetoothSchedulerInsertionExecutionControl<'registers> {
-    registers: &'registers crate::svd::BluetoothControllerCore,
+    registers: &'registers mut crate::generated::bluetooth_controller_core::BluetoothControllerCore,
 }
 
 impl BluetoothSchedulerInsertionExecutionControl
     for HardwareBluetoothSchedulerInsertionExecutionControl<'_>
 {
     fn publish_execution_lock(&mut self, request: BluetoothSchedulerExecutionLockRequest) {
-        crate::svd::zero_based_field_write::publish_bluetooth_scheduler_execution_lock_request(
-            self.registers,
-            crate::generated::bluetooth_scheduler_lock_pointer_image(Some(request.address()))
-                .expect("the placed layout has a nonzero BLE encoding"),
-            request.hardware_list_index().get(),
-            true,
-        );
+        self.registers.publish_bluetooth_scheduler_execution_lock_request(crate::generated::bluetooth_controller_core::scheduler_command_0::CompressedSramPointerImage::new(request.address())
+                .expect("the placed layout has a nonzero BLE encoding"), request.hardware_list_index().field_bits(), true);
     }
 
     fn publish_execution_modify(&mut self, index: BluetoothSchedulerHardwareListIndex) {
-        crate::svd::zero_based_field_write::publish_bluetooth_scheduler_execution_modify_request(
-            self.registers,
-            list_mask(index),
-            true,
-        );
+        self.registers
+            .publish_bluetooth_scheduler_execution_modify_request(list_mask(index), true);
     }
 
     fn publish_execution_modify_list_deletion(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
     ) {
-        crate::svd::zero_based_field_write::publish_bluetooth_scheduler_execution_modify_list_deletion_request(
-            self.registers,
-            list_mask(index),
-            true,
-            true,
-        );
+        self.registers
+            .publish_bluetooth_scheduler_execution_modify_list_deletion_request(
+                list_mask(index),
+                true,
+                true,
+            );
     }
 
     fn order_after_publication(&mut self) {
@@ -174,21 +166,23 @@ impl BluetoothSchedulerInsertionExecutionObservationControl
     for HardwareBluetoothSchedulerInsertionExecutionControl<'_>
 {
     fn observe_execution_lock_ready(&mut self) -> bool {
-        crate::svd::field_read::observe_bluetooth_scheduler_execution_lock_ready(self.registers)
+        self.registers.read_scheduler_command_0().status_24()
     }
 
     fn observe_execution_lock_result(&mut self) -> u8 {
-        crate::svd::field_read::observe_bluetooth_scheduler_execution_lock_result(self.registers)
+        crate::field_byte(
+            self.registers
+                .read_scheduler_command_0()
+                .execution_lock_result(),
+        )
     }
 
     fn observe_execution_modify_ready(&mut self) -> bool {
-        crate::svd::field_read::observe_bluetooth_scheduler_execution_modify_ready(self.registers)
+        self.registers.read_scheduler_command_1().status_17()
     }
 
     fn observe_execution_modify_rejected(&mut self) -> bool {
-        crate::svd::field_read::observe_bluetooth_scheduler_execution_modify_rejected(
-            self.registers,
-        )
+        self.registers.read_scheduler_command_1().status_19()
     }
 }
 
@@ -254,7 +248,7 @@ impl BluetoothTaskRegisters {
         request: BluetoothSchedulerExecutionLockRequest,
     ) -> BluetoothSchedulerExecutionLockPublished {
         let mut control = HardwareBluetoothSchedulerInsertionExecutionControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         };
         execute_execution_lock_publication(&mut control, request)
     }
@@ -269,7 +263,7 @@ impl BluetoothTaskRegisters {
         scheduler: BluetoothSchedulerBusyObservation,
     ) -> BluetoothSchedulerExecutionLockDisposition {
         let mut control = HardwareBluetoothSchedulerInsertionExecutionControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         };
         execute_execution_lock_observation(&mut control, scheduler)
     }
@@ -291,7 +285,7 @@ impl BluetoothTaskRegisters {
         index: BluetoothSchedulerHardwareListIndex,
     ) -> BluetoothSchedulerExecutionModifyPublished {
         let mut control = HardwareBluetoothSchedulerInsertionExecutionControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         };
         execute_execution_modify_publication(&mut control, index)
     }
@@ -314,7 +308,7 @@ impl BluetoothTaskRegisters {
         index: BluetoothSchedulerHardwareListIndex,
     ) -> BluetoothSchedulerExecutionModifyPublished {
         let mut control = HardwareBluetoothSchedulerInsertionExecutionControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         };
         execute_execution_modify_list_deletion_publication(&mut control, index)
     }
@@ -323,7 +317,7 @@ impl BluetoothTaskRegisters {
     #[doc(hidden)]
     pub fn scheduler_execution_modify_ready(&mut self) -> bool {
         HardwareBluetoothSchedulerInsertionExecutionControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         }
         .observe_execution_modify_ready()
     }
@@ -332,7 +326,7 @@ impl BluetoothTaskRegisters {
     #[doc(hidden)]
     pub fn scheduler_execution_modify_rejected(&mut self) -> bool {
         HardwareBluetoothSchedulerInsertionExecutionControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         }
         .observe_execution_modify_rejected()
     }
@@ -343,7 +337,7 @@ impl crate::BluetoothInterruptRegisters {
     #[doc(hidden)]
     pub fn select_scheduler_execution_modify_progress(&mut self) {
         super::runtime::select_execution_modify_progress(
-            &self.peripherals.bluetooth_scheduler_interrupt_runtime,
+            &mut self.peripherals.bluetooth_scheduler_interrupt_runtime,
         );
     }
 
@@ -352,7 +346,7 @@ impl crate::BluetoothInterruptRegisters {
     #[doc(hidden)]
     pub fn scheduler_execution_modify_repeats(&mut self) -> Option<bool> {
         super::runtime::sample_execution_modify_repeats(
-            &self.peripherals.bluetooth_scheduler_interrupt_runtime,
+            &mut self.peripherals.bluetooth_scheduler_interrupt_runtime,
         )
     }
 
@@ -360,7 +354,7 @@ impl crate::BluetoothInterruptRegisters {
     #[doc(hidden)]
     pub fn select_scheduler_execution_modify_settle(&mut self) {
         super::runtime::select_execution_modify_settle(
-            &self.peripherals.bluetooth_scheduler_interrupt_runtime,
+            &mut self.peripherals.bluetooth_scheduler_interrupt_runtime,
         );
     }
 
@@ -369,7 +363,7 @@ impl crate::BluetoothInterruptRegisters {
     #[doc(hidden)]
     pub fn scheduler_execution_modify_settled(&mut self) -> Option<bool> {
         super::runtime::sample_execution_modify_settled(
-            &self.peripherals.bluetooth_scheduler_interrupt_runtime,
+            &mut self.peripherals.bluetooth_scheduler_interrupt_runtime,
         )
     }
 }

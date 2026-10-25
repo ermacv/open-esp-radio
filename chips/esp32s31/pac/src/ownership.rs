@@ -188,7 +188,7 @@ pub struct CoexistencePartition(svd::peripheral_ownership::CoexistencePeripheral
 /// Opaque Bluetooth controller register partition.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct BluetoothControllerPartition {
-    bluetooth: svd::peripheral_ownership::BluetoothControllerPeripherals,
+    bluetooth: generated::peripheral_ownership::BluetoothControllerPeripherals,
     etm: crate::modem::etm::BluetoothPhyEtmChannel,
 }
 
@@ -301,6 +301,9 @@ impl RadioPartitions {
     pub(crate) fn from_peripherals(peripherals: svd::Peripherals, claims: Claims) -> Self {
         let generated::peripheral_ownership::PeripheralPartitions {
             wifi_mac_interface,
+            bluetooth,
+            bluetooth_modem_lp_timer,
+            bluetooth_interrupts,
             ieee802154,
         } = generated::peripheral_ownership::partition(claims);
         let svd::peripheral_ownership::PeripheralPartitions {
@@ -309,9 +312,6 @@ impl RadioPartitions {
             wifi_interrupts,
             radio_phy,
             coexistence,
-            bluetooth,
-            bluetooth_modem_lp_timer,
-            bluetooth_interrupts,
             shared_radio,
             modem_etm,
             mac_local_time,
@@ -855,7 +855,7 @@ pub struct Ieee802154InterruptRegisters {
 /// controller lifecycle prerequisites have run.
 #[must_use = "the Bluetooth task owner must be reunited before release"]
 pub struct BluetoothTaskRegisters {
-    pub(crate) bluetooth: svd::peripheral_ownership::BluetoothControllerPeripherals,
+    pub(crate) bluetooth: generated::peripheral_ownership::BluetoothControllerPeripherals,
     /// Modem ETM channel two, which BLE PHY initialization programs.
     pub(crate) etm: crate::modem::etm::BluetoothPhyEtmChannel,
 }
@@ -914,7 +914,7 @@ impl BluetoothTaskRegisters {
 /// Inactive owner of the reviewed Bluetooth interrupt partition.
 #[must_use = "the Bluetooth interrupt setup must remain paired with its task owner"]
 pub struct BluetoothInterruptSetup {
-    pub(crate) peripherals: svd::peripheral_ownership::BluetoothInterruptPeripherals,
+    pub(crate) peripherals: generated::peripheral_ownership::BluetoothInterruptPeripherals,
 }
 
 /// Bluetooth interrupt-bank capability staged for a future powered ISR epoch.
@@ -925,7 +925,7 @@ pub struct BluetoothInterruptSetup {
 /// primary and NRT handlers before enabling either CPU route.
 #[must_use = "the Bluetooth interrupt owner must be deactivated and reunited"]
 pub struct BluetoothInterruptRegisters {
-    pub(crate) peripherals: svd::peripheral_ownership::BluetoothInterruptPeripherals,
+    pub(crate) peripherals: generated::peripheral_ownership::BluetoothInterruptPeripherals,
 }
 
 #[cfg(test)]

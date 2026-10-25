@@ -47,25 +47,18 @@ impl BluetoothTaskRegisters {
         &mut self,
         descriptor: DmaRef<BleDirectionFindingDescriptor>,
     ) -> BluetoothDirectionFindingDisabledBaselinePrepared {
-        let compressed = crate::generated::BluetoothCteSampleDescriptorPointerBits::new(
-            crate::generated::bluetooth_df_descriptor_pointer_image(Some(descriptor))
-                .expect("the placed layout has a nonzero BLE encoding"),
-        )
-        .expect("a validated Controller SRAM address always has a low-twenty-bit image");
+        let image =
+            crate::generated::ble_hw_cte_ring_control::buffer_pointer::CompressedDescriptorPointerImage::new(
+                descriptor,
+            )
+            .expect("the placed layout has a nonzero BLE encoding");
+        let slot = oer_mmio::Index::constant::<0>();
+        let ring = &mut self.bluetooth.ble_hw_cte_ring_control;
 
         device_fence();
-        crate::generated::configure_bluetooth_cte_six_buffer_limit(
-            &self.bluetooth.ble_hw_cte_ring_control,
-        );
-        crate::generated::publish_bluetooth_cte_sample_descriptor_pointer(
-            &self.bluetooth.ble_hw_cte_ring_control,
-            0,
-            compressed,
-        );
-        crate::generated::clear_bluetooth_cte_buffer_software_ownership(
-            &self.bluetooth.ble_hw_cte_ring_control,
-            0,
-        );
+        ring.configure_bluetooth_cte_six_buffer_limit();
+        ring.publish_bluetooth_cte_sample_descriptor_pointer(slot, image);
+        ring.clear_bluetooth_cte_buffer_software_ownership(slot);
         device_fence();
 
         BluetoothDirectionFindingDisabledBaselinePrepared { descriptor }

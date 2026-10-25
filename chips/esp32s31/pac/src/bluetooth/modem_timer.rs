@@ -13,7 +13,7 @@
 
 #![deny(unsafe_code)]
 
-use crate::{device_fence, svd};
+use crate::device_fence;
 
 /// Disjoint register owner for the Bluetooth modem low-power timer.
 ///
@@ -23,7 +23,7 @@ use crate::{device_fence, svd};
 /// baseband and Link-Layer registers.
 #[must_use = "the modem LP-timer owner must remain paired with the Bluetooth lifecycle"]
 pub struct BluetoothModemLpTimerRegisters {
-    peripherals: svd::peripheral_ownership::BluetoothModemLpTimerPeripherals,
+    peripherals: crate::generated::peripheral_ownership::BluetoothModemLpTimerPeripherals,
     /// Modem ETM channels four through seven, programmed by the low-power
     /// component.
     etm: crate::modem::etm::BluetoothEtmChannels,
@@ -31,7 +31,7 @@ pub struct BluetoothModemLpTimerRegisters {
 
 impl BluetoothModemLpTimerRegisters {
     pub(crate) const fn new(
-        peripherals: svd::peripheral_ownership::BluetoothModemLpTimerPeripherals,
+        peripherals: crate::generated::peripheral_ownership::BluetoothModemLpTimerPeripherals,
         etm: crate::modem::etm::BluetoothEtmChannels,
     ) -> Self {
         Self { peripherals, etm }
@@ -380,12 +380,12 @@ fn execute_modem_lp_timer_start(transaction: &mut impl ModemLpTimerStartTransact
 }
 
 struct HardwareModemLpTimerTransaction<'registers> {
-    registers: &'registers crate::svd::BtdmRuntimeControl,
+    registers: &'registers mut crate::generated::btdm_runtime_control::BtdmRuntimeControl,
 }
 
 struct HardwareModemLpTimerLowPowerInitTransaction<'registers> {
     config: &'registers crate::svd::ModemEtm,
-    runtime_control: &'registers crate::svd::BtdmRuntimeControl,
+    runtime_control: &'registers mut crate::generated::btdm_runtime_control::BtdmRuntimeControl,
 }
 
 impl ModemLpTimerLowPowerInitTransaction for HardwareModemLpTimerLowPowerInitTransaction<'_> {
@@ -394,15 +394,17 @@ impl ModemLpTimerLowPowerInitTransaction for HardwareModemLpTimerLowPowerInitTra
     }
 
     fn clear_controls_0_4(&mut self) {
-        crate::generated::clear_bluetooth_low_power_controls_0_4(self.runtime_control);
+        self.runtime_control
+            .clear_bluetooth_low_power_controls_0_4();
     }
 
     fn control_2_is_set(&mut self) -> bool {
-        crate::svd::field_read::observe_bluetooth_modem_lp_timer_control_2(self.runtime_control)
+        self.runtime_control.read_word_0058_opaque().control_2()
     }
 
     fn publish_control_1(&mut self) {
-        crate::generated::publish_bluetooth_modem_lp_timer_control_1(self.runtime_control);
+        self.runtime_control
+            .publish_bluetooth_modem_lp_timer_control_1();
     }
 
     fn fence(&mut self) {
@@ -412,7 +414,11 @@ impl ModemLpTimerLowPowerInitTransaction for HardwareModemLpTimerLowPowerInitTra
 
 impl ModemLpTimerStartTransaction for HardwareModemLpTimerTransaction<'_> {
     fn start_counter(&mut self) {
-        crate::svd::fixed_register_write::start_bluetooth_runtime_timer(self.registers);
+        self.registers.write_runtime_timer_start_command(|writer| {
+            writer.set_command(
+                crate::generated::btdm_runtime_control::runtime_timer_start_command::Command::Start,
+            );
+        });
     }
 
     fn fence(&mut self) {
@@ -422,25 +428,19 @@ impl ModemLpTimerStartTransaction for HardwareModemLpTimerTransaction<'_> {
 
 impl ModemLpTimerTransaction for HardwareModemLpTimerTransaction<'_> {
     fn prepare_hardware(&mut self) {
-        crate::svd::zero_register_write::prepare_bluetooth_modem_lp_timer_command_004c(
-            self.registers,
-        );
-        crate::svd::field_or_modify::prepare_bluetooth_modem_lp_timer_control_25(self.registers);
-        crate::svd::fixed_register_image::prepare_bluetooth_modem_lp_timer_command_0004(
-            self.registers,
-        );
-        crate::svd::fixed_register_image::prepare_bluetooth_modem_lp_timer_command_0008(
-            self.registers,
-        );
-        crate::svd::fixed_register_image::prepare_bluetooth_modem_lp_timer_command_0014(
-            self.registers,
-        );
-        crate::svd::fixed_register_image::prepare_bluetooth_modem_lp_timer_command_0034(
-            self.registers,
-        );
-        crate::svd::fixed_register_image::prepare_bluetooth_modem_lp_timer_command_0010(
-            self.registers,
-        );
+        self.registers
+            .prepare_bluetooth_modem_lp_timer_command_004c();
+        self.registers.prepare_bluetooth_modem_lp_timer_control_25();
+        self.registers
+            .prepare_bluetooth_modem_lp_timer_command_0004();
+        self.registers
+            .prepare_bluetooth_modem_lp_timer_command_0008();
+        self.registers
+            .prepare_bluetooth_modem_lp_timer_command_0014();
+        self.registers
+            .prepare_bluetooth_modem_lp_timer_command_0034();
+        self.registers
+            .prepare_bluetooth_modem_lp_timer_command_0010();
     }
 
     fn fence(&mut self) {
@@ -450,19 +450,19 @@ impl ModemLpTimerTransaction for HardwareModemLpTimerTransaction<'_> {
 
 impl ModemLpTimerInterruptTransaction for HardwareModemLpTimerTransaction<'_> {
     fn read_status_0038(&mut self) -> u32 {
-        crate::svd::field_read::observe_bluetooth_modem_lp_timer_status_0038(self.registers)
+        self.registers.read_word_0038_opaque().bits_0_31_opaque()
     }
 
     fn read_value_006c(&mut self) -> u32 {
-        crate::svd::field_read::observe_bluetooth_modem_lp_timer_value_006c(self.registers)
+        self.registers.read_word_006c_opaque().bits_0_31_opaque()
     }
 
     fn control_0058_bit_2_is_set(&mut self) -> bool {
-        crate::svd::field_read::observe_bluetooth_modem_lp_timer_control_2(self.registers)
+        self.registers.read_word_0058_opaque().control_2()
     }
 
     fn set_control_0058_bit_1_from_fresh_read(&mut self) {
-        crate::generated::publish_bluetooth_modem_lp_timer_control_1(self.registers);
+        self.registers.publish_bluetooth_modem_lp_timer_control_1();
     }
 
     fn fence(&mut self) {
@@ -472,23 +472,23 @@ impl ModemLpTimerInterruptTransaction for HardwareModemLpTimerTransaction<'_> {
 
 impl ModemLpTimerHandlerRegisterTransaction for HardwareModemLpTimerTransaction<'_> {
     fn sample_state_0024_low_byte_nonzero(&mut self) -> bool {
-        crate::svd::field_read::observe_bluetooth_modem_lp_timer_state_0024(self.registers) != 0
+        self.registers.read_word_0024_opaque().low_byte() != 0
     }
 
     fn clear_state_0024(&mut self) {
-        crate::svd::zero_register_write::clear_bluetooth_modem_lp_timer_state_0024(self.registers);
+        self.registers.clear_bluetooth_modem_lp_timer_state_0024();
     }
 
     fn sample_state_002c_low_byte_nonzero(&mut self) -> bool {
-        crate::svd::field_read::observe_bluetooth_modem_lp_timer_state_002c(self.registers) != 0
+        self.registers.read_word_002c_opaque().low_byte() != 0
     }
 
     fn clear_state_002c(&mut self) {
-        crate::svd::zero_register_write::clear_bluetooth_modem_lp_timer_state_002c(self.registers);
+        self.registers.clear_bluetooth_modem_lp_timer_state_002c();
     }
 
     fn sample_final_state_0024(&mut self) {
-        let _ = crate::svd::field_read::observe_bluetooth_modem_lp_timer_state_0024(self.registers);
+        let _ = self.registers.read_word_0024_opaque().low_byte();
     }
 
     fn fence(&mut self) {
@@ -498,33 +498,33 @@ impl ModemLpTimerHandlerRegisterTransaction for HardwareModemLpTimerTransaction<
 
 impl ModemLpTimerRuntimeTransaction for HardwareModemLpTimerTransaction<'_> {
     fn read_counter(&mut self) -> u32 {
-        crate::svd::field_read::observe_bluetooth_modem_lp_timer_counter(self.registers)
+        self.registers.read_word_0048_opaque().bits_0_31_opaque()
     }
 
     fn rollover_low_byte_nonzero(&mut self) -> bool {
-        crate::svd::field_read::observe_bluetooth_modem_lp_timer_state_002c(self.registers) != 0
+        self.registers.read_word_002c_opaque().low_byte() != 0
     }
 
     fn clear_rollover(&mut self) {
-        crate::svd::zero_register_write::clear_bluetooth_modem_lp_timer_state_002c(self.registers);
+        self.registers.clear_bluetooth_modem_lp_timer_state_002c();
     }
 
     fn publish_software_pending(&mut self) {
-        crate::svd::fixed_register_image::publish_bluetooth_modem_lp_timer_software_pending(
-            self.registers,
-        );
+        self.registers
+            .publish_bluetooth_modem_lp_timer_software_pending();
     }
 
     fn disable_compare(&mut self) {
-        crate::svd::fixed_register_image::disable_bluetooth_modem_lp_timer_compare(self.registers);
+        self.registers.disable_bluetooth_modem_lp_timer_compare();
     }
 
     fn write_compare(&mut self, image: crate::generated::BluetoothModemLpTimerCompareImage) {
-        crate::generated::publish_bluetooth_modem_lp_timer_compare(self.registers, image);
+        self.registers
+            .publish_bluetooth_modem_lp_timer_compare(image);
     }
 
     fn trigger_timer_command(&mut self) {
-        crate::svd::fixed_register_image::trigger_bluetooth_modem_lp_timer_command(self.registers);
+        self.registers.trigger_bluetooth_modem_lp_timer_command();
     }
 
     fn fence(&mut self) {
@@ -543,7 +543,7 @@ impl BluetoothModemLpTimerRegisters {
     /// teardown does not reverse these eight operations.
     pub fn prepare_registers(&mut self) {
         let mut transaction = HardwareModemLpTimerTransaction {
-            registers: &self.peripherals.btdm_runtime_control,
+            registers: &mut self.peripherals.btdm_runtime_control,
         };
         execute_modem_lp_timer_prepare(&mut transaction);
     }
@@ -563,7 +563,7 @@ impl BluetoothModemLpTimerRegisters {
     pub fn initialize_low_power_hardware(&mut self) -> BluetoothLowPowerRuntimeControlObservation {
         let mut transaction = HardwareModemLpTimerLowPowerInitTransaction {
             config: &self.etm.registers,
-            runtime_control: &self.peripherals.btdm_runtime_control,
+            runtime_control: &mut self.peripherals.btdm_runtime_control,
         };
         execute_modem_lp_timer_low_power_init(&mut transaction)
     }
@@ -576,7 +576,7 @@ impl BluetoothModemLpTimerRegisters {
     /// the operation `r_btdm_hal_rtc_start`.
     pub fn start_runtime_counter(&mut self) {
         let mut transaction = HardwareModemLpTimerTransaction {
-            registers: &self.peripherals.btdm_runtime_control,
+            registers: &mut self.peripherals.btdm_runtime_control,
         };
         execute_modem_lp_timer_start(&mut transaction);
     }
@@ -588,7 +588,7 @@ impl BluetoothModemLpTimerRegisters {
     /// fenced and returns the path that requires the common timer handler.
     pub fn classify_interrupt(&mut self) -> Option<BluetoothModemLpTimerInterruptObservation> {
         let mut transaction = HardwareModemLpTimerTransaction {
-            registers: &self.peripherals.btdm_runtime_control,
+            registers: &mut self.peripherals.btdm_runtime_control,
         };
         match execute_modem_lp_timer_interrupt(&mut transaction) {
             ModemLpTimerInterruptDisposition::Spurious => None,
@@ -607,7 +607,7 @@ impl BluetoothModemLpTimerRegisters {
         &mut self,
     ) -> Option<BluetoothModemLpTimerHandlerRegisterObservation> {
         let mut transaction = HardwareModemLpTimerTransaction {
-            registers: &self.peripherals.btdm_runtime_control,
+            registers: &mut self.peripherals.btdm_runtime_control,
         };
         match execute_modem_lp_timer_handler_registers(&mut transaction) {
             ModemLpTimerHandlerRegisterDisposition::Rearmed => None,
@@ -627,7 +627,7 @@ impl BluetoothModemLpTimerRegisters {
         epoch: &mut BluetoothModemLpTimerEpoch,
     ) -> BluetoothModemLpTimerCounterObservation {
         let mut transaction = HardwareModemLpTimerTransaction {
-            registers: &self.peripherals.btdm_runtime_control,
+            registers: &mut self.peripherals.btdm_runtime_control,
         };
         execute_modem_lp_timer_counter_sample(&mut transaction, epoch)
     }
@@ -635,7 +635,7 @@ impl BluetoothModemLpTimerRegisters {
     /// Disable the currently programmed positional compare.
     pub fn disable_compare(&mut self) {
         let mut transaction = HardwareModemLpTimerTransaction {
-            registers: &self.peripherals.btdm_runtime_control,
+            registers: &mut self.peripherals.btdm_runtime_control,
         };
         execute_modem_lp_timer_compare_disable(&mut transaction);
     }
@@ -652,7 +652,7 @@ impl BluetoothModemLpTimerRegisters {
         epoch: BluetoothModemLpTimerEpoch,
     ) -> BluetoothModemLpTimerCompareDisposition {
         let mut transaction = HardwareModemLpTimerTransaction {
-            registers: &self.peripherals.btdm_runtime_control,
+            registers: &mut self.peripherals.btdm_runtime_control,
         };
         execute_modem_lp_timer_compare_program(&mut transaction, deadline, epoch)
     }
@@ -660,7 +660,7 @@ impl BluetoothModemLpTimerRegisters {
     /// Perform the common handler's final fresh state read after software work.
     pub fn sample_final_state(&mut self) {
         let mut transaction = HardwareModemLpTimerTransaction {
-            registers: &self.peripherals.btdm_runtime_control,
+            registers: &mut self.peripherals.btdm_runtime_control,
         };
         transaction.sample_final_state_0024();
     }

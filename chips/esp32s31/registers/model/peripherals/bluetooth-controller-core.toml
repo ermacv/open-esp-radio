@@ -565,6 +565,9 @@ name = "ADDRESS"
 description = "CPU address published for the BLE PHY environment member at +0x4d."
 bitOffset = 0
 bitWidth = 32
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFFFFF
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "HAL_INIT_SCHEDULER_CONTROL"

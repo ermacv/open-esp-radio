@@ -162,32 +162,27 @@ trait BluetoothSchedulerCancellationControl {
 }
 
 struct HardwareBluetoothSchedulerCancellationControl<'registers> {
-    registers: &'registers crate::svd::BluetoothControllerCore,
+    registers: &'registers mut crate::generated::bluetooth_controller_core::BluetoothControllerCore,
 }
 
 impl BluetoothSchedulerCancellationControl for HardwareBluetoothSchedulerCancellationControl<'_> {
     fn publish_skip(&mut self, request: BluetoothSchedulerSkipRequest) {
-        crate::svd::zero_based_field_write::publish_bluetooth_scheduler_skip_request(
-            self.registers,
-            crate::generated::bluetooth_scheduler_skip_pointer_image(Some(request.address()))
-                .expect("the placed layout has a nonzero BLE encoding"),
-            request.hardware_list_index().get(),
-            true,
-        );
+        self.registers.publish_bluetooth_scheduler_skip_request(crate::generated::bluetooth_controller_core::scheduler_skip_request::CompressedSramPointerImage::new(request.address())
+                .expect("the placed layout has a nonzero BLE encoding"), request.hardware_list_index().field_bits(), true);
     }
 
     fn observe_skip(&mut self) -> (bool, u8) {
-        crate::svd::field_snapshot_read::observe_bluetooth_scheduler_skip_request(self.registers)
+        let request = self.registers.read_scheduler_skip_request();
+        (request.start(), crate::field_byte(request.result()))
     }
 
     fn clear_skip(&mut self) {
-        crate::svd::zero_register_write::clear_bluetooth_scheduler_skip_request(self.registers);
+        self.registers.clear_bluetooth_scheduler_skip_request();
     }
 
     fn clear_list_index(&mut self) {
-        crate::generated::clear_bluetooth_scheduler_cancellation_hardware_list_index(
-            self.registers,
-        );
+        self.registers
+            .clear_bluetooth_scheduler_cancellation_hardware_list_index();
     }
 
     fn publish_list_index(&mut self, index: BluetoothSchedulerHardwareListIndex) {
@@ -195,26 +190,26 @@ impl BluetoothSchedulerCancellationControl for HardwareBluetoothSchedulerCancell
             u32::from(index.get()),
         )
         .expect("typed scheduler hardware-list index fits its generated PAC domain");
-        crate::generated::publish_bluetooth_scheduler_cancellation_hardware_list_index(
-            self.registers,
-            index,
-        );
+        self.registers
+            .publish_bluetooth_scheduler_cancellation_hardware_list_index(index);
     }
 
     fn set_control(&mut self) {
-        crate::generated::set_bluetooth_scheduler_cancellation_control(self.registers);
+        self.registers
+            .set_bluetooth_scheduler_cancellation_control();
     }
 
     fn clear_control(&mut self) {
-        crate::generated::clear_bluetooth_scheduler_cancellation_control(self.registers);
+        self.registers
+            .clear_bluetooth_scheduler_cancellation_control();
     }
 
     fn observe_status_0324(&mut self) -> bool {
-        crate::svd::field_read::observe_bluetooth_scheduler_cancellation_status_0324(self.registers)
+        self.registers.read_word_0324_opaque().status_0()
     }
 
     fn observe_status_0208(&mut self) -> bool {
-        crate::svd::field_read::observe_bluetooth_scheduler_cancellation_status_0208(self.registers)
+        self.registers.read_word_0208_opaque().status_0()
     }
 
     fn order_after_publication(&mut self) {
@@ -333,7 +328,7 @@ impl BluetoothTaskRegisters {
         request: BluetoothSchedulerSkipRequest,
     ) -> BluetoothSchedulerSkipPublished {
         let mut control = HardwareBluetoothSchedulerCancellationControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         };
         execute_skip_publication(&mut control, request)
     }
@@ -346,7 +341,7 @@ impl BluetoothTaskRegisters {
         scheduler: BluetoothSchedulerBusyObservation,
     ) -> BluetoothSchedulerSkipDisposition {
         let mut control = HardwareBluetoothSchedulerCancellationControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         };
         execute_skip_observation(&mut control, scheduler)
     }
@@ -357,7 +352,7 @@ impl BluetoothTaskRegisters {
         published: BluetoothSchedulerSkipPublished,
     ) -> BluetoothSchedulerSkipCleared {
         let mut control = HardwareBluetoothSchedulerCancellationControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         };
         execute_skip_clear(&mut control, published)
     }
@@ -380,7 +375,7 @@ impl BluetoothTaskRegisters {
         index: BluetoothSchedulerHardwareListIndex,
     ) -> BluetoothSchedulerCancellationIndexed {
         let mut control = HardwareBluetoothSchedulerCancellationControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         };
         execute_cancellation_indexing(&mut control, index)
     }
@@ -393,7 +388,7 @@ impl BluetoothTaskRegisters {
         acknowledged: BluetoothSchedulerCancellationSourceAcknowledged,
     ) -> BluetoothSchedulerCancellationRequested {
         let mut control = HardwareBluetoothSchedulerCancellationControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         };
         execute_cancellation_request(&mut control, indexed, acknowledged)
     }
@@ -405,7 +400,7 @@ impl BluetoothTaskRegisters {
         scheduler: BluetoothSchedulerBusyObservation,
     ) -> BluetoothSchedulerCancellationDisposition {
         let mut control = HardwareBluetoothSchedulerCancellationControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         };
         execute_cancellation_observation(&mut control, requested, scheduler)
     }
@@ -417,7 +412,7 @@ impl BluetoothTaskRegisters {
         requested: BluetoothSchedulerCancellationRequested,
     ) -> BluetoothSchedulerCancellationReleased {
         let mut control = HardwareBluetoothSchedulerCancellationControl {
-            registers: &self.bluetooth.bluetooth_controller_core,
+            registers: &mut self.bluetooth.bluetooth_controller_core,
         };
         execute_cancellation_release(&mut control, requested)
     }
@@ -429,9 +424,9 @@ impl BluetoothInterruptRegisters {
         &mut self,
         _indexed: &BluetoothSchedulerCancellationIndexed,
     ) -> BluetoothSchedulerCancellationSourceAcknowledged {
-        crate::svd::fixed_register_image::acknowledge_bluetooth_scheduler_cancellation_source(
-            &self.peripherals.bluetooth_interrupt_bank,
-        );
+        self.peripherals
+            .bluetooth_interrupt_bank
+            .acknowledge_bluetooth_scheduler_cancellation_source();
         device_fence();
         BluetoothSchedulerCancellationSourceAcknowledged { _private: () }
     }
