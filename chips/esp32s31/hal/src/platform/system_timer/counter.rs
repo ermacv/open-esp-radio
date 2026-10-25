@@ -22,7 +22,7 @@
 //! esp-hal 1f646c5 `timer/systimer.rs` (`Unit::read_count`).
 
 /// The counter latch of system timer unit zero, shared by every context.
-pub(crate) trait CounterLatch {
+pub trait CounterLatch {
     /// Strobe the latch: copy the count into the value registers.
     fn update(&self);
     /// Whether the latched value is synchronized and valid.
@@ -33,19 +33,41 @@ pub(crate) trait CounterLatch {
     fn low(&self) -> u32;
 }
 
+impl<P: oer_mmio::Placement> CounterLatch for super::SystimerCounter<P> {
+    #[inline(always)]
+    fn update(&self) {
+        Self::update(self);
+    }
+
+    #[inline(always)]
+    fn valid(&self) -> bool {
+        Self::valid(self)
+    }
+
+    #[inline(always)]
+    fn high(&self) -> u32 {
+        Self::high(self)
+    }
+
+    #[inline(always)]
+    fn low(&self) -> u32 {
+        Self::low(self)
+    }
+}
+
 /// The polls of the valid flag one latch may take: the copy crosses into
 /// the 16 MHz counter domain in a few of its cycles, well inside the 20 µs a
 /// named settle may last at any CPU clock.
-pub(crate) const LATCH_SETTLE_POLLS: u32 = 64;
+pub const LATCH_SETTLE_POLLS: u32 = 64;
 
 /// The LO/HI/LO rounds one read may take: each further round needs a strobe
 /// from a preempting context between two of its reads.
-pub(crate) const READ_ROUNDS: u32 = 16;
+pub const READ_ROUNDS: u32 = 16;
 const _: () = assert!(READ_ROUNDS > 0, "a read takes at least one round");
 
 /// The latch did not settle within its bound: a fault of the system timer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct LatchStuck;
+pub struct LatchStuck;
 
 /// Wait the latch's settle: whether its value turned valid within the bound.
 fn settle(latch: &impl CounterLatch) -> bool {
@@ -59,7 +81,7 @@ fn settle(latch: &impl CounterLatch) -> bool {
 /// # Errors
 ///
 /// [`LatchStuck`] when the latch never turns valid.
-pub(crate) fn check(latch: &impl CounterLatch) -> Result<(), LatchStuck> {
+pub fn check(latch: &impl CounterLatch) -> Result<(), LatchStuck> {
     latch.update();
     if settle(latch) {
         Ok(())
@@ -72,10 +94,10 @@ pub(crate) fn check(latch: &impl CounterLatch) -> Result<(), LatchStuck> {
 /// [`READ_ROUNDS`] rounds: preempting strobes kept relatching, or the latch
 /// stayed invalid.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct Unverified {
+pub struct Unverified {
     /// A count between two copies of the last round: no earlier read
     /// returned more, and no later read returns less.
-    pub(crate) floor: u64,
+    pub floor: u64,
 }
 
 fn join(high: u32, low: u32) -> u64 {
@@ -93,7 +115,7 @@ fn join(high: u32, low: u32) -> u64 {
 ///
 /// [`Unverified`], with its floor, when no round of [`READ_ROUNDS`]
 /// verified a count.
-pub(crate) fn read(latch: &impl CounterLatch) -> Result<u64, Unverified> {
+pub fn read(latch: &impl CounterLatch) -> Result<u64, Unverified> {
     latch.update();
     // Once a settle saw the latch valid, every later copy belongs to a strobe
     // made after this read began.

@@ -30,7 +30,9 @@ pub fn fatal_halt(fatal_path: impl for<'a> FnOnce(Fatal<'a>)) -> ! {
 
 /// Reset the chip from a fatal path: mask this hart's interrupts for good,
 /// then the chip HAL's software reset, which restores what the boot ROM
-/// needs and resets through the ROM.
+/// needs and resets through the ROM. A path that cannot hold the
+/// core-control words (`cores::AwaitWatchdog`) halts its masked hart until
+/// an armed watchdog resets the chip.
 #[cfg(target_arch = "riscv32")]
 #[allow(unsafe_code, reason = "lends the chip HAL's fatal-path proof")]
 pub fn reset() -> ! {
@@ -39,9 +41,10 @@ pub fn reset() -> ! {
     // and the software reset does not return.
     unsafe {
         cores::fatal(|fatal| {
-            cores::software_reset(fatal);
+            let cores::AwaitWatchdog { reason: _ } = cores::software_reset(fatal);
         })
     };
-    // The software reset does not return; the halt only ends the type.
+    // Reached only when the reset could not be prepared: the masked hart
+    // waits for an armed watchdog's reset.
     crate::halt()
 }

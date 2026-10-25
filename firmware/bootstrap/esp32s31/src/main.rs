@@ -41,12 +41,15 @@ static FLASH_TUNING_SCRATCH: ConstStaticCell<[u32; flash::TUNING_SCRATCH_WORDS]>
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".rwtext.bootstrap_main")]
 extern "C" fn bootstrap_main() -> ! {
+    // The root claims the chip once and installs the console's parts for the
+    // early writer, so it comes before any output; the boot-hart check of
+    // `start` prints nothing before it fails.
+    let root = hal::root::Root::take();
     staged::start();
-    // Target HAL contract: Root claims the entire chip once and splits owners;
-    // none of the bootstrap owners is manufactured from another HAL's tokens.
-    let root = hal::root::Root::take()
-        .unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=root-taken\r\n"));
-    let mut hardware = root.into_bootstrap();
+    let root = root.unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=root-taken\r\n"));
+    let mut hardware = root
+        .into_bootstrap()
+        .unwrap_or_else(|_| fail("OER_BOOT bootstrap=FAIL reason=monotonic\r\n"));
     let deadline = boot::BootDeadline::start(&hardware.monotonic, boot::BOOT_BUDGET);
     hardware
         .soc
@@ -63,13 +66,14 @@ extern "C" fn bootstrap_main() -> ! {
         .unwrap_or_else(|_| fail("OER_BOOT bootstrap=FAIL reason=brownout-policy\r\n"));
     print("OER_BOOT bootstrap=BROWNOUT\r\n");
 
-    checked(clock::bring_up(
+    let rates = checked(clock::bring_up(
         &mut hardware.clock,
         &mut hardware.active_power,
         boot::CpuProfile::Mhz160.clock(),
         boot::CLOCK_WAITS,
         &deadline,
     ));
+    hardware.soc.update_rom_delay(rates);
     print("OER_BOOT bootstrap=INIT\r\n");
     let memory = checked(psram::bring_up(
         psram::PsramOwners {
@@ -108,7 +112,7 @@ extern "C" fn bootstrap_main() -> ! {
             flash: &mut hardware.flash,
             clock: &mut hardware.clock,
             cache: &mut hardware.cache,
-            xip: &hardware.xip,
+            xip: &boot::XipRegion::new(&FLASH_TUNING_REFERENCE),
         },
         boot::flash_geometry(FLASH_CAPACITY_BYTES),
         flash::TuningRegion {

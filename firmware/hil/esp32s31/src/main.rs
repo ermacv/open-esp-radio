@@ -378,6 +378,6 @@ fn fail(failure: fatal::Failure) -> ! {
             return;
         }
         fatal::record_failure(failure);
-        cores::software_reset(path)
+        let cores::AwaitWatchdog { reason: _ } = cores::software_reset(path);
     })
 }

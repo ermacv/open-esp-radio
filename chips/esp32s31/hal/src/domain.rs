@@ -23,8 +23,10 @@
 
 use oer_esp32s31_pac::{
     BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, BluetoothTaskRegisters, RadioPhyRegisters,
-    SharedRadioRegisters, WifiRadioRegisters,
+    WifiRadioRegisters,
 };
+
+use crate::root::SharedRadioParts;
 
 pub use crate::clock::{
     BluetoothClient, CommonPower, CommonPowerExitFailure, CommonRadioPowerError, Ieee802154Client,
@@ -185,7 +187,7 @@ pub enum BtbbAcquired {
 /// Shared registers, the PHY, power and BTBB state that must stay with them,
 /// and the upper layer's attachment.
 struct SharedRadioState<B: PlatformClockBackend, T> {
-    registers: SharedRadioRegisters,
+    registers: SharedRadioParts,
     phy: PhyRouteState,
     power: CommonRadioPower<B>,
     wifi_power_entry: crate::ieee80211::client::WifiPowerEntry,
@@ -364,7 +366,7 @@ pub struct RadioDomain<B: PlatformClockBackend, T = ()> {
 impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// Place the shared owner, its PHY state and `attachment` in one domain.
     /// This performs no MMIO.
-    pub(crate) fn new(registers: SharedRadioRegisters, phy: PhyRouteState, attachment: T) -> Self {
+    pub(crate) fn new(registers: SharedRadioParts, phy: PhyRouteState, attachment: T) -> Self {
         Self {
             state: SharedRadioState {
                 registers,
@@ -398,7 +400,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     )]
     pub(crate) fn into_parts(
         self,
-    ) -> Result<(SharedRadioRegisters, PhyRouteState, T), (Self, RadioDomainReleaseError)> {
+    ) -> Result<(SharedRadioParts, PhyRouteState, T), (Self, RadioDomainReleaseError)> {
         let state = self.state;
         if state.power.any_client() {
             return Err((
@@ -1171,13 +1173,13 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         self.registers().radio_phy().register_image(index)
     }
 
-    pub(crate) fn registers(&self) -> &SharedRadioRegisters {
+    pub(crate) fn registers(&self) -> &SharedRadioParts {
         &self.state().registers
     }
 
     /// Borrow the shared registers for a protocol transaction that also
     /// touches protocol registers.
-    pub(crate) fn registers_mut(&mut self) -> &mut SharedRadioRegisters {
+    pub(crate) fn registers_mut(&mut self) -> &mut SharedRadioParts {
         &mut self.state_mut().registers
     }
 }

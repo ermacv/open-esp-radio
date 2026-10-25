@@ -6,8 +6,11 @@
 
 //! ESP32-S31 register transactions and affine radio ownership.
 //!
-//! [`root`] owns the protocol-neutral radio root and composes the restricted
-//! PAC partitions into exclusive protocol routes. [`domain`] holds the shared
+//! [`root`] claims the chip once and splits the PAC's partitions by domain:
+//! the bootstrap's owners ([`boot`]), the platform ([`platform`], [`cores`],
+//! [`watchdog`], [`usb_serial_jtag`], [`executor`]) and the protocol-neutral
+//! radio root, which composes the radio partitions into exclusive protocol
+//! routes. [`domain`] holds the shared
 //! radio partitions and PHY state of concurrently running protocols, owned by
 //! value by the radio system. [`owner`] holds the running Wi-Fi MAC owner and
 //! grants bounded capabilities; [`ieee80211::client`] brings Wi-Fi up as a
@@ -39,6 +42,7 @@ pub mod coex;
 pub mod cores;
 
 pub mod domain;
+pub mod executor;
 pub mod power;
 pub mod root;
 pub mod types;

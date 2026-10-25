@@ -2,17 +2,20 @@
 //! path's stop of every other hart ([`StopTheWorld`]) and the chip's software
 //! reset ([`software_reset`]).
 //!
-//! The core-control words have one holder, an atomic state that only a
-//! compare-and-swap changes and nothing waits for:
+//! The reset root installs the core-control words once ([`install`]) in one
+//! [`ClaimCell`], whose state only a compare-and-swap changes and nothing
+//! waits for:
 //!
-//! - `Free → Owned` when the image takes the cores' owner on hart 0
-//!   ([`Cores::take`]); each of its operations holds the words (`Owned →
-//!   Busy → Owned`) for a few register accesses and a bounded wait.
-//! - `Free | Owned → Fatal(hart)` when a fatal path of `hart` takes them, for
-//!   good. That compare-and-swap is the election of two harts that fail at
-//!   once: the loser never requests a stall, so two fatal harts never stall
-//!   each other. A fatal path that finds the cores' owner in an operation
-//!   does not wait for it: the owner may be the code it interrupted.
+//! - The image takes the cores' owner once, on hart 0 ([`Cores::take`]);
+//!   each of its operations borrows the words (`Free → Lent → Free`) for a
+//!   few register accesses and a bounded wait.
+//! - `Free → Held(hart)` when a fatal path of `hart` takes them, for good;
+//!   the same hart's path reaches them again, one call at a time. That
+//!   compare-and-swap is the election of two harts that fail at once: the
+//!   loser never requests a stall, so two fatal harts never stall each
+//!   other. A fatal path that finds the words lent (an operation of the
+//!   cores' owner, or its own hart's path it interrupted) does not wait
+//!   for them.
 //!
 //! A fatal path is the only one that gets a [`Fatal`]: the staged runtime's
 //! fatal entries make it after masking the hart's interrupts, and the path
@@ -34,19 +37,26 @@
 //! accesses.
 //!
 //! UART0's function clock, which the boot ROM prints through, has its own
-//! holder: the reset restores it even when it cannot hold the core-control
+//! cell: the reset restores it even when it cannot hold the core-control
 //! words.
+//!
+//! A fatal path that cannot hold the core-control words resets through the
+//! watchdog: [`software_reset`] returns [`AwaitWatchdog`] after the console's
+//! fatal note (if the block is free), and the path halts its masked hart
+//! until an armed watchdog resets the chip; no second owner of the words is
+//! made.
 
 use core::{
     marker::PhantomData,
-    sync::atomic::{AtomicU8, Ordering},
+    sync::atomic::{AtomicBool, Ordering},
 };
 
-pub use oer_esp32s31_pac::platform::HpCore;
-use oer_esp32s31_pac::platform::{
-    CoreControlHandoff, CoreControlRegisters, Uart0ClockHandoff, Uart0ClockRegisters,
-};
+use oer_diagnostics::Note;
+use oer_memory::{Claim, ClaimCell, Held};
 use oer_mmio::Placement;
+
+pub use crate::platform::HpCore;
+use crate::platform::core_control::{CoreControlRegisters, Uart0ClockRegisters};
 
 #[cfg(test)]
 mod tests;
@@ -67,21 +77,11 @@ pub const STALL_POLLS: u32 = 10_000;
 /// Keeps a value on the hart that made it: not `Send`.
 type ThisHart = PhantomData<*const ()>;
 
-/// No one holds the words.
-const FREE: u8 = 0;
-/// The cores' owner exists and runs no operation.
-const OWNED: u8 = 1;
-/// The cores' owner runs one operation.
-const BUSY: u8 = 2;
-/// Hart 0's fatal path holds the words, for good.
-const FATAL_0: u8 = 3;
-/// Hart 1's fatal path holds the words, for good.
-const FATAL_1: u8 = 4;
-
-const fn fatal_state(hart: HpCore) -> u8 {
+/// A fatal path's key of its hart in the cells.
+const fn key(hart: HpCore) -> u8 {
     match hart {
-        HpCore::Core0 => FATAL_0,
-        HpCore::Core1 => FATAL_1,
+        HpCore::Core0 => 0,
+        HpCore::Core1 => 1,
     }
 }
 
@@ -93,91 +93,28 @@ const fn other(hart: HpCore) -> HpCore {
     }
 }
 
-/// Who holds the core-control words.
-pub(crate) struct Holder(AtomicU8);
+/// The chip's core-control words, installed once by the reset root.
+static CORE_CONTROL: ClaimCell<CoreControlRegisters> = ClaimCell::new();
 
-/// What a fatal path's claim of the words found.
+/// UART0's function clock word, installed once by the reset root.
+static UART0_CLOCK: ClaimCell<Uart0ClockRegisters> = ClaimCell::new();
+
+/// Whether the cores' owner was taken.
+static OWNER: AtomicBool = AtomicBool::new(false);
+
+/// The core-control parts were installed before.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Election {
-    /// The words are this fatal path's now.
-    Won,
-    /// This hart's fatal path took them before.
-    Again,
-    /// The other hart's fatal path took them.
-    Lost,
-    /// The cores' owner runs an operation.
-    Busy,
-}
+pub struct Installed;
 
-impl Holder {
-    pub(crate) const fn new() -> Self {
-        Self(AtomicU8::new(FREE))
-    }
-
-    fn take_owner(&self) -> bool {
-        self.0
-            .compare_exchange(FREE, OWNED, Ordering::Acquire, Ordering::Relaxed)
-            .is_ok()
-    }
-
-    fn begin(&self) -> bool {
-        self.0
-            .compare_exchange(OWNED, BUSY, Ordering::Acquire, Ordering::Relaxed)
-            .is_ok()
-    }
-
-    fn end(&self) {
-        self.0.store(OWNED, Ordering::Release);
-    }
-
-    /// Claim the words for `hart`'s fatal path, for good. Never waits: one
-    /// attempt from each state a claim moves from.
-    fn elect(&self, hart: HpCore) -> Election {
-        let ours = fatal_state(hart);
-        let found = match self
-            .0
-            .compare_exchange(FREE, ours, Ordering::AcqRel, Ordering::Acquire)
-        {
-            Ok(_) => return Election::Won,
-            Err(OWNED) => {
-                match self
-                    .0
-                    .compare_exchange(OWNED, ours, Ordering::AcqRel, Ordering::Acquire)
-                {
-                    Ok(_) => return Election::Won,
-                    Err(found) => found,
-                }
-            }
-            Err(found) => found,
-        };
-        if found == ours {
-            Election::Again
-        } else if found == FATAL_0 || found == FATAL_1 {
-            Election::Lost
-        } else {
-            Election::Busy
-        }
-    }
-}
-
-/// The chip's one holder of the core-control words.
-static HOLDER: Holder = Holder::new();
-
-/// The words' owner, built for the holder's winner.
-#[allow(
-    unsafe_code,
-    reason = "the cores' owner and the fatal path capture the words they hold"
-)]
-fn capture() -> CoreControlRegisters {
-    // SAFETY: `HOLDER` calls for this only after its compare-and-swap made
-    // the caller the words' one writer: the cores' owner for one operation,
-    // which drops this owner before it frees the words, or a fatal path, for
-    // good. A fatal path that took the words from the cores' owner on its
-    // own hart never returns to the code it interrupted, and one that took
-    // them on the other hart found no operation running. esp-hal writes
-    // them only in esp_hal::init (`registers/shared-words.toml`).
-    let handoff = unsafe { CoreControlHandoff::assume_exclusive() };
-    CoreControlRegisters::from_handoff(handoff)
+/// Install the core-control words and UART0's clock word for the cores'
+/// owner and the fatal paths, once, from the reset root.
+pub(crate) fn install(
+    core_control: CoreControlRegisters,
+    uart0_clock: Uart0ClockRegisters,
+) -> Result<(), Installed> {
+    let core = CORE_CONTROL.install(core_control).map_err(|_| Installed);
+    let uart0 = UART0_CLOCK.install(uart0_clock).map_err(|_| Installed);
+    core.and(uart0)
 }
 
 /// The hart this code runs on.
@@ -210,6 +147,8 @@ pub struct Unconfirmed;
 /// Why the cores' owner did not run an operation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CoresError {
+    /// The reset root installed no core-control words.
+    NotInstalled,
     /// A fatal path holds the words for good.
     Stopped,
     /// The hardware did not confirm the request within [`STALL_POLLS`].
@@ -279,7 +218,7 @@ fn stop_other<P: Placement, Q: Placement, R: Placement, S: Placement>(
 }
 
 /// Where hart 1 starts after its reset: the ROM's boot address word.
-trait BootAddress {
+pub(crate) trait BootAddress {
     /// Make hart 1's ROM jump to `entry`; zero keeps it waiting in the ROM.
     fn set(&mut self, entry: u32);
 }
@@ -305,9 +244,9 @@ fn prepare_reset<P: Placement, Q: Placement, R: Placement, S: Placement>(
 }
 
 /// The ROM routines this module calls.
-mod rom {
+pub(crate) mod rom {
     /// The ROM's boot address of hart 1.
-    pub(super) struct Rom;
+    pub(crate) struct Rom;
 
     #[cfg(target_arch = "riscv32")]
     unsafe extern "C" {
@@ -357,58 +296,47 @@ mod rom {
 pub struct Cores(ThisHart);
 
 impl Cores {
-    /// Take the cores' owner on hart 0, once: `None` on hart 1, after it was
-    /// taken, or once a fatal path holds the words.
+    /// Take the cores' owner on hart 0, once: `None` on hart 1 or after it
+    /// was taken. Its operations are refused once a fatal path holds the
+    /// words.
     pub fn take() -> Option<Self> {
-        (current_hart() == HpCore::Core0 && HOLDER.take_owner()).then_some(Self(PhantomData))
+        (current_hart() == HpCore::Core0
+            && OWNER
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok())
+        .then_some(Self(PhantomData))
     }
 
     fn operate<T>(
         &mut self,
         operation: impl FnOnce(&mut CoreControlRegisters) -> T,
     ) -> Result<T, CoresError> {
-        if !HOLDER.begin() {
-            return Err(CoresError::Stopped);
-        }
-        let result = operation(&mut capture());
-        HOLDER.end();
-        Ok(result)
+        operate(&CORE_CONTROL, operation)
     }
 
     /// How hart 1 stands: held in reset with its clock gated, stalled by the
     /// hardware's report, or neither.
     ///
     /// # Errors
-    /// A fatal path holds the words ([`CoresError::Stopped`]).
+    /// No words are installed, or a fatal path holds them.
     pub fn hart1(&mut self) -> Result<Hart1, CoresError> {
-        self.operate(|words| {
-            if words.core1_held() {
-                Hart1::Held
-            } else if words.is_stalled(HpCore::Core1) {
-                Hart1::Stalled
-            } else {
-                Hart1::Released
-            }
-        })
+        self.operate(|words| hart1(words))
     }
 
     /// Park hart 1 as ESP-IDF's single-core start does: request its stall,
     /// then gate its clocks and hold it in its global reset.
     ///
     /// # Errors
-    /// A fatal path holds the words ([`CoresError::Stopped`]).
+    /// No words are installed, or a fatal path holds them.
     pub fn park_hart1(&mut self) -> Result<(), CoresError> {
-        self.operate(|words| {
-            words.request_stall(HpCore::Core1);
-            words.hold_core1();
-        })
+        self.operate(park_hart1)
     }
 
     /// Stall hart 1 and wait for the hardware to confirm it.
     ///
     /// # Errors
-    /// A fatal path holds the words, or the hardware did not confirm the
-    /// stall within [`STALL_POLLS`].
+    /// No words are installed, a fatal path holds them, or the hardware did
+    /// not confirm the stall within [`STALL_POLLS`].
     pub fn stall_hart1(&mut self) -> Result<(), CoresError> {
         self.operate(|words| stall(words, HpCore::Core1, STALL_POLLS))?
             .map_err(|Unconfirmed| CoresError::Unconfirmed)
@@ -418,8 +346,8 @@ impl Cores {
     /// stalled.
     ///
     /// # Errors
-    /// A fatal path holds the words, or the hardware did not confirm the run
-    /// within [`STALL_POLLS`].
+    /// No words are installed, a fatal path holds them, or the hardware did
+    /// not confirm the run within [`STALL_POLLS`].
     pub fn run_hart1(&mut self) -> Result<(), CoresError> {
         self.operate(|words| run(words, HpCore::Core1, STALL_POLLS))?
             .map_err(|Unconfirmed| CoresError::Unconfirmed)
@@ -433,8 +361,8 @@ impl Cores {
     /// (`start_other_core`).
     ///
     /// # Errors
-    /// A fatal path holds the words, or the hardware did not confirm the run
-    /// within [`STALL_POLLS`].
+    /// No words are installed, a fatal path holds them, or the hardware did
+    /// not confirm the run within [`STALL_POLLS`].
     #[cfg(feature = "cpu1-runs")]
     pub fn start_hart1(&mut self, entry: extern "C" fn() -> !) -> Result<(), CoresError> {
         self.operate(|words| {
@@ -447,6 +375,39 @@ impl Cores {
         })?
         .map_err(|Unconfirmed| CoresError::Unconfirmed)
     }
+}
+
+/// Run `operation` on the words of `cell`, as the cores' owner.
+fn operate<W, T>(
+    cell: &ClaimCell<W>,
+    operation: impl FnOnce(&mut W) -> T,
+) -> Result<T, CoresError> {
+    cell.lend(operation).map_err(|claim| match claim {
+        Claim::Empty => CoresError::NotInstalled,
+        Claim::Lent | Claim::Kept => CoresError::Stopped,
+    })
+}
+
+/// How hart 1 stands.
+fn hart1<P: Placement, Q: Placement, R: Placement, S: Placement>(
+    words: &CoreControlRegisters<P, Q, R, S>,
+) -> Hart1 {
+    if words.core1_held() {
+        Hart1::Held
+    } else if words.is_stalled(HpCore::Core1) {
+        Hart1::Stalled
+    } else {
+        Hart1::Released
+    }
+}
+
+/// Request hart 1's stall, then hold it in reset with its clocks gated, as
+/// ESP-IDF's single-core start leaves it.
+pub(crate) fn park_hart1<P: Placement, Q: Placement, R: Placement, S: Placement>(
+    words: &mut CoreControlRegisters<P, Q, R, S>,
+) {
+    words.request_stall(HpCore::Core1);
+    words.hold_core1();
 }
 
 /// How hart 1 stands.
@@ -496,14 +457,16 @@ pub unsafe fn fatal<T>(fatal_path: impl for<'a> FnOnce(Fatal<'a>) -> T) -> T {
 /// Why a fatal path did not stop the world.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StopError {
+    /// The reset root installed no core-control words.
+    NotInstalled,
     /// The other hart's fatal path holds the core-control words: it stops
     /// this hart.
     Lost,
-    /// The cores' owner runs an operation, which this path may have
-    /// interrupted; it is not waited for.
+    /// The words are lent: to an operation of the cores' owner, which this
+    /// path may have interrupted, or to this hart's own fatal path it
+    /// interrupted. It is not waited for.
     Busy,
-    /// This hart's fatal path took the words before: a fatal path inside a
-    /// fatal path.
+    /// This hart's fatal path took the words before: a second stop.
     Reentered,
     /// The hardware did not confirm the other hart's stall within
     /// [`STALL_POLLS`].
@@ -534,17 +497,18 @@ impl StopTheWorld<'_> {
     }
 }
 
-/// Stop the world from `fatal`'s path before its reset: claim the
+/// Stop the world from `fatal`'s path before its reset: hold the
 /// core-control words for good, then stop the other hart and confirm it.
 /// The path resets with the same proof afterwards ([`software_reset`]).
 ///
 /// # Errors
-/// [`StopError`]: the other hart's fatal path or the cores' owner holds the
-/// words, this hart stopped the world before, or the other hart's stall was
-/// not confirmed. The caller keeps its record and resets all the same.
+/// [`StopError`]: no words are installed, the other hart's fatal path or the
+/// cores' owner holds them, this hart stopped the world before, or the other
+/// hart's stall was not confirmed. The caller keeps its record and resets
+/// all the same.
 pub fn stop_the_world<'a>(fatal: &Fatal<'a>) -> Result<StopTheWorld<'a>, StopError> {
     let hart = fatal.hart;
-    let stopped = stop_with(&HOLDER, capture, hart, STALL_POLLS)?;
+    let stopped = stop_with(&CORE_CONTROL, hart, STALL_POLLS)?;
     Ok(StopTheWorld {
         hart,
         stopped,
@@ -554,102 +518,79 @@ pub fn stop_the_world<'a>(fatal: &Fatal<'a>) -> Result<StopTheWorld<'a>, StopErr
 }
 
 fn stop_with<P: Placement, Q: Placement, R: Placement, S: Placement>(
-    holder: &Holder,
-    capture: impl FnOnce() -> CoreControlRegisters<P, Q, R, S>,
+    cell: &ClaimCell<CoreControlRegisters<P, Q, R, S>>,
     hart: HpCore,
     polls: u32,
 ) -> Result<Stopped, StopError> {
-    match holder.elect(hart) {
-        Election::Won => {}
-        Election::Again => return Err(StopError::Reentered),
-        Election::Lost => return Err(StopError::Lost),
-        Election::Busy => return Err(StopError::Busy),
+    match cell.hold(key(hart), |words| stop_other(words, hart, polls)) {
+        Ok(Held { value, first: true }) => value.map_err(|Unconfirmed| StopError::Unconfirmed),
+        Ok(Held { first: false, .. }) => Err(StopError::Reentered),
+        Err(Claim::Empty) => Err(StopError::NotInstalled),
+        Err(Claim::Lent) => Err(StopError::Busy),
+        Err(Claim::Kept) => Err(StopError::Lost),
     }
-    stop_other(&mut capture(), hart, polls).map_err(|Unconfirmed| StopError::Unconfirmed)
 }
+
+/// A fatal path that could not prepare the chip's reset: the other hart's
+/// fatal path or a lent borrow holds the core-control words, or none are
+/// installed. The path halts its masked hart, without returning to the code
+/// it interrupted, until an armed watchdog resets the chip.
+#[must_use = "the path halts its masked hart until a watchdog resets the chip"]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AwaitWatchdog {
+    /// Why the words could not be held.
+    pub reason: StopError,
+}
+
+/// The reason the console's fatal note gives for a reset left to the
+/// watchdog.
+pub const RESET_UNPREPARED: &str = "reset-unprepared";
 
 /// Reset the chip from `fatal`'s path, as the boot ROM expects it: UART0's
 /// clock restored, no boot address for hart 1, the other hart reset and
-/// stalled, then the ROM's system reset. UART0's clock has its own holder,
-/// so every path restores it unless the other hart's fatal path took it
-/// first to restore it itself. A path that cannot hold the core-control
-/// words (the other hart's fatal path, or the cores' owner in an operation)
-/// skips only the hart preparation.
-pub fn software_reset(fatal: Fatal<'_>) -> ! {
-    restore_uart0_with(&UART0_HOLDER, capture_uart0, fatal.hart);
-    reset_with(&HOLDER, capture, &mut rom::Rom, fatal.hart);
-    oer_mmio::fence();
-    rom::system_reset()
-}
-
-/// Who restores UART0's function clock: no one yet, or one hart's fatal
-/// path, for good. Only the software reset takes it.
-pub(crate) struct Uart0Holder(AtomicU8);
-
-impl Uart0Holder {
-    pub(crate) const fn new() -> Self {
-        Self(AtomicU8::new(FREE))
-    }
-
-    /// Claim the word for `hart`'s fatal path, for good: `true` when it is
-    /// this hart's now or was before. Never waits.
-    fn claim(&self, hart: HpCore) -> bool {
-        let ours = fatal_state(hart);
-        match self
-            .0
-            .compare_exchange(FREE, ours, Ordering::AcqRel, Ordering::Acquire)
-        {
-            Ok(_) => true,
-            Err(found) => found == ours,
+/// stalled, then the ROM's system reset, which does not return. UART0's
+/// clock has its own cell, so every path restores it unless the other
+/// hart's fatal path took it first to restore it itself.
+///
+/// A path that cannot hold the core-control words writes the console's
+/// fatal note ([`RESET_UNPREPARED`]) if the block is free and returns
+/// [`AwaitWatchdog`]: its hart then halts, masked, until an armed watchdog
+/// resets the chip. No second owner of the words is made.
+pub fn software_reset(fatal: Fatal<'_>) -> AwaitWatchdog {
+    restore_uart0_with(&UART0_CLOCK, fatal.hart);
+    match reset_with(&CORE_CONTROL, &mut rom::Rom, fatal.hart) {
+        Ok(()) => {
+            oer_mmio::fence();
+            rom::system_reset()
+        }
+        Err(reason) => {
+            let _held_or_written =
+                crate::usb_serial_jtag::fatal_note(&Note::runtime_fail(RESET_UNPREPARED));
+            AwaitWatchdog { reason }
         }
     }
-}
-
-/// The chip's one holder of UART0's function clock word.
-static UART0_HOLDER: Uart0Holder = Uart0Holder::new();
-
-/// UART0's clock owner, built for the holder's claimant.
-#[allow(
-    unsafe_code,
-    reason = "the software reset captures the UART0 clock word it holds"
-)]
-fn capture_uart0() -> Uart0ClockRegisters {
-    // SAFETY: `UART0_HOLDER` calls for this only after its compare-and-swap
-    // made the caller's hart the word's one writer, for good: no other
-    // hart's path builds this owner. A reset inside a reset on the same
-    // hart never returns to the outer one, whose owner never accesses the
-    // word again. esp-hal writes the word only inside esp_hal::init and
-    // from a UART driver no image makes (`registers/shared-words.toml`).
-    let handoff = unsafe { Uart0ClockHandoff::assume_exclusive() };
-    Uart0ClockRegisters::from_handoff(handoff)
 }
 
 /// Restore UART0's clock for the boot ROM if `hart` holds the word; whether
 /// it did.
 fn restore_uart0_with<P: Placement>(
-    holder: &Uart0Holder,
-    capture: impl FnOnce() -> Uart0ClockRegisters<P>,
+    cell: &ClaimCell<Uart0ClockRegisters<P>>,
     hart: HpCore,
 ) -> bool {
-    let ours = holder.claim(hart);
-    if ours {
-        capture().restore_uart0_clock();
-    }
-    ours
+    cell.hold(key(hart), |clock| clock.restore_uart0_clock())
+        .is_ok()
 }
 
-/// Whether the reset was prepared, holding the words.
+/// Prepare the reset holding the words, or say why they could not be held.
 fn reset_with<P: Placement, Q: Placement, R: Placement, S: Placement>(
-    holder: &Holder,
-    capture: impl FnOnce() -> CoreControlRegisters<P, Q, R, S>,
+    cell: &ClaimCell<CoreControlRegisters<P, Q, R, S>>,
     boot: &mut impl BootAddress,
     hart: HpCore,
-) -> bool {
-    match holder.elect(hart) {
-        Election::Won | Election::Again => {
-            prepare_reset(&mut capture(), boot, hart);
-            true
-        }
-        Election::Lost | Election::Busy => false,
+) -> Result<(), StopError> {
+    match cell.hold(key(hart), |words| prepare_reset(words, boot, hart)) {
+        Ok(Held { value: (), .. }) => Ok(()),
+        Err(Claim::Empty) => Err(StopError::NotInstalled),
+        Err(Claim::Lent) => Err(StopError::Busy),
+        Err(Claim::Kept) => Err(StopError::Lost),
     }
 }

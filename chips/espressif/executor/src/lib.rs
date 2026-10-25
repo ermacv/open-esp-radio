@@ -35,8 +35,6 @@ mod context;
 #[cfg(feature = "chip")]
 mod cooperative;
 #[cfg(any(feature = "chip", test))]
-mod counter;
-#[cfg(any(feature = "chip", test))]
 mod deadline_cell;
 #[cfg(feature = "chip")]
 mod doorbell;

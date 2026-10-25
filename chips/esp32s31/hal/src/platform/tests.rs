@@ -27,12 +27,11 @@ fn memory(bytes: usize, fill: u32) -> Vec<u32> {
     vec![fill; bytes.div_ceil(4)]
 }
 
-/// Enough host memory for any of the platform blocks.
-const BLOCK_BYTES: usize = 0x100;
+use oer_esp32s31_pac::instances;
 
 #[test]
 fn the_identity_derives_each_interface_address_from_the_factory_mac() {
-    let mut words = memory(BLOCK_BYTES, 0x0011_2033);
+    let mut words = memory(instances::efuse::SIZE, 0x0011_2033);
     let identity = FactoryIdentity::read(
         EfuseRegisters::host(&mut words).expect("host memory holds the block"),
     );
@@ -48,13 +47,13 @@ fn the_identity_derives_each_interface_address_from_the_factory_mac() {
 
 #[test]
 fn reset_causes_decode_each_core_with_the_chip_table() {
-    let mut words = memory(BLOCK_BYTES, 0b111);
+    let mut words = memory(instances::lp_aon_clkrst::SIZE, 0b111);
     let causes = ResetCauses::read(
         ResetCauseRegisters::host(&mut words).expect("host memory holds the block"),
     );
     assert_eq!(causes.of(HpCore::Core0), ResetCause::CoreSoftware);
     assert_eq!(causes.of(HpCore::Core1), ResetCause::CoreSoftware);
-    let mut words = memory(BLOCK_BYTES, u32::MAX);
+    let mut words = memory(instances::lp_aon_clkrst::SIZE, u32::MAX);
     let causes = ResetCauses::read(
         ResetCauseRegisters::host(&mut words).expect("host memory holds the block"),
     );
@@ -63,8 +62,8 @@ fn reset_causes_decode_each_core_with_the_chip_table() {
 
 #[test]
 fn the_first_read_does_not_wait_and_later_reads_keep_the_gap() {
-    let mut trng = memory(BLOCK_BYTES, 0x0403_0201);
-    let mut clock_words = memory(BLOCK_BYTES, 0);
+    let mut trng = memory(instances::trng::SIZE, 0x0403_0201);
+    let mut clock_words = memory(instances::lp_periclkrst::SIZE, 0);
     let clock = Stepping(Cell::new(100));
     let mut entropy = Entropy::new(
         EntropyRegisters::host(&mut trng, &mut clock_words).expect("host memory holds the blocks"),
@@ -80,8 +79,8 @@ fn the_first_read_does_not_wait_and_later_reads_keep_the_gap() {
 
 #[test]
 fn bytes_come_four_from_each_word_little_endian() {
-    let mut trng = memory(BLOCK_BYTES, 0x0403_0201);
-    let mut clock_words = memory(BLOCK_BYTES, 0);
+    let mut trng = memory(instances::trng::SIZE, 0x0403_0201);
+    let mut clock_words = memory(instances::lp_periclkrst::SIZE, 0);
     let clock = Stepping(Cell::new(0));
     let mut entropy = Entropy::new(
         EntropyRegisters::host(&mut trng, &mut clock_words).expect("host memory holds the blocks"),
@@ -92,8 +91,8 @@ fn bytes_come_four_from_each_word_little_endian() {
 
 #[test]
 fn a_running_generator_is_healthy_only_without_a_health_error() {
-    let mut trng = memory(BLOCK_BYTES, 0);
-    let mut clock_words = memory(BLOCK_BYTES, 0);
+    let mut trng = memory(instances::trng::SIZE, 0);
+    let mut clock_words = memory(instances::lp_periclkrst::SIZE, 0);
     let clock = Stepping(Cell::new(0));
     let entropy = Entropy::new(
         EntropyRegisters::host(&mut trng, &mut clock_words).expect("host memory holds the blocks"),

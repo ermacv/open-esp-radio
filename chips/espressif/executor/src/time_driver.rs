@@ -34,42 +34,15 @@ use crate::{
     chip::{SOFTWARE_INTERRUPT_COUNT, alarm_source},
     deadline_cell::DeadlineCell,
     executor::{NO_EXECUTOR, pend, ready, running},
-    systimer::{Comparator, ComparatorAcknowledger, ComparatorWriter},
+    systimer::{AlarmPart, Comparator, ComparatorWriter},
     task::TaskId,
     timer_queue::WakeQueue,
 };
 
-enum Acknowledger {
-    Zero(ComparatorAcknowledger<0>),
-    One(ComparatorAcknowledger<1>),
-    Two(ComparatorAcknowledger<2>),
-}
-impl Acknowledger {
-    fn bind(&mut self, bank: &mut ComparatorWriter) {
-        match self {
-            Self::Zero(ack) => bank.bind(ack),
-            Self::One(ack) => bank.bind(ack),
-            Self::Two(ack) => bank.bind(ack),
-        }
-    }
-    #[inline(always)]
-    fn acknowledge(&mut self) {
-        match self {
-            Self::Zero(ack) => ack.acknowledge(),
-            Self::One(ack) => ack.acknowledge(),
-            Self::Two(ack) => ack.acknowledge(),
-        }
-    }
-}
-
-// The boot context hands the bank to its one writer executor. Alarm ISRs
-// receive independent W1C owners and never borrow BANK.
+// The boot context hands the bank to its one writer executor. Each alarm
+// handler holds its own comparator's alarm part and never borrows BANK.
 static BANK_STORAGE: static_cell::StaticCell<ComparatorWriter> = static_cell::StaticCell::new();
 static BANK: oer_memory::HandlerCell<ComparatorWriter> = oer_memory::HandlerCell::new();
-static ACK_STORAGE: [static_cell::StaticCell<Acknowledger>; COMPARATOR_COUNT] =
-    [const { static_cell::StaticCell::new() }; COMPARATOR_COUNT];
-static ACKNOWLEDGERS: [oer_memory::HandlerCell<Acknowledger>; COMPARATOR_COUNT] =
-    [const { oer_memory::HandlerCell::new() }; COMPARATOR_COUNT];
 
 const COMPARATOR_COUNT: usize = 3;
 const NO_COMPARATOR: u8 = u8::MAX;
@@ -175,23 +148,14 @@ pub fn init<const WRITER_SWI: u8, A, C>(
     part: A::Part,
 ) where
     A: Entry,
+    A::Part: AlarmPart,
     C: oer_interrupt_table::Controller,
 {
-    let (bank, zero, one, two) = ComparatorWriter::adopt(systimer);
+    let bank = ComparatorWriter::adopt(systimer);
     assert!(
         BANK.install(BANK_STORAGE.init(bank)).is_ok(),
         "the SYSTIMER bank owner is already installed"
     );
-    for ((storage, acknowledger), ack) in ACK_STORAGE.iter().zip(&ACKNOWLEDGERS).zip([
-        Acknowledger::Zero(zero),
-        Acknowledger::One(one),
-        Acknowledger::Two(two),
-    ]) {
-        assert!(
-            acknowledger.install(storage.init(ack)).is_ok(),
-            "the SYSTIMER acknowledger is already installed"
-        );
-    }
     assert!(
         WRITER
             .compare_exchange(NO_EXECUTOR, WRITER_SWI, Ordering::AcqRel, Ordering::Acquire)
@@ -213,9 +177,10 @@ pub fn init<const WRITER_SWI: u8, A, C>(
 pub fn bind<const SWI: u8, A, C>(
     router: &mut oer_interrupt_table::Router<C>,
     alarm: A,
-    part: A::Part,
+    mut part: A::Part,
 ) where
     A: Entry,
+    A::Part: AlarmPart,
     C: oer_interrupt_table::Controller,
 {
     let comparator = const {
@@ -249,18 +214,10 @@ pub fn bind<const SWI: u8, A, C>(
                 .is_ok(),
         "executor {SWI} or comparator {comparator} is bound already"
     );
-    // Setup still owns both halves before this alarm's route is enabled.
+    // Setup still owns the bank and the alarm part before this alarm's
+    // route is enabled.
     assert!(
-        BANK.with(|bank| {
-            assert!(
-                ACKNOWLEDGERS
-                    .get(usize::from(comparator))
-                    .and_then(|ack| ack.with(|ack| ack.bind(bank)))
-                    .is_some(),
-                "the comparator owner is installed before its route"
-            );
-        })
-        .is_some(),
+        BANK.with(|bank| bank.bind(&mut part)).is_some(),
         "the SYSTIMER bank is installed before binding"
     );
     assert_eq!(
@@ -380,18 +337,19 @@ fn program_published(writer: &mut Slot) {
 }
 
 /// The interrupt-table handler of comparator `COMPARATOR`'s alarm
-/// (`SYSTIMER_TARGET<COMPARATOR>`): it acknowledges the alarm and pends the
-/// comparator's executor. It writes no other register and touches no queue.
-pub fn alarm_interrupt<const COMPARATOR: u8>() {
+/// (`SYSTIMER_TARGET<COMPARATOR>`), which holds the comparator's alarm part:
+/// it acknowledges the alarm and pends the comparator's executor. It writes
+/// no other register and touches no queue.
+pub fn alarm_interrupt<const COMPARATOR: u8, P: AlarmPart>(part: &mut P) {
+    const {
+        assert!(
+            P::COMPARATOR as u8 == COMPARATOR,
+            "the part is another comparator's"
+        );
+    };
     #[cfg(oer_profile)]
     let entered = now();
-    assert!(
-        ACKNOWLEDGERS
-            .get(usize::from(COMPARATOR))
-            .and_then(|ack| ack.with(Acknowledger::acknowledge))
-            .is_some(),
-        "only the alarm handler acknowledges its installed comparator"
-    );
+    part.acknowledge();
     #[cfg(oer_profile)]
     {
         let (entry, acknowledgement) = &ALARM_AT[COMPARATOR as usize];

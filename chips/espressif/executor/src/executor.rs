@@ -526,16 +526,28 @@ impl_executor_constructors!(2, FromCpu2, own_line_2);
 impl_executor_constructors!(3, FromCpu3, own_line_3);
 
 /// The interrupt-table handler of a thread-mode executor's software interrupt
-/// (`FROM_CPU_INTR<SWI>`): it lowers the line, which wakes the executor's
-/// core from its wait.
-pub fn wake_handler<const SWI: u8>() {
+/// (`FROM_CPU_INTR<SWI>`), which holds the line's interrupt part: it lowers
+/// the line, which wakes the executor's core from its wait.
+pub fn wake_handler<const SWI: u8, P: oer_interrupt_table::InterruptSource>(_: &mut P) {
+    const {
+        assert!(
+            P::SOURCE == software_interrupt_source(SWI),
+            "the part is another line's"
+        );
+    };
     serve_interrupt(SWI, || ());
 }
 
 /// The interrupt-table handler of the interrupt-mode executor of the tasks
-/// `T` (its software interrupt, `FROM_CPU_INTR<N>`): it serves the
-/// executor's timers and signals and polls one round of its ready tasks.
-pub fn interrupt_handler<T: Tasks<Mode = InterruptMode>>() {
+/// `T` (its software interrupt, `FROM_CPU_INTR<N>`), which holds the line's
+/// interrupt part: it serves the executor's timers and signals and polls one
+/// round of its ready tasks.
+pub fn interrupt_handler<
+    T: Tasks<Mode = InterruptMode>,
+    P: oer_interrupt_table::InterruptSource,
+>(
+    _: &mut P,
+) {
     let swi = T::EXECUTOR;
     // The line is lowered before the round takes its work: a pend during the
     // round raises it again and runs another round.

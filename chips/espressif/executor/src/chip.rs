@@ -6,19 +6,29 @@ use oer_esp32s31_hal::executor::Platform as Chip;
 pub(crate) use oer_esp32s31_hal::platform;
 use oer_memory::zeroed::ZeroedOnce;
 
-use crate::{
-    counter::CounterLatch,
-    software_line::{SoftwareLine, serve},
-};
+use crate::software_line::{SoftwareLine, serve};
+use platform::system_timer::counter;
+
+/// The HAL's executor contract: its source identities and its pending and
+/// debugger reads.
+impl ExecutorPlatform for Chip {
+    const SOFTWARE_SOURCES: [u16; 4] = Chip::SOFTWARE_SOURCES;
+    const ALARM_SOURCES: [u16; 3] = Chip::ALARM_SOURCES;
+
+    fn debugger_connected() -> bool {
+        Chip::debugger_connected()
+    }
+
+    fn is_pending(source: u16) -> bool {
+        Chip::is_pending(source)
+    }
+}
 
 /// The software interrupts an executor can own.
 pub(crate) const SOFTWARE_INTERRUPT_COUNT: usize = crate::task::EXECUTORS as usize;
 
-/// The system timer's ticks per microsecond: it counts at 16 MHz.
-///
-/// SOURCE: ESP-IDF 4d59230d `esp_hw_support/port/esp32s31/systimer.c`
-/// (`systimer_ticks_to_us`: `ticks / 16`).
-pub(crate) const TICKS_PER_MICROSECOND: u64 = 16;
+/// The system timer's ticks per microsecond, the HAL's.
+pub(crate) const TICKS_PER_MICROSECOND: u64 = platform::system_timer::TICKS_PER_MICROSECOND;
 
 /// The core running the caller.
 #[inline(always)]
@@ -48,31 +58,12 @@ pub(crate) fn interrupt_level() -> u8 {
     (status >> oer_riscv::clic::MINTSTATUS_MIL_SHIFT) as u8
 }
 
-impl CounterLatch for platform::SystimerCounter {
-    #[inline(always)]
-    fn update(&self) {
-        self.trigger_unit0_op_update();
-    }
-    #[inline(always)]
-    fn valid(&self) -> bool {
-        self.read_unit0_op().value_valid()
-    }
-    #[inline(always)]
-    fn high(&self) -> u32 {
-        self.read_unit0_value_hi().value_hi().get()
-    }
-    #[inline(always)]
-    fn low(&self) -> u32 {
-        self.read_unit0_value_lo().value_lo()
-    }
-}
-
 /// The shared counter latch every context reads, published once by the time
 /// driver's handoff.
 static COUNTER: ZeroedOnce<platform::SystimerCounter> = ZeroedOnce::new();
 
 /// Publish the counter latch, from the system timer's handoff, once its
-/// latch has settled within its bound ([`crate::counter::check`]).
+/// latch has settled within its bound ([`counter::check`]).
 ///
 /// # Panics
 /// When it is published already or its latch never settles (a fault of the
@@ -80,7 +71,7 @@ static COUNTER: ZeroedOnce<platform::SystimerCounter> = ZeroedOnce::new();
 pub(crate) fn install_counter(counter: platform::SystimerCounter) {
     assert!(COUNTER.get().is_none(), "the counter is published once");
     assert!(
-        crate::counter::check(&counter).is_ok(),
+        counter::check(&counter).is_ok(),
         "the system timer's counter latch settles"
     );
     let _ = COUNTER.get_or_init(|| counter);
@@ -95,8 +86,7 @@ pub(crate) fn install_counter(counter: platform::SystimerCounter) {
 #[inline(never)]
 pub(crate) fn now() -> u64 {
     COUNTER.get().map_or(0, |counter| {
-        crate::counter::read(counter).unwrap_or_else(|unverified| unverified.floor)
-            / TICKS_PER_MICROSECOND
+        counter::read(counter).unwrap_or_else(|unverified| unverified.floor) / TICKS_PER_MICROSECOND
     })
 }
 
@@ -129,38 +119,23 @@ pub(crate) enum Line {
     Three(&'static platform::FromCpu3),
 }
 
-/// Store `$value` into the line block `$line`; a raise reads the line back,
-/// so the raise has reached the interrupt matrix when it returns.
-///
-/// SOURCE: esp-hal 1f646c5 `interrupt/software.rs` (`raise`: the store and
-/// its read back).
-macro_rules! store_line {
-    ($line:expr, $value:expr) => {{
-        let line = $line;
-        line.store_line($value);
-        if $value {
-            let _ = line.read_line();
-        }
-    }};
-}
-
 impl SoftwareLine for Line {
     #[inline(always)]
     fn raise(&self) {
         match self {
-            Self::Zero(line) => store_line!(line, true),
-            Self::One(line) => store_line!(line, true),
-            Self::Two(line) => store_line!(line, true),
-            Self::Three(line) => store_line!(line, true),
+            Self::Zero(line) => line.raise(),
+            Self::One(line) => line.raise(),
+            Self::Two(line) => line.raise(),
+            Self::Three(line) => line.raise(),
         }
     }
     #[inline(always)]
     fn lower(&self) {
         match self {
-            Self::Zero(line) => store_line!(line, false),
-            Self::One(line) => store_line!(line, false),
-            Self::Two(line) => store_line!(line, false),
-            Self::Three(line) => store_line!(line, false),
+            Self::Zero(line) => line.lower(),
+            Self::One(line) => line.lower(),
+            Self::Two(line) => line.lower(),
+            Self::Three(line) => line.lower(),
         }
     }
 }

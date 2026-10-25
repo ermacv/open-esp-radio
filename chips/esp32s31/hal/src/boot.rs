@@ -7,23 +7,133 @@
 //! Where the vendor polls without a limit, the bound is this crate's,
 //! stated with the poll it replaces; a first-boot stand run confirms it.
 
-pub use oer_esp32s31_pac::boot::{
-    BootBlocks, BootHandoff, BusDividers, CacheMap, CacheRegisters, ClockRegisters, CpllDividers,
-    CpuRoot, FlashRegisters, FlashTimingCandidate, MemDivider, PsramRegisters, PsramSupplyLevel,
+mod active_power;
+mod brownout;
+mod cache;
+mod clock;
+mod flash;
+mod psram;
+mod soc;
+
+pub use active_power::ActivePower;
+pub use brownout::{BrownoutFailure, BrownoutRegisters, THRESHOLD_WAIT, apply_idf_policy};
+pub use cache::{CacheMap, CacheRegisters};
+pub use clock::{
+    BusDividers, ClockRegisters, CpllDividers, CpuRoot, FlashClockWord, MemDivider,
+    PsramSupplyLevel,
 };
+pub use flash::{FlashRegisters, FlashTimingCandidate, FlashTimingWords};
 pub use oer_espressif_boot::{
     BootFailure,
     cache::{CacheGeometry, SuspendWaits},
     clock::{ClockRates, ClockWaits, CpuClockProfile},
-    flash::{FlashGeometry, FlashReadCommand, FlashReadCommands, TuningWaits},
+    flash::{FlashGeometry, FlashReadCommand, FlashReadCommands, TuningWaits, XipWindow},
+    mmu::MmuWindow,
     psram::{CacheAccess, ChipSelectTiming, OctalPsramProfile, PsramWaits},
     wait::{BootBudget, BootDeadline, BootWait},
 };
+pub use psram::PsramRegisters;
+pub use soc::{Soc, SocFailure};
+
+use oer_esp32s31_pac::{lp_ana::LpAnaBrownout, ownership::AnalogBusPeripherals};
 use oer_mmio::Bits;
-use oer_time::Duration;
+use oer_time::{Clock, Duration};
 
 #[cfg(test)]
+mod register_tests;
+#[cfg(test)]
 mod tests;
+
+/// The flash MMU's window: 64-KiB pages from `0x4000_0000`, 1024 entries of
+/// the flash controller's table, each naming one of 2048 physical pages
+/// (its 11-bit page field).
+///
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/soc/esp32s31/include/soc/ext_mem_defs.h:19,75,85,93`
+/// (`SOC_MMU_PAGE_SIZE`, `SOC_MMU_FLASH_VALID_VAL_MASK` 0x7ff,
+/// `SOC_MMU_ENTRY_NUM`, `SOC_MMU_FLASH_VADDR_BASE`).
+pub const FLASH_MMU_WINDOW: MmuWindow = MmuWindow {
+    virtual_base: 0x4000_0000,
+    page_bytes: 0x1_0000,
+    first_entry: 0,
+    entries: 1024,
+    physical_pages: 2048,
+};
+
+/// The PSRAM MMU's window: 64-KiB pages from `0x5000_0000`, 1024 entries of
+/// the PSRAM controller's table, each naming one of 1024 physical pages
+/// (its 10-bit page field).
+///
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/soc/esp32s31/include/soc/ext_mem_defs.h:19,76,85,94`
+/// (`SOC_MMU_PAGE_SIZE`, `SOC_MMU_PSRAM_VALID_VAL_MASK` 0x3ff,
+/// `SOC_MMU_ENTRY_NUM`, `SOC_MMU_PSRAM_VADDR_BASE`).
+pub const PSRAM_MMU_WINDOW: MmuWindow = MmuWindow {
+    virtual_base: 0x5000_0000,
+    page_bytes: 0x1_0000,
+    first_entry: 0,
+    entries: 1024,
+    physical_pages: 1024,
+};
+
+/// The flash tuning region as instruction fetch maps it: the bootstrap's
+/// own cold reference words, read through the cache, each read a volatile
+/// load the compiler keeps.
+pub struct XipRegion<'a>(&'a [u32]);
+
+impl<'a> XipRegion<'a> {
+    /// The region of `words`, which nothing else reads during the sweep.
+    pub const fn new(words: &'a [u32]) -> Self {
+        Self(words)
+    }
+}
+
+impl XipWindow for XipRegion<'_> {
+    /// Word `index` of the region.
+    ///
+    /// # Panics
+    ///
+    /// When `index` lies past the region: the sweep reads inside it.
+    fn word(&self, index: usize) -> u32 {
+        oer_memory::read_volatile(
+            self.0
+                .get(index)
+                .expect("the sweep reads inside its region"),
+        )
+    }
+}
+
+/// The brownout detector and the analog bus whose threshold it writes,
+/// owned by the bootstrap.
+#[must_use = "dropping a register owner permanently loses its register authority"]
+pub struct Brownout {
+    registers: BrownoutRegisters,
+    analog: AnalogBusPeripherals,
+}
+
+impl Brownout {
+    /// Own the brownout part and the analog bus for the bootstrap.
+    pub(crate) fn new(part: LpAnaBrownout, analog: AnalogBusPeripherals) -> Self {
+        Self {
+            registers: BrownoutRegisters::new(part),
+            analog,
+        }
+    }
+
+    /// Apply ESP-IDF's application brownout policy and check it reads back
+    /// ([`apply_idf_policy`]).
+    ///
+    /// # Errors
+    ///
+    /// [`BrownoutFailure`].
+    pub fn apply_idf_policy<C: Clock + ?Sized>(
+        &mut self,
+        deadline: &BootDeadline<'_, C>,
+    ) -> Result<(), BrownoutFailure> {
+        let mut bus = crate::phy::i2c::AnalogBus::new(&mut self.analog.i2c_ana_mst);
+        apply_idf_policy(&mut self.registers, &mut bus, deadline)
+    }
+}
 
 /// The CPU PLL's rate.
 ///

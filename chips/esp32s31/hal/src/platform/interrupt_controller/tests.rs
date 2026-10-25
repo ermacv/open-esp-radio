@@ -1,7 +1,11 @@
 use std::vec;
 use std::vec::Vec;
 
-use oer_esp32s31_pac::platform::{Clic, InterruptCore0, clic, interrupt_core0};
+use oer_esp32s31_pac::{
+    clic::{self, Clic},
+    instances,
+    interrupt_core::{self, InterruptCore0},
+};
 use oer_interrupt_table::{
     Binding, Class, Controller, Error, LineState, Lines, Router, Table, Trigger, line_control,
 };
@@ -19,8 +23,8 @@ impl Memory {
     /// Every word holding `word`.
     fn filled(word: u32) -> Self {
         Self {
-            matrix: vec![word; interrupt_core0::SIZE / 4],
-            clic: vec![word; clic::SIZE / 4],
+            matrix: vec![word; instances::interrupt_core0::SIZE / 4],
+            clic: vec![word; instances::clic::SIZE / 4],
         }
     }
 
@@ -40,7 +44,7 @@ impl Memory {
     }
 }
 
-fn source(number: u16) -> Index<{ interrupt_core0::route::COUNT }> {
+fn source(number: u16) -> Index<{ interrupt_core::route::COUNT }> {
     Index::new(usize::from(number)).expect("a source of the bank")
 }
 
@@ -225,7 +229,7 @@ fn a_line_another_writer_left_edge_triggered_reads_as_such() {
 pub struct WakeIrq;
 
 impl InterruptSource for WakeIrq {
-    const SOURCE: u16 = <oer_esp32s31_pac::platform::FromCpu0 as InterruptSource>::SOURCE;
+    const SOURCE: u16 = <oer_esp32s31_pac::hp_system::FromCpu0 as InterruptSource>::SOURCE;
 }
 
 pub fn on_wake(_: &mut WakeIrq) {}
@@ -338,4 +342,20 @@ fn the_router_refuses_a_table_outside_the_matrix_or_the_clic_before_any_write() 
             "no line changed"
         );
     }
+}
+
+#[test]
+fn a_source_is_pending_at_its_bit_of_its_status_word() {
+    // SOURCE: ESP-IDF 4d59230d `interrupt_core0_reg.h`: the status words
+    // at 0x2a8 + 4n hold sources 32n to 32n + 31.
+    let mut words = vec![0; instances::interrupt_core0::SIZE / 4];
+    words[0x2a8 / 4 + 2] = 1 << 4; // source 68, FROM_CPU_INTR3
+    words[0x2a8 / 4 + 5] = 1 << 8; // source 168, the last
+    let status = oer_esp32s31_pac::interrupt_core::InterruptCore0Status::host(&mut words)
+        .expect("the memory holds the bank");
+    assert!(super::pending_in(&status, 68));
+    assert!(super::pending_in(&status, 168));
+    assert!(!super::pending_in(&status, 67));
+    assert!(!super::pending_in(&status, 169), "no such source");
+    assert!(!super::pending_in(&status, u16::MAX));
 }
