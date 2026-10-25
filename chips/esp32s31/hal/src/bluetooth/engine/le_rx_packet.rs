@@ -6,9 +6,7 @@
 
 #![forbid(unsafe_code)]
 
-use crate::bluetooth::engine::sram_link::ControllerSramLinkAddress;
-
-use crate::types::BluetoothControllerSramAddress;
+use crate::bluetooth::engine::sram_link::ControllerSramLink;
 
 use crate::bluetooth::engine::rx_packet_bytes::{RxPacketBytes, result_not_produced};
 use crate::bluetooth::engine::shared_layout::BufferHeaderImage;
@@ -147,8 +145,8 @@ impl LeRxPacketAddress {
         Self(address)
     }
 
-    pub(crate) const fn compressed_image(self) -> u32 {
-        ble_word_index(self.0.get()).expect("a placed RX packet has a nonzero encodable address")
+    pub(crate) const fn address(self) -> u32 {
+        self.0.get()
     }
 }
 
@@ -177,21 +175,20 @@ impl LeRxBufferHeaderStorage {
     pub(crate) fn install(
         &self,
         packet: LeRxPacketAddress,
-        successor: Option<ControllerSramLinkAddress>,
-        predecessor: Option<BluetoothControllerSramAddress>,
+        successor: Option<ControllerSramLink<BleBufferHeader>>,
+        predecessor: Option<ControllerSramLink<BleBufferHeader>>,
         rotates_into_successor: bool,
     ) {
         BufferHeaderImage {
-            next: BleBufferHeaderNext::from_bits(
-                successor.map_or(0, ControllerSramLinkAddress::compressed_image),
-            ),
+            next: BleBufferHeaderNext::ZERO
+                .with_address(successor.map(ControllerSramLink::reference))
+                .expect("a bound link is encodable"),
             packet_base: BleBufferHeaderPacketBase::ZERO
                 .with_address(packet.0)
                 .expect("the placed RX buffer address is encodable"),
             allocation: BleBufferHeaderAllocation::ZERO.with_terminal(rotates_into_successor),
-            previous: BleBufferHeaderPrevious::from_bits(
-                predecessor.map_or(0, BluetoothControllerSramAddress::address),
-            ),
+            previous: BleBufferHeaderPrevious::ZERO
+                .with_address(predecessor.map(ControllerSramLink::reference)),
             ..RX_HEADER
         }
         .write(&self.layout);
@@ -199,9 +196,14 @@ impl LeRxBufferHeaderStorage {
     pub(crate) fn completion_observed(&self) -> bool {
         self.layout.completion().read().done()
     }
-    pub(crate) fn install_completed_predecessor(&self, successor: ControllerSramLinkAddress) {
+    pub(crate) fn install_completed_predecessor(
+        &self,
+        successor: ControllerSramLink<BleBufferHeader>,
+    ) {
         BufferHeaderImage {
-            next: BleBufferHeaderNext::from_bits(successor.compressed_image()),
+            next: BleBufferHeaderNext::ZERO
+                .with_address(Some(successor.reference()))
+                .expect("a bound link is encodable"),
             completion: BleBufferHeaderCompletion::ZERO.with_done(true),
             ..RX_HEADER
         }
@@ -213,9 +215,9 @@ impl LeRxBufferHeaderStorage {
             .completion()
             .write(self.layout.completion().read().with_done(true));
     }
+    /// The address the successor link decodes to, if there is one.
     pub(crate) fn successor(&self) -> Option<u32> {
-        let image = self.layout.next().read().address();
-        (image != 0).then_some(image)
+        self.layout.next().read().address_address()
     }
     pub(crate) fn predecessor(&self) -> Option<u32> {
         let address = self.layout.previous().read().address();
@@ -229,21 +231,18 @@ impl LeRxBufferHeaderStorage {
             .allocation()
             .write(self.layout.allocation().read().with_terminal(marked));
     }
-    pub(crate) fn link_successor(&self, successor: Option<ControllerSramLinkAddress>) {
-        self.layout
-            .next()
-            .write(
-                self.layout
-                    .next()
-                    .read()
-                    .with_address_from(BleBufferHeaderNext::from_bits(
-                        successor.map_or(0, ControllerSramLinkAddress::compressed_image),
-                    )),
-            );
+    pub(crate) fn link_successor(&self, successor: Option<ControllerSramLink<BleBufferHeader>>) {
+        self.layout.next().write(
+            self.layout
+                .next()
+                .read()
+                .with_address(successor.map(ControllerSramLink::reference))
+                .expect("a bound link is encodable"),
+        );
     }
-    pub(crate) fn packet_image(&self) -> Option<u32> {
-        let image = self.layout.packet_base().read().address();
-        (image != 0).then_some(image)
+    /// The address the packet link decodes to, if there is one.
+    pub(crate) fn packet_address(&self) -> Option<u32> {
+        self.layout.packet_base().read().address_address()
     }
     pub(crate) fn clear_packet(&self) {
         self.layout
@@ -417,7 +416,9 @@ mod tests {
             .layout
             .next()
             .write(BleBufferHeaderNext::from_bits(0xa5a5_4321));
-        header.link_successor(Some(ControllerSramLinkAddress::new(0x2f00_4000).unwrap()));
+        header.link_successor(Some(crate::bluetooth::engine::sram_link::model_link(
+            0x2f00_4000,
+        )));
         assert_eq!(header.layout.next().read().bits(), 0xa5a0_1000);
         header.link_successor(None);
         assert_eq!(header.layout.next().read().bits(), 0xa5a0_0000);

@@ -846,6 +846,7 @@ pub const BLUETOOTH: Suite = Suite {
         "xPortEnterCriticalTimeout",
         "vPortExitCriticalMultiCore",
     ],
+    session: None,
 };
 
 #[cfg(test)]

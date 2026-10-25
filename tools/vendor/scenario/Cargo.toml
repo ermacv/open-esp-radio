@@ -11,7 +11,7 @@ description = "Chip-neutral engine of the typed vendor-comparison scenarios: Blo
 [dependencies]
 oer-analysis-elf = { path = "../../analysis/elf" }
 oer-os-process = { path = "../../os/process" }
-oer-registers-bindings = { path = "../../registers/bindings" }
+oer-registers-model = { path = "../../registers/model" }
 oer-os-durable = { path = "../../os/durable" }
 oer-tool-pins = { path = "../../pins" }
 oer-image-build = { path = "../../image/build" }

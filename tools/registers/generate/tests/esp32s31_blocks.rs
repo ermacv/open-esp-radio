@@ -9,7 +9,6 @@ use std::path::{Path, PathBuf};
 
 use oer_registers_model::{
     RegisterEvidenceSet,
-    chip_import::ImportSpec,
     chip_model::{ChipModel, ControlKind, FieldClass, Location},
     chip_policy::{ChipPolicy, Claim, Holder},
 };
@@ -32,28 +31,62 @@ fn model() -> ChipModel {
 }
 
 #[test]
-fn the_esp32s31_root_loads_with_every_spec_block() {
-    let registers = registers();
-    let spec = ImportSpec::parse(
-        &std::fs::read_to_string(registers.join("import.toml")).expect("the import spec reads"),
-    )
-    .expect("the import spec parses");
+fn the_bootstrap_soc_owner_holds_filters_and_trng_configuration() {
+    let evidence = evidence();
     let model = model();
-    for block in &spec.types {
-        assert!(
-            model.types().contains_key(&block.name),
-            "type {}",
-            block.name
-        );
-        for instance in &block.instances {
-            let placed = model
-                .instances()
-                .iter()
-                .find(|placed| placed.name == instance.name)
-                .unwrap_or_else(|| panic!("the root places {}", instance.name));
-            assert_eq!(placed.block_type, block.name);
-        }
+    let policy = ChipPolicy::load(&registers().join("policy.toml"), &model, &evidence)
+        .expect("the SoC initialization policy loads");
+    let owner = |word: &str| {
+        let Some(Claim::Whole(Holder::Part(id))) = policy.claim(word) else {
+            panic!("{word} has one whole-word owner");
+        };
+        policy.partitions()[id.partition].member.as_str()
+    };
+    for instance in ["LP_APM", "HP_APM", "HP_MEM_APM"] {
+        let block = model
+            .instances()
+            .iter()
+            .find(|block| block.name == instance)
+            .expect("the root places the APM filter");
+        assert!(block.extent.partial);
+        assert!(!block.extent.sources.is_empty());
+        assert_eq!(owner(&format!("{instance}.FUNC_CTRL")), "soc");
     }
+    for word in [
+        "TRNG.CONF",
+        "TRNG.DEBUG_CONF",
+        "TRNG.DATE",
+        "LP_PERICLKRST.RNG_CTRL",
+    ] {
+        assert_eq!(owner(word), "soc", "{word}");
+    }
+    for word in ["TRNG.INT_RAW", "TRNG.CRC_SYNC_DATA"] {
+        assert_eq!(owner(word), "entropy", "{word}");
+    }
+    let entropy = policy
+        .partitions()
+        .iter()
+        .find(|partition| partition.member == "entropy")
+        .expect("the entropy reader exists");
+    let trng = entropy
+        .parts
+        .iter()
+        .find(|part| part.name == "Trng")
+        .expect("the entropy reader has its status view");
+    assert_eq!(trng.observes, ["CONF", "DEBUG_CONF"]);
+    for word in [
+        "PMU.CPU_STALL_SW",
+        "HP_SYS.HP_CPU_CORESTALLED_ST",
+        "HP_SYS_CLKRST.HPCORE1_CTRL0",
+        "LP_AON_CLKRST.LP_AONCLKRST_HPCORE1_RESET_CTRL",
+    ] {
+        assert_eq!(owner(word), "core_control", "{word}");
+    }
+}
+
+#[test]
+fn the_esp32s31_root_binds_every_interrupt_source() {
+    let model = model();
     let mut covered = model
         .interrupts()
         .iter()
@@ -508,5 +541,73 @@ fn modem_power_and_coexistence_keep_pulse_resets_and_the_common_32k_mux() {
                 .collect::<Vec<_>>(),
             [(0, "XTAL32K"), (1, "RC32K"), (2, "EXT32K")]
         );
+    }
+}
+
+#[test]
+fn the_thin_renderer_renders_the_esp32s31_root_and_policy() {
+    let evidence = evidence();
+    let model =
+        ChipModel::load(&registers().join("chip.toml"), &evidence).expect("the chip root loads");
+    let policy = ChipPolicy::load(&registers().join("policy.toml"), &model, &evidence)
+        .unwrap_or_else(|error| panic!("the policy loads: {error}"));
+    let rendered = oer_registers_model::chip_render::render(&model, &policy)
+        .unwrap_or_else(|error| panic!("the thin PAC renders: {error}"));
+    // Each part the policy gives an interrupt serves its source: the
+    // handlers', the software lines' and the modem low-power timer's.
+    for (part, source) in [
+        ("Ieee802154MacIrq", 132),
+        ("UsbSerialJtagIrq", 2),
+        ("FromCpu0", 65),
+        ("FromCpu3", 68),
+        ("BtdmRuntimeControl", 127),
+    ] {
+        let item = format!(
+            "impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for {part}<P> {{\nconst SOURCE: u16 = {source};"
+        );
+        assert!(rendered.contains(&item), "{item}");
+    }
+    // The Bluetooth bank acknowledges the primary source 124 and the NRT
+    // source 133, so its part serves both and names no single one.
+    let bank = "impl<P: oer_mmio::Placement> oer_mmio::InterruptSources for BluetoothInterruptBank<P> {\nconst SOURCES: &'static [u16] = &[124, 133];";
+    assert!(rendered.contains(bank), "{bank}");
+    assert!(!rendered.contains(
+        "impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for BluetoothInterruptBank<P>"
+    ));
+    // The irreducible acknowledgements render; ordinary transactions do not.
+    for item in [
+        "pub fn mac_interrupt_clear(&mut self)",
+        "pub fn sample_mac_interrupt(&self)",
+        "pub fn acknowledge_acknowledge_mac_tx_completion(",
+        "pub fn frequency_parameter_0(&mut self)",
+    ] {
+        assert!(rendered.contains(item), "{item}");
+    }
+    assert!(!rendered.contains("fn configure_bluetooth_cte_six_buffer_limit"));
+    // The hardware facts the types state: typed DMA pointers, the RX
+    // window's prefix, the RX append doorbell, the analog-I2C host words
+    // written from zero and the console's own snapshot events.
+    for item in [
+        "pub fn set_address(&mut self, value: oer_mmio::DmaRef<super::super::layouts::WifiRxDmaDescriptor>) -> &mut Self",
+        "pub fn set_address_high_prefix(&mut self) -> &mut Self",
+        "self.0 = (self.0 & 0x000fffff) | 0x2f000000;",
+        "pub fn rx_control_append_descriptor_reload_pending(&self) -> bool",
+        "pub fn trigger_rx_control_append_descriptor_reload(&mut self)",
+        "pub fn modify_rx_control(&mut self, change: impl FnOnce(&mut rx_control::W))",
+        "pub fn write_i2c0_ctrl(",
+        "pub fn sample_usb_serial_jtag_interrupt(&self)",
+        "pub const EVENTS: u32 = 0x0000000c;",
+        "pub mod analog_i2c {",
+        "pub const BBPLL: Block = Block::new(0x66);",
+    ] {
+        assert!(rendered.contains(item), "{item}");
+    }
+    let linker = oer_registers_model::chip_render::dma_window(&model).expect("the window renders");
+    for item in [
+        "DMA_WINDOW_ORIGIN = 0x2f000000;",
+        "DMA_WINDOW_LENGTH = 0x00080000;",
+        "DMA_ADDRESS_LOW_BITS = 20;",
+    ] {
+        assert!(linker.contains(item), "{item}\n{linker}");
     }
 }

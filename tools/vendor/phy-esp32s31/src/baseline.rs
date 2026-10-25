@@ -91,11 +91,10 @@ impl Signature {
             )?,
             model_sha256: digest(
                 root,
-                &[
-                    "chips/esp32s31/registers/published/radio.svd",
-                    "chips/esp32s31/registers/policy/api.toml",
-                    "chips/esp32s31/registers/model/analog/phy.toml",
-                ],
+                &crate::registers::model_files(root)?
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
             )?,
             relation_sha256: digest(
                 root,

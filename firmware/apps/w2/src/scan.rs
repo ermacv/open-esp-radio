@@ -46,6 +46,7 @@ use oer_ieee80211_wire::{
     scan::parse_management,
     sequence::SequenceNumber,
 };
+use oer_interrupt_table::Bound;
 use oer_memory::AffineSpscSender;
 use oer_radio_regulatory::{Country, Initiate, RegulatoryDomain, TxCeiling};
 use oer_time::{Clock, Duration, Instant, Timer};
@@ -61,7 +62,7 @@ use {
 };
 use {oer_ieee80211_port::MacTxPlan, oer_ieee80211_wire::address::IndividualAddress};
 
-type Rx = ReceiveSession<N, B, S, Q, crate::irq::RadioExecutor>;
+type Rx = ReceiveSession<N, B, S, Q, crate::irq::RadioExecutor, Bound<irq::WifiPart>>;
 type Frames = FrameReceiver<'static, Q, B, crate::irq::RadioExecutor>;
 type Publisher = QueueSink<'static, EmbassyClock, Q, B>;
 type Tx = OrdinaryTxOwner<
@@ -85,7 +86,7 @@ pub struct Boot {
     pub station: [u8; 6],
     pub ap: [u8; 6],
     pub config: W2Config,
-    pub routes: irq::ImageRoutes,
+    pub bound: Bound<irq::WifiPart>,
     pub bell: irq::ImageDoorbell,
     pub sender: AffineSpscSender<'static, Report, 1>,
 }
@@ -128,7 +129,7 @@ pub async fn scanner(boot: Boot) {
         boot.station,
         boot.ap,
         boot.config,
-        boot.routes,
+        boot.bound,
         boot.bell,
         &mut report,
     )
@@ -174,7 +175,7 @@ async fn run(
     station: [u8; 6],
     ap: [u8; 6],
     config: W2Config,
-    mut routes: irq::ImageRoutes,
+    bound: Bound<irq::WifiPart>,
     bell: irq::ImageDoorbell,
     report: &mut Report,
 ) -> Result<(), &'static str> {
@@ -212,7 +213,6 @@ async fn run(
     let WifiRoleMaterialized {
         owner,
         mut registers,
-        interrupt_setup,
         ..
     } = materialize_esp32s31_wifi_role(stopped, ());
     let (mut platform, context) = owner.into_runtime_parts();
@@ -235,7 +235,7 @@ async fn run(
     )
     .map_err(|_| "rx-bind")?;
     let mut session =
-        Rx::new(parts, interrupt_setup, &mut registers, &irq::LINE).map_err(|_| "rx-session")?;
+        Rx::new(parts, bound, &mut registers, &irq::LINE).map_err(|_| "rx-session")?;
     let publisher = QueueSink::new(sender, &CLOCK);
     let dma = TxDmaStorage::pin::<ChipDma>(irq::TX_DMA.take().ok_or("tx-claimed")?)
         .map_err(|_| "tx-bind")?;
@@ -252,7 +252,7 @@ async fn run(
     let mut sequence = SequenceNumber::ZERO;
     let mut basic = None;
     session
-        .start(&mut registers, &CLOCK, &mut routes)
+        .start(&mut registers, &CLOCK, &bell)
         .await
         .map_err(|_| "rx-start")?;
     for number in 1..=13 {
@@ -262,24 +262,22 @@ async fn run(
             continue;
         };
         let limit = ceiling(channel, config);
-        let setup = session
-            .pause(&mut registers, &mut routes, &bell, &CLOCK, &publisher)
+        session
+            .pause(&mut registers, &bell, &CLOCK, &publisher)
             .await
             .map_err(|_| "rx-pause")?;
-        let stopped = owner.into_stopped(registers, setup, ()).wifi;
+        let stopped = owner.into_stopped(registers, ()).wifi;
         let (returned, tuned) = stopped.retune(cell, channel, limit).await;
         cell = returned;
         let (stopped, tuned) = tuned.map_err(|_| "retune")?;
         let parts = materialize_esp32s31_wifi_role(stopped, ());
         owner = parts.owner;
         registers = parts.registers;
-        session
-            .reattach(parts.interrupt_setup)
-            .map_err(|_| "irq-reattach")?;
+        session.reattach();
         retuned_tx(&mut tx, tuned.tx_power, limit, "tx-active-on-retune")?;
         let priority = tuned.probe_priority;
         session
-            .start(&mut registers, &CLOCK, &mut routes)
+            .start(&mut registers, &CLOCK, &bell)
             .await
             .map_err(|_| "rx-restart")?;
         let index = report.count;
@@ -318,7 +316,6 @@ async fn run(
                 .expect("the scanner retains its transmitter between retunes"),
             &mut receiver,
             &publisher,
-            &mut routes,
             &bell,
             config,
             station,
@@ -337,11 +334,11 @@ async fn run(
         }
     }
     // Return to the lab channel with both DMA owners idle, then solicit an ACK.
-    let setup = session
-        .pause(&mut registers, &mut routes, &bell, &CLOCK, &publisher)
+    session
+        .pause(&mut registers, &bell, &CLOCK, &publisher)
         .await
         .map_err(|_| "rx-pause-unicast")?;
-    let stopped = owner.into_stopped(registers, setup, ()).wifi;
+    let stopped = owner.into_stopped(registers, ()).wifi;
     let limit = ceiling(initial, config);
     let (returned, tuned) = stopped.retune(cell, initial, limit).await;
     cell = returned;
@@ -349,12 +346,10 @@ async fn run(
     let parts = materialize_esp32s31_wifi_role(stopped, ());
     owner = parts.owner;
     registers = parts.registers;
-    session
-        .reattach(parts.interrupt_setup)
-        .map_err(|_| "irq-reattach-unicast")?;
+    session.reattach();
     retuned_tx(&mut tx, tuned.tx_power, limit, "tx-active-before-unicast")?;
     session
-        .start(&mut registers, &CLOCK, &mut routes)
+        .start(&mut registers, &CLOCK, &bell)
         .await
         .map_err(|_| "rx-start-unicast")?;
     let rate = management_rate(Band::Ghz2_4, Some(&basic.ok_or("lab-basic-rates")?))
@@ -385,7 +380,6 @@ async fn run(
             .expect("the scanner retains its transmitter between retunes"),
         &mut receiver,
         &publisher,
-        &mut routes,
         &bell,
         config,
         station,
@@ -405,11 +399,11 @@ async fn run(
         report.unicast_raw = outcome.report().completion.map_or(255, |c| c.status());
     }
     report.errors += session.counters().report().service_errors;
-    let setup = session
-        .pause(&mut registers, &mut routes, &bell, &CLOCK, &publisher)
+    session
+        .pause(&mut registers, &bell, &CLOCK, &publisher)
         .await
         .map_err(|_| "rx-final-stop")?;
-    let stopped = owner.into_stopped(registers, setup, ()).wifi;
+    let stopped = owner.into_stopped(registers, ()).wifi;
     let (_cell, released) = stopped.release(cell).await;
     released.map_err(|_| "release")?;
     Ok(())
@@ -483,7 +477,6 @@ async fn drive(
     tx: &mut Tx,
     frames: &mut Frames,
     publisher: &Publisher,
-    routes: &mut irq::ImageRoutes,
     bell: &irq::ImageDoorbell,
     config: W2Config,
     station: [u8; 6],
@@ -552,7 +545,7 @@ async fn drive(
                 }
                 if rx {
                     session
-                        .drain(registers, routes, bell, &CLOCK, publisher)
+                        .drain(registers, bell, &CLOCK, publisher)
                         .await
                         .map_err(|_| "rx-drain")?;
                 }

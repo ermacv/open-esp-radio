@@ -39,8 +39,6 @@ pub(super) enum Io<'a, 'owner> {
             oer_esp32s31_hal::owner::route::Shared,
         >,
     ),
-    #[cfg(all(target_arch = "riscv32", oer_probe))]
-    Validation(&'a mut oer_esp32s31_hal::owner::ValidationSharedPhy<'owner>),
     #[cfg(test)]
     Test(
         &'a mut super::tests::Io,
@@ -79,45 +77,6 @@ impl Registers
     }
     fn i2c_status(&mut self) -> u8 {
         Io::Shared(self).i2c_status()
-    }
-}
-#[cfg(all(target_arch = "riscv32", oer_probe))]
-impl Registers for oer_esp32s31_hal::owner::ValidationSharedPhy<'_> {
-    fn advance<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
-        &mut self,
-        job: &mut Job<'_>,
-        clock: &C,
-        now: Instant,
-    ) -> Step {
-        job.advance_one::<D, _>(Io::Validation(self), clock, now)
-    }
-    fn advance_power<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
-        &mut self,
-        child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
-        gain: &mut super::power::Cursor,
-        action: crate::tracking::power::PhyTxPowerTrackingAction,
-        clock: &C,
-        measured: bool,
-    ) -> Step {
-        super::power::advance::<D, _>(
-            &mut Io::Validation(self),
-            child,
-            gain,
-            action,
-            clock,
-            measured,
-        )
-        .unwrap_or_else(Step::Failure)
-    }
-    fn rfpll_atom<D: super::super::wait::PhyShortDelay, C: oer_time::Clock + ?Sized>(
-        &mut self,
-        clock: &C,
-        binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
-    ) -> Result<crate::analog::rfpll::RfpllFrequencyCompletion, Failure> {
-        Io::Validation(self).rfpll_frequency::<D, _>(clock, binding)
-    }
-    fn i2c_status(&mut self) -> u8 {
-        Io::Validation(self).i2c_status()
     }
 }
 
@@ -172,8 +131,6 @@ impl Io<'_, '_> {
         let result = match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => apply::<D, _>(clock, *registers, binding),
-            #[cfg(all(target_arch = "riscv32", oer_probe))]
-            Self::Validation(registers) => apply::<D, _>(clock, *registers, binding),
             #[cfg(test)]
             Self::Test(..) => Err(Failure::Binding),
         }?;
@@ -206,8 +163,6 @@ impl Io<'_, '_> {
         match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(_) => self.rfpll_frequency::<D, _>(clock, binding),
-            #[cfg(all(target_arch = "riscv32", oer_probe))]
-            Self::Validation(_) => self.rfpll_frequency::<D, _>(clock, binding),
             #[cfg(test)]
             Self::Test(io, _) => io.frequency::<D>(binding),
         }
@@ -223,10 +178,6 @@ impl Io<'_, '_> {
             Self::Shared(registers) => Ok(
                 oer_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
             ),
-            #[cfg(all(target_arch = "riscv32", oer_probe))]
-            Self::Validation(registers) => Ok(
-                oer_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
-            ),
             #[cfg(test)]
             Self::Test(io, _) => io.power_gain_base(action),
         }
@@ -236,10 +187,6 @@ impl Io<'_, '_> {
         match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => Ok(
-                oer_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
-            ),
-            #[cfg(all(target_arch = "riscv32", oer_probe))]
-            Self::Validation(registers) => Ok(
                 oer_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
             ),
             #[cfg(test)]
@@ -257,11 +204,6 @@ impl Io<'_, '_> {
                 oer_esp32s31_hal::phy::memory::program_gain_memory_entry(*registers, entry);
                 Ok(())
             }
-            #[cfg(all(target_arch = "riscv32", oer_probe))]
-            Self::Validation(registers) => {
-                oer_esp32s31_hal::phy::memory::program_gain_memory_entry(*registers, entry);
-                Ok(())
-            }
             #[cfg(test)]
             Self::Test(io, _) => io.power_gain_entry(entry),
         }
@@ -274,8 +216,6 @@ impl Io<'_, '_> {
         match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => Ok(binding.execute_target(*registers)),
-            #[cfg(all(target_arch = "riscv32", oer_probe))]
-            Self::Validation(registers) => Ok(binding.execute_target(*registers)),
             #[cfg(test)]
             Self::Test(io, _) => io.power(binding),
         }
@@ -319,8 +259,6 @@ impl Io<'_, '_> {
                 }
                 Ok(match self {
                     Self::Shared(registers) => binding.execute_target(*registers),
-                    #[cfg(oer_probe)]
-                    Self::Validation(registers) => binding.execute_target(*registers),
                     #[cfg(test)]
                     Self::Test(..) => return Err(Failure::Binding),
                 })
@@ -339,8 +277,7 @@ impl Io<'_, '_> {
     ) -> Result<Step, Failure> {
         use crate::{
             analog::{
-                frequency::PhyFrequencyCapMemoryAction as Memory,
-                i2c::{fields, registers},
+                frequency::PhyFrequencyCapMemoryAction as Memory, i2c::analog_i2c,
                 rfpll::RfpllCapacitorCode,
             },
             calibration::cold::{
@@ -383,26 +320,33 @@ impl Io<'_, '_> {
                 if run.transaction.is_none() {
                     let request = match search_action {
                         search::Action::ReadInitialCap if run.phase == 0 => {
-                            Request::read_byte(registers::RFPLL_CALIBRATED_CAPACITOR_LOW)
+                            Request::read_byte(analog_i2c::rfpll::calibrated_capacitor_low::ADDRESS)
                         }
-                        search::Action::ReadInitialCap => {
-                            Request::read_field(fields::RFPLL_CALIBRATED_CAPACITOR_HIGH)
-                        }
-                        search::Action::EnableSearch => {
-                            Request::write_field(fields::RFPLL_CAPACITOR_SEARCH_ENABLE, 1)
-                        }
+                        search::Action::ReadInitialCap => Request::read_field(
+                            analog_i2c::rfpll::lock_status::CALIBRATED_CAPACITOR_HIGH,
+                        ),
+                        search::Action::EnableSearch => Request::write_field(
+                            analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
+                            1,
+                        ),
                         search::Action::WriteCap(requested) => {
                             let code = RfpllCapacitorCode::from_request(requested)
                                 .ok_or(Failure::Binding)?;
                             if run.phase == 0 {
-                                Request::write_byte(registers::RFPLL_CAPACITOR_LOW, code.low_byte())
+                                Request::write_byte(
+                                    analog_i2c::rfpll::capacitor_low::ADDRESS,
+                                    code.low_byte(),
+                                )
                             } else {
-                                Request::write_field(fields::RFPLL_CAPACITOR_HIGH, code.high_bit())
+                                Request::write_field(
+                                    analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH,
+                                    code.high_bit(),
+                                )
                             }
                         }
-                        search::Action::ReadStatus => {
-                            Request::read_field(fields::RFPLL_CAPACITOR_SEARCH_STATUS)
-                        }
+                        search::Action::ReadStatus => Request::read_field(
+                            analog_i2c::rfpll::capacitor_search_status::CAPACITOR_SEARCH_STATUS,
+                        ),
                         _ => return Err(Failure::Binding),
                     };
                     run.transaction = Some(PhyColdI2cTransaction::new(request));
@@ -528,11 +472,6 @@ impl Io<'_, '_> {
                 crate::target_port::rfpll::complete_memory(*registers, action)
                     .map_err(Failure::Target)
             }
-            #[cfg(all(target_arch = "riscv32", oer_probe))]
-            Self::Validation(registers) => {
-                crate::target_port::rfpll::complete_memory(*registers, action)
-                    .map_err(Failure::Target)
-            }
             #[cfg(test)]
             Self::Test(io, _) => {
                 let crate::tracking::rfpll::Completion::Memory(done) = io
@@ -557,8 +496,6 @@ impl Io<'_, '_> {
         match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => sample(*registers),
-            #[cfg(all(target_arch = "riscv32", oer_probe))]
-            Self::Validation(registers) => sample(*registers),
             #[cfg(test)]
             Self::Test(io, _) => Registers::i2c_status(*io),
         }
@@ -590,8 +527,6 @@ impl Io<'_, '_> {
         match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => apply(*registers, transaction, start),
-            #[cfg(all(target_arch = "riscv32", oer_probe))]
-            Self::Validation(registers) => apply(*registers, transaction, start),
             #[cfg(test)]
             Self::Test(io, _) => {
                 if start {
@@ -633,8 +568,6 @@ impl Io<'_, '_> {
         match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => apply(*registers, binding, start),
-            #[cfg(all(target_arch = "riscv32", oer_probe))]
-            Self::Validation(registers) => apply(*registers, binding, start),
             #[cfg(test)]
             Self::Test(io, _) => {
                 if start {
@@ -650,10 +583,6 @@ impl Io<'_, '_> {
         match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => oer_esp32s31_hal::phy::temperature::read_code(*registers),
-            #[cfg(all(target_arch = "riscv32", oer_probe))]
-            Self::Validation(registers) => {
-                oer_esp32s31_hal::phy::temperature::read_code(*registers)
-            }
             #[cfg(test)]
             Self::Test(io, _) => io.temperature_code(),
         }
@@ -685,8 +614,6 @@ impl Io<'_, '_> {
         match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => apply(*registers, work_mode),
-            #[cfg(all(target_arch = "riscv32", oer_probe))]
-            Self::Validation(registers) => apply(*registers, work_mode),
             #[cfg(test)]
             Self::Test(io, _) => io.clear_pbus_control(work_mode),
         }

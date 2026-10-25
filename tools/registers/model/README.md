@@ -3,10 +3,11 @@
 ## Block types and the chip root
 
 `chip_model::ChipModel::load(root, evidence)` reads a chip as one root file
-and the block type files it includes. Generation still reads the
-schema-3 manifest and its schema-2 fragments described below; that format
-is deleted in the same change that moves the generator to this one, and no
-adapter joins the two.
+and the block type files it includes; `Chip::load(checkout, chip)` loads
+`chips/<chip>/registers/chip.toml` with every evidence catalog of its
+`evidence/` directory, and `Chip::policy()` its ownership policy
+`policy.toml`. `cargo registers generate --chip <chip>` renders the PAC
+from them ([generate](../generate/README.md)).
 
 A **block type** is one hardware block, one TOML file, without an address:
 every register has an offset from the block's base. A type is never a
@@ -137,6 +138,105 @@ held = ["BUSY"]
 sources = ["IDF_TIMG_REG_H"]
 ```
 
+Hardware pointer and complete value-domain facts belong to the field in its
+block type. Ownership policy names these facts; it carries no second encoding
+or value list. A domain narrower than an entire field's representable range
+remains in policy/HAL.
+
+```toml
+[[registers.fields]]
+name = "HEAD"
+bits = "19:0"
+class = "plain"
+pointer = { points-to = "DMA_DESCRIPTOR", placement = "dma-window", encoding = { width = 20, shift = 2 }, sources = ["DMA_HEADER"] }
+
+[[registers.fields]]
+name = "PRIORITY"
+bits = "23:20"
+class = "plain"
+value-range = { min = 0, max = 15, sources = ["DMA_HEADER"] }
+
+[[registers.fields]]
+name = "ENABLED"
+bits = "24"
+class = "plain"
+values = [
+    { name = "DISABLED", value = 0, sources = ["DMA_HEADER"] },
+    { name = "ENABLED", value = 1, sources = ["DMA_HEADER"] },
+]
+write-values-only = true
+```
+
+A `pointer` targets a root-included word or array layout (`points-to`) or,
+without `points-to`, raw byte storage in its `placement` RAM region. The
+region's address and size live only in root `[[ram-regions]]`. A layout target
+is placed in that region alone. Optional `member-offset` lies inside it.
+`encoding.width` equals the field width; `shift` omits aligned low address
+bits. Their sum is at most 32. Target alignment and member offset preserve
+all omitted low bits. The region fits one fixed high-address prefix, obtained
+from its base, and a 32-bit address space. Thus a BLE word index uses width
+20 and shift 2 without repeating an SRAM prefix. A full pointer uses width
+32 and shift 0. A raw buffer pointer has shift zero and no member offset.
+
+`low-bits = true` identifies an unshifted partial address (width below 32).
+Its optional `high-field = "REGISTER.FIELD"` names a field in the same type
+supplying the remaining high bits, as with the Wi-Fi RX descriptor window.
+The high field is readable and, for a writable pointer, plain. The Wi-Fi TX
+queue head instead obtains its prefix from the placement region. Pointer
+fields are plain, write-only or read-only and have no numeric domain or write
+constraint; a read-only pointer describes an observation, not publication.
+
+`value-range` is an inclusive hardware domain for reads and writes, including
+read-only fields. Its bounds fit the field and it has its own sources. Named
+encodings use the existing `values`; each value may cite its own sources,
+otherwise the field's resolved review supplies them. `write-values-only`
+restricts writes to those encodings. Existing `write-range` constraints and
+named values must lie inside a declared `value-range`.
+
+Names are unique within a field. Several context-specific names may denote
+the same numeric encoding: the first is its read variant, and subsequent
+names are associated constants of the same value type. They do not create
+ambiguous read variants. `bits()` returns the field image; `register_bits()`
+positions that image in its register.
+
+Each register module exposes `<FIELD>_WIDTH`, `<FIELD>_MAX` and
+`<FIELD>_MASK`, as well as `COUNT` for repeated registers. Block geometry
+outside register fields is sourced explicitly in the type file:
+
+```toml
+[[geometry]]
+name = "LINE_BYTES"
+value = 64
+sources = ["CACHE_HEADER"]
+description = "Bytes per cache line."
+```
+
+These positive quantities generate constants in the block type's module.
+HAL derives bounds and wrapping moduli from this geometry.
+
+Type-local `[[interrupt-pairs]]` state `status`, `clear` and `sources`.
+Both register keys exist and have matching widths and repetition; every
+status lane is a lane of the clear word, which may hold more (an event the
+caller consumes elsewhere); status reads without side effects and clear
+holds only W1C or write-trigger fields. An interrupt snapshot of the policy
+takes its clear word from its status register's pair. A status has one clear; several status views may share a clear word.
+For example:
+
+```toml
+[[interrupt-pairs]]
+status = "IRQ_STATUS_0"
+clear = "IRQ_CLEAR_0"
+sources = ["BT_IRQ_SOURCE"]
+```
+
+Loading validates these facts even for a type with no instance or no policy
+operation, reporting the type file and field/pair that breaks the rule.
+
+A pointer's `high-field` takes the fixed high bits of its placement
+(`base >> width`) and nothing else: it has no `values`, `value-range`,
+`write-range` or `write-values-only`, and every pointer naming it agrees on
+the prefix. The PAC sets it only to that prefix.
+
 Every field has one `class` from a closed set. The class alone fixes what a
 read and a write do; there is no separate access key.
 
@@ -148,7 +248,7 @@ read and a write do; there is no separate access key.
 | `write-trigger` | `WT` | `trigger_<register>_<field>` (a wider one with its value); zero in every other write; no getter |
 | `write-one-to-clear` | `WTC`, `W1C` | in a register of only such fields: a sample token and its acknowledgement; otherwise getter only |
 | `set-only` | `W1S`, `WTS`, `WS`, `R/W1` | getter only |
-| `self-clearing` | `R/W/SC`, `R/W/WTC` | getter only, unless a `[[commands]]` entry names it |
+| `self-clearing` | `R/W/SC`, `R/W/WTC` | getter only, unless a `[[commands]]` or `[[doorbells]]` entry names it |
 | `hardware-written` | `R/W/SS`, `R/W/SS/SC`, ... | getter only, unless it is a data port's field |
 | `read-clears` | `R_SS_RC`, "cleared by a read" | nothing: its register has no API |
 | `debug-only` | "Do not use it in applications" | getter only; never written |
@@ -163,6 +263,14 @@ Register-level constructs live in the type file:
   refuses, writing nothing, while any of them reads one. A command register
   has no `write-trigger`, `read-clears` or `unknown` field and no port or
   read side effect;
+- `[[doorbells]]` (`register`, `field`, `sources`): a one-bit
+  `self-clearing` field outside a command register that software sets to
+  request one hardware action and the hardware clears when it accepts it.
+  Its register's other fields are `plain`, `read-only` or `write-trigger`,
+  and it is no FIFO, data port or word a read changes. A read-modify-write
+  of the register writes the doorbell back as read, as the vendor's own
+  read-modify-writes do (the source says so); the PAC sets it only by its
+  trigger;
 - `fifo = { sources }`: a FIFO port, popped and pushed only; one field, no
   `dim`, neither `write-one-to-clear` nor `unknown`;
 - `data-port = { sources }`: a command port's data word, read and stored
@@ -496,52 +604,10 @@ and numeric mux inputs. `gate_groups()` returns resolved fields and sources;
 `shared_controls()`, `clock_sources()`, `interrupt_sources()` and
 `unbound_interrupts()` retain their checked root facts.
 
-### Importing vendor blocks
-
-`chip_import::import` (`cargo registers import --chip <chip>`) writes block
-types, the chip root and an evidence catalog from the blocks a chip's
-`registers/import.toml` lists: a type per header device layout, its
-instances by SVD peripheral (or by `reg_base.h` macro for a block the SVD
-lacks). It reads the pinned vendor SVD and the pinned ESP-IDF headers
-(`vendor/artifacts.toml`); where they disagree the header wins: offsets,
-fields and bits, each field's `class` (with `debug-only` and `read-clears`
-from the header's descriptions), defaults and reserved bits. The SVD names
-registers and the fields at the header's bits, binds interrupt sources
-and states the reset of bits no header field covers. Interrupts are resolved
-by name in `interrupts.h`, which supplies their numbers even when the SVD
-number differs. An instance's optional `interrupts = { SVD_NAME = "HEADER_NAME" }`
-maps differing spellings explicitly; the imported binding cites the SVD and
-the target enumerator's line. An unknown identity or unused mapping is an
-error. A register the header lacks keeps its SVD fields as
-`read-only`; one in a word the header's layout reserves is left out. SVD
-arrays whose elements import identically become `dim` registers. Instances
-listed as one type must import identically. The strictness overlay's
-command registers, ports, `define-fields`, driver writes and values move as
-data. The lanes outside `define-fields` are reserved, citing the overlay's
-layout evidence along with the header. Every `sources` entry is an evidence
-ID of the written catalog: one per pinned file and one per cited line
-(`<FILE>_L<line>`, its description holding the `esp-idf:<path>:<line>`
-locator). The report,
-`target/registers-import/<chip>/report.md`, lists every disagreement and
-what the import made of it. The import writes a chip's first types and
-root; from then on those files, with the curated refinements merged into
-them, are the source of truth, and the import is not run over them again.
-
-The root covers every source in the header's `0..ETS_MAX_INTR_SOURCE`:
-existing SVD bindings name imported instances, and every other source is
-explicitly unbound with a reason. Names remove `ETS_` and either
-`_INTR_SOURCE` or `_SOURCE`, preserving embedded `INTR` segments. Each
-enumerator, including `ETS_MAX_INTR_SOURCE`, has its own line evidence ID;
-the root's source count cites all those lines. Missing bounds, gaps and
-duplicate source identities are errors. For S31, unbound reasons name the
-unresolved flash/PSRAM controller pair and the PMT/PMU alias conflict.
-
 ### Ownership policy (`schema = 6`)
 
 `chip_policy::ChipPolicy::load(path, model, evidence)` reads the ownership
-policy over a loaded `ChipModel`. Generation still reads the schema-5
-policy, which names curated peripherals; it moves to this one together with
-the model.
+policy over a loaded `ChipModel`.
 
 The policy holds ownership and transactions only. A **part** is the words
 of one MMIO instance one owner holds; a **partition** is one owner, a
@@ -636,7 +702,8 @@ A part's flags:
 | Flag | Meaning | Rule |
 | --- | --- | --- |
 | `observes` | registers of the instance it reads | each reads without a side effect and is held by another part |
-| `irq-side` | an interrupt handler owns it | not `shared` |
+| `irq-side` | an interrupt handler owns it | not `shared`; names its `interrupt` |
+| `interrupt` | the root's interrupt sources the part serves: a name, or a list of names when one bank of the part acknowledges several sources | each bound to the part's instance, listed once; one part per source; the part's owner names one source (`InterruptSource`) or several (`InterruptSources` alone) |
 | `shared` | every context reaches it through `&self` | each word is a side-effect-free read, write-trigger strobes or one `plain` or `write-only` field stored whole; a strobe writes from zero, never a read-modify-write, so a `write-one-to-clear` field beside the strobes takes zero and is only read; no FIFO, data port, command, `read-clears`, and no `write-one-to-clear` field in a word without a strobe; no `observes`, `triggers`, `read-only`, `irq-side`; no transaction |
 | `read-only` | the owner only reads its words | each word reads without a side effect; no `triggers`; no writing transaction |
 | `copy` | the read-only owner is `Copy` | only with `read-only` |
@@ -645,13 +712,21 @@ A part with any flag, `observes` or `triggers` has a `description` and
 `sources`. Partitions have unique names and members, a description and at
 least one part; a part selects at least one word.
 
-Domains (`flag-domains`, `enum-domains`, `bounded-domains`,
-`opaque-domains`, `bitwise-composed-domains`) keep their schema-5 shape;
-an opaque or bitwise-composed domain names its `register` and is used on
+Policy domains (`flag-domains`, `enum-domains`, `bounded-domains`,
+`opaque-domains`, `bitwise-composed-domains`) retain operation-specific inputs.
+A `[[field-domains]]` entry names `name` (the policy's UpperCamelCase name)
+and `field` (`INSTANCE.REGISTER.FIELD`, including templates), with an optional
+policy `description`: it refers to the type's `value-range` or `values`
+without copying them. `positioned = true` places an enum reference's
+values at the field's own bits, for a masked register modify whose input is
+exactly that field's lane (for example, the TSENS clock-enable bit at
+position 30); the shift is the field's, never a copy. Bounded references
+are unpositioned. All transaction validation uses the referenced domain.
+An opaque or bitwise-composed domain names its `register` and is used on
 it alone. Transactions name `INSTANCE.REGISTER` and
 `INSTANCE.REGISTER.FIELD` of the root, a template key for every element
 (`MODEM_ETM.CH%s_EVENT.ID`), and take no `peripheral` or `exposure`. The
-kinds are `interrupt-snapshots` (`status`, `clear`), `field-reads`,
+kinds are `interrupt-snapshots` (`status`, optional `events`), `field-reads`,
 `full-register-reads`, `partition-image-reads`, `full-register-writes`,
 `pointer-fields`, `zero-based-field-writes` (`fields`),
 `sampled-bit-zero-writes`, `zero-register-writes`,
@@ -673,8 +748,8 @@ What a transaction may reach follows the field class and the word:
 The shapes and inputs:
 
 - a `full-register-write` names its word's one 32-bit field and takes a
-  `domain`, a `points-to` layout (a word or array layout placed in
-  `dma-window` alone) or `placement = "dma-window"`; a
+  `domain` or `pointer = true` referring to that field's type-level pointer
+  fact; a
   `full-register-read` names one element's one 32-bit field and an opaque
   domain or a bounded one of every `u32`; a signed `field-read` reads an
   8-, 16- or 32-bit field;
@@ -698,20 +773,19 @@ The shapes and inputs:
   with their own sources. The bits grant no setter and no
   read-modify-write; no other kind takes them.
 
-A **pointer field** (`pointer-fields`: `plain` or `write-only`, as wide
-as its encoding: 32 bits plain, 20 `ble-compressed`, below 32
-`low-bits`; no named values or write constraint; `points-to` a layout in
-`dma-window` alone, `member-offset` inside it and, compressed, a multiple
-of four) is set only from the image of a typed DMA reference: by its
-declaration, by a `field-or-modifies` or `field-replace-modifies` of that
-one field from input bit zero with neither `domain` nor `value`, by a
-`zero-based-field-write` of its image, or to zero (a write from zero, a
-replace with `value = 0`). An **address field** (the field of a
-full-register write with `points-to` or `placement`) is set only by that
-write or to zero by a write from zero. No other transaction sets a bit of
-either: no fixed image, masked modify, bit modify, indexed bit set,
-sampled bit or integer full write. Template and element spellings of a
-field are the same field.
+A policy `pointer-fields` entry contains only `name`, `field` and `sources`:
+a typed pointer-image operation referencing the field's hardware fact. It
+names a plain or write-only pointer. Neither this entry nor a full-register
+write may redeclare `points-to`, `placement`, `encoding` or `member-offset`.
+
+Every hardware pointer field is protected, including those with no pointer
+operation in policy. It is set only from a typed reference image, by a
+`field-or-modifies` or `field-replace-modifies` of one field from input bit
+zero with neither `domain` nor `value`, a `zero-based-field-write` of its
+image, or to zero. A field exposed by a full-register pointer write is set
+only by that write or to zero by a write from zero. No fixed image, masked
+modify, indexed bit set, sampled bit or integer full write may forge either
+kind of address. Template and element spellings denote the same lanes.
 
 A field's `write-range` or `write-values-only` bounds every transaction:
 every lane of a fixed image or step, and the zero a write from zero
@@ -727,12 +801,17 @@ not a narrower range. Every other transaction on a constrained field
 fails.
 
 A `write-one-to-clear` field is written only by its snapshot's
-acknowledgement. A snapshot's status word reads without a side effect, its
-clear word is one element of `write-one-to-clear` or `write-trigger`
-fields (the vendor's `INT_CLR` strobes) that acknowledge whole readable
-status fields; a `write-trigger` clear field lies wholly inside the sampled
-bits or wholly outside them. A word of `write-one-to-clear` fields alone may
-be its own status (`status` equal to `clear`). A snapshot may name
+acknowledgement. A snapshot names its `status` element; its clear element
+is the one the status register's type pairs with it (`[[interrupt-pairs]]`,
+at the status element's index), or the status word itself when it holds only
+`write-one-to-clear` fields; any other status is refused. Its status word
+reads without a side effect, its clear word is one element of
+`write-one-to-clear` or `write-trigger` fields (the vendor's `INT_CLR`
+strobes) that acknowledge whole readable status fields; a `write-trigger`
+clear field lies wholly inside the sampled bits or wholly outside them.
+`events` (`INSTANCE.REGISTER.FIELD` of the status word) narrows the sample
+to those fields, each acknowledged by the clear word (the console's
+USB Serial/JTAG events). A snapshot may name
 `consumed-event` (the event the caller consumed elsewhere) with
 `consumed-fields`, one-bit `write-one-to-clear` or `write-trigger` fields
 of its clear word: the acknowledgement writes the sample and the one
@@ -757,292 +836,144 @@ holding a control field's word writes it, whichever instances use it.
 Every check runs on load and fails with a typed `chip_policy::Error` that
 names the file and the entity.
 
-## Field accessors
+## The thin PAC
 
-One convention names the accessors of every typed block in the PAC: the
-vendor blocks of the `soc` module and the typed blocks of the API policy.
-The renderer consumes the published SVD and API policy. A field's class
-(the table under
+`chip_render::render(model, policy)` renders the PAC of a loaded
+`ChipModel` and `ChipPolicy` (`chips/<chip>/pac/src/generated.rs`), over
+`oer-mmio` and without `unsafe`; `chip_render::dma_window(model)` renders
+the images' linker fragment. The PAC is the exact model: field accessors by
+class, value domains, typed pointers, ownership parts, layouts and the
+analog-I2C dictionary, and no logic.
+
+### Field accessors
+
+A field's class (the table under
 [Block type file](#block-type-file-schema--3)) fixes which accessors it has;
-nothing else adds one.
+the only others are the generated controls of the root's links (below).
 
 | Accessor | Given to |
 | --- | --- |
 | `read_<register>(&self) -> <register>::R`, a getter `<field>()` per readable field | a register read without a side effect |
-| `modify_<register>(&mut self, change)`; `change` takes `&mut <register>::W`, whose `set_<field>(value)` sets one field | a readable ordinary register with a setter and no unreadable write lane or physical W1C effect: every other bit keeps the value read, every write-trigger and command bit is zero |
-| `write_<register>(&mut self, change)`, the same `W` | a register with writable fields and no readable one: written from zero |
-| `write_<register>(&mut self, value: DmaRef<Layout> / DmaWindowAddress)` | a whole-register DMA address: the typed argument is mandatory on unsplit and owner-part APIs |
-| `trigger_<register>_<field>(&mut self)`, or with `value` for a wider field | each `write-trigger` field: one write sets it, every other field keeps the value read or, in a register not read, is zero |
+| `modify_<register>(&mut self, change)`; `change` takes `&mut <register>::W`, whose `set_<field>(value)` sets one field | a readable register whose write-back replays nothing: every other bit keeps the value read, every trigger, command bit and zero-only field is zero |
+| `write_<register>(&mut self, <required>..., change)`, the same `W` from zero | a register with writable fields and no readable one, or a readable one with `write-only` lanes and only `plain`, `read-only`, trigger and write-one-to-clear fields beside them; the fields no write may leave zero are arguments |
+| `trigger_<register>_<field>(&mut self)`, or with `value` for a wider field | each `write-trigger` field whose writes are not zero only, and each doorbell |
+| `trigger_<register>(&mut self, change)`; `change` takes `&mut <register>::T`, whose `<field>()` (or `<field>(value)`) sets one trigger | a word whose every field is `write-trigger` or `read-only`, at least two triggers settable: several triggers in one write |
+| `<register>_<doorbell>_pending(&self) -> bool` | each doorbell |
 | `start_<register>_<command>(&mut self, <qualifier>: bool, ...) -> Result<(), CommandBusy>` and `<register>_<command>_busy(&self) -> bool` | each command of a `[[commands]]` register |
-| `sample_<register>(&self) -> <register>::Snapshot` and `acknowledge_<register>(&mut self, snapshot)` | a register of only `write-one-to-clear` fields; a status register paired with its clear register takes the pair's name (`sample_<pair>`, `<Pair>Snapshot`) |
+| `sample_<register>(&self) -> <register>::Snapshot` and `acknowledge_<register>(&mut self, snapshot)` | a register of only `write-one-to-clear` fields |
 | `pop_<register>(&mut self)`, `push_<register>(&mut self, value)` | a FIFO port |
-| `write_<register>(&mut self, value)` | a command port's data word, stored whole |
-| `trigger_<register>_<field>(&self)`, `store_<register>(&self, value)` | the strobes and whole-word stores of a block several contexts share |
+| `write_<register>(&mut self, value)` | a data port's word, stored whole |
+| `trigger_<register>_<field>(&self)`, `store_<register>(&self, value)` | the strobes and whole-word stores of a `shared` part, per element of an array |
+| `set_<instance>_<role>_clock(&mut self, on: bool)`, `set_<instance>_<role>_reset(&mut self, asserted: bool)` | each clock or reset link of the root (a fact: which field gates or resets which instance) whose one-bit `plain` field, set as a `bool`, lies in a word the part holds with a `modify_<register>` that needs no index; a field in `[[shared-controls]]` takes one `set_<shared control>_clock` or `_reset` instead of one per user; muxes and other links have none |
 
 Names are the model's in snake case (`r#` before a keyword). A repeated
 register takes `index: oer_mmio::Index<COUNT>` first. A field value is
 `bool` for one bit, the native integer for 8, 16 and 32 bits,
-`oer_mmio::Bits<WIDTH>` otherwise, and the field's enum where it has
-`values`. A field the hardware reads as an address has no integer setter:
-its whole-register `write_<register>` requires the layout's `DmaRef` or a
-`DmaWindowAddress`; a policy pointer field's setter takes the encoded image
-of a reference. A register a read changes has no accessor,
-and a field whose class gives no setter has none. Physical W1C write
-effects remain part of the word's safety checks even when software access
-is read-only: a mixed W1C/ordinary word is refused. A readable word with an
-ordinary write-only lane has no generic `modify_`, `write_` or `W`; only
-sourced policy word operations may write it. Policy RMWs across that lane
-are refused. Completion fields remain readable without setters. An owner
-part has the accessors of the registers it owns and the reads of those it
-observes. Names in API-policy blocks follow their reviewed SVD field names; the
-`soc` pass keeps the vendor's field prefixes.
+`oer_mmio::Bits<WIDTH>` otherwise. A field limited to its `values` by
+`write-values-only`, or one whose `values` cover its width, takes its enum
+unless a narrower `write-range` bounds it: then it takes a bounded
+`<Field>Range`. A field with `values` has a `<field>_variant()` getter. A
+field with a `pointer` fact takes `oer_mmio::DmaRef<Layout>` of its target
+layout, or the window's `DmaWindowAddress` for a raw buffer, and stores its
+encoding (`member-offset` added, shifted, its width kept), and
+`clear_<field>()` stores its zero image, no address; a high field has
+`set_<field>_prefix()` alone and a write from zero starts from its prefix. A
+register a read changes has no accessor, and a field whose class gives no
+setter has none.
 
-The typed blocks of the API policy (`typed-peripherals`) take each field's
-class from the published SVD and the policy: `read-write` is `plain`,
-`read-only` is `read-only` and `write-only` is `write-only`; `oneToClear`
-makes a field `write-one-to-clear`, or `write-trigger` when it is
-`write-only` outside a snapshot's clear register; a `write-trigger-fields`
-entry is `write-trigger` and a command register's bit `self-clearing`; a
-register with a `readAction` that is no FIFO port is `read-clears`, and a
-field whose access no level of the SVD states is `read-only`. Any other
-modified-write value is refused.
+What a write does with the lanes it does not set:
+
+- a read-modify-write and a readable word's trigger keep the value read in
+  `plain`, `read-only`, `debug-only` fields, doorbells, reserved bits and
+  the bits of no field, and write zero to triggers, command bits and
+  zero-only fields;
+- a command start keeps the same lanes and writes zero to triggers,
+  write-one-to-clear and set-only lanes; a lane it can neither keep nor
+  zero (`write-only`, `hardware-written`, `unknown`) is a render error;
+- a write from zero stores the reserved bits at their reset value, each
+  high field's prefix and zero elsewhere; a field no write may leave zero
+  (a `write-range` above zero, `write-values-only` without zero, a pointer)
+  is an argument, and a word with an `unknown` or `debug-only` lane has no
+  writer from zero;
+- an acknowledgement writes one to each sampled bit and zero to every
+  other field, keeping the bits of no field as read now (or at their reset
+  value in a clear word that does not read back); a lane whose constraint
+  forbids that zero is a render error.
+
+### Owners, names and policy items
+
+- **Modules.** Each MMIO block type is one module holding a register module
+  per template (its masks, offsets, `R`, `W`, `Snapshot` and value types)
+  and the owners of the parts on its instances. `instances` holds each
+  instance's base and bound interrupt sources, and `Interrupt` lists every
+  source of the root. `ownership` holds the partitions, `Claims`,
+  `partition` and the check that no two claimed blocks share a word.
+  `layouts` holds the memory layouts and `analog_i2c` the analog-I2C
+  dictionary.
+- **Names.** A type's vendor prefix is cut from its register, group and
+  field names. The prefix is the longest run of whole `_` segments that
+  every named (not `_OPAQUE`) top-level register and group starts with.
+  The cut never applies when a type has fewer than two such names, and a
+  name that would become empty or start with a digit keeps its prefix. A
+  `%s` template whose stem is also a single register's keeps its index
+  place as `_n` (`STATUS%s` beside `STATUS` is `status_n`). A part that
+  holds every element of an even array gets indexed accessors; one that
+  holds only some elements gets one accessor per element, named after the
+  element (`ch4_event`, `t1_config`). Two generated names in one Rust
+  namespace (a module's types or values, a type's associated items) are a
+  render error naming both.
+- **Owners.** A part is one owner type: a block of its own, or one part
+  of an instance's division when its parts observe or split each other's
+  words (two to four parts). `shared` parts reach their words through
+  `&self`, and a `read-only` part only reads; with `copy` it is `Copy`. A
+  snapshot's clear word is written only by its acknowledgement. A part
+  naming one `interrupt` implements `InterruptSource` with that source; a
+  part naming several implements only `InterruptSources` with them, so it
+  never stands where one source is expected. A
+  part that reaches an 8- or 16-bit word is refused: owners reach 32-bit
+  words only.
+- **Policy items.** Only the items field accessors cannot express render:
+  `whole-word` fixed images, each `whole-word` step of a fixed sequence
+  (one method per image, `<sequence>_<element>`; the HAL orders the
+  steps), fixed images with a `masks` (masked first, whole-word or not) or
+  `consumed-event` proof, interrupt snapshots (with the consumed field as
+  an `Option` argument; the token reads back its sampled `bits()` and has
+  no constructor), zero-based writes with `whole-word-bits` and
+  field-or-modifies of a pointer field (a typed reference's image ORed
+  into a fresh read) and partition image reads (on each part of the
+  partition, `<name>(index)` reads the part's readable side-effect-free
+  words whole, at `<NAME>_OFFSETS`, a diagnostic without field decoding).
+  Each becomes a method of the part that owns it; every
+  other transaction is HAL code over the accessors.
+
+### Linker fragment
+
+`dma_window` states the root's `dma-window` RAM region
+(`DMA_WINDOW_ORIGIN`, `DMA_WINDOW_LENGTH`) and the low address bits its
+narrowest low-bits pointer keeps (`DMA_ADDRESS_LOW_BITS`): the link refuses
+DMA storage outside the window or at an address whose kept low bits are
+zero, the null such a pointer reads.
 
 ## Analog-I2C space
 
-The chip manifest's `indirect-spaces = ["analog/phy.toml"]` selects one
-independent `schema = 1`, `kind = "analog-i2c"` document. Its `[[blocks]]`
-have a unique `name`, byte `code`, cited `sources`, optional `routes` and
-explicit sparse byte `registers`. There is no CPU base, pointer conversion
-or inferred 256-register array. A route has `profile`, original
-`request-code`, `host` (0/1), one-hot-or-zero `read-select`,
-`read-mask-bits` (24/32) and sources. Its command code is the enclosing
-physical block's code. Thus two C5 request routes 0x62/0x65 reach the same
-physical 0x65 bytes while retaining different host and selection facts.
+Analog-I2C types (`space = "analog-i2c"`) have 8-bit registers addressed
+by index; the root's `[[analog-i2c.instances]]` place each by its block
+`code` with its `routes` (`profile`, `request-code`, `host` 0 or 1,
+`read-select`, `read-mask-bits`, `sources`). A route's command code is its
+instance's code, so two request codes may reach the same bytes. An
+analog-I2C instance is reached through its I2C master's words and is not
+partitioned.
 
-A byte register has `name`, `index`, optional `description`, `access`,
-`read-action`, `modified-write-values`, `reset-value`/`reset-known-mask`,
-`reserved = { mask, sources }`, `read-safe = { epoch, sources }` and fields.
-The optional `read-safe.comparison-mask` selects lanes for the qualified
-capture without declaring their meaning or reset state.
-Fields use the same `FieldInfo` declarations as MMIO (`name`, `bitOffset`,
-`bitWidth`, access, enumerations, read/write actions and constraints).
-Inheritance and arrays require explicit expanded field geometry in this
-first transport model; unsupported extension keys are errors.
-Sourced `views` select strict subranges of a declared parent field using
-`name`, `field`, `bit-offset`, `bit-width` and `sources`; they do not duplicate
-the parent's hardware declaration or change bit states.
-
-`[blocks.review]` supplies a whole-record review default. `[[review]]`
-records replace it for a fully qualified `BLOCK.REGISTER.FIELD` or
-`BLOCK.REGISTER`. They use the common provenance, accuracy, completeness
-and naming rules. An opaque byte is `BYTE_<two-digit-index>_OPAQUE`;
-opaque fields use the usual `BIT_n_OPAQUE` / `BITS_low_high_OPAQUE` names.
-Every publication review and every block, route, reserved and safety source
-is validated against the chip's evidence catalogs.
-
-Both MMIO and analog geometry expose `BitStates`: described, opaque,
-reserved and absent. Gaps never become reserved. Unknown reset is absence
-of both reset properties; a partial reset supplies only its nonempty known
-mask, with zeroes outside that mask carrying no knowledge. Readable access
-does not qualify a dump: `read-safe` additionally needs a finite epoch and
-sources, and rejects destructive/modified reads. The current real models
-claim no known reset. The S31 model qualifies only the existing 40-byte R1
-image in its calibrated-radio epoch, with explicit comparison masks. These
-masks do not promote unknown data lanes to described or OPAQUE.
-
-`AnalogAddress { block, index }` is a separate host type. Semantic IDs retain
-the existing grammar: `register:<chip>/analog-i2c/0xBBII/8`, where BB/II encode
-block/index, and `register-field:<chip>/analog-i2c/0xBBII/8/<offset>/<width>`.
-This number is a transport identity; it is never supplied to the CPU memory
-map. CMSIS-SVD exports only direct registers and its omission summary records
-the indirect spaces. `cargo registers inspect-analog --manifest
-chips/<chip>/registers/publication/registers.toml` queries full geometry,
-routes, reviews, bit states and semantic IDs without hardware access.
-
-The ordinary publication command writes the `[outputs].analog` destination,
-`pac/src/analog_generated.rs`, containing the closed PAC's `analog_i2c` module:
-addresses, bounded byte fields, original-request route lookup, register facts
-and a separately qualified `READ_SAFE` list. Shared value types live in
-`chips/espressif/analog::model`. Sampled values preserve all other bits and
-reject another register's field or a value exceeding its width. Unknown or
-partial reset never creates a whole-byte reset image. These are pure values;
-no analog bus transaction is generated here. Both production PACs compile
-this vocabulary; PAC/HAL/PHY and probes consume its fields, physical byte
-identities and routes. `Request` retains an original request code separately
-from its physical address, preserving C5 alias routing. Configuration payloads
-remain algorithms in PAC code and do not assert a hardware reset. Sourced
-`views` select strict subranges of declared hardware fields without overlapping
-field declarations or changing their bit states. `CAPTURE` contains only
-read-safe bytes with an explicit comparison mask, in physical address order.
-
-## The vendor SVD
-
-`render_soc` renders every peripheral of a chip's vendor SVD as a typed
-register block in the PAC API's `soc` module. The vendor SVD names fields
-and an access, but not what a read or a write does: a write-one-to-clear
-status, a field the hardware changes under a read-modify-write and a
-reserved lane all read `read-write` there. The pinned ESP-IDF headers state
-it, so they decide the API. The overlay's `[[headers]]` table names each
-vendor peripheral's `*_reg.h` (offsets, field bits, access classes,
-descriptions) and `*_struct.h` (the device layout); the generator reads them
-as pinned artifacts of the chip's `artifacts.toml` (`cargo pins fetch`) and
-finds every vendor register in its header by name and offset. From the
-header (`soc_headers.rs`):
-
-- `R/W` is a plain field, `RO`/`R`/`HRO` a read-only one, a `WT` a write
-  trigger written only by its trigger (a wider one with its value); a
-  register of write triggers alone is write-only, written from zero and
-  never read;
-- a register whose every field is write-one-to-clear (`WTC`, `W1C`) is
-  sampled and acknowledged with exactly that sample, never modified;
-- a writable field the hardware also changes (`R/W/SC`, `R/W/WTC`,
-  `R/W/SS`, ...), a set-only one (`W1S`, `WTS`, `WS`, `R/W1`), an unknown
-  class and a write-one-to-clear field beside others leave the register
-  read-only, except in a command register or a command port's data words:
-  that a field clears itself does not say that writing zero to it is
-  harmless, so no command is inferred from a class;
-- a field the header keeps to internal debugging ("Do not use it in
-  applications") is never written: read only, and a write trigger among
-  them a lane every write leaves zero, unless the overlay cites the vendor
-  driver's write of that field (`driver-writes`, `driver-writes-word`,
-  below);
-- a field the header describes as `Reserved`, and bits no header field
-  declares, are reserved: no accessor, kept by every write;
-- a field a read clears ("cleared by a read", "cleared when read",
-  `R_SS_RC`) or a port read and written in sequence gives its register no
-  API, also when only the vendor SVD's description says so;
-- a field the header names otherwise at the same bits takes the header's
-  name; the report lists each (`[[renamed]]`);
-- a register the header does not define is read-only, and has no API when
-  the device layout reserves its word (`uint32_t reserved_<offset>[n]`); a
-  peripheral without a header is read-only;
-- a register the header places at another offset than the SVD is an error
-  until the overlay corrects its `offset`; `add = true` builds a register
-  the SVD lacks from its header definition.
-
-A peripheral whose semantics the headers describe only in text (flags that
-a read clears or a write acknowledges in `R/W` fields, self-clearing bits)
-is stated in the overlay's `[[no-api]]` table with its reason and sources:
-none of its registers is rendered until a typed API exists.
-
-The SVD-only rules stay below the header's: a register with undeclared
-bits, a write-only field, overlapping fields, vendor modified-write values,
-a write constraint, a field without a snake-case name, or a raw interrupt
-status (`_RAW`) the header does not make write-one-to-clear is only read; a
-FIFO or data port by its name, a register not 32 bits wide, without fields,
-sharing a word or whose word the curated model describes is not rendered.
-
-`derivedFrom` peripherals take their base's registers, corrected. The
-chip's `model/strictness.toml` ([`StrictnessOverlay`]) also states what the
-headers do not, per register (`offset`, `add`, `access`, `reserved`,
-`read-side-effect`, `fifo`, `write-one-to-clear`, `raw-status-writable`,
-`data-port`: a command port's data words, one field the hardware also
-writes, read and stored whole; `define-fields`: the register's fields
-where the SVD and its header disagree, each `name`, `offset`, `width` and
-`description` from the cited source, replacing the SVD's; each takes the
-class of the header field whose bits hold it, and the bits no defined
-field holds are reserved; a defined field the header calls reserved
-stands only with its driver write; `driver-writes`: per field, the
-`esp-idf:` line outside `components/soc/` where the vendor driver writes
-it, an assignment to the field of the register's device member or a
-register write macro naming the register and the field's macro;
-`driver-writes-word`: per field, a value line assigning an identifier and
-a store of the whole word, either in one function with the value naming
-the field's macro and the store holding the identifier, or, for one bit,
-its literal returned by the function (`return`) and a store in the same
-file, the path between them listed line by line in `reviewed-chain` and
-reported unchecked. The overlay check opens every cited driver line in the
-pinned ESP-IDF; a driver write of a field that needs none, or one that
-does not hold, fails generation) and per field (`rename`, `access`,
-`kind = "plain" | "write-trigger"`, `values`), the command registers
-(`[[commands]]`: `fields`, optional `qualifiers`, `sources`) and the
-interrupt sources the SVD does not. A command register's `fields` are
-one-bit `R/W/SC` or `R/W/WTC` fields its sources state software starts and
-the hardware clears when done; its `qualifiers` are such bits a start
-writes together with the command, by its argument. The register is written
-only by those starts, and each refuses, writing nothing, while any
-self-clearing bit of the register reads one (the named ones and every other
-one-bit `R/W/SC`/`R/W/WTC` field, held at zero): the zero a start writes
-never lands on a running command. Every other field of it is only read.
-Every entry
-names existing vendor geometry and cites `esp-idf:<path>:<line>` (at the
-overlay's `esp-idf` pin, which must be the chip's pinned ESP-IDF) or
-`trm:<section>`. An `esp-idf:` citation is checked against the pinned file
-(`check_overlay`): a register definition line names the register at its
-offset, a field line the field (its words in order) with its bits and an
-access class that justifies the entry, a register union's reserved members
-the entry's `reserved`, an `interrupts.h` enumerator the source's number;
-`ETS_MAX_INTR_SOURCE`, the source count, is no source. A mismatch fails
-the generation. The module holds the chip's `Interrupt` enum, one partition
-`SocPeripherals` and its `Claims`, which a PAC root claims at once, and a
-`const` assertion that no vendor block lists a word of another typed
-block. The generated `registers/published/soc.report.toml` lists every
-renamed field and every register the pass narrowed, with its reasons.
-
-A typed block with an interrupt source implements
-`oer_mmio::InterruptSource` on its interrupt side (or on the whole owner
-of a block without sides).
-
-## Direct register model
-
-`oer-registers-model` owns the portable register publication formats:
-
-- safe loading of a multi-file TOML model;
-- native unreviewed initialization from explicit peripheral geometry and import
-  of CMSIS-SVD standard declarations; the source tool retains original inputs;
-- CMSIS-SVD data structures, arrays, clusters, fields and enumerations;
-- structured review records kept outside exported hardware descriptions;
-- deterministic clean SVD materialization and expanded register identities;
-- deterministic sparse reviewed-assertion overlays keyed by canonical typed
-  chip/address-space/register and register-field identities;
-- one explicit sparse `register-identity = "REGION.NAME"` fact for renaming,
-  no-op confirmation or materialization in a concrete singular peripheral,
-  with retained evidence and applicability;
-- retained effective classification, applicability and evidence for every
-  applied register, field, access, description and write-semantics claim;
-- generic physical-layout and write-semantics invariants;
-- reviewed PAC transaction, binding-index and evidence-catalog schemas;
-- the chip memory map (`memory::Memory`, `chips/<chip>/registers/model/memory.toml`):
-  its address spaces and regions, validated against the model and its owned
-  ranges, and its MMIO windows, which the register tool reads.
-
-The raw PAC is generated output only. The PAC pack has no module declarations
-for hand-written code; ownership and validation transactions that need raw
-register access live in the closed parent PAC.
-
-The closed-PAC transaction pack is schema 5 only. Its
-`w1c-register-snapshots` operation binds one non-array 32-bit W1C register field
-to an affine sample token. The token has no public constructor, is not cloneable
-and is consumed by the exact same-register acknowledgement; no caller-built
-clear image crosses this boundary. Sequencing and hardware qualification stay
-above the generated raw helper.
-
-It does not know about ELF files, discovery facts, ESP32-S31, PAC helper
-contents or output paths. The [register tool](../../../chips/espressif/registers/README.md) composes it with
-explicitly selected reviewed publication inputs. RTOS, NVS,
-logging and delay semantics remain outside this crate.
-
-The format and editing workflow are documented by the
-[register tool](../../../chips/espressif/registers/README.md).
-An absent physical register is created only by one reviewed
-`register-identity = "REGION.NAME"` assertion; the
-`register-declaration` and `register-name` kinds are rejected with an error. The
-top-level manifest is schema 3 and declares the stable chip ID and address
-space. Assertion subjects use only canonical `register:<chip>/<space>/...` or
-`register-field:<chip>/<space>/...` semantic IDs; other subject spellings are
-rejected. The subject must match this model's chip and address
-space, have a supported aligned width, fit the named concrete region (and its
-register address blocks when present), and not alias or overlap existing
-geometry. Identity application is atomic and rejects arrays, clusters,
-derived regions, placeholders and noncanonical SVD identifiers. Generated
-observations are never consulted for access or modified-write semantics; those
-require their own explicit reviewed assertions.
-
-Reusable `[[review]]` metadata is accepted as reviewed coverage only with a
-non-empty source list, all three classification fields, and non-`hint`
-provenance. Incomplete metadata remains a navigation hint and cannot close a
-publication gate. Array coverage is resolved from the structural SVD template,
-not by wildcard-matching expanded names.
+The PAC's `analog_i2c` module is the dictionary of these facts and performs
+no access: `blocks` (each code), `Profile`, `route(profile, code)`,
+`Request` (an original request code kept apart from the byte it reaches),
+a module per instance with a module per register holding its `ADDRESS` and
+a `Field` per field and view, `REGISTERS` (each byte's described, opaque
+and reserved bits and known reset), `READ_SAFE` (the bytes a finite
+reviewed epoch admits to a read) and `CAPTURE` (those with an explicit
+comparison mask). The value types are `chips/espressif/analog::model`'s.
+`AnalogAddress { block, index }` is a transport identity, never a CPU
+address.
 
 ## Register bit states
 
@@ -1082,24 +1013,9 @@ absence of hardware use. Independent masked uses or behaviour-dependent
 reads still qualify their own fields. Keep the unresolved lanes in the
 unknown-reset report; callers cannot supply an arbitrary replacement image.
 
-A native schema-2 fragment adds one optional property on a register:
-
-```toml
-[peripherals.registers.register]
-name = "DELAY"
-addressOffset = 0
-size = 32
-reserved = { mask = 0xfffffc00, sources = ["VENDOR_HEADER"] }
-```
-
-The nonzero mask must fit the inherited register width and must not overlap
-any field. Sources are nonempty, distinct and checked against the publication's
-evidence catalogs. Masks above TOML's signed integer range use a hexadecimal
-string (up to 128 bits). Array instances inherit the structural register
-template's annotation. Sparse reviewed overlays retain it by physical identity
-and cannot add an overlapping field. Clean SVD omits these source annotations;
-the native model and expanded geometry retain them for checks. No field or PAC
-accessor is generated for reserved bits.
+A type's register states its reserved bits as `reserved = { mask,
+sources }` ([Block type file](#block-type-file-schema--3)); no field or
+accessor exists for them.
 
 ## Name origin
 
@@ -1112,10 +1028,8 @@ A register or field review also records where its name comes from with
 | `descriptive` | A name this project assigned from established behavior | Published description starts with "Project-assigned name." |
 | `opaque` | The meaning is not established | The name ends in `_OPAQUE`; published description starts with "Opaque: meaning not established." |
 
-Every published register and field carries `naming`:
-`RegisterModel::load_for_publication`, which publication uses, rejects a model
-where one lacks it, while `RegisterModel::load` also opens unreviewed drafts
-such as an SVD import. An `_OPAQUE` name and `naming = "opaque"` require each
+Every register and field of a type and every layout entity carries
+`naming`; the loader rejects one that lacks it. An `_OPAQUE` name and `naming = "opaque"` require each
 other, and no published name spells unknown meaning as `UNKNOWN`, `UNNAMED`,
 `UNCLASSIFIED` or `OPAQUE` inside the name, so an unreviewed name cannot claim
 or hide it. A `descriptive` name states meaning, not position or the vendor's
@@ -1130,5 +1044,4 @@ position. Validation computes the name from the geometry and refuses any
 other. The whole content of a register whose meaning is established is its
 `VALUE` field. Vendor names keep their
 source's spelling. `naming` applies only
-to registers and fields. The SVD description carries the marker, so raw PAC
-documentation shows it too.
+to registers and fields.

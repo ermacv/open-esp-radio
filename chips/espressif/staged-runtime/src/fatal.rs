@@ -12,7 +12,7 @@
 #[cfg(feature = "esp32s31")]
 use oer_esp32s31_hal::cores;
 
-pub use cores::Fatal;
+pub use cores::{Fatal, StopError, StopTheWorld};
 
 /// End this hart in a fatal path: mask its interrupts for good, lend
 /// `fatal_path` the proof, then wait for good. The other hart keeps running
@@ -28,20 +28,39 @@ pub fn fatal_halt(fatal_path: impl for<'a> FnOnce(Fatal<'a>)) -> ! {
     crate::halt()
 }
 
-/// Reset the chip from a fatal path: mask this hart's interrupts for good,
-/// then the chip HAL's software reset, which restores what the boot ROM
-/// needs and resets through the ROM.
+/// Reset the chip from a fatal path that records its state first: mask this
+/// hart's interrupts for good, stop the other hart (`cores::stop_the_world`)
+/// and give `record` the stop, or why there is none, then reset as
+/// [`reset`] does. Under the stop the image's router writes no more, so a
+/// record reads the interrupt controller as the hardware holds it.
 #[cfg(target_arch = "riscv32")]
 #[allow(unsafe_code, reason = "lends the chip HAL's fatal-path proof")]
-pub fn reset() -> ! {
+pub fn reset_recording(
+    record: impl for<'a, 'b> FnOnce(Result<&'b cores::StopTheWorld<'a>, cores::StopError>),
+) -> ! {
     crate::critical::hart::mask_for_good();
     // SAFETY: the hart's interrupts are masked above, the threshold first,
-    // and the software reset does not return.
+    // and the software reset does not return; a path that cannot prepare it
+    // halts below without unmasking them.
     unsafe {
         cores::fatal(|fatal| {
-            cores::software_reset(fatal);
+            let stop = cores::stop_the_world(&fatal);
+            record(stop.as_ref().map_err(|error| *error));
+            drop(stop);
+            let cores::AwaitWatchdog { reason: _ } = cores::software_reset(fatal);
         })
     };
-    // The software reset does not return; the halt only ends the type.
     crate::halt()
+}
+
+/// Reset the chip from a fatal path that records nothing
+/// ([`reset_recording`]): mask this hart's interrupts for good, stop the
+/// other hart, then the chip HAL's software reset, which restores what the
+/// boot ROM needs and resets through the ROM. A path that cannot hold the
+/// core-control words (`cores::AwaitWatchdog`) halts its masked hart until
+/// the RTC watchdog the image armed when it took its watchdogs
+/// (`watchdog::Watchdogs`) resets the chip.
+#[cfg(target_arch = "riscv32")]
+pub fn reset() -> ! {
+    reset_recording(|_stop| ())
 }

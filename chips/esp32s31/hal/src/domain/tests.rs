@@ -1,23 +1,10 @@
 use super::*;
 use crate::phy::registration::PhyRegistration;
-use oer_esp32s31_pac::{RadioPartitions, SharedRadioParts};
+use crate::root::RadioPartitions;
 
 fn radio_domain() -> RadioDomain<crate::power::test_clocks::CountingBackend> {
-    let RadioPartitions {
-        radio_phy,
-        coexistence,
-        shared_radio,
-        ..
-    } = RadioPartitions::for_host_test();
-    RadioDomain::new(
-        SharedRadioRegisters::new(SharedRadioParts {
-            radio_phy,
-            coexistence,
-            shared_radio,
-        }),
-        PhyRouteState::new(PhyRegistration::new()),
-        (),
-    )
+    let RadioPartitions { shared, .. } = RadioPartitions::for_host_test();
+    RadioDomain::new(shared, PhyRouteState::new(PhyRegistration::new()), ())
 }
 
 #[test]
@@ -48,8 +35,8 @@ fn btbb_joins_an_initialized_baseband_without_register_access() {
         ieee802154,
         ..
     } = RadioPartitions::for_host_test();
-    let bluetooth = oer_esp32s31_pac::BluetoothTaskRegisters::new(bluetooth);
-    let (ieee802154, _interrupts) = crate::ieee802154::mac::split(ieee802154);
+    let bluetooth = BluetoothTaskRegisters::new(bluetooth.controller);
+    let (ieee802154, _interrupts) = crate::ieee802154::mac::split(ieee802154.into_mac());
     let mut radio = radio_domain();
     let domain = &mut radio;
 
@@ -81,7 +68,7 @@ fn btbb_joins_an_initialized_baseband_without_register_access() {
 fn only_the_latest_gain_of_the_current_registration_admits_btbb() {
     use crate::owner::PhyInitializationAccess;
     let RadioPartitions { ieee802154, .. } = RadioPartitions::for_host_test();
-    let (ieee802154, _interrupts) = crate::ieee802154::mac::split(ieee802154);
+    let (ieee802154, _interrupts) = crate::ieee802154::mac::split(ieee802154.into_mac());
     let mut radio = radio_domain();
     let first = radio.phy_hal().begin_registration();
     let earlier = radio.btbb_publisher().1.publish(&first, 0x4e).unwrap();
@@ -117,7 +104,7 @@ fn the_domain_stays_while_btbb_is_held() {
 
 #[test]
 fn a_client_cannot_disable_modem_clocks_it_never_enabled() {
-    let wifi = oer_esp32s31_pac::WifiRadioRegisters::new(RadioPartitions::for_host_test().wifi_mac);
+    let wifi = WifiRadioRegisters::new(RadioPartitions::for_host_test().wifi.into_parts().0);
     let mut radio = radio_domain();
     let domain = &mut radio;
     // Rejected before any register access.

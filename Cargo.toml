@@ -89,8 +89,6 @@ members = [
     "chips/espressif/executor",
     "portable/embassy/net",
     "portable/time-virtual",
-    "chips/espressif/esp-hal/radio",
-    "chips/espressif/esp-hal/soc",
     "protocols/bluetooth/hci",
     "protocols/bluetooth/le/controller",
     "protocols/bluetooth/le/ll",
@@ -111,7 +109,6 @@ members = [
     "protocols/ieee80211/model",
     "chips/espressif/ieee80211-policy",
     "chips/esp32s31/pac",
-    "chips/esp32s31/pac-raw",
     "chips/esp32s31/hal",
     "chips/esp32s31/phy",
     "chips/esp32s31/radio/coex",
@@ -121,7 +118,6 @@ members = [
     "chips/esp32s31/ieee80211/mac",
     "chips/espressif/coex",
     "chips/espressif/ieee802154-engine",
-    "chips/espressif/ieee80211-pac",
     "chips/espressif/ieee802154-mac-values",
     "chips/espressif/efuse",
     "chips/espressif/usb-serial-jtag",
@@ -138,10 +134,8 @@ members = [
     "tools/os/serial",
     "tools/chip/profile",
     "chips/espressif/facts",
-    "tools/registers/bindings",
     "tools/registers/contracts",
     "tools/registers/model",
-    "tools/registers/review",
     "tools/lab/model",
     "tools/lab/router",
     "tools/registers/generate",
@@ -245,8 +239,6 @@ default-members = [
     "chips/espressif/executor",
     "portable/embassy/net",
     "portable/time-virtual",
-    "chips/espressif/esp-hal/radio",
-    "chips/espressif/esp-hal/soc",
     "protocols/bluetooth/hci",
     "protocols/bluetooth/le/controller",
     "protocols/bluetooth/le/ll",
@@ -267,7 +259,6 @@ default-members = [
     "protocols/ieee80211/model",
     "chips/espressif/ieee80211-policy",
     "chips/esp32s31/pac",
-    "chips/esp32s31/pac-raw",
     "chips/esp32s31/hal",
     "chips/esp32s31/phy",
     "chips/esp32s31/radio/coex",
@@ -277,7 +268,6 @@ default-members = [
     "chips/esp32s31/ieee80211/mac",
     "chips/espressif/coex",
     "chips/espressif/ieee802154-engine",
-    "chips/espressif/ieee80211-pac",
     "chips/espressif/ieee802154-mac-values",
     "chips/espressif/efuse",
     "chips/espressif/usb-serial-jtag",
@@ -294,10 +284,8 @@ default-members = [
     "tools/os/serial",
     "tools/chip/profile",
     "chips/espressif/facts",
-    "tools/registers/bindings",
     "tools/registers/contracts",
     "tools/registers/model",
-    "tools/registers/review",
     "tools/lab/model",
     "tools/lab/router",
     "tools/registers/generate",
@@ -332,13 +320,10 @@ publish = false
 
 [workspace.dependencies]
 # The firmware packages' shared dependencies.
-esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "1f646c5af4f4ca2774f493783581237fea2379dc", default-features = false }
-esp-bootloader-esp-idf = { git = "https://github.com/ermacv/esp-hal", rev = "1f646c5af4f4ca2774f493783581237fea2379dc", default-features = false }
 static_cell = "2.1.1"
 oer-espressif-staged-layout = { path = "chips/espressif/staged-layout" }
 oer-espressif-usb-serial-jtag = { path = "chips/espressif/usb-serial-jtag" }
 oer-esp32s31-layout = { path = "chips/esp32s31/layout" }
-oer-espressif-esp-hal-soc = { path = "chips/espressif/esp-hal/soc", features = ["esp32s31"] }
 # The HIL agent images' shared dependencies.
 embassy-sync = "0.8.0"
 embassy-time = "0.5.1"
@@ -350,9 +335,9 @@ critical-section = "1.2.0"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
-# `oer_probe` compiles the probe hooks of the HAL, PHY, PACs and BLE driver:
-# `cargo fw` sets it for the images of `firmware/probes/` alone, in
-# their own target directory. `oer_trace` (what happened: values and
+# `oer_probe`: `cargo fw` sets it for the images of `firmware/probes/`
+# alone, in their own target directory; no production crate of the S31
+# reads it. `oer_trace` (what happened: values and
 # events), `oer_profile` (what execution costs: time, cycles, load) and
 # `oer_debug_control` (knobs that force execution paths) are set by
 # `cargo fw` for an image that declares the class in its manifest

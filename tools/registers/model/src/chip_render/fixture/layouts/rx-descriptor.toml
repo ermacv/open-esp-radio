@@ -1,0 +1,36 @@
+schema = 1
+
+[layout]
+name = "RX_DESCRIPTOR"
+description = "Synthetic DMA descriptor."
+size = 8
+align = 4
+
+[layout.review]
+sources = ["SRC_HEADER"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[layout.words]]
+name = "CONTROL"
+offset = 0x00
+access = "shared"
+
+[[layout.words.fields]]
+name = "OWNER"
+bits = "31"
+writer = "cpu"
+description = "Who holds the descriptor."
+
+[[layout.words]]
+name = "NEXT"
+offset = 0x04
+access = "shared"
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "The next descriptor's address."

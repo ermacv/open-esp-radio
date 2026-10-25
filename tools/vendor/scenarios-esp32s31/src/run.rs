@@ -2,13 +2,11 @@
 //! scenario set, its inputs and the dispatch that prints its verdicts.
 //! The binary adds the reviewer commands.
 use crate::{
-    ampdu_resort, ble, calibration_leaves, calibration_prefix, channel, coex, coex_hw, decisions,
+    ble, calibration_leaves, coex_hw, decisions,
     gain::{Gain, Options},
     gain_state::{self, Unmet},
     harness::{Budget, Result},
-    harness_edges, i2c, i2c_transport, mac, observation,
-    phy::PhyOptions,
-    retry, rfpll, rx_append, rx_gain, session, state, tracking, tx_dc,
+    harness_edges, i2c, mac, observation, session, state,
 };
 use clap::Subcommand;
 use oer_vendor_scenario::findings::RunReport;
@@ -17,8 +15,8 @@ use std::{path::PathBuf, process::ExitCode};
 /// One vendor-comparison scenario and its inputs.
 #[derive(Subcommand)]
 pub enum Scenario {
-    /// Wi-Fi/BT gain arithmetic and publication, calibration storage and the
-    /// RF-test power producer (`--rftest`).
+    /// Vendor gain characterization, calibration storage and the RF-test
+    /// power producer (`--rftest`).
     Gain {
         #[command(flatten)]
         common: Common,
@@ -26,39 +24,15 @@ pub enum Scenario {
         #[arg(long, default_value_os_t = crate::artifacts::default_path("librftest"))]
         rftest: PathBuf,
     },
-    /// Channel restoration over installed ROM callbacks: full-root channel,
-    /// temperature prefix over every sensor range and stuck-readiness containment.
-    Channel {
-        #[command(flatten)]
-        common: Common,
-    },
-    /// Complete RX-gain root: publication guards, DC calibration and
-    /// failed-channel, minimum-search and shared-budget containment.
-    RxGain {
-        #[command(flatten)]
-        common: Common,
-        /// Authenticated SDK firmware supplying the never-executed diagnostics symbol.
-        #[arg(long, default_value_os_t = crate::artifacts::default_path("phy-sdk"))]
-        phy_sdk: PathBuf,
-    },
-    /// Complete TX-DC/PWDET root: Wi-Fi/BT DC rows over constant and
-    /// alternating SAR samples, and PBus/SAR fault containment.
-    TxDc {
-        #[command(flatten)]
-        common: Common,
-        /// Authenticated SDK firmware supplying the never-executed diagnostics symbol.
-        #[arg(long, default_value_os_t = crate::artifacts::default_path("phy-sdk"))]
-        phy_sdk: PathBuf,
-    },
-    /// Every PHY comparison scenario concurrently under one budget, each in its
+    /// Every comparison scenario concurrently under one budget, each in its
     /// own output directory; any failure fails the run.
     All {
         #[command(flatten)]
         common: Common,
-        /// Authenticated bootloader SDK firmware (calibration leaves and prefix).
+        /// Authenticated bootloader SDK firmware (calibration leaves).
         #[arg(long, default_value_os_t = crate::artifacts::default_path("sdk"))]
         sdk: PathBuf,
-        /// Authenticated PHY SDK firmware (RFPLL and diagnostics symbols).
+        /// Authenticated PHY SDK firmware (logging and network-stack symbols).
         #[arg(long, default_value_os_t = crate::artifacts::default_path("phy-sdk"))]
         phy_sdk: PathBuf,
         /// Authenticated `librftest.a` (RF-test power producer).
@@ -73,9 +47,6 @@ pub enum Scenario {
         /// Compiled Bluetooth probe image.
         #[arg(long)]
         bluetooth_production: PathBuf,
-        /// Authenticated `libcoexist.a` (coexistence schedule).
-        #[arg(long, default_value_os_t = crate::artifacts::default_path("libcoexist"))]
-        libcoexist: PathBuf,
     },
     /// Bluetooth LE controller leaves of the pinned Bluetooth archives
     /// against the compiled Bluetooth probe image.
@@ -98,15 +69,6 @@ pub enum Scenario {
         #[arg(long, default_value_os_t = crate::artifacts::default_path("phy-sdk"))]
         phy_sdk: PathBuf,
     },
-    /// The coexistence time-slice schedule of `libcoexist.a`: scheme
-    /// selection, status bits, phase timeouts and restarts.
-    Coex {
-        #[command(flatten)]
-        common: Common,
-        /// Authenticated `libcoexist.a`.
-        #[arg(long, default_value_os_t = crate::artifacts::default_path("libcoexist"))]
-        libcoexist: PathBuf,
-    },
     /// Wi-Fi MAC HAL leaves of `libpp.a` over every radio register fill.
     WifiMac {
         #[command(flatten)]
@@ -121,21 +83,8 @@ pub enum Scenario {
         #[arg(long, default_value_os_t = crate::artifacts::default_path("phy-sdk"))]
         phy_sdk: PathBuf,
     },
-    /// Combined calibration and parameter tracking parents with their real
-    /// children, RFPLL corrections and failed-TX containment.
-    Tracking {
-        #[command(flatten)]
-        common: Common,
-        /// Authenticated SDK firmware supplying the never-executed diagnostics symbol.
-        #[arg(long, default_value_os_t = crate::artifacts::default_path("phy-sdk"))]
-        phy_sdk: PathBuf,
-        /// Existing parent cases that reach final temperature without RX/TX
-        /// recalibration. The default still runs the complete tracking suite.
-        #[arg(long)]
-        temperature_parent: bool,
-    },
-    /// PHY I2C command memory and transport, harness call edges, calibration
-    /// leaves and PBus/DCODE prefix (`--sdk`) and RFPLL (`--phy-sdk`).
+    /// PHY I2C command memory, harness call edges and calibration leaves
+    /// (`--sdk`).
     I2c {
         #[command(flatten)]
         common: Common,
@@ -143,10 +92,6 @@ pub enum Scenario {
         /// by default the pinned one.
         #[arg(long, default_value_os_t = crate::artifacts::default_path("sdk"))]
         sdk: PathBuf,
-        /// Authenticated SDK firmware with the RFPLL diagnostics symbol, by
-        /// default the pinned one.
-        #[arg(long, default_value_os_t = crate::artifacts::default_path("phy-sdk"))]
-        phy_sdk: PathBuf,
     },
 }
 
@@ -179,144 +124,19 @@ fn single(outcome: Result<Outcome>) -> Result<ExitCode> {
 type Outcome = (ExitCode, session::Claims);
 
 /// Vendor roots each scenario claims against its compiled production entry.
-const GAIN_CLAIMS: [(&str, &str, &str); 4] = [
-    (
-        "archive",
-        "phy_wifi_get_tx_tab_new",
-        "open_phy_channel_trace_calculate_tx_gain",
-    ),
-    (
-        "archive",
-        "phy_set_tx_gain_mem_new",
-        "open_phy_channel_trace_publish_tx_gain",
-    ),
-    (
-        "archive",
-        "phy_bt_get_tx_tab_new",
-        "open_phy_bluetooth_trace_calculate_gain",
-    ),
-    (
-        "archive",
-        "phy_bt_set_tx_gain_new",
-        "open_phy_bluetooth_trace_tx_gain",
-    ),
-];
-const I2C_CLAIMS: [(&str, &str, &str); 12] = [
-    (
-        "archive",
-        "phy_i2c_master_cmd_mem_init",
-        "open_phy_trace_command_memory",
-    ),
-    (
-        "archive",
-        "phy_get_i2c_hostid_new",
-        "open_phy_trace_i2c_host",
-    ),
-    ("rom", "phy_i2c_readReg", "open_phy_trace_i2c_transfer"),
-    ("rom", "phy_i2c_writeReg", "open_phy_trace_i2c_transfer"),
-    ("rom", "phy_i2c_readReg_Mask", "open_phy_trace_i2c_transfer"),
-    (
-        "rom",
-        "phy_i2c_writeReg_Mask",
-        "open_phy_trace_i2c_transfer",
-    ),
-    ("rom", "phy_i2c_master_reset", "open_phy_trace_i2c_reset"),
-    (
-        "archive",
-        "phy_i2c_master_mem_cfg",
-        "open_phy_trace_phy_i2c_master_mem_cfg",
-    ),
-    (
-        "archive",
-        "phy_i2c_master_command_mem_cfg",
-        "open_phy_trace_phy_i2c_master_command_mem_cfg",
-    ),
-    (
-        "archive",
-        "phy_get_i2c_data",
-        "open_phy_trace_phy_get_i2c_data",
-    ),
-    (
-        "archive",
-        "phy_i2c_enter_critical",
-        "open_phy_trace_phy_i2c_enter_critical",
-    ),
-    (
-        "archive",
-        "phy_i2c_exit_critical",
-        "open_phy_trace_phy_i2c_exit_critical",
-    ),
-];
-const I2C_SDK_CLAIMS: [(&str, &str, &str); 5] = [
-    (
-        "rom",
-        "phy_pbus_clear_reg",
-        "open_phy_calibration_trace_pbus_clear",
-    ),
+const I2C_CLAIMS: [(&str, &str, &str); 1] = [(
+    "archive",
+    "phy_i2c_master_cmd_mem_init",
+    "open_phy_trace_command_memory",
+)];
+const I2C_SDK_CLAIMS: [(&str, &str, &str); 3] = [
     (
         "archive",
         "phy_txgain_comp_pacfg_new",
         "open_phy_calibration_leaf",
     ),
     ("archive", "phy_force_dig_gain", "open_phy_calibration_leaf"),
-    (
-        "archive",
-        "phy_temp_to_power_new",
-        "open_phy_calibration_leaf",
-    ),
     ("archive", "phy_reg_update_new", "open_phy_calibration_leaf"),
-];
-const I2C_RFPLL_CLAIMS: [(&str, &str, &str); 4] = [
-    (
-        "archive",
-        "phy_rfpll_cap_init_cal_track",
-        "open_phy_rfpll_trace_search",
-    ),
-    (
-        "archive",
-        "phy_rfpll_cap_track_new",
-        "open_phy_rfpll_trace_maintain",
-    ),
-    (
-        "archive",
-        "phy_rfpll_cap_track_new",
-        "open_phy_rfpll_trace_track",
-    ),
-    (
-        "archive",
-        "phy_set_rfpll_freq_new",
-        "open_phy_rfpll_trace_program",
-    ),
-];
-const CHANNEL_CLAIMS: [(&str, &str, &str); 2] = [
-    (
-        "archive",
-        "phy_chip_set_chan",
-        "open_phy_channel_trace_state",
-    ),
-    ("rom", channel::SENSOR_ROOT, channel::SENSOR_ENTRY),
-];
-const RX_GAIN_CLAIMS: [(&str, &str, &str); 1] = [(
-    "archive",
-    "phy_set_rx_gain_table",
-    "open_phy_calibration_trace_rx_gain",
-)];
-const TX_DC_CLAIMS: [(&str, &str, &str); 1] = [(
-    "archive",
-    "phy_txdc_cal_pwdet_init",
-    "open_phy_calibration_trace_tx_dc_pwdet",
-)];
-const TRACKING_CLAIMS: [(&str, &str, &str); 2] = [
-    (
-        "archive",
-        "phy_cal_param_track",
-        "open_phy_calibration_trace_combined",
-    ),
-    (
-        "archive",
-        "phy_param_track_tot",
-        "open_phy_tracking_trace_parent",
-    ),
 ];
 
 fn finish(unmet: &[Unmet], message: &str, run: &std::path::Path) -> ExitCode {
@@ -347,30 +167,19 @@ fn gain(common: Common, rftest: Option<PathBuf>, report: &dyn RunReport) -> Resu
     let mut g = Gain::new(&options)?;
     let unmet = gain_state::exercise(&mut g, options.rftest.is_some())?;
     g.doc("unmet-obligations", &unmet)?;
-    g.coefficient_boundaries()?;
     g.characterize()?;
-    g.wifi()?;
-    g.publish_wifi()?;
-    g.bluetooth()?;
-    g.additive()?;
-    g.negative()?;
-    let claims = g.session.claims("gain", &g.roots, &GAIN_CLAIMS, report)?;
+    let claims = g.session.claims("gain", &g.roots, &[], report)?;
     Ok((
         finish(
             &unmet,
-            "authenticated gain arithmetic/publication, gain state passed",
+            "authenticated gain characterization, gain state passed",
             &g.run,
         ),
         claims,
     ))
 }
 
-fn i2c(
-    common: Common,
-    sdk: Option<PathBuf>,
-    phy_sdk: Option<PathBuf>,
-    report: &dyn RunReport,
-) -> Result<Outcome> {
+fn i2c(common: Common, sdk: Option<PathBuf>, report: &dyn RunReport) -> Result<Outcome> {
     let options = i2c::Options {
         library: common.library,
         rom: common.rom,
@@ -379,19 +188,11 @@ fn i2c(
         output: common.output,
         budget: common.budget,
         sdk,
-        phy_sdk,
     };
     let mut ctx = i2c::I2c::new(&options)?;
-    let unmet = i2c::unmet(options.sdk.is_some(), options.phy_sdk.is_some());
+    let unmet = i2c::unmet(options.sdk.is_some());
     ctx.doc("unmet-obligations", &unmet)?;
-    if options.phy_sdk.is_some() {
-        rfpll::exercise(&mut ctx)?;
-    }
-    if options.sdk.is_some() {
-        calibration_prefix::exercise(&mut ctx)?;
-    }
     ctx.command_memory()?;
-    i2c_transport::exercise(&mut ctx)?;
     if options.sdk.is_some() {
         calibration_leaves::exercise(&mut ctx)?;
     }
@@ -402,42 +203,9 @@ fn i2c(
     if options.sdk.is_some() {
         list.extend(I2C_SDK_CLAIMS);
     }
-    if options.phy_sdk.is_some() {
-        list.extend(I2C_RFPLL_CLAIMS);
-    }
     let claims = ctx.session.claims("i2c", &ctx.roots, &list, report)?;
     Ok((
         finish(&unmet, "authenticated PHY comparisons passed", &ctx.run),
-        claims,
-    ))
-}
-
-impl Common {
-    fn phy(self) -> PhyOptions {
-        PhyOptions {
-            library: self.library,
-            rom: self.rom,
-            production: self.production,
-            linker: self.linker,
-            output: self.output,
-            budget: self.budget,
-        }
-    }
-}
-
-fn channel(common: Common, report: &dyn RunReport) -> Result<Outcome> {
-    let options = common.phy();
-    let mut ctx = channel::Channel::new(&options)?;
-    channel::exercise(&mut ctx)?;
-    let claims = ctx
-        .session
-        .claims("channel", &ctx.roots, &CHANNEL_CLAIMS, report)?;
-    Ok((
-        finish(
-            &[],
-            "authenticated channel restoration, temperature prefix, containment passed",
-            &ctx.run,
-        ),
         claims,
     ))
 }
@@ -468,10 +236,6 @@ fn wifi_mac(
     };
     let mut ctx = mac::Mac::new(&options)?;
     mac::exercise(&mut ctx)?;
-    retry::exercise(&mut ctx)?;
-    rx_append::exercise(&mut ctx)?;
-    ampdu_resort::exercise(&mut ctx)?;
-    ampdu_resort::exercise_timeouts(&mut ctx)?;
     let claims = ctx
         .session
         .claims("wifi-mac", &ctx.roots, &mac::claims(&ctx), report)?;
@@ -546,94 +310,6 @@ fn coex_hw(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<O
     ))
 }
 
-fn coex(common: Common, libcoexist: PathBuf, report: &dyn RunReport) -> Result<Outcome> {
-    let options = coex::CoexOptions {
-        library: libcoexist,
-        rom: common.rom,
-        production: common.production,
-        linker: common.linker,
-        output: common.output,
-        budget: common.budget,
-    };
-    let mut ctx = coex::Coex::new(&options)?;
-    coex::exercise(&mut ctx)?;
-    let claims = ctx
-        .session
-        .claims("coex", &ctx.roots, coex::CLAIMS, report)?;
-    Ok((
-        finish(&[], "authenticated coexistence schedule passed", &ctx.run),
-        claims,
-    ))
-}
-
-fn rx_gain(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<Outcome> {
-    let mut ctx = rx_gain::RxGain::new(&common.phy(), &phy_sdk)?;
-    rx_gain::exercise(&mut ctx)?;
-    let claims = ctx
-        .session
-        .claims("rx-gain", &ctx.roots, &RX_GAIN_CLAIMS, report)?;
-    Ok((
-        finish(
-            &[],
-            "authenticated RX gain publication, calibration, containment passed",
-            &ctx.run,
-        ),
-        claims,
-    ))
-}
-
-fn tx_dc(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<Outcome> {
-    let mut ctx = tx_dc::TxDc::new(&common.phy(), &phy_sdk)?;
-    tx_dc::exercise(&mut ctx)?;
-    let claims = ctx
-        .session
-        .claims("tx-dc", &ctx.roots, &TX_DC_CLAIMS, report)?;
-    Ok((
-        finish(
-            &[],
-            "authenticated TX-DC/PWDET calibration, fault containment passed",
-            &ctx.run,
-        ),
-        claims,
-    ))
-}
-
-fn tracking(
-    common: Common,
-    phy_sdk: PathBuf,
-    temperature_parent: bool,
-    report: &dyn RunReport,
-) -> Result<Outcome> {
-    let mut ctx = tracking::Tracking::new(&common.phy(), &phy_sdk, temperature_parent)?;
-    if temperature_parent {
-        tracking::exercise_temperature_parent(&mut ctx)?;
-    } else {
-        tracking::exercise(&mut ctx)?;
-    }
-    let claims = ctx.session.claims(
-        "tracking",
-        &ctx.roots,
-        if temperature_parent {
-            &TRACKING_CLAIMS[1..]
-        } else {
-            &TRACKING_CLAIMS
-        },
-        report,
-    )?;
-    Ok((
-        finish(
-            &[],
-            if temperature_parent {
-                "authenticated temperature-reaching parent cases passed"
-            } else {
-                "authenticated tracking parents, failed-TX containment passed"
-            },
-            &ctx.run,
-        ),
-        claims,
-    ))
-}
-
 /// Every vendor input and extra production image `all` requires.
 struct AllInputs {
     sdk: PathBuf,
@@ -642,10 +318,9 @@ struct AllInputs {
     libpp: PathBuf,
     libnet80211: PathBuf,
     bluetooth_production: PathBuf,
-    libcoexist: PathBuf,
 }
 
-/// Run every PHY comparison scenario; each must pass with no unmet obligation.
+/// Run every comparison scenario; each must pass with no unmet obligation.
 fn all(common: Common, inputs: AllInputs, report: &dyn RunReport) -> Result<ExitCode> {
     let AllInputs {
         sdk,
@@ -654,7 +329,6 @@ fn all(common: Common, inputs: AllInputs, report: &dyn RunReport) -> Result<Exit
         libpp,
         libnet80211,
         bluetooth_production,
-        libcoexist,
     } = inputs;
     let within = |name: &str| Common {
         output: common.output.join(name),
@@ -668,27 +342,7 @@ fn all(common: Common, inputs: AllInputs, report: &dyn RunReport) -> Result<Exit
         ),
         (
             "i2c",
-            Box::new(|| {
-                i2c(
-                    within("i2c"),
-                    Some(sdk.clone()),
-                    Some(phy_sdk.clone()),
-                    report,
-                )
-            }),
-        ),
-        ("channel", Box::new(|| channel(within("channel"), report))),
-        (
-            "rx-gain",
-            Box::new(|| rx_gain(within("rx-gain"), phy_sdk.clone(), report)),
-        ),
-        (
-            "tx-dc",
-            Box::new(|| tx_dc(within("tx-dc"), phy_sdk.clone(), report)),
-        ),
-        (
-            "tracking",
-            Box::new(|| tracking(within("tracking"), phy_sdk.clone(), false, report)),
+            Box::new(|| i2c(within("i2c"), Some(sdk.clone()), report)),
         ),
         (
             "wifi-mac",
@@ -712,10 +366,6 @@ fn all(common: Common, inputs: AllInputs, report: &dyn RunReport) -> Result<Exit
                     report,
                 )
             }),
-        ),
-        (
-            "coex",
-            Box::new(|| coex(within("coex"), libcoexist.clone(), report)),
         ),
         (
             "coex-hw",
@@ -869,15 +519,6 @@ fn split<T>(outcomes: Outcomes<'_, T>) -> Split<'_, T> {
 pub fn run(scenario: Scenario, report: &dyn RunReport) -> ExitCode {
     let result = match scenario {
         Scenario::Gain { common, rftest } => single(gain(common, Some(rftest), report)),
-        Scenario::Channel { common } => single(channel(common, report)),
-        Scenario::Coex { common, libcoexist } => single(coex(common, libcoexist, report)),
-        Scenario::RxGain { common, phy_sdk } => single(rx_gain(common, phy_sdk, report)),
-        Scenario::TxDc { common, phy_sdk } => single(tx_dc(common, phy_sdk, report)),
-        Scenario::Tracking {
-            common,
-            phy_sdk,
-            temperature_parent,
-        } => single(tracking(common, phy_sdk, temperature_parent, report)),
         Scenario::WifiMac {
             common,
             libpp,
@@ -898,7 +539,6 @@ pub fn run(scenario: Scenario, report: &dyn RunReport) -> ExitCode {
             libpp,
             libnet80211,
             bluetooth_production,
-            libcoexist,
         } => all(
             common,
             AllInputs {
@@ -908,15 +548,10 @@ pub fn run(scenario: Scenario, report: &dyn RunReport) -> ExitCode {
                 libpp,
                 libnet80211,
                 bluetooth_production,
-                libcoexist,
             },
             report,
         ),
-        Scenario::I2c {
-            common,
-            sdk,
-            phy_sdk,
-        } => single(i2c(common, Some(sdk), Some(phy_sdk), report)),
+        Scenario::I2c { common, sdk } => single(i2c(common, Some(sdk), report)),
     };
     result.unwrap_or_else(|error| {
         eprintln!("error: {error}");
@@ -959,7 +594,7 @@ mod tests {
     fn every_outcome_is_collected_and_the_first_error_is_returned() {
         let (elapsed, passed, failed) = split(vec![
             ("gain", 1.0, Ok((ExitCode::SUCCESS, 1))),
-            ("channel", 2.0, Err("scenario channel panicked".into())),
+            ("i2c", 2.0, Err("scenario i2c panicked".into())),
             ("wifi-mac", 3.0, Ok((ExitCode::FAILURE, 3))),
             ("bluetooth", 4.0, Ok((ExitCode::SUCCESS, 4))),
         ]);
@@ -970,7 +605,7 @@ mod tests {
                 .expect("a scenario failed")
                 .expect_err("the first failure is an error")
                 .to_string()
-                .contains("channel")
+                .contains("i2c")
         );
     }
     #[test]

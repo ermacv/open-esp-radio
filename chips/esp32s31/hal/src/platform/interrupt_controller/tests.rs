@@ -1,13 +1,17 @@
 use std::vec;
 use std::vec::Vec;
 
-use oer_esp32s31_pac::platform::{Clic, InterruptCore0, clic, interrupt_core0};
+use oer_esp32s31_pac::{
+    clic::{self, Clic, ClicObserver},
+    instances,
+    interrupt_core::{self, InterruptCore0, InterruptCore0Observer},
+};
 use oer_interrupt_table::{
     Binding, Class, Controller, Error, LineState, Lines, Router, Table, Trigger, line_control,
 };
 use oer_mmio::{Bits, Host, Index, InterruptSource};
 
-use super::{InterruptController, LEVEL_BITS};
+use super::{InterruptController, InterruptView, LEVEL_BITS, LineObservation, Observer};
 
 /// Host memory of hart 0's bank and of the CLIC.
 struct Memory {
@@ -19,28 +23,53 @@ impl Memory {
     /// Every word holding `word`.
     fn filled(word: u32) -> Self {
         Self {
-            matrix: vec![word; interrupt_core0::SIZE / 4],
-            clic: vec![word; clic::SIZE / 4],
+            matrix: vec![word; instances::interrupt_core0::SIZE / 4],
+            clic: vec![word; instances::clic::SIZE / 4],
         }
     }
 
     fn controller(&mut self) -> InterruptController<Host<'_>, Host<'_>> {
         InterruptController::new(
-            InterruptCore0::host(&mut self.matrix).expect("the memory holds the bank"),
-            Clic::host(&mut self.clic).expect("the memory holds the CLIC"),
+            interrupt_core::interrupt_core0_host(&mut self.matrix)
+                .expect("the memory holds the bank")
+                .0,
+            clic::clic_host(&mut self.clic)
+                .expect("the memory holds the CLIC")
+                .0,
         )
     }
 
     fn matrix(&mut self) -> InterruptCore0<Host<'_>> {
-        InterruptCore0::host(&mut self.matrix).expect("the memory holds the bank")
+        interrupt_core::interrupt_core0_host(&mut self.matrix)
+            .expect("the memory holds the bank")
+            .0
     }
 
     fn clic(&mut self) -> Clic<Host<'_>> {
-        Clic::host(&mut self.clic).expect("the memory holds the CLIC")
+        clic::clic_host(&mut self.clic)
+            .expect("the memory holds the CLIC")
+            .0
+    }
+
+    fn clic_observer(&mut self) -> ClicObserver<Host<'_>> {
+        clic::clic_host(&mut self.clic)
+            .expect("the memory holds the CLIC")
+            .1
+    }
+
+    fn observer(&mut self) -> Observer<Host<'_>, Host<'_>> {
+        let routes: InterruptCore0Observer<Host<'_>> =
+            interrupt_core::interrupt_core0_host(&mut self.matrix)
+                .expect("the memory holds the bank")
+                .1;
+        let lines = clic::clic_host(&mut self.clic)
+            .expect("the memory holds the CLIC")
+            .1;
+        Observer { routes, lines }
     }
 }
 
-fn source(number: u16) -> Index<{ interrupt_core0::route::COUNT }> {
+fn source(number: u16) -> Index<{ interrupt_core::route::COUNT }> {
     Index::new(usize::from(number)).expect("a source of the bank")
 }
 
@@ -49,15 +78,71 @@ fn line(number: u8) -> Index<{ clic::ctrl::COUNT }> {
 }
 
 #[test]
-fn taking_the_controller_sets_three_level_bits_and_keeps_the_other_configuration() {
+fn splitting_the_partition_sets_three_level_bits_and_keeps_the_other_configuration() {
     let mut memory = Memory::filled(u32::MAX);
-    let controller = memory.controller();
-    assert_eq!(controller.level_bits(), LEVEL_BITS);
-    drop(controller);
-    let config = memory.clic().read_int_config();
+    super::set_level_bits(&mut memory.clic_observer());
+    assert_eq!(super::level_bits(&memory.clic_observer()), LEVEL_BITS);
+    let config = memory.clic_observer().read_int_config();
     assert_eq!(config.mnlbits().get(), 3);
     assert!(config.nvbits(), "the vectoring flag stays");
     assert_eq!(config.nmbits().get(), 3, "the mode bits stay");
+}
+
+#[test]
+fn the_fatal_view_reads_exactly_the_routes_and_lines_the_words_hold() {
+    let mut memory = Memory::filled(0);
+    let mut controller = memory.controller();
+    controller.route(12, 20).expect("source 12 and line 20");
+    controller
+        .set_line(
+            20,
+            LineState {
+                enabled: true,
+                vectored: true,
+                trigger: Trigger::PositiveEdge,
+                control: line_control(3, LEVEL_BITS),
+            },
+        )
+        .expect("line 20");
+    drop(controller);
+    memory.clic().modify_ctrl(line(20), |word| {
+        word.set_ip(true);
+    });
+    let matrix_before = memory.matrix.clone();
+    let clic_before = memory.clic.clone();
+    {
+        let observer = memory.observer();
+        let view = InterruptView {
+            observer: &observer,
+        };
+        assert_eq!(view.routed(12), Some(20));
+        assert_eq!(view.routed(11), None, "a silent source");
+        assert_eq!(view.routed(u16::MAX), None, "no source of the bank");
+        assert_eq!(
+            view.line(20),
+            Some(LineObservation {
+                pending: true,
+                state: LineState {
+                    enabled: true,
+                    vectored: true,
+                    trigger: Trigger::PositiveEdge,
+                    control: line_control(3, LEVEL_BITS),
+                },
+            })
+        );
+        assert_eq!(
+            view.line(21),
+            Some(LineObservation {
+                pending: false,
+                state: LineState::DISABLED,
+            })
+        );
+        assert_eq!(view.line(u8::MAX), None, "no line of the CLIC");
+    }
+    assert!(
+        memory.matrix == matrix_before && memory.clic == clic_before,
+        "the view writes nothing"
+    );
 }
 
 #[test]
@@ -206,7 +291,7 @@ fn a_line_another_writer_left_edge_triggered_reads_as_such() {
     memory.clic().modify_ctrl(line(20), |word| {
         word.set_ie(true)
             .set_attr_shv(true)
-            .set_attr_trig(Bits::constant::<0b01>())
+            .set_attr_trig(clic::ctrl::AttrTrig::PositiveEdge)
             .set_ctl(line_control(3, 3));
     });
     let controller = memory.controller();
@@ -225,7 +310,7 @@ fn a_line_another_writer_left_edge_triggered_reads_as_such() {
 pub struct WakeIrq;
 
 impl InterruptSource for WakeIrq {
-    const SOURCE: u16 = <oer_esp32s31_pac::platform::FromCpu0 as InterruptSource>::SOURCE;
+    const SOURCE: u16 = <oer_esp32s31_pac::hp_system::FromCpu0 as InterruptSource>::SOURCE;
 }
 
 pub fn on_wake(_: &mut WakeIrq) {}
@@ -338,4 +423,20 @@ fn the_router_refuses_a_table_outside_the_matrix_or_the_clic_before_any_write() 
             "no line changed"
         );
     }
+}
+
+#[test]
+fn a_source_is_pending_at_its_bit_of_its_status_word() {
+    // SOURCE: ESP-IDF 4d59230d `interrupt_core0_reg.h`: the status words
+    // at 0x2a8 + 4n hold sources 32n to 32n + 31.
+    let mut words = vec![0; instances::interrupt_core0::SIZE / 4];
+    words[0x2a8 / 4 + 2] = 1 << 4; // source 68, FROM_CPU_INTR3
+    words[0x2a8 / 4 + 5] = 1 << 8; // source 168, the last
+    let status = oer_esp32s31_pac::interrupt_core::InterruptCore0Status::host(&mut words)
+        .expect("the memory holds the bank");
+    assert!(super::pending_in(&status, 68));
+    assert!(super::pending_in(&status, 168));
+    assert!(!super::pending_in(&status, 67));
+    assert!(!super::pending_in(&status, 169), "no such source");
+    assert!(!super::pending_in(&status, u16::MAX));
 }

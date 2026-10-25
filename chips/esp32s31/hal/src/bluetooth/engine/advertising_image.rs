@@ -11,7 +11,7 @@ use crate::layouts::*;
 use crate::bluetooth::engine::{
     le_phy_packet::{LeAccessAddress, LeCrcInit},
     le_tx_power::LeTxPower,
-    sram_link::ControllerSramLinkAddress,
+    sram_link::ControllerSramLink,
 };
 
 /// Semantic primary channel selected by one legacy advertising event.
@@ -83,7 +83,7 @@ impl LegacyAdvertisingLinkStateWords {
     /// supported profile leaves clear.
     pub(super) const fn reset(
         mut self,
-        tx_header: ControllerSramLinkAddress,
+        tx_header: ControllerSramLink<BleBufferHeader>,
         own_address: LegacyAdvertisingOwnAddress,
         default_tx_power: LeTxPower,
         priority: SchedulerEventPriority,
@@ -92,7 +92,11 @@ impl LegacyAdvertisingLinkStateWords {
         // pointer index's upper byte and ORs the bound header into it.
         // Operate on the decoded field, independently of its location in SRAM.
         let previous_index = self.word_00.header().to_le_bytes();
-        let next_index = tx_header.compressed_image().to_le_bytes();
+        let next_index = BleLinkStateTxPath::ZERO
+            .with_header(Some(tx_header.reference()))
+            .expect("a bound link is encodable")
+            .header()
+            .to_le_bytes();
         let header_index = u32::from_le_bytes([
             next_index[0],
             next_index[1],
@@ -109,9 +113,9 @@ impl LegacyAdvertisingLinkStateWords {
             .word_04
             .with_header(None)
             .expect("empty link fits")
-            .with_phy_code_28_29(0)
+            .with_phy_code_28_29(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_28_29_LE_1M)
             .expect("zero fits")
-            .with_phy_code_30_31(0)
+            .with_phy_code_30_31(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_30_31_LE_1M)
             .expect("zero fits");
         self.word_08 = ADVERTISING_RESET.word_08;
         self.word_0c = self
@@ -211,9 +215,9 @@ impl LegacyAdvertisingSchedulerItemWords {
         self.word_04 = self.word_04.with_event_ready(true);
         self.word_14 = self
             .word_14
-            .with_phy_code_28_29(0)
+            .with_phy_code_28_29(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_28_29_LE_1M)
             .expect("zero fits")
-            .with_phy_code_30_31(0)
+            .with_phy_code_30_31(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_30_31_LE_1M)
             .expect("zero fits")
             .with_power_index(link_state.power_index());
         self.word_18 = self

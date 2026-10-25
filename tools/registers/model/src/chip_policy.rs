@@ -31,10 +31,10 @@ mod transactions;
 pub use error::{Error, ErrorKind};
 pub use source::{
     BitwiseComposedDomain, BoundedDomain, ComposedArgument, ComposedValueType, DomainValue,
-    Elements, EnumDomain, FieldBitModify, FieldRead, FieldReplaceModify, FixedRegisterImage,
-    FixedRegisterSequence, FlagDomain, FullRegisterRead, FullRegisterWrite, IndexedBitSetModify,
-    InputTransform, InterruptSnapshot, MaskedRegisterModify, OpaqueDomain, POLICY_SCHEMA, Part,
-    Partition, PartitionImageRead, PointerEncoding, PointerField, PolicyFile, Projection,
+    Elements, EnumDomain, FieldBitModify, FieldDomain, FieldRead, FieldReplaceModify,
+    FixedRegisterImage, FixedRegisterSequence, FlagDomain, FullRegisterRead, FullRegisterWrite,
+    IndexedBitSetModify, InputTransform, InterruptSnapshot, MaskedRegisterModify, OpaqueDomain,
+    POLICY_SCHEMA, Part, Partition, PartitionImageRead, PointerField, PolicyFile, Projection,
     SampledBitZeroWrite, SequenceStep, Triggers, Unclaimed, WholeWordBits, ZeroBasedFieldWrite,
     ZeroRegisterWrite,
 };
@@ -82,7 +82,7 @@ impl ChipPolicy {
     ) -> Result<Self, Error> {
         let text = std::fs::read_to_string(path)
             .map_err(|error| Error::new(path, "", ErrorKind::Read(error)))?;
-        let file: PolicyFile = toml_edit::de::from_str(&text)
+        let mut file: PolicyFile = toml_edit::de::from_str(&text)
             .map_err(|error| Error::new(path, "", ErrorKind::Parse(error.to_string())))?;
         let ids = evidence.source_ids();
         let context = Context {
@@ -107,9 +107,11 @@ impl ChipPolicy {
                 },
             ));
         }
+        resolve_clears(context, model, &mut file.interrupt_snapshots)?;
         let index = Index::new(context, model)?;
         let coverage = ownership::check(context, &index, &file)?;
-        let owners = transactions::check(context, &index, &coverage, &file, model)?;
+        let owners = transactions::check(context, &index, &coverage, &file)?;
+        check_interrupts(context, model, &file)?;
         let claims = coverage.claims(&index);
         Ok(Self {
             path: path.to_owned(),
@@ -154,6 +156,110 @@ impl ChipPolicy {
     pub fn owner(&self, transaction: &str) -> Option<PartId> {
         self.owners.get(transaction).copied()
     }
+}
+
+/// Each part's interrupts are sources of the root bound to the part's
+/// instance, each served by that part alone; an interrupt handler's part
+/// names at least one.
+fn check_interrupts(
+    context: Context<'_>,
+    model: &ChipModel,
+    file: &PolicyFile,
+) -> Result<(), Error> {
+    let mut served = BTreeSet::new();
+    for partition in &file.partitions {
+        for part in &partition.parts {
+            let entity = format!("{}.{}", partition.name, part.name);
+            let fail = |reason: String| context.error(&entity, ErrorKind::Interrupt(reason));
+            if part.interrupt.is_empty() && part.irq_side {
+                return Err(fail(
+                    "an interrupt handler's part names its interrupt".to_owned(),
+                ));
+            }
+            for name in &part.interrupt {
+                let bound = model.interrupts().iter().any(|interrupt| {
+                    interrupt.name == *name && interrupt.instance == part.instance
+                });
+                if !bound {
+                    return Err(fail(format!(
+                        "{name} is no interrupt source bound to {}",
+                        part.instance
+                    )));
+                }
+                if !served.insert(name.as_str()) {
+                    return Err(fail(format!("{name} is already served")));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The clear element of each snapshot: the one its status register's type
+/// pairs with it, at the status element's index, or the status element
+/// itself when it holds only write-one-to-clear fields.
+fn resolve_clears(
+    context: Context<'_>,
+    model: &ChipModel,
+    snapshots: &mut [InterruptSnapshot],
+) -> Result<(), Error> {
+    for snapshot in snapshots {
+        let fail = |reason: String| context.error(&snapshot.name, ErrorKind::Snapshot(reason));
+        let status = model
+            .register(&snapshot.status)
+            .ok_or_else(|| fail(format!("{} is no register element", snapshot.status)))?;
+        let block = model
+            .instances()
+            .iter()
+            .find(|instance| instance.name == status.instance)
+            .and_then(|instance| model.types().get(&instance.block_type))
+            .ok_or_else(|| fail(format!("{} is no MMIO instance", status.instance)))?;
+        let elements = |key: &str| {
+            model
+                .registers()
+                .iter()
+                .filter(|register| register.instance == status.instance && register.key == key)
+                .collect::<Vec<_>>()
+        };
+        let clear = match block
+            .file
+            .interrupt_pairs
+            .iter()
+            .find(|pair| pair.status == status.key)
+        {
+            Some(pair) => {
+                let position = elements(&status.key)
+                    .iter()
+                    .position(|element| element.identity == status.identity);
+                position
+                    .and_then(|position| elements(&pair.clear).get(position).copied())
+                    .ok_or_else(|| {
+                        fail(format!(
+                            "{} has no element of {} at its index",
+                            snapshot.status, pair.clear
+                        ))
+                    })?
+                    .identity
+                    .clone()
+            }
+            None if !status.fields.is_empty()
+                && status
+                    .fields
+                    .iter()
+                    .all(|field| field.class == FieldClass::WriteOneToClear) =>
+            {
+                status.identity.clone()
+            }
+            None => {
+                return Err(fail(format!(
+                    "{} has no interrupt pair in its type and holds other fields than write-one-to-clear ones",
+                    snapshot.status
+                )));
+            }
+        };
+        snapshot.clear = clear;
+    }
+    Ok(())
 }
 
 /// Where a check runs: the policy file and the evidence catalogs' IDs.
@@ -203,7 +309,7 @@ struct Word<'m> {
     command: bool,
 }
 
-impl Word<'_> {
+impl<'m> Word<'m> {
     fn identity(&self) -> &str {
         &self.register.identity
     }
@@ -300,7 +406,7 @@ impl Word<'_> {
     }
 
     /// The type file's declaration of `field`.
-    fn source(&self, field: &ExpandedField) -> Option<&Field> {
+    fn source(&self, field: &ExpandedField) -> Option<&'m Field> {
         self.template
             .fields
             .iter()
@@ -314,6 +420,12 @@ impl Word<'_> {
         let ones = field_ones(field.width);
         let range = source
             .write_range
+            .or_else(|| {
+                source.value_range.as_ref().map(|range| WriteRange {
+                    min: range.min,
+                    max: range.max,
+                })
+            })
             .filter(|range| range.min != 0 || range.max != ones);
         let values = source
             .write_values_only

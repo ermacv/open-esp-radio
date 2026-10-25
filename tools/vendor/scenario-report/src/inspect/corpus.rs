@@ -18,7 +18,7 @@ impl Corpus {
             inputs: vec![],
             roles: vec![],
             missing: vec![],
-            registers: Registers::load(&root.join(oer_vendor_scenario::chip().registers))?,
+            registers: Registers::load(root, oer_vendor_scenario::chip().registers)?,
         };
         for artifact in &oer_vendor_scenario::artifacts::manifest().artifact {
             if ![".a", ".elf"]

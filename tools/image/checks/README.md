@@ -120,11 +120,10 @@ hart's exception), CPU0 (stage two's entry) and each task root in the
 runtime, and the bootstrap root; it runs with the stack and interrupts
 checks, over their bounds' `reached` inventories. A site belongs to the
 layer of the crate its function's demangled name starts with (the self type
-of `<T as Trait>`): workspace crates by directory (`chips/**/pac`,
-`pac-raw`, `*-pac`, `*-pac-raw` are `pac`; `chips/*/hal` is `hal`; the rest
+of `<T as Trait>`): workspace crates by directory (`chips/*/pac` is `pac`;
+`chips/*/hal` is `hal`; the rest
 of `chips/` is `chips`; `portable`, `protocols`, `firmware`), then `core`
-(core, alloc, compiler_builtins), `embassy` (`embassy_*`), `esp-hal`
-(`esp_*`, `esp32*`), `third-party` (every other crate) and `unnamed` (names
+(core, alloc, compiler_builtins), `embassy` (`embassy_*`), `third-party` (every other crate) and `unnamed` (names
 without a crate: `#[no_mangle]` and assembly symbols). An inlined call counts in the function it is inlined into.
 
 The image's `[package.metadata.open-radio.panic-budget]` gives each ELF's
@@ -158,8 +157,8 @@ up to 16 bytes, plus its guard; an unproven or diagnostic stack keeps the
 contract maximum. Checks use the actual linked ranges, and placement
 `maximum-bytes` limits their capacity. A second-pass bound change above 64
 bytes or a bound plus margin that no longer fits fails without another link.
-Strict code has no manual function-section annotations. Assembly entry,
-riscv-rt and esp-hal section conventions still place their code in SRAM;
+Strict code has no manual function-section annotations. The staged platform
+places its assembly entry and trap code in SRAM;
 `.hot.text` selects code for performance. The post-build interrupt check
 verifies the final ELF.
 
@@ -317,7 +316,7 @@ context with the same context-specific resolutions as the interrupt bound.
 `bootstrap-reachability.txt` reports the bootstrap root.
 Probe builds write `runtime-reachability.txt` below
 `target/fw/probes/<package>/<binary>/`. They report each present boot entry
-(`runtime_main`, `_start_rust`, `main`, `_start`, deduplicating addresses),
+(`runtime_main`, `bootstrap_main`, `main`, `_start`, deduplicating addresses),
 the task polls and, where a staged interrupt table is linked, IRQ contexts.
 Without that table the report explicitly makes no IRQ completeness claim.
 These files are separate from stack, frame and placement reports and do not

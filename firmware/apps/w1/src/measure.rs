@@ -16,13 +16,14 @@ use core::{
     task::Poll,
 };
 
-use oer_esp32s31_hal::power::PlatformClockBackend;
-use oer_esp32s31_hal::power::{PlatformClock, PlatformClockAbandonment};
+use oer_esp32s31_hal::power::{
+    ChipClocks, PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
+    PlatformClockGuard, PlatformClockProvider,
+};
 use oer_esp32s31_radio_client::{Client, Failed, LpClock, LpSource, PhyPreparation};
 use oer_esp32s31_radio_system::{
     ClientBackend, CloseFault, Exit, Fault, LastClientLeft, PhyDomain,
 };
-use oer_espressif_esp_hal_radio::EspHal;
 use oer_espressif_executor::{
     poll_timing::{CycleHistogram, CycleSource, Mcycle},
     timer_observation::{Report, Window},
@@ -270,9 +271,9 @@ fn clock_cell(
         .get(phase as usize)
 }
 
-fn clock_op(clock: PlatformClock, op: ClockOp, run: impl FnOnce()) {
+fn clock_op<T>(clock: PlatformClock, op: ClockOp, run: impl FnOnce() -> T) -> T {
     let start = Mcycle.now();
-    run();
+    let result = run();
     let cycles = Mcycle.now().wrapping_sub(start);
     let phase = phase();
     if let (Some(count), Some(max)) = (
@@ -282,6 +283,7 @@ fn clock_op(clock: PlatformClock, op: ClockOp, run: impl FnOnce()) {
         count.fetch_add(1, Ordering::Relaxed);
         max.fetch_max(cycles, Ordering::Relaxed);
     }
+    result
 }
 
 /// The operations of `clock` by `op` in `phase` and the longest, in cycles.
@@ -291,22 +293,52 @@ pub fn clock_stats(clock: PlatformClock, op: ClockOp, phase: Phase) -> (u32, u32
     (load(&CLOCK_COUNT), load(&CLOCK_MAX))
 }
 
-/// esp-hal's clock backend, each operation timed by clock, operation and
-/// phase. The operations stay in SRAM with the underlying backend because
-/// the radio actor calls them at interrupt level 2.
-pub struct TimedEspHal;
+/// The chip's platform clock owner, each operation timed by clock,
+/// operation and phase. The operations stay in SRAM with the underlying
+/// backend because the radio actor calls them at interrupt level 2.
+///
+/// As a provider it takes each reference through the backend, as the
+/// guards it hands out give it back: the root's owner (`runtime.clocks`)
+/// is held for the image's life.
+pub struct TimedChipClocks(ChipClocks);
 
-impl PlatformClockBackend for TimedEspHal {
-    fn acquire(clock: PlatformClock) {
-        clock_op(clock, ClockOp::Acquire, || EspHal::acquire(clock));
+impl TimedChipClocks {
+    /// Time the root's platform clock owner.
+    pub const fn new(clocks: ChipClocks) -> Self {
+        Self(clocks)
+    }
+}
+
+impl PlatformClockBackend for TimedChipClocks {
+    fn acquire(clock: PlatformClock) -> Result<(), PlatformClockError> {
+        clock_op(clock, ClockOp::Acquire, || {
+            <ChipClocks as PlatformClockBackend>::acquire(clock)
+        })
     }
 
-    fn release(clock: PlatformClock) {
-        clock_op(clock, ClockOp::Release, || EspHal::release(clock));
+    fn release(clock: PlatformClock) -> Result<(), PlatformClockError> {
+        clock_op(clock, ClockOp::Release, || {
+            <ChipClocks as PlatformClockBackend>::release(clock)
+        })
     }
 
     fn abandon(clock: PlatformClock, how: PlatformClockAbandonment) {
-        clock_op(clock, ClockOp::Abandon, || EspHal::abandon(clock, how));
+        clock_op(clock, ClockOp::Abandon, || {
+            <ChipClocks as PlatformClockBackend>::abandon(clock, how);
+        });
+    }
+}
+
+impl PlatformClockProvider for TimedChipClocks {
+    type Backend = Self;
+
+    fn acquire(
+        &self,
+        clock: PlatformClock,
+    ) -> Result<PlatformClockGuard<Self>, PlatformClockError> {
+        let _owner = &self.0;
+        <Self as PlatformClockBackend>::acquire(clock)?;
+        Ok(PlatformClockGuard::new(clock))
     }
 }
 

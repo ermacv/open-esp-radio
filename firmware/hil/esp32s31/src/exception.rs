@@ -8,7 +8,7 @@ use oer_espressif_staged_runtime::trap::{self, TrapFrame};
 /// and respects debugger ownership.
 pub fn report_stack_guard() {
     let (control, address) = trap::stack_watchpoint();
-    let hart = esp_hal::system::Cpu::current() as usize;
+    let hart = trap::TrapRegisters::read().hart;
     crate::usb::early(&Note::stack_guard(
         hart as u32,
         control as u32,
@@ -20,8 +20,10 @@ oer_espressif_staged_runtime::exception_handler!(exception);
 
 /// A fatal exception cannot rely on a live executor or acquire a logger
 /// lock that the interrupted code may already hold: it records the
-/// machine state without formatting and resets; the next boot reports it.
+/// machine state without formatting, with the other hart stopped, and
+/// resets; the next boot reports it.
 #[inline(always)]
 fn exception(context: &TrapFrame) -> ! {
-    crate::fatal::record_exception(context.ra as u32)
+    let ra = context.ra;
+    oer_espressif_staged_runtime::reset_recording(|stop| crate::fatal::record_exception(ra, stop))
 }

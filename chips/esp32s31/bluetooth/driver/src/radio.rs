@@ -15,6 +15,7 @@ use oer_interrupt_table::signal::SignalExecutor;
 use crate::{
     ble_phy::{BlePhyRuntime, ControllerBlePhyEngineInitialized},
     controller_hal::{ControllerHalInitializationFailure, ControllerHalInitialized},
+    interrupt::{BluetoothInterruptGate, ChipGate, RadioDoorbell},
     low_power::{
         ControllerLowPowerHardwareInitializationFailure, ControllerLowPowerHardwareInitialized,
     },
@@ -30,10 +31,12 @@ pub trait RadioController<B: PlatformClockBackend> {
     fn task_owner(&self) -> Option<&TaskOwner>;
     fn initialize_phy(&mut self, ready: BluetoothRfReady<'_, B>) -> Result<(), ControllerFault>;
     fn is_retired(&self, installation: u32) -> bool;
+    /// Reset the retired Controller, then take its timer from the timer's
+    /// interrupt handler, which gives it up only after the reset.
     fn reset(
         &mut self,
         radio: &mut RadioDomain<B, ConcurrentPhy>,
-    ) -> Result<ClockedOwner, ControllerFault>;
+    ) -> impl core::future::Future<Output = Result<ClockedOwner, ControllerFault>>;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -55,10 +58,18 @@ pub trait ControllerFactory<M: ControllerMemory> {
 
 /// One generatively scoped installation, from clock setup through reset.
 /// `factory` binds a fresh pool/epoch and the placed arena after clocks exist.
-pub struct ControllerLifecycle<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize> {
+pub struct ControllerLifecycle<
+    F,
+    E,
+    X: SignalExecutor + 'static,
+    M: ControllerMemory,
+    R,
+    const MT: usize,
+> {
     factory: Option<F>,
     runtime: Option<ControllerRuntimeResources<'static, MT, X>>,
     cells: &'static ControllerEventCells<X>,
+    gate: BluetoothInterruptGate<ChipGate, X, R>,
     address: oer_bluetooth_hci::BluetoothPublicDeviceAddress,
     installation: Option<u32>,
     state: State<E, X, M, MT>,
@@ -87,13 +98,17 @@ enum State<E, X: SignalExecutor, M: ControllerMemory, const MT: usize> {
     ResetFailed(ControllerShutdownFailure<X, M>),
 }
 
-impl<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize>
-    ControllerLifecycle<F, E, X, M, MT>
+impl<F, E, X: SignalExecutor + 'static, M: ControllerMemory, R, const MT: usize>
+    ControllerLifecycle<F, E, X, M, R, MT>
 {
+    /// `gate` is the task's end of the Bluetooth interrupt handler's gate;
+    /// the lifecycle keeps it for the timer's reunion after reset and lends
+    /// it to the composition between.
     pub fn new(
         factory: F,
         runtime: ControllerRuntimeResources<'static, MT, X>,
         cells: &'static ControllerEventCells<X>,
+        gate: BluetoothInterruptGate<ChipGate, X, R>,
         address: oer_bluetooth_hci::BluetoothPublicDeviceAddress,
     ) -> Self
     where
@@ -103,10 +118,17 @@ impl<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize>
             factory: Some(factory),
             runtime: Some(runtime),
             cells,
+            gate,
             address,
             installation: None,
             state: State::Empty,
         }
+    }
+
+    /// The task's end of the interrupt handler's gate, which opens and
+    /// closes each epoch.
+    pub fn gate_mut(&mut self) -> &mut BluetoothInterruptGate<ChipGate, X, R> {
+        &mut self.gate
     }
 
     /// Transfer the initialized graph to the BLE backend once, between actor
@@ -143,27 +165,39 @@ impl<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize>
         Ok(())
     }
 
-    /// Reclaim the complete arena only after the actor completed leave and
-    /// the matching Controller reset. Reinstall uses fresh generative scopes.
-    #[allow(clippy::result_large_err)]
-    pub fn into_reset(mut self) -> Result<oer_esp32s31_hal::dma_static::Placed<M::Storage>, Self> {
+    /// Reclaim the complete arena and the task's end of the interrupt
+    /// handler's gate only after the actor completed leave and the matching
+    /// Controller reset. Reinstall uses fresh generative scopes and the same
+    /// gate: the handler's part stays bound for every epoch.
+    #[allow(clippy::result_large_err, clippy::type_complexity)]
+    pub fn into_reset(
+        mut self,
+    ) -> Result<
+        (
+            oer_esp32s31_hal::dma_static::Placed<M::Storage>,
+            BluetoothInterruptGate<ChipGate, X, R>,
+        ),
+        Self,
+    > {
         let arena = match &mut self.state {
             State::Reset(arena) => arena.take(),
             _ => None,
         };
         match arena {
-            Some(arena) => Ok(arena),
+            Some(arena) => Ok((arena, self.gate)),
             None => Err(self),
         }
     }
 }
 
-impl<B, F, E, X, M, const MT: usize> RadioController<B> for ControllerLifecycle<F, E, X, M, MT>
+impl<B, F, E, X, M, R, const MT: usize> RadioController<B>
+    for ControllerLifecycle<F, E, X, M, R, MT>
 where
     B: PlatformClockBackend,
     F: ControllerFactory<M, Error = E>,
-    X: SignalExecutor,
+    X: SignalExecutor + 'static,
     M: ControllerMemory,
+    R: RadioDoorbell,
 {
     fn can_prepare(&self) -> bool {
         matches!(self.state, State::Empty)
@@ -254,8 +288,7 @@ where
         self.installation == Some(installation) && matches!(self.state, State::Retired(Some(_)))
     }
 
-    #[inline(never)]
-    fn reset(
+    async fn reset(
         &mut self,
         radio: &mut RadioDomain<B, ConcurrentPhy>,
     ) -> Result<ClockedOwner, ControllerFault> {
@@ -263,7 +296,14 @@ where
             State::Retired(retired) => retired.take().ok_or(ControllerFault)?,
             _ => return Err(ControllerFault),
         };
-        match retired.shut_down(radio, self.cells) {
+        let pending = match retired.shut_down(radio, self.cells) {
+            Ok(pending) => pending,
+            Err(error) => {
+                self.state = State::ResetFailed(error);
+                return Err(ControllerFault);
+            }
+        };
+        match pending.reunite(&mut self.gate).await {
             Ok(returned) => {
                 self.state = State::Reset(Some(returned.arena));
                 Ok(returned.clocked)

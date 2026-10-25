@@ -173,11 +173,11 @@ branch. Test End calls `r_ble_phy_init` (`r_sym_ble_r39KCENxd4X4fI1qTGp9`),
 which marks the PHY for reinitialization and thereby restores the route.
 
 This repository gives channels zero and one to IEEE 802.15.4 and runs the BLE
-PHY route on channel two (see the modem ETM PAC), so it follows the vendor
+PHY route on channel two (the generated modem ETM part the HAL holds), so it follows the vendor
 semantically rather than by channel number. The first event of a test session
 returns the `EnterTest` step: the runtime disables channel two through
 `MODEM_ETM.CHANNEL_ENABLE_CLEAR` immediately before the list head is published
-and the scheduler runs, and keeps the PAC's `BlePhyEtmRouteDisabled` owner.
+and the scheduler runs, and keeps the HAL's `BlePhyEtmRouteDisabled` owner.
 The channel stays disabled for the later events of the session, as nothing
 between them reinitializes the PHY. Test End returns the `LeaveTest` step,
 whose restore consumes that owner and routes and enables channel two again;
@@ -291,8 +291,8 @@ so the open HCI policy reports zero for a transmitter.
 
 | Owner | Contract |
 | --- | --- |
-| Register model and PAC | Reviewed fields, controller-time transactions, exact publication/acknowledgement and affine MMIO capabilities |
-| HAL | Powered epoch, clock/reset/PHY lifecycle, finite hardware operations and interrupt routing |
+| Register model and PAC | Reviewed fields, field accessors, write-one-to-clear samples and acknowledgements, the vendor stores the accessors cannot express |
+| HAL | Register operations over the field accessors, exact publication/acknowledgement order, affine MMIO capabilities, powered epoch, clock/reset/PHY lifecycle, finite hardware operations and interrupt routing |
 | Controller memory | Pinned descriptor graphs, private pointer codecs and CPU/hardware ownership transfer |
 | Scheduler executor | List-zero mirror, insertion, cancellation, completion walk and stopped state |
 | Radio role | Lowering of test events, stop-then-publish for DTM and result reports |

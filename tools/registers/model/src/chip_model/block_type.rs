@@ -107,7 +107,7 @@ pub(super) fn check_name(name: &str, indexed: bool) -> Result<(), ErrorKind> {
 }
 
 /// `"n"` or `"high:low"` as (low, width).
-pub(super) fn parse_bits(bits: &str) -> Result<(u32, u32), ErrorKind> {
+pub(crate) fn parse_bits(bits: &str) -> Result<(u32, u32), ErrorKind> {
     let invalid = |reason: &str| ErrorKind::FieldBits {
         bits: bits.to_owned(),
         reason: reason.to_owned(),
@@ -215,6 +215,18 @@ impl BlockType {
         }
         context.sources(&name, &file.header.sources)?;
         let space = file.header.space;
+        let mut geometry = BTreeSet::new();
+        for value in &file.geometry {
+            let entity = format!("{name}.{}", value.name);
+            check_name(&value.name, false).map_err(|kind| context.error(&entity, kind))?;
+            if value.value == 0 || !geometry.insert(&value.name) {
+                return Err(context.error(
+                    &entity,
+                    ErrorKind::Values("geometry must be positive with unique names".to_owned()),
+                ));
+            }
+            context.sources(&entity, &value.sources)?;
+        }
 
         let mut outputs = BTreeSet::new();
         for output in &file.interrupt_outputs {
@@ -264,6 +276,7 @@ impl BlockType {
         check_elements(context, space, &name, &elements)?;
         check_group_spans(context, &name, &file.groups, &elements)?;
         check_commands(context, &name, &file.commands, &templates)?;
+        check_doorbells(context, &name, &file, &templates)?;
         let reviews = resolve_reviews(context, &file, &templates)?;
         Ok(Self {
             path,
@@ -336,6 +349,14 @@ fn check_register(
         }
         taken.push((field_mask, field.name.as_str()));
         check_values(field, field_width).map_err(fail)?;
+        for value in &field.values {
+            if !value.sources.is_empty() {
+                context.sources(&field_entity, &value.sources)?;
+            }
+        }
+        if let Some(range) = &field.value_range {
+            context.sources(&field_entity, &range.sources)?;
+        }
     }
 
     if let Some(reserved) = &register.reserved {
@@ -450,17 +471,31 @@ fn check_register(
 fn check_values(field: &Field, width: u32) -> Result<(), ErrorKind> {
     let invalid = |reason: String| Err(ErrorKind::Values(reason));
     let mut names = BTreeSet::new();
-    let mut values = BTreeSet::new();
     for value in &field.values {
         check_name(&value.name, false)?;
-        if !names.insert(value.name.as_str()) || !values.insert(value.value) {
-            return invalid(format!("value {} is named or numbered twice", value.name));
+        if !names.insert(value.name.as_str()) {
+            return invalid(format!("value {} is named twice", value.name));
         }
         if !fits(value.value, width) {
             return invalid(format!(
                 "value {} ({:#x}) is wider than the field",
                 value.name, value.value
             ));
+        }
+    }
+    if let Some(range) = &field.value_range {
+        if range.min > range.max || !fits(range.max, width) {
+            return invalid("value-range is reversed or wider than the field".to_owned());
+        }
+        if field
+            .values
+            .iter()
+            .any(|value| value.value < range.min || value.value > range.max)
+            || field
+                .write_range
+                .is_some_and(|write| write.min < range.min || write.max > range.max)
+        {
+            return invalid("named values and write-range must lie inside value-range".to_owned());
         }
     }
     let constrained = field.write_range.is_some() || field.write_values_only;
@@ -887,6 +922,62 @@ fn check_commands(
             ));
         }
         context.sources(&entity, &command.sources)?;
+    }
+    Ok(())
+}
+
+/// A doorbell is one self-clearing bit of a register that is no command
+/// register, FIFO, data port or word a read changes, and whose other
+/// fields a read-modify-write may write back: plain, read-only or
+/// write-trigger ones (a trigger is written zero).
+fn check_doorbells(
+    context: Context<'_>,
+    name: &str,
+    file: &TypeFile,
+    templates: &BTreeMap<String, Register>,
+) -> Result<(), Error> {
+    let mut seen = BTreeSet::new();
+    for doorbell in &file.doorbells {
+        let entity = format!("{name}.{}.{}", doorbell.register, doorbell.field);
+        let fail = |reason: &str| context.error(&entity, ErrorKind::Doorbell(reason.to_owned()));
+        let register = templates
+            .get(&doorbell.register)
+            .ok_or_else(|| fail("its register is not in the type"))?;
+        if !seen.insert((doorbell.register.as_str(), doorbell.field.as_str())) {
+            return Err(context.error(&entity, ErrorKind::Duplicate(entity.clone())));
+        }
+        let one_bit = register.fields.iter().any(|field| {
+            field.name == doorbell.field
+                && field.class == FieldClass::SelfClearing
+                && parse_bits(&field.bits).is_ok_and(|(_, width)| width == 1)
+        });
+        if !one_bit {
+            return Err(fail("is not one self-clearing bit of its register"));
+        }
+        if file
+            .commands
+            .iter()
+            .any(|command| command.register == doorbell.register)
+            || register.fifo.is_some()
+            || register.data_port.is_some()
+            || register.read_side_effect.is_some()
+        {
+            return Err(fail(
+                "its register is a command register, a FIFO or data port, or a read changes it",
+            ));
+        }
+        if register.fields.iter().any(|field| {
+            field.name != doorbell.field
+                && !matches!(
+                    field.class,
+                    FieldClass::Plain | FieldClass::ReadOnly | FieldClass::WriteTrigger
+                )
+        }) {
+            return Err(fail(
+                "its register holds a field a read-modify-write cannot write back",
+            ));
+        }
+        context.sources(&entity, &doorbell.sources)?;
     }
     Ok(())
 }

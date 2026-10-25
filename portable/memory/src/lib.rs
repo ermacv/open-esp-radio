@@ -11,7 +11,9 @@
 //! audited storage leaves into otherwise safe register APIs. Higher protocol
 //! and integration crates use only these safe capabilities. [`zeroed`] gives
 //! statics in regions the boot zeroes an initializer that is all zero bytes;
-//! [`HandlerCell`] in such a static hands one value to an interrupt handler.
+//! [`HandlerCell`] in such a static hands one value to an interrupt handler;
+//! [`ClaimCell`] lends one value to one holder at a time, without waiting,
+//! until one keeps it for good.
 //! [`RequestSlot`] carries one request at a time from a client to a server
 //! and its answer back, without a lock. [`retained`] holds records in memory
 //! that survives a reset, one holder at a time.
@@ -26,6 +28,7 @@ pub extern crate core as __core;
 use core::marker::PhantomData;
 
 mod affine_spsc;
+mod claim_cell;
 mod dma_bytes;
 mod handler_cell;
 mod indexed_custody;
@@ -50,6 +53,7 @@ pub use affine_spsc::{
     AffineSpscTrySendError, CachedSpscCursor, CompactSpscCursor, LocalSpscReceiver,
     LocalSpscSender, SpscCursor, UniqueQueueIndex,
 };
+pub use claim_cell::{Claim, ClaimCell, Held, KEYS};
 pub use dma_bytes::DmaBytes;
 pub use handler_cell::{HandlerCell, Installed};
 pub use indexed_custody::{CustodyDomain, Drained, IndexedCustody, Quarantine, RetainedName};

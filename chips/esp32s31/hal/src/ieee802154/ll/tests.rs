@@ -6,7 +6,7 @@ use oer_espressif_ieee802154_engine::types::{
 };
 
 use super::*;
-use crate::ieee802154::mac::host::{HostMemory, changed};
+use crate::ieee802154::mac::host::{HostMemory, changed, silent};
 use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
 
 #[test]
@@ -42,8 +42,8 @@ fn a_timer_threshold_is_written_whole() {
 fn the_pib_accessors_read_back_what_they_write() {
     let mut memory = HostMemory::filled(0);
     let (mut task, setup) = memory.owners();
-    let interrupts = setup.activate(&mut task);
-    let mut owners = Ieee802154MacOwners::new(task, interrupts);
+    let interrupts = setup.arm(&mut task);
+    let mut owners = Ieee802154MacOwners::new(task, interrupts, silent());
 
     owners.set_tx_auto_ack(true);
     owners.set_rx_auto_ack(true);
@@ -70,7 +70,7 @@ fn the_pib_accessors_read_back_what_they_write() {
     owners.set_multipan_enable(Ieee802154MultipanEnableState::ALL);
     assert_eq!(owners.multipan_enable(), Ieee802154MultipanEnableState::ALL);
 
-    let (mut task, interrupts) = owners.into_parts();
+    let (mut task, interrupts, _silent) = owners.into_parts();
     let _setup = interrupts.deactivate(&mut task);
 }
 
@@ -78,8 +78,8 @@ fn the_pib_accessors_read_back_what_they_write() {
 fn disabling_coexistence_writes_the_disabled_priority_to_both_fields() {
     let mut memory = HostMemory::filled(u32::MAX);
     let (mut task, setup) = memory.owners();
-    let interrupts = setup.activate(&mut task);
-    let mut owners = Ieee802154MacOwners::new(task, interrupts);
+    let interrupts = setup.arm(&mut task);
+    let mut owners = Ieee802154MacOwners::new(task, interrupts, silent());
     owners.disable_coex();
     let pti = owners.task.mac_part().read_coex_pti();
     assert_eq!(pti.txrx_pti().get(), u32::from(COEX_DISABLED_PTI));
@@ -93,7 +93,7 @@ fn disabling_coexistence_writes_the_disabled_priority_to_both_fields() {
     owners.set_txrx_pti(shared);
     assert_eq!(owners.task.mac_part().read_coex_pti().txrx_pti().get(), 9);
 
-    let (mut task, interrupts) = owners.into_parts();
+    let (mut task, interrupts, _silent) = owners.into_parts();
     let _setup = interrupts.deactivate(&mut task);
 }
 
@@ -101,18 +101,20 @@ fn disabling_coexistence_writes_the_disabled_priority_to_both_fields() {
 fn an_event_enable_reaches_only_its_event() {
     let mut memory = HostMemory::filled(0);
     let (mut task, setup) = memory.owners();
-    let interrupts = setup.activate(&mut task);
-    let mut owners = Ieee802154MacOwners::new(task, interrupts);
-    owners.disable_event(Ieee802154Event::TxDone);
-    owners.enable_event(Ieee802154Event::Timer0Overflow);
-    let events = owners.task.mac_part().read_event_enable();
-    assert!(!events.tx_done() && events.rx_done());
-    assert!(events.timer0_overflow() && !events.clock_count_match());
-
+    let interrupts = setup.arm(&mut task);
+    let mut owners = Ieee802154MacOwners::new(task, interrupts, silent());
+    // Arming left every event masked; the engine enables them.
     owners.enable_all_events();
     let events = owners.task.mac_part().read_event_enable();
     assert!(events.tx_done() && events.events_7() && events.events_13());
 
-    let (mut task, interrupts) = owners.into_parts();
+    owners.disable_event(Ieee802154Event::TxDone);
+    owners.disable_event(Ieee802154Event::Timer0Overflow);
+    owners.enable_event(Ieee802154Event::Timer0Overflow);
+    let events = owners.task.mac_part().read_event_enable();
+    assert!(!events.tx_done() && events.rx_done());
+    assert!(events.timer0_overflow() && events.clock_count_match());
+
+    let (mut task, interrupts, _silent) = owners.into_parts();
     let _setup = interrupts.deactivate(&mut task);
 }

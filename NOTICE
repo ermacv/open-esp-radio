@@ -36,8 +36,9 @@ modification notice:
 Facts only (register sequences, values, call order) in the ESP32-S31 HAL and
 PAC, cited by SOURCE lines and evidence identifiers.
 
-Native analog-I2C geometry facts in
-chips/{esp32s31,esp32c5}/registers/model/analog/phy.toml, from the pinned
+Native analog-I2C geometry facts in the analog-I2C block types of
+chips/esp32s31/registers/types/ and in
+chips/esp32c5/registers/model/analog/phy.toml, from the pinned
 4d59230d regi2c headers (Apache-2.0 OR MIT), and the S31 regi2c_impl.c block
 identifiers (Apache-2.0). The evidence catalogs cite exact paths and hashes;
 no source code is copied. Generated PAC vocabulary retains those SOURCE IDs.
@@ -62,12 +63,11 @@ Source:    https://github.com/esp-rs/esp-pacs at a1f6cf68e,
 Copyright: Espressif Systems (Shanghai) PTE LTD
 License:   Apache-2.0
 
-- chips/esp32s31/registers/upstream/esp32s31.svd and
-  chips/esp32c5/registers/upstream/esp32c5.svd: the vendor SVDs, unmodified;
-  the PAC's generated `soc` module is rendered from them.
-- chips/esp32s31/registers/upstream/platform-radio-deps.svd: a subset with review
-  annotations, modified by Vladislav Ermachenkov; its licenseText carries the
-  original notice.
+- chips/esp32c5/registers/upstream/esp32c5.svd: the vendor SVD, unmodified;
+  the PAC's generated `soc` module is rendered from it.
+- chips/esp32s31/registers/types/: the ESP32-S31 block types take register
+  and field names, interrupt bindings and resets from esp32s31.base.svd as
+  facts, each citing it; the SVD itself is not in this repository.
 
 
 3. Espressif vendor libraries

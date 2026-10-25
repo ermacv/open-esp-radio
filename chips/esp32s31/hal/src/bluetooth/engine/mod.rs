@@ -36,7 +36,10 @@ mod owner;
 pub use arena::{ArenaError, ArenaMemory, BluetoothArena, ControllerMemory, Engine, EngineFault};
 #[cfg(target_arch = "riscv32")]
 pub use live::{EngineScheduleError, EngineStopError, ReceivePublicationError};
-pub use owner::{EngineInitError, EngineShutDown, EngineShutdownError, EngineShutdownFailure};
+pub use owner::{
+    EngineInitError, EngineOutputReleaseError, EngineResetTimerPending, EngineShutDown,
+    EngineShutdownError, EngineShutdownFailure,
+};
 mod coexistence;
 mod connectable_advertising;
 mod direction_finding_workspace;
@@ -179,7 +182,7 @@ pub use rx_memory_list::RxMemoryListClass;
 
 pub use scheduler_context::{BLUETOOTH_SCHEDULER_CONTEXT_BYTES, SchedulerContextStorage};
 
-pub(crate) use sram_link::ControllerSramLinkAddress;
+pub(crate) use sram_link::{ControllerSramLink, SchedulerItemLink};
 
 #[cfg(test)]
 mod test_images;

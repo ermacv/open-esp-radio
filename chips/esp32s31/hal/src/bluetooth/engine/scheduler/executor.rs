@@ -20,7 +20,7 @@
 )]
 
 use crate::bluetooth::engine::{
-    ControllerSramLinkAddress, SchedulerItemCompletionStatus, SchedulerItemId, SchedulerItemSpace,
+    SchedulerItemCompletionStatus, SchedulerItemId, SchedulerItemLink, SchedulerItemSpace,
 };
 use crate::bluetooth::{BluetoothSchedulerBusyObservation, BluetoothSchedulerStopped};
 
@@ -35,22 +35,22 @@ use crate::bluetooth::engine::scheduler::{
 /// method addresses an item that the executor currently owns.
 pub(crate) trait SchedulerItemAccess<I> {
     /// Controller link of the item.
-    fn link(&self, id: I) -> ControllerSramLinkAddress;
+    fn link(&self, id: I) -> SchedulerItemLink;
 
     /// Prepare an item for insertion as list insertion does: clear the
     /// scheduler control byte, mark it unexecuted and install both links.
     fn prepare_for_list(
         &mut self,
         id: I,
-        previous: Option<ControllerSramLinkAddress>,
-        next: Option<ControllerSramLinkAddress>,
+        previous: Option<SchedulerItemLink>,
+        next: Option<SchedulerItemLink>,
     );
 
     /// Replace the hardware next link of a listed item.
-    fn set_next(&mut self, id: I, next: Option<ControllerSramLinkAddress>);
+    fn set_next(&mut self, id: I, next: Option<SchedulerItemLink>);
 
     /// Replace the previous-item link of a listed item.
-    fn set_previous(&mut self, id: I, previous: Option<ControllerSramLinkAddress>);
+    fn set_previous(&mut self, id: I, previous: Option<SchedulerItemLink>);
 
     /// Recorded status, or `None` while hardware has not executed the item.
     fn completion_status(&self, id: I) -> Option<SchedulerItemCompletionStatus>;
@@ -66,24 +66,24 @@ pub(crate) trait SchedulerItemAccess<I> {
 impl<P: crate::bluetooth::engine::SchedulerItemSources> SchedulerItemAccess<SchedulerItemId>
     for SchedulerItemSpace<P>
 {
-    fn link(&self, id: SchedulerItemId) -> ControllerSramLinkAddress {
+    fn link(&self, id: SchedulerItemId) -> SchedulerItemLink {
         SchedulerItemSpace::link(self, id)
     }
 
     fn prepare_for_list(
         &mut self,
         id: SchedulerItemId,
-        previous: Option<ControllerSramLinkAddress>,
-        next: Option<ControllerSramLinkAddress>,
+        previous: Option<SchedulerItemLink>,
+        next: Option<SchedulerItemLink>,
     ) {
         SchedulerItemSpace::prepare_for_list(self, id, previous, next);
     }
 
-    fn set_next(&mut self, id: SchedulerItemId, next: Option<ControllerSramLinkAddress>) {
+    fn set_next(&mut self, id: SchedulerItemId, next: Option<SchedulerItemLink>) {
         SchedulerItemSpace::set_next(self, id, next);
     }
 
-    fn set_previous(&mut self, id: SchedulerItemId, previous: Option<ControllerSramLinkAddress>) {
+    fn set_previous(&mut self, id: SchedulerItemId, previous: Option<SchedulerItemLink>) {
         SchedulerItemSpace::set_previous(self, id, previous);
     }
 
@@ -136,7 +136,7 @@ pub struct SchedulerNotStopped;
 #[derive(Clone, Copy, Eq, PartialEq)]
 #[must_use = "the list head must be published and the scheduler started"]
 pub struct SchedulerIdleInsertion {
-    pub(crate) head: ControllerSramLinkAddress,
+    pub(crate) head: SchedulerItemLink,
 }
 
 /// Events that hardware executed, taken from the head of the list.

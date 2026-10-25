@@ -4,14 +4,19 @@
 //! the vector it last took, the sources pending and routed to that vector and
 //! its CLIC line in `.rtc_fast.persistent` without formatting: every step is
 //! a register read through a typed accessor or a bounded copy, so the fatal
-//! path stays a short leaf in every context's stack bound. The chip then
+//! path stays a short leaf in every context's stack bound. The routes and the
+//! line are read as the hardware holds them, under the fatal path's stop of
+//! the other hart (`interrupt_controller::fatal_view`); without the stop
+//! they read as routed nowhere. The chip then
 //! resets, and the next boot's [`report_previous`] prints the record once.
 //! A failed boot check whose note the console's driver kept off the USB
 //! block records only its [`Failure`] and the hart, then resets the chip.
 
-use esp_hal::system::Cpu;
 use oer_diagnostics::Note;
+use oer_esp32s31_hal::platform::interrupt_controller::{self, LineObservation};
+use oer_espressif_staged_runtime::fatal::{StopError, StopTheWorld};
 use oer_espressif_staged_runtime::trap::{self, TrapRegisters};
+use oer_interrupt_table::Trigger;
 
 const MAGIC: u32 = u32::from_le_bytes(*b"OFTL");
 #[cfg(feature = "panic-hook")]
@@ -86,10 +91,11 @@ oer_espressif_staged_runtime::retained_static! {
     static SLOT: Slot;
 }
 
-/// Record a panic's machine state; the platform resets the chip next.
+/// Record a panic's machine state under `stop`; the platform resets the
+/// chip next.
 #[cfg(feature = "panic-hook")]
-pub(crate) fn record_panic(stage: u32) {
-    record(PANIC, 0, stage);
+pub(crate) fn record_panic(stage: u32, stop: Result<&StopTheWorld<'_>, StopError>) {
+    record(PANIC, 0, stage, stop);
 }
 
 /// A boot check that halts the image.
@@ -99,16 +105,29 @@ pub(crate) enum Failure {
     Layout = 1,
     TaskAllocation = 2,
     EntropySource = 3,
+    RootTaken = 4,
+    InterruptTable = 5,
+    Console = 6,
 }
 
 impl Failure {
-    const ALL: [Self; 3] = [Self::Layout, Self::TaskAllocation, Self::EntropySource];
+    const ALL: [Self; 6] = [
+        Self::Layout,
+        Self::TaskAllocation,
+        Self::EntropySource,
+        Self::RootTaken,
+        Self::InterruptTable,
+        Self::Console,
+    ];
 
     pub(crate) const fn name(self) -> &'static str {
         match self {
             Self::Layout => "layout",
             Self::TaskAllocation => "task-allocation",
             Self::EntropySource => "entropy-source",
+            Self::RootTaken => "root-taken",
+            Self::InterruptTable => "interrupt-table",
+            Self::Console => "console",
         }
     }
 
@@ -134,14 +153,13 @@ pub(crate) fn record_failure(failure: Failure) {
     slot.checksum = slot.sum();
 }
 
-/// Record an exception's machine state and its `ra`, then reset through
-/// the runtime's fatal reset.
-pub(crate) fn record_exception(ra: u32) -> ! {
-    record(EXCEPTION, ra, 0);
-    oer_espressif_staged_runtime::reset()
+/// Record an exception's machine state and its `ra` under `stop`; the
+/// runtime's fatal reset follows.
+pub(crate) fn record_exception(ra: u32, stop: Result<&StopTheWorld<'_>, StopError>) {
+    record(EXCEPTION, ra, 0, stop);
 }
 
-fn record(kind: u32, ra: u32, stage: u32) {
+fn record(kind: u32, ra: u32, stage: u32, stop: Result<&StopTheWorld<'_>, StopError>) {
     let TrapRegisters {
         hart,
         mcause,
@@ -154,23 +172,29 @@ fn record(kind: u32, ra: u32, stage: u32) {
     let vector = mcause & 0x0fff;
     let mtvt_slot = trap::current_hart_vector_slot(vector).unwrap_or(0);
     let mut pending = [0; SOURCE_WORDS];
-    for source in esp_hal::interrupt::InterruptStatus::current().iterator() {
-        set(&mut pending, usize::from(source));
+    for source in 0..SOURCE_WORDS * 32 {
+        // At most 192 sources: the count fits a source number.
+        if interrupt_controller::is_pending(source as u16) {
+            set(&mut pending, source);
+        }
     }
-    let cpu = Cpu::current();
     let mut routed = [0; SOURCE_WORDS];
     let mut line = 0;
-    for (source, cpu_interrupt) in esp_hal::interrupt::mapped_sources(cpu) {
-        if cpu_interrupt as usize == vector {
-            set(&mut routed, source);
-            line = u32::from(cpu_interrupt.is_pending())
-                | u32::from(cpu_interrupt.is_enabled()) << 1
-                | u32::from(matches!(
-                    cpu_interrupt.kind(),
-                    esp_hal::interrupt::InterruptKind::Edge
-                )) << 2
-                | cpu_interrupt.level() << 8;
-        }
+    if let Ok(stop) = stop {
+        let _observed = interrupt_controller::fatal_view(stop, |view| {
+            for source in 0..SOURCE_WORDS * 32 {
+                if view.routed(source as u16).map(usize::from) == Some(vector) {
+                    set(&mut routed, source);
+                }
+            }
+            if routed != [0; SOURCE_WORDS]
+                && let Some(observed) = u8::try_from(vector)
+                    .ok()
+                    .and_then(|vector| view.line(vector))
+            {
+                line = line_word(observed);
+            }
+        });
     }
     // The other hart may hold any lock while this one fails, so the slot
     // is taken without waiting; when that hart is recording its own
@@ -197,6 +221,19 @@ fn record(kind: u32, ra: u32, stage: u32) {
         checksum: 0,
     };
     slot.checksum = slot.sum();
+}
+
+/// The record's word of an observed line: bit 0 pending, 1 enabled, 2
+/// edge-triggered, bits 8.. its level byte.
+fn line_word(observed: LineObservation) -> u32 {
+    let LineObservation { pending, state } = observed;
+    u32::from(pending)
+        | u32::from(state.enabled) << 1
+        | u32::from(matches!(
+            state.trigger,
+            Trigger::PositiveEdge | Trigger::NegativeEdge
+        )) << 2
+        | u32::from(state.control) << 8
 }
 
 /// Set `source`'s bit, without an index whose bounds check could fail: a

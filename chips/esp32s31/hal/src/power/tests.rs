@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, vec::Vec};
 
-use oer_esp32s31_pac::{PlatformClockPowerObservation, SharedModemClockObservation};
+use crate::modem::{PlatformClockPowerObservation, SharedModemClockObservation};
 
 use super::{
     PlatformClock, PlatformClockError, PowerCheckpoint, PowerError, PowerSequenceBackend,
@@ -28,7 +28,7 @@ struct FakeShared {
     /// The platform clock owner refuses this reference.
     refused: Option<PowerCheckpoint>,
     platform: PlatformClockPowerObservation,
-    modem: oer_esp32s31_pac::ModemSysconPowerObservation,
+    modem: crate::modem::ModemSysconPowerObservation,
     observation: SharedModemClockObservation,
 }
 
@@ -43,7 +43,7 @@ impl FakeShared {
                 modem_register_bus_clock_enabled: true,
                 modem_source_clocks_configured: true,
             },
-            modem: oer_esp32s31_pac::ModemSysconPowerObservation {
+            modem: crate::modem::ModemSysconPowerObservation {
                 wifi_reset_released: true,
                 active_clock_map_configured: true,
                 phy_calibration_clocks_enabled: true,
@@ -123,7 +123,7 @@ impl PowerSequenceBackend for FakeShared {
             .push(Operation::SelectI2c160Mhz);
     }
 
-    fn modem_syscon_power_observation(&self) -> oer_esp32s31_pac::ModemSysconPowerObservation {
+    fn modem_syscon_power_observation(&self) -> crate::modem::ModemSysconPowerObservation {
         self.modem
     }
 

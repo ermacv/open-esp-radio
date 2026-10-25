@@ -5,7 +5,7 @@
 //! and walker readbacks check that the caller drained active TX and stopped
 //! its RX descriptor epoch; they do not retire software DMA leases.
 
-use super::{MacInterruptSetup, RadioAccess};
+use super::RadioAccess;
 use crate::ieee80211::{
     dma::rx_dma::{RxDma, WifiRxDmaEngine},
     mac::WifiMacHal,
@@ -18,39 +18,32 @@ pub enum Error {
 }
 
 /// Original resources retained when admission has made no hardware changes.
-pub struct AdmissionFailure {
+pub struct AdmissionFailure<Registers = RadioAccess> {
     pub error: Error,
-    pub registers: RadioAccess,
-    pub interrupts: MacInterruptSetup,
+    pub registers: Registers,
 }
 
 impl RadioAccess {
     /// Verify the stopped physical boundary without acquiring maintenance or
     /// changing hardware. This is the final-client shutdown admission check.
-    pub fn try_confirm_phy_stopped(
-        self,
-        interrupts: MacInterruptSetup,
-    ) -> Result<(Self, MacInterruptSetup), AdmissionFailure> {
-        confirm_stopped(self, interrupts, |registers| {
+    pub fn try_confirm_phy_stopped(self) -> Result<Self, AdmissionFailure> {
+        confirm_stopped(self, |registers| {
             let (mac, rx_dma) = registers.split_rx_dma();
             check_stopped(&mut Stopped { mac, rx_dma })
         })
     }
 }
 
-fn confirm_stopped(
-    mut registers: RadioAccess,
-    interrupts: MacInterruptSetup,
-    check: impl FnOnce(&mut RadioAccess) -> Result<(), Error>,
-) -> Result<(RadioAccess, MacInterruptSetup), AdmissionFailure> {
+/// Run `check` on the owner and return it unchanged, or with the refusal;
+/// it moves the owner and touches no register itself.
+fn confirm_stopped<Registers>(
+    mut registers: Registers,
+    check: impl FnOnce(&mut Registers) -> Result<(), Error>,
+) -> Result<Registers, AdmissionFailure<Registers>> {
     if let Err(error) = check(&mut registers) {
-        return Err(AdmissionFailure {
-            error,
-            registers,
-            interrupts,
-        });
+        return Err(AdmissionFailure { error, registers });
     }
-    Ok((registers, interrupts))
+    Ok(registers)
 }
 
 // Closed readback interface: tests exercise the actual admission/release

@@ -12,8 +12,6 @@ impl RadioDoorbell for Bell {
 
 #[test]
 fn only_reply_readiness_coalesces_and_each_exchange_rings_the_shared_line() {
-    fn transferable<T: Send>() {}
-    transferable::<ControllerInterruptHalf<host::Deferred>>();
     let signal = Box::leak(Box::new(IrqSignal::<host::Deferred>::new()));
     let bell = SchedulerDoorbell::new(Bell(Cell::new(0)), signal);
     let mut cx = Context::from_waker(Waker::noop());

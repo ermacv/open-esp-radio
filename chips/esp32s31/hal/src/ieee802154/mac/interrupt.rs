@@ -3,7 +3,7 @@
 //!
 //! SOURCE: esp-idf-7b9cc1ac-ieee802154-common-ll.
 
-use oer_esp32s31_pac::ieee802154_mac::{Ieee802154MacIrq, event_status};
+use oer_esp32s31_pac::ieee802154::{Ieee802154MacIrq, event_status};
 use oer_espressif_ieee802154_engine::types::{
     Ieee802154Event, Ieee802154EventMask, Ieee802154EventObservation,
     Ieee802154RxAbortReasonObservation, Ieee802154TxAbortReasonObservation,
@@ -80,7 +80,7 @@ impl<P: Placement> Ieee802154InterruptSetupOwner<P> {
 impl<P: Placement> Ieee802154InterruptOwner<P> {
     /// `ieee802154_ll_get_events`: one read of the event field, without
     /// acknowledging it.
-    pub(crate) fn events(&self) -> Ieee802154EventObservation {
+    pub fn events(&self) -> Ieee802154EventObservation {
         observation(&self.mac.read_event_status())
     }
 
@@ -88,7 +88,7 @@ impl<P: Placement> Ieee802154InterruptOwner<P> {
     /// write-one-to-clear word is sampled once and only the asserted events
     /// `mask` selects are acknowledged, so events outside the mask and
     /// events raised after the sample stay latched.
-    pub(crate) fn clear_events(&mut self, mask: Ieee802154EventMask) {
+    pub fn clear_events(&mut self, mask: Ieee802154EventMask) {
         let snapshot = retain(self.mac.sample_event_status(), mask);
         self.mac.acknowledge_event_status(snapshot);
     }

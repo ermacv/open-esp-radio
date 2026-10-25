@@ -19,18 +19,20 @@ system these rules serve.
   method accesses, not only its type name.
 - **No compatibility layers.** Change an interface together with all its
   callers: no deprecated aliases, re-export shims or fallback paths.
-- **No esp-hal, no bridges.** esp-hal, esp-pacs, esp-riscv-rt and
-  esp-metadata are being removed, and nothing is built on them: no adapter
-  that takes their singletons (`take_*`, `assume_exclusive` handoffs), no
-  `handoff = true` partitions, no shared-word inventory, no allowlist entry.
-  New code is written against our own PAC, HAL and root as if they were
-  already gone; existing bridges are deleted, not extended.
+- **Chip ownership.** The S31 workspace contains no esp-* platform crates
+  or bridges. Host `espflash` and its transitive image-format dependency are
+  host tools. The PAC's single `take()` claims the chip; the HAL's
+  `Root::take` splits it through `into_bootstrap` or `into_runtime`.
+  Only these owned partitions grant register access. C5 stays outside the
+  workspace.
 - **Compile time first.** Every check that can run at compile time runs there.
-- **Panics.** Input from outside never panics: frames from the air, any peer
+- **Panics and unsafe.** A change introduces no new runtime panic sites or
+  `unsafe` code. Compile-time checks and test assertions are allowed.
+  Input from outside never panics: frames from the air, any peer
   value (counters, PNs, sequence numbers, lengths, indices), host and API
-  input return a handled error. Elsewhere `todo!`, `unreachable!`, `panic!`
-  and `expect` (never a bare `unwrap()`) are allowed, each with a static
-  message. Panic lints warn; a crate moves to `deny` when its contract
+  input return a handled error. Existing `todo!`, `unreachable!`, `panic!`
+  and `expect` (never a bare `unwrap()`) keep their static messages.
+  Panic lints warn; a crate moves to `deny` when its contract
   freezes.
 - **Execution.** An interrupt handler never shares a lock with a task. Driver
   code never blocks or spins; it yields to its executor. The one exception is
@@ -52,14 +54,22 @@ system these rules serve.
   cannot express is written by hand.
 - **Hardware access.** MMIO only through typed PAC accessors. A missing field
   is added to `chips/<chip>/registers/` and regenerated (`cargo registers
-  generate`), never written as a local mask or shift. Code preserves reserved
-  and unknown bits; the one exception is a PAC policy fixed image marked
-  `whole-word`, a vendor's store of a whole word with its `SOURCE:`. Generated register code has no `unsafe`: volatile access
-  lives in `portable/mmio` alone (svd2rust-rendered PAC domains keep theirs
-  until they move). `unsafe` stays in `portable/mmio`, the PAC (svd2rust-rendered
-  domains and hand-written roots), probe images, the placement constructor and
-  the HAL's protocol core, narrow and with `// SAFETY:`
+  generate --chip <chip>`), never written as a local mask or shift. Code
+  preserves reserved and unknown bits; the one exception is a PAC policy
+  fixed image marked `whole-word`, a vendor's store of a whole word with
+  its `SOURCE:`.
+  Generated register code has no `unsafe`: volatile access lives in
+  `portable/mmio` alone. `unsafe` stays in `portable/mmio`, architectural
+  instructions in `portable/riscv`, the PAC's one root claim, probe images,
+  the placement constructor and the HAL's protocol core, narrow and with `// SAFETY:`
   ([docs/unsafe.md](docs/unsafe.md)); crates above the HAL forbid it.
+- **Hardware dictionaries and geometry.** Field codes and opcodes are named
+  values in the register model, including analog-I2C and hardware-consumed
+  memory layouts; HAL selects the generated names. Field widths, maxima,
+  register-array counts and block geometry come from generated constants.
+  Sequence settings remain HAL constants with `SOURCE:`. An observed image
+  without an established code meaning stays cited configuration, not a model
+  dictionary entry.
 - **Air formats** use the `oer-wire` field macro and its bounded cursor; each
   field names its clause of the standard. No hand-written masks or shifts.
 - **Tests.** Every behavioral change gets a focused regression test beside its
@@ -71,11 +81,14 @@ system these rules serve.
   time. The one exception is the pinned toolchain (`cargo`, `rustc`, `lld`)
   run into the test's own build directory for compile-fail and
   compiler-driven cases.
-- **Generated files** (`*/pac-raw/src/lib.rs`, `*/pac/src/generated.rs`,
-  `registers/**/published/*`, `vendor/facts/**`, `vendor/phy-baselines/*/*.json`,
-  all below `chips/`) are never read whole or edited by hand: grep them by
-  path, regenerate them. `chips/*/layout/linker/dma-window.x` may be read,
-  never edited.
+- **Generated files.** `chips/*/pac/src/generated.rs`,
+  `chips/*/vendor/facts/**/*.toml` (including TOML files directly in `facts/`)
+  and `chips/*/vendor/phy-baselines/*/*.json` are never read whole or edited
+  by hand: grep them by path, regenerate them. `cargo registers generate
+  --chip <chip>` renders the PAC and
+  `chips/*/layout/linker/dma-window.x`; the linker fragment may be read,
+  never edited. Its inputs are `chips/<chip>/registers/chip.toml`, `types/`,
+  `layouts/`, `evidence/` and the schema-6 `policy.toml`.
 - **Sources.** No vendor binaries, disassembly or credentials in git. A
   recovered value carries its `SOURCE:`. From sources without a license only
   facts, never code or verbatim tables
@@ -133,7 +146,7 @@ system these rules serve.
   on a conflict or when main changed the same files. Cite commit hashes as
   `git` prints them. Pass lists of paths as arrays, not one string.
 - **GitHub.** Act only in the owner's repositories; upstream projects are
-  read-only (fixes to esp-hal go to the owner's fork).
+  read-only.
 - **Documents state the current state,** in English. No plans, history or
   "the owner decided" in the repository. An owner decision changes this file,
   [docs/architecture.md](docs/architecture.md) or the README of the code it

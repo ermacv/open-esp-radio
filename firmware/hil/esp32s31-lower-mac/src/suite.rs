@@ -79,7 +79,7 @@ type Device = RadioDevice<
     Fixture,
     EmbassyClock,
     Platform,
-    irq::ImageRoutes,
+    irq::WifiBound,
     irq::ImageDoorbell,
     N,
     B,
@@ -125,7 +125,7 @@ pub struct Boot {
     pub rng: Rng,
     pub station: [u8; 6],
     pub ap: [u8; 6],
-    pub routes: irq::ImageRoutes,
+    pub bound: irq::WifiBound,
     pub bell: irq::ImageDoorbell,
 }
 struct Platform {
@@ -437,7 +437,7 @@ async fn install(boot: Boot, config: Prepare) -> Result<PortParts<Device, TX>, &
             interrupt_cell: &irq::LINE,
             actor: cell,
             timer: EmbassyClock,
-            routes: boot.routes,
+            bound: boot.bound,
             doorbell: boot.bell,
             domain,
             power_limits: limits,

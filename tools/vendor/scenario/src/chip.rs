@@ -31,8 +31,8 @@ pub struct Chip {
     pub phy: Option<&'static crate::phy::PhyLayout>,
     /// The instruction set both implementations run under.
     pub isa: Isa,
-    /// Published register bindings for discovery and inspection, relative
-    /// to the repository root.
+    /// The chip whose register model (`chips/<chip>/registers/`) names
+    /// addresses and bits for discovery and inspection.
     pub registers: &'static str,
 }
 
@@ -100,7 +100,7 @@ pub(crate) static TEST: Chip = Chip {
     observation: &[],
     phy: Some(&TEST_PHY),
     isa: Isa::Rv32imac,
-    registers: "chips/test/registers/published/radio.bindings.toml",
+    registers: "test",
 };
 
 /// The test chip's PHY layout: distinct transport and scratch addresses.

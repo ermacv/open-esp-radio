@@ -12,7 +12,7 @@ minimum_free_bytes = 16384
 
 [core.0.interrupt_stack]
 
-# Core 1 runs nothing: the esp-hal fork holds it in reset
+# Core 1 runs nothing: the staged runtime refuses `cpu1-runs`
 # (chips/esp32s31/notes/core1-boot.md) and the image gate proves that no
 # image starts it, routes an interrupt to it or allocates it a stack.
 [core.1.task_stack]

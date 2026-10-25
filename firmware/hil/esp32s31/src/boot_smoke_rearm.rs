@@ -2,8 +2,7 @@
 
 use core::{future::Future, future::poll_fn, pin::pin, task::Poll};
 
-use embassy_time::{Duration, Timer};
-use esp_hal::time::Instant;
+use embassy_time::{Duration, Instant, Timer};
 
 pub(crate) struct Measurement {
     pub step: u8,

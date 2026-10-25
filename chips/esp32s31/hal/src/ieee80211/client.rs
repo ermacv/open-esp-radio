@@ -1,6 +1,7 @@
 //! Wi-Fi as a client of the shared radio domain.
 //!
-//! The concurrent split hands Wi-Fi its MAC partition and interrupt setup;
+//! The concurrent split hands Wi-Fi its MAC partition (its interrupt banks
+//! belong to the radio interrupt handler, which the root hands them to);
 //! common radio power, the modem clocks and every shared register stay with
 //! the radio domain. These owners follow ESP-IDF's bring-up: common power, then
 //! `modem_clock_module_enable(PERIPH_WIFI_MODULE)`, then the Wi-Fi
@@ -12,17 +13,15 @@
 //! cold MAC HAL and the channel HAL take the shared registers from the radio domain
 //! for one transaction, the MAC reset pulses through it, and the runtime MAC
 //! HAL needs no radio domain because the Wi-Fi hot path touches Wi-Fi registers
-//! only. After cold MAC setup [`WifiClocked::into_running`] splits the client
-//! into the task-side [`RadioAccess`] and the MAC interrupt setup;
-//! [`WifiClocked::from_running`] reunites a stopped runtime epoch.
+//! only. After cold MAC setup [`WifiClocked::into_running`] hands out the
+//! task-side [`RadioAccess`]; [`WifiClocked::from_running`] takes a stopped
+//! runtime epoch back.
 
 use crate::power::PlatformClockBackend;
 
 use core::fmt;
 
-use oer_esp32s31_pac::{MacInterruptSetup, WifiRadioRegisters};
-
-use crate::types::MacInterruptEnableState;
+use crate::ieee80211::registers::{WifiRadioRegisters, WifiRxDmaRegisters};
 
 use crate::{
     clock::{ClockPort, CommonRadioPower},
@@ -44,7 +43,7 @@ pub(crate) trait WifiPowerPort: ClockPort {
     fn pulse_wifi_baseband_and_mac_reset(&mut self);
 }
 
-impl WifiPowerPort for oer_esp32s31_pac::RadioPhyRegisters {
+impl WifiPowerPort for crate::phy::RadioPhyRegisters {
     fn pulse_wifi_baseband_and_mac_reset(&mut self) {
         self.set_wifi_baseband_and_mac_reset(true);
         self.set_wifi_baseband_and_mac_reset(false);
@@ -77,12 +76,11 @@ impl WifiPowerEntry {
     }
 }
 
-/// The Wi-Fi MAC register set, the RX walker's registers and the interrupt
-/// setup.
+/// The Wi-Fi MAC register set and the RX walker's registers. The MAC's
+/// interrupt banks belong to the radio interrupt handler, not the client.
 struct WifiClientRegisters {
     mac: WifiRadioRegisters,
-    rx_dma: oer_esp32s31_pac::WifiRxDmaRegisters,
-    interrupts: MacInterruptSetup,
+    rx_dma: WifiRxDmaRegisters,
 }
 
 /// Unpowered Wi-Fi client holding its partition.
@@ -113,8 +111,8 @@ pub struct WifiClocked {
 /// A [`WifiClocked`] client holds it, and hands it out beside its running
 /// epoch in [`WifiClocked::into_running`]; the clocks can be disabled only
 /// after [`WifiClocked::from_running`] took it back. A running role
-/// therefore proves its clocks to the shared PHY while its registers and
-/// interrupt setup belong to its datapath.
+/// therefore proves its clocks to the shared PHY while its registers belong
+/// to its datapath.
 ///
 /// ```compile_fail
 /// use oer_esp32s31_hal::ieee80211::client::WifiClocksOn;
@@ -157,24 +155,19 @@ impl<Owner, Error: fmt::Debug> fmt::Debug for WifiTransitionFailure<Owner, Error
 impl WifiCold {
     /// Take the partition of a concurrent split. This performs no MMIO.
     pub fn from_partition(partition: WifiPartition) -> Self {
-        let (mac, rx_dma, interrupts) = partition.into_parts();
+        let (mac, rx_dma) = partition.into_parts();
         Self {
             registers: WifiClientRegisters {
                 mac: WifiRadioRegisters::new(mac),
                 rx_dma,
-                interrupts,
             },
         }
     }
 
     /// Return the partition. This performs no MMIO.
     pub fn into_partition(self) -> WifiPartition {
-        let WifiClientRegisters {
-            mac,
-            rx_dma,
-            interrupts,
-        } = self.registers;
-        WifiPartition::from_parts(mac.into_partition(), rx_dma, interrupts)
+        let WifiClientRegisters { mac, rx_dma } = self.registers;
+        WifiPartition::from_parts(mac.into_partition(), rx_dma)
     }
 
     /// Enter Wi-Fi after PHY calibration: its first entry pulses its BB+MAC
@@ -321,12 +314,8 @@ impl WifiClocked {
         &'hal mut self,
         radio: &'hal mut RadioDomain<B, T>,
     ) -> WifiMacColdHal<'hal> {
-        let WifiClientRegisters {
-            mac,
-            rx_dma,
-            interrupts,
-        } = &mut self.registers;
-        WifiMacColdHal::from_leased(mac, rx_dma, interrupts, radio.registers_mut())
+        let WifiClientRegisters { mac, rx_dma } = &mut self.registers;
+        WifiMacColdHal::from_leased(mac, rx_dma, radio.registers_mut())
     }
 
     /// Borrow the runtime MAC HAL over the MAC alone.
@@ -336,7 +325,7 @@ impl WifiClocked {
 
     /// Borrow the channel HAL for one channel transaction, with the shared
     /// PHY borrowed from the radio domain.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn channel_hal<'hal, B: PlatformClockBackend, P, T>(
         &'hal mut self,
         platform: &'hal mut P,
@@ -360,49 +349,28 @@ impl WifiClocked {
         )
     }
 
-    /// Close the cold polling interrupt phase before the task/ISR split:
-    /// mask and clear every MAC interrupt and return the previous enables.
-    pub fn close_cold_interrupt_phase(&mut self) -> MacInterruptEnableState {
-        let interrupts = &mut self.registers.interrupts;
-        let mask = interrupts.mac_interrupt_enable();
-        interrupts.mask_and_clear_all_mac_interrupts();
-        mask
-    }
-
     /// Complete the one-way transition after cold MAC setup: the task-side
-    /// runtime owner, the MAC interrupt setup, which keeps MAC interrupts
-    /// masked until its activation, and the proof that the clocks stay on.
-    /// This performs no MMIO.
-    pub fn into_running(self) -> (RadioAccess, crate::owner::MacInterruptSetup, WifiClocksOn) {
-        let WifiClientRegisters {
-            mac,
-            rx_dma,
-            interrupts,
-        } = self.registers;
+    /// runtime owner and the proof that the clocks stay on. The MAC's
+    /// interrupts stay masked until the radio interrupt handler activates
+    /// them. This performs no MMIO.
+    pub fn into_running(self) -> (RadioAccess, WifiClocksOn) {
+        let WifiClientRegisters { mac, rx_dma } = self.registers;
         (
             RadioAccess::from_clocked(mac, rx_dma, self.station_wake, self.initialized),
-            crate::owner::MacInterruptSetup { inner: interrupts },
             self.clocks,
         )
     }
 
-    /// Reunite a stopped runtime epoch with its inactive interrupt setup.
+    /// Take back a stopped runtime epoch.
     ///
-    /// The caller must have completed its protocol stop: no DMA owner or
-    /// installed interrupt route may remain outside these values. This
-    /// performs no MMIO; the Wi-Fi clocks stay enabled.
-    pub fn from_running(
-        runtime: RadioAccess,
-        interrupts: crate::owner::MacInterruptSetup,
-        clocks: WifiClocksOn,
-    ) -> Self {
+    /// The caller must have completed its protocol stop: no DMA owner may
+    /// remain outside this value, and the radio interrupt handler has closed
+    /// the MAC's interrupt epoch. This performs no MMIO; the Wi-Fi clocks
+    /// stay enabled.
+    pub fn from_running(runtime: RadioAccess, clocks: WifiClocksOn) -> Self {
         let (mac, rx_dma, station_wake, initialized) = runtime.into_clocked_parts();
         Self {
-            registers: WifiClientRegisters {
-                mac,
-                rx_dma,
-                interrupts: interrupts.inner,
-            },
+            registers: WifiClientRegisters { mac, rx_dma },
             initialized,
             station_wake,
             clocks,
@@ -411,8 +379,7 @@ impl WifiClocked {
 
     /// End this stopped installation's clock obligation exactly once.
     ///
-    /// The caller has recovered both the task owner and inactive IRQ setup
-    /// into this value. Any failed clock release, whether a physical failure
+    /// The caller has recovered the task owner into this value. Any failed clock release, whether a physical failure
     /// or the shared modem planner's internal refusal (`Rejected`,
     /// `NotEnabled`), returns stopped custody and an unreleased, poisoned
     /// obligation; neither can restart or retry it.

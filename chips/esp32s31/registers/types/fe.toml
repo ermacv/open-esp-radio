@@ -1154,7 +1154,7 @@ name = "CHANNEL_INDEX"
 bits = "7:0"
 class = "plain"
 description = "Complete phy_freq_chan_en_sw replaces the low byte with the caller's frequency-table index."
-write-range = { min = 0x0, max = 0xff }
+value-range = { min = 0x0, max = 0xff, sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }
 
 [[registers.fields]]
 name = "BITS_8_17_OPAQUE"
@@ -1199,6 +1199,8 @@ name = "HARDWARE_FREQUENCY_DISABLE"
 bits = "31"
 class = "plain"
 description = "Complete phy_dis_hw_set_freq sets bit 31 before its two-microsecond delay; complete phy_en_hw_set_freq clears it."
+values = [{ name = "HARDWARE", value = 0x0, description = "Permit hardware-owned frequency updates.", sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }, { name = "SOFTWARE", value = 0x1, description = "Disable hardware-owned frequency updates.", sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "BIT_21_OPAQUE"
@@ -1238,7 +1240,7 @@ name = "BITS_0_1_OPAQUE"
 bits = "1:0"
 class = "plain"
 description = "Complete phy_bb_init writes encoding two before calibration and zero after the initial channel setup."
-write-range = { min = 0x0, max = 0x3 }
+value-range = { min = 0x0, max = 0x3, sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }
 
 [[registers.fields]]
 name = "FREQUENCY_READY"
@@ -1285,19 +1287,19 @@ name = "MEMORY_READ_MODE"
 bits = "1:0"
 class = "plain"
 description = "Complete phy_read_rf_freq_mem replaces only the low two bits with its read-mode argument."
-write-range = { min = 0x0, max = 0x3 }
+value-range = { min = 0x0, max = 0x3, sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }
 
 [[registers.fields]]
 name = "BITS_8_12_OPAQUE"
 bits = "12:8"
 class = "plain"
-write-range = { min = 0x0, max = 0x1f }
+value-range = { min = 0x0, max = 0x1f, sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }
 
 [[registers.fields]]
 name = "BITS_13_17_OPAQUE"
 bits = "17:13"
 class = "plain"
-write-range = { min = 0x0, max = 0x1f }
+value-range = { min = 0x0, max = 0x1f, sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }
 
 [[registers]]
 name = "I2C_NUMBER_WORD%s"
@@ -1385,13 +1387,13 @@ description = "Shared word contains the table-memory base index and the complete
 name = "FORCED_DIGITAL_GAIN_0"
 bits = "7:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xff }
+value-range = { min = 0x0, max = 0xff, sources = ["BLOB_LIBPHY_CALIBRATION_20260907"] }
 
 [[registers.fields]]
 name = "FORCED_DIGITAL_GAIN_1"
 bits = "15:8"
 class = "plain"
-write-range = { min = 0x0, max = 0xff }
+value-range = { min = 0x0, max = 0xff, sources = ["BLOB_LIBPHY_CALIBRATION_20260907"] }
 
 [[registers.fields]]
 name = "FORCE_DIGITAL_GAIN_ENABLE"
@@ -1403,20 +1405,22 @@ name = "FORCED_POWER_INDEX"
 bits = "22:17"
 class = "plain"
 description = "Complete phy_force_pwr_index replaces bits 22:17 with the low six bits of its second argument."
-write-range = { min = 0x0, max = 0x3f }
+value-range = { min = 0x0, max = 0x3f, sources = ["ROM_REV0_PHY_FORCE_PWR_INDEX"] }
 
 [[registers.fields]]
 name = "FORCE_POWER_ENABLE"
 bits = "23"
 class = "plain"
 description = "Complete phy_force_pwr_index replaces bit 23 with the low bit of its first argument."
+values = [{ name = "DISABLED", value = 0x0, description = "Disable the forced PHY power index.", sources = ["ROM_REV0_PHY_FORCE_PWR_INDEX", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Enable the forced PHY power index.", sources = ["ROM_REV0_PHY_FORCE_PWR_INDEX", "S31_ESP_PACS_SVD"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "BASE_INDEX"
 bits = "31:24"
 class = "plain"
 description = "Eight-bit table-memory base index; the complete front-end initializer writes 0xa0."
-write-range = { min = 0x0, max = 0xff }
+value-range = { min = 0x0, max = 0xff, sources = ["ROM_REV0_PHY_WRITE_PBUS_MEM", "BLOB_LIBPHY_PHY_SET_TX_CFR_MEM", "ROM_REV0_PHY_WRITE_GAIN_MEM"] }
 
 [[registers]]
 name = "FRONT_END_AND_TONE_STOP_CONTROL"
@@ -1526,48 +1530,50 @@ name = "SELECTOR_HIGH"
 bits = "7:0"
 class = "plain"
 description = "Upper eight bits of the evidenced ten-bit selector; bits 1:0 are in TONE_SELECTOR_CONTROL."
-write-range = { min = 0x0, max = 0xff }
+value-range = { min = 0x0, max = 0xff, sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR"] }
 
 [[registers.fields]]
 name = "BITS_8_9_OPAQUE"
 bits = "9:8"
 class = "plain"
 description = "Complete tone writers clear these bits; their hardware meaning is unknown."
-write-range = { min = 0x0, max = 0x3 }
+value-range = { min = 0x0, max = 0x3, sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR"] }
 
 [[registers.fields]]
 name = "NEGATED_STEP_OR_ATTENUATION"
 bits = "17:10"
 class = "plain"
 description = "Two's-complement negated eight-bit tone step or attenuation."
-write-range = { min = 0x0, max = 0xff }
+value-range = { min = 0x0, max = 0xff, sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR"] }
 
 [[registers.fields]]
 name = "TONE_ENABLE_OR_ARM"
 bits = "18"
 class = "plain"
 description = "Set by tone start and by each PWDET sample-arm edge; cleared by stop and sample cleanup."
+values = [{ name = "DISARMED", value = 0x0, description = "Do not arm the power-detector tone sample.", sources = ["ROM_REV0_PHY_POWER_DETECTOR"] }, { name = "ARMED", value = 0x1, description = "Arm one power-detector tone sample.", sources = ["ROM_REV0_PHY_POWER_DETECTOR"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "BITS_19_21_OPAQUE"
 bits = "21:19"
 class = "plain"
 description = "Three-bit image set to binary 101 for the first mismatch-power polarity and otherwise cleared by general tone setup."
-write-range = { min = 0x0, max = 0x7 }
+value-range = { min = 0x0, max = 0x7, sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR"] }
 
 [[registers.fields]]
 name = "BITS_22_23_OPAQUE"
 bits = "23:22"
 class = "plain"
 description = "Complete general and first-polarity tone writers clear these bits."
-write-range = { min = 0x0, max = 0x3 }
+value-range = { min = 0x0, max = 0x3, sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR"] }
 
 [[registers.fields]]
 name = "TXIQ_POLARITY_IMAGE"
 bits = "27:24"
 class = "plain"
 description = "Four-bit mismatch polarity image: first configuration writes bit 26, while the second phase writes nibble 1 or 8."
-write-range = { min = 0x0, max = 0xf }
+value-range = { min = 0x0, max = 0xf, sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR"] }
 
 [[registers.fields]]
 name = "BITS_28_31_OPAQUE"
@@ -1587,6 +1593,7 @@ bits = "7:0"
 class = "plain"
 values = [{ name = "CLEARED", value = 0 }]
 write-values-only = true
+value-range = { min = 0x0, max = 0xff, sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR"] }
 
 [[registers.fields]]
 name = "BITS_8_9_OPAQUE"
@@ -1594,6 +1601,7 @@ bits = "9:8"
 class = "plain"
 values = [{ name = "CLEARED", value = 0 }]
 write-values-only = true
+value-range = { min = 0x0, max = 0x3, sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR"] }
 
 [[registers.fields]]
 name = "NEGATED_STEP_OR_ATTENUATION"
@@ -1601,6 +1609,7 @@ bits = "17:10"
 class = "plain"
 values = [{ name = "CLEARED", value = 0 }]
 write-values-only = true
+value-range = { min = 0x0, max = 0xff, sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR"] }
 
 [[registers.fields]]
 name = "TONE_ENABLE_OR_ARM"
@@ -1689,7 +1698,7 @@ name = "BITS_22_23_OPAQUE"
 bits = "23:22"
 class = "plain"
 description = "Two-bit field preserved around the complete bounded RX-DCO measurement graph."
-write-range = { min = 0x0, max = 0x3 }
+value-range = { min = 0x0, max = 0x3, sources = ["BLOB_LIBPHY_PHY_XTAL_DUTY_CAL", "ROM_REV0_PHY_RX_DCO_CAL"] }
 
 [[registers.fields]]
 name = "BITS_0_21_OPAQUE"
@@ -1785,11 +1794,15 @@ description = "Complete phy_adc_rate_set and phy_dac_rate_set publish rate bit z
 name = "BIT_0_OPAQUE"
 bits = "0"
 class = "plain"
+values = [{ name = "LOW", value = 0x0, description = "Select the low PHY ADC rate.", sources = ["ROM_REV0_PHY_ADC_RATE"] }, { name = "HIGH", value = 0x1, description = "Select the high PHY ADC rate.", sources = ["ROM_REV0_PHY_ADC_RATE"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "BIT_1_OPAQUE"
 bits = "1"
 class = "plain"
+values = [{ name = "LOW", value = 0x0, description = "Select the low PHY ADC rate.", sources = ["ROM_REV0_PHY_ADC_RATE"] }, { name = "HIGH", value = 0x1, description = "Select the high PHY ADC rate.", sources = ["ROM_REV0_PHY_ADC_RATE"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "BITS_2_31_OPAQUE"
@@ -1818,11 +1831,15 @@ description = "Complete phy_iq_est_enable publishes the caller control word and 
 name = "START_ENABLE"
 bits = "0"
 class = "plain"
+values = [{ name = "DISABLED", value = 0x0, description = "Disable the selected IQ-estimator phase.", sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Enable the selected IQ-estimator phase.", sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "MEASUREMENT_ENABLE"
 bits = "1"
 class = "plain"
+values = [{ name = "DISABLED", value = 0x0, description = "Disable the selected IQ-estimator phase.", sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Enable the selected IQ-estimator phase.", sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "BITS_2_16_OPAQUE"
@@ -2007,7 +2024,7 @@ class = "plain"
 name = "BITS_4_11_OPAQUE"
 bits = "11:4"
 class = "plain"
-write-range = { min = 0x0, max = 0xff }
+value-range = { min = 0x0, max = 0xff, sources = ["ROM_REV0_PHY_POWER_DETECTOR"] }
 
 [[registers.fields]]
 name = "BIT_16_OPAQUE"
@@ -2067,7 +2084,7 @@ description = "Complete initialization writes 0x00ff0f64; TX-DC calibration temp
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xff }
+value-range = { min = 0x0, max = 0xff, sources = ["ROM_REV0_PHY_POWER_DETECTOR"] }
 
 [[registers]]
 name = "POWER_DETECTOR_REFERENCE"
@@ -2201,7 +2218,7 @@ name = "MEMORY_INDEX"
 bits = "18:11"
 class = "plain"
 description = "Low eight bits of the PBUS command and complete CFR/gain memory index."
-write-range = { min = 0x0, max = 0xff }
+value-range = { min = 0x0, max = 0xff, sources = ["ROM_REV0_PHY_WRITE_PBUS_MEM", "BLOB_LIBPHY_PHY_SET_TX_CFR_MEM", "ROM_REV0_PHY_WRITE_GAIN_MEM"] }
 
 [[registers.fields]]
 name = "GAIN_WRITE_OR_PBUS_COMMAND_BIT_8"
@@ -2383,6 +2400,8 @@ description = "phy_pbus_force_test command word; phy_pbus_force_mode also uses b
 name = "DEBUG_MODE_ENABLE"
 bits = "0"
 class = "plain"
+values = [{ name = "DISABLED", value = 0x0, description = "Disable the selected PBus control.", sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Enable the selected PBus control.", sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "TRANSACTION_START"
@@ -2416,6 +2435,8 @@ description = "PBus debug/work mode selector used by complete phy_pbus_force_mod
 name = "WORK_MODE_ENABLE"
 bits = "26"
 class = "plain"
+values = [{ name = "DISABLED", value = 0x0, description = "Disable the selected PBus control.", sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Enable the selected PBus control.", sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "BIT_2_OPAQUE"
@@ -2447,12 +2468,16 @@ name = "BIT_14_OPAQUE"
 bits = "14"
 class = "plain"
 description = "phy_set_rxclk_en writes this bit with its neighbor as a pair; complete phy_rxiq_cal_init independently sets it first at root entry. The shared electrical identity remains unknown."
+values = [{ name = "DISABLED", value = 0x0, description = "Disable the selected PBus control.", sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Enable the selected PBus control.", sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "BIT_15_OPAQUE"
 bits = "15"
 class = "plain"
 description = "phy_set_rxclk_en writes this bit with its neighbor as a pair; complete phy_rxiq_cal_init independently sets it at root entry and clears it during the successful cleanup suffix. The shared electrical identity remains unknown."
+values = [{ name = "DISABLED", value = 0x0, description = "Disable the selected PBus control.", sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Enable the selected PBus control.", sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "TX_CLOCK_ENABLE_PAIR"
@@ -2622,7 +2647,7 @@ name = "BITS_4_11_OPAQUE"
 bits = "11:4"
 class = "plain"
 description = "First update writes parameter byte 0x121 into bits 11:4."
-write-range = { min = 0x0, max = 0xff }
+value-range = { min = 0x0, max = 0xff, sources = ["ROM_REV0_PHY_AGC"] }
 
 [[registers.fields]]
 name = "BITS_12_19_OPAQUE"

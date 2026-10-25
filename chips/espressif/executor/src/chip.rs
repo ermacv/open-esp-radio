@@ -1,39 +1,39 @@
-//! What the executor takes from the chip, in one place. Ours, on the typed
-//! platform blocks: the software interrupt lines that pend and wake
-//! executors (`FROM_CPU_0..3`), the system timer's counter
-//! (`SYSTIMER_COUNTER`) and its comparators ([`crate::systimer`]), the
-//! pending sources (the interrupt table's matrix) and the current interrupt
-//! level ([`interrupt_level`]). Still esp-hal's: the wait for an interrupt
-//! (which skips `wfi` while a debugger is attached), the current core and the
-//! interrupt table's source, level and core types.
+//! Chip access for the executor: owned HAL blocks, source identities from
+//! the HAL's executor contract and architectural CSR instructions.
 
-pub(crate) use esp_hal::{
-    interrupt::{Priority, software::SoftwareInterrupt, wait_for_interrupt},
-    peripherals::{Interrupt, SYSTIMER},
-    system::Cpu,
-};
-#[cfg(feature = "esp32s31")]
+use crate::hardware::ExecutorPlatform;
+use oer_esp32s31_hal::executor::Platform as Chip;
 pub(crate) use oer_esp32s31_hal::platform;
 use oer_memory::zeroed::ZeroedOnce;
 
-use crate::{
-    counter::CounterLatch,
-    software_line::{SoftwareLine, serve},
-};
+use crate::software_line::{SoftwareLine, serve};
+use platform::system_timer::counter;
+
+/// The HAL's executor contract: its source identities and its pending and
+/// debugger reads.
+impl ExecutorPlatform for Chip {
+    const SOFTWARE_SOURCES: [u16; 4] = Chip::SOFTWARE_SOURCES;
+    const ALARM_SOURCES: [u16; 3] = Chip::ALARM_SOURCES;
+
+    fn debugger_connected() -> bool {
+        Chip::debugger_connected()
+    }
+
+    fn is_pending(source: u16) -> bool {
+        Chip::is_pending(source)
+    }
+}
 
 /// The software interrupts an executor can own.
 pub(crate) const SOFTWARE_INTERRUPT_COUNT: usize = crate::task::EXECUTORS as usize;
 
-/// The system timer's ticks per microsecond: it counts at 16 MHz.
-///
-/// SOURCE: ESP-IDF 4d59230d `esp_hw_support/port/esp32s31/systimer.c`
-/// (`systimer_ticks_to_us`: `ticks / 16`).
-pub(crate) const TICKS_PER_MICROSECOND: u64 = 16;
+/// The system timer's ticks per microsecond, the HAL's.
+pub(crate) const TICKS_PER_MICROSECOND: u64 = platform::system_timer::TICKS_PER_MICROSECOND;
 
 /// The core running the caller.
 #[inline(always)]
 pub(crate) fn current_core() -> usize {
-    Cpu::current() as usize
+    oer_riscv::hart_id()
 }
 
 /// The interrupt level the caller runs at: the CLIC's `mintstatus.mil`,
@@ -58,31 +58,12 @@ pub(crate) fn interrupt_level() -> u8 {
     (status >> oer_riscv::clic::MINTSTATUS_MIL_SHIFT) as u8
 }
 
-impl CounterLatch for platform::SystimerCounter {
-    #[inline(always)]
-    fn update(&self) {
-        self.trigger_unit0_op_update();
-    }
-    #[inline(always)]
-    fn valid(&self) -> bool {
-        self.read_unit0_op().value_valid()
-    }
-    #[inline(always)]
-    fn high(&self) -> u32 {
-        self.read_unit0_value_hi().value_hi().get()
-    }
-    #[inline(always)]
-    fn low(&self) -> u32 {
-        self.read_unit0_value_lo().value_lo()
-    }
-}
-
 /// The shared counter latch every context reads, published once by the time
 /// driver's handoff.
 static COUNTER: ZeroedOnce<platform::SystimerCounter> = ZeroedOnce::new();
 
 /// Publish the counter latch, from the system timer's handoff, once its
-/// latch has settled within its bound ([`crate::counter::check`]).
+/// latch has settled within its bound ([`counter::check`]).
 ///
 /// # Panics
 /// When it is published already or its latch never settles (a fault of the
@@ -90,7 +71,7 @@ static COUNTER: ZeroedOnce<platform::SystimerCounter> = ZeroedOnce::new();
 pub(crate) fn install_counter(counter: platform::SystimerCounter) {
     assert!(COUNTER.get().is_none(), "the counter is published once");
     assert!(
-        crate::counter::check(&counter).is_ok(),
+        counter::check(&counter).is_ok(),
         "the system timer's counter latch settles"
     );
     let _ = COUNTER.get_or_init(|| counter);
@@ -105,24 +86,27 @@ pub(crate) fn install_counter(counter: platform::SystimerCounter) {
 #[inline(never)]
 pub(crate) fn now() -> u64 {
     COUNTER.get().map_or(0, |counter| {
-        crate::counter::read(counter).unwrap_or_else(|unverified| unverified.floor)
-            / TICKS_PER_MICROSECOND
+        counter::read(counter).unwrap_or_else(|unverified| unverified.floor) / TICKS_PER_MICROSECOND
     })
 }
 
 /// Whether `source` is pending at the current core's interrupt matrix.
 #[inline(always)]
-pub(crate) fn is_pending(source: Interrupt) -> bool {
-    oer_espressif_esp_hal_irq::is_pending(source)
+pub(crate) fn is_pending(source: u16) -> bool {
+    Chip::is_pending(source)
 }
 
-/// The peripheral interrupt source of software interrupt `SWI`.
-pub(crate) const fn software_interrupt_source(swi: u8) -> Interrupt {
-    match swi {
-        0 => Interrupt::FROM_CPU_INTR0,
-        1 => Interrupt::FROM_CPU_INTR1,
-        2 => Interrupt::FROM_CPU_INTR2,
-        _ => Interrupt::FROM_CPU_INTR3,
+pub(crate) const fn software_interrupt_source(swi: u8) -> u16 {
+    Chip::SOFTWARE_SOURCES[swi as usize]
+}
+
+pub(crate) const fn alarm_source(comparator: usize) -> u16 {
+    Chip::ALARM_SOURCES[comparator]
+}
+
+pub(crate) fn wait_for_interrupt() {
+    if !Chip::debugger_connected() {
+        oer_riscv::wait_for_interrupt();
     }
 }
 
@@ -135,103 +119,43 @@ pub(crate) enum Line {
     Three(&'static platform::FromCpu3),
 }
 
-/// Store `$value` into the line block `$line`; a raise reads the line back,
-/// so the raise has reached the interrupt matrix when it returns.
-///
-/// SOURCE: esp-hal 1f646c5 `interrupt/software.rs` (`raise`: the store and
-/// its read back).
-macro_rules! store_line {
-    ($line:expr, $value:expr) => {{
-        let line = $line;
-        line.store_line($value);
-        if $value {
-            let _ = line.read_line();
-        }
-    }};
-}
-
 impl SoftwareLine for Line {
     #[inline(always)]
     fn raise(&self) {
         match self {
-            Self::Zero(line) => store_line!(line, true),
-            Self::One(line) => store_line!(line, true),
-            Self::Two(line) => store_line!(line, true),
-            Self::Three(line) => store_line!(line, true),
+            Self::Zero(line) => line.raise(),
+            Self::One(line) => line.raise(),
+            Self::Two(line) => line.raise(),
+            Self::Three(line) => line.raise(),
         }
     }
     #[inline(always)]
     fn lower(&self) {
         match self {
-            Self::Zero(line) => store_line!(line, false),
-            Self::One(line) => store_line!(line, false),
-            Self::Two(line) => store_line!(line, false),
-            Self::Three(line) => store_line!(line, false),
+            Self::Zero(line) => line.lower(),
+            Self::One(line) => line.lower(),
+            Self::Two(line) => line.lower(),
+            Self::Three(line) => line.lower(),
         }
     }
 }
 
-macro_rules! take_line {
-    ($number:literal, $variant:ident, $block:ident, $take:ident, $handoff:ident, $partition:ident, $member:ident, $storage:ident) => {
+macro_rules! own_line {
+    ($variant:ident, $block:ident, $take:ident, $storage:ident) => {
         static $storage: ZeroedOnce<platform::$block> = ZeroedOnce::new();
 
-        /// Consume esp-hal's software interrupt and claim its line's block.
-        pub(crate) fn $take(interrupt: SoftwareInterrupt<'static, $number>) -> Line {
-            let _consumed = interrupt;
-            #[allow(
-                unsafe_code,
-                reason = "the consumed esp-hal line proves the line handoff"
-            )]
-            // SAFETY: esp-hal makes `SoftwareInterrupt<N>` once and its owner
-            // consumed it here for good, so no esp-hal raise or reset of the
-            // line remains; this is the line's only handoff.
-            let handoff = unsafe { platform::$handoff::assume_exclusive() };
-            let block = platform::$partition::from_handoff(handoff).$member;
+        /// Publish a line moved from the single reset root, once.
+        pub(crate) fn $take(block: platform::$block) -> Line {
+            assert!($storage.get().is_none(), "the line owner is published once");
             Line::$variant($storage.get_or_init(|| block))
         }
     };
 }
 
-take_line!(
-    0,
-    Zero,
-    FromCpu0,
-    take_line_0,
-    SoftwareInterrupt0Handoff,
-    SoftwareInterrupt0Peripherals,
-    from_cpu_0,
-    LINE0
-);
-take_line!(
-    1,
-    One,
-    FromCpu1,
-    take_line_1,
-    SoftwareInterrupt1Handoff,
-    SoftwareInterrupt1Peripherals,
-    from_cpu_1,
-    LINE1
-);
-take_line!(
-    2,
-    Two,
-    FromCpu2,
-    take_line_2,
-    SoftwareInterrupt2Handoff,
-    SoftwareInterrupt2Peripherals,
-    from_cpu_2,
-    LINE2
-);
-take_line!(
-    3,
-    Three,
-    FromCpu3,
-    take_line_3,
-    SoftwareInterrupt3Handoff,
-    SoftwareInterrupt3Peripherals,
-    from_cpu_3,
-    LINE3
-);
+own_line!(Zero, FromCpu0, own_line_0, LINE0);
+own_line!(One, FromCpu1, own_line_1, LINE1);
+own_line!(Two, FromCpu2, own_line_2, LINE2);
+own_line!(Three, FromCpu3, own_line_3, LINE3);
 
 // Each executor's line, published once for wakers; only the line's handler
 // lowers it. Boot lowers the line before it is published.

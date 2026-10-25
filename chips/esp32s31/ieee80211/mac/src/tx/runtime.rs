@@ -313,7 +313,7 @@ impl<X: BackendTxProfile> WifiTxRuntimePolicy<X> {
         }
     }
 
-    #[cfg(any(test, feature = "test-support", oer_probe, oer_debug_control))]
+    #[cfg(any(test, feature = "test-support", oer_debug_control))]
     pub fn contention_exponent(&self, queue: LegacyTxQueue) -> u8 {
         self.queues.queue(queue).current_exponent()
     }

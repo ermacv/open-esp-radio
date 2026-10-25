@@ -59,6 +59,10 @@ pub enum ErrorKind {
     Reset(String),
     #[error("values or write constraint: {0}")]
     Values(String),
+    #[error("pointer: {0}")]
+    Pointer(String),
+    #[error("interrupt pair: {0}")]
+    InterruptPair(String),
     #[error("dim: {0}")]
     Dim(String),
     #[error("group: {0}")]
@@ -71,6 +75,8 @@ pub enum ErrorKind {
     WordOverlap { offset: u64, other: String },
     #[error("command register: {0}")]
     Command(String),
+    #[error("doorbell: {0}")]
+    Doorbell(String),
     #[error("port: {0}")]
     Port(String),
     #[error("{0} is allowed only in an analog-I2C type")]

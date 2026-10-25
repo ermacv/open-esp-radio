@@ -16,9 +16,13 @@ pub enum PeripheralConnectionTransmitPduKind {
 impl PeripheralConnectionTransmitPduKind {
     pub(super) const fn llid(self) -> u8 {
         match self {
-            Self::DataContinuation => 1,
-            Self::DataStartOrComplete => 2,
-            Self::Control => 3,
+            Self::DataContinuation => {
+                crate::layouts::BleBufferHeaderAllocation::LLID_DATA_CONTINUATION
+            }
+            Self::DataStartOrComplete => {
+                crate::layouts::BleBufferHeaderAllocation::LLID_DATA_START_OR_COMPLETE
+            }
+            Self::Control => crate::layouts::BleBufferHeaderAllocation::LLID_CONTROL,
         }
     }
 }

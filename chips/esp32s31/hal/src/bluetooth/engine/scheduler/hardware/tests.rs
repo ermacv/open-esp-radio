@@ -1,6 +1,7 @@
 use std::vec::Vec;
 
-use crate::bluetooth::engine::ControllerSramLinkAddress;
+use crate::bluetooth::engine::SchedulerItemLink;
+use crate::bluetooth::engine::sram_link::model_link;
 use crate::bluetooth::{
     BluetoothSchedulerCancellationDisposition, BluetoothSchedulerExecutionLockDisposition,
     BluetoothSchedulerLockModifyObservation, BluetoothSchedulerSkipDisposition,
@@ -33,7 +34,7 @@ impl SchedulerPublications for Units {
 enum Call {
     Action(Action),
     Observe(SchedulerWait),
-    Start(ControllerSramLinkAddress),
+    Start(SchedulerItemLink),
 }
 
 #[derive(Default)]
@@ -47,7 +48,7 @@ impl SchedulerHardwareBackend for Recorder {
     type Publications = Units;
     type StartError = ();
 
-    fn publish_execution_lock(&mut self, at: ControllerSramLinkAddress) {
+    fn publish_execution_lock(&mut self, at: SchedulerItemLink) {
         self.calls
             .push(Call::Action(Action::PublishExecutionLock(at)));
     }
@@ -65,10 +66,10 @@ impl SchedulerHardwareBackend for Recorder {
         self.calls
             .push(Call::Action(Action::ReleaseExecutionModify));
     }
-    fn publish_lock_modify(&mut self, at: ControllerSramLinkAddress) {
+    fn publish_lock_modify(&mut self, at: SchedulerItemLink) {
         self.calls.push(Call::Action(Action::PublishLockModify(at)));
     }
-    fn publish_head(&mut self, head: Option<ControllerSramLinkAddress>) {
+    fn publish_head(&mut self, head: Option<SchedulerItemLink>) {
         self.calls.push(Call::Action(Action::PublishHead(head)));
     }
     fn index_cancellation(&mut self) {
@@ -93,7 +94,7 @@ impl SchedulerHardwareBackend for Recorder {
     fn release_cancellation(&mut self, (): ()) {
         self.calls.push(Call::Action(Action::ReleaseCancellation));
     }
-    fn publish_skip(&mut self, at: ControllerSramLinkAddress) {
+    fn publish_skip(&mut self, at: SchedulerItemLink) {
         self.calls.push(Call::Action(Action::PublishSkip(at)));
     }
     fn clear_skip(&mut self, (): ()) {
@@ -110,17 +111,14 @@ impl SchedulerHardwareBackend for Recorder {
         self.calls.push(Call::Observe(wait));
         Ok(self.observations.remove(0))
     }
-    async fn start(
-        &mut self,
-        head: ControllerSramLinkAddress,
-    ) -> Result<(), SchedulerStartError<()>> {
+    async fn start(&mut self, head: SchedulerItemLink) -> Result<(), SchedulerStartError<()>> {
         self.calls.push(Call::Start(head));
         Ok(())
     }
 }
 
-fn link(offset: u32) -> ControllerSramLinkAddress {
-    ControllerSramLinkAddress::new(0x2f00_1000 + offset).unwrap()
+fn link(offset: u32) -> SchedulerItemLink {
+    model_link(0x2f00_1000 + offset)
 }
 
 fn perform(

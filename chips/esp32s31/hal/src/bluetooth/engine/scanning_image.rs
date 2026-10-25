@@ -8,7 +8,7 @@ use crate::bluetooth::engine::shared_layout::LinkStateImage;
 use crate::layouts::*;
 
 use crate::bluetooth::engine::{
-    le_phy_packet::LeAccessAddress, le_tx_power::LeTxPower, sram_link::ControllerSramLinkAddress,
+    le_phy_packet::LeAccessAddress, le_tx_power::LeTxPower, sram_link::ControllerSramLink,
 };
 
 /// Primary advertising channel observed by one passive scan window.
@@ -77,8 +77,12 @@ impl LegacyScanWindowTicks {
 pub(super) struct LegacyScanRxHeadProjection(BleLinkStateRxPath);
 
 impl LegacyScanRxHeadProjection {
-    pub(super) const fn from_bound(address: ControllerSramLinkAddress) -> Self {
-        Self(BleLinkStateRxPath::from_bits(address.compressed_image()))
+    pub(super) const fn from_bound(address: ControllerSramLink<BleBufferHeader>) -> Self {
+        Self(
+            BleLinkStateRxPath::ZERO
+                .with_header(Some(address.reference()))
+                .expect("a bound link is encodable"),
+        )
     }
 }
 
@@ -206,9 +210,9 @@ impl LegacyScanSchedulerItemWords {
         self.word_14 = self
             .word_14
             .with_power_index(link_state.power_index())
-            .with_phy_code_28_29(0)
+            .with_phy_code_28_29(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_28_29_LE_1M)
             .expect("zero fits")
-            .with_phy_code_30_31(0)
+            .with_phy_code_30_31(crate::layouts::BleSchedulerItemRateAndPower::PHY_CODE_30_31_LE_1M)
             .expect("zero fits");
         self.word_18 = self
             .word_18
@@ -237,8 +241,10 @@ pub enum ScanItemKind {
 impl ScanItemKind {
     pub(crate) const fn item_kind(self) -> u8 {
         match self {
-            Self::Listen => 12,
-            Self::RequestResponse => 4,
+            Self::Listen => crate::layouts::BleSchedulerItemLinkState::KIND_SCAN_LISTEN,
+            Self::RequestResponse => {
+                crate::layouts::BleSchedulerItemLinkState::KIND_SCAN_REQUEST_RESPONSE
+            }
         }
     }
 }

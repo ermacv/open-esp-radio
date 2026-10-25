@@ -121,7 +121,6 @@ impl<const BUFFER_SIZE: usize> TxDmaStorage<BUFFER_SIZE> {
             storage: Pin::static_mut(storage),
             binding: TxDmaBinding {
                 descriptor_head,
-                buffer_address,
                 buffer,
                 buffer_capacity: buffer_len,
                 descriptor_range,
@@ -140,7 +139,6 @@ impl<const BUFFER_SIZE: usize> Default for TxDmaStorage<BUFFER_SIZE> {
 /// Non-forgeable memory authority for one ordinary TX descriptor chain.
 pub struct TxDmaBinding {
     descriptor_head: DmaRef<WifiTxDmaDescriptor>,
-    buffer_address: u32,
     buffer: DmaWindowAddress,
     buffer_capacity: u32,
     descriptor_range: StableDmaRange<'static>,
@@ -153,7 +151,7 @@ impl TxDmaBinding {
     }
 
     pub const fn buffer_address(&self) -> u32 {
-        self.buffer_address
+        self.buffer.get()
     }
 
     pub const fn buffer_capacity(&self) -> u32 {

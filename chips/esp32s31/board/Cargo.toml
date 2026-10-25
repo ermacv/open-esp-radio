@@ -10,7 +10,6 @@ publish.workspace = true
 oer-espressif-staged-layout.workspace = true
 oer-esp32s31-layout.workspace = true
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
-esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "unstable"] }
 
 [lints]
 workspace = true

@@ -2,52 +2,27 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 #[derive(Parser)]
-#[command(about = "Validate reviewed registers and publish SVD/PAC source")]
+#[command(about = "Validate a chip's register model and generate its PAC and linker fragment")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
 }
 #[derive(Subcommand)]
 enum Command {
-    /// Initialize empty peripheral geometry from an explicit source request.
-    InitModel {
-        #[arg(long)]
-        request: PathBuf,
-        #[arg(long)]
-        directory: PathBuf,
-    },
-    /// Capture SVD into a native editable model without accepting its claims.
-    ImportSvd {
-        #[arg(long)]
-        source: PathBuf,
-        #[arg(long)]
-        directory: PathBuf,
-        #[arg(long)]
-        chip: String,
-        #[arg(long)]
-        address_space: String,
-    },
-    /// Import the chip's vendor blocks (`chips/<chip>/registers/import.toml`)
-    /// from the pinned vendor SVD and ESP-IDF headers into block types and
-    /// the chip root; write the report to `target/registers-import/<chip>`.
-    Import {
-        #[arg(long)]
-        chip: String,
-    },
+    /// Load a chip's register model and ownership policy
+    /// (`chips/<chip>/registers/`) and check every rule.
     Validate {
         #[arg(long)]
-        manifest: PathBuf,
+        chip: String,
     },
+    /// Render the chip's thin PAC (`chips/<chip>/pac/src/generated.rs`) and
+    /// DMA-window linker fragment (`chips/<chip>/layout/linker/dma-window.x`)
+    /// from its register model; with `--check`, compare instead of writing.
     Generate {
         #[arg(long)]
-        manifest: PathBuf,
+        chip: String,
         #[arg(long)]
         check: bool,
-    },
-    /// Query native analog-I2C geometry, routes, bit states and provenance.
-    InspectAnalog {
-        #[arg(long)]
-        manifest: PathBuf,
     },
     /// Generate Blobray ABI contracts from pinned ESP-IDF headers.
     Signatures {
@@ -69,61 +44,10 @@ enum Command {
     /// The register checks.
     #[command(subcommand)]
     Check(Check),
-    /// A chip's strictness overlay against the pinned ESP-IDF headers.
-    #[command(subcommand)]
-    Overlay(Overlay),
-}
-
-#[derive(Subcommand)]
-enum Overlay {
-    /// Pin the ESP-IDF register headers of PERIPHERAL (those the overlay
-    /// pins, by default) in `chips/<chip>/registers/model/strictness.toml`
-    /// and print the registers the headers place at another offset than the
-    /// vendor SVD as correction entries.
-    Import {
-        #[arg(long)]
-        chip: String,
-        /// The ESP-IDF checkout at the overlay's pin.
-        #[arg(long)]
-        idf: PathBuf,
-        #[arg(long)]
-        peripheral: Vec<String>,
-        /// Append the proposed corrections to the overlay.
-        #[arg(long)]
-        write: bool,
-    },
-    /// Verify every overlay entry against the file and line it cites in the
-    /// pinned ESP-IDF headers and against the vendor SVD.
-    Check {
-        #[arg(long)]
-        chip: String,
-        /// The ESP-IDF checkout at the overlay's pin.
-        #[arg(long)]
-        idf: PathBuf,
-    },
 }
 
 #[derive(Subcommand)]
 enum Check {
-    /// Handwritten MMIO below DIRECTORY (Git-tracked Rust files) uses one
-    /// PAC transaction per register access.
-    PacTransactions { directory: PathBuf },
-    /// Every MMIO word both the radio and esp-hal write is reviewed.
-    SharedWords {
-        #[arg(long)]
-        chip: String,
-        /// esp-hal's `src` directory, as the firmware workspace resolves it.
-        #[arg(long)]
-        esp_hal_src: PathBuf,
-        /// `esp-metadata-generated`'s `src` directory, whose chip file holds
-        /// the clock and reset writers esp-hal expands and its peripheral
-        /// singleton aliases.
-        #[arg(long)]
-        esp_metadata_generated_src: PathBuf,
-        /// The chip PAC's `src` directory.
-        #[arg(long)]
-        pac_src: PathBuf,
-    },
     /// Reject vendor uses of absent register bits in every pinned vendor
     /// binary; report violations, unknown bits and corpus limits in
     /// `target/register-inventory/<chip>/report.txt`. Analyzes typed Blobray
@@ -140,44 +64,15 @@ fn run() -> oer_registers_generate::Result<()> {
     let _signals = oer_os_process::install_signal_handlers()?;
     let ctx = oer_os_process::Checkout::discover("registers")?;
     match Cli::parse().command {
-        Command::InitModel { request, directory } => {
-            let count = oer_registers_generate::initialize_model(&request, &directory)?;
-            println!("initialized {count} unreviewed peripherals");
+        Command::Validate { chip } => {
+            oer_registers_generate::validate(&ctx.root, &chip)?;
+            println!("register model of {chip} valid");
         }
-        Command::ImportSvd {
-            source,
-            directory,
-            chip,
-            address_space,
-        } => {
-            let count =
-                oer_registers_generate::import_svd(&source, &directory, &chip, &address_space)?;
-            println!("imported {count} unreviewed peripherals; original XML retained");
-        }
-        Command::Import { chip } => {
-            let imported = oer_registers_generate::import::run(&ctx.root, &chip)?;
+        Command::Generate { chip, check } => {
+            oer_registers_generate::generate(&ctx.root, &chip, check)?;
             println!(
-                "imported {} block types; {} findings in {}",
-                imported.types,
-                imported.report.findings.len(),
-                imported.report_path.display()
-            );
-        }
-        Command::Validate { manifest } => {
-            oer_registers_generate::Publication::load(&manifest)?;
-            println!("register publication inputs valid");
-        }
-        Command::Generate { manifest, check } => {
-            oer_registers_generate::Publication::load(&manifest)?.generate(check)?;
-            println!(
-                "register outputs {}",
+                "register outputs of {chip} {}",
                 if check { "verified" } else { "written" }
-            );
-        }
-        Command::InspectAnalog { manifest } => {
-            println!(
-                "{:#}",
-                oer_registers_generate::Publication::load(&manifest)?.analog_inventory()?
             );
         }
         Command::Signatures {
@@ -201,44 +96,6 @@ fn run() -> oer_registers_generate::Result<()> {
                     output,
                 },
             )?;
-        }
-        Command::Check(Check::PacTransactions { directory }) => {
-            let listed = oer_os_process::capture(
-                oer_os_process::git::command(&ctx.root)
-                    .args(["ls-files", "--"])
-                    .arg(&directory),
-            )?;
-            let files: Vec<String> = String::from_utf8(listed.stdout)?
-                .lines()
-                .map(str::to_owned)
-                .collect();
-            oer_registers_generate::checks::pac_transactions::check(&ctx.root, &files)?;
-        }
-        Command::Check(Check::SharedWords {
-            chip,
-            esp_hal_src,
-            esp_metadata_generated_src,
-            pac_src,
-        }) => {
-            let shared = oer_registers_generate::checks::shared_words::check(
-                &ctx.root,
-                &chip,
-                &oer_registers_generate::checks::shared_words::EspHalSources {
-                    esp_hal: &esp_hal_src,
-                    metadata_generated: &esp_metadata_generated_src,
-                },
-                &pac_src,
-            )?;
-            println!("shared MMIO words of {chip}: {shared} reviewed");
-        }
-        Command::Overlay(Overlay::Import {
-            chip,
-            idf,
-            peripheral,
-            write,
-        }) => oer_registers_generate::overlay::import(&ctx.root, &chip, &idf, &peripheral, write)?,
-        Command::Overlay(Overlay::Check { chip, idf }) => {
-            oer_registers_generate::overlay::check(&ctx.root, &chip, &idf)?;
         }
         Command::Check(Check::Inventory { chip, output }) => {
             oer_registers_generate::checks::inventory::run(&ctx, &chip, output)?;

@@ -4,7 +4,7 @@
 //! External zero-copy aggregates receive prepare/start authority only through
 //! an owner which also retains every referenced [`StableDmaBacking`](oer_memory::StableDmaBacking) lease.
 
-use crate::dma_address;
+use crate::dma_address::{PlacedRegion, PlacedSlots, PlacedTable};
 use crate::ieee80211::dma::space::DmaSpace;
 use core::{marker::PhantomPinned, mem, mem::ManuallyDrop, pin::Pin};
 
@@ -13,7 +13,7 @@ use crate::types::MacTxQueueDetached;
 use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use pin_project::pin_project;
 
-use crate::layouts::{DmaRef, WifiTxDmaDescriptor, WifiTxDmaDescriptorControl};
+use crate::layouts::{DmaRef, DmaWindowAddress, WifiTxDmaDescriptor, WifiTxDmaDescriptorControl};
 
 use crate::ieee80211::dma::descriptor::{DESCRIPTOR_BYTES, TxDescriptor, tx_owned_word};
 
@@ -190,35 +190,39 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
         let descriptor_range = range
             .subrange(descriptor_base, descriptor_len)
             .ok_or(AmpduDmaStorageError::Address)?;
-        // SAFETY: the head names the first aligned descriptor of the placed
-        // static arena; the owner retains the whole allocation permanently.
-        let descriptor_head = unsafe { dma_address::placed_link(descriptor_base) }
+        // SAFETY: `descriptor_base` is the DMA address of the placed static
+        // arena's SLOTS aligned descriptors, which the link keeps in the DMA
+        // window; the owner retains the whole allocation permanently.
+        let descriptors = unsafe { PlacedTable::new(descriptor_base, SLOTS) }
             .ok_or(AmpduDmaStorageError::Address)?;
 
         let buffer_stride = u32::try_from(core::mem::size_of::<AmpduDmaBuffer<BUFFER_SIZE>>())
             .map_err(|_| AmpduDmaStorageError::Address)?;
         let buffer_capacity =
             u32::try_from(BUFFER_SIZE).map_err(|_| AmpduDmaStorageError::Address)?;
-        let buffer_range = if BUFFER_SIZE == 0 {
-            None
+        let (buffer_range, buffers) = if BUFFER_SIZE == 0 {
+            (None, None)
         } else {
             let buffer_len = u32::try_from(core::mem::size_of_val(&storage.buffers))
                 .map_err(|_| AmpduDmaStorageError::Address)?;
-            Some(
-                range
-                    .subrange(buffer_base, buffer_len)
-                    .ok_or(AmpduDmaStorageError::Address)?,
-            )
+            let buffer_range = range
+                .subrange(buffer_base, buffer_len)
+                .ok_or(AmpduDmaStorageError::Address)?;
+            // SAFETY: `buffer_base` is the DMA address of the placed static
+            // arena's SLOTS buffers of `buffer_stride` bytes, inside its
+            // range (checked above); the owner retains them permanently.
+            let buffers = unsafe { PlacedSlots::new(buffer_base, buffer_stride, SLOTS) }
+                .ok_or(AmpduDmaStorageError::Address)?;
+            (Some(buffer_range), Some(buffers))
         };
 
         Ok(PinnedAmpduDmaStorage {
             storage: Pin::static_mut(storage),
             binding: AmpduDmaBinding {
-                descriptor_head,
+                descriptors,
                 descriptor_count,
                 descriptor_range,
-                buffer_base,
-                buffer_stride,
+                buffers,
                 buffer_capacity,
                 buffer_range,
                 external_region,
@@ -244,11 +248,11 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> Default for AmpduDmaStorage<S
 
 /// Private-range authority for one statically retained aggregate arena.
 pub struct AmpduDmaBinding {
-    descriptor_head: DmaRef<WifiTxDmaDescriptor>,
+    descriptors: PlacedTable<WifiTxDmaDescriptor>,
     descriptor_count: u8,
     descriptor_range: StableDmaRange<'static>,
-    buffer_base: u32,
-    buffer_stride: u32,
+    /// The internal buffers, `None` for an arena without them.
+    buffers: Option<PlacedSlots>,
     buffer_capacity: u32,
     buffer_range: Option<StableDmaRange<'static>>,
     /// The space this arena was bound in, applied to the external regions
@@ -258,7 +262,7 @@ pub struct AmpduDmaBinding {
 
 impl AmpduDmaBinding {
     pub const fn descriptor_head(&self) -> u32 {
-        self.descriptor_head.bits()
+        self.descriptors.base()
     }
 
     pub const fn descriptor_count(&self) -> u8 {
@@ -266,25 +270,31 @@ impl AmpduDmaBinding {
     }
 
     pub fn descriptor_address(&self, index: usize) -> Option<u32> {
+        self.descriptor(index).map(DmaRef::bits)
+    }
+
+    /// Descriptor `index` of the arena, inside its private range.
+    fn descriptor(&self, index: usize) -> Option<DmaRef<WifiTxDmaDescriptor>> {
         (index < usize::from(self.descriptor_count))
-            .then(|| {
-                self.descriptor_head
-                    .bits()
-                    .checked_add(u32::try_from(index).ok()?.checked_mul(DESCRIPTOR_BYTES)?)
-            })
+            .then(|| self.descriptors.element(index))
             .flatten()
-            .filter(|address| self.descriptor_range.contains(*address, DESCRIPTOR_BYTES))
+            .filter(|element| {
+                self.descriptor_range
+                    .contains(element.bits(), DESCRIPTOR_BYTES)
+            })
     }
 
     pub fn internal_buffer_address(&self, index: usize) -> Option<u32> {
+        self.internal_buffer(index).map(DmaWindowAddress::get)
+    }
+
+    /// Internal buffer `index` of the arena, inside its private range.
+    fn internal_buffer(&self, index: usize) -> Option<DmaWindowAddress> {
         let range = self.buffer_range.as_ref()?;
         (index < usize::from(self.descriptor_count))
-            .then(|| {
-                self.buffer_base
-                    .checked_add(u32::try_from(index).ok()?.checked_mul(self.buffer_stride)?)
-            })
+            .then(|| self.buffers?.slot(index))
             .flatten()
-            .filter(|address| range.contains(*address, self.buffer_capacity))
+            .filter(|address| range.contains(address.get(), self.buffer_capacity))
     }
 
     pub const fn internal_buffer_capacity(&self) -> u32 {
@@ -306,7 +316,7 @@ pub struct AmpduDmaStart<'owner> {
 // field prevents forging the token.
 unsafe impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>> for AmpduDmaStart<'_> {
     fn descriptor_head(&self) -> DmaRef<WifiTxDmaDescriptor> {
-        self.binding.descriptor_head
+        self.binding.descriptors.first()
     }
 }
 
@@ -396,8 +406,8 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
         // descriptor's 14-bit size field; discovering that on a later entry
         // must not leave an earlier descriptor published.
         let mut words = [WifiTxDmaDescriptorControl::ZERO; SLOTS];
-        let mut buffer_addresses = [0_u32; SLOTS];
-        let mut descriptor_addresses = [0_u32; SLOTS];
+        let mut buffer_addresses = [None; SLOTS];
+        let mut descriptor_addresses = [None; SLOTS];
         for (index, entry) in entries.iter().enumerate() {
             if entry.buffer_capacity == 0
                 || entry.buffer_capacity > self.binding.buffer_capacity
@@ -406,35 +416,28 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
             {
                 return Err(AmpduDmaStorageError::InvalidLength);
             }
-            buffer_addresses[index] = self
-                .binding
-                .internal_buffer_address(index)
-                .ok_or(AmpduDmaStorageError::Address)?;
-            descriptor_addresses[index] = self
-                .binding
-                .descriptor_address(index)
-                .ok_or(AmpduDmaStorageError::Address)?;
+            buffer_addresses[index] = Some(
+                self.binding
+                    .internal_buffer(index)
+                    .ok_or(AmpduDmaStorageError::Address)?,
+            );
+            descriptor_addresses[index] = Some(
+                self.binding
+                    .descriptor(index)
+                    .ok_or(AmpduDmaStorageError::Address)?,
+            );
             words[index] = tx_owned_word(entry.buffer_capacity, entry.transfer_length)
                 .ok_or(AmpduDmaStorageError::InvalidLength)?;
         }
 
         for index in 0..entries.len() {
-            let next_address = if index + 1 == entries.len() {
-                0
+            let next = if index + 1 == entries.len() {
+                None
             } else {
                 descriptor_addresses[index + 1]
             };
-            let word0 = words[index].with_tx_last(next_address == 0);
-            // SAFETY: the binding derived both addresses from the placed
-            // static's descriptor and buffer bases, which the link keeps in
-            // the DMA window.
-            #[allow(unsafe_code, reason = "typed addresses of the pinned aggregate")]
-            let (buffer, next) = unsafe {
-                (
-                    dma_address::placed(buffer_addresses[index]),
-                    dma_address::placed_link(next_address),
-                )
-            };
+            let word0 = words[index].with_tx_last(next.is_none());
+            let buffer = buffer_addresses[index].ok_or(AmpduDmaStorageError::Address)?;
             self.storage.as_ref().get_ref().descriptors[index].publish_owned(word0, buffer, next);
         }
         *self.storage.as_mut().project().published_count = entries.len();
@@ -481,7 +484,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
         &mut self,
         detached: MacTxQueueDetached<'_>,
     ) -> Result<(), AmpduDmaStorageError> {
-        if !detached.confirms_descriptor_head(self.binding.descriptor_head.bits()) {
+        if !detached.confirms_descriptor_head(self.binding.descriptors.base()) {
             return Err(AmpduDmaStorageError::Address);
         }
         self.transition(AmpduDmaState::Completed, AmpduDmaState::Detached)
@@ -511,7 +514,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
         &mut self,
         detached: MacTxQueueDetached<'_>,
     ) -> Result<(), AmpduDmaStorageError> {
-        if !detached.confirms_descriptor_head(self.binding.descriptor_head.bits()) {
+        if !detached.confirms_descriptor_head(self.binding.descriptors.base()) {
             return Err(AmpduDmaStorageError::Address);
         }
         self.clear_to_free(AmpduDmaState::HardwareOwned)
@@ -608,14 +611,14 @@ struct RetainedDmaBackingIdentity {
     generation: u64,
     address: usize,
     len: usize,
-    /// DMA address of the region's first byte, `None` when the region has
-    /// none in the arena's space.
-    dma_address: Option<u32>,
+    /// The region's DMA addresses, `None` when it has none in the arena's
+    /// space.
+    dma_region: Option<PlacedRegion>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct RetainedDmaDescriptor {
-    buffer_address: u32,
+    buffer_address: DmaWindowAddress,
     word0: WifiTxDmaDescriptorControl,
 }
 
@@ -953,11 +956,24 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
             .expect("retained backing was inserted")
             .stable_dma_region()
             .into_mut_slice();
+        let dma_region = external_region(bytes)
+            .zip(u32::try_from(bytes.len()).ok())
+            .and_then(|(start, len)| {
+                // SAFETY: the region is a retained `PlacedBacking`'s: its
+                // pool placed it in the DMA window, and this owner keeps the
+                // lease (and so the region) until the hardware is done with
+                // it or quarantines it. A host model's synthetic address is
+                // recorded, never dereferenced.
+                #[allow(unsafe_code, reason = "a retained placed backing's region")]
+                unsafe {
+                    PlacedRegion::new(start, len)
+                }
+            });
         let identity = RetainedDmaBackingIdentity {
             generation,
             address: bytes.as_ptr().addr(),
             len: bytes.len(),
-            dma_address: external_region(bytes),
+            dma_region,
         };
         identities[index] = Some(identity);
         Ok((
@@ -1173,8 +1189,8 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
         // This is a transaction over the descriptor arena: derive every
         // address and ownership word before the first volatile publication.
         let mut words = [WifiTxDmaDescriptorControl::ZERO; SLOTS];
-        let mut buffer_addresses = [0_u32; SLOTS];
-        let mut descriptor_addresses = [0_u32; SLOTS];
+        let mut buffer_addresses = [None; SLOTS];
+        let mut descriptor_addresses = [None; SLOTS];
         for (index, entry) in entries.iter().enumerate() {
             let backing = entry.backing.ok_or(AmpduDmaStorageError::StaleBacking)?;
             let identity = self.validate_backing(backing)?;
@@ -1188,12 +1204,13 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
                 .checked_add(capacity)
                 .filter(|end| *end <= identity.len)
                 .ok_or(AmpduDmaStorageError::Address)?;
-            buffer_addresses[index] = external_dma_address(identity, offset)?;
-            descriptor_addresses[index] = self
-                .dma()
-                .binding
-                .descriptor_address(index)
-                .ok_or(AmpduDmaStorageError::Address)?;
+            buffer_addresses[index] = Some(external_dma_address(identity, offset)?);
+            descriptor_addresses[index] = Some(
+                self.dma()
+                    .binding
+                    .descriptor(index)
+                    .ok_or(AmpduDmaStorageError::Address)?,
+            );
             words[index] = tx_owned_word(entry.buffer_capacity, entry.transfer_length)
                 .ok_or(AmpduDmaStorageError::InvalidLength)?;
         }
@@ -1205,22 +1222,13 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
         self.prepare_backings_for_dma_read()?;
 
         for index in 0..entries.len() {
-            let next_address = if index + 1 == entries.len() {
-                0
+            let next = if index + 1 == entries.len() {
+                None
             } else {
                 descriptor_addresses[index + 1]
             };
-            let word0 = words[index].with_tx_last(next_address == 0);
-            // SAFETY: each buffer lies in a `PlacedBacking` retained for this
-            // publication, placed in the DMA window by its pool; the links
-            // name descriptors of the placed static's base.
-            #[allow(unsafe_code, reason = "typed addresses of retained placed backings")]
-            let (buffer, next) = unsafe {
-                (
-                    dma_address::placed(buffer_addresses[index]),
-                    dma_address::placed_link(next_address),
-                )
-            };
+            let word0 = words[index].with_tx_last(next.is_none());
+            let buffer = buffer_addresses[index].ok_or(AmpduDmaStorageError::Address)?;
             self.dma().storage.as_ref().get_ref().descriptors[index]
                 .publish_owned(word0, buffer, next);
         }
@@ -1267,25 +1275,18 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
 
         for (logical_index, descriptor) in descriptors[..count].iter().copied().enumerate() {
             let descriptor = descriptor.ok_or(AmpduDmaStorageError::StaleBacking)?;
-            let next_address = if logical_index + 1 == count {
-                0
+            let next = if logical_index + 1 == count {
+                None
             } else {
-                self.dma()
-                    .binding
-                    .descriptor_address(logical_index + 1)
-                    .ok_or(AmpduDmaStorageError::Address)?
-            };
-            let word0 = descriptor.word0.with_tx_last(next_address == 0);
-            // SAFETY: the retained descriptor image's buffer lies in a
-            // `PlacedBacking` still retained, placed in the DMA window by its
-            // pool; the link names a descriptor of the placed static's base.
-            #[allow(unsafe_code, reason = "typed addresses of retained placed backings")]
-            let (buffer, next) = unsafe {
-                (
-                    dma_address::placed(descriptor.buffer_address),
-                    dma_address::placed_link(next_address),
+                Some(
+                    self.dma()
+                        .binding
+                        .descriptor(logical_index + 1)
+                        .ok_or(AmpduDmaStorageError::Address)?,
                 )
             };
+            let word0 = descriptor.word0.with_tx_last(next.is_none());
+            let buffer = descriptor.buffer_address;
             self.dma().storage.as_ref().get_ref().descriptors[logical_index]
                 .publish_owned(word0, buffer, next);
         }
@@ -1329,11 +1330,11 @@ impl<B, const SLOTS: usize, const BUFFER_SIZE: usize> Drop
 fn external_dma_address(
     identity: RetainedDmaBackingIdentity,
     offset: usize,
-) -> Result<u32, AmpduDmaStorageError> {
+) -> Result<DmaWindowAddress, AmpduDmaStorageError> {
     identity
-        .dma_address
+        .dma_region
         .zip(u32::try_from(offset).ok())
-        .and_then(|(base, offset)| base.checked_add(offset))
+        .and_then(|(region, offset)| region.at(offset))
         .ok_or(AmpduDmaStorageError::Address)
 }
 
@@ -1359,7 +1360,7 @@ unsafe impl<B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
     for RetainedAmpduDmaPublication<'_, '_, B, SLOTS, BUFFER_SIZE>
 {
     fn descriptor_head(&self) -> DmaRef<WifiTxDmaDescriptor> {
-        self.owner.dma().binding.descriptor_head
+        self.owner.dma().binding.descriptors.first()
     }
 }
 
@@ -1394,7 +1395,7 @@ unsafe impl<const SLOTS: usize, const BUFFER_SIZE: usize> PreparedTxDma<DmaRef<W
     for AmpduDmaPublication<'_, SLOTS, BUFFER_SIZE>
 {
     fn descriptor_head(&self) -> DmaRef<WifiTxDmaDescriptor> {
-        self.owner.binding.descriptor_head
+        self.owner.binding.descriptors.first()
     }
 }
 

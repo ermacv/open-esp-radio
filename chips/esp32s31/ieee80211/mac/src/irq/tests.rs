@@ -1,5 +1,5 @@
 use super::*;
-use epoch::{ActiveEpoch, Moderated, Unmoderated};
+use epoch::{EpochState, InterruptEpoch, Moderated, Unmoderated};
 use model::{
     MacInterruptModel, MacInterruptOperation, PowerInterruptModel, PowerInterruptOperation,
 };
@@ -27,6 +27,15 @@ impl MacInterrupt for Interrupt {
     }
     fn acknowledge(&mut self, _: Self::Snapshot) {
         self.operations.push("ack");
+    }
+    fn clear_all(&mut self, _: &BanksMasked) {
+        self.operations.push("clear all");
+    }
+    fn publish(&mut self, _: MacInterruptMask) {
+        self.operations.push("publish");
+    }
+    fn enable_state(&self) -> MacInterruptEnableState {
+        MacInterruptEnableState::Unknown
     }
 }
 
@@ -132,6 +141,8 @@ impl MacPowerInterrupt for Power {
     fn acknowledge(&mut self, _: Self::Snapshot) {
         self.acks += 1;
     }
+    fn clear_all(&mut self, _: &BanksMasked) {}
+    fn enable_station_tbtt(&mut self) {}
 }
 
 #[test]
@@ -170,8 +181,116 @@ fn sta_tbtt() -> MacPowerInterruptObservation {
     MacPowerInterruptObservation::from_semantic_events(false, false, false, false, true, false)
 }
 
-fn host_epoch() -> ActiveEpoch<Moderated, MacInterruptModel, PowerInterruptModel> {
-    ActiveEpoch::for_host_test(MacInterruptModel::new(), PowerInterruptModel::new())
+type HostEpoch = InterruptEpoch<Moderated, MacInterruptModel, PowerInterruptModel>;
+
+fn host_epoch() -> HostEpoch {
+    InterruptEpoch::for_host_test(MacInterruptModel::new(), PowerInterruptModel::new())
+}
+
+fn clear_logs(epoch: &mut HostEpoch) {
+    let (mac, power) = epoch.banks_mut();
+    mac.clear_operations();
+    power.clear_operations();
+}
+
+#[test]
+fn activation_masks_clears_then_publishes_mac_before_power() {
+    let mut epoch: HostEpoch =
+        InterruptEpoch::new(MacInterruptModel::masked(), PowerInterruptModel::masked());
+    assert_eq!(epoch.state(), EpochState::Closed);
+    // Stale events from before the epoch.
+    let (mac, power) = epoch.banks_mut();
+    mac.latch(rx_and_tx());
+    power.latch(sta_tbtt());
+
+    epoch.activate(MacInterruptMask::STATION);
+
+    assert_eq!(epoch.state(), EpochState::Active);
+    let (mac, power) = epoch.banks();
+    assert!(mac.operations().matches(&[
+        MacInterruptOperation::MaskAll,
+        MacInterruptOperation::ClearAll,
+        MacInterruptOperation::Publish(MacInterruptMask::STATION),
+    ]));
+    assert!(power.operations().matches(&[
+        PowerInterruptOperation::MaskAll,
+        PowerInterruptOperation::ClearAll,
+        PowerInterruptOperation::EnableStationTbtt,
+    ]));
+    // The stale events were cleared before the mask went live.
+    assert!(!mac.line_asserted() && !power.line_asserted());
+    assert!(mac.latched().is_empty() && power.latched().is_empty());
+    assert_eq!(
+        epoch.mac_interrupt_enable(),
+        MacInterruptEnableState::Station
+    );
+}
+
+#[test]
+fn closing_masks_then_clears_both_banks() {
+    let mut epoch = host_epoch();
+    clear_logs(&mut epoch);
+    let (mac, power) = epoch.banks_mut();
+    mac.latch(rx_and_tx());
+    power.latch(sta_tbtt());
+
+    epoch.close();
+
+    assert_eq!(epoch.state(), EpochState::Closed);
+    let (mac, power) = epoch.banks();
+    assert!(mac.operations().matches(&[
+        MacInterruptOperation::MaskAll,
+        MacInterruptOperation::ClearAll,
+    ]));
+    assert!(power.operations().matches(&[
+        PowerInterruptOperation::MaskAll,
+        PowerInterruptOperation::ClearAll,
+    ]));
+    assert!(mac.latched().is_empty() && power.latched().is_empty());
+    assert_eq!(
+        epoch.mac_interrupt_enable(),
+        MacInterruptEnableState::Disabled
+    );
+}
+
+#[test]
+fn a_closed_epoch_closes_its_banks_again_on_a_stray_interrupt() {
+    let mut epoch = host_epoch();
+    epoch.close();
+    clear_logs(&mut epoch);
+    // Nothing enabled: nothing to close, and no work is serviced.
+    assert!(!epoch.close_stray());
+    assert_eq!(epoch.service_mac(), None);
+    assert_eq!(epoch.service_power(), None);
+    assert!(
+        epoch
+            .banks()
+            .0
+            .operations()
+            .matches(&[MacInterruptOperation::Status])
+    );
+
+    // An enable a reset restored, with an event latched under it.
+    clear_logs(&mut epoch);
+    epoch.banks_mut().0.publish(MacInterruptMask::STATION);
+    epoch.banks_mut().0.latch(rx_and_tx());
+    assert!(epoch.banks().0.line_asserted());
+
+    assert!(epoch.close_stray());
+
+    assert_eq!(epoch.state(), EpochState::Closed);
+    let (mac, _) = epoch.banks();
+    assert!(!mac.line_asserted() && mac.latched().is_empty());
+    // Sampled, then closed; nothing acknowledged as work.
+    assert!(mac.operations().matches(&[
+        MacInterruptOperation::Publish(MacInterruptMask::STATION),
+        MacInterruptOperation::Status,
+        MacInterruptOperation::MaskAll,
+        MacInterruptOperation::ClearAll,
+    ]));
+    // An open epoch has nothing stray.
+    epoch.activate(MacInterruptMask::STATION);
+    assert!(!epoch.close_stray());
 }
 
 #[test]
@@ -182,8 +301,10 @@ fn mask_all_masks_both_banks_without_acknowledging() {
     power.latch(sta_tbtt());
     assert!(mac.line_asserted() && power.line_asserted());
 
-    epoch.mask_all();
+    // Dropping the proof keeps the banks masked and their events latched.
+    drop(epoch.mask_all());
 
+    assert_eq!(epoch.state(), EpochState::Masked);
     let (mac, power) = epoch.banks();
     assert!(!mac.line_asserted() && !power.line_asserted());
     assert!(!mac.rx_delivery_enabled() && !mac.other_sources_enabled());
@@ -198,51 +319,35 @@ fn mask_all_masks_both_banks_without_acknowledging() {
             .matches(&[PowerInterruptOperation::MaskAll])
     );
 
-    // A late entry of either handler sees nothing and acknowledges nothing.
-    assert_eq!(epoch.service_mac().0, IrqDisposition::Spurious);
-    assert_eq!(epoch.service_power().0, PowerIrqDisposition::Spurious);
+    // A late entry of the handler sees nothing and acknowledges nothing.
+    assert_eq!(
+        epoch.service_mac().map(|(disposition, _)| disposition),
+        Some(IrqDisposition::Spurious)
+    );
+    assert_eq!(
+        epoch.service_power().map(|(disposition, _)| disposition),
+        Some(PowerIrqDisposition::Spurious)
+    );
     let (mac, power) = epoch.banks();
     assert_eq!(mac.latched(), rx_and_tx());
     assert_eq!(power.latched(), sta_tbtt());
 }
 
 #[test]
-fn unmask_after_mask_all_restores_only_the_rx_group() {
+fn an_unmask_after_mask_all_or_close_is_refused() {
     let mut epoch = host_epoch();
     epoch.banks_mut().0.latch(rx_and_tx());
-    epoch.mask_all();
+    drop(epoch.mask_all());
+    clear_logs(&mut epoch);
 
-    epoch.unmask_rx_after_drain();
+    assert!(!epoch.unmask_rx_after_drain());
+    epoch.close();
+    clear_logs(&mut epoch);
+    assert!(!epoch.unmask_rx_after_drain());
 
-    let (mac, power) = epoch.banks();
-    assert!(mac.rx_delivery_enabled() && !mac.other_sources_enabled());
-    assert!(!power.sta_tbtt_enabled());
-    // The latched RX level reasserts the line; the latched TX stays masked.
-    assert!(mac.line_asserted());
-    let rx_only =
-        MacInterruptObservation::from_semantic_events(MacInterruptEvents::RX_SUCCESS, true, false);
-    assert_eq!(mac.visible(), rx_only);
-
-    let (disposition, snapshot) = epoch.service_mac();
-    assert_eq!(disposition, IrqDisposition::Posted);
-    assert_eq!(snapshot.posted_events, EVENT_RX_SUCCESS);
     let (mac, _) = epoch.banks();
-    assert!(mac.operations().matches(&[
-        MacInterruptOperation::MaskAll,
-        MacInterruptOperation::UnmaskRxDelivery,
-        MacInterruptOperation::Status,
-        MacInterruptOperation::MaskRxDelivery,
-        MacInterruptOperation::Acknowledge(rx_only),
-    ]));
-    assert!(!mac.line_asserted());
-    assert_eq!(
-        mac.latched(),
-        MacInterruptObservation::from_semantic_events(
-            MacInterruptEvents::TX_COMPLETE,
-            false,
-            false
-        )
-    );
+    assert!(mac.operations().is_empty());
+    assert!(!mac.rx_delivery_enabled() && !mac.other_sources_enabled());
 }
 
 #[test]
@@ -251,14 +356,19 @@ fn moderated_rx_stays_latched_until_the_drain_unmasks_it() {
     let rx =
         MacInterruptObservation::from_semantic_events(MacInterruptEvents::RX_SUCCESS, false, false);
     epoch.banks_mut().0.latch(rx);
-    assert_eq!(epoch.service_mac().0, IrqDisposition::Posted);
+    assert_eq!(
+        epoch.service_mac().map(|(disposition, _)| disposition),
+        Some(IrqDisposition::Posted)
+    );
     // A frame completing while the group is masked stays latched, unseen.
     epoch.banks_mut().0.latch(rx);
     assert!(!epoch.banks().0.line_asserted());
 
-    epoch.unmask_rx_after_drain();
+    assert!(epoch.unmask_rx_after_drain());
 
-    assert!(epoch.banks().0.line_asserted());
+    let (mac, _) = epoch.banks();
+    assert!(mac.line_asserted());
+    assert!(mac.rx_delivery_enabled() && mac.other_sources_enabled());
 }
 
 #[test]

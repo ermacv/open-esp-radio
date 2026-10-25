@@ -60,9 +60,9 @@ pub async fn observe<B: PlatformClockBackend, T>(
     point: Point,
 ) -> Result<WifiClocked, RejectReason> {
     // Both ownership transitions perform no MMIO.
-    let (runtime, interrupts, clocks) = wifi.into_running();
+    let (runtime, clocks) = wifi.into_running();
     let result = observe_running(domain, &runtime, point).await;
-    let wifi = WifiClocked::from_running(runtime, interrupts, clocks);
+    let wifi = WifiClocked::from_running(runtime, clocks);
     result?;
     Ok(wifi)
 }

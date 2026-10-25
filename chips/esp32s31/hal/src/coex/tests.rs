@@ -6,7 +6,7 @@ use super::{ExternalCoexConfig, ExternalCoexLevel, ExternalCoexRole, ExternalCoe
 fn the_vendor_external_levels_become_the_published_priorities() {
     let config = ExternalCoexConfig::vendor(ExternalCoexRole::Leader, ExternalCoexWires::Three);
     let expected = [3, 8, 0xc].map(|value| {
-        oer_esp32s31_pac::ExternalCoexPriority::new(value)
+        crate::modem::ExternalCoexPriority::new(value)
             .unwrap_or_else(|| panic!("{value} is a priority"))
     });
     assert_eq!(config.priorities(), expected);

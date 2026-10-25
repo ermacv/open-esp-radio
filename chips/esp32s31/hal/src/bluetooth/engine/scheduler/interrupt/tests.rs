@@ -201,3 +201,72 @@ fn a_reply_during_wait_registration_is_observed_in_the_same_poll() {
     let bell = DuringRegistration(core::cell::RefCell::new(irq));
     assert_eq!(poll(pin!(task.select_progress(&bell))), Poll::Ready(Ok(())));
 }
+
+#[test]
+fn the_output_release_alternates_through_the_channel_with_its_proofs() {
+    let (mut task, mut irq, bell) = halves();
+    {
+        let mut sample = pin!(task.sample_idle_output(
+            &bell,
+            crate::bluetooth::BluetoothOutputReleaseAdmitted::for_host_test()
+        ));
+        assert!(poll(sample.as_mut()).is_pending());
+        assert!(irq.service_with(|command| {
+            assert!(matches!(command, Command::SampleIdleOutput(_)));
+            Ok(Reply::IdleSampled(Ok(
+                crate::bluetooth::BluetoothOutputIdleSampled::for_host_test(),
+            )))
+        }));
+        assert!(matches!(poll(sample.as_mut()), Poll::Ready(Ok(Ok(_)))));
+    }
+    {
+        let mut mask = pin!(task.mask_output(
+            &bell,
+            crate::bluetooth::BluetoothSchedulerHeadsAbsent::for_host_test()
+        ));
+        assert!(poll(mask.as_mut()).is_pending());
+        assert!(irq.service_with(|command| {
+            assert!(matches!(command, Command::MaskOutput(_)));
+            Ok(Reply::OutputMasked(
+                crate::bluetooth::BluetoothDynamicSourcesMasked::for_host_test(),
+            ))
+        }));
+        assert!(matches!(poll(mask.as_mut()), Poll::Ready(Ok(_))));
+    }
+    {
+        let mut release = pin!(task.release_output(
+            &bell,
+            crate::bluetooth::BluetoothSchedulerRunDisabled::for_host_test()
+        ));
+        assert!(poll(release.as_mut()).is_pending());
+        assert!(irq.service_with(|command| {
+            assert!(matches!(command, Command::ReleaseOutput(_)));
+            Ok(Reply::OutputReleased(Err(
+                BluetoothControllerOutputReleaseError::InterruptFault,
+            )))
+        }));
+        assert!(matches!(
+            poll(release.as_mut()),
+            Poll::Ready(Ok(Err(
+                BluetoothControllerOutputReleaseError::InterruptFault
+            )))
+        ));
+    }
+    assert_eq!(bell.0.get(), 3);
+    assert!(task.is_quiet());
+}
+
+#[test]
+fn a_mismatched_release_reply_is_foreign() {
+    let (mut task, mut irq, bell) = halves();
+    let mut sample = pin!(task.sample_idle_output(
+        &bell,
+        crate::bluetooth::BluetoothOutputReleaseAdmitted::for_host_test()
+    ));
+    assert!(poll(sample.as_mut()).is_pending());
+    assert!(irq.service_with(|_| Ok(Reply::Done)));
+    assert!(matches!(
+        poll(sample.as_mut()),
+        Poll::Ready(Err(SchedulerInterruptError::ForeignReply))
+    ));
+}

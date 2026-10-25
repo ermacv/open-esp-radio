@@ -10,23 +10,33 @@ oer_espressif_executor::tasks! {
     PanicResetTasks: Executor<0> {
         panic_on_request() = super::panic::panic_on_request;
         run(usb: crate::transport::Usb, boot: u64) = run;
+        rtc_watchdog(watchdog: RtcWatchdog) = crate::feed_rtc_watchdog;
     }
 }
 
-pub(crate) fn start(
+/// The RTC watchdog the root armed.
+type RtcWatchdog =
+    oer_esp32s31_hal::watchdog::ArmedRtcWatchdog<oer_esp32s31_hal::watchdog::RwdtRegisters>;
+
+pub(crate) fn start<C: oer_interrupt_table::Controller>(
     executor: crate::Executor<0>,
-    wake: crate::ExecutorWake,
+    router: &mut oer_interrupt_table::Router<C>,
+    (wake, line): (crate::ExecutorWake, oer_esp32s31_hal::platform::FromCpu0Irq),
     (usb, _pads): (
         crate::transport::Usb,
         oer_esp32s31_hal::usb_serial_jtag::UsbPads,
     ),
     mut entropy: crate::Rng,
+    watchdog: RtcWatchdog,
 ) -> ! {
     let boot = u64::from_le_bytes(entropy.random_bytes()).max(1);
     CONSOLE.start(boot);
-    executor.run(wake, |spawner| {
+    executor.run(router, wake, line, |spawner| {
         PanicResetTasks::panic_on_request(spawner).expect("panic-reset task");
         PanicResetTasks::run(spawner, usb, boot).expect("system console task");
+        if PanicResetTasks::rtc_watchdog(spawner, watchdog).is_err() {
+            crate::fail(crate::fatal::Failure::TaskAllocation);
+        }
     });
 }
 

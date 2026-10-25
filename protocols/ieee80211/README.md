@@ -72,7 +72,7 @@ upstream lost without an announcement in short absences after the access
 point's TBTTs, densely and then sparsely (`ApSearchPolicy`). It takes facts
 and returns `CoordinatorAction`s; the port's owner carries them out.
 
-[`lower-mac`](lower-mac/README.md) declares the radio port every Wi-Fi backend
+[`port`](port/README.md) declares the radio port every Wi-Fi backend
 implements; one submission is one hardware transmission attempt. Optional
 features are its extension traits. An attempt carries no backoff: a backend
 draws its queue's EDCA contention below the port, with

@@ -99,7 +99,11 @@ pub(super) fn execute_rf_close_with_hal<D: PhyShortDelay, C: oer_time::Clock + ?
                 oer_esp32s31_hal::phy::analog_i2c::power_off_rf_circuits(registers);
             }
             PhyRfCloseOperation::ClearImmediateClockPower => {
-                oer_esp32s31_hal::phy::clock::clear_rf_immediate_clock_power(registers);
+                // The vendor writes 0 to `PMU.IMM_HP_CK_POWER_0` here
+                // (SOURCE: BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907). Every field
+                // of that register is write-trigger by the PMU header
+                // (S31_PMU_HEADERS), so a write of zero starts no action:
+                // the step writes nothing.
             }
             PhyRfCloseOperation::CloseFrontendBasebandClocks => {
                 oer_esp32s31_hal::phy::clock::close_frontend_baseband(registers);
@@ -464,7 +468,9 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                         registers,
                         init_parameters,
                         u32::from(HARDWARE_EDGE_LIMIT),
+                        async || delay::<D, _>(timer, Kind::Completion, 1).await,
                     )
+                    .await
                     .map_err(|_| PhyTargetPortError::HardwareEdgeTimedOut)?;
                 }
                 PhyRfWakeOperation::PublishRetainedFrequencyI2c => {
@@ -502,7 +508,7 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     write_i2c_direct(
                         timer,
                         registers,
-                        crate::analog::i2c::registers::TXRF_TX_CAPACITOR_LOW,
+                        crate::analog::i2c::analog_i2c::txrf::tx_capacitor_low::ADDRESS,
                         tx_cap,
                     )?;
                     oer_esp32s31_hal::phy::frequency::configure_nrx_frequency(
@@ -514,7 +520,7 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     write_i2c_direct(
                         timer,
                         registers,
-                        crate::analog::i2c::registers::TXRF_TX_CAPACITOR_LOW,
+                        crate::analog::i2c::analog_i2c::txrf::tx_capacitor_low::ADDRESS,
                         tx_cap,
                     )?;
                 }

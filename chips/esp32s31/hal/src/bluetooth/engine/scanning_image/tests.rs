@@ -1,7 +1,7 @@
 use crate::bluetooth::engine::test_images::scan_item;
 use crate::bluetooth::engine::{
     le_phy_packet::{LeAccessAddress, LeCrcInit},
-    sram_link::ControllerSramLinkAddress,
+    sram_link::model_link,
 };
 use crate::layouts::*;
 
@@ -12,10 +12,7 @@ use super::{
 
 #[test]
 fn restricted_profile_retains_only_semantic_dynamic_inputs() {
-    let head = LegacyScanRxHeadProjection::from_bound(
-        ControllerSramLinkAddress::new(0x2f00_0100)
-            .expect("the model header is a nonzero controller link"),
-    );
+    let head = LegacyScanRxHeadProjection::from_bound(model_link(0x2f00_0100));
     let config = ScanResetImage::new(
         crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level"),
         crate::bluetooth::engine::ScanItemKind::Listen,
@@ -32,10 +29,7 @@ fn restricted_profile_retains_only_semantic_dynamic_inputs() {
 }
 
 fn head() -> LegacyScanRxHeadProjection {
-    LegacyScanRxHeadProjection::from_bound(
-        ControllerSramLinkAddress::new(0x2f00_0100)
-            .expect("the model header is a nonzero controller link"),
-    )
+    LegacyScanRxHeadProjection::from_bound(model_link(0x2f00_0100))
 }
 
 #[test]

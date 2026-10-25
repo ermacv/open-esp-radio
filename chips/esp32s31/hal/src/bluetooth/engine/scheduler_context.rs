@@ -24,6 +24,11 @@ impl SchedulerContextStorage {
         }
     }
 
+    /// The layout the scheduler item's context link points at.
+    pub(crate) const fn layout(&self) -> &crate::layouts::BleSchedulerContext {
+        &self.layout
+    }
+
     pub(crate) fn clear(&mut self) {
         crate::bluetooth::engine::shared_layout::clear_scheduler_context(&self.layout);
     }

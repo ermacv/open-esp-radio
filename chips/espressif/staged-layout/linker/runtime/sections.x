@@ -1,11 +1,8 @@
 /* Runtime image sections and their relocation/load contracts. */
 SECTIONS
 {
-  /* esp-riscv-rt keeps its reset initializer in the same LTO object as the
-     interrupt vectors used by this independently entered runtime. Define the
-     chip's RTC-fast (LP RAM) zero/persistent ranges even though runtime
-     handoff bypasses the normal reset entry. RTC-fast executable or initialized
-     data would require a separate bootstrap copy contract and is rejected. */
+  /* Reset-retained memory belongs only to explicit persistent records.
+     Executable and initialized RTC data have no relocation contract. */
   .rtc_fast.unsupported ORIGIN(RTC_FAST) (NOLOAD) :
   {
     *(.rtc_fast.literal .rtc_fast.literal.*);
@@ -16,8 +13,7 @@ SECTIONS
   /* `.noinit` promises memory that survives a reset, but stage two keeps
      reset-retained state only in `.rtc_fast.persistent`; any other RAM is
      re-initialized on every boot. Reject the promise instead of zeroing it. */
-  /* esp-riscv-rt zeroes `.dram2_uninit.bss` at reset; this platform places
-     nothing in the region after the loaded image, so it stays empty. */
+  /* No reset initializer owns this input region; require it to be empty. */
   .dram2_uninit.unsupported (NOLOAD) :
   {
     _dram2_uninit_bss_start = ABSOLUTE(.);
@@ -379,3 +375,5 @@ ASSERT(_runtime_start >= __runtime_text_start && _runtime_start < __runtime_text
        "runtime entry point is outside executable text");
 ASSERT(SIZEOF(.dram2_uninit.unsupported) == 0,
        "this platform places nothing in .dram2_uninit");
+
+ASSERT(SIZEOF(.rtc_fast.bss) == 0, "the runtime has no RTC-fast BSS initializer");

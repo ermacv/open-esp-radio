@@ -1,0 +1,325 @@
+schema = 3
+
+[type]
+name = "RADIO"
+description = "Synthetic radio block: every field class and register construct."
+sources = ["SRC_HEADER"]
+
+[review]
+sources = ["SRC_HEADER"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[review.opaque]
+sources = ["SRC_VENDOR"]
+provenance = "observed"
+accuracy = "positional"
+completeness = "unknown"
+
+[[registers]]
+name = "RAD_CONFIG"
+offset = 0x00
+description = "Configuration: a modified word."
+reset = { value = 0x00080000 }
+reserved = { mask = 0x00f80000, sources = ["SRC_HEADER"] }
+
+[[registers.fields]]
+name = "RAD_ENABLE"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "LEVEL"
+bits = "6:4"
+class = "plain"
+write-range = { min = 1, max = 5 }
+
+[[registers.fields]]
+name = "MODE"
+bits = "9:8"
+class = "plain"
+write-values-only = true
+values = [{ name = "SLOW", value = 0 }, { name = "FAST", value = 1 }, { name = "TURBO", value = 2 }]
+
+[[registers.fields]]
+name = "START"
+bits = "16"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "QUIET"
+bits = "17"
+class = "plain"
+write-range = { min = 0, max = 0 }
+
+[[registers.fields]]
+name = "VERSION"
+bits = "31:24"
+class = "read-only"
+
+[[registers]]
+name = "RAD_COMMAND"
+offset = 0x04
+reset = { value = 0x01000000 }
+reserved = { mask = 0xff000000, sources = ["SRC_HEADER"] }
+
+[[registers.fields]]
+name = "OPCODE"
+bits = "7:0"
+class = "write-only"
+write-values-only = true
+values = [{ name = "NOP", value = 0 }, { name = "RUN", value = 1 }, { name = "STOP", value = 2 }]
+
+[[registers.fields]]
+name = "ARGUMENT"
+bits = "15:8"
+class = "write-only"
+
+[[registers]]
+name = "RAD_STATUS"
+offset = 0x08
+
+[[registers.fields]]
+name = "DONE"
+bits = "0"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "ERROR"
+bits = "1"
+class = "write-one-to-clear"
+
+[[registers]]
+name = "RAD_EVENTS"
+offset = 0x0c
+
+[[registers.fields]]
+name = "RX"
+bits = "0"
+class = "read-only"
+
+[[registers.fields]]
+name = "TX"
+bits = "1"
+class = "read-only"
+
+[[registers]]
+name = "RAD_EVENT_CLR"
+offset = 0x10
+
+[[registers.fields]]
+name = "RX"
+bits = "0"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "TX"
+bits = "1"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "AUX"
+bits = "2"
+class = "write-trigger"
+
+[[registers]]
+name = "RAD_ENABLE"
+offset = 0x14
+
+[[registers.fields]]
+name = "RX"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "TX"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "SPARE"
+bits = "8"
+class = "plain"
+
+[[registers]]
+name = "RAD_CMD"
+offset = 0x18
+
+[[registers.fields]]
+name = "GO"
+bits = "0"
+class = "self-clearing"
+
+[[registers.fields]]
+name = "FAST"
+bits = "1"
+class = "self-clearing"
+
+[[registers.fields]]
+name = "BUSY"
+bits = "2"
+class = "self-clearing"
+
+[[registers.fields]]
+name = "CFG"
+bits = "7:4"
+class = "plain"
+
+[[registers]]
+name = "RAD_FIFO"
+offset = 0x1c
+fifo = { sources = ["SRC_HEADER"] }
+
+[[registers.fields]]
+name = "DATA"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "RAD_PORT"
+offset = 0x20
+data-port = { sources = ["SRC_HEADER"] }
+
+[[registers.fields]]
+name = "VALUE"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "RAD_SLOT%s"
+offset = 0x40
+dim = { count = 4, stride = 4 }
+
+[[registers.fields]]
+name = "VALUE"
+bits = "15:0"
+class = "plain"
+
+[[registers]]
+name = "RAD_MIXED"
+offset = 0x50
+
+[[registers.fields]]
+name = "ON"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "KEY"
+bits = "15:8"
+class = "write-only"
+
+[[registers]]
+name = "RAD_VAGUE"
+offset = 0x54
+
+[[registers.fields]]
+name = "VAGUE"
+bits = "3:0"
+class = "unknown"
+
+[[registers]]
+name = "RAD_HW"
+offset = 0x58
+
+[[registers.fields]]
+name = "CFG"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "STAT"
+bits = "1"
+class = "hardware-written"
+
+[[registers]]
+name = "RAD_DESC"
+offset = 0x5c
+
+[[registers.fields]]
+name = "PTR"
+bits = "31:0"
+class = "plain"
+pointer = { points-to = "RX_DESCRIPTOR", placement = "dma-window", encoding = { width = 32, shift = 0 }, sources = ["SRC_DRIVER"] }
+
+[[registers]]
+name = "WORD_0060_OPAQUE"
+offset = 0x60
+
+[[registers.fields]]
+name = "BITS_0_7_OPAQUE"
+bits = "7:0"
+class = "plain"
+
+[[registers]]
+name = "RAD_PUBLISH"
+offset = 0x64
+
+[[registers.fields]]
+name = "LOW"
+bits = "23:0"
+class = "plain"
+
+[[registers.fields]]
+name = "HIGH"
+bits = "31:24"
+class = "read-only"
+
+[[registers]]
+name = "RAD_HALF%s"
+offset = 0x70
+width = 16
+dim = { count = 2, stride = 2 }
+
+[[registers.fields]]
+name = "V"
+bits = "15:0"
+class = "plain"
+
+[[registers]]
+name = "RAD_STATE"
+offset = 0x74
+read-side-effect = { sources = ["SRC_HEADER"] }
+
+[[registers.fields]]
+name = "STATE"
+bits = "7:0"
+class = "read-only"
+
+[[groups]]
+name = "RAD_CH%s"
+offset = 0x80
+count = 2
+stride = 0x8
+
+[[groups.registers]]
+name = "CONF"
+offset = 0x0
+
+[[groups.registers.fields]]
+name = "EN"
+bits = "0"
+class = "plain"
+
+[[groups.registers]]
+name = "CNT"
+offset = 0x4
+
+[[groups.registers.fields]]
+name = "N"
+bits = "7:0"
+class = "read-only"
+
+[[commands]]
+register = "RAD_CMD"
+commands = ["GO"]
+qualifiers = ["FAST"]
+held = ["BUSY"]
+sources = ["SRC_HEADER"]
+
+[[interrupt-pairs]]
+status = "RAD_EVENTS"
+clear = "RAD_EVENT_CLR"
+sources = ["SRC_DRIVER"]

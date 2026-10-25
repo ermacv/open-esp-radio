@@ -906,7 +906,8 @@ impl Session {
             .map(Executable::bytes)
             .collect();
         let registers = crate::registers::Registers::load(
-            &oer_os_process::built_root().join(crate::chip().registers),
+            &oer_os_process::built_root(),
+            crate::chip().registers,
         )?;
         let symbols = crate::discovery::Symbols::of(&elfs, registers);
         Ok(crate::discovery::discover(

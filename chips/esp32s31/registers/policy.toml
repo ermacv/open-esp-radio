@@ -5,6 +5,46 @@ schema = 6
 chip = "esp32s31"
 
 [[partitions]]
+name = "SocPeripherals"
+member = "soc"
+description = "The bootstrap SoC initializer: access-path filters, the LP TRNG clock, reset, sampling, conditioning and health tests, and the system timer's bus and function clocks the boot's monotonic clock needs. Core containment is owned by CoreControlPeripherals."
+
+[[partitions.parts]]
+name = "LpApmFilter"
+instance = "LP_APM"
+registers = ["FUNC_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_APM_REG_H_L990"]
+
+[[partitions.parts]]
+name = "HpApmFilter"
+instance = "HP_APM"
+registers = ["FUNC_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_APM_REG_H_L1950"]
+
+[[partitions.parts]]
+name = "HpMemApmFilter"
+instance = "HP_MEM_APM"
+registers = ["FUNC_CTRL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_MEM_APM_REG_H_L1214"]
+
+[[partitions.parts]]
+name = "TrngInit"
+instance = "TRNG"
+registers = ["CONF", "DEBUG_CONF", "DATE"]
+sources = ["ESP_IDF_4D59230D_HAL_ESP32S31_INCLUDE_HAL_RNG_LL_H_L163"]
+
+[[partitions.parts]]
+name = "LpPericlkrstRngInit"
+instance = "LP_PERICLKRST"
+registers = ["RNG_CTRL"]
+sources = ["ESP_IDF_4D59230D_HAL_ESP32S31_INCLUDE_HAL_RNG_LL_H_L163"]
+
+[[partitions.parts]]
+name = "HpSysClkrstSystimer"
+instance = "HP_SYS_CLKRST"
+registers = ["SYSTIMER_CTRL0"]
+
+[[partitions]]
 name = "UsbSerialJtagPeripherals"
 member = "usb_serial_jtag"
 description = "The USB Serial/JTAG console: its data FIFO, interrupts and pads, written by the early writer before the console's driver exists and by the driver after."
@@ -17,6 +57,7 @@ registers = ["EP1", "EP1_CONF", "INT_ST", "INT_ENA"]
 [[partitions.parts]]
 name = "UsbSerialJtagIrq"
 instance = "USB_DEVICE"
+interrupt = "USB_SERIAL_JTAG"
 registers = ["INT_CLR"]
 observes = ["INT_ST"]
 irq-side = true
@@ -76,17 +117,15 @@ registers = ["RD_MAC_SYS0", "RD_MAC_SYS1", "RD_MAC_SYS3"]
 [[partitions]]
 name = "EntropyPeripherals"
 member = "entropy"
-description = "The true random number generator and its clock and reset word, read by the entropy owner."
+description = "The conditioned TRNG output and error word, with read-only views of the configuration held by the bootstrap SoC initializer."
 
 [[partitions.parts]]
 name = "Trng"
 instance = "TRNG"
-registers = ["CONF", "DEBUG_CONF", "INT_RAW", "CRC_SYNC_DATA"]
-
-[[partitions.parts]]
-name = "LpPericlkrstRng"
-instance = "LP_PERICLKRST"
-registers = ["RNG_CTRL"]
+registers = ["INT_RAW", "CRC_SYNC_DATA"]
+observes = ["CONF", "DEBUG_CONF"]
+description = "The entropy owner reads the conditioned output and health status; only the bootstrap initializer configures sampling and health tests."
+sources = ["ESP_IDF_4D59230D_S31_TRNG"]
 
 [[partitions]]
 name = "ResetCausePeripherals"
@@ -121,7 +160,7 @@ registers = ["TIMERGRP1_CTRL0"]
 [[partitions.parts]]
 name = "LpWdt"
 instance = "LP_WDT"
-registers = ["CONFIG0", "WPROTECT"]
+registers = ["CONFIG0", "CONFIG1", "FEED", "WPROTECT"]
 
 [[partitions.parts]]
 name = "LpWdtSwd"
@@ -136,7 +175,7 @@ description = "The system timer: the comparators the time driver programs and th
 [[partitions.parts]]
 name = "Systimer"
 instance = "SYSTIMER"
-registers = ["CONF", "TARGET0_HI", "TARGET0_LO", "TARGET1_HI", "TARGET1_LO", "TARGET2_HI", "TARGET2_LO", "TARGET0_CONF", "TARGET1_CONF", "TARGET2_CONF", "COMP0_LOAD", "COMP1_LOAD", "COMP2_LOAD", "INT_ENA"]
+registers = ["CONF", "TARGET%s_HI", "TARGET%s_LO", "TARGET%s_CONF", "COMP%s_LOAD", "INT_ENA"]
 
 [[partitions.parts]]
 name = "SystimerCounter"
@@ -147,11 +186,30 @@ description = "The counter latch of system timer unit zero, which every context 
 sources = ["ESP_IDF_4D59230D_S31_SYSTIMER", "ESP_IDF_4D59230D_S31_SYSTIMER_LL"]
 
 [[partitions.parts]]
-name = "SystimerAcknowledge"
+name = "SystimerAlarm0"
 instance = "SYSTIMER"
-registers = ["INT_CLR"]
-shared = true
-description = "The comparators' acknowledgements: each alarm handler strobes its own bit from its own context."
+triggers = [{ register = "INT_CLR", fields = ["TARGET0_INT_CLR"] }]
+interrupt = "SYSTIMER_TARGET0"
+irq-side = true
+description = "Comparator 0's alarm handler strobes its own acknowledgement bit, zero in the others; the time driver owns the comparator's configuration and enable."
+sources = ["ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[[partitions.parts]]
+name = "SystimerAlarm1"
+instance = "SYSTIMER"
+triggers = [{ register = "INT_CLR", fields = ["TARGET1_INT_CLR"] }]
+interrupt = "SYSTIMER_TARGET1"
+irq-side = true
+description = "Comparator 1's alarm handler strobes its own acknowledgement bit, zero in the others; the time driver owns the comparator's configuration and enable."
+sources = ["ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[[partitions.parts]]
+name = "SystimerAlarm2"
+instance = "SYSTIMER"
+triggers = [{ register = "INT_CLR", fields = ["TARGET2_INT_CLR"] }]
+interrupt = "SYSTIMER_TARGET2"
+irq-side = true
+description = "Comparator 2's alarm handler strobes its own acknowledgement bit, zero in the others; the time driver owns the comparator's configuration and enable."
 sources = ["ESP_IDF_4D59230D_S31_SYSTIMER"]
 
 [[partitions]]
@@ -162,6 +220,7 @@ description = "Software interrupt line 0, owned by the line's owner (an executor
 [[partitions.parts]]
 name = "FromCpu0"
 instance = "HP_SYS"
+interrupt = "CPU_INTR_FROM_CPU_0"
 registers = ["HP_CPU_INT_FROM_CPU_0"]
 shared = true
 description = "Software interrupt line 0: wakers raise it from every context and its handler lowers it."
@@ -175,6 +234,7 @@ description = "Software interrupt line 1, owned by the line's owner (an executor
 [[partitions.parts]]
 name = "FromCpu1"
 instance = "HP_SYS"
+interrupt = "CPU_INTR_FROM_CPU_1"
 registers = ["HP_CPU_INT_FROM_CPU_1"]
 shared = true
 description = "Software interrupt line 1: wakers raise it from every context and its handler lowers it."
@@ -188,6 +248,7 @@ description = "Software interrupt line 2, owned by the line's owner (an executor
 [[partitions.parts]]
 name = "FromCpu2"
 instance = "HP_SYS"
+interrupt = "CPU_INTR_FROM_CPU_2"
 registers = ["HP_CPU_INT_FROM_CPU_2"]
 shared = true
 description = "Software interrupt line 2: wakers raise it from every context and its handler lowers it."
@@ -201,6 +262,7 @@ description = "Software interrupt line 3, owned by the line's owner (an executor
 [[partitions.parts]]
 name = "FromCpu3"
 instance = "HP_SYS"
+interrupt = "CPU_INTR_FROM_CPU_3"
 registers = ["HP_CPU_INT_FROM_CPU_3"]
 shared = true
 description = "Software interrupt line 3: wakers raise it from every context and its handler lowers it."
@@ -214,12 +276,29 @@ description = "The interrupt matrix route and pending words and the CLIC configu
 [[partitions.parts]]
 name = "Clic"
 instance = "CLIC"
-registers = ["INT_CONFIG", "CTRL%s"]
+registers = ["CTRL%s"]
+
+[[partitions.parts]]
+name = "ClicObserver"
+instance = "CLIC"
+registers = ["INT_CONFIG"]
+observes = ["CTRL%s"]
+description = "The CLIC's level bits, set once when the root splits the partition, and hart 0's lines as a fatal path reads them after the other hart stopped; it writes no line."
+sources = ["ESP_IDF_4D59230D_S31_CLIC"]
 
 [[partitions.parts]]
 name = "InterruptCore0"
 instance = "INTERRUPT_CORE0"
-registers = ["SYS_ICM_INTR_MAP", "AXI_PERF_MON_INTR_MAP", "USB_DEVICE_INTR_MAP", "SDIO_HOST_INTR_MAP", "SPI2_INTR_MAP", "SPI3_INTR_MAP", "I2S0_INTR_MAP", "I2S1_INTR_MAP", "UHCI0_INTR_MAP", "UART0_INTR_MAP", "UART1_INTR_MAP", "UART2_INTR_MAP", "UART3_INTR_MAP", "LCD_CAM_INTR_MAP", "PWM0_INTR_MAP", "PWM1_INTR_MAP", "PWM2_INTR_MAP", "PWM3_INTR_MAP", "CAN0_INTR_MAP", "CAN0_TIMER_INTR_MAP", "CAN1_INTR_MAP", "CAN1_TIMER_INTR_MAP", "RMT_INTR_MAP", "I2C0_INTR_MAP", "I2C1_INTR_MAP", "TIMERGRP0_T0_INTR_MAP", "TIMERGRP0_T1_INTR_MAP", "TIMERGRP0_WDT_INTR_MAP", "TIMERGRP1_T0_INTR_MAP", "TIMERGRP1_T1_INTR_MAP", "TIMERGRP1_WDT_INTR_MAP", "LEDC0_INTR_MAP", "LEDC1_INTR_MAP", "SYSTIMER_TARGET0_INTR_MAP", "SYSTIMER_TARGET1_INTR_MAP", "SYSTIMER_TARGET2_INTR_MAP", "AHB_PDMA_IN_CH0_INTR_MAP", "AHB_PDMA_IN_CH1_INTR_MAP", "AHB_PDMA_IN_CH2_INTR_MAP", "AHB_PDMA_IN_CH3_INTR_MAP", "AHB_PDMA_IN_CH4_INTR_MAP", "AHB_PDMA_OUT_CH0_INTR_MAP", "AHB_PDMA_OUT_CH1_INTR_MAP", "AHB_PDMA_OUT_CH2_INTR_MAP", "AHB_PDMA_OUT_CH3_INTR_MAP", "AHB_PDMA_OUT_CH4_INTR_MAP", "ASRC_CHNL0_INTR_MAP", "ASRC_CHNL1_INTR_MAP", "AXI_PDMA_IN_CH0_INTR_MAP", "AXI_PDMA_IN_CH1_INTR_MAP", "AXI_PDMA_IN_CH2_INTR_MAP", "AXI_PDMA_OUT_CH0_INTR_MAP", "AXI_PDMA_OUT_CH1_INTR_MAP", "AXI_PDMA_OUT_CH2_INTR_MAP", "RSA_INTR_MAP", "AES_INTR_MAP", "SHA_INTR_MAP", "ECC_INTR_MAP", "ECDSA_INTR_MAP", "KM_INTR_MAP", "RMA_INTR_MAP", "GPIO_INTR0_MAP", "GPIO_INTR1_MAP", "GPIO_INTR2_MAP", "GPIO_INTR3_MAP", "CPU_INTR_FROM_CPU_0_MAP", "CPU_INTR_FROM_CPU_1_MAP", "CPU_INTR_FROM_CPU_2_MAP", "CPU_INTR_FROM_CPU_3_MAP", "CACHE_INTR_MAP", "CPU_APM_M0_INTR_MAP", "CPU_APM_M1_INTR_MAP", "CPU_APM_M2_INTR_MAP", "CPU_APM_M3_INTR_MAP", "HP_MEM_APM_M0_INTR_MAP", "HP_MEM_APM_M1_INTR_MAP", "HP_MEM_APM_M2_INTR_MAP", "HP_MEM_APM_M3_INTR_MAP", "HP_MEM_APM_M4_INTR_MAP", "HP_MEM_APM_M5_INTR_MAP", "CPU_PERI0_TIMEOUT_INTR_MAP", "CPU_PERI1_TIMEOUT_INTR_MAP", "HP_PERI0_TIMEOUT_INTR_MAP", "HP_PERI1_TIMEOUT_INTR_MAP", "HP_APM_M0_INTR_MAP", "HP_APM_M1_INTR_MAP", "HP_APM_M2_INTR_MAP", "HP_APM_M3_INTR_MAP", "HP_APM_M4_INTR_MAP", "HP_APM_M5_INTR_MAP", "HP_APM_M6_INTR_MAP", "HP_PERI0_PMS_INTR_MAP", "HP_PERI1_PMS_INTR_MAP", "CPU0_PERI_PMS_INTR_MAP", "CPU1_PERI_PMS_INTR_MAP", "FLASH_MSPI_INTR_MAP", "LPI_INTR_MAP", "PMT_INTR_MAP", "SBD_INTR_MAP", "USB_OTGHS_INTR_MAP", "USB_OTGHS_ENDP_MULTI_PROC_INTR_MAP", "JPEG_INTR_MAP", "PPA_INTR_MAP", "CORE0_TRACE_INTR_MAP", "CORE1_TRACE_INTR_MAP", "DMA2D_IN_CH0_INTR_MAP", "DMA2D_IN_CH1_INTR_MAP", "DMA2D_IN_CH2_INTR_MAP", "DMA2D_OUT_CH0_INTR_MAP", "DMA2D_OUT_CH1_INTR_MAP", "DMA2D_OUT_CH2_INTR_MAP", "DMA2D_OUT_CH3_INTR_MAP", "PSRAM_MSPI_INTR_MAP", "HP_SYSREG_INTR_MAP", "PCNT0_INTR_MAP", "PCNT1_INTR_MAP", "HP_PAU_INTR_MAP", "HP_PARLIO_RX_INTR_MAP", "HP_PARLIO_TX_INTR_MAP", "BUS_MONITOR_INTR_MAP", "MODEM_WIFI_MAC_INTR_MAP", "MODEM_WIFI_MAC_NMI_INTR_MAP", "MODEM_WIFI_PWR_INTR_MAP", "MODEM_WIFI_BB_INTR_MAP", "MODEM_BT_MAC_INTR_MAP", "MODEM_BT_BB_INTR_MAP", "MODEM_BT_BB_NMI_INTR_MAP", "MODEM_LP_TIMER_INTR_MAP", "MODEM_COEX_INTR_MAP", "MODEM_BLE_TIMER_INTR_MAP", "MODEM_BLE_SEC_INTR_MAP", "MODEM_I2C_MST_INTR_MAP", "MODEM_ZB_MAC_INTR_MAP", "MODEM_BT_MAC_INT1_INTR_MAP", "CORDIC_INTR_MAP", "ZERO_DET_INTR_MAP", "LP_WDT_INTR_MAP", "LP_TIMER_REG_0_INTR_MAP", "LP_TIMER_REG_1_INTR_MAP", "MB_HP_INTR_MAP", "MB_LP_INTR_MAP", "PMU_REG_0_INTR_MAP", "PMU_REG_1_INTR_MAP", "LP_ANAPERI_INTR_MAP", "LP_ADC_INTR_MAP", "LP_DAC_INTR_MAP", "LP_GPIO_INTR_MAP", "LP_I2C_INTR_MAP", "LP_SPI_INTR_MAP", "LP_TOUCH_INTR_MAP", "LP_TSENS_INTR_MAP", "LP_UART_INTR_MAP", "LP_EFUSE_INTR_MAP", "LP_SW_INTR_MAP", "LP_TRNG_INTR_MAP", "LP_SYSREG_INTR_MAP", "LP_APM_M0_INTR_MAP", "LP_APM_M1_INTR_MAP", "LP_APM_M2_INTR_MAP", "LP_APM_M3_INTR_MAP", "LP_PERI0_PMS_INTR_MAP", "LP_PERI1_PMS_INTR_MAP", "LP_HUK_INTR_MAP", "LP_PERI_TIMEOUT_INTR_MAP", "LP_AHB_PDMA_IN_CH0_INTR_MAP", "LP_AHB_PDMA_IN_CH1_INTR_MAP", "LP_AHB_PDMA_OUT_CH0_INTR_MAP", "LP_AHB_PDMA_OUT_CH1_INTR_MAP", "LP_SW_INVALID_SLEEP_INTR_MAP"]
+registers = ["ROUTE%s"]
+
+[[partitions.parts]]
+name = "InterruptCore0Observer"
+instance = "INTERRUPT_CORE0"
+registers = ["INTERRUPT_DATE"]
+observes = ["ROUTE%s"]
+read-only = true
+description = "Hart 0's routes as a fatal path reads them after the other hart stopped, and the matrix's version word; it writes nothing."
+sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
 
 [[partitions.parts]]
 name = "InterruptCore0Status"
@@ -232,7 +311,7 @@ sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
 [[partitions.parts]]
 name = "InterruptCore1"
 instance = "INTERRUPT_CORE1"
-registers = ["SYS_ICM_INTR_MAP", "AXI_PERF_MON_INTR_MAP", "USB_DEVICE_INTR_MAP", "SDIO_HOST_INTR_MAP", "SPI2_INTR_MAP", "SPI3_INTR_MAP", "I2S0_INTR_MAP", "I2S1_INTR_MAP", "UHCI0_INTR_MAP", "UART0_INTR_MAP", "UART1_INTR_MAP", "UART2_INTR_MAP", "UART3_INTR_MAP", "LCD_CAM_INTR_MAP", "PWM0_INTR_MAP", "PWM1_INTR_MAP", "PWM2_INTR_MAP", "PWM3_INTR_MAP", "CAN0_INTR_MAP", "CAN0_TIMER_INTR_MAP", "CAN1_INTR_MAP", "CAN1_TIMER_INTR_MAP", "RMT_INTR_MAP", "I2C0_INTR_MAP", "I2C1_INTR_MAP", "TIMERGRP0_T0_INTR_MAP", "TIMERGRP0_T1_INTR_MAP", "TIMERGRP0_WDT_INTR_MAP", "TIMERGRP1_T0_INTR_MAP", "TIMERGRP1_T1_INTR_MAP", "TIMERGRP1_WDT_INTR_MAP", "LEDC0_INTR_MAP", "LEDC1_INTR_MAP", "SYSTIMER_TARGET0_INTR_MAP", "SYSTIMER_TARGET1_INTR_MAP", "SYSTIMER_TARGET2_INTR_MAP", "AHB_PDMA_IN_CH0_INTR_MAP", "AHB_PDMA_IN_CH1_INTR_MAP", "AHB_PDMA_IN_CH2_INTR_MAP", "AHB_PDMA_IN_CH3_INTR_MAP", "AHB_PDMA_IN_CH4_INTR_MAP", "AHB_PDMA_OUT_CH0_INTR_MAP", "AHB_PDMA_OUT_CH1_INTR_MAP", "AHB_PDMA_OUT_CH2_INTR_MAP", "AHB_PDMA_OUT_CH3_INTR_MAP", "AHB_PDMA_OUT_CH4_INTR_MAP", "ASRC_CHNL0_INTR_MAP", "ASRC_CHNL1_INTR_MAP", "AXI_PDMA_IN_CH0_INTR_MAP", "AXI_PDMA_IN_CH1_INTR_MAP", "AXI_PDMA_IN_CH2_INTR_MAP", "AXI_PDMA_OUT_CH0_INTR_MAP", "AXI_PDMA_OUT_CH1_INTR_MAP", "AXI_PDMA_OUT_CH2_INTR_MAP", "RSA_INTR_MAP", "AES_INTR_MAP", "SHA_INTR_MAP", "ECC_INTR_MAP", "ECDSA_INTR_MAP", "KM_INTR_MAP", "RMA_INTR_MAP", "GPIO_INTR0_MAP", "GPIO_INTR1_MAP", "GPIO_INTR2_MAP", "GPIO_INTR3_MAP", "CPU_INTR_FROM_CPU_0_MAP", "CPU_INTR_FROM_CPU_1_MAP", "CPU_INTR_FROM_CPU_2_MAP", "CPU_INTR_FROM_CPU_3_MAP", "CACHE_INTR_MAP", "CPU_APM_M0_INTR_MAP", "CPU_APM_M1_INTR_MAP", "CPU_APM_M2_INTR_MAP", "CPU_APM_M3_INTR_MAP", "HP_MEM_APM_M0_INTR_MAP", "HP_MEM_APM_M1_INTR_MAP", "HP_MEM_APM_M2_INTR_MAP", "HP_MEM_APM_M3_INTR_MAP", "HP_MEM_APM_M4_INTR_MAP", "HP_MEM_APM_M5_INTR_MAP", "CPU_PERI0_TIMEOUT_INTR_MAP", "CPU_PERI1_TIMEOUT_INTR_MAP", "HP_PERI0_TIMEOUT_INTR_MAP", "HP_PERI1_TIMEOUT_INTR_MAP", "HP_APM_M0_INTR_MAP", "HP_APM_M1_INTR_MAP", "HP_APM_M2_INTR_MAP", "HP_APM_M3_INTR_MAP", "HP_APM_M4_INTR_MAP", "HP_APM_M5_INTR_MAP", "HP_APM_M6_INTR_MAP", "HP_PERI0_PMS_INTR_MAP", "HP_PERI1_PMS_INTR_MAP", "CPU0_PERI_PMS_INTR_MAP", "CPU1_PERI_PMS_INTR_MAP", "FLASH_MSPI_INTR_MAP", "LPI_INTR_MAP", "PMT_INTR_MAP", "SBD_INTR_MAP", "USB_OTGHS_INTR_MAP", "USB_OTGHS_ENDP_MULTI_PROC_INTR_MAP", "JPEG_INTR_MAP", "PPA_INTR_MAP", "CORE0_TRACE_INTR_MAP", "CORE1_TRACE_INTR_MAP", "DMA2D_IN_CH0_INTR_MAP", "DMA2D_IN_CH1_INTR_MAP", "DMA2D_IN_CH2_INTR_MAP", "DMA2D_OUT_CH0_INTR_MAP", "DMA2D_OUT_CH1_INTR_MAP", "DMA2D_OUT_CH2_INTR_MAP", "DMA2D_OUT_CH3_INTR_MAP", "PSRAM_MSPI_INTR_MAP", "HP_SYSREG_INTR_MAP", "PCNT0_INTR_MAP", "PCNT1_INTR_MAP", "HP_PAU_INTR_MAP", "HP_PARLIO_RX_INTR_MAP", "HP_PARLIO_TX_INTR_MAP", "BUS_MONITOR_INTR_MAP", "MODEM_WIFI_MAC_INTR_MAP", "MODEM_WIFI_MAC_NMI_INTR_MAP", "MODEM_WIFI_PWR_INTR_MAP", "MODEM_WIFI_BB_INTR_MAP", "MODEM_BT_MAC_INTR_MAP", "MODEM_BT_BB_INTR_MAP", "MODEM_BT_BB_NMI_INTR_MAP", "MODEM_LP_TIMER_INTR_MAP", "MODEM_COEX_INTR_MAP", "MODEM_BLE_TIMER_INTR_MAP", "MODEM_BLE_SEC_INTR_MAP", "MODEM_I2C_MST_INTR_MAP", "MODEM_ZB_MAC_INTR_MAP", "MODEM_BT_MAC_INT1_INTR_MAP", "CORDIC_INTR_MAP", "ZERO_DET_INTR_MAP", "LP_WDT_INTR_MAP", "LP_TIMER_REG_0_INTR_MAP", "LP_TIMER_REG_1_INTR_MAP", "MB_HP_INTR_MAP", "MB_LP_INTR_MAP", "PMU_REG_0_INTR_MAP", "PMU_REG_1_INTR_MAP", "LP_ANAPERI_INTR_MAP", "LP_ADC_INTR_MAP", "LP_DAC_INTR_MAP", "LP_GPIO_INTR_MAP", "LP_I2C_INTR_MAP", "LP_SPI_INTR_MAP", "LP_TOUCH_INTR_MAP", "LP_TSENS_INTR_MAP", "LP_UART_INTR_MAP", "LP_EFUSE_INTR_MAP", "LP_SW_INTR_MAP", "LP_TRNG_INTR_MAP", "LP_SYSREG_INTR_MAP", "LP_APM_M0_INTR_MAP", "LP_APM_M1_INTR_MAP", "LP_APM_M2_INTR_MAP", "LP_APM_M3_INTR_MAP", "LP_PERI0_PMS_INTR_MAP", "LP_PERI1_PMS_INTR_MAP", "LP_HUK_INTR_MAP", "LP_PERI_TIMEOUT_INTR_MAP", "LP_AHB_PDMA_IN_CH0_INTR_MAP", "LP_AHB_PDMA_IN_CH1_INTR_MAP", "LP_AHB_PDMA_OUT_CH0_INTR_MAP", "LP_AHB_PDMA_OUT_CH1_INTR_MAP", "LP_SW_INVALID_SLEEP_INTR_MAP"]
+registers = ["ROUTE%s"]
 
 [[partitions.parts]]
 name = "InterruptCore1Status"
@@ -546,11 +625,19 @@ description = "Wi-Fi interrupt banks transferred from cold setup to the hard int
 name = "WifiMacInterrupt"
 instance = "WIFI_MAC"
 registers = ["ENABLE", "RAW", "STATUS", "CLEAR"]
+irq-side = true
+interrupt = "MODEM_WIFI_MAC"
+description = "The MAC interrupt bank: cold setup publishes its mask, then the MAC handler samples, acknowledges and masks its events."
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT"]
 
 [[partitions.parts]]
 name = "WifiMacPowerInterrupt"
 instance = "MODEM_PWR"
 registers = ["ENABLE", "RAW", "POWER_INTERRUPT_STATUS", "CLEAR"]
+irq-side = true
+interrupt = "MODEM_WIFI_PWR"
+description = "The WDEVPWR interrupt bank: cold setup masks it, then the power handler samples, acknowledges and masks its events."
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT"]
 
 [[partitions]]
 name = "MacLocalTimePeripherals"
@@ -561,6 +648,10 @@ description = "The free-running Wi-Fi MAC local-time counter. Reading it has no 
 name = "WifiMacLocalTime"
 instance = "MODEM_PWR"
 registers = ["COUNTER"]
+read-only = true
+copy = true
+description = "The read of the free-running MAC local-time counter: side-effect free and written by no part, so one `Copy` reader serves the radio PHY's SDM-stability deadline and the Wi-Fi MAC's receive timestamps."
+sources = ["ROM_REV0_PHY_WAIT_I2C_SDM_STABLE", "BLOB_LIBPP_MAC_LOCAL_TIME"]
 
 [[partitions]]
 name = "RadioPhyPeripherals"
@@ -693,11 +784,6 @@ instance = "WIFI_BB"
 registers = ["NRX_FREQUENCY_CONTROL", "CHANNEL_CBW_CONTROL_0", "CHANNEL_CBW_CONTROL_1"]
 
 [[partitions.parts]]
-name = "PhyI2cCommandRam"
-instance = "I2C_ANA_MST_MEM"
-registers = ["COMMAND_MEMORY%s"]
-
-[[partitions.parts]]
 name = "PhyIqEstimatorOracle"
 instance = "FE"
 registers = ["ESTIMATOR_CONFIG", "ESTIMATOR_CONTROL", "SIGNAL_POWER_SUM_I", "SIGNAL_POWER_DIFFERENCE_I", "SIGNAL_POWER_DIFFERENCE_Q", "SIGNAL_POWER_SUM_Q", "DC_I_ACCUMULATOR", "DC_Q_ACCUMULATOR", "POWER_ACCUMULATOR", "ESTIMATOR_READY_STATUS", "ESTIMATOR_ACTIVITY_STATUS"]
@@ -726,11 +812,6 @@ registers = ["TSENS_CTRL"]
 name = "LpTsens"
 instance = "LP_TSENS"
 registers = ["CTRL", "CLK_CONF"]
-
-[[partitions.parts]]
-name = "I2cAnaMst"
-instance = "I2C_ANA_MST"
-registers = ["I2C0_CTRL", "I2C1_CTRL", "ANA_CONF0", "ANA_CONF1", "ANA_CONF2", "I2C0_CTRL1", "I2C1_CTRL1", "HW_I2C_CTRL"]
 
 [[partitions.parts]]
 name = "PhyMemory"
@@ -860,6 +941,7 @@ description = "Bluetooth modem low-power timer registers transferred independent
 [[partitions.parts]]
 name = "BtdmRuntimeControl"
 instance = "MODEM_PWR"
+interrupt = "MODEM_LP_TIMER"
 registers = ["RUNTIME_TIMER_START_COMMAND", "WORD_0004_OPAQUE", "WORD_0008_OPAQUE", "WORD_0010_OPAQUE", "WORD_0014_OPAQUE", "WORD_001C_OPAQUE", "WORD_0020_OPAQUE", "WORD_0024_OPAQUE", "WORD_002C_OPAQUE", "WORD_0034_OPAQUE", "WORD_0038_OPAQUE", "WORD_0040_OPAQUE", "WORD_0044_OPAQUE", "WORD_0048_OPAQUE", "WORD_004C_OPAQUE", "WORD_0058_OPAQUE", "WORD_0064_OPAQUE", "WORD_0068_OPAQUE", "WORD_006C_OPAQUE", "WORD_0078_OPAQUE"]
 
 [[partitions]]
@@ -870,6 +952,9 @@ description = "Bluetooth controller interrupt registers transferred independentl
 [[partitions.parts]]
 name = "BluetoothInterruptBank"
 instance = "BT_MAC"
+interrupt = ["MODEM_BT_MAC", "MODEM_BT_MAC_INT1"]
+description = "The controller's interrupt bank: the primary source and the NRT source are each sampled and acknowledged through this one write-one-to-clear bank, so one handler serves both."
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 registers = ["IRQ_CONTROL_0", "IRQ_CONTROL_1", "IRQ_CONTROL_2", "IRQ_ENABLE_0", "IRQ_CLEAR_0", "IRQ_STATUS_0", "IRQ_ENABLE_1", "IRQ_CLEAR_1", "IRQ_STATUS_1", "IRQ_DIAGNOSTIC_STATE", "IRQ_DIAGNOSTIC_DETAIL_0", "IRQ_DIAGNOSTIC_DETAIL_1", "IRQ_STATUS_SNAPSHOT_0", "IRQ_STATUS_SNAPSHOT_1"]
 
 [[partitions.parts]]
@@ -958,14 +1043,119 @@ registers = ["COMMAND", "CONTROL", "CHANNEL", "TX_POWER", "ED_DURATION", "ED_CON
 [[partitions.parts]]
 name = "Ieee802154MacIrq"
 instance = "IEEE802154"
+interrupt = "MODEM_ZB_MAC"
 registers = ["EVENT_STATUS"]
 observes = ["RX_STATUS", "TX_STATUS", "ED_CONFIG"]
 irq-side = true
 description = "The hard interrupt handler samples and acknowledges EVENT_STATUS and reads the RX/TX status words and the ED/CCA result of ED_CONFIG; the task owns every other register, ED_CONFIG's configuration fields included."
 sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 
+[[partitions]]
+name = "ChipClockPeripherals"
+member = "chip_clocks"
+description = "The platform clock words the radio shares with the SoC: the modem low-power clock gates (Wi-Fi power, coexistence, analog-I2C master, modem low-power timer) and the 160 MHz PLL output's gate. One owner, the HAL's chip clock manager, writes them and counts references for every user."
+
+[[partitions.parts]]
+name = "ModemLpconChipClocks"
+instance = "MODEM_LPCON"
+registers = ["CLK_CONF"]
+
+[[partitions.parts]]
+name = "HpSysClkrstPll160"
+instance = "HP_SYS_CLKRST"
+registers = ["REF_160M_CTRL0"]
+
+[[partitions]]
+name = "BootPeripherals"
+member = "boot"
+description = "The blocks the bootstrap brings the chip up with: the CPU clock, its PLL and update, the flash clock, the memory PLL and the PSRAM supply; the L1 cache's fetch suspension and sync engine; the flash command port, timing and MMU; the PSRAM controllers, command port, pads and MMU; the brownout detector. Owned by the bootstrap image alone."
+
+[[partitions.parts]]
+name = "HpSysClkrstBootClock"
+instance = "HP_SYS_CLKRST"
+registers = ["SOC_CLK_SEL", "CPU_FREQ_CTRL0", "MEM_FREQ_CTRL0", "SYS_FREQ_CTRL0", "APB_FREQ_CTRL0", "ROOT_CLK_CTRL0", "ANA_PLL_CTRL0", "FLASH_CTRL0", "PSRAM_CTRL0", "REF_500M_CTRL0", "REF_50M_CTRL0", "REF_25M_CTRL0"]
+
+[[partitions.parts]]
+name = "LpAonClkrstCpll"
+instance = "LP_AON_CLKRST"
+registers = ["LP_AONCLKRST_CPLL_DIV"]
+
+[[partitions.parts]]
+name = "PmuBootClock"
+instance = "PMU"
+registers = ["IMM_HP_CK_POWER_1", "EXT_LDO_CTRL", "PSRAM_CFG"]
+
+[[partitions.parts]]
+name = "HpAliveSysPllClock"
+instance = "HP_ALIVE_SYS"
+registers = ["HP_CLK_CTRL"]
+
+[[partitions.parts]]
+name = "CacheBoot"
+instance = "CACHE"
+registers = ["L1_ICACHE_CTRL", "L1_CACHE_FREEZE_CTRL", "LOCK_CTRL", "SYNC_CTRL", "SYNC_MAP", "SYNC_ADDR", "SYNC_SIZE", "L1_ICACHE0_PRELOAD_CTRL", "L1_ICACHE0_AUTOLOAD_CTRL"]
+
+[[partitions.parts]]
+name = "Spi0Flash"
+instance = "SPI0"
+registers = ["SPI_MEM_CTRL", "SPI_MEM_CLOCK", "SPI_MEM_TIMING_CALI", "SPI_MEM_DIN_MODE", "SPI_MEM_DIN_NUM", "MMU_ITEM_CONTENT", "SPI_MEM_MMU_ITEM_INDEX"]
+
+[[partitions.parts]]
+name = "Spi1Flash"
+instance = "SPI1"
+registers = ["SPI_MEM_CMD", "SPI_MEM_ADDR", "SPI_MEM_CTRL", "SPI_MEM_CLOCK", "SPI_MEM_USER", "SPI_MEM_USER1", "SPI_MEM_USER2", "SPI_MEM_MISO_DLEN", "SPI_MEM_RD_STATUS", "SPI_MEM_TIMING_CALI", "SPI_MEM_W0", "SPI_MEM_W1", "SPI_MEM_W2", "SPI_MEM_W3", "SPI_MEM_W4", "SPI_MEM_W5", "SPI_MEM_W6", "SPI_MEM_W7", "SPI_MEM_W8", "SPI_MEM_W9", "SPI_MEM_W10", "SPI_MEM_W11", "SPI_MEM_W12", "SPI_MEM_W13", "SPI_MEM_W14", "SPI_MEM_W15"]
+
+[[partitions.parts]]
+name = "Memspi2Psram"
+instance = "MEMSPI2"
+registers = ["CTRL1", "CACHE_FCTRL", "CACHE_SCTRL", "SRAM_CMD", "SRAM_DRD_CMD", "SRAM_DWR_CMD", "SRAM_CLK", "SMEM_DDR", "TIMING_CALI", "SMEM_TIMING_CALI", "SMEM_AC", "MMU_ITEM_CONTENT", "MMU_ITEM_INDEX"]
+
+[[partitions.parts]]
+name = "Memspi3Psram"
+instance = "MEMSPI3"
+registers = ["CMD", "ADDR", "CTRL", "CLOCK", "USER", "USER1", "USER2", "MOSI_DLEN", "MISO_DLEN", "MISC", "W%s", "DDR"]
+
+[[partitions.parts]]
+name = "IomuxMspiPsramPins"
+instance = "IOMUX_MSPI_PIN"
+registers = ["PSRAM_D_PIN0", "PSRAM_Q_PIN0", "PSRAM_WP_PIN0", "PSRAM_HOLD_PIN0", "PSRAM_DQ4_PIN0", "PSRAM_DQ5_PIN0", "PSRAM_DQ6_PIN0", "PSRAM_DQ7_PIN0", "PSRAM_DQS_0_PIN0", "PSRAM_CK_PIN0", "PSRAM_CS_PIN0"]
+
+[[partitions.parts]]
+name = "LpAnaBrownout"
+instance = "LP_ANA_PERI"
+registers = ["LP_ANA_BOD_MODE0_CNTL", "LP_ANA_BOD_MODE1_CNTL", "LP_ANA_FIB_ENABLE"]
+
+[[partitions]]
+name = "AnalogBusPeripherals"
+member = "analog_bus"
+description = "The analog-I2C master and its command memory: the one writer of the analog-I2C space, the bootstrap's brownout threshold in the bootstrap image and the radio domain in stage two."
+
+[[partitions.parts]]
+name = "I2cAnaMst"
+instance = "I2C_ANA_MST"
+registers = ["I2C0_CTRL", "I2C1_CTRL", "ANA_CONF0", "ANA_CONF1", "ANA_CONF2", "I2C0_CTRL1", "I2C1_CTRL1", "HW_I2C_CTRL"]
+
+[[partitions.parts]]
+name = "PhyI2cCommandRam"
+instance = "I2C_ANA_MST_MEM"
+registers = ["COMMAND_MEMORY%s"]
+
+[[partitions]]
+name = "DebugPeripherals"
+member = "debug"
+description = "HP core 0's debug status, which the executor reads before it waits for an interrupt."
+
+[[partitions.parts]]
+name = "DebugModeStatus"
+instance = "BUS_MONITOR"
+registers = ["CORE_0_DEBUG_MODE"]
+read-only = true
+copy = true
+description = "Every context reads whether a debugger is attached to HP core 0; the word has no writable field."
+sources = ["ESP_IDF_4D59230D_S31_BUS_MONITOR_DEBUG_MODE"]
+
 [[unclaimed]]
-instances = ["UART0", "SOC_ETM", "SPI0", "SPI1", "MEMSPI2", "MEMSPI3", "IOMUX_MSPI_PIN", "HP_ALIVE_SYS", "LP_ANA_PERI", "CACHE"]
+instances = ["UART0", "SOC_ETM"]
 reason = "No owner yet."
 
 [[unclaimed]]
@@ -1035,7 +1225,7 @@ reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "MODEM_LPCON"
-registers = ["TEST_CONF", "MODEM_SRC_CLK_CONF", "CLK_CONF", "CLK_CONF_FORCE_ON", "RST_CONF", "MEM_CONF", "MEM_RF1_AUX_CTRL", "MEM_RF2_AUX_CTRL", "APB_MEM_SEL", "DCMEM_VALID_0", "DCMEM_VALID_1", "DCMEM_VALID_2", "DCMEM_VALID_3", "MODEM_INTR_WAKEUP_CONF", "MODEM_INTR_STATUS", "MEM_CONF2", "DATE"]
+registers = ["TEST_CONF", "MODEM_SRC_CLK_CONF", "CLK_CONF_FORCE_ON", "RST_CONF", "MEM_CONF", "MEM_RF1_AUX_CTRL", "MEM_RF2_AUX_CTRL", "APB_MEM_SEL", "DCMEM_VALID_0", "DCMEM_VALID_1", "DCMEM_VALID_2", "DCMEM_VALID_3", "MODEM_INTR_WAKEUP_CONF", "MODEM_INTR_STATUS", "MEM_CONF2", "DATE"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
@@ -1065,7 +1255,7 @@ reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "INTERRUPT_CORE0"
-registers = ["SIG_IDX_ASSERT_IN_SEC", "SRC_PASS_IN_S_STATUS_0", "SRC_PASS_IN_S_STATUS_1", "SRC_PASS_IN_S_STATUS_2", "SRC_PASS_IN_S_STATUS_3", "SRC_PASS_IN_S_STATUS_4", "SRC_PASS_IN_S_STATUS_5", "SRC_PASS_IN_M_STATUS_0", "SRC_PASS_IN_M_STATUS_1", "SRC_PASS_IN_M_STATUS_2", "SRC_PASS_IN_M_STATUS_3", "SRC_PASS_IN_M_STATUS_4", "SRC_PASS_IN_M_STATUS_5", "CONFIG_STATE", "S_STATUS", "M_STATUS", "CLOCK_GATE", "INTERRUPT_DATE"]
+registers = ["SIG_IDX_ASSERT_IN_SEC", "SRC_PASS_IN_S_STATUS_0", "SRC_PASS_IN_S_STATUS_1", "SRC_PASS_IN_S_STATUS_2", "SRC_PASS_IN_S_STATUS_3", "SRC_PASS_IN_S_STATUS_4", "SRC_PASS_IN_S_STATUS_5", "SRC_PASS_IN_M_STATUS_0", "SRC_PASS_IN_M_STATUS_1", "SRC_PASS_IN_M_STATUS_2", "SRC_PASS_IN_M_STATUS_3", "SRC_PASS_IN_M_STATUS_4", "SRC_PASS_IN_M_STATUS_5", "CONFIG_STATE", "S_STATUS", "M_STATUS", "CLOCK_GATE"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
@@ -1080,17 +1270,17 @@ reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "HP_SYS_CLKRST"
-registers = ["SOC_CLK_SEL", "CPU_FREQ_CTRL0", "MEM_FREQ_CTRL0", "SYS_FREQ_CTRL0", "APB_FREQ_CTRL0", "ROOT_CLK_CTRL0", "CPU_WFI_DELAY_CTRL0", "HPCORE0_CTRL0", "TRACE_CTRL0", "TCM_CTRL0", "TCMMON_CTRL0", "PSRAMMON_CTRL0", "ROM_CTRL0", "CACHE_CTRL0", "ICM_CTRL0", "MISC_CTRL0", "BUSMON_CTRL0", "REMOVE_TMP0", "PVT0_CTRL0", "PVT0_PERI_CTRL0", "CRYPTO_CTRL0", "KEY_MANAGER_CTRL0", "DPA_CTRL0", "FLASH_CTRL0", "PSRAM_CTRL0", "GPSPI2_CTRL0", "GPSPI3_CTRL0", "GDMA_CTRL0", "AXI_PDMA_CTRL0", "AHB_PDMA_CTRL0", "REGDMA_CTRL0", "UHCI_CTRL0", "UART1_CTRL0", "UART2_CTRL0", "UART3_CTRL0", "PARLIO_CTRL0", "PARLIO_RX_CTRL0", "PARLIO_TX_CTRL0", "BITSRAMBLER_CTRL0", "ETM_CTRL0", "USB_OTGHS_CTRL0", "DMA2D_CTRL0", "PPA_CTRL0", "JPEG_CTRL0", "RMT_CTRL0", "SDIO_HOST_CTRL0", "SDIO_HOST_FUNC_CTRL0", "EMAC_CTRL0", "DSI_CTRL0", "DSI_PHY_CTRL0", "DSI_DPI_CTRL0", "MSPI_PAD_CTRL0", "I2C0_CTRL0", "I2C1_CTRL0", "I2S0_CTRL0", "I2S0_RX_CTRL0", "I2S0_RX_DIV_CTRL0", "I2S0_TX_CTRL0", "I2S0_TX_DIV_CTRL0", "I2S1_CTRL0", "I2S1_RX_CTRL0", "I2S1_RX_DIV_CTRL0", "I2S1_TX_CTRL0", "I2S1_TX_DIV_CTRL0", "TWAI0_CTRL0", "TWAI1_CTRL0", "TIMERGRP0_CTRL0", "TIMERGRP0_TGRT_CTRL0", "SYSTIMER_CTRL0", "MCPWM0_CTRL0", "MCPWM1_CTRL0", "MCPWM2_CTRL0", "MCPWM3_CTRL0", "INTRMTX_CTRL0", "PCNT_CTRL0", "USB_DEVICE_CTRL0", "LEDC_CTRL0", "LCDCAM_CTRL0", "LCDCAM_LCD_CTRL0", "LCDCAM_LCDCAM_CTRL0", "LCDCAM_CAM_CTRL0", "IOMUX_CTRL0", "HPWDT_CORE0_RST_CTRL0", "HPWDT_CORE1_RST_CTRL0", "CPU_SRC_FREQ0", "CPU_CLK_STATUS0", "HPCORE_WDT_RESET_SOURCE0", "ANA_PLL_CTRL0", "REF_500M_CTRL0", "REF_240M_CTRL0", "REF_160M_CTRL0", "REF_120M_CTRL0", "REF_80M_CTRL0", "REF_60M_CTRL0", "REF_20M_CTRL0", "REF_50M_CTRL0", "REF_25M_CTRL0", "TM_CLK_CTRL0", "DBG0_CLK_CTRL0", "DBG1_CLK_CTRL0", "DBG2_CLK_CTRL0", "LP_CLK_CTRL0", "AHB_ASRC_CTRL0", "CORDIC_CTRL0", "ZERO_DET_CTRL0", "CORDIC_CTRL1", "CLK_PWR_DECREASE", "CNNT_IOMUX_CTRL0", "HP_I2CMST_CTRL0", "AXI_PERF_MON_CTRL0", "CNNT_SYSREG_CTRL0", "HP_ALIVE_SYSREG_CTRL0", "CLK_EN0", "DATE"]
+registers = ["CPU_WFI_DELAY_CTRL0", "HPCORE0_CTRL0", "TRACE_CTRL0", "TCM_CTRL0", "TCMMON_CTRL0", "PSRAMMON_CTRL0", "ROM_CTRL0", "CACHE_CTRL0", "ICM_CTRL0", "MISC_CTRL0", "BUSMON_CTRL0", "REMOVE_TMP0", "PVT0_CTRL0", "PVT0_PERI_CTRL0", "CRYPTO_CTRL0", "KEY_MANAGER_CTRL0", "DPA_CTRL0", "GPSPI2_CTRL0", "GPSPI3_CTRL0", "GDMA_CTRL0", "AXI_PDMA_CTRL0", "AHB_PDMA_CTRL0", "REGDMA_CTRL0", "UHCI_CTRL0", "UART1_CTRL0", "UART2_CTRL0", "UART3_CTRL0", "PARLIO_CTRL0", "PARLIO_RX_CTRL0", "PARLIO_TX_CTRL0", "BITSRAMBLER_CTRL0", "ETM_CTRL0", "USB_OTGHS_CTRL0", "DMA2D_CTRL0", "PPA_CTRL0", "JPEG_CTRL0", "RMT_CTRL0", "SDIO_HOST_CTRL0", "SDIO_HOST_FUNC_CTRL0", "EMAC_CTRL0", "DSI_CTRL0", "DSI_PHY_CTRL0", "DSI_DPI_CTRL0", "MSPI_PAD_CTRL0", "I2C0_CTRL0", "I2C1_CTRL0", "I2S0_CTRL0", "I2S0_RX_CTRL0", "I2S0_RX_DIV_CTRL0", "I2S0_TX_CTRL0", "I2S0_TX_DIV_CTRL0", "I2S1_CTRL0", "I2S1_RX_CTRL0", "I2S1_RX_DIV_CTRL0", "I2S1_TX_CTRL0", "I2S1_TX_DIV_CTRL0", "TWAI0_CTRL0", "TWAI1_CTRL0", "TIMERGRP0_CTRL0", "TIMERGRP0_TGRT_CTRL0", "MCPWM0_CTRL0", "MCPWM1_CTRL0", "MCPWM2_CTRL0", "MCPWM3_CTRL0", "INTRMTX_CTRL0", "PCNT_CTRL0", "USB_DEVICE_CTRL0", "LEDC_CTRL0", "LCDCAM_CTRL0", "LCDCAM_LCD_CTRL0", "LCDCAM_LCDCAM_CTRL0", "LCDCAM_CAM_CTRL0", "IOMUX_CTRL0", "HPWDT_CORE0_RST_CTRL0", "HPWDT_CORE1_RST_CTRL0", "CPU_SRC_FREQ0", "CPU_CLK_STATUS0", "HPCORE_WDT_RESET_SOURCE0", "REF_240M_CTRL0", "REF_120M_CTRL0", "REF_80M_CTRL0", "REF_60M_CTRL0", "REF_20M_CTRL0", "TM_CLK_CTRL0", "DBG0_CLK_CTRL0", "DBG1_CLK_CTRL0", "DBG2_CLK_CTRL0", "LP_CLK_CTRL0", "AHB_ASRC_CTRL0", "CORDIC_CTRL0", "ZERO_DET_CTRL0", "CORDIC_CTRL1", "CLK_PWR_DECREASE", "CNNT_IOMUX_CTRL0", "HP_I2CMST_CTRL0", "AXI_PERF_MON_CTRL0", "CNNT_SYSREG_CTRL0", "HP_ALIVE_SYSREG_CTRL0", "CLK_EN0", "DATE"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "LP_AON_CLKRST"
-registers = ["LP_AONCLKRST_LP_CLK_PO_EN", "LP_AONCLKRST_MISC", "LP_AONCLKRST_TIMER", "LP_AONCLKRST_WDT", "LP_AONCLKRST_CLOCKCALI", "LP_AONCLKRST_ANAPERI", "LP_AONCLKRST_HUK", "LP_AONCLKRST_FOSC_DFREQ", "LP_AONCLKRST_RC32K_DFREQ", "LP_AONCLKRST_SOSC_DFREQ", "LP_AONCLKRST_XTAL32K", "LP_AONCLKRST_LPCORE_RESET_CAUSE", "LP_AONCLKRST_TOUCH_AON", "LP_AONCLKRST_HP_CLK_CTRL", "LP_AONCLKRST_CPLL_DIV", "LP_AONCLKRST_APLL_DIV", "LP_AONCLKRST_MSPI_DIV", "LP_AONCLKRST_LP_ADI", "LP_AONCLKRST_LPROOT_CLK_DIV", "LP_AONCLKRST_CPLL_CFG", "LP_AONCLKRST_APLL_SDM", "LP_AONCLKRST_DATE"]
+registers = ["LP_AONCLKRST_LP_CLK_PO_EN", "LP_AONCLKRST_MISC", "LP_AONCLKRST_TIMER", "LP_AONCLKRST_WDT", "LP_AONCLKRST_CLOCKCALI", "LP_AONCLKRST_ANAPERI", "LP_AONCLKRST_HUK", "LP_AONCLKRST_FOSC_DFREQ", "LP_AONCLKRST_RC32K_DFREQ", "LP_AONCLKRST_SOSC_DFREQ", "LP_AONCLKRST_XTAL32K", "LP_AONCLKRST_LPCORE_RESET_CAUSE", "LP_AONCLKRST_TOUCH_AON", "LP_AONCLKRST_HP_CLK_CTRL", "LP_AONCLKRST_APLL_DIV", "LP_AONCLKRST_MSPI_DIV", "LP_AONCLKRST_LP_ADI", "LP_AONCLKRST_LPROOT_CLK_DIV", "LP_AONCLKRST_CPLL_CFG", "LP_AONCLKRST_APLL_SDM", "LP_AONCLKRST_DATE"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "PMU"
-registers = ["HP_ACTIVE_DIG_POWER", "HP_ACTIVE_ICG_HP_FUNC", "HP_ACTIVE_ICG_HP_APB", "HP_ACTIVE_ICG_HP_FUNC1", "HP_ACTIVE_ICG_HP_APB1", "HP_ACTIVE_HP_SYS_CNTL", "HP_ACTIVE_BIAS", "HP_ACTIVE_BACKUP", "HP_ACTIVE_BACKUP_CLK", "HP_ACTIVE_BACKUP1_CLK", "HP_ACTIVE_SYSCLK", "HP_ACTIVE_HP_REGULATOR0", "HP_ACTIVE_HP_REGULATOR1", "HP_ACTIVE_XTAL", "HP_MODEM_DIG_POWER", "HP_MODEM_ICG_HP_FUNC", "HP_MODEM_ICG_HP_APB", "HP_MODEM_ICG_HP_FUNC1", "HP_MODEM_ICG_HP_APB1", "HP_MODEM_ICG_MODEM", "HP_MODEM_HP_SYS_CNTL", "HP_MODEM_HP_CK_POWER", "HP_MODEM_BIAS", "HP_MODEM_BACKUP", "HP_MODEM_BACKUP_CLK", "HP_MODEM_BACKUP1_CLK", "HP_MODEM_SYSCLK", "HP_MODEM_HP_REGULATOR0", "HP_MODEM_HP_REGULATOR1", "HP_MODEM_XTAL", "HP_SLEEP_DIG_POWER", "HP_SLEEP_ICG_HP_FUNC", "HP_SLEEP_ICG_HP_APB", "HP_SLEEP_ICG_HP_FUNC1", "HP_SLEEP_ICG_HP_APB1", "HP_SLEEP_ICG_MODEM", "HP_SLEEP_HP_SYS_CNTL", "HP_SLEEP_HP_CK_POWER", "HP_SLEEP_BIAS", "HP_SLEEP_BACKUP", "HP_SLEEP_BACKUP_CLK", "HP_SLEEP_BACKUP1_CLK", "HP_SLEEP_SYSCLK", "HP_SLEEP_HP_REGULATOR0", "HP_SLEEP_HP_REGULATOR1", "HP_SLEEP_XTAL", "HP_SLEEP_LP_REGULATOR0", "HP_SLEEP_LP_REGULATOR1", "HP_SLEEP_LP_DCDC_RESERVE", "HP_SLEEP_LP_DIG_POWER", "HP_SLEEP_LP_CK_POWER", "LP_SLEEP_LP_BIAS_RESERVE", "LP_SLEEP_LP_REGULATOR0", "LP_SLEEP_LP_REGULATOR1", "LP_SLEEP_XTAL", "LP_SLEEP_LP_DIG_POWER", "LP_SLEEP_LP_CK_POWER", "LP_SLEEP_BIAS", "IMM_HP_CK_POWER_1", "IMM_HP_FUNC_ICG", "IMM_HP_APB_ICG", "IMM_LP_ICG", "IMM_PAD_HOLD_ALL", "IMM_I2C_ISO", "POWER_WAIT_TIMER0", "POWER_WAIT_TIMER1", "POWER_WAIT_TIMER2", "POWER_PD_TOP_CNTL", "POWER_PD_HP_ALIVE_CNTL", "POWER_PD_MODEM_PWR_CNTL", "POWER_PD_HPCPU_CNTL", "POWER_PD_HPCNNT_CNTL", "POWER_PD_MODEM_TOP_CNTL", "POWER_PD_LPPERI_CNTL", "POWER_PD_MEM_CNTL", "POWER_PD_MEM_MASK", "POWER_HP_PAD", "POWER_VDD_SPI_CNTL", "POWER_CK_WAIT_CNTL", "SLP_WAKEUP_CNTL0", "SLP_WAKEUP_CNTL1", "SLP_WAKEUP_CNTL2", "SLP_WAKEUP_CNTL3", "SLP_WAKEUP_CNTL4", "SLP_WAKEUP_CNTL5", "SLP_WAKEUP_CNTL6", "SLP_WAKEUP_CNTL7", "SLP_WAKEUP_STATUS0", "SLP_WAKEUP_STATUS1", "HP_CK_POWERON", "HP_CK_CNTL", "POR_STATUS", "BACKUP_CFG", "INT_RAW", "HP_INT_ST", "HP_INT_ENA", "HP_INT_CLR", "LP_INT_RAW", "LP_INT_ST", "LP_INT_ENA", "LP_INT_CLR", "LP_CPU_PWR0", "LP_CPU_PWR1", "LP_CPU_PWR2", "HP_LP_CPU_COMM", "HP_REGULATOR_CFG", "MAIN_STATE", "PWR_STATE", "CLK_STATE0", "CLK_STATE1", "CLK_STATE2", "CLK_STATE3", "VDD_SPI_STATUS", "VDD_SPI_CFG", "VDD_SPI_DISCHARGE_CFG", "VDD_SDIO_CFG", "PSRAM_CFG", "EXT_WAKEUP_LV", "EXT_WAKEUP_SEL", "EXT_WAKEUP_ST", "EXT_WAKEUP_CNTL", "SDIO_WAKEUP_CNTL", "TOUCH_PWR_CTRL", "RDN_ECO", "PUF_MEM_CTRL", "SLP_WAKEUP_CNTL8", "EXT_LDO_CTRL", "DEBUG_RO", "LPCPU_WAKEUP_CAUSE", "BACKUP_WAIT_TARGET", "DATE"]
+registers = ["HP_ACTIVE_DIG_POWER", "HP_ACTIVE_ICG_HP_FUNC", "HP_ACTIVE_ICG_HP_APB", "HP_ACTIVE_ICG_HP_FUNC1", "HP_ACTIVE_ICG_HP_APB1", "HP_ACTIVE_HP_SYS_CNTL", "HP_ACTIVE_BIAS", "HP_ACTIVE_BACKUP", "HP_ACTIVE_BACKUP_CLK", "HP_ACTIVE_BACKUP1_CLK", "HP_ACTIVE_SYSCLK", "HP_ACTIVE_HP_REGULATOR0", "HP_ACTIVE_HP_REGULATOR1", "HP_ACTIVE_XTAL", "HP_MODEM_DIG_POWER", "HP_MODEM_ICG_HP_FUNC", "HP_MODEM_ICG_HP_APB", "HP_MODEM_ICG_HP_FUNC1", "HP_MODEM_ICG_HP_APB1", "HP_MODEM_ICG_MODEM", "HP_MODEM_HP_SYS_CNTL", "HP_MODEM_HP_CK_POWER", "HP_MODEM_BIAS", "HP_MODEM_BACKUP", "HP_MODEM_BACKUP_CLK", "HP_MODEM_BACKUP1_CLK", "HP_MODEM_SYSCLK", "HP_MODEM_HP_REGULATOR0", "HP_MODEM_HP_REGULATOR1", "HP_MODEM_XTAL", "HP_SLEEP_DIG_POWER", "HP_SLEEP_ICG_HP_FUNC", "HP_SLEEP_ICG_HP_APB", "HP_SLEEP_ICG_HP_FUNC1", "HP_SLEEP_ICG_HP_APB1", "HP_SLEEP_ICG_MODEM", "HP_SLEEP_HP_SYS_CNTL", "HP_SLEEP_HP_CK_POWER", "HP_SLEEP_BIAS", "HP_SLEEP_BACKUP", "HP_SLEEP_BACKUP_CLK", "HP_SLEEP_BACKUP1_CLK", "HP_SLEEP_SYSCLK", "HP_SLEEP_HP_REGULATOR0", "HP_SLEEP_HP_REGULATOR1", "HP_SLEEP_XTAL", "HP_SLEEP_LP_REGULATOR0", "HP_SLEEP_LP_REGULATOR1", "HP_SLEEP_LP_DCDC_RESERVE", "HP_SLEEP_LP_DIG_POWER", "HP_SLEEP_LP_CK_POWER", "LP_SLEEP_LP_BIAS_RESERVE", "LP_SLEEP_LP_REGULATOR0", "LP_SLEEP_LP_REGULATOR1", "LP_SLEEP_XTAL", "LP_SLEEP_LP_DIG_POWER", "LP_SLEEP_LP_CK_POWER", "LP_SLEEP_BIAS", "IMM_HP_FUNC_ICG", "IMM_HP_APB_ICG", "IMM_LP_ICG", "IMM_PAD_HOLD_ALL", "IMM_I2C_ISO", "POWER_WAIT_TIMER0", "POWER_WAIT_TIMER1", "POWER_WAIT_TIMER2", "POWER_PD_TOP_CNTL", "POWER_PD_HP_ALIVE_CNTL", "POWER_PD_MODEM_PWR_CNTL", "POWER_PD_HPCPU_CNTL", "POWER_PD_HPCNNT_CNTL", "POWER_PD_MODEM_TOP_CNTL", "POWER_PD_LPPERI_CNTL", "POWER_PD_MEM_CNTL", "POWER_PD_MEM_MASK", "POWER_HP_PAD", "POWER_VDD_SPI_CNTL", "POWER_CK_WAIT_CNTL", "SLP_WAKEUP_CNTL0", "SLP_WAKEUP_CNTL1", "SLP_WAKEUP_CNTL2", "SLP_WAKEUP_CNTL3", "SLP_WAKEUP_CNTL4", "SLP_WAKEUP_CNTL5", "SLP_WAKEUP_CNTL6", "SLP_WAKEUP_CNTL7", "SLP_WAKEUP_STATUS0", "SLP_WAKEUP_STATUS1", "HP_CK_POWERON", "HP_CK_CNTL", "POR_STATUS", "BACKUP_CFG", "INT_RAW", "HP_INT_ST", "HP_INT_ENA", "HP_INT_CLR", "LP_INT_RAW", "LP_INT_ST", "LP_INT_ENA", "LP_INT_CLR", "LP_CPU_PWR0", "LP_CPU_PWR1", "LP_CPU_PWR2", "HP_LP_CPU_COMM", "HP_REGULATOR_CFG", "MAIN_STATE", "PWR_STATE", "CLK_STATE0", "CLK_STATE1", "CLK_STATE2", "CLK_STATE3", "VDD_SPI_STATUS", "VDD_SPI_CFG", "VDD_SPI_DISCHARGE_CFG", "VDD_SDIO_CFG", "EXT_WAKEUP_LV", "EXT_WAKEUP_SEL", "EXT_WAKEUP_ST", "EXT_WAKEUP_CNTL", "SDIO_WAKEUP_CNTL", "TOUCH_PWR_CTRL", "RDN_ECO", "PUF_MEM_CTRL", "SLP_WAKEUP_CNTL8", "DEBUG_RO", "LPCPU_WAKEUP_CAUSE", "BACKUP_WAIT_TARGET", "DATE"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
@@ -1105,12 +1295,12 @@ reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "LP_WDT"
-registers = ["CONFIG1", "CONFIG2", "CONFIG3", "CONFIG4", "FEED", "INT_RAW", "INT_ST", "INT_ENA", "INT_CLR", "PAUSE_EN", "DATE"]
+registers = ["CONFIG2", "CONFIG3", "CONFIG4", "INT_RAW", "INT_ST", "INT_ENA", "INT_CLR", "PAUSE_EN", "DATE"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "TRNG"
-registers = ["CONDITION_KEY0", "CONDITION_KEY1", "CONDITION_KEY2", "CONDITION_KEY3", "CONDITION_KEY4", "CONDITION_KEY5", "CONDITION_KEY6", "CONDITION_KEY7", "INT_ENA", "INT_CLR", "INT_ST", "ARBIT_CFG", "SW_READ", "SW_READ_ST", "CRC_DATA", "DATE"]
+registers = ["CONDITION_KEY0", "CONDITION_KEY1", "CONDITION_KEY2", "CONDITION_KEY3", "CONDITION_KEY4", "CONDITION_KEY5", "CONDITION_KEY6", "CONDITION_KEY7", "INT_ENA", "INT_CLR", "INT_ST", "ARBIT_CFG", "SW_READ", "SW_READ_ST", "CRC_DATA"]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
@@ -1180,21 +1370,11 @@ value = 1
 description = "Bit zero set by complete phy_tsens_read_init."
 sources = ["BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
 
-[[enum-domains]]
+[[field-domains]]
 name = "LpTsensPeripheralClockEnable"
 description = "Reviewed enabled and disabled images for LP_PERICLKRST.TSENS_CTRL.LP_TSENS_CLK_EN."
-
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "Last temperature owner disables the peripheral clock before releasing SAR-I2C."
-sources = ["IDF_S31_TSENS_POWER_LIFECYCLE"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 0x40000000
-description = "Bit thirty set by complete phy_tsens_read_init."
-sources = ["BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+field = "LP_PERICLKRST.TSENS_CTRL.LP_TSENS_CLK_EN"
+positioned = true
 
 [[enum-domains]]
 name = "LpTsensPhyReadoutEnable"
@@ -1216,21 +1396,11 @@ value = 0x00000200
 description = "Bit nine set by complete phy_tsens_read_init."
 sources = ["BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
 
-[[enum-domains]]
+[[field-domains]]
 name = "LpTsensPowerEnable"
 description = "Reviewed images for LP_TSENS.CTRL.POWER_UP."
-
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "Bit twenty-two cleared by complete ROM phy_set_tsens_power_ for argument zero."
-sources = ["ROM_REV0_PHY_TSENS"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 0x00400000
-description = "Bit twenty-two set by complete ROM phy_set_tsens_power_."
-sources = ["ROM_REV0_PHY_TSENS", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+field = "LP_TSENS.CTRL.POWER_UP"
+positioned = true
 
 [[enum-domains]]
 name = "BluetoothHalSleepTimerShift"
@@ -1260,69 +1430,25 @@ value = 5
 description = "Shift selected by scale sixteen and period image 500."
 sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
 
-[[enum-domains]]
+[[field-domains]]
 name = "PhyPowerDetectorToneArmState"
 description = "Semantic arm state of the shared first PHY tone path during power-detector sampling."
+field = "FE.TONE_PATH_0_CONTROL.TONE_ENABLE_OR_ARM"
 
-[[enum-domains.values]]
-name = "Disarmed"
-value = 0
-description = "Do not arm the power-detector tone sample."
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
-
-[[enum-domains.values]]
-name = "Armed"
-value = 1
-description = "Arm one power-detector tone sample."
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "PhyAdcRateSelection"
 description = "One of the two complete-ROM PHY ADC-rate selections."
+field = "FE.ADC_RATE_AND_FRONT_END_CONTROL.BIT_0_OPAQUE"
 
-[[enum-domains.values]]
-name = "Low"
-value = 0
-description = "Select the low PHY ADC rate."
-sources = ["ROM_REV0_PHY_ADC_RATE"]
-
-[[enum-domains.values]]
-name = "High"
-value = 1
-description = "Select the high PHY ADC rate."
-sources = ["ROM_REV0_PHY_ADC_RATE"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "PhyRxGainDcCalibrationState"
 description = "Reviewed direct-register state surrounding RX-gain DC calibration."
+field = "FE.RX_GAIN_DC_CONTROL.BITS_5_6_OPAQUE"
 
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "Clear the RX-gain DC calibration field during cleanup."
-sources = ["ROM_REV0_PHY_SET_RX_GAIN_CAL_DC"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 3
-description = "Set both reviewed RX-gain DC calibration bits before calibration."
-sources = ["ROM_REV0_PHY_SET_RX_GAIN_CAL_DC"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "PhyHardwareFrequencyControlState"
 description = "Semantic owner of PHY frequency updates, encoded through the inverse hardware-disable field."
-
-[[enum-domains.values]]
-name = "Hardware"
-value = 0
-description = "Permit hardware-owned frequency updates."
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-
-[[enum-domains.values]]
-name = "Software"
-value = 1
-description = "Disable hardware-owned frequency updates."
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+field = "FE.FREQUENCY_CONTROL.HARDWARE_FREQUENCY_DISABLE"
 
 [[enum-domains]]
 name = "PhyFrequencyRegisterMode"
@@ -1394,53 +1520,20 @@ value = 8
 description = "Selector 8, accepted only with divisor 1; coex_core_pre_init selects it off silicon."
 sources = ["BLOB_LIBCOEX_TIMER_CLOCK"]
 
-[[enum-domains]]
+[[field-domains]]
 name = "ModemSysconClockGateState"
 description = "Boolean state accepted by reviewed MODEM_SYSCON clock-gate transactions."
+field = "HP_SYS_CLKRST.MODEM_CTRL0.REG_MODEM_CLK_EN"
 
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "The selected MODEM_SYSCON clock gate is disabled."
-sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 1
-description = "The selected MODEM_SYSCON clock gate is enabled."
-sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "ModemSysconResetState"
 description = "Boolean state accepted by reviewed MODEM_SYSCON reset transactions."
+field = "MODEM_SYSCON.MODEM_RST_CONF.RST_BLE_TIMER"
 
-[[enum-domains.values]]
-name = "Released"
-value = 0
-description = "The selected MODEM_SYSCON reset is released."
-sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Asserted"
-value = 1
-description = "The selected MODEM_SYSCON reset is asserted."
-sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "ModemSysconEnableState"
 description = "Boolean state accepted by reviewed MODEM_SYSCON functional enable fields."
-
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "The selected MODEM_SYSCON function is disabled."
-sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 1
-description = "The selected MODEM_SYSCON function is enabled."
-sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
+field = "MODEM_SYSCON.WIFI_BB_CFG.BIT_28_OPAQUE"
 
 [[enum-domains]]
 name = "WifiBaseband40MhzState"
@@ -1458,295 +1551,115 @@ value = 1
 description = "Select the reviewed 40 MHz digital baseband state."
 sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
 
-[[enum-domains]]
+[[field-domains]]
 name = "WifiBasebandAgcUpdateMode"
 description = "Reviewed MODEM_SYSCON Wi-Fi baseband AGC update modes."
+field = "MODEM_SYSCON.WIFI_BB_CFG.BITS_11_13_OPAQUE"
 
-[[enum-domains.values]]
-name = "Initialization"
-value = 1
-description = "Select the initialization update mode."
-sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "RegisterUpdatesEnabled"
-value = 7
-description = "Enable subsequent baseband register updates."
-sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "PhyI2cBbpllCalibrationState"
 description = "Reviewed BBPLL calibration modes selected through the shared analog-I2C master."
+field = "I2C_ANA_MST.ANA_CONF0.BBPLL_CAL_MODE"
 
-[[enum-domains.values]]
-name = "Disabled"
-value = 1
-description = "Select the complete-ROM disabled BBPLL calibration mode."
-sources = ["ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 2
-description = "Select the complete-ROM enabled BBPLL calibration mode."
-sources = ["ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "PbusForceTxRxState"
 description = "Four complete-ROM force-TX/RX phase encodings."
+field = "FE.STATUS_CLOCK_FORCE.BITS_8_11_OPAQUE"
 
-[[enum-domains.values]]
-name = "DisabledFinal"
-value = 0
-description = "Publish the final force-TX/RX disable phase."
-sources = ["ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "DisabledInitial"
-value = 2
-description = "Publish the initial force-TX/RX disable phase."
-sources = ["ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "EnabledInitial"
-value = 8
-description = "Publish the initial force-TX/RX enable phase."
-sources = ["ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "EnabledFinal"
-value = 0x0000000a
-description = "Publish the final force-TX/RX enable phase."
-sources = ["ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "PbusEnableState"
 description = "Boolean state shared by reviewed one-bit PBus control transactions."
+field = "FE.MODE.WORK_MODE_ENABLE"
 
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "Disable the selected PBus control."
-sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 1
-description = "Enable the selected PBus control."
-sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "PbusTxClockPairState"
 description = "Complete two-bit PBus TX clock-pair encodings."
+field = "FE.STATUS_CLOCK_FORCE.TX_CLOCK_ENABLE_PAIR"
 
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "Disable both recovered PBus TX clock bits."
-sources = ["ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 3
-description = "Enable both recovered PBus TX clock bits."
-sources = ["ROM_REV0_PHY_CLOCK_FORCE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "IqEstimatorEnableState"
 description = "Boolean state accepted by reviewed IQ-estimator enable transactions."
+field = "FE.ESTIMATOR_CONTROL.MEASUREMENT_ENABLE"
 
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "Disable the selected IQ-estimator phase."
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 1
-description = "Enable the selected IQ-estimator phase."
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "PhyForcedPowerState"
 description = "Boolean forced-power-index state accepted by complete rev0 ROM phy_force_pwr_index."
+field = "FE.TABLE_MEMORY_INDEX_SOURCE.FORCE_POWER_ENABLE"
 
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "Disable the forced PHY power index."
-sources = ["ROM_REV0_PHY_FORCE_PWR_INDEX", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 1
-description = "Enable the forced PHY power index."
-sources = ["ROM_REV0_PHY_FORCE_PWR_INDEX", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "CfrEnableState"
 description = "Boolean enable state shared by reviewed HCCFR and forced-ICCFR transactions."
+field = "WIFI_BB.HCCFR_CONTROL.ENABLE"
 
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "Disable the selected CFR path."
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 1
-description = "Enable the selected CFR path."
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "CfrForceMode"
 description = "Boolean mode image published independently to both forced-ICCFR mode fields."
+field = "WIFI_BB.ICCFR_FORCE_CONTROL.FORCE_MODE_HIGH"
 
-[[enum-domains.values]]
-name = "Low"
-value = 0
-description = "Publish the zero forced-ICCFR mode image."
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "High"
-value = 1
-description = "Publish the one forced-ICCFR mode image."
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "IccfrGateState"
 description = "Complete two-image ICCFR gate domain with the reviewed inverted enable encoding."
+field = "WIFI_BB.ICCFR_ENABLE_CONTROL.GATE"
 
-[[enum-domains.values]]
-name = "Enabled"
-value = 0
-description = "Enable ICCFR through the zero gate image."
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Disabled"
-value = 3
-description = "Disable ICCFR through the all-ones gate image."
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "AgcRuntimeEnableState"
 description = "Boolean state accepted by reviewed runtime AGC and antenna-diversity transactions."
+field = "WIFI_BB.AGC_SHARED_CONTROL.FORCED_GAIN_ENABLE"
 
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "Disable the selected runtime AGC behavior."
-sources = ["ROM_REV0_PHY_ANT_DFT_CFG", "ROM_REV0_PHY_FORCE_RX_GAIN", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 1
-description = "Enable the selected runtime AGC behavior."
-sources = ["ROM_REV0_PHY_ANT_DFT_CFG", "ROM_REV0_PHY_FORCE_RX_GAIN", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "PhyLowRateState"
 description = "Boolean state shared by the three separately ordered low-rate control edges."
+field = "WIFI_BB_BRX.LOW_RATE_PRIMARY_CONTROL.LOW_RATE_ENABLE_FIRST"
 
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "Disable the selected PHY low-rate control edge."
-sources = ["ROM_REV0_PHY_LOW_RATE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 1
-description = "Enable the selected PHY low-rate control edge."
-sources = ["ROM_REV0_PHY_LOW_RATE", "S31_ESP_PACS_SVD"]
-
-[[enum-domains]]
+[[field-domains]]
 name = "PhyTxPowerTrackingState"
 description = "Boolean state accepted by the complete PHY baseband TX-power tracking transaction."
+field = "WIFI_BB.TX_POWER_TRACK_CONTROL_0.TRACK_ENABLE"
 
-[[enum-domains.values]]
-name = "Disabled"
-value = 0
-description = "Disable PHY baseband TX-power tracking."
-sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG", "S31_ESP_PACS_SVD"]
-
-[[enum-domains.values]]
-name = "Enabled"
-value = 1
-description = "Enable PHY baseband TX-power tracking."
-sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG", "S31_ESP_PACS_SVD"]
-
-[[bounded-domains]]
+[[field-domains]]
 name = "BluetoothDeviceTableEntryCount"
 description = "Number of entries of the Controller-SRAM device table, published in the low byte of DEVICE_TABLE_CONTROL."
-min = 0
-max = 255
-sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
+field = "BT_MAC.DEVICE_TABLE_CONTROL.ENTRY_COUNT"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "MacSlowClockCalibrationValue"
 description = "The eighteen-bit slow-clock calibration hal_timer_update_by_rtc publishes."
-min = 0
-max = 262143
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+field = "MODEM_PWR.SLOW_CLOCK_CALIBRATION.VALUE"
 
-[[bounded-domains]]
-name = "WifiDescriptorAddressLow"
-description = "The low twenty address bits of a Wi-Fi DMA descriptor that the RX walker cursors and the TX queue head hold."
-min = 0
-max = 1048575
-sources = ["PROMOTED_LMAC_TX"]
-
-[[bounded-domains]]
+[[field-domains]]
 name = "ExternalCoexNibble"
 description = "One four-bit external coexistence priority or grant field image."
-min = 0
-max = 15
-sources = ["BLOB_LIBCOEX_EXTERNAL"]
+field = "COEX.ENABLE_MASK_0.MASK"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "ExternalCoexWorkMode"
 description = "The two-bit external coexistence work mode hal_set_extern_coex_mode publishes."
-min = 0
-max = 3
-sources = ["BLOB_LIBCOEX_EXTERNAL"]
+field = "COEX.PTI.WORK_MODE"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "ExternalCoexGrantDelay"
 description = "The grant delay in microseconds: the upper nibble of the byte hal_set_extern_coex_delay publishes."
-min = 0
-max = 15
-sources = ["BLOB_LIBCOEX_EXTERNAL"]
+field = "COEX.CONTROL.GRANT_DELAY"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "ExternalCoexSync"
 description = "The ten-bit synchronization image hal_set_extern_coex_sync publishes."
-min = 0
-max = 1023
-sources = ["BLOB_LIBCOEX_EXTERNAL"]
+field = "COEX.CONTROL.SYNC"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "ExternalCoexFlag"
 description = "One external coexistence control bit."
-min = 0
-max = 1
-sources = ["BLOB_LIBCOEX_EXTERNAL"]
+field = "COEX.CONTROL.ENABLE"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "MacPti"
 description = "One reviewed four-bit Wi-Fi packet-traffic-information value. Its scheduling policy remains outside the PAC."
-min = 0
-max = 15
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME", "BLOB_LIBPP_HAL_INIT_COEX", "BLOB_LIBPP_HAL_MAC_TX"]
+field = "MODEM_PWR.RX_BEACON_PTI.PTI"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyForcedPowerIndex"
 description = "Six-bit transmit-power table index accepted by complete rev0 ROM phy_force_pwr_index."
-min = 0
-max = 63
-sources = ["ROM_REV0_PHY_FORCE_PWR_INDEX"]
+field = "FE.TABLE_MEMORY_INDEX_SOURCE.FORCED_POWER_INDEX"
 
 [[bounded-domains]]
 name = "MacAssociationId"
@@ -1755,47 +1668,35 @@ min = 1
 max = 2047
 sources = ["BLOB_LIBPP_HAL_HE_SET_MMSS_AND_AID"]
 
-[[bounded-domains]]
+[[field-domains]]
 name = "MacMinimumMpduStartSpacing"
 description = "Three-bit minimum MPDU start-spacing value accepted by the reviewed HE association transaction."
-min = 0
-max = 7
-sources = ["BLOB_LIBPP_HAL_HE_SET_MMSS_AND_AID"]
+field = "WIFI_MAC.BSSID_HIGH%s.MINIMUM_MPDU_START_SPACING"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "MacHeBssColor"
 description = "Six-bit BSS color accepted by the reviewed HE BSSID lifecycle transaction."
-min = 0
-max = 63
-sources = ["BLOB_LIBPP_HAL_HE_BSSID_LIFECYCLE"]
+field = "WIFI_MAC.MULTI_BSSID_CONTROL.BSS_COLOR"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "MacHeDefaultPacketExtensionDuration"
 description = "Three-bit Default PE Duration accepted by complete hal_he_set_default_pe."
-min = 0
-max = 7
-sources = ["BLOB_LIBPP_HAL_HE_SET_DEFAULT_PE"]
+field = "WIFI_MAC.HE_DEFAULT_CONTROL.DEFAULT_PE_DURATION"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "MacHePacketPaddingDuration"
 description = "Five-bit nominal packet-padding duration accepted by the reviewed HE peer transaction."
-min = 0
-max = 31
-sources = ["PROMOTED_HE20_PEER"]
+field = "WIFI_MAC.HE_PACKET_PADDING.BPSK_DURATION"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "BluetoothHalInitByte"
 description = "One complete runtime-derived byte accepted by the reviewed BTDM HAL initialization transaction."
-min = 0
-max = 255
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
+field = "BT_MAC.HAL_INIT_BYTES.VALUE_0"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyPowerDetectorRestoreByte"
 description = "One complete eight-bit power-detector field captured and restored by the reviewed TX-DC calibration transaction."
-min = 0
-max = 255
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+field = "FE.POWER_DETECTOR_CONTROL.BITS_4_11_OPAQUE"
 
 [[bounded-domains]]
 name = "PhyToneSelector"
@@ -1818,40 +1719,30 @@ min = 0
 max = 255
 sources = ["ROM_REV0_PHY_IQ_COEFFICIENTS"]
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyToneByteImage"
 description = "One complete eight-bit component of a reviewed calibration-tone field transaction."
-min = 0
-max = 255
-sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR"]
+field = "FE.TONE_PATH_0_CONTROL.SELECTOR_HIGH"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyToneTwoBitImage"
 description = "One complete two-bit component of a reviewed calibration-tone field transaction."
-min = 0
-max = 3
-sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR"]
+field = "FE.TONE_PATH_0_CONTROL.BITS_8_9_OPAQUE"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyToneThreeBitImage"
 description = "One complete three-bit component of a reviewed calibration-tone field transaction."
-min = 0
-max = 7
-sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR"]
+field = "FE.TONE_PATH_0_CONTROL.BITS_19_21_OPAQUE"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyToneFourBitImage"
 description = "One complete four-bit component of a reviewed calibration-tone field transaction."
-min = 0
-max = 15
-sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR"]
+field = "FE.TONE_PATH_0_CONTROL.TXIQ_POLARITY_IMAGE"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyFrequencyBasebandMode"
 description = "Complete two-bit baseband mode accepted by the reviewed frequency helper."
-min = 0
-max = 3
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+field = "FE.FREQUENCY_PARAMETER_1_STATUS.BITS_0_1_OPAQUE"
 
 [[bounded-domains]]
 name = "PhyFrequencyMemoryAddress"
@@ -1860,54 +1751,40 @@ min = 0
 max = 2047
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyFrequencyMemoryReadMode"
 description = "Complete two-bit read mode accepted by the reviewed PHY frequency-memory transaction."
-min = 0
-max = 3
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+field = "FE.I2C_NUMBER_CONTROL.MEMORY_READ_MODE"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyFrequencyChannelIndex"
 description = "Complete eight-bit frequency-table index accepted by reviewed channel switch transactions."
-min = 0
-max = 255
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+field = "FE.FREQUENCY_CONTROL.CHANNEL_INDEX"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyFrequencyI2cNumberAddress"
 description = "One complete five-bit PHY-I2C number address from the reviewed descriptor sequence."
-min = 0
-max = 31
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+field = "FE.I2C_NUMBER_CONTROL.BITS_8_12_OPAQUE"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyChannelOffsetNibble"
 description = "Complete low channel-offset nibble produced by reviewed CBW derivation."
-min = 0
-max = 15
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+field = "WIFI_MAC.CHANNEL_TX_OFFSET_CONTROL.PRIMARY_20_CHANNEL_OFFSET"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyChannelCbwTwoBitImage"
 description = "Complete two-bit CBW control image produced by reviewed CBW derivation."
-min = 0
-max = 3
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+field = "WIFI_BB.CHANNEL_CBW_CONTROL_0.BITS_0_1_OPAQUE"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyChannelCbwThreeBitImage"
 description = "Complete three-bit CBW control image produced by reviewed CBW derivation."
-min = 0
-max = 7
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+field = "WIFI_BB.CHANNEL_CBW_CONTROL_1.BITS_2_4_OPAQUE"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "BluetoothPhyInitTimingByte"
 description = "Runtime-derived byte ORed into both BLE link-controller transmit-delay fields by one fresh-read transaction."
-min = 0
-max = 255
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+field = "BT_MAC.LC_TX_ON_DELAY_CONFIG.INIT_DUPLICATE_BYTE"
 
 [[bounded-domains]]
 name = "BluetoothBasebandGainParameterByte"
@@ -1916,12 +1793,10 @@ min = 0
 max = 255
 sources = ["BLOB_LIBBTBB_BT_BB_V2_INIT"]
 
-[[bounded-domains]]
+[[field-domains]]
 name = "ModemLowPowerClockDivider"
 description = "Twelve-bit divider accepted by the canonical MODEM_LPCON low-power timer selector."
-min = 0
-max = 4095
-sources = ["S31_MODEM_LPCON_STRUCT"]
+field = "MODEM_LPCON.LP_TIMER_CONF.CLK_LP_TIMER_DIV_NUM"
 
 [[bounded-domains]]
 name = "MacItwtClearIndex"
@@ -1937,12 +1812,10 @@ min = 0
 max = 3
 sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME", "BLOB_LIBPP_HAL_MAC_TX"]
 
-[[bounded-domains]]
+[[field-domains]]
 name = "MacTxPtiCount"
 description = "Twelve-bit descriptor metadata count published by complete hal_set_tx_pti."
-min = 0
-max = 4095
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME", "BLOB_LIBPP_HAL_MAC_TX"]
+field = "WIFI_MAC.PTI%s.COUNT"
 
 [[bounded-domains]]
 name = "MacKeyEntryIndex"
@@ -1965,19 +1838,15 @@ min = 0
 max = 7
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
 
-[[bounded-domains]]
+[[field-domains]]
 name = "MacRxBlockAckTid"
 description = "Four-bit traffic identifier encoded by the reviewed receive BlockAck transaction."
-min = 0
-max = 15
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
+field = "WIFI_MAC.RX_BLOCK_ACK_ENTRY%s_CONTROL.TID"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "MacRxBlockAckStartingSequence"
 description = "Twelve-bit starting sequence encoded by the reviewed receive BlockAck transaction."
-min = 0
-max = 4095
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
+field = "WIFI_MAC.RX_BLOCK_ACK_ENTRY%s_START_SEQUENCE_LOAD.SEQUENCE"
 
 [[bounded-domains]]
 name = "MacRxBlockAckWindow"
@@ -1986,26 +1855,20 @@ min = 1
 max = 127
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
 
-[[bounded-domains]]
+[[field-domains]]
 name = "CoexTimerClockDividerMinusOne"
 description = "Twelve-bit coexistence timer clock divider image, the divisor minus one, that complete coex_hw_timer_freq_set publishes."
-min = 0
-max = 4095
-sources = ["BLOB_LIBCOEX_TIMER_CLOCK"]
+field = "MODEM_LPCON.COEX_LP_CLK_CONF.CLK_COEX_LP_DIV_NUM"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "CoexTimerClientValue"
 description = "Two-bit coexistence client selector published by complete coex_hw_timer_set."
-min = 0
-max = 3
-sources = ["BLOB_LIBCOEX_HW_TIMER"]
+field = "COEX.CONFIGURATION%s.PARAMETER_1"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "CoexTimerPtiValue"
 description = "Four-bit coexistence priority value published by complete coex_hw_timer_set."
-min = 0
-max = 15
-sources = ["BLOB_LIBCOEX_HW_TIMER"]
+field = "COEX.CONFIGURATION%s.PARAMETER_2"
 
 [[bounded-domains]]
 name = "CoexTimerTickInput"
@@ -2014,26 +1877,20 @@ min = 0
 max = 4294967295
 sources = ["BLOB_LIBCOEX_HW_TIMER"]
 
-[[bounded-domains]]
+[[field-domains]]
 name = "StationTbttTargetBits35To10"
 description = "Low 26-bit station-TBTT target image formed from station TSF bits 35:10 by complete hal_set_sta_tbtt."
-min = 0
-max = 67108863
-sources = ["BLOB_LIBPP_HAL_TSF"]
+field = "MODEM_PWR.TARGET.TSF_BITS_35_10"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyRxDcoCalibrationControl"
 description = "Two-bit RX-DCO calibration control field retained and restored by complete calibration bodies."
-min = 0
-max = 3
-sources = ["BLOB_LIBPHY_PHY_XTAL_DUTY_CAL", "ROM_REV0_PHY_RX_DCO_CAL"]
+field = "FE.CONTROL.BITS_22_23_OPAQUE"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "BluetoothSchedulerLockModifyHardwareListIndex"
 description = "Zero-based hardware-list index accepted by the reviewed scheduler lock/modify publication."
-min = 0
-max = 15
-sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "PUBLIC_ESP32S31_BT_SCHEDULER_LIST_INDEX"]
+field = "BT_MAC.WORD_036C_OPAQUE.LOCK_MODIFY_HARDWARE_LIST_INDEX"
 
 [[bounded-domains]]
 name = "IqEstimatorControlWord"
@@ -2042,12 +1899,10 @@ min = 0
 max = 65535
 sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyMemoryIndex"
 description = "Complete eight-bit index shared by reviewed PBUS, TX-CFR and gain-memory transactions."
-min = 0
-max = 255
-sources = ["ROM_REV0_PHY_WRITE_PBUS_MEM", "BLOB_LIBPHY_PHY_SET_TX_CFR_MEM", "ROM_REV0_PHY_WRITE_GAIN_MEM"]
+field = "FE.MEMORY_COMMAND.MEMORY_INDEX"
 
 [[bounded-domains]]
 name = "PhyPbusMemoryCommand"
@@ -2056,26 +1911,20 @@ min = 0
 max = 1023
 sources = ["ROM_REV0_PHY_WRITE_PBUS_MEM"]
 
-[[bounded-domains]]
+[[field-domains]]
 name = "CfrValue"
 description = "Complete twelve-bit value accepted by reviewed HCCFR and forced-ICCFR transactions."
-min = 0
-max = 4095
-sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
+field = "WIFI_BB.HCCFR_VALUE.VALUE"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "ForcedRxGain"
 description = "Complete byte accepted by the recovered forced-RX-gain transaction."
-min = 0
-max = 255
-sources = ["ROM_REV0_PHY_FORCE_RX_GAIN"]
+field = "WIFI_BB.AGC_SHARED_CONTROL.FORCED_GAIN_INDEX"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyAgcParameterByte"
 description = "Complete caller byte accepted by the reviewed rev0 PHY AGC register initializer."
-min = 0
-max = 255
-sources = ["ROM_REV0_PHY_AGC"]
+field = "FE.AGC_PARAMETER_CONTROL.BITS_4_11_OPAQUE"
 
 [[bounded-domains]]
 name = "PhyRx11bLowRateArgument"
@@ -2091,19 +1940,15 @@ min = 0
 max = 255
 sources = ["BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE"]
 
-[[bounded-domains]]
+[[field-domains]]
 name = "PhyDigitalGainImage"
 description = "Two-complement digital gain byte."
-min = 0
-max = 255
-sources = ["BLOB_LIBPHY_CALIBRATION_20260907"]
+field = "FE.TABLE_MEMORY_INDEX_SOURCE.FORCED_DIGITAL_GAIN_0"
 
-[[bounded-domains]]
+[[field-domains]]
 name = "BluetoothSchedulerCancellationHardwareListIndex"
 description = "Zero-based hardware-list index accepted by the reviewed scheduler cancellation sequence."
-min = 0
-max = 15
-sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
+field = "BT_MAC.WORD_036C_OPAQUE.CANCELLATION_HARDWARE_LIST_INDEX"
 
 [[opaque-domains]]
 name = "PhyFtmEnableVendorArgument"
@@ -2286,45 +2131,44 @@ output-mask = 0xffffffff
 sources = ["ROM_REV0_PHY_SET_PBUS_MEM"]
 
 [[interrupt-snapshots]]
+name = "usb_serial_jtag_interrupt"
+status = "USB_DEVICE.INT_ST"
+events = ["USB_DEVICE.INT_ST.SERIAL_OUT_RECV_PKT_INT_ST", "USB_DEVICE.INT_ST.SERIAL_IN_EMPTY_INT_ST"]
+sources = ["ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"]
+
+[[interrupt-snapshots]]
 name = "mac_interrupt"
 status = "WIFI_MAC.STATUS"
-clear = "WIFI_MAC.CLEAR"
 sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT"]
 
 [[interrupt-snapshots]]
 name = "mac_power_interrupt"
 status = "MODEM_PWR.POWER_INTERRUPT_STATUS"
-clear = "MODEM_PWR.CLEAR"
 sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT"]
 
 [[interrupt-snapshots]]
 name = "bluetooth_interrupt_bank_0"
 status = "BT_MAC.IRQ_STATUS_SNAPSHOT_0"
-clear = "BT_MAC.IRQ_CLEAR_0"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[interrupt-snapshots]]
 name = "bluetooth_interrupt_bank_1"
 status = "BT_MAC.IRQ_STATUS_SNAPSHOT_1"
-clear = "BT_MAC.IRQ_CLEAR_1"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[interrupt-snapshots]]
 name = "bluetooth_primary_interrupt_bank_0"
 status = "BT_MAC.IRQ_STATUS_0"
-clear = "BT_MAC.IRQ_CLEAR_0"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[interrupt-snapshots]]
 name = "bluetooth_primary_interrupt_bank_1"
 status = "BT_MAC.IRQ_STATUS_1"
-clear = "BT_MAC.IRQ_CLEAR_1"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[interrupt-snapshots]]
 name = "acknowledge_mac_tx_completion"
 status = "WIFI_MAC.COMPLETE_CLEAR"
-clear = "WIFI_MAC.COMPLETE_CLEAR"
 consumed-event = "The selected ordinary queue's completion, which the TX path read in COMPLETE_STATE."
 consumed-fields = ["WIFI_MAC.COMPLETE_CLEAR.QUEUE_0", "WIFI_MAC.COMPLETE_CLEAR.QUEUE_1", "WIFI_MAC.COMPLETE_CLEAR.QUEUE_2", "WIFI_MAC.COMPLETE_CLEAR.QUEUE_3"]
 sources = ["BLOB_LIBPP_HAL_MAC_TX", "PROMOTED_LMAC_TX"]
@@ -2364,7 +2208,7 @@ sources = ["BLOB_LIBPP_HAL_TSF"]
 [[full-register-writes]]
 name = "rx_descriptor_base"
 field = "WIFI_MAC.RX_DESCRIPTOR_BASE.ADDRESS"
-points-to = "WIFI_RX_DMA_DESCRIPTOR"
+pointer = true
 sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX"]
 
 [[full-register-writes]]
@@ -2402,13 +2246,13 @@ sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
 [[full-register-writes]]
 name = "publish_ieee802154_tx_dma_address"
 field = "IEEE802154.TX_DMA_ADDRESS.ADDRESS"
-placement = "dma-window"
+pointer = true
 sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 
 [[full-register-writes]]
 name = "publish_ieee802154_rx_dma_address"
 field = "IEEE802154.RX_DMA_ADDRESS.ADDRESS"
-placement = "dma-window"
+pointer = true
 sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 
 [[full-register-writes]]
@@ -2468,106 +2312,76 @@ sources = ["ROM_REV0_PHY_WRITE_GAIN_MEM"]
 [[pointer-fields]]
 name = "bluetooth_rxlink_1_current_pointer_image"
 field = "BT_MAC.GLOBAL_RXLINK_1_CURRENT.COMPRESSED_SRAM_POINTER"
-points-to = "BLE_BUFFER_HEADER"
-encoding = "ble-compressed"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
 [[pointer-fields]]
 name = "bluetooth_rxlink_1_next_pointer_image"
 field = "BT_MAC.GLOBAL_RXLINK_1_NEXT.COMPRESSED_SRAM_POINTER"
-points-to = "BLE_BUFFER_HEADER"
-encoding = "ble-compressed"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
 [[pointer-fields]]
 name = "bluetooth_rxlink_2_current_pointer_image"
 field = "BT_MAC.GLOBAL_RXLINK_2_CURRENT.COMPRESSED_SRAM_POINTER"
-points-to = "BLE_BUFFER_HEADER"
-encoding = "ble-compressed"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
 [[pointer-fields]]
 name = "bluetooth_rxlink_2_next_pointer_image"
 field = "BT_MAC.GLOBAL_RXLINK_2_NEXT.COMPRESSED_SRAM_POINTER"
-points-to = "BLE_BUFFER_HEADER"
-encoding = "ble-compressed"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
 [[pointer-fields]]
 name = "bluetooth_rxlink_3_current_pointer_image"
 field = "BT_MAC.GLOBAL_RXLINK_3_CURRENT.COMPRESSED_SRAM_POINTER"
-points-to = "BLE_BUFFER_HEADER"
-encoding = "ble-compressed"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
 [[pointer-fields]]
 name = "bluetooth_rxlink_3_next_pointer_image"
 field = "BT_MAC.GLOBAL_RXLINK_3_NEXT.COMPRESSED_SRAM_POINTER"
-points-to = "BLE_BUFFER_HEADER"
-encoding = "ble-compressed"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
 [[pointer-fields]]
 name = "bluetooth_scheduler_head_pointer_image"
 field = "BTDM.ENTRY%s.HEAD_POINTER"
-points-to = "BLE_SCHEDULER_ITEM"
-encoding = "ble-compressed"
 sources = ["BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION"]
 
 [[pointer-fields]]
 name = "bluetooth_scheduler_lock_pointer_image"
 field = "BT_MAC.SCHEDULER_COMMAND_0.COMPRESSED_SRAM_POINTER"
-points-to = "BLE_SCHEDULER_ITEM"
-encoding = "ble-compressed"
 sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS"]
 
 [[pointer-fields]]
 name = "bluetooth_scheduler_skip_pointer_image"
 field = "BT_MAC.SCHEDULER_SKIP_REQUEST.COMPRESSED_SRAM_POINTER"
-points-to = "BLE_SCHEDULER_ITEM"
-encoding = "ble-compressed"
 sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION"]
 
 [[pointer-fields]]
 name = "bluetooth_scheduler_lock_modify_pointer_image"
 field = "BT_MAC.SCHEDULER_LOCK_MODIFY_REQUEST.COMPRESSED_SRAM_POINTER"
-points-to = "BLE_SCHEDULER_ITEM"
-encoding = "ble-compressed"
 sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
 
 [[pointer-fields]]
 name = "bluetooth_device_table_pointer_image"
 field = "BT_MAC.DEVICE_TABLE_FIRST_ENTRY.COMPRESSED_ADDRESS"
-points-to = "BLE_DEVICE_TABLE"
-encoding = "ble-compressed"
 sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
 
 [[pointer-fields]]
 name = "bluetooth_df_descriptor_pointer_image"
 field = "BT_MAC.BUFFER_POINTER%s.COMPRESSED_DESCRIPTOR_POINTER"
-points-to = "BLE_DIRECTION_FINDING_DESCRIPTOR"
-encoding = "ble-compressed"
 sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
 
 [[pointer-fields]]
 name = "bluetooth_phy_resolving_list_pointer_image"
 field = "BT_MAC.BASE_POINTER.COMPRESSED_SRAM_POINTER"
-points-to = "BLE_RESOLVING_LIST"
-encoding = "ble-compressed"
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
 [[pointer-fields]]
 name = "bluetooth_phy_environment_member_pointer_image"
 field = "BT_MAC.PHY_ENVIRONMENT_MEMBER_POINTER.ADDRESS"
-points-to = "BLE_PHY_ENVIRONMENT"
-member-offset = 44
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
 [[pointer-fields]]
 name = "bluetooth_phy_environment_tail_pointer_image"
 field = "BT_MAC.PHY_ENVIRONMENT_TAIL_POINTER.ADDRESS"
-points-to = "BLE_PHY_ENVIRONMENT"
-member-offset = 77
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
 [[zero-based-field-writes]]
@@ -2999,12 +2813,14 @@ sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 name = "open_modem_pll_source_gate"
 register = "HP_SYS_CLKRST.MODEM_CONF"
 value = 0x0000003d
+whole-word = true
 sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK"]
 
 [[fixed-register-images]]
 name = "close_modem_pll_source_gate"
 register = "HP_SYS_CLKRST.MODEM_CONF"
 value = 0x00000025
+whole-word = true
 sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK"]
 
 [[fixed-register-images]]
@@ -3474,6 +3290,7 @@ sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNT
 name = "select_hp_active_modem_icg"
 register = "PMU.HP_ACTIVE_ICG_MODEM"
 value = 0x80000000
+whole-word = true
 sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "S31_PMU_HEADERS"]
 
 [[fixed-register-images]]
@@ -7673,3 +7490,48 @@ name = "request_mac_itwt_clear"
 field = "MODEM_PWR.CLEAR_REQUEST.BITS_0_31_OPAQUE"
 domain = "MacItwtClearIndex"
 sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+
+[[unclaimed]]
+instance = "HP_ALIVE_SYS"
+registers = ["HP_PAD_PARLIO_CTRL", "HP_PAD_I2S0_CTRL", "HP_PAD_I2S1_CTRL", "HP_PAD_UART0_CTRL", "HP_PAD_UART1_CTRL", "HP_PAD_UART2_CTRL", "HP_PAD_UART3_CTRL", "MODEM_CLK_AON", "USB_CTRL", "HP_TCM_MEM_LP_CTRL", "FLASH_MMU_MEM_LP_CTRL", "PSRAM_MMU_MEM_LP_CTRL", "SPRAM_MEM_AUX_CTRL", "SPRF_MEM_AUX_CTRL", "SDPRF_MEM_AUX_CTRL", "CPU_SPROM_MEM_AUX_CTRL", "CPU_SPRF_MEM_AUX_CTRL", "INTR_HP2LP_CONF_0", "INTR_HP2LP_CONF_1", "INTR_HP2LP_CONF_2", "INTR_HP2LP_CONF_3", "INTR_HP2LP_CONF_4", "INTR_HP2LP_STATUS_0", "INTR_HP2LP_STATUS_1", "INTR_HP2LP_STATUS_2", "INTR_HP2LP_STATUS_3", "INTR_HP2LP_STATUS_4", "CPU_SPRAM_MEM_AUX_CTRL", "BUS_CLOCK_GATE_BYPASS", "RST_EVENT_BYPASS", "USB_OTGHS_CTRL", "DATE"]
+reason = "No owner yet: the bootstrap reaches only its boot part's words."
+
+[[unclaimed]]
+instance = "CACHE"
+registers = ["L1_DCACHE_CTRL", "L1_BYPASS_CACHE_CONF", "L1_CACHE_ATOMIC_CONF", "L1_ACACHE_CACHESIZE_CONF", "L1_ACACHE_BLOCKSIZE_CONF", "L1_ICACHE_CACHESIZE_CONF", "L1_ICACHE_BLOCKSIZE_CONF", "L1_DCACHE_CACHESIZE_CONF", "L1_DCACHE_BLOCKSIZE_CONF", "L1_CACHE_WRAP_AROUND_CTRL", "L1_CACHE_MISS_ACCESS_CTRL", "L1_CACHE_DATA_MEM_ACS_CONF", "L1_CACHE_TAG_MEM_ACS_CONF", "L1_ICACHE0_PRELOCK_CONF", "L1_ICACHE0_PRELOCK_SCT0_ADDR", "L1_ICACHE0_PRELOCK_SCT1_ADDR", "L1_ICACHE0_PRELOCK_SCT_SIZE", "L1_ICACHE1_PRELOCK_CONF", "L1_ICACHE1_PRELOCK_SCT0_ADDR", "L1_ICACHE1_PRELOCK_SCT1_ADDR", "L1_ICACHE1_PRELOCK_SCT_SIZE", "L1_ICACHE2_PRELOCK_CONF", "L1_ICACHE2_PRELOCK_SCT0_ADDR", "L1_ICACHE2_PRELOCK_SCT1_ADDR", "L1_ICACHE2_PRELOCK_SCT_SIZE", "L1_ICACHE3_PRELOCK_CONF", "L1_ICACHE3_PRELOCK_SCT0_ADDR", "L1_ICACHE3_PRELOCK_SCT1_ADDR", "L1_ICACHE3_PRELOCK_SCT_SIZE", "L1_DCACHE_PRELOCK_CONF", "L1_DCACHE_PRELOCK_SCT0_ADDR", "L1_DCACHE_PRELOCK_SCT1_ADDR", "L1_DCACHE_PRELOCK_SCT_SIZE", "LOCK_MAP", "LOCK_ADDR", "LOCK_SIZE", "L1_ICACHE0_PRELOAD_ADDR", "L1_ICACHE0_PRELOAD_SIZE", "L1_ICACHE1_PRELOAD_CTRL", "L1_ICACHE1_PRELOAD_ADDR", "L1_ICACHE1_PRELOAD_SIZE", "L1_ICACHE2_PRELOAD_CTRL", "L1_ICACHE2_PRELOAD_ADDR", "L1_ICACHE2_PRELOAD_SIZE", "L1_ICACHE3_PRELOAD_CTRL", "L1_ICACHE3_PRELOAD_ADDR", "L1_ICACHE3_PRELOAD_SIZE", "L1_DCACHE_PRELOAD_CTRL", "L1_DCACHE_PRELOAD_ADDR", "L1_DCACHE_PRELOAD_SIZE", "L1_ICACHE0_AUTOLOAD_SCT0_ADDR", "L1_ICACHE0_AUTOLOAD_SCT0_SIZE", "L1_ICACHE0_AUTOLOAD_SCT1_ADDR", "L1_ICACHE0_AUTOLOAD_SCT1_SIZE", "L1_ICACHE1_AUTOLOAD_CTRL", "L1_ICACHE1_AUTOLOAD_SCT0_ADDR", "L1_ICACHE1_AUTOLOAD_SCT0_SIZE", "L1_ICACHE1_AUTOLOAD_SCT1_ADDR", "L1_ICACHE1_AUTOLOAD_SCT1_SIZE", "L1_ICACHE2_AUTOLOAD_CTRL", "L1_ICACHE2_AUTOLOAD_SCT0_ADDR", "L1_ICACHE2_AUTOLOAD_SCT0_SIZE", "L1_ICACHE2_AUTOLOAD_SCT1_ADDR", "L1_ICACHE2_AUTOLOAD_SCT1_SIZE", "L1_ICACHE3_AUTOLOAD_CTRL", "L1_ICACHE3_AUTOLOAD_SCT0_ADDR", "L1_ICACHE3_AUTOLOAD_SCT0_SIZE", "L1_ICACHE3_AUTOLOAD_SCT1_ADDR", "L1_ICACHE3_AUTOLOAD_SCT1_SIZE", "L1_DCACHE_AUTOLOAD_CTRL", "L1_DCACHE_AUTOLOAD_SCT0_ADDR", "L1_DCACHE_AUTOLOAD_SCT0_SIZE", "L1_DCACHE_AUTOLOAD_SCT1_ADDR", "L1_DCACHE_AUTOLOAD_SCT1_SIZE", "L1_DCACHE_AUTOLOAD_SCT2_ADDR", "L1_DCACHE_AUTOLOAD_SCT2_SIZE", "L1_DCACHE_AUTOLOAD_SCT3_ADDR", "L1_DCACHE_AUTOLOAD_SCT3_SIZE", "L1_CACHE_ACS_CNT_INT_ENA", "L1_CACHE_ACS_CNT_INT_CLR", "L1_CACHE_ACS_CNT_INT_RAW", "L1_CACHE_ACS_CNT_INT_ST", "L1_CACHE_ACS_FAIL_CTRL", "L1_CACHE_ACS_FAIL_INT_ENA", "L1_CACHE_ACS_FAIL_INT_CLR", "L1_CACHE_ACS_FAIL_INT_RAW", "L1_CACHE_ACS_FAIL_INT_ST", "L1_CACHE_ACS_CNT_CTRL", "L1_IBUS0_ACS_HIT_CNT", "L1_IBUS0_ACS_MISS_CNT", "L1_IBUS0_ACS_CONFLICT_CNT", "L1_IBUS0_ACS_NXTLVL_RD_CNT", "L1_IBUS1_ACS_HIT_CNT", "L1_IBUS1_ACS_MISS_CNT", "L1_IBUS1_ACS_CONFLICT_CNT", "L1_IBUS1_ACS_NXTLVL_RD_CNT", "L1_IBUS2_ACS_HIT_CNT", "L1_IBUS2_ACS_MISS_CNT", "L1_IBUS2_ACS_CONFLICT_CNT", "L1_IBUS2_ACS_NXTLVL_RD_CNT", "L1_IBUS3_ACS_HIT_CNT", "L1_IBUS3_ACS_MISS_CNT", "L1_IBUS3_ACS_CONFLICT_CNT", "L1_IBUS3_ACS_NXTLVL_RD_CNT", "L1_DBUS0_ACS_HIT_CNT", "L1_DBUS0_ACS_MISS_CNT", "L1_DBUS0_ACS_CONFLICT_CNT", "L1_DBUS0_ACS_NXTLVL_RD_CNT", "L1_DBUS0_ACS_NXTLVL_WR_CNT", "L1_DBUS1_ACS_HIT_CNT", "L1_DBUS1_ACS_MISS_CNT", "L1_DBUS1_ACS_CONFLICT_CNT", "L1_DBUS1_ACS_NXTLVL_RD_CNT", "L1_DBUS1_ACS_NXTLVL_WR_CNT", "L1_DBUS2_ACS_HIT_CNT", "L1_DBUS2_ACS_MISS_CNT", "L1_DBUS2_ACS_CONFLICT_CNT", "L1_DBUS2_ACS_NXTLVL_RD_CNT", "L1_DBUS2_ACS_NXTLVL_WR_CNT", "L1_DBUS3_ACS_HIT_CNT", "L1_DBUS3_ACS_MISS_CNT", "L1_DBUS3_ACS_CONFLICT_CNT", "L1_DBUS3_ACS_NXTLVL_RD_CNT", "L1_DBUS3_ACS_NXTLVL_WR_CNT", "L1_ICACHE0_ACS_FAIL_ID_ATTR", "L1_ICACHE0_ACS_FAIL_ADDR", "L1_ICACHE1_ACS_FAIL_ID_ATTR", "L1_ICACHE1_ACS_FAIL_ADDR", "L1_ICACHE2_ACS_FAIL_ID_ATTR", "L1_ICACHE2_ACS_FAIL_ADDR", "L1_ICACHE3_ACS_FAIL_ID_ATTR", "L1_ICACHE3_ACS_FAIL_ADDR", "L1_DCACHE_ACS_FAIL_ID_ATTR", "L1_DCACHE_ACS_FAIL_ADDR", "L1_CACHE_SYNC_PRELOAD_INT_ENA", "L1_CACHE_SYNC_PRELOAD_INT_CLR", "L1_CACHE_SYNC_PRELOAD_INT_RAW", "L1_CACHE_SYNC_PRELOAD_INT_ST", "L1_CACHE_SYNC_PRELOAD_EXCEPTION", "L1_CACHE_SYNC_RST_CTRL", "L1_CACHE_PRELOAD_RST_CTRL", "L1_CACHE_AUTOLOAD_BUF_CLR_CTRL", "L1_UNALLOCATE_BUFFER_CLEAR", "L1_CACHE_OBJECT_CTRL", "L1_CACHE_WAY_OBJECT", "L1_CACHE_ADDR", "L1_CACHE_DEBUG_BUS", "LEVEL_SPLIT0", "L2_CACHE_CTRL", "L2_BYPASS_CACHE_CONF", "L2_CACHE_CACHESIZE_CONF", "L2_CACHE_BLOCKSIZE_CONF", "L2_CACHE_WRAP_AROUND_CTRL", "L2_CACHE_MISS_ACCESS_CTRL", "L2_CACHE_FREEZE_CTRL", "L2_CACHE_DATA_MEM_ACS_CONF", "L2_CACHE_TAG_MEM_ACS_CONF", "L2_CACHE_PRELOCK_CONF", "L2_CACHE_PRELOCK_SCT0_ADDR", "L2_CACHE_PRELOCK_SCT1_ADDR", "L2_CACHE_PRELOCK_SCT_SIZE", "L2_CACHE_PRELOAD_CTRL", "L2_CACHE_PRELOAD_ADDR", "L2_CACHE_PRELOAD_SIZE", "L2_CACHE_AUTOLOAD_CTRL", "L2_CACHE_AUTOLOAD_SCT0_ADDR", "L2_CACHE_AUTOLOAD_SCT0_SIZE", "L2_CACHE_AUTOLOAD_SCT1_ADDR", "L2_CACHE_AUTOLOAD_SCT1_SIZE", "L2_CACHE_AUTOLOAD_SCT2_ADDR", "L2_CACHE_AUTOLOAD_SCT2_SIZE", "L2_CACHE_AUTOLOAD_SCT3_ADDR", "L2_CACHE_AUTOLOAD_SCT3_SIZE", "L2_CACHE_ACS_CNT_INT_ENA", "L2_CACHE_ACS_CNT_INT_CLR", "L2_CACHE_ACS_CNT_INT_RAW", "L2_CACHE_ACS_CNT_INT_ST", "L2_CACHE_ACS_FAIL_CTRL", "L2_CACHE_ACS_FAIL_INT_ENA", "L2_CACHE_ACS_FAIL_INT_CLR", "L2_CACHE_ACS_FAIL_INT_RAW", "L2_CACHE_ACS_FAIL_INT_ST", "L2_CACHE_ACS_CNT_CTRL", "L2_IBUS0_ACS_HIT_CNT", "L2_IBUS0_ACS_MISS_CNT", "L2_IBUS0_ACS_CONFLICT_CNT", "L2_IBUS0_ACS_NXTLVL_RD_CNT", "L2_IBUS1_ACS_HIT_CNT", "L2_IBUS1_ACS_MISS_CNT", "L2_IBUS1_ACS_CONFLICT_CNT", "L2_IBUS1_ACS_NXTLVL_RD_CNT", "L2_IBUS2_ACS_HIT_CNT", "L2_IBUS2_ACS_MISS_CNT", "L2_IBUS2_ACS_CONFLICT_CNT", "L2_IBUS2_ACS_NXTLVL_RD_CNT", "L2_IBUS3_ACS_HIT_CNT", "L2_IBUS3_ACS_MISS_CNT", "L2_IBUS3_ACS_CONFLICT_CNT", "L2_IBUS3_ACS_NXTLVL_RD_CNT", "L2_DBUS0_ACS_HIT_CNT", "L2_DBUS0_ACS_MISS_CNT", "L2_DBUS0_ACS_CONFLICT_CNT", "L2_DBUS0_ACS_NXTLVL_RD_CNT", "L2_DBUS0_ACS_NXTLVL_WR_CNT", "L2_DBUS1_ACS_HIT_CNT", "L2_DBUS1_ACS_MISS_CNT", "L2_DBUS1_ACS_CONFLICT_CNT", "L2_DBUS1_ACS_NXTLVL_RD_CNT", "L2_DBUS1_ACS_NXTLVL_WR_CNT", "L2_DBUS2_ACS_HIT_CNT", "L2_DBUS2_ACS_MISS_CNT", "L2_DBUS2_ACS_CONFLICT_CNT", "L2_DBUS2_ACS_NXTLVL_RD_CNT", "L2_DBUS2_ACS_NXTLVL_WR_CNT", "L2_DBUS3_ACS_HIT_CNT", "L2_DBUS3_ACS_MISS_CNT", "L2_DBUS3_ACS_CONFLICT_CNT", "L2_DBUS3_ACS_NXTLVL_RD_CNT", "L2_DBUS3_ACS_NXTLVL_WR_CNT", "L2_CACHE_ACS_FAIL_ID_ATTR", "L2_CACHE_ACS_FAIL_ADDR", "L2_CACHE_SYNC_PRELOAD_INT_ENA", "L2_CACHE_SYNC_PRELOAD_INT_CLR", "L2_CACHE_SYNC_PRELOAD_INT_RAW", "L2_CACHE_SYNC_PRELOAD_INT_ST", "L2_CACHE_SYNC_PRELOAD_EXCEPTION", "L2_CACHE_SYNC_RST_CTRL", "L2_CACHE_PRELOAD_RST_CTRL", "L2_CACHE_AUTOLOAD_BUF_CLR_CTRL", "L2_UNALLOCATE_BUFFER_CLEAR", "L2_CACHE_ACCESS_ATTR_CTRL", "L2_CACHE_OBJECT_CTRL", "L2_CACHE_WAY_OBJECT", "L2_CACHE_ADDR", "L2_CACHE_DEBUG_BUS", "LEVEL_SPLIT1", "CLOCK_GATE", "TRACE_ENA", "REDUNDANCY_SIG0", "REDUNDANCY_SIG1", "REDUNDANCY_SIG2", "REDUNDANCY_SIG3", "REDUNDANCY_SIG4", "DATE"]
+reason = "No owner yet: the bootstrap reaches only its boot part's words."
+
+[[unclaimed]]
+instance = "SPI0"
+registers = ["SPI_MEM_CMD", "ADDR", "SPI_MEM_CTRL1", "SPI_MEM_CTRL2", "SPI_MEM_USER", "SPI_MEM_USER1", "SPI_MEM_USER2", "SPI_MEM_RD_STATUS", "SPI_MEM_MISC", "SPI_MEM_CACHE_FCTRL", "SPI_MEM_CACHE_SCTRL", "SPI_MEM_SRAM_CMD", "SPI_MEM_SRAM_DRD_CMD", "SPI_MEM_SRAM_DWR_CMD", "SPI_MEM_SRAM_CLK", "SPI_MEM_FSM", "SPI_MEM_INT_ENA", "SPI_MEM_INT_CLR", "SPI_MEM_INT_RAW", "SPI_MEM_INT_ST", "SPI_MEM_DDR", "SPI_SMEM_DDR", "SPI_MEM_DLL_DLY_DB", "SPI_MEM_DLL_DB_ST0", "SPI_MEM_DLL_DB_ST1", "SPI_FMEM_PMS%s_ATTR", "SPI_FMEM_PMS%s_ADDR", "SPI_FMEM_PMS%s_SIZE", "SPI_SMEM_PMS%s_ATTR", "SPI_SMEM_PMS%s_ADDR", "SPI_SMEM_PMS%s_SIZE", "SPI_MEM_PMS_REJECT", "SPI_MEM_PMS_REJECT_ADDR", "SPI_MEM_ECC_CTRL", "SPI_MEM_ECC_ERR_ADDR", "SPI_MEM_AXI_ERR_ADDR", "SPI_SMEM_ECC_CTRL", "SPI_SMEM_AXI_ADDR_CTRL", "SPI_MEM_AXI_ERR_RESP_EN", "SPI_MEM_DOUT_MODE", "SPI_SMEM_TIMING_CALI", "SPI_SMEM_DIN_MODE", "SPI_SMEM_DIN_NUM", "SPI_SMEM_DOUT_MODE", "SPI_SMEM_AC", "SPI_MEM_CLOCK_GATE", "SPI_MEM_NAND_FLASH_EN", "SPI_MEM_NAND_FLASH_SR_ADDR0", "SPI_MEM_NAND_FLASH_SR_DIN0", "SPI_MEM_NAND_FLASH_CFG_DATA0", "SPI_MEM_NAND_FLASH_CFG_DATA1", "SPI_MEM_NAND_FLASH_CFG_DATA2", "SPI_MEM_NAND_FLASH_CMD_LUT0", "NAND_FLASH_CMD_LUT1", "NAND_FLASH_CMD_LUT2", "NAND_FLASH_CMD_LUT3", "NAND_FLASH_CMD_LUT4", "NAND_FLASH_CMD_LUT5", "NAND_FLASH_CMD_LUT6", "NAND_FLASH_CMD_LUT7", "NAND_FLASH_CMD_LUT8", "NAND_FLASH_CMD_LUT9", "NAND_FLASH_CMD_LUT10", "NAND_FLASH_CMD_LUT11", "NAND_FLASH_CMD_LUT12", "NAND_FLASH_CMD_LUT13", "NAND_FLASH_CMD_LUT14", "NAND_FLASH_CMD_LUT15", "SPI_MEM_NAND_FLASH_SPI_SEQ0", "NAND_FLASH_SPI_SEQ1", "NAND_FLASH_SPI_SEQ2", "NAND_FLASH_SPI_SEQ3", "NAND_FLASH_SPI_SEQ4", "NAND_FLASH_SPI_SEQ5", "NAND_FLASH_SPI_SEQ6", "NAND_FLASH_SPI_SEQ7", "NAND_FLASH_SPI_SEQ8", "NAND_FLASH_SPI_SEQ9", "NAND_FLASH_SPI_SEQ10", "NAND_FLASH_SPI_SEQ11", "NAND_FLASH_SPI_SEQ12", "NAND_FLASH_SPI_SEQ13", "NAND_FLASH_SPI_SEQ14", "NAND_FLASH_SPI_SEQ15", "NAND_FLASH_SPI_SEQ16", "NAND_FLASH_SPI_SEQ17", "NAND_FLASH_SPI_SEQ18", "NAND_FLASH_SPI_SEQ19", "NAND_FLASH_SPI_SEQ20", "NAND_FLASH_SPI_SEQ21", "NAND_FLASH_SPI_SEQ22", "NAND_FLASH_SPI_SEQ23", "NAND_FLASH_SPI_SEQ24", "NAND_FLASH_SPI_SEQ25", "NAND_FLASH_SPI_SEQ26", "NAND_FLASH_SPI_SEQ27", "NAND_FLASH_SPI_SEQ28", "NAND_FLASH_SPI_SEQ29", "NAND_FLASH_SPI_SEQ30", "NAND_FLASH_SPI_SEQ31", "SPI_MEM_XTS_PLAIN_BASE", "SPI_MEM_XTS_LINESIZE", "SPI_MEM_XTS_DESTINATION", "SPI_MEM_XTS_PHYSICAL_ADDRESS", "SPI_MEM_XTS_TRIGGER", "SPI_MEM_XTS_RELEASE", "SPI_MEM_XTS_DESTROY", "SPI_MEM_XTS_STATE", "SPI_MEM_XTS_DATE", "SPI_MEM_MMU_POWER_CTRL", "SPI_MEM_DPA_CTRL", "SPI_MEM_XTS_PSEUDO_ROUND_CONF", "SPI_MEM_REGISTERRND_ECO_HIGH", "SPI_MEM_REGISTERRND_ECO_LOW", "SPI_MEM_DATE"]
+reason = "No owner yet: the bootstrap reaches only its boot part's words."
+
+[[unclaimed]]
+instance = "SPI1"
+registers = ["SPI_MEM_CTRL1", "SPI_MEM_CTRL2", "SPI_MEM_MOSI_DLEN", "SPI_MEM_MISC", "SPI_MEM_TX_CRC", "SPI_MEM_CACHE_FCTRL", "SPI_MEM_FLASH_WAITI_CTRL", "SPI_MEM_FLASH_SUS_CTRL", "SPI_MEM_FLASH_SUS_CMD", "SPI_MEM_SUS_STATUS", "SPI_MEM_FLASH_WAITI_CTRL1", "SPI_MEM_INT_ENA", "SPI_MEM_INT_CLR", "SPI_MEM_INT_RAW", "SPI_MEM_INT_ST", "SPI_MEM_DDR", "SPI_MEM_CLOCK_GATE", "SPI_MEM_DATE"]
+reason = "No owner yet: the bootstrap reaches only its boot part's words."
+
+[[unclaimed]]
+instance = "MEMSPI2"
+registers = ["CMD", "CTRL", "CTRL2", "CLOCK", "USER", "USER1", "USER2", "RD_STATUS", "MISC", "FSM", "INT_ENA", "INT_CLR", "INT_RAW", "INT_ST", "DDR", "DLL_DLY_DB", "DLL_DB_ST0", "DLL_DB_ST1", "FMEM_PMS%s_ATTR", "FMEM_PMS%s_ADDR", "FMEM_PMS%s_SIZE", "SMEM_PMS%s_ATTR", "SMEM_PMS%s_ADDR", "SMEM_PMS%s_SIZE", "PMS_REJECT", "PMS_REJECT_ADDR", "ECC_CTRL", "ECC_ERR_ADDR", "AXI_ERR_ADDR", "SMEM_ECC_CTRL", "SMEM_AXI_ADDR_CTRL", "AXI_ERR_RESP_EN", "DIN_MODE", "DIN_NUM", "DOUT_MODE", "SMEM_DIN_MODE", "SMEM_DIN_NUM", "SMEM_DOUT_MODE", "SMEM_DIN_HEX_MODE", "SMEM_DIN_HEX_NUM", "SMEM_DOUT_HEX_MODE", "CLOCK_GATE", "NAND_FLASH_EN", "NAND_FLASH_SR_ADDR0", "NAND_FLASH_SR_DIN0", "NAND_FLASH_CFG_DATA0", "NAND_FLASH_CFG_DATA1", "NAND_FLASH_CFG_DATA2", "NAND_FLASH_CMD_LUT0", "NAND_FLASH_SPI_SEQ0", "XTS_PLAIN_BASE", "XTS_LINESIZE", "XTS_DESTINATION", "XTS_PHYSICAL_ADDRESS", "XTS_TRIGGER", "XTS_RELEASE", "XTS_DESTROY", "XTS_STATE", "XTS_DATE", "MMU_POWER_CTRL", "DPA_CTRL", "XTS_PSEUDO_ROUND_CONF", "REGISTERRND_ECO_HIGH", "REGISTERRND_ECO_LOW", "DATE"]
+reason = "No owner yet: the bootstrap reaches only its boot part's words."
+
+[[unclaimed]]
+instance = "MEMSPI3"
+registers = ["CTRL1", "CTRL2", "RD_STATUS", "TX_CRC", "CACHE_FCTRL", "FLASH_WAITI_CTRL", "FLASH_SUS_CTRL", "FLASH_SUS_CMD", "SUS_STATUS", "FLASH_WAITI_CTRL1", "INT_ENA", "INT_CLR", "INT_RAW", "INT_ST", "TIMING_CALI", "CLOCK_GATE", "DATE"]
+reason = "No owner yet: the bootstrap reaches only its boot part's words."
+
+[[unclaimed]]
+instance = "IOMUX_MSPI_PIN"
+registers = ["CLK_EN0"]
+reason = "No owner yet: the bootstrap reaches only its boot part's words."
+
+[[unclaimed]]
+instance = "LP_ANA_PERI"
+registers = ["LP_ANA_VDD_SOURCE_CNTL", "LP_ANA_PG_GLITCH_CNTL", "LP_ANA_INT_RAW", "LP_ANA_INT_ST", "LP_ANA_INT_ENA", "LP_ANA_INT_CLR", "LP_ANA_LP_INT_RAW", "LP_ANA_LP_INT_ST", "LP_ANA_LP_INT_ENA", "LP_ANA_LP_INT_CLR", "LP_ANA_DATE"]
+reason = "No owner yet: the bootstrap reaches only its boot part's words."
+
+[[unclaimed]]
+instance = "BUS_MONITOR"
+registers = ["CORE_1_DEBUG_MODE"]
+reason = "No owner yet: hart 1 runs no code, so nothing reads its debug status."

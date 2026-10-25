@@ -8,15 +8,14 @@ publish = false
 description = "The chip-neutral steps of the Espressif staged-boot bootstrap: stage-two validation, relocation into PSRAM and handoff"
 
 [features]
-# The chip of esp-hal and of the early USB writer; a bootstrap selects
-# exactly one.
-esp32s31 = ["esp-hal/esp32s31", "dep:oer-esp32s31-hal"]
+# A bootstrap selects its chip HAL and early USB writer.
+esp32s31 = ["dep:oer-esp32s31-hal"]
 
 [dependencies]
+oer-espressif-boot = { path = "../boot" }
 oer-riscv = { path = "../../../portable/riscv" }
 oer-espressif-staged-layout.workspace = true
 oer-esp32s31-hal = { path = "../../esp32s31/hal", optional = true }
-esp-hal = { workspace = true, features = ["static-interrupts", "rt", "unstable"] }
 
 [lints]
 workspace = true

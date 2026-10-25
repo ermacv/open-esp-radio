@@ -61,18 +61,20 @@ fn cold_start_prepares_mac_without_opening_its_core() {
             ColdStartClockEdge::SetWifiMacReset(false),
         ]
     );
+    // The MAC's interrupt banks are the radio interrupt handler's: the
+    // cold sequence neither clears them after the handshake nor publishes
+    // the station mask.
     assert_eq!(
-        &mmio.operations()[..5],
+        &mmio.operations()[..4],
         [
             Operation::SetWifiMacReset(true),
             Operation::SetWifiMacReset(false),
             Operation::RequestColdHandshake,
             Operation::SampleColdHandshake,
-            Operation::FinishColdHandshake,
         ]
     );
     assert_eq!(
-        &mmio.operations()[5..12],
+        &mmio.operations()[4..11],
         [
             Operation::HoldMacRuntime,
             Operation::InitializeTxRxPrefix,
@@ -84,31 +86,27 @@ fn cold_start_prepares_mac_without_opening_its_core() {
         ]
     );
     assert!(matches!(
-        mmio.operations()[12],
+        mmio.operations()[11],
         Operation::InitializeTxPower(_)
     ));
     assert_eq!(
-        &mmio.operations()[13..19],
+        &mmio.operations()[12..18],
         [
             Operation::InitializeHeSuffix,
             Operation::InitializeLastRxBufferTable,
             Operation::DisablePhyLowRate,
             Operation::InitializeCryptoBypass,
             Operation::InitializeMacAntenna,
-            Operation::InitializeHalTail(
-                MacInterruptMask::STATION,
-                MacSlowClockCalibration::Unavailable,
-            ),
+            Operation::InitializeHalTail(MacSlowClockCalibration::Unavailable),
         ]
     );
     assert!(matches!(
-        mmio.operations()[19],
+        mmio.operations()[18],
         Operation::InitializeColdCoex(_)
     ));
     assert_eq!(
-        &mmio.operations()[20..],
+        &mmio.operations()[19..],
         [
-            Operation::PrepareMacInterrupts(MacInterruptMask::STATION),
             Operation::ProgramInterfaceAddress(MacInterface::Station, station),
             Operation::ProgramInterfaceAddress(MacInterface::AccessPoint, access_point),
             Operation::ConfigureOpenPromiscuousReceive,

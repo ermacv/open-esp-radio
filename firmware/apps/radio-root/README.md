@@ -1,8 +1,11 @@
 # radio-root
 
-This ESP32-S31 staged application adopts PSRAM, takes the radio hardware
-root from esp-hal, and acquires and releases each platform clock once. It
-initializes no RF, PHY or MAC. The hardware root remains held until reset.
+This ESP32-S31 staged application takes the reset root, adopts PSRAM, owns
+`RadioHardware` from the HAL root's `into_runtime()`, and acquires and
+releases each platform clock once through the chip's platform clock owner
+(`oer_esp32s31_hal::power::ChipClocks`). It initializes no RF, PHY or MAC.
+The radio root remains held until reset, and the image's one executor feeds
+the RTC watchdog the root armed.
 
 ```console
 cargo fw build radio-root
@@ -10,12 +13,11 @@ cargo fw run radio-root --board s31-c
 ```
 
 The [typed boot console](../../../portable/diagnostics/README.md) reports any
-previous panic first, then the handoff, clock results in `PlatformClock::ALL`
-order, and the verdict. `cargo fw run` and `monitor` render the same text on
+previous panic first, then the clock results in `PlatformClock::ALL` order,
+and the verdict. `cargo fw run` and `monitor` render the same text on
 the host as before:
 
 ```text
-OER radio-root handoff=ok
 OER radio-root clock=Pll160m acquired released
 …
 OER-RESULT: pass radio-root

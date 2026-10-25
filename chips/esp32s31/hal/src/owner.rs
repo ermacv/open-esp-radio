@@ -7,13 +7,17 @@ use crate::{
     ieee80211::{
         channel, dma::rx_dma::WifiRxDmaEngine, mac as wifi_mac, station_wake::StationWakeState,
     },
-    types::{MacInterruptMask, MacInterruptSnapshot, MacPowerInterruptSnapshot, PhyAdcRate},
+    phy::i2c::PhyAdcRate,
+    types::{
+        MacInterruptEnableState, MacInterruptMask, MacInterruptSnapshot, MacPowerInterruptSnapshot,
+    },
 };
 
 use super::*;
 
-use crate::phy::restore::PhyRouteState;
-use oer_esp32s31_pac::WifiRadioRegisters;
+use crate::ieee80211::registers::{WifiRadioRegisters, WifiRxDmaRegisters};
+use crate::phy::registers::RadioPhyParts;
+use crate::phy::{baseband::ops as bb_ops, restore::PhyRouteState};
 
 pub mod maintenance;
 
@@ -126,23 +130,41 @@ pub trait SharedPhyAccess: sealed::SharedPhyAccess {
     }
 
     fn set_phy_calibration_clock(&mut self, enabled: bool) {
-        phy_pac_mut(self).set_phy_calibration_clock(enabled);
+        crate::phy::clock::ops::set_calibration_clock(
+            &mut phy_blocks_mut(self).phy_clock_oracle,
+            enabled,
+        );
     }
 
     fn set_rx_gain_dc_calibration(&mut self, enabled: bool) {
-        phy_pac_mut(self).set_rx_gain_dc_calibration(enabled);
+        bb_ops::set_rx_gain_dc_calibration(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            enabled,
+        );
     }
 
     fn configure_power_control_tone(&mut self, selector: u16, step: u8) {
-        phy_pac_mut(self).configure_power_control_tone(selector, step);
+        bb_ops::configure_power_control_tone(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            selector,
+            step,
+        );
     }
 
     fn configure_calibration_tone(&mut self, enabled: bool, selector: u16, step: u8) {
-        phy_pac_mut(self).configure_calibration_tone(enabled, selector, step);
+        bb_ops::configure_calibration_tone(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            enabled,
+            selector,
+            step,
+        );
     }
 
     fn configure_tx_iq_correction(&mut self, begin: bool) {
-        phy_pac_mut(self).configure_tx_iq_correction(begin);
+        bb_ops::configure_tx_iq_correction(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            begin,
+        );
     }
 
     /// Capture the first-path TX-IQ tone-control state into the route slot.
@@ -153,7 +175,11 @@ pub trait SharedPhyAccess: sealed::SharedPhyAccess {
         &mut self,
     ) -> Result<(), crate::phy::restore::TxIqToneControlPrepareError> {
         let (phy, restore) = sealed::SharedPhyAccess::parts_mut(self);
-        restore.prepare_txiq_with(|| phy.capture_txiq_tone_control())
+        restore.prepare_txiq_with(|| {
+            crate::phy::baseband::ops::TxIqToneControlFields::capture(
+                &phy.peripherals.phy_baseband_config_oracle,
+            )
+        })
     }
 
     /// Restore and consume the saved TX-IQ tone-control state.
@@ -164,7 +190,9 @@ pub trait SharedPhyAccess: sealed::SharedPhyAccess {
         &mut self,
     ) -> Result<(), crate::phy::restore::TxIqToneControlRestoreError> {
         let (phy, restore) = sealed::SharedPhyAccess::parts_mut(self);
-        restore.restore_txiq_with(|fields| phy.restore_txiq_tone_control(fields))
+        restore.restore_txiq_with(|fields| {
+            fields.restore(&mut phy.peripherals.phy_baseband_config_oracle)
+        })
     }
 
     fn configure_txiq_mismatch_power(
@@ -174,59 +202,84 @@ pub trait SharedPhyAccess: sealed::SharedPhyAccess {
         attenuation: u8,
         selector: u16,
     ) {
-        phy_pac_mut(self).configure_txiq_mismatch_power(first, polarity, attenuation, selector);
+        bb_ops::configure_txiq_mismatch_power(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            first,
+            polarity,
+            attenuation,
+            selector,
+        );
     }
 
     fn set_tx_iq_gain_coefficient(&mut self, coefficient: i8) {
-        phy_pac_mut(self).set_tx_iq_gain_coefficient(coefficient);
+        bb_ops::set_tx_iq_gain_coefficient(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            coefficient,
+        );
     }
 
     fn set_tx_iq_phase_coefficient(&mut self, coefficient: i8) {
-        phy_pac_mut(self).set_tx_iq_phase_coefficient(coefficient);
+        bb_ops::set_tx_iq_phase_coefficient(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            coefficient,
+        );
     }
 
     fn set_rx_iq_gain_coefficient(&mut self, coefficient: i8) {
-        phy_pac_mut(self).set_rx_iq_gain_coefficient(coefficient);
+        bb_ops::set_rx_iq_gain_coefficient(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            coefficient,
+        );
     }
 
     fn set_rx_iq_phase_coefficient(&mut self, coefficient: i8) {
-        phy_pac_mut(self).set_rx_iq_phase_coefficient(coefficient);
+        bb_ops::set_rx_iq_phase_coefficient(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            coefficient,
+        );
     }
 
     fn configure_rx_iq_calibration_mode(&mut self) {
-        phy_pac_mut(self).configure_rx_iq_calibration_mode();
+        bb_ops::configure_rx_iq_calibration_mode(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+        );
     }
 
     fn configure_adc_rate(&mut self, rate: PhyAdcRate) {
-        phy_pac_mut(self).configure_adc_rate(rate);
+        bb_ops::configure_adc_rate(&mut phy_blocks_mut(self).phy_baseband_config_oracle, rate);
     }
 
     fn set_power_detector_tone_armed(&mut self, armed: bool) {
-        phy_pac_mut(self).set_power_detector_tone_armed(armed);
+        bb_ops::set_power_detector_tone_armed(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            armed,
+        );
     }
 
     fn stop_power_detector_tone(&mut self) {
-        phy_pac_mut(self).stop_power_detector_tone();
+        bb_ops::stop_power_detector_tone(&mut phy_blocks_mut(self).phy_baseband_config_oracle);
     }
 
     fn trigger_tx_dc_measurement(&mut self) {
-        phy_pac_mut(self).trigger_tx_dc_measurement();
+        bb_ops::trigger_tx_dc_measurement(&mut phy_blocks_mut(self).phy_baseband_config_oracle);
     }
 
     fn tx_dc_measurement_is_ready(&mut self) -> bool {
-        phy_pac_mut(self).tx_dc_measurement_is_ready()
+        bb_ops::tx_dc_measurement_is_ready(&phy_blocks(self).phy_baseband_config_oracle)
     }
 
     fn sample_tx_dc_comparators(&mut self) -> [bool; 2] {
-        phy_pac_mut(self).sample_tx_dc_comparators()
+        bb_ops::sample_tx_dc_comparators(&phy_blocks(self).phy_baseband_config_oracle)
     }
 
     fn clear_tx_dc_measurement(&mut self) {
-        phy_pac_mut(self).clear_tx_dc_measurement();
+        bb_ops::clear_tx_dc_measurement(&mut phy_blocks_mut(self).phy_baseband_config_oracle);
     }
 
     fn open_frontend_baseband_internal_clocks(&mut self) {
-        phy_pac_mut(self).open_frontend_baseband_internal_clocks();
+        crate::phy::clock::ops::open_frontend_baseband_internal_clocks(
+            &mut phy_blocks_mut(self).phy_clock_oracle,
+        );
     }
 
     fn set_rf_circuit_power(&mut self, enabled: bool) {
@@ -316,63 +369,22 @@ impl<R: route::Route> sealed::PhyInitializationAccess for SharedPhyHal<'_, R> {}
 
 impl<R: route::Route> PhyInitializationAccess for SharedPhyHal<'_, R> {}
 
-/// Shared PHY capability over externally supplied registers in an isolated
-/// probe image (`cfg(oer_probe)`).
-///
-/// Compiled vendor-comparison entry points receive the register partition by
-/// pointer. This wrapper owns a fresh restore slot for one call, so a probe
-/// cannot observe or leak another route's calibration restore obligation.
-#[cfg(oer_probe)]
-#[doc(hidden)]
-pub struct ValidationSharedPhy<'registers> {
-    registers: &'registers mut RadioPhyRegisters,
-    restore: PhyRouteState,
-}
-
-#[cfg(oer_probe)]
-impl<'registers> ValidationSharedPhy<'registers> {
-    pub fn new(registers: &'registers mut RadioPhyRegisters) -> Self {
-        Self {
-            registers,
-            restore: PhyRouteState::for_host_test(),
-        }
-    }
-}
-
-#[cfg(oer_probe)]
-impl sealed::SharedPhyAccess for ValidationSharedPhy<'_> {
-    fn pac(&self) -> &RadioPhyRegisters {
-        self.registers
-    }
-
-    fn route_state(&self) -> &PhyRouteState {
-        &self.restore
-    }
-
-    fn parts_mut(&mut self) -> (&mut RadioPhyRegisters, &mut PhyRouteState) {
-        (self.registers, &mut self.restore)
-    }
-}
-
-#[cfg(oer_probe)]
-impl sealed::SharedPhyContext for ValidationSharedPhy<'_> {
-    fn wifi_baseband_enable_observation(&self) -> WifiBasebandEnableObservation {
-        WifiBasebandEnableObservation::from_pac_readback(self.registers.wifi_baseband_is_enabled())
-    }
-}
-
-#[cfg(oer_probe)]
-impl SharedPhyAccess for ValidationSharedPhy<'_> {}
-
-#[cfg(oer_probe)]
-impl SharedPhyContext for ValidationSharedPhy<'_> {}
-
 pub(crate) fn phy_pac(access: &(impl SharedPhyAccess + ?Sized)) -> &RadioPhyRegisters {
     sealed::SharedPhyAccess::pac(access)
 }
 
 pub(crate) fn phy_pac_mut(access: &mut (impl SharedPhyAccess + ?Sized)) -> &mut RadioPhyRegisters {
     sealed::SharedPhyAccess::parts_mut(access).0
+}
+
+/// The generated blocks of the radio-PHY partition the access holds.
+pub(crate) fn phy_blocks(access: &(impl SharedPhyAccess + ?Sized)) -> &RadioPhyParts {
+    &phy_pac(access).peripherals
+}
+
+/// The generated blocks of the radio-PHY partition the access holds.
+pub(crate) fn phy_blocks_mut(access: &mut (impl SharedPhyAccess + ?Sized)) -> &mut RadioPhyParts {
+    &mut phy_pac_mut(access).peripherals
 }
 
 pub(crate) fn phy_parts_mut(
@@ -432,7 +444,7 @@ impl RadioAccess {
 
     pub(crate) fn from_clocked(
         registers: WifiRadioRegisters,
-        rx_dma: oer_esp32s31_pac::WifiRxDmaRegisters,
+        rx_dma: WifiRxDmaRegisters,
         station_wake: StationWakeState,
         initialized: bool,
     ) -> Self {
@@ -448,7 +460,7 @@ impl RadioAccess {
         self,
     ) -> (
         WifiRadioRegisters,
-        oer_esp32s31_pac::WifiRxDmaRegisters,
+        WifiRxDmaRegisters,
         StationWakeState,
         bool,
     ) {
@@ -597,25 +609,74 @@ impl RadioAccess {
 #[cfg(test)]
 mod access_tests;
 
-/// Task-side setup authority for one finite MAC interrupt epoch.
-pub struct MacInterruptSetup {
-    pub(crate) inner: PacMacInterruptSetup,
-}
-
-/// Proof that connected-STA interrupt policy was applied before activation.
+/// Proof that the connected-STA beacon-filter policy was applied.
 pub struct ConnectedStaInterruptPrepared {
     pub(crate) _private: (),
 }
 
-/// Disjoint HAL capability installed in the hard MAC interrupt handler.
+impl RadioAccess {
+    /// Disable vendor hardware beacon filtering before a connected STA
+    /// epoch: CONTROL bits 2:0. The matching interrupt-enable field stays
+    /// clear in every image the radio interrupt handler publishes.
+    pub fn prepare_connected_sta_without_power_save(&mut self) -> ConnectedStaInterruptPrepared {
+        let _ = self.registers.prepare_connected_sta_without_power_save();
+        ConnectedStaInterruptPrepared { _private: () }
+    }
+}
+
+/// The Wi-Fi MAC's interrupt banks, for one binding of the image's
+/// interrupt table: the radio interrupt handler holds both for the image's
+/// life, and every write of their enable, status and clear words is its.
+#[must_use = "the Wi-Fi interrupt banks belong to the radio interrupt handler"]
+pub struct WifiInterruptBanks {
+    /// The MAC bank (`MODEM_WIFI_MAC`).
+    pub mac: MacInterruptRegisters,
+    /// The WDEVPWR bank (`MODEM_WIFI_PWR`).
+    pub power: MacPowerInterruptRegisters,
+}
+
+impl WifiInterruptBanks {
+    /// Take both banks from the root's partition. This performs no MMIO.
+    pub(crate) fn new(partition: oer_esp32s31_pac::ownership::WifiInterruptPeripherals) -> Self {
+        let (mac, power) = crate::ieee80211::registers::interrupt_banks(partition);
+        Self {
+            mac: MacInterruptRegisters { inner: mac },
+            power: MacPowerInterruptRegisters { inner: power },
+        }
+    }
+}
+
+/// The MAC interrupt bank (`MODEM_WIFI_MAC`), which the radio interrupt
+/// handler holds.
 pub struct MacInterruptRegisters {
     pub(crate) inner: PacMacInterruptRegisters,
 }
 
+impl oer_mmio::InterruptSource for MacInterruptRegisters {
+    const SOURCE: u16 =
+        <oer_esp32s31_pac::wifi_mac::WifiMacInterrupt as oer_mmio::InterruptSource>::SOURCE;
+}
+
 impl MacInterruptRegisters {
-    /// Mask every MAC source of the live epoch; nothing is acknowledged.
+    /// Mask every MAC source; nothing is acknowledged.
     pub fn mask_all_mac_interrupts(&mut self) {
         self.inner.mask_all_mac_interrupts();
+    }
+
+    /// Acknowledge every latched MAC event through the generated image,
+    /// which masks the bank first.
+    pub fn clear_all_mac_interrupts(&mut self) {
+        self.inner.clear_all_mac_interrupts();
+    }
+
+    /// Publish one reviewed MAC interrupt mask.
+    pub fn publish_mac_interrupt_mask(&mut self, event_mask: MacInterruptMask) {
+        self.inner.publish_mac_interrupt_mask(event_mask);
+    }
+
+    /// Read the currently published MAC interrupt mask.
+    pub fn mac_interrupt_enable(&self) -> MacInterruptEnableState {
+        self.inner.mac_interrupt_enable()
     }
 
     pub fn mac_interrupt_status(&self) -> MacInterruptSnapshot {
@@ -633,23 +694,34 @@ impl MacInterruptRegisters {
     pub fn unmask_rx_delivery_interrupts(&mut self) {
         self.inner.unmask_rx_delivery_interrupts();
     }
-
-    pub fn deactivate(self, power: MacPowerInterruptRegisters) -> MacInterruptSetup {
-        MacInterruptSetup {
-            inner: self.inner.deactivate(power.inner),
-        }
-    }
 }
 
-/// Disjoint HAL capability installed in the hard power interrupt handler.
+/// The WDEVPWR interrupt bank (`MODEM_WIFI_PWR`), which the radio interrupt
+/// handler holds.
 pub struct MacPowerInterruptRegisters {
     pub(crate) inner: PacMacPowerInterruptRegisters,
 }
 
+impl oer_mmio::InterruptSource for MacPowerInterruptRegisters {
+    const SOURCE: u16 =
+        <oer_esp32s31_pac::modem_pwr::WifiMacPowerInterrupt as oer_mmio::InterruptSource>::SOURCE;
+}
+
 impl MacPowerInterruptRegisters {
-    /// Mask every WDEVPWR cause of the live epoch; nothing is acknowledged.
+    /// Mask every WDEVPWR cause; nothing is acknowledged.
     pub fn mask_all_power_interrupts(&mut self) {
         self.inner.mask_all_power_interrupts();
+    }
+
+    /// Acknowledge every latched WDEVPWR cause through the generated image,
+    /// which masks the bank first.
+    pub fn clear_all_power_interrupts(&mut self) {
+        self.inner.clear_all_power_interrupts();
+    }
+
+    /// Enable the station TBTT event.
+    pub fn enable_station_tbtt_interrupt(&mut self) {
+        self.inner.enable_station_tbtt_interrupt();
     }
 
     pub fn power_interrupt_status(&self) -> MacPowerInterruptSnapshot {
@@ -658,29 +730,6 @@ impl MacPowerInterruptRegisters {
 
     pub fn acknowledge_power_interrupts(&mut self, snapshot: MacPowerInterruptSnapshot) {
         self.inner.acknowledge_power_interrupts(snapshot);
-    }
-}
-
-impl MacInterruptSetup {
-    pub fn prepare_connected_sta_without_power_save(
-        &mut self,
-        radio: &mut RadioAccess,
-    ) -> ConnectedStaInterruptPrepared {
-        let _ = self
-            .inner
-            .prepare_connected_sta_without_power_save(&mut radio.registers);
-        ConnectedStaInterruptPrepared { _private: () }
-    }
-
-    pub fn activate(
-        self,
-        event_mask: MacInterruptMask,
-    ) -> (MacInterruptRegisters, MacPowerInterruptRegisters) {
-        let (mac, power) = self.inner.activate(event_mask);
-        (
-            MacInterruptRegisters { inner: mac },
-            MacPowerInterruptRegisters { inner: power },
-        )
     }
 }
 

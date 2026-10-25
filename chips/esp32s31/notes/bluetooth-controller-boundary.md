@@ -51,7 +51,7 @@ The same review closes the HAL body's runtime-input question. Complete
 selector in the same internal object, and the complete helper uses that
 selector to scale the two bytes. For the standalone caller the resulting
 hardware images are sleep-timer shift `3`, byte zero `22`, byte one `66` and
-SRAM prefix `0x2f00_0000`. The restricted PAC represents these accepted
+SRAM prefix `0x2f00_0000`. The HAL represents these accepted
 domains directly and executes the complete 49-operation MMIO body. It does
 not reproduce the vendor object layout, task, event primitive or IRQ allocator.
 
@@ -62,10 +62,10 @@ complete 182-byte archive body. It calls three software environment helpers
 HCI state, initializes a vendor mempool with 272-byte elements, registers
 numeric broker source four and initializes a software list head. These are
 open-Controller storage, address and dispatch policy rather than silicon
-transactions. The ESP-HAL platform lease reads the factory base identity
-through its safe eFuse accessor and applies the pinned S31 two-universal-address
-policy: Bluetooth is the next final-octet value after Wi-Fi STA. It retains the
-result in canonical EUI-48 order; the generic HCI bootstrap performs the
+transactions. The factory base identity comes from the reset root's eFuse
+owner (`EfuseRegisters`); the pinned S31 two-universal-address policy applies:
+Bluetooth is the next final-octet value after Wi-Fi STA. The result is kept
+in canonical EUI-48 order; the generic HCI bootstrap performs the
 observed single six-byte reversal only when encoding `BD_ADDR`. The Rust
 replacement therefore binds the already initialized scheduler epoch to one
 bounded `LeControllerHciResources` owner instead of copying the private
@@ -80,8 +80,8 @@ without requesting IRAM placement. The public OSAL installs all three on the
 configured Controller core. The primary setup clears and enables
 baseline groups `0x0000_8000` in bank 0 and `0x0000_1300` in bank 1 before the
 output strobe. Its handler samples masked status; the NRT handler samples its
-dedicated snapshot status. Both acknowledge through the same two W1C clear banks. The restricted
-PAC therefore exposes a transition that stages a single shared register owner
+dedicated snapshot status. Both acknowledge through the same two W1C clear banks. The HAL
+therefore exposes a transition that stages a single shared register owner
 before either CPU route is bound and preserves the distinct snapshot modes.
 
 This closes route identity, level, residency policy, baseline masks and the
@@ -101,14 +101,14 @@ but those two effects must have typed open replacements. The distilled
 contract and RTOS-free replacement boundary are recorded in
 [`bluetooth-interrupt-runtime.md`](bluetooth-interrupt-runtime.md). The
 pinned `esp-pacs` revision names source 124 as `BT_MAC` and source 133 as
-`BT_MAC_INT1`. The ESP-HAL adapter compile-checks both identities against the
-chip policy, requires level-three handlers, binds the complete pair on one
-core and disables both through the same retained core identity. Those
-primitives stay crate-private until the staged ISR owner, feature-specific NRT
+`BT_MAC_INT1`. One interrupt-table entry binds both, with the runtime timer's
+(127) and the doorbell's sources, as one composite part (`BluetoothInterrupts`) on
+one line; its handler holds the bank and the timer through gates for the
+image's life. A lossless live epoch still needs the feature-specific NRT
 policy, typed selector-4/6 actions, open completion queue and lost-wake-safe
-waker can make a lossless live epoch. The
+waker. The
 baseline groups are classified by the complete
-source-124 prefix proves four fault/assert lanes, and the restricted PAC
+source-124 prefix proves four fault/assert lanes, and the HAL
 performs their conditional diagnostic reads at the reviewed temporal points
 without exporting the opaque words. Bluetooth policy then selects fail-stop
 over any simultaneous scheduler wake.
@@ -231,7 +231,8 @@ those adapters.
 The ownership direction is:
 
 ```text
-SVD / restricted PAC
+SVD / generated PAC blocks
+  -> HAL register owners over their field accessors
   -> shared clock, reset, PHY and BTBB leases
   -> BLE Controller HAL: primary/timer/NRT IRQs + scheduler + packet memory + radio command
   -> Lower Link Layer (hard-deadline radio-event engine)

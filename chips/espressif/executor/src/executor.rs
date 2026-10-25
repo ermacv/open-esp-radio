@@ -7,8 +7,8 @@ use oer_interrupt_table::{
 use portable_atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
 use crate::chip::{
-    Cpu, Interrupt, Priority, SOFTWARE_INTERRUPT_COUNT, SoftwareInterrupt, current_core,
-    install_line, interrupt_level, raise_interrupt, serve_interrupt, software_interrupt_source,
+    SOFTWARE_INTERRUPT_COUNT, current_core, install_line, interrupt_level, platform,
+    raise_interrupt, serve_interrupt, software_interrupt_source,
 };
 pub(crate) use crate::context::NO_EXECUTOR;
 use crate::context::Running;
@@ -121,7 +121,7 @@ pub(crate) fn should_yield() -> bool {
         .expect("cooperative admission requires a running executor");
     READY[swi].any()
         || crate::chip::is_pending(software_interrupt_source(swi as u8))
-        || crate::chip::is_pending(Interrupt::FROM_CPU_INTR3)
+        || crate::chip::is_pending(software_interrupt_source(3))
         || signal_pending(swi)
         || {
             let now = crate::chip::now();
@@ -192,9 +192,9 @@ type Levels<High, Mid, Low> = fn() -> (High, Mid, Low);
 
 impl<High, Mid, Low> LevelOrder<High, Mid, Low>
 where
-    High: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
-    Mid: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
-    Low: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
+    High: Entry,
+    Mid: Entry,
+    Low: Entry,
 {
     /// The order of the three entries' levels and cores, or a compile error.
     pub const fn new() -> Self {
@@ -208,7 +208,7 @@ where
                 "the radio executor must preempt the application"
             );
             assert!(
-                High::CORE as u8 == Mid::CORE as u8 && Mid::CORE as u8 == Low::CORE as u8,
+                High::HART as u8 == Mid::HART as u8 && Mid::HART as u8 == Low::HART as u8,
                 "the three contexts share one core"
             );
         }
@@ -220,9 +220,9 @@ where
 
 impl<High, Mid, Low> Default for LevelOrder<High, Mid, Low>
 where
-    High: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
-    Mid: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
-    Low: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
+    High: Entry,
+    Mid: Entry,
+    Low: Entry,
 {
     fn default() -> Self {
         Self::new()
@@ -238,42 +238,10 @@ impl<High, Mid, Low> Clone for LevelOrder<High, Mid, Low> {
 impl<High, Mid, Low> Copy for LevelOrder<High, Mid, Low> {}
 
 /// Two entries at one level on one core, checked when the image is compiled:
-/// a radio interrupt (`Radio`, P3) and the [`Doorbell`](crate::Doorbell)
-/// (`Bell`) whose handler applies requests to that interrupt's registers.
-/// esp-hal runs all sources of one level on one core one after another, so
-/// neither handler preempts the other. The host tests of `level` cover the
-/// refusals: a `compile_fail` doctest proves nothing on the chip target,
-/// where every doctest that links fails on esp-hal's interrupt vector.
-///
-/// The doctest stands in table tokens for the image's (`Entry` is
-/// implemented here by hand, as only the table's macro may in an image):
-///
-/// ```no_run
-/// # #![no_std]
-/// # #![no_main]
-/// # #[panic_handler]
-/// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
-/// # use esp_hal::{interrupt::Priority, peripherals::Interrupt, system::Cpu};
-/// # macro_rules! token {
-/// #     ($token:ident = $source:ident, $level:ident, $core:ident) => {
-/// #         struct $token;
-/// #         // SAFETY: a doctest's stand-in for a table token.
-/// #         unsafe impl oer_interrupt_table::Entry for $token {
-/// #             type Source = Interrupt;
-/// #             type Level = Priority;
-/// #             type Core = Cpu;
-/// #             const SOURCE: Interrupt = Interrupt::$source;
-/// #             const LEVEL: Priority = Priority::$level;
-/// #             const CORE: Cpu = Cpu::$core;
-/// #         }
-/// #     };
-/// # }
-/// # token!(MacToken = MODEM_WIFI_MAC, Priority3, ProCpu);
-/// # token!(DoorbellToken = FROM_CPU_INTR3, Priority3, ProCpu);
-/// use oer_espressif_executor::SameLevel;
-/// // The MAC interrupt and the doorbell, both at Priority3 on ProCpu.
-/// const BELL: SameLevel<MacToken, DoorbellToken> = SameLevel::new();
-/// ```
+/// a radio interrupt (`Radio`, P3) and a peer entry (`Bell`) whose handler
+/// may run between that interrupt's handler runs but never inside one.
+/// Equal levels on one hart cannot preempt each other. The host tests of
+/// `level` cover the refusals.
 pub struct SameLevel<Radio, Bell> {
     _levels: PhantomData<Pair<Radio, Bell>>,
 }
@@ -282,15 +250,15 @@ type Pair<Radio, Bell> = fn() -> (Radio, Bell);
 
 impl<Radio, Bell> SameLevel<Radio, Bell>
 where
-    Radio: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
-    Bell: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
+    Radio: Entry,
+    Bell: Entry,
 {
     /// The two entries' common level and core, or a compile error.
     pub const fn new() -> Self {
         const {
             crate::level::same_level(
-                (Radio::LEVEL as u8, Radio::CORE as u8),
-                (Bell::LEVEL as u8, Bell::CORE as u8),
+                (Radio::LEVEL as u8, Radio::HART as u8),
+                (Bell::LEVEL as u8, Bell::HART as u8),
             )
         }
         Self {
@@ -301,8 +269,8 @@ where
 
 impl<Radio, Bell> Default for SameLevel<Radio, Bell>
 where
-    Radio: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
-    Bell: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
+    Radio: Entry,
+    Bell: Entry,
 {
     fn default() -> Self {
         Self::new()
@@ -334,20 +302,34 @@ impl<const SWI: u8> Executor<SWI> {
     /// # Panics
     ///
     /// When the table routes the source to another core.
-    pub fn run<T, W>(self, wake: W, init: impl FnOnce(&Spawner<T>)) -> !
+    pub fn run<T, W, C>(
+        self,
+        router: &mut oer_interrupt_table::Router<C>,
+        wake: W,
+        part: W::Part,
+        init: impl FnOnce(&Spawner<T>),
+    ) -> !
     where
         T: Tasks<Mode = Thread>,
-        W: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
+        W: Entry,
+        W::Part: oer_interrupt_table::InterruptSource,
+        C: oer_interrupt_table::Controller,
     {
         const {
             assert!(
-                W::SOURCE as u16 == software_interrupt_source(SWI) as u16,
+                <W::Part as oer_interrupt_table::InterruptSource>::SOURCE
+                    == software_interrupt_source(SWI) as u16,
                 "the token is not this executor's software interrupt"
             );
             assert!(T::EXECUTOR == SWI, "the tasks are another executor's");
         };
         let _ = self.not_send;
-        if let Err(error) = oer_espressif_esp_hal_irq::enable(&wake) {
+        assert_eq!(
+            W::HART as usize,
+            current_core(),
+            "executor route is on this hart"
+        );
+        if let Err(error) = router.bind(wake, part) {
             panic!("executor software interrupt {SWI}: {error:?}");
         }
         claim_core(SWI);
@@ -476,16 +458,25 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
     ///
     /// When the table routes the source to another core, or the software
     /// interrupt already serves an executor.
-    pub fn start<T, W, High, Low>(self, wake: W, order: LevelOrder<High, W, Low>) -> Spawner<T>
+    pub fn start<T, W, High, Low, C>(
+        self,
+        router: &mut oer_interrupt_table::Router<C>,
+        wake: W,
+        part: W::Part,
+        order: LevelOrder<High, W, Low>,
+    ) -> Spawner<T>
     where
         T: Tasks<Mode = InterruptMode>,
-        W: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
-        High: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
-        Low: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
+        W: Entry,
+        W::Part: oer_interrupt_table::InterruptSource,
+        C: oer_interrupt_table::Controller,
+        High: Entry,
+        Low: Entry,
     {
         const {
             assert!(
-                W::SOURCE as u16 == software_interrupt_source(SWI) as u16,
+                <W::Part as oer_interrupt_table::InterruptSource>::SOURCE
+                    == software_interrupt_source(SWI) as u16,
                 "the token is not this executor's software interrupt"
             );
             assert!(T::EXECUTOR == SWI, "the tasks are another executor's");
@@ -495,7 +486,12 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
         // Published before the source is enabled, so the first handler polls
         // and a pend raises its interrupt.
         INTERRUPT_MODE[usize::from(SWI)].store(true, Ordering::Release);
-        if let Err(error) = oer_espressif_esp_hal_irq::enable(&wake) {
+        assert_eq!(
+            W::HART as usize,
+            current_core(),
+            "executor route is on this hart"
+        );
+        if let Err(error) = router.bind(wake, part) {
             panic!("executor software interrupt {SWI}: {error:?}");
         }
         Spawner::new()
@@ -503,11 +499,11 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
 }
 
 macro_rules! impl_executor_constructors {
-    ($number:literal, $take:ident) => {
+    ($number:literal, $block:ident, $take:ident) => {
         impl Executor<$number> {
             /// The executor on software interrupt line `SWI`: it consumes
-            /// esp-hal's line and claims the line's typed block.
-            pub fn new(interrupt: SoftwareInterrupt<'static, $number>) -> Self {
+            /// the line's typed block from the reset root.
+            pub fn new(interrupt: platform::$block) -> Self {
                 install_line($number, crate::chip::$take(interrupt));
                 Self {
                     not_send: PhantomData,
@@ -517,8 +513,8 @@ macro_rules! impl_executor_constructors {
 
         impl InterruptExecutor<$number> {
             /// The executor on software interrupt line `SWI`: it consumes
-            /// esp-hal's line and claims the line's typed block.
-            pub fn new(interrupt: SoftwareInterrupt<'static, $number>) -> Self {
+            /// the line's typed block from the reset root.
+            pub fn new(interrupt: platform::$block) -> Self {
                 install_line($number, crate::chip::$take(interrupt));
                 Self { _line: () }
             }
@@ -526,22 +522,34 @@ macro_rules! impl_executor_constructors {
     };
 }
 
-impl_executor_constructors!(0, take_line_0);
-impl_executor_constructors!(1, take_line_1);
-impl_executor_constructors!(2, take_line_2);
-impl_executor_constructors!(3, take_line_3);
+impl_executor_constructors!(0, FromCpu0, own_line_0);
+impl_executor_constructors!(1, FromCpu1, own_line_1);
+impl_executor_constructors!(2, FromCpu2, own_line_2);
+impl_executor_constructors!(3, FromCpu3, own_line_3);
 
 /// The interrupt-table handler of a thread-mode executor's software interrupt
-/// (`FROM_CPU_INTR<SWI>`): it lowers the line, which wakes the executor's
-/// core from its wait.
-pub fn wake_handler<const SWI: u8>() {
+/// (`FROM_CPU_INTR<SWI>`), which holds the line's interrupt part: it lowers
+/// the line, which wakes the executor's core from its wait.
+pub fn wake_handler<const SWI: u8, P: oer_interrupt_table::InterruptSource>(_: &mut P) {
+    const {
+        assert!(
+            P::SOURCE == software_interrupt_source(SWI),
+            "the part is another line's"
+        );
+    };
     serve_interrupt(SWI, || ());
 }
 
 /// The interrupt-table handler of the interrupt-mode executor of the tasks
-/// `T` (its software interrupt, `FROM_CPU_INTR<N>`): it serves the
-/// executor's timers and signals and polls one round of its ready tasks.
-pub fn interrupt_handler<T: Tasks<Mode = InterruptMode>>() {
+/// `T` (its software interrupt, `FROM_CPU_INTR<N>`), which holds the line's
+/// interrupt part: it serves the executor's timers and signals and polls one
+/// round of its ready tasks.
+pub fn interrupt_handler<
+    T: Tasks<Mode = InterruptMode>,
+    P: oer_interrupt_table::InterruptSource,
+>(
+    _: &mut P,
+) {
     let swi = T::EXECUTOR;
     // The line is lowered before the round takes its work: a pend during the
     // round raises it again and runs another round.
@@ -600,7 +608,7 @@ pub(crate) fn pend_task(swi: u8) {
 }
 
 fn wait_for_work<const SWI: u8>() {
-    riscv::interrupt::free(|| {
+    oer_riscv::interrupt_free(|| {
         if WORK_PENDING.0[usize::from(SWI)].load(Ordering::Acquire) == 0
             && !READY[usize::from(SWI)].any()
         {

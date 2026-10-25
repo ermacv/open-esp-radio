@@ -1,11 +1,10 @@
 //! The probe images of the vendor comparison: the packages of
 //! `firmware/probes/`, built with `cfg(oer_probe)`.
 //!
-//! `cfg(oer_probe)` compiles the probe hooks of the HAL, PHY, PACs and radio
-//! crates. Only this build sets it, only for a verification package, and in
-//! its own target directory (`target/fw-probe`), so no production image or
-//! host build ever compiles a hook and the production build cache never sees
-//! the cfg.
+//! Only this build sets `cfg(oer_probe)`, only for a verification package,
+//! and in its own target directory (`target/fw-probe`), so the production
+//! build cache never sees the cfg. The probes reach the hardware through the
+//! production crates' public API; no production crate reads the cfg.
 
 use std::{
     cell::RefCell,

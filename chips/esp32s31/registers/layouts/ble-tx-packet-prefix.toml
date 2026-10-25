@@ -38,12 +38,14 @@ description = "Observed byte range; decoded only after ownership passes to the C
 
 [[layout.bytes.fields]]
 name = "CLASS"
+values = [{ name = "COMMON_TX", value = 2 }]
 bits = "15:8"
 writer = "cpu"
 description = "Packet allocator class byte; the common TX producer writes two."
 
 [[layout.bytes.fields]]
 name = "STATE"
+values = [{ name = "INITIAL", value = 0 }]
 bits = "23:16"
 writer = "cpu"
 description = "Packet allocator state byte; the common TX producer clears it."

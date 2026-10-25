@@ -161,6 +161,7 @@ description = "Observed word position; unassigned bits retain their exact image.
 
 [[layout.words.fields]]
 name = "BITS_26_27_OPAQUE"
+values = [{ name = "DIRECT_TEST", value = 3 }]
 opaque = true
 bits = "27:26"
 writer = "cpu"
@@ -249,6 +250,7 @@ description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "CLASS"
+values = [{ name = "PRIVATE_CONNECTION", value = 0 }, { name = "SCANNING", value = 1 }, { name = "NON_SCANNING", value = 2 }]
 bits = "30:28"
 writer = "cpu"
 description = "Global RX memory-list class: one for scanner, two for admitted non-scanners, zero for private connection RX."

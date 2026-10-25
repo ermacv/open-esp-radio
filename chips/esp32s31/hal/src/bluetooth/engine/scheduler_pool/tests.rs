@@ -8,7 +8,7 @@ use super::{
     SchedulerRoleKind, SchedulerRolePool, SchedulerRolePoolStorage, SchedulerRoleStorage, sealed,
 };
 use crate::bluetooth::engine::{
-    scheduler_item::SchedulerItemCompletionStatus, sram_link::ControllerSramLinkAddress,
+    scheduler_item::SchedulerItemCompletionStatus, sram_link::SchedulerItemLink,
 };
 
 /// Two items and a marker word that reinitialization writes.
@@ -21,7 +21,7 @@ struct TestStorage<const DTM: bool = false> {
 
 #[derive(Clone, Copy)]
 struct TestBinding {
-    items: [ControllerSramLinkAddress; 2],
+    items: [SchedulerItemLink; 2],
     number: u16,
 }
 
@@ -51,7 +51,7 @@ impl<const DTM: bool> SchedulerRoleStorage for TestStorage<DTM> {
             items: self
                 .items
                 .each_ref()
-                .map(|item| ControllerSramLinkAddress::from_placed(placement.address(item))),
+                .map(|item| SchedulerItemLink::new(placement.reference(item))),
             number: first_number,
         }
     }
@@ -63,7 +63,7 @@ impl<const DTM: bool> SchedulerRoleStorage for TestStorage<DTM> {
         &self.items[item]
     }
 
-    fn item_link(binding: &TestBinding, item: usize) -> ControllerSramLinkAddress {
+    fn item_link(binding: &TestBinding, item: usize) -> SchedulerItemLink {
         binding.items[item]
     }
 
@@ -136,12 +136,9 @@ fn instances_are_bound_at_their_offsets_and_reinitialized() {
     assert!(pool.acquire().is_none());
     let stride = core::mem::size_of::<TestStorage>() as u32;
     let space = SchedulerItemSpace::new().with(&pool);
+    assert_eq!(space.link(first.item(1)).controller_address(), 0x2f00_1060);
     assert_eq!(
-        space.link(first.item(1)).controller_address().address(),
-        0x2f00_1060
-    );
-    assert_eq!(
-        space.link(second.item(0)).controller_address().address(),
+        space.link(second.item(0)).controller_address(),
         0x2f00_1000 + stride
     ); // Connections are numbered after the advertising instances and one
     // reserved number.

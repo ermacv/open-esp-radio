@@ -6,7 +6,7 @@ helper, and the caller `r_btdm_task_init` in member `20.o`; from a
 vendor-code analysis (record outside this repository).
 
 Facts only. Fixed values are the ones in the reviewed register model,
-`chips/esp32s31/registers/policy/api.toml` (operations named
+`chips/esp32s31/registers/policy.toml` (operations named
 `*_bluetooth_hal_*`), and are not repeated here.
 
 ## Place in the lifecycle

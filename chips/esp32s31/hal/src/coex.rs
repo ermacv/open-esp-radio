@@ -11,9 +11,10 @@
 //! Timer 5 is not lent: the domain programs it for the PHY grant-protect
 //! request (`RadioDomain::acquire_phy_grant_protect`).
 
-use oer_esp32s31_pac::{
-    CoexTimerBankRegisters, CoexTimerClientValue, CoexTimerPtiValue, CoexTimerRegister,
-    CoexistenceLowPowerClockObservation, SharedRadioRegisters,
+use crate::modem::{
+    CoexTimerBankRegisters, CoexTimerRegister, CoexistenceLowPowerClockObservation,
+    SharedRadioRegisters,
+    values::{CoexTimerClientValue, CoexTimerPtiValue},
 };
 
 /// The event priority table every Espressif chip
@@ -32,11 +33,6 @@ pub enum PhyGrantProtectError {
     /// No request is programmed.
     NotProtected,
 }
-
-/// The coexistence request kind of `phy_acquire_grant_protect` (`2`), as
-/// the timer client field value: `coex_core_request` maps request kinds
-/// 0 through 4 through its five-byte table `02 01 00 03 04`.
-const PHY_GRANT_PROTECT_CLIENT: u32 = 0;
 
 /// The vendor PHY grant-protect event.
 pub(crate) const PHY_GRANT_PROTECT_EVENT: CoexEventId = match CoexEventId::new(48) {
@@ -86,7 +82,9 @@ impl<'owner> PhyGrantProtect<'owner> {
             return Err(PhyGrantProtectError::AlreadyProtected);
         }
         let (Some(client), Some(pti)) = (
-            CoexTimerClientValue::new(PHY_GRANT_PROTECT_CLIENT),
+            CoexTimerClientValue::new(
+                oer_esp32s31_pac::coex::configuration::Parameter1::PhyGrantProtect.bits(),
+            ),
             CoexTimerPtiValue::new(u32::from(self.pti.value())),
         ) else {
             unreachable!("the client and four-bit priority are in their domains");
@@ -242,7 +240,7 @@ impl<'registers> CoexTimerBank<'registers> {
     }
 }
 
-pub use oer_esp32s31_pac::{ExternalCoexRole, ExternalCoexWires};
+pub use crate::modem::{ExternalCoexRole, ExternalCoexWires};
 
 /// An external priority level (`esp_coex_pti_level_t`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -293,13 +291,13 @@ impl ExternalCoexConfig {
     }
 
     /// The delay the hardware field holds, or `None` above 15 µs.
-    pub(crate) fn grant_delay(self) -> Option<oer_esp32s31_pac::ExternalCoexGrantDelay> {
-        oer_esp32s31_pac::ExternalCoexGrantDelay::new(u32::from(self.grant_delay_us))
+    pub(crate) fn grant_delay(self) -> Option<crate::modem::values::ExternalCoexGrantDelay> {
+        crate::modem::values::ExternalCoexGrantDelay::new(u32::from(self.grant_delay_us))
     }
 
-    pub(crate) fn priorities(self) -> [oer_esp32s31_pac::ExternalCoexPriority; 3] {
+    pub(crate) fn priorities(self) -> [crate::modem::ExternalCoexPriority; 3] {
         let priority = |value| {
-            oer_esp32s31_pac::ExternalCoexPriority::new(value)
+            crate::modem::ExternalCoexPriority::new(value)
                 .unwrap_or_else(|| unreachable!("the reviewed priorities fit four bits"))
         };
         [

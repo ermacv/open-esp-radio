@@ -287,46 +287,6 @@ impl PhyBluetoothTxGainChild {
         };
         Ok(())
     }
-
-    /// Execute the complete child as one blocking target transaction.
-    ///
-    /// Production steps this child inside the TX-gain initialization graph;
-    /// only the standalone vendor comparison executes it alone.
-    #[cfg(all(target_arch = "riscv32", oer_probe))]
-    pub fn execute_target<D: crate::executor::wait::PhyShortDelay>(
-        mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
-    ) -> Result<(), crate::target_executor::PhyTargetPortError> {
-        use crate::{
-            analog::pbus::PhyForceTxRxExternalBinding, target_executor::PhyTargetPortError,
-        };
-        loop {
-            let completion = match self.action() {
-                PhyBluetoothTxGainChildAction::Complete => return Ok(()),
-                PhyBluetoothTxGainChildAction::Publish(publication) => {
-                    publication.execute_target(registers);
-                    PhyBluetoothTxGainChildCompletion::Published(publication)
-                }
-                PhyBluetoothTxGainChildAction::ForceTxRx(action) => {
-                    let binding = PhyForceTxRxExternalBinding::lower(action)
-                        .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                    PhyBluetoothTxGainChildCompletion::ForceTxRx(match binding {
-                        PhyForceTxRxExternalBinding::Mmio(binding) => {
-                            binding.execute_target(registers)
-                        }
-                        PhyForceTxRxExternalBinding::Timer(binding) => {
-                            if !D::settle_micros(binding.micros()) {
-                                return Err(PhyTargetPortError::HardwareCapabilityUnavailable);
-                            }
-                            binding.into_completion()
-                        }
-                    })
-                }
-            };
-            self.advance(completion)
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-        }
-    }
 }
 
 /// Rust-owned implementation of archive `phy_bt_txdc_cal_new`.

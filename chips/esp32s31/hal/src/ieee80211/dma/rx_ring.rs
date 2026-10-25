@@ -4,18 +4,17 @@
 //! decoding remains in the MAC crate, while the semantic MMIO operations are
 //! defined by [`crate::ieee80211::dma::rx_dma::RxDma`].
 
-use crate::dma_address;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::{AtomicU8, Ordering};
 use oer_time::settle::Settle;
 
 use crate::ieee80211::dma::ring_index::RingIndex;
 
-use crate::layouts::WifiRxDmaDescriptorControl;
+use crate::layouts::{DmaWindowAddress, WifiRxDmaDescriptorControl};
 
 use crate::ieee80211::dma::{
     descriptor::{DESCRIPTOR_BYTES, RxDescriptor, rx_armed_word, rx_detached_word, rx_rearm_word},
-    rx_dma::{RxDma, RxDmaBinding},
+    rx_dma::{RxDescriptorAddresses, RxDma, RxDmaBinding},
 };
 
 /// Guard value restored by the ROM RX recycler at both DMA-buffer bounds.
@@ -27,16 +26,18 @@ use crate::ieee80211::dma::{
 /// capacity, so backing storage must reserve four additional bytes.
 pub const RX_BUFFER_SENTINEL: u32 = 0xdead_beef;
 
-/// Immutable descriptor-to-buffer address authority for one DMA lifecycle.
-pub type RxDmaBufferAddresses<const COUNT: usize> = [u32; COUNT];
+/// Immutable descriptor-to-buffer address authority for one DMA lifecycle:
+/// per descriptor, the typed DMA address of its bound buffer.
+pub type RxDmaBufferAddresses<const COUNT: usize> = crate::dma_address::PlacedAddresses<COUNT>;
 
 fn rx_buffer_address_snapshot<const COUNT: usize>(
     binding: &RxDmaBufferAddresses<COUNT>,
 ) -> [u32; COUNT] {
-    *binding
+    *binding.bits()
 }
 
-const RX_DESCRIPTOR_ADDRESS_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+const RX_DESCRIPTOR_ADDRESS_LOW_MASK: u32 =
+    crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
 
 /// The descriptors one RX arena publishes: the ring and, right after it, the
 /// reserved descriptor R.
@@ -667,8 +668,8 @@ impl<'a, const COUNT: usize> RxRingCoreReady<'a, COUNT> {
 pub struct RxRingStopped<'a, const COUNT: usize> {
     descriptors: &'a [RxDescriptor; COUNT],
     table: &'a RxDescriptorTable<COUNT>,
-    reserved_buffer_address: u32,
-    descriptor_base: u32,
+    reserved_buffer: DmaWindowAddress,
+    descriptor_table: RxDescriptorAddresses,
     buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
     buffer_size: u16,
     initial_start: RingIndex<COUNT>,
@@ -699,8 +700,8 @@ pub struct RxRingStopped<'a, const COUNT: usize> {
 pub struct RxRingLive<'a, const COUNT: usize> {
     descriptors: &'a [RxDescriptor; COUNT],
     table: &'a RxDescriptorTable<COUNT>,
-    reserved_buffer_address: u32,
-    descriptor_base: u32,
+    reserved_buffer: DmaWindowAddress,
+    descriptor_table: RxDescriptorAddresses,
     buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
     buffer_size: u16,
     observed_mask: RxObservedMask,
@@ -731,8 +732,8 @@ pub struct RxRingLive<'a, const COUNT: usize> {
 pub struct RxRingHalted<'a, const COUNT: usize> {
     table: &'a RxDescriptorTable<COUNT>,
     descriptors: &'a [RxDescriptor; COUNT],
-    reserved_buffer_address: u32,
-    descriptor_base: u32,
+    reserved_buffer: DmaWindowAddress,
+    descriptor_table: RxDescriptorAddresses,
     buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
     buffer_size: u16,
     arena: &'a RxArenaWords,
@@ -745,7 +746,7 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
     }
 
     pub const fn descriptor_base(&self) -> u32 {
-        self.descriptor_base
+        self.descriptor_table.base()
     }
 
     pub const fn descriptors(&self) -> &'a [RxDescriptor; COUNT] {
@@ -762,7 +763,7 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
     /// epoch. This snapshot is useful for fault evidence before the next
     /// [`RxDmaStorage::prepare_halted`](crate::ieee80211::dma::rx_storage::RxDmaStorage::prepare_halted) rebuilds every descriptor.
     pub fn descriptor_snapshot(&self, index: usize) -> Option<RxDescriptorSnapshot> {
-        descriptor_snapshot(self.descriptors, self.descriptor_base, index)
+        descriptor_snapshot(self.descriptors, self.descriptor_table.base(), index)
     }
 
     /// Rebuild the stopped ring for a new ownership epoch.
@@ -790,9 +791,9 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
         match RxRingStopped::prepare_inner(
             mmio,
             self.table,
-            self.descriptor_base,
+            self.descriptor_table,
             buffer_addresses,
-            self.reserved_buffer_address,
+            self.reserved_buffer,
             buffer_size,
             prepare_buffer,
             prepare_reserved_buffer,
@@ -830,8 +831,8 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         RxRingHalted {
             table: self.table,
             descriptors: self.descriptors,
-            reserved_buffer_address: self.reserved_buffer_address,
-            descriptor_base: self.descriptor_base,
+            reserved_buffer: self.reserved_buffer,
+            descriptor_table: self.descriptor_table,
             buffer_addresses: self.buffer_addresses,
             buffer_size: self.buffer_size,
             arena: self.arena,
@@ -870,9 +871,9 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
     pub(crate) fn prepare_inner<M, F, R>(
         mmio: &mut M,
         table: &'a RxDescriptorTable<COUNT>,
-        descriptor_base: u32,
+        descriptor_table: RxDescriptorAddresses,
         buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
-        reserved_buffer_address: u32,
+        reserved_buffer: DmaWindowAddress,
         buffer_size: u32,
         mut prepare_buffer: F,
         prepare_reserved_buffer: R,
@@ -889,7 +890,9 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             return Err(RxRingError::Size);
         };
         let descriptors = table.ring();
-        let binding = RxDmaBinding::new(table, descriptor_base, arena).ok_or(RxRingError::Count)?;
+        let binding =
+            RxDmaBinding::new(table, descriptor_table, arena).ok_or(RxRingError::Count)?;
+        let descriptor_base = descriptor_table.base();
         if mmio.walker_enabled() {
             disable_receive_inner(mmio, &binding, arena)?;
         }
@@ -918,45 +921,30 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
                 .ok_or(RxRingError::Corrupt)?
         };
 
-        let buffer_addresses_snapshot = rx_buffer_address_snapshot(buffer_addresses);
         for index in 0..COUNT {
             prepare_buffer(index)?;
         }
         prepare_reserved_buffer()?;
-        build_cold_ring_inner(
-            descriptors,
-            descriptor_base,
-            &buffer_addresses_snapshot,
-            buffer_size,
-        )?;
+        build_cold_ring_inner(descriptors, descriptor_table, buffer_addresses, buffer_size)?;
         relink_rotated_ring(
             descriptors,
-            descriptor_base,
-            &buffer_addresses_snapshot,
+            descriptor_table,
+            buffer_addresses,
             initial_start,
         )?;
-        let head = descriptor_address(descriptor_base, initial_start.get())?;
-        // SAFETY: `prepare_inner`'s only callers, `PlacedRxDma::prepare_ring`
-        // and `prepare_halted`, pass the DMA addresses of their own placed
-        // descriptor table and buffers: the link keeps them in the DMA window
-        // and the storage stays allocated for the DMA epoch.
-        #[allow(unsafe_code, reason = "typed addresses of the placed arena")]
-        let (reserved_buffer, head) = unsafe {
-            (
-                dma_address::placed(reserved_buffer_address),
-                dma_address::placed_link(head),
-            )
-        };
+        let head = descriptor_table
+            .element(initial_start.get())
+            .ok_or(RxRingError::Overflow)?;
         table
             .reserved()
-            .publish_owned(armed_word, reserved_buffer, head);
+            .publish_owned(armed_word, reserved_buffer, Some(head));
 
         Ok(RxRingPrepared {
             ring: Self {
                 descriptors,
                 table,
-                reserved_buffer_address,
-                descriptor_base,
+                reserved_buffer,
+                descriptor_table,
                 buffer_addresses,
                 buffer_size: buffer_size_u16,
                 initial_start,
@@ -991,7 +979,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
 
     /// Observe one descriptor without exposing mutation authority.
     pub fn descriptor_snapshot(&self, index: usize) -> Option<RxDescriptorSnapshot> {
-        descriptor_snapshot(self.descriptors, self.descriptor_base, index)
+        descriptor_snapshot(self.descriptors, self.descriptor_table.base(), index)
     }
 
     /// Validate the complete stopped list before it becomes hardware-owned.
@@ -999,7 +987,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         let buffer_addresses = rx_buffer_address_snapshot(self.buffer_addresses());
         ring_topology_snapshot(
             self.descriptors,
-            self.descriptor_base,
+            self.descriptor_table.base(),
             &buffer_addresses,
             self.initial_start,
             true,
@@ -1008,15 +996,15 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
 
     /// The reserved descriptor R, published ahead of the ring.
     pub fn reserved_snapshot(&self) -> RxDescriptorSnapshot {
-        reserved_snapshot(self.table, self.descriptor_base)
+        reserved_snapshot(self.table, self.descriptor_table.base())
     }
 
     /// Whether R is armed with its own buffer and links to the ring head.
     fn reserved_published(&self) -> bool {
         let reserved = self.table.reserved();
-        descriptor_address(self.descriptor_base, self.initial_start.get())
+        descriptor_address(self.descriptor_table.base(), self.initial_start.get())
             .is_ok_and(|head| reserved.next_address() == head)
-            && reserved.buffer_address() == self.reserved_buffer_address
+            && reserved.buffer_address() == self.reserved_buffer.get()
             && rx_armed_word(u32::from(self.buffer_size)) == Some(reserved.word0())
     }
 
@@ -1055,8 +1043,8 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         Ok(RxRingLive {
             descriptors: self.descriptors,
             table: self.table,
-            reserved_buffer_address: self.reserved_buffer_address,
-            descriptor_base: self.descriptor_base,
+            reserved_buffer: self.reserved_buffer,
+            descriptor_table: self.descriptor_table,
             buffer_addresses: self.buffer_addresses,
             buffer_size: self.buffer_size,
             observed_mask: RxObservedMask::default(),
@@ -1076,7 +1064,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
 
 impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     pub const fn descriptor_base(&self) -> u32 {
-        self.descriptor_base
+        self.descriptor_table.base()
     }
 
     pub(crate) const fn descriptors(&self) -> &'a [RxDescriptor; COUNT] {
@@ -1084,7 +1072,12 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     }
 
     fn bound_buffer_address(&self, index: usize) -> Option<u32> {
-        self.buffer_addresses.get(index).copied()
+        self.buffer_addresses.bits().get(index).copied()
+    }
+
+    /// The typed DMA address of the buffer bound to descriptor `index`.
+    fn bound_buffer(&self, index: usize) -> Option<DmaWindowAddress> {
+        self.buffer_addresses.get(index)
     }
 
     pub const fn buffer_addresses(&self) -> &RxDmaBufferAddresses<COUNT> {
@@ -1105,7 +1098,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
 
     /// Observe one live descriptor without transferring its ownership.
     pub fn descriptor_snapshot(&self, index: usize) -> Option<RxDescriptorSnapshot> {
-        descriptor_snapshot(self.descriptors, self.descriptor_base, index)
+        descriptor_snapshot(self.descriptors, self.descriptor_table.base(), index)
     }
 
     /// Walk the links from the current recycle frontier.
@@ -1118,7 +1111,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let buffer_addresses = rx_buffer_address_snapshot(self.buffer_addresses());
         ring_topology_snapshot(
             self.descriptors,
-            self.descriptor_base,
+            self.descriptor_table.base(),
             &buffer_addresses,
             self.recycle_start,
             false,
@@ -1132,7 +1125,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
 
     /// The reserved descriptor R, published ahead of the ring.
     pub fn reserved_snapshot(&self) -> RxDescriptorSnapshot {
-        reserved_snapshot(self.table, self.descriptor_base)
+        reserved_snapshot(self.table, self.descriptor_table.base())
     }
 
     /// Whether the first ring take of this epoch cleared R's link.
@@ -1288,13 +1281,15 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// descriptor: observed, with its owner bit clear.
     fn names_detached(&self, next_low: u32) -> bool {
         next_low != 0
-            && descriptor_index::<COUNT>(next_low, self.descriptor_base).is_some_and(|index| {
-                self.observed_mask.contains(index.get())
-                    && self
-                        .descriptors
-                        .get(index.get())
-                        .is_some_and(|descriptor| !descriptor.word0().owner())
-            })
+            && descriptor_index::<COUNT>(next_low, self.descriptor_table.base()).is_some_and(
+                |index| {
+                    self.observed_mask.contains(index.get())
+                        && self
+                            .descriptors
+                            .get(index.get())
+                            .is_some_and(|descriptor| !descriptor.word0().owner())
+                },
+            )
     }
 
     /// Fail closed when NEXT names a detached descriptor: the walker stopped
@@ -1335,8 +1330,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let halted = RxRingHalted {
             table: self.table,
             descriptors: self.descriptors,
-            reserved_buffer_address: self.reserved_buffer_address,
-            descriptor_base: self.descriptor_base,
+            reserved_buffer: self.reserved_buffer,
+            descriptor_table: self.descriptor_table,
             buffer_addresses: self.buffer_addresses,
             buffer_size: self.buffer_size,
             arena: self.arena,
@@ -1432,7 +1427,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return None;
         }
         let last_index =
-            descriptor_index::<COUNT>(cursor.last_descriptor_low, self.descriptor_base)?;
+            descriptor_index::<COUNT>(cursor.last_descriptor_low, self.descriptor_table.base())?;
         let observed = self.observed_prefix_len();
         if observed == COUNT {
             return None;
@@ -1461,7 +1456,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         }
         let (Some(index), Some(last_index)) = (
             RingIndex::<COUNT>::checked(index),
-            descriptor_index::<COUNT>(cursor.last_descriptor_low, self.descriptor_base),
+            descriptor_index::<COUNT>(cursor.last_descriptor_low, self.descriptor_table.base()),
         ) else {
             return false;
         };
@@ -1685,7 +1680,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let first_word0 = self.validate_descriptor_image(first_index)?;
         let first_length = u32::from(first_word0.length());
         if first_word0.rx_done() {
-            let descriptor_address = descriptor_address(self.descriptor_base, first_index.get())?;
+            let descriptor_address =
+                descriptor_address(self.descriptor_table.base(), first_index.get())?;
             let segment_length = u16::try_from(first_length).map_err(|_| RxRingError::Size)?;
             self.observed_mask.insert(first_index.get());
             return Ok(Some(RxCompletedUnit {
@@ -1743,7 +1739,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 .ok()
                 .and_then(|length| staged_word0(metadata_word0, length));
             let descriptor_address =
-                descriptor_address(self.descriptor_base, metadata_index.get())?;
+                descriptor_address(self.descriptor_table.base(), metadata_index.get())?;
             self.observed_mask
                 .insert_group::<COUNT>(first_index, descriptor_count);
             return Ok(Some(RxCompletedUnit {
@@ -1784,7 +1780,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return None;
         }
         self.validate_descriptor_image(RingIndex::checked(index)?).ok()?;
-        let descriptor_address = descriptor_address(self.descriptor_base, index).ok()?;
+        let descriptor_address = descriptor_address(self.descriptor_table.base(), index).ok()?;
         if !self.reserved_left && self.leave_reserved(reserved).is_err() {
             self.require_reset();
             return None;
@@ -1831,7 +1827,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let expected_next = if index == terminal_tail {
             0
         } else {
-            descriptor_address(self.descriptor_base, index.advance(1).get())?
+            descriptor_address(self.descriptor_table.base(), index.advance(1).get())?
         };
         if descriptor.next_address() != expected_next {
             return Err(RxRingError::Corrupt);
@@ -2099,11 +2095,11 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             // the observed group, so these images remain stable until rearm.
             rx_rearm_word(word0).ok_or(RxRingError::Size)?;
             if step + 1 < group_size {
-                descriptor_address(self.descriptor_base, index.advance(1).get())?;
+                descriptor_address(self.descriptor_table.base(), index.advance(1).get())?;
             }
         }
         let head_index = self.recycle_start;
-        let head_address = descriptor_address(self.descriptor_base, head_index.get())?;
+        let head_address = descriptor_address(self.descriptor_table.base(), head_index.get())?;
         let tail_index = head_index.advance(group_size - 1);
         if self.descriptors[self.accepted_tail.get()].next_address() != 0 {
             // The accepted tail is the only legal append point. Validate it
@@ -2142,24 +2138,15 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             let index = self.recycle_start.advance(step);
             let descriptor = &self.descriptors[index.get()];
             let next = if step + 1 < group_size {
-                descriptor_address(self.descriptor_base, index.advance(1).get())?
-            } else {
-                0
-            };
-            let buffer_address = self
-                .bound_buffer_address(index.get())
-                .ok_or(RxRingError::Count)?;
-            // SAFETY: the live ring's descriptor base and buffer table are the
-            // ones `prepare_inner` took from its placed storage arena: that
-            // arena's descriptors and buffers, which the link keeps in the DMA
-            // window.
-            #[allow(unsafe_code, reason = "typed addresses of the placed arena")]
-            let (buffer, next) = unsafe {
-                (
-                    dma_address::placed(buffer_address),
-                    dma_address::placed_link(next),
+                Some(
+                    self.descriptor_table
+                        .element(index.advance(1).get())
+                        .ok_or(RxRingError::Overflow)?,
                 )
+            } else {
+                None
             };
+            let buffer = self.bound_buffer(index.get()).ok_or(RxRingError::Count)?;
             descriptor.publish_owned(
                 rx_rearm_word(descriptor.word0()).ok_or(RxRingError::Size)?,
                 buffer,
@@ -2171,11 +2158,11 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         // This type is the sole publication authority. All descriptors in the
         // appended group were observed complete, rearmed and remain
         // unreachable until this old-tail link and the following doorbell.
-        // SAFETY: as for the group above, `head_address` names a descriptor
-        // of the live ring's placed table.
-        #[allow(unsafe_code, reason = "a link to a descriptor of the placed table")]
-        let head = unsafe { dma_address::placed_link(head_address) };
-        accepted_tail.publish_next(head);
+        let head = self
+            .descriptor_table
+            .element(head_index.get())
+            .ok_or(RxRingError::Overflow)?;
+        accepted_tail.publish_next(Some(head));
         mmio.fence();
         mmio.request_reload(&self.binding);
         mmio.fence();
@@ -2231,7 +2218,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         if next.is_zero() {
             return Some(0);
         }
-        let next_index = descriptor_index::<COUNT>(next.address_low(), self.descriptor_base)?;
+        let next_index =
+            descriptor_index::<COUNT>(next.address_low(), self.descriptor_table.base())?;
         Some(next_index.distance_to(self.accepted_tail) + 1)
     }
 
@@ -2271,7 +2259,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         Ok(RxFrozenCursor {
             last_descriptor_low,
             next_descriptor_low,
-            descriptor_base: self.descriptor_base,
+            descriptor_base: self.descriptor_table.base(),
             arena_identity: self.descriptors.as_ptr() as usize,
             live_epoch: self.arena.live_epoch(),
             generation: self.cursor_generation,
@@ -2292,7 +2280,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             if cursor.next_descriptor_low() != 0 {
                 return false;
             }
-            descriptor_index::<COUNT>(cursor.last_descriptor_low(), self.descriptor_base)
+            descriptor_index::<COUNT>(cursor.last_descriptor_low(), self.descriptor_table.base())
                 == Some(self.accepted_tail)
         })
     }
@@ -2360,7 +2348,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// Whether `cursor` was frozen on this ring in its current live epoch and
     /// descriptor generation.
     fn frozen_cursor_current(&self, cursor: RxFrozenCursor) -> bool {
-        cursor.descriptor_base == self.descriptor_base
+        cursor.descriptor_base == self.descriptor_table.base()
             && cursor.arena_identity == self.descriptors.as_ptr() as usize
             && cursor.live_epoch == self.arena.live_epoch()
             && cursor.generation == self.cursor_generation
@@ -2384,7 +2372,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return false;
         }
         let Some(last_index) =
-            descriptor_index::<COUNT>(cursor.last_descriptor_low, self.descriptor_base)
+            descriptor_index::<COUNT>(cursor.last_descriptor_low, self.descriptor_table.base())
         else {
             return false;
         };
@@ -2405,7 +2393,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return false;
         }
         let tail_index = self.recycle_start.advance(descriptor_count - 1);
-        let Some(last_index) = descriptor_index::<COUNT>(last_descriptor_low, self.descriptor_base)
+        let Some(last_index) =
+            descriptor_index::<COUNT>(last_descriptor_low, self.descriptor_table.base())
         else {
             self.completion_release_probe_pending = false;
             return false;
@@ -2529,8 +2518,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 return Ok(false);
             }
             let last_descriptor_low = last_descriptor_low.ok_or(RxRingError::Corrupt)?;
-            let last_index = descriptor_index::<COUNT>(last_descriptor_low, self.descriptor_base)
-                .ok_or(RxRingError::Corrupt)?;
+            let last_index =
+                descriptor_index::<COUNT>(last_descriptor_low, self.descriptor_table.base())
+                    .ok_or(RxRingError::Corrupt)?;
             Ok(last_index != pending_tail)
         });
         self.record_reload_observation(next_descriptor, last_descriptor_low);
@@ -2780,27 +2770,25 @@ fn observed_prefix_len<const COUNT: usize>(
 
 fn relink_rotated_ring<const COUNT: usize>(
     descriptors: &[RxDescriptor; COUNT],
-    descriptor_base: u32,
-    buffer_addresses: &[u32; COUNT],
+    descriptor_table: RxDescriptorAddresses,
+    buffer_addresses: &RxDmaBufferAddresses<COUNT>,
     start: RingIndex<COUNT>,
 ) -> Result<(), RxRingError> {
     for step in 0..COUNT {
         let index = start.advance(step);
         let next = if step + 1 < COUNT {
-            descriptor_address(descriptor_base, index.advance(1).get())?
+            Some(
+                descriptor_table
+                    .element(index.advance(1).get())
+                    .ok_or(RxRingError::Overflow)?,
+            )
         } else {
-            0
+            None
         };
         let word0 = descriptors[index.get()].word0();
-        // SAFETY: only `prepare_inner` calls this, with the descriptor base
-        // and the buffer table of its placed storage arena.
-        #[allow(unsafe_code, reason = "typed addresses of the placed arena")]
-        let (buffer, next) = unsafe {
-            (
-                dma_address::placed(buffer_addresses[index.get()]),
-                dma_address::placed_link(next),
-            )
-        };
+        let buffer = buffer_addresses
+            .get(index.get())
+            .ok_or(RxRingError::Address)?;
         descriptors[index.get()].publish_owned(word0, buffer, next);
     }
     Ok(())
@@ -2828,44 +2816,31 @@ pub fn prepare_recycled_buffer(buffer: &mut [u8], capacity: usize) -> Result<(),
 }
 
 /// Builds the cold, zero-terminated list used by the recovered S31 RX path.
-fn build_cold_ring_inner(
-    descriptors: &[RxDescriptor],
-    descriptor_dma_base: u32,
-    buffer_addresses: &[u32],
+fn build_cold_ring_inner<const COUNT: usize>(
+    descriptors: &[RxDescriptor; COUNT],
+    descriptor_table: RxDescriptorAddresses,
+    buffer_addresses: &RxDmaBufferAddresses<COUNT>,
     buffer_size: u32,
 ) -> Result<(), RxRingError> {
-    if descriptors.is_empty() {
+    if COUNT == 0 {
         return Err(RxRingError::Empty);
     }
-    if descriptors.len() != buffer_addresses.len() {
+    // The table holds the ring and R behind it.
+    if descriptor_table.len() != COUNT + 1 {
         return Err(RxRingError::Count);
     }
     let word0 = rx_armed_word(buffer_size).ok_or(RxRingError::Size)?;
-    let count = u32::try_from(descriptors.len()).map_err(|_| RxRingError::Overflow)?;
-    let span = count
-        .checked_mul(DESCRIPTOR_BYTES)
-        .ok_or(RxRingError::Overflow)?;
-    // The links below add descriptor offsets to the base.
-    let _end = descriptor_dma_base
-        .checked_add(span)
-        .ok_or(RxRingError::Overflow)?;
     for (index, descriptor) in descriptors.iter().enumerate() {
-        let next = if index + 1 < descriptors.len() {
-            descriptor_dma_base + (index as u32 + 1) * DESCRIPTOR_BYTES
-        } else {
-            0
-        };
-        // SAFETY: only `prepare_inner` calls this, with the descriptor base
-        // and the buffer table of its placed storage arena
-        // (`PlacedRxDma`): the link keeps every one of them in the DMA
-        // window, and the storage stays allocated for the DMA epoch.
-        #[allow(unsafe_code, reason = "typed addresses of the placed arena")]
-        let (buffer, next) = unsafe {
-            (
-                dma_address::placed(buffer_addresses[index]),
-                dma_address::placed_link(next),
+        let next = if index + 1 < COUNT {
+            Some(
+                descriptor_table
+                    .element(index + 1)
+                    .ok_or(RxRingError::Overflow)?,
             )
+        } else {
+            None
         };
+        let buffer = buffer_addresses.get(index).ok_or(RxRingError::Address)?;
         descriptor.publish_owned(word0, buffer, next);
     }
     Ok(())

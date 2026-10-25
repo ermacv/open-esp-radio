@@ -7,6 +7,5 @@ pub mod h4;
 extern crate std;
 
 pub mod handoff;
-pub mod routes;
 pub mod rx;
 pub mod tx;

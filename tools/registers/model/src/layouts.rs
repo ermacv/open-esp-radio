@@ -1,6 +1,6 @@
 //! Memory layouts: structures in RAM whose format the hardware defines and
 //! which the CPU and the hardware hand to each other
-//! (`chips/<chip>/registers/model/layouts/<name>.toml`, see
+//! (`chips/<chip>/registers/layouts/<name>.toml`, see
 //! `docs/hardware-memory.md`).
 //!
 //! A layout has no address. An owner places it in a RAM region of the memory
@@ -20,9 +20,8 @@ use std::{
 use serde::Deserialize;
 
 use crate::{
-    Error, NamingRequirement, Position, Result, ReviewAnnotation, mark_description,
-    opaque_position_name, review_annotation_is_assertion, validate_naming,
-    validate_relative_fragment,
+    Error, Position, Result, ReviewAnnotation, mark_description, opaque_position_name,
+    review_annotation_is_assertion, validate_naming, validate_relative_fragment,
 };
 
 mod byte_array;
@@ -106,6 +105,18 @@ struct FieldSource {
     encoding: Option<PointerEncoding>,
     #[serde(default)]
     phases: Vec<LayoutPhase>,
+    #[serde(default)]
+    values: Vec<LayoutValue>,
+}
+
+/// A named hardware image of a memory-layout field. Its field review supplies the sources.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct LayoutValue {
+    pub name: String,
+    pub value: u32,
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 /// A fixed-size array of a shared-word or owned-byte layout.
@@ -208,6 +219,7 @@ pub struct LayoutUnit {
 /// little-endian value.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LayoutField {
+    pub values: Vec<LayoutValue>,
     pub name: String,
     pub low: u32,
     pub width: u32,
@@ -258,25 +270,12 @@ fn invalid(path: &Path, reason: impl std::fmt::Display) -> Error {
     Error::manifest("memory layout", path, reason)
 }
 
-/// Load the layout files a model manifest names, relative to `base`.
-pub(crate) fn load_layouts(
-    base: &Path,
-    relative: &[String],
-    loaded_inputs: &mut BTreeMap<PathBuf, String>,
-    naming: NamingRequirement,
-) -> Result<Vec<MemoryLayout>> {
-    let layouts = parse_layouts(base, relative, loaded_inputs, naming)?;
-    validate_layout_set(&layouts)?;
-    Ok(layouts)
-}
-
 /// Parse files and check local geometry. The caller assigns placement before
 /// validating relationships between layouts with `validate_layout_set`.
 pub(crate) fn parse_layouts(
     base: &Path,
     relative: &[String],
     loaded_inputs: &mut BTreeMap<PathBuf, String>,
-    naming: NamingRequirement,
 ) -> Result<Vec<MemoryLayout>> {
     let mut seen = BTreeSet::new();
     let mut layouts = Vec::with_capacity(relative.len());
@@ -292,7 +291,7 @@ pub(crate) fn parse_layouts(
             let span = error.span();
             Error::manifest_span("memory layout", &path, error, span)
         })?;
-        layouts.push(parse_layout(&path, file, naming)?);
+        layouts.push(parse_layout(&path, file)?);
     }
     let kinds: BTreeMap<_, _> = layouts
         .iter()
@@ -309,7 +308,7 @@ pub(crate) fn parse_layouts(
 }
 
 /// Parse and validate one layout file on its own.
-fn parse_layout(path: &Path, file: LayoutFile, naming: NamingRequirement) -> Result<MemoryLayout> {
+fn parse_layout(path: &Path, file: LayoutFile) -> Result<MemoryLayout> {
     if file.schema != LAYOUT_SCHEMA {
         return Err(invalid(path, format!("requires schema = {LAYOUT_SCHEMA}")));
     }
@@ -425,7 +424,7 @@ fn parse_layout(path: &Path, file: LayoutFile, naming: NamingRequirement) -> Res
         units,
         review: resolved_review,
     };
-    validate_reviews(&layout, naming).map_err(|error| invalid(path, error))?;
+    validate_reviews(&layout).map_err(|error| invalid(path, error))?;
     Ok(layout)
 }
 
@@ -548,6 +547,20 @@ fn parse_field(kind: LayoutKind, unit_size: u32, source: FieldSource) -> Result<
         )));
     }
     let width = high - low + 1;
+    let mut value_names = BTreeSet::new();
+    for value in &source.values {
+        validate_name(&value.name)?;
+        if !value_names.insert(&value.name) || u64::from(value.value) >= (1u64 << width) {
+            return Err(Error::message(
+                "layout field values must have unique names and fit the field",
+            ));
+        }
+    }
+    if (!source.placement.is_empty() || source.points_to.is_some()) && !source.values.is_empty() {
+        return Err(Error::message(
+            "a pointer field has no named integer values",
+        ));
+    }
     if source.encoding.is_some() && source.points_to.is_none() && source.placement.is_empty() {
         return Err(Error::message("encoding requires placement or points-to"));
     }
@@ -593,6 +606,7 @@ fn parse_field(kind: LayoutKind, unit_size: u32, source: FieldSource) -> Result<
         return Err(Error::message("only a phased writer declares phases"));
     }
     Ok(LayoutField {
+        values: source.values,
         name: source.name,
         low,
         width,
@@ -780,7 +794,7 @@ fn validate_same_geometry(layout: &MemoryLayout, other: &MemoryLayout) -> Result
 /// Reviews name entities of this layout; for publication the layout and
 /// every unit and field carry a complete review, and every unit and field a
 /// naming, by the same rules as registers and fields.
-fn validate_reviews(layout: &MemoryLayout, naming: NamingRequirement) -> Result<()> {
+fn validate_reviews(layout: &MemoryLayout) -> Result<()> {
     let mut entities = BTreeMap::new();
     entities.insert(layout.name.clone(), None);
     for unit in &layout.units {
@@ -854,17 +868,9 @@ fn validate_reviews(layout: &MemoryLayout, naming: NamingRequirement) -> Result<
                     validate_naming(entity, review, entity)?;
                 }
             }
-            Some(position) => {
-                if review.is_some_and(|review| review.naming.is_some())
-                    || naming == NamingRequirement::Complete
-                {
-                    validate_naming(entity, review, position)?;
-                }
-            }
+            Some(position) => validate_naming(entity, review, position)?,
         }
-        if naming == NamingRequirement::Complete
-            && !review.is_some_and(review_annotation_is_assertion)
-        {
+        if !review.is_some_and(review_annotation_is_assertion) {
             return Err(Error::message(format!(
                 "{entity} has no complete review: sources, provenance (not a hint), accuracy and completeness"
             )));
@@ -1230,6 +1236,36 @@ fn render_field(
 ) {
     let entity = format!("{}.{}.{}", layout.name, unit.name, field.name);
     let name = snake(&field.name);
+    let constant = &field.name;
+    let field_type = if field.width == 1 {
+        "bool"
+    } else {
+        storage(field.width)
+    };
+    let maximum = (1u64 << field.width) - 1;
+    let _ = writeln!(
+        output,
+        "/// Width of `{constant}` in bits.\npub const {constant}_WIDTH: u32 = {};\n/// Greatest unsigned image of `{constant}`.\npub const {constant}_MAX: u32 = 0x{maximum:x};",
+        field.width
+    );
+    for value in &field.values {
+        if let Some(description) = &value.description {
+            push_doc(output, description, "");
+        }
+        if let Some(line) = sources_line(&layout.review, &entity) {
+            let _ = writeln!(output, "/// {line}");
+        }
+        let image = if field.width == 1 {
+            (value.value != 0).to_string()
+        } else {
+            value.value.to_string()
+        };
+        let _ = writeln!(
+            output,
+            "/// Named image of `{constant}`.\npub const {constant}_{}: {field_type} = {image};",
+            value.name
+        );
+    }
     let unit_bits = 8 * unit.size;
     let bits = if field.width == 1 {
         format!("bit {}", field.low)
@@ -1291,9 +1327,17 @@ fn render_field(
     if field.is_address() {
         if field.encoding == Some(PointerEncoding::BleCompressed) {
             let low = field.low;
+            let (read, placed) = if low == 0 {
+                (format!("self.0 & 0x{mask:x}"), "index".to_owned())
+            } else {
+                (
+                    format!("(self.0 >> {low}) & 0x{mask:x}"),
+                    format!("(index << {low})"),
+                )
+            };
             let _ = writeln!(
                 output,
-                "    pub const fn {name}(self) -> u32 {{ (self.0 >> {low}) & 0x{mask:x} }}\n\
+                "    pub const fn {name}(self) -> u32 {{ {read} }}\n\
                 /// The decoded address, without granting a reference to the memory.\n\
                 pub const fn {name}_address(self) -> Option<u32> {{\n\
                 let index = self.{name}();\n\
@@ -1316,7 +1360,7 @@ fn render_field(
                     "    /// Set a BLE pointer, preserving the other fields; reject an unencodable address.\n\
                     pub const fn with_{name}(self, value: {parameter}) -> Option<Self> {{\n\
                     let index = {index};\n\
-                    Some(Self((self.0 & 0x{keep:x}) | (index << {low})))\n\
+                    Some(Self((self.0 & 0x{keep:x}) | {placed}))\n\
                     }}\n\
                     /// Copy the encoded pointer from another word image, preserving every other bit.\n\
                     pub const fn with_{name}_from(self, image: Self) -> Self {{\n\

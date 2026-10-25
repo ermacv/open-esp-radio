@@ -2,6 +2,7 @@ use crate::Rng;
 use crate::{Answer, WireRequest as Request, projection};
 use oer_diagnostics::{DiagPath, Note};
 use oer_embassy_time::EmbassyClock;
+use oer_esp32s31_hal::power::ChipClocks;
 use oer_esp32s31_hal::{
     domain::{CoexAbsent, Coexisting, CommonPower, RadioDomain, WifiClient},
     ieee80211::{
@@ -17,15 +18,14 @@ use oer_esp32s31_phy::{
     wifi_client::{WifiPhyMembership, join_wifi, leave_wifi, set_wifi_rx},
     *,
 };
-use oer_espressif_esp_hal_radio::EspHalClocks;
 use oer_hil_protocol::{base::RejectReason, phy::*};
 use oer_time::{Clock, Timer};
 
 type Result<T> = core::result::Result<T, RejectReason>;
 
 pub struct Radio {
-    domain: RadioDomain<oer_espressif_esp_hal_radio::EspHal, ConcurrentPhy>,
-    clocks: EspHalClocks,
+    domain: RadioDomain<ChipClocks, ConcurrentPhy>,
+    clocks: ChipClocks,
     cold: Option<WifiCold>,
     clocked: Option<WifiClocked>,
     absent: Option<CoexAbsent<WifiClient>>,
@@ -55,11 +55,11 @@ impl Radio {
     #[allow(clippy::too_many_arguments)]
     pub fn place<'storage>(
         storage: &'storage mut core::mem::MaybeUninit<Self>,
-        domain: RadioDomain<oer_espressif_esp_hal_radio::EspHal, ConcurrentPhy>,
+        domain: RadioDomain<ChipClocks, ConcurrentPhy>,
         wifi: WifiPartition,
         coex: CoexAbsent<WifiClient>,
         ieee802154: crate::ieee802154::Rx,
-        clocks: EspHalClocks,
+        clocks: ChipClocks,
         identity: PhyCalibrationIdentity,
         station: [u8; 6],
         access_point: [u8; 6],
@@ -494,10 +494,14 @@ impl Radio {
             .as_ref()
             .filter(|hold| hold.running)
             .map(|hold| hold.deadline);
-        match (hold, self.cache.deadline()) {
-            (Some(a), Some(b)) => Some(a.min(b)),
-            (a, b) => a.or(b),
-        }
+        [
+            hold,
+            self.cache.deadline(),
+            crate::ieee802154::poll_deadline(),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
 
     #[inline(never)]

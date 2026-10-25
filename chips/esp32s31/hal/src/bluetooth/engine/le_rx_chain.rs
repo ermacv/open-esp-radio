@@ -20,8 +20,8 @@
 use core::{marker::PhantomPinned, pin::Pin};
 
 use crate::bluetooth::BluetoothControllerReset;
+use crate::layouts::BleBufferHeader;
 
-use crate::types::BluetoothControllerSramAddress;
 use pin_project::pin_project;
 
 use crate::bluetooth::engine::{
@@ -31,7 +31,7 @@ use crate::bluetooth::engine::{
         LeRxPacketStorage,
     },
     rx_memory_list::RxMemoryListClass,
-    sram_link::ControllerSramLinkAddress,
+    sram_link::ControllerSramLink,
 };
 
 /// Allocation number of the scheduler item that received a packet: the low
@@ -40,7 +40,7 @@ use crate::bluetooth::engine::{
 pub struct LeRxTag(u16);
 
 impl LeRxTag {
-    pub(crate) const MAX: u16 = 0x0fff;
+    pub(crate) const MAX: u16 = crate::layouts::BleSchedulerItemAllocationNumber::VALUE_MAX as u16;
 
     pub(crate) const fn new(number: u16) -> Option<Self> {
         if number <= Self::MAX {
@@ -163,8 +163,8 @@ type Header = usize;
 /// `+0x70` and `+0x78`: the software head and tail and the spare header.
 #[derive(Clone, Copy)]
 pub(crate) struct LeRxRing<const PACKETS: usize> {
-    cursor: ControllerSramLinkAddress,
-    headers: [ControllerSramLinkAddress; PACKETS],
+    cursor: ControllerSramLink<BleBufferHeader>,
+    headers: [ControllerSramLink<BleBufferHeader>; PACKETS],
     packets: [LeRxPacketAddress; PACKETS],
     head: Header,
     tail: Header,
@@ -178,9 +178,9 @@ impl<const PACKETS: usize> LeRxRing<PACKETS> {
         placement: &Placement<S>,
     ) -> Self {
         Self {
-            cursor: ControllerSramLinkAddress::from_placed(placement.address(&nodes.cursor)),
+            cursor: ControllerSramLink::new(placement.reference(&nodes.cursor.layout)),
             headers: core::array::from_fn(|i| {
-                ControllerSramLinkAddress::from_placed(placement.address(&nodes.nodes[i].header))
+                ControllerSramLink::new(placement.reference(&nodes.nodes[i].header.layout))
             }),
             packets: core::array::from_fn(|i| {
                 LeRxPacketAddress::from_placed(placement.address(&nodes.nodes[i].packet))
@@ -205,10 +205,10 @@ impl<const PACKETS: usize> LeRxRing<PACKETS> {
     }
 
     fn address(&self, header: Header) -> u32 {
-        self.link(header).controller_address().address()
+        self.link(header).controller_address()
     }
 
-    fn link(&self, header: Header) -> ControllerSramLinkAddress {
+    fn link(&self, header: Header) -> ControllerSramLink<BleBufferHeader> {
         match header {
             0 => self.cursor,
             node => self.headers[node - 1],
@@ -226,12 +226,12 @@ impl<const PACKETS: usize> LeRxRing<PACKETS> {
     }
 
     /// Link of the software head.
-    pub(crate) fn head_link(&self) -> ControllerSramLinkAddress {
+    pub(crate) fn head_link(&self) -> ControllerSramLink<BleBufferHeader> {
         self.link(self.head)
     }
 
     /// The initial packetless cursor.
-    pub(crate) const fn cursor(&self) -> ControllerSramLinkAddress {
+    pub(crate) const fn cursor(&self) -> ControllerSramLink<BleBufferHeader> {
         self.cursor
     }
 }
@@ -285,7 +285,7 @@ impl<const PACKETS: usize> LeRxRingView<'_, PACKETS> {
                 None => false,
             };
             self.header(current).set_rotation_marker(!next_completed);
-            if header.packet_image().is_some() {
+            if header.packet_address().is_some() {
                 let packet = self.packet(self.packet_of(current)?);
                 if tag.is_some_and(|tag| packet.receive_tag() != tag.number()) {
                     self.header(current).set_rotation_marker(false);
@@ -381,7 +381,7 @@ impl<const PACKETS: usize> LeRxRingView<'_, PACKETS> {
             node.header.install(
                 self.ring.packets[index],
                 self.ring.headers.get(index + 1).copied(),
-                Some(previous.controller_address()),
+                Some(previous),
                 false,
             );
         }
@@ -402,7 +402,7 @@ impl<const PACKETS: usize> LeRxRingView<'_, PACKETS> {
         &self.nodes.nodes[packet].packet
     }
 
-    fn link(&self, header: Header) -> ControllerSramLinkAddress {
+    fn link(&self, header: Header) -> ControllerSramLink<BleBufferHeader> {
         self.ring.link(header)
     }
 
@@ -410,14 +410,14 @@ impl<const PACKETS: usize> LeRxRingView<'_, PACKETS> {
         self.ring.address(header)
     }
 
-    fn header_at(&self, image: u32) -> Result<Header, LeRxChainError> {
-        if image == self.ring.cursor.compressed_image() {
+    fn header_at(&self, address: u32) -> Result<Header, LeRxChainError> {
+        if self.ring.cursor.is(Some(address)) {
             return Ok(0);
         }
         self.ring
             .headers
             .iter()
-            .position(|header| header.compressed_image() == image)
+            .position(|header| header.is(Some(address)))
             .map(|index| index + 1)
             .ok_or(LeRxChainError::ForeignLink)
     }
@@ -433,14 +433,14 @@ impl<const PACKETS: usize> LeRxRingView<'_, PACKETS> {
     }
 
     fn packet_of(&self, header: Header) -> Result<usize, LeRxChainError> {
-        let image = self
+        let address = self
             .header(header)
-            .packet_image()
+            .packet_address()
             .ok_or(LeRxChainError::ForeignLink)?;
         self.ring
             .packets
             .iter()
-            .position(|packet| packet.compressed_image() == image)
+            .position(|packet| packet.address() == address)
             .ok_or(LeRxChainError::ForeignLink)
     }
 
@@ -475,7 +475,7 @@ impl<const PACKETS: usize> LeRxRingView<'_, PACKETS> {
             let storage = self.header(header);
             order.push((
                 header,
-                storage.packet_image().is_some(),
+                storage.packet_address().is_some(),
                 storage.completion_observed(),
             ));
             current = storage
@@ -552,13 +552,13 @@ impl<const PACKETS: usize> LeRxChain<PACKETS> {
         self.ring.snapshot()
     }
 
-    pub(crate) fn head_link(&self) -> ControllerSramLinkAddress {
+    pub(crate) fn head_link(&self) -> ControllerSramLink<BleBufferHeader> {
         self.ring.head_link()
     }
 
     /// Header to publish as the class's current RX header, once, before any
     /// event of the class runs.
-    pub(crate) const fn initial_cursor(&self) -> BluetoothControllerSramAddress {
+    pub(crate) const fn initial_cursor(&self) -> u32 {
         self.ring.cursor().controller_address()
     }
 
@@ -573,9 +573,7 @@ impl<const PACKETS: usize> LeRxChain<PACKETS> {
         unsafe {
             crate::bluetooth::RxChainHead::new(
                 self.class.selector(),
-                crate::bluetooth::engine::layout_reference::controller_reference(
-                    self.initial_cursor().address(),
-                ),
+                self.ring.cursor().reference(),
                 matches!(self.class, RxMemoryListClass::Scanning),
             )
         }

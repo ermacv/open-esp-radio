@@ -11,7 +11,7 @@
 pub const PHY_REGISTER_I2C_RESET_SAMPLE_LIMIT: u16 = 1_000;
 
 const PHY_REGISTER_FINAL_I2C_ADDRESS: crate::analog::i2c::Address =
-    crate::analog::i2c::fields::SDM_RFPLL_SDM_UPDATE_ENABLE.address();
+    crate::analog::i2c::analog_i2c::sdm::update_enable::UPDATE_ENABLE.address();
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyRegisterDelayPhase {

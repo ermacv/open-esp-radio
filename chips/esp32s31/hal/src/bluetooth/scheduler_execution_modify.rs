@@ -11,7 +11,7 @@
 //! in one critical section with polling loops; here every step is finite,
 //! sequenced through durable P3 replies, and the caller owns the deadline.
 
-use oer_esp32s31_pac::{
+use crate::bluetooth::registers::{
     BluetoothSchedulerExecutionModifyDisposition, BluetoothSchedulerExecutionModifyPublished,
     BluetoothSchedulerHardwareListIndex, BluetoothSchedulerInsertionCommand,
     BluetoothTaskRegisters,

@@ -1,6 +1,9 @@
 //! Compiled harness call-boundary acceptance; no hardware timing claim.
+//!
+//! Both sides run the production image; the probe's software-frequency
+//! entries borrow the session's shared PHY, which a setup starts first.
 use crate::evidence::{events, stop};
-use crate::harness::{Result, case, direct};
+use crate::harness::{Result, case, direct, setup};
 use crate::i2c::I2c;
 use crate::layout::FREQUENCY_CONTROL;
 use oer_analysis_blobray_domain::{
@@ -52,11 +55,21 @@ pub fn exercise(ctx: &mut I2c) -> Result<()> {
             delay_micros: Some(CallValue::Argument { word: 0 }),
         }],
     }];
+    let session = || {
+        ctx.probes
+            .invoke(crate::session_entry::ENTRY, vec![], vec![], vec![])
+    };
+    let start = setup(
+        "ordinary-delay-tail-session",
+        session()?,
+        session()?,
+        SessionReset::Cold,
+    );
     let mut row = case(
         "ordinary-delay-tail",
         phase.clone(),
         Some(phase),
-        SessionReset::Cold,
+        SessionReset::Warm,
         false,
     );
     row.relation.as_mut().unwrap().calls = true;
@@ -66,16 +79,16 @@ pub fn exercise(ctx: &mut I2c) -> Result<()> {
         &replacement,
         Some(&replacement),
         None,
-        vec![row],
+        vec![start, row],
         1024,
         Some(ComparisonVerdict::Match),
     )?;
     for side in [false, true] {
         assert!(matches!(
-            stop(&records, 0, side),
+            stop(&records, 1, side),
             ExecutionStop::Returned { .. }
         ));
-        let observed = events(&records, 0, side);
+        let observed = events(&records, 1, side);
         let transfers = |target: u32, tail: bool| {
             observed.iter().any(|e| matches!(e, ExecutionEvent::CallTransfer { target: t, tail: x, .. } if *t == target && *x == tail))
         };

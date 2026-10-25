@@ -6,19 +6,14 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "Versioned editable register model and clean CMSIS-SVD materialization"
+description = "The register model of a chip: block types, the chip root, layouts, the ownership policy and the thin PAC renderer"
 
 [dependencies]
-oer-registers-bindings = { path = "../bindings" }
 oer-registers-contracts = { path = "../contracts" }
-oer-registers-review = { path = "../review" }
 serde = { version = "=1.0.229", features = ["derive"] }
-svd-encoder = "=0.14.7"
-svd-parser = { version = "=0.14.9", features = ["expand"] }
-svd-rs = { version = "=0.14.12", features = ["serde"] }
 toml_edit = { version = "=0.25.13", features = ["serde"] }
-toml = "=1.1.4"
 thiserror = "=2.0.19"
+syn = { version = "=2.0.119", features = ["full"] }
 
 [dev-dependencies]
 tempfile = "=3.27.0"

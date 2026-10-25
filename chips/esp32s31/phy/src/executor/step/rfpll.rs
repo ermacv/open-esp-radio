@@ -21,7 +21,7 @@ impl<C: Clock + ?Sized> Clock for OutlinedClock<'_, C> {
 }
 
 pub(crate) enum Cursor<'a> {
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     Search(&'a mut crate::tracking::rfpll::search::Search),
     Correction(&'a mut Correction),
 }
@@ -29,7 +29,7 @@ impl Cursor<'_> {
     #[inline(never)]
     pub(super) fn action(&self) -> crate::tracking::rfpll::Action {
         match self {
-            #[cfg(any(test, oer_probe))]
+            #[cfg(test)]
             Self::Search(search) => crate::tracking::rfpll::Action::Search(search.action()),
             Self::Correction(correction) => correction.action(),
         }
@@ -41,7 +41,7 @@ impl Cursor<'_> {
         completion: crate::tracking::rfpll::Completion,
     ) -> Result<(), Failure> {
         match self {
-            #[cfg(any(test, oer_probe))]
+            #[cfg(test)]
             Self::Search(search) => {
                 let crate::tracking::rfpll::Completion::Search(completion) = completion else {
                     return Err(Failure::Binding);

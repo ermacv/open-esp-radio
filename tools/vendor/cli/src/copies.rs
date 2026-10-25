@@ -443,16 +443,15 @@ pub fn run(root: &Path, chip: &str, budget: &Budget) -> Result<()> {
         }
     }
     let unbuilt_images = oer_tool_pins::artifacts::unbuilt_firmware(root, chip)?;
-    let memory_map = oer_registers_model::memory::Memory::load(
-        &root.join(format!("chips/{chip}/registers/model/memory.toml")),
-    )?;
-    let windows = memory_map
-        .mmio_regions()
-        .into_iter()
-        .map(|(_, start, end)| -> Result<ImageRegion> {
+    // The MMIO windows: every instance of the chip root.
+    let model = oer_registers_model::Chip::load(root, chip)?.model;
+    let windows = model
+        .instances()
+        .iter()
+        .map(|instance| -> Result<ImageRegion> {
             Ok(ImageRegion {
-                start: u32::try_from(start).map_err(|_| "MMIO region above 4 GiB")?,
-                length: end - start,
+                start: u32::try_from(instance.base).map_err(|_| "MMIO instance above 4 GiB")?,
+                length: instance.extent.size,
             })
         })
         .collect::<Result<Vec<_>>>()?;

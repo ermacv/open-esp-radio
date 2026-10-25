@@ -170,12 +170,16 @@ name = "LOW_RATE_ENABLE_FIRST"
 bits = "10"
 class = "plain"
 description = "First independently updated low-rate enable bit."
+values = [{ name = "DISABLED", value = 0x0, description = "Disable the selected PHY low-rate control edge.", sources = ["ROM_REV0_PHY_LOW_RATE", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Enable the selected PHY low-rate control edge.", sources = ["ROM_REV0_PHY_LOW_RATE", "S31_ESP_PACS_SVD"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "LOW_RATE_ENABLE_SECOND"
 bits = "11"
 class = "plain"
 description = "Second independently updated low-rate enable bit."
+values = [{ name = "DISABLED", value = 0x0, description = "Disable the selected PHY low-rate control edge.", sources = ["ROM_REV0_PHY_LOW_RATE", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Enable the selected PHY low-rate control edge.", sources = ["ROM_REV0_PHY_LOW_RATE", "S31_ESP_PACS_SVD"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "BITS_0_9_OPAQUE"
@@ -221,6 +225,8 @@ name = "LOW_RATE_ENABLE"
 bits = "11"
 class = "plain"
 description = "Set by complete phy_enable_low_rate and cleared by complete phy_disable_low_rate."
+values = [{ name = "DISABLED", value = 0x0, description = "Disable the selected PHY low-rate control edge.", sources = ["ROM_REV0_PHY_LOW_RATE", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Enable the selected PHY low-rate control edge.", sources = ["ROM_REV0_PHY_LOW_RATE", "S31_ESP_PACS_SVD"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "BITS_0_10_OPAQUE"

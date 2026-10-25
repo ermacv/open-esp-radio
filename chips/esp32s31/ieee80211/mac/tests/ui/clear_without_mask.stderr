@@ -1,0 +1,5 @@
+error[E0599]: no method named `clear_all` found for mutable reference `&mut InterruptEpoch<Moderated>` in the current scope
+ --> tests/ui/clear_without_mask.rs:7:11
+  |
+7 |     epoch.clear_all(); // ui-error: E0599
+  |           ^^^^^^^^^ method not found in `&mut InterruptEpoch<Moderated>`

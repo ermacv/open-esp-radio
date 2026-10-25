@@ -1,6 +1,8 @@
 // B0's statically placed radio tasks and owned USB console.
-use esp_hal::interrupt::software::SoftwareInterrupt;
 use oer_embassy_time::EmbassyClock;
+use oer_esp32s31_hal::platform::{FromCpu0Irq, FromCpu2Irq, SystimerAlarm0, SystimerAlarm1};
+use oer_esp32s31_hal::usb_serial_jtag::ConsoleInterrupt;
+use oer_esp32s31_hal::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
 use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder};
 use static_cell::StaticCell;
 
@@ -17,19 +19,38 @@ mod radio;
 mod usb;
 
 oer_espressif_staged_runtime::interrupt_table! {
-    wake: WakeToken = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu, Hardware;
-    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<radio::RadioTasks>, Priority2, ProCpu, Executor;
-    radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority3, ProCpu, Hardware;
-    app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu, Hardware;
-    doorbell: DoorbellToken = FROM_CPU_INTR3 => irq::doorbell, Priority3, ProCpu, Hardware;
-    primary: PrimaryToken = MODEM_BT_MAC => irq::primary, Priority3, ProCpu, Hardware;
-    nrt: NrtToken = MODEM_BT_MAC_INT1 => irq::nrt, Priority3, ProCpu, Hardware;
-    timer: TimerToken = MODEM_LP_TIMER => irq::timer, Priority3, ProCpu, Hardware;
-    console_usb: ConsoleUsb = USB_DEVICE => usb::interrupt, Priority1, ProCpu, Hardware;
+    /// The application executor's wake (thread mode).
+    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, level 1, hart 0, Hardware;
+    /// The radio executor (P2), polled in its handler.
+    radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<radio::RadioTasks, FromCpu2Irq>, line 17, level 2, hart 0, Executor;
+    /// The radio executor's timer alarm; it only acknowledges and pends.
+    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 18, level 3, hart 0, Hardware;
+    /// The application executor's timer alarm.
+    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 19, level 1, hart 0, Hardware;
+    /// The Bluetooth bank, the modem low-power timer and the radio doorbell.
+    bt: BtToken = irq::Interrupts => irq::bt, line 20, level 3, hart 0, Hardware;
+    /// The console's USB Serial/JTAG interrupt; it raises the endpoint's signal.
+    console_usb: ConsoleUsb = ConsoleInterrupt => usb::interrupt, line 21, level 1, hart 0, Hardware;
 }
 type X = InterruptExecutor<2>;
-const LEVELS: LevelOrder<PrimaryToken, RadioToken, WakeToken> = LevelOrder::new();
+const LEVELS: LevelOrder<BtToken, RadioToken, WakeToken> = LevelOrder::new();
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     radio::boot(handoff)
+}
+
+/// Feed the RTC watchdog for good: the image resets when the application
+/// executor stops polling.
+async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
+    let period = oer_time::Duration::from_millis(RTC_WATCHDOG_FEED_PERIOD_MS);
+    match watchdog.feed_every(&EmbassyClock, period).await {}
+}
+
+/// Report a failed boot step on the early writer and wait: no task feeds
+/// the RTC watchdog, which resets the chip.
+fn fail(reason: &'static str) -> ! {
+    usb::early_text(b"OER-B0-BRINGUP: fail ");
+    usb::early_text(reason.as_bytes());
+    usb::early_text(b"\r\n");
+    oer_espressif_staged_runtime::idle()
 }

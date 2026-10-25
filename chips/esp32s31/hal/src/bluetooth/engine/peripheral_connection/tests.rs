@@ -128,14 +128,14 @@ fn transmit(
         (&graph.tx_successor, cpu.binding.tx_successor),
     ];
     let path = graph.link_state.layout.tx_path();
-    let current = path.read().header();
+    let current = path.read().header_address();
     let (cursor, _) = headers
         .iter()
-        .find(|(_, address)| address.compressed_image() == current)?;
-    let next = cursor.snapshot().next.address();
+        .find(|(_, address)| Some(address.controller_address()) == current)?;
+    let next = cursor.snapshot().next.address_address();
     let (header, address) = headers
         .iter()
-        .find(|(_, address)| address.compressed_image() == next)?;
+        .find(|(_, address)| Some(address.controller_address()) == next)?;
     if header.transmission_completed() {
         return None;
     }
@@ -143,7 +143,13 @@ fn transmit(
     if acknowledged {
         header.model_complete_transmission();
         let old = path.read();
-        path.write(old.with_header_from(BleLinkStateTxPath::from_bits(address.compressed_image())));
+        path.write(
+            old.with_header_from(
+                BleLinkStateTxPath::ZERO
+                    .with_header(Some(address.reference()))
+                    .expect("a bound link is encodable"),
+            ),
+        );
     }
     Some(pdu)
 }
@@ -170,16 +176,16 @@ fn the_first_event_uses_the_private_chain_and_takes_the_free_head() {
     // No RX class; the hardware cursor starts at the private software head.
     assert_eq!(layout.rx_list().read().bits(), 0);
     assert_eq!(
-        layout.rx_path().read().header(),
-        rx.head_link().compressed_image()
+        layout.rx_path().read().header_address(),
+        Some(rx.head_link().controller_address())
     );
     assert_eq!(layout.rx_head().read().bits(), rx.snapshot().0);
     assert_eq!(
         layout.scheduler_head().read().bits(),
-        binding.items[0].controller_address().address()
+        binding.items[0].controller_address()
     );
     let header = graph.items[EVENT_ITEM].header();
-    assert_eq!(header.hardware_next_image(), 0);
+    assert_eq!(header.hardware_next_address(), None);
     assert_eq!((header.raw_start(), header.raw_end()), (25_000, 26_000));
     assert_eq!(header.sequence_start(), 25_100);
     assert_eq!(
@@ -247,11 +253,11 @@ fn finishing_reports_the_capture_and_returns_the_item() {
     let (graph, binding, _) = pool.shared(&instance).unwrap();
     assert_eq!(
         graph.link_state.layout.scheduler_head().read().bits(),
-        binding.items[EVENT_ITEM].controller_address().address()
+        binding.items[EVENT_ITEM].controller_address()
     );
     assert_eq!(
-        graph.items[EVENT_ITEM].header().hardware_next_image(),
-        binding.items[0].compressed_image()
+        graph.items[EVENT_ITEM].header().hardware_next_address(),
+        Some(binding.items[0].controller_address())
     );
 }
 
@@ -407,7 +413,7 @@ fn release_returns_a_pristine_instance() {
     let (graph, binding, _) = pool.shared(&instance).unwrap();
     assert_eq!(
         graph.link_state.layout.scheduler_head().read().bits(),
-        binding.items[EVENT_ITEM].controller_address().address()
+        binding.items[EVENT_ITEM].controller_address()
     );
 }
 

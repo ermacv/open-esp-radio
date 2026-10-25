@@ -66,7 +66,7 @@ moves; ownership, orchestration and wiring are rebuilt.
 
 | Context | Runs | Rule |
 | --- | --- | --- |
-| P3, core 0 | radio interrupt handlers; one shared radio doorbell on `FROM_CPU` line 3; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
+| P3, core 0 | radio interrupt handlers; the radio doorbell on `FROM_CPU` line 3, a source of its radio's interrupt part; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
 | P2 | one radio executor on `FROM_CPU` line 2: Wi-Fi driver, BLE lower link layer, the radio-system actor | every step bounded; long waits are timer waits |
 | P1 / thread | role bodies, network stack, application | — |
 
@@ -75,16 +75,24 @@ moves; ownership, orchestration and wiring are rebuilt.
 - Drivers never block or spin. A named settle of a known length up to 20 µs
   may busy-wait and counts against its context's step bound; a wait of
   unknown length is a timer-woken step with a deadline.
+  PHY short settles count `mcycle` through `oer-riscv`, at the stable CPU
+  frequency the clock owner adopts from its register state during runtime
+  handover. They require neither a ROM delay nor ROM clock calibration.
 - A lower-priority task wakes a higher-priority one only through
   `oer_sync::PriorityWaker` ([notifications](execution-wakes.md)).
 - Each interrupt table entry binds one interrupt part, whose type names its
-  source, to one CPU line (16 to 47) at a level on a hart: the line's vector
+  sources, to one CPU line (16 to 47) at a level on a hart: the line's vector
   calls the entry's handler directly, the handler holds the part, and
   binding it returns the `Bound` proof a driver takes before it enables the
   peripheral's interrupt; a driver that polls a source no entry binds takes
-  the router's `Silent` proof instead. The table fails to compile when two
-  entries share a line or a source, and a binding when its entry lies
-  outside the chip's interrupt controller.
+  the router's `Silent` proof instead. A part of several sources (a radio's
+  interrupt banks and its doorbell) routes them all to its one line, and its
+  handler learns which fired from the peripherals' status. A part is bound
+  once and its handler holds it for the image's life: a task asks the
+  handler for each bank transition, and the CPU route never changes. The
+  table fails to compile when two entries share a line, or two entries or
+  one part list a source twice, and a binding when its entry lies outside
+  the chip's interrupt controller.
 - Each interrupt table entry declares its class: `Hardware` (capture,
   acknowledge, latch, raise a signal; never on its core's executor level),
   `Executor` (one per level and core; strict up to its task polls) or
@@ -96,7 +104,7 @@ moves; ownership, orchestration and wiring are rebuilt.
   (the bootstrap, CPU0 as stage two's entry, each task, each interrupt
   context), the panic sites it reaches, by the crate layer of the function
   holding them: PAC, HAL, chips, portable, protocols, firmware, core,
-  embassy, esp-hal, third-party, unnamed (`#[no_mangle]` and assembly
+  embassy, third-party, unnamed (`#[no_mangle]` and assembly
   symbols). Each image declares a budget of its runtime and bootstrap in
   `[package.metadata.open-radio.panic-budget]`, per layer and for the sites
   its `Hardware` interrupt contexts reach together (`hardware`); a count
@@ -145,59 +153,58 @@ moves; ownership, orchestration and wiring are rebuilt.
 
 ## Hardware
 
-- **Two roots, one shrinking.** esp-hal (the owner's fork, fixes only) still
-  owns parts of the SoC before the radio handoff: boot, clocks, PSRAM,
-  flash, console. Stage two's traps are the
-  staged runtime's: its vector tables, entries and checked exit, the direct
-  call of each line's handler, the image's `critical-section` and the fatal
-  paths, which mask their hart for good and reset the chip through the chip
-  HAL's `cores` (core control on our typed blocks). The
-  interrupt table's router writes the routes and CPU lines through the
-  chip HAL's interrupt controller on the typed interrupt matrix and CLIC,
-  every source's route word included (the IEEE 802.15.4 MAC's too). The executor's time, software interrupt lines and
-  timer comparators run on our typed platform blocks. esp-hal, esp-pacs, esp-riscv-rt and
-  esp-metadata are used only at the sites listed in
-  `tools/test/layers/tests/platform_crates.allowlist`; a test fails on any use
-  elsewhere, and new platform code goes into our HAL and PAC crates. Each
-  domain that moves to our code removes its lines. Our HAL owns the radio blocks after the
-  handoff, taken through a safe constructor that consumes esp-hal's radio
-  singletons. Each word both sides can write has one runtime writer, listed in
-  `chips/esp32s31/registers/shared-words.toml` and checked by `cargo
-  registers check shared-words`. `embassy-sync`, `embassy-futures`,
-  `embassy-net` and `embassy-time` stay; tasks run on our own static
-  executor (`chips/espressif/executor`): each executor's tasks are declared
-  when the image compiles, live in static slots, are polled by a direct call
-  and wake through one waker vtable whose data names the executor and the
-  task.
-- **Register model.** Registers, analog-I2C bytes (a separate space addressed
-  by block and index) and the memory the hardware reads and writes (DMA
+- **One root at reset.** The S31 workspace contains no esp-* platform
+  crates or bridges. Host `espflash` and its transitive image-format parser
+  serve image encoding and the stand. The reset root claims the chip once
+  through the PAC's single `take()`. The HAL's `Root::take` returns that
+  unique owner; `Root::into_bootstrap` and `Root::into_runtime` split its
+  partitions for each image's phase. Only these owned partitions grant
+  access. The bootstrap owns reset, its linker sections and application
+  descriptor, and runs the bounded `oer-espressif-boot` sequences over the
+  HAL's register traits.
+  Stage two adopts the initialized platform without repeating cold boot.
+  Its own traps, vectors, checked exits and the image's `critical-section`
+  run on the typed interrupt controller. Each table entry moves its part
+  through `Router::bind`; the executor receives owned software lines and
+  timer blocks. Source identities come from the HAL's `ExecutorPlatform`
+  contract, and architectural CSR access and waits from `oer-riscv`.
+  `embassy-sync`, `embassy-futures`, `embassy-net` and `embassy-time` stay;
+  tasks run on the static executor (`chips/espressif/executor`), in static
+  slots, polled by direct calls, with one waker vtable whose data names the
+  executor and task.
+- **Register model.** The chip is block types (one hardware block each,
+  offsets from its base) placed by a root at their addresses, with its
+  interrupt sources, analog-I2C bytes (a separate space addressed by block
+  and index), RAM regions and the memory the hardware reads and writes (DMA
   descriptors, the RX control prefix, TX descriptor words, BLE exchange
-  memory) are described in `chips/<chip>/registers/` and generated into the
-  PAC ([hardware memory](hardware-memory.md)). A bit is described, opaque (a
-  use observed, meaning unknown), reserved or absent; only described and
-  opaque bits are fields. Pointer fields take typed references; placement is
-  proved by the linker; each block's handover protocol is its HAL engine. Every
-  peripheral of the vendor SVD the model does not describe is a typed block
-  of the PAC's `soc` module whose API the pinned ESP-IDF register headers
-  decide (access classes, reserved lanes and words, offsets, names); what
-  no header states is read-only, and the chip's sourced overlay
-  (`model/strictness.toml`) adds and corrects what they lack.
-- **PAC and HAL.** The PAC's generated boundary provides typed blocks
-  taken once, field accessors by class, typed value domains and DMA
-  addresses, memory layouts and ownership parts. The current renderer
-  consumes the published SVD and API policy and also emits that policy's
-  named transactions, whole-word images and snapshot acknowledgements.
-  Handwritten PAC domain modules assemble owned register parts and expose
-  register-local operations, analog-host operations and straight-line
-  transactions. They keep no in-flight state between calls. Phased
-  sequencing, polls, retries, interrupt routing and lifecycle policy belong
-  to the HAL, each vendor step with its `SOURCE:`. API-policy blocks use the
-  reviewed model's field names; `soc` blocks retain the vendor's prefixes
-  ([PAC](../chips/esp32s31/pac/README.md),
-  [field accessors](../tools/registers/model/README.md#field-accessors)).
-- **Radio access.** The S31 Wi-Fi handoff returns one `RadioAccess` by value;
-  the driver owns it through the runtime epoch and lends it with `&mut`. No
-  shared register arena or dynamic borrow guard.
+  memory), all in `chips/<chip>/registers/`: `types/`, `layouts/` and
+  `chip.toml`, with sources in `evidence/` and the schema-6 ownership policy
+  in `policy.toml` ([hardware memory](hardware-memory.md)). A bit is
+  described, opaque (a use observed, meaning unknown), reserved or absent;
+  only described and opaque bits are fields, each of one access class.
+  Pointer fields state their target and encoding and take typed references;
+  placement is proved by the linker; each block's handover protocol is its
+  HAL engine. Hardware codes and opcodes are sourced named field values in
+  this model; sequence settings and images with unproved code meaning remain
+  cited HAL configuration. HAL derives bounds, array lengths and wrapping
+  moduli from generated geometry, including sourced block quantities outside
+  registers.
+- **PAC and HAL.** The PAC is the exact model, generated whole by `cargo
+  registers generate --chip esp32s31`: typed blocks taken once by its root,
+  field accessors by class, typed value domains and DMA pointers, interrupt
+  sources, ownership parts, memory layouts, the analog-I2C dictionary and
+  the few policy items accessors cannot express (whole-word images, masked
+  acknowledgements, interrupt snapshots, pointer ORs). Its hardware API is
+  generated; `src/lib.rs` exposes it and the single `take()` claim.
+  Register sets, phased sequencing, polls, retries, interrupt routing and
+  lifecycle policy belong to the HAL, each vendor step with its
+  `SOURCE:` ([PAC](../chips/esp32s31/pac/README.md),
+  [the thin PAC](../tools/registers/model/README.md#the-thin-pac)).
+- **Radio access.** The HAL root returns one `RadioHardware` by value.
+  Its split gives the radio system the shared `RadioDomain` and each
+  protocol its partition. The Wi-Fi driver owns its `RadioAccess` through
+  the runtime epoch and lends it with `&mut`. There is no shared register
+  arena or dynamic borrow guard.
 
 ## Radio system
 
@@ -289,8 +296,9 @@ its model and conformance case.
 `trace` (what happened), `profile` (what it costs) and `debug-control`
 (knobs that force paths) are separate classes, each under its own cfg
 (`oer_trace`, `oer_profile`, `oer_debug_control`) that only `cargo fw` sets
-for an image declaring it. Probe hooks compile under `cfg(oer_probe)` for
-`cargo fw probe` images only; production has no item only a probe uses.
+for an image declaring it. Probe images (`cargo fw probe`) are built over the
+production crates' public API alone; production has no item, module or
+`cfg(oer_probe)` only a probe uses.
 
 ## Tools
 

@@ -1,4 +1,4 @@
-use crate::types::BluetoothMemoryListSelector;
+use crate::bluetooth::BluetoothMemoryListSelector;
 
 use super::RxMemoryListClass;
 

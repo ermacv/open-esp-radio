@@ -26,7 +26,7 @@ use crate::bluetooth::engine::{
         SchedulerPoolError, SchedulerRoleInstance, SchedulerRoleKind, SchedulerRolePool,
         SchedulerRoleStorage, sealed,
     },
-    sram_link::ControllerSramLinkAddress,
+    sram_link::SchedulerItemLink,
 };
 
 pub use codec::{
@@ -199,7 +199,7 @@ impl SchedulerRoleStorage for DtmStorage {
         &self.scheduler_item.layout
     }
 
-    fn item_link(binding: &DtmBinding, _item: usize) -> ControllerSramLinkAddress {
+    fn item_link(binding: &DtmBinding, _item: usize) -> SchedulerItemLink {
         binding.scheduler_item_address()
     }
 

@@ -4,13 +4,12 @@
 //! module is the only public path used by HAL consumers.  No peripheral owner,
 //! register block, raw accessor, or generic MMIO capability is re-exported.
 
-pub use oer_esp32s31_pac::{
-    BluetoothMemoryListSelector, CfrValue, CoexTimerClientValue, CoexTimerClockDividerMinusOne,
-    CoexTimerClockSource, CoexTimerPtiValue, CoexTimerRegister,
-    CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource,
-    ExtraSoftApRxBlockAckEntrySnapshot, ForcedRxGain, MAC_TX_POWER_RATE_COUNT,
-    MacApReceivePolicySnapshot, MacAssociationId, MacCcmpKeyIdentity, MacCoexPrioritySnapshot,
-    MacDelaySlot, MacExtraSoftApRxBlockAckEntryIndex, MacHe20PeerConfig, MacHe20PeerError,
+pub use crate::bluetooth::BluetoothMemoryListSelector;
+/// The Wi-Fi MAC value types of the HAL's register operations.
+pub use crate::ieee80211::registers::{
+    ExtraSoftApRxBlockAckEntrySnapshot, MAC_TX_POWER_RATE_COUNT, MacApReceivePolicySnapshot,
+    MacAssociationId, MacCcmpKeyIdentity, MacCoexPrioritySnapshot, MacDelaySlot,
+    MacExtraSoftApRxBlockAckEntryIndex, MacHe20PeerConfig, MacHe20PeerError,
     MacHeBeamformingReportProfile, MacHeBeamformingReportProfileError, MacHeBssColor,
     MacHeDefaultPacketExtensionDuration, MacHeErSuAckRateProfile, MacHeFecCoding,
     MacHeGuardIntervalAndLtf, MacHeMcs, MacHePacketPaddingDuration, MacHeRate,
@@ -31,9 +30,7 @@ pub use oer_esp32s31_pac::{
     MacStaPolicyMode, MacStaReceivePolicySnapshot, MacTxCompletionObservation, MacTxControlFrame,
     MacTxDetachOutcome, MacTxDetachReason, MacTxPowerPair, MacTxPowerTable, MacTxProtection,
     MacTxPtiCount, MacTxPtiProgram, MacTxQueueDetached, MacTxQueueIndex, MacTxStatisticsSnapshot,
-    PbusMemoryGroupBoundary, PhyAdcRate, PhyForcedPowerIndex, PhyFtmEnableVendorArgument,
-    PhyGainMemoryEntry, PhyMemoryError, RxBlockAckEntrySnapshot, StaTbttSchedule,
-    TxBlockAckPayload,
+    RxBlockAckEntrySnapshot, StaTbttSchedule, TxBlockAckPayload,
 };
 
 pub use crate::phy::restore::{
@@ -43,10 +40,17 @@ pub use crate::phy::restore::{
     TxIqToneControlRestoreError,
 };
 
+pub use crate::ieee80211::registers::WifiRxCsiControlMask;
 pub use crate::ieee80211::station_wake::StaTbttScheduleError;
-pub use oer_esp32s31_pac::WifiRxCsiControlMask;
 
-pub(crate) use oer_esp32s31_pac::{
-    BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
-    BluetoothPhyRegisterInitInputs,
+pub use crate::modem::values::{
+    CfrValue, CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource,
+    CoexTimerPtiValue, ForcedRxGain, PhyForcedPowerIndex,
+};
+pub use crate::modem::{
+    CoexTimerRegister, CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource,
+};
+pub use crate::phy::{
+    i2c::PhyAdcRate,
+    memory::{PbusMemoryGroupBoundary, PhyGainMemoryEntry, PhyMemoryError},
 };

@@ -4,9 +4,9 @@
 use std::borrow::Cow;
 
 use oer_diagnostics::note::Part;
+use oer_diagnostics::radio_root::RadioRoot;
 use oer_diagnostics::render::{Gap, Next};
 use oer_diagnostics::{BootSmokePassed, MAX_PAYLOAD, Record};
-use oer_espressif_esp_hal_radio::diagnostics::RadioRoot;
 use oer_trace::Event;
 
 /// The first parts of a console line that several notes make, and the
@@ -137,7 +137,6 @@ impl Decoder {
                     .flatten()
                     .ok_or_else(|| format!("unknown boot diagnostic event: {kind:?} {words:?}"))?;
                 match event {
-                    RadioRoot::Handoff => "OER radio-root handoff=ok".into(),
                     RadioRoot::ClockReleased(clock) => {
                         format!("OER radio-root clock={clock:?} acquired released")
                     }

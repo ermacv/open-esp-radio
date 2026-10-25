@@ -9,7 +9,7 @@ this repository). The register evidence is
 (`BLOB_LIBBLE_PHY_INIT_REGISTERS`).
 
 Facts only. Where a step writes a fixed image, the value is the one in the
-reviewed register model, `chips/esp32s31/registers/policy/api.toml`, under the named
+reviewed register model, `chips/esp32s31/registers/policy.toml`, under the named
 operation; it is not repeated here.
 
 ## Place in the lifecycle

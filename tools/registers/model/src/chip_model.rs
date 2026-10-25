@@ -14,25 +14,26 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{
-    MemoryLayout, NamingRequirement, RegisterEvidenceSet, ReviewAnnotation, analog::AnalogAddress,
-};
+use crate::{MemoryLayout, RegisterEvidenceSet, ReviewAnnotation, analog::AnalogAddress};
 
 mod block_type;
 mod controls;
 mod error;
+mod facts;
 mod source;
 
+pub(crate) use block_type::parse_bits;
 pub use block_type::{BlockType, Element};
-use block_type::{Context, ExpansionBudget, check_name, parse_bits};
+use block_type::{Context, ExpansionBudget, check_name};
 pub use controls::{ControlKind, ExpandedControl, ExpandedGateGroup, ResolvedField};
 pub use error::{Error, ErrorKind};
 pub use source::{
     AnalogInstance, AnalogSpace, ClockSource, Command, Control, Dim, Extent, Field, FieldClass,
-    GateGroup, Group, Instance, Interrupt, InterruptOutput, InterruptSources, LayoutPlacement, Mux,
-    OpaqueReview, ROOT_SCHEMA, RamRegion, ReadSafe, Register, Reserved, Reset, ReviewOverride,
-    RootFile, SharedControl, Sourced, Space, TYPE_SCHEMA, TypeFile, TypeHeader, TypeReview,
-    UnboundInterrupt, Value, View, WriteRange,
+    GateGroup, Group, Instance, Interrupt, InterruptOutput, InterruptPair, InterruptSources,
+    LayoutPlacement, Mux, OpaqueReview, Pointer, PointerEncoding, ROOT_SCHEMA, RamRegion, ReadSafe,
+    Register, Reserved, Reset, ReviewOverride, RootFile, SharedControl, Sourced, Space,
+    TYPE_SCHEMA, TypeFile, TypeHeader, TypeReview, UnboundInterrupt, Value, ValueRange, View,
+    WriteRange,
 };
 
 /// Where an expanded register is.
@@ -136,6 +137,7 @@ impl ChipModel {
         place_layouts(context, &root, &regions, &mut layouts)?;
         crate::layouts::validate_layout_set(&layouts)
             .map_err(|error| context.error("", ErrorKind::Layouts(Box::new(error))))?;
+        facts::check(context, &types, &layouts, &root.ram_regions)?;
         let mut budget = ExpansionBudget::default();
         let registers = expand(context, &root, &types, &mut budget)?;
         let controls = controls::expand(context, &root, &registers, &mut budget)?;
@@ -283,13 +285,8 @@ fn load_layouts(
     if includes.is_empty() {
         return Ok(Vec::new());
     }
-    let layouts = crate::layouts::parse_layouts(
-        base,
-        includes,
-        &mut BTreeMap::new(),
-        NamingRequirement::Complete,
-    )
-    .map_err(|error| context.error("", ErrorKind::Layouts(Box::new(error))))?;
+    let layouts = crate::layouts::parse_layouts(base, includes, &mut BTreeMap::new())
+        .map_err(|error| context.error("", ErrorKind::Layouts(Box::new(error))))?;
     for layout in &layouts {
         if !layout.placement.is_empty() {
             return Err(context.error(

@@ -324,7 +324,7 @@ fn accepted_list_pressure_projects_next_to_the_current_tail() {
 #[test]
 fn completed_ownership_follows_a_permuted_descriptor_buffer_binding() {
     const COUNT: usize = 2;
-    const ADDRESS_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+    const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     // Descriptor zero names physical buffer one; descriptor one names
     // physical buffer zero.
     let mut storage = Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new());
@@ -383,7 +383,7 @@ fn completed_ownership_follows_a_permuted_descriptor_buffer_binding() {
 #[test]
 fn detached_buffer_cannot_rearm_until_the_network_lease_returns() {
     const COUNT: usize = 2;
-    const ADDRESS_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+    const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
     storage.buffer_mut(0).unwrap()[4..8].copy_from_slice(&[1, 2, 3, 4]);
     let placed = place(storage);
@@ -446,7 +446,7 @@ fn detached_buffer_cannot_rearm_until_the_network_lease_returns() {
 #[test]
 fn role_neutral_prefix_recycle_normalizes_a_returned_staged_buffer() {
     const COUNT: usize = 2;
-    const ADDRESS_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+    const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
@@ -500,7 +500,7 @@ fn role_neutral_prefix_recycle_normalizes_a_returned_staged_buffer() {
 #[test]
 fn released_dma_buffers_rearm_only_as_a_contiguous_ring_prefix() {
     const COUNT: usize = 4;
-    const ADDRESS_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+    const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
@@ -630,7 +630,7 @@ fn live_binding_rejects_a_foreign_storage_arena() {
 #[test]
 fn first_frontier_returns_one_unit_from_a_terminal_burst() {
     const COUNT: usize = 4;
-    const ADDRESS_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+    const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
@@ -727,7 +727,7 @@ fn failed_halted_prepare_quarantines_the_arena_when_walker_stop_is_unproved() {
 #[test]
 fn partial_live_buffer_rearm_quarantines_the_arena() {
     const COUNT: usize = 2;
-    const ADDRESS_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+    const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
@@ -787,7 +787,7 @@ fn completed_descriptor_metadata_is_validated_before_payload_transfer() {
         let placed = place(storage);
         let storage = placed.storage();
         let base = placed.descriptor_base();
-        let buffers = *storage.buffer_addresses();
+        let buffers = *storage.buffer_addresses().bits();
         let mut mmio = MockRxDma::default();
         let prepared = placed
             .prepare_ring(&mut mmio)
@@ -825,7 +825,7 @@ fn completed_descriptor_metadata_is_validated_before_payload_transfer() {
 #[test]
 fn impossible_reload_frontier_quarantines_the_static_arena() {
     const COUNT: usize = 2;
-    const ADDRESS_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+    const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
@@ -888,7 +888,7 @@ fn impossible_reload_frontier_quarantines_the_static_arena() {
 #[test]
 fn in_arena_intermediate_last_rerings_the_doorbell() {
     const COUNT: usize = 4;
-    const ADDRESS_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+    const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
@@ -968,7 +968,7 @@ fn in_arena_intermediate_last_rerings_the_doorbell() {
 }
 
 const REPAIR_COUNT: usize = 2;
-const ADDRESS_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
 
 /// A live two-descriptor ring whose walker exhausted the accepted tail
 /// after its doorbell was rung while NEXT was still nonzero, so the settle
@@ -1163,7 +1163,7 @@ fn exhausted_list_reclaims_untouched_prefix_before_terminal_payload() {
 #[test]
 fn dropping_a_taken_completed_unit_requires_radio_reset() {
     const COUNT: usize = 2;
-    const ADDRESS_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+    const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
@@ -1199,7 +1199,7 @@ fn dropping_a_taken_completed_unit_requires_radio_reset() {
 #[test]
 fn frozen_last_releases_the_descriptor_equal_to_last() {
     const COUNT: usize = 4;
-    const ADDRESS_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+    const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
@@ -1252,7 +1252,7 @@ fn two_completed_frames_last_on_the_first() -> (
     MockRxDma,
     RxRingLive<'static, 4>,
 ) {
-    const ADDRESS_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+    const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     let storage = Box::leak(Box::new(RxDmaStorage::<4, 16, 20, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
@@ -1457,7 +1457,7 @@ fn a_cursor_of_an_earlier_live_epoch_takes_nothing() {
 #[test]
 fn frozen_last_unit_reclaim_returns_only_one_vendor_chain() {
     const COUNT: usize = 4;
-    const ADDRESS_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+    const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
@@ -1607,7 +1607,7 @@ fn live_host_arena<const COUNT: usize>() -> (
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
-    let buffers = storage.buffer_addresses();
+    let buffers = storage.buffer_addresses().bits();
     let mut mmio = MockRxDma::default();
     let live = placed
         .prepare_ring(&mut mmio)
@@ -1738,7 +1738,9 @@ impl ForeignStopProof {
         )));
         let base = other.descriptor_base();
         let other = other.storage();
-        let foreign = RxDmaBinding::new(&other.descriptors, base, &other.arena).unwrap();
+        let descriptors =
+            crate::ieee80211::dma::rx_dma::RxDescriptorAddresses::for_host_model(base, 3).unwrap();
+        let foreign = RxDmaBinding::new(&other.descriptors, descriptors, &other.arena).unwrap();
         Self {
             walker: crate::ieee80211::dma::rx_dma::model::RxWalkerModel::new(),
             foreign: Box::leak(Box::new(foreign)),
@@ -1919,7 +1921,7 @@ fn a_chain_longer_than_the_length_field_is_owned_and_recycled() {
     let placed = place(storage);
     let storage = placed.storage();
     let base = placed.descriptor_base();
-    let buffers = *storage.buffer_addresses();
+    let buffers = *storage.buffer_addresses().bits();
     let mut mmio = RxWalkerModel::new();
     let mut live = placed
         .prepare_ring(&mut mmio)

@@ -38,14 +38,14 @@ pub struct CoreStart {
     pub ipc: Vec<String>,
 }
 
-/// The `[reset-cause]` table: the field of the chip's platform publication
-/// (`chips/<id>/registers/published/platform.bindings.toml`) that holds why the
-/// core last left reset, which the stand reads through JTAG after a power
-/// cycle, and the code of a power-on reset.
+/// The `[reset-cause]` table: the field of the chip's register model
+/// (`chips/<id>/registers/chip.toml`) that holds why the core last left
+/// reset, which the stand reads through JTAG after a power cycle, and the
+/// code of a power-on reset.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct ResetCause {
-    /// `PERIPHERAL.REGISTER.FIELD`, the SVD names.
+    /// `INSTANCE.REGISTER.FIELD` of the chip root.
     pub field: String,
     pub power_on: u32,
 }

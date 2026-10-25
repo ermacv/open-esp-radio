@@ -2010,6 +2010,7 @@ pub const PHY_I2C: Suite = Suite {
     roots: &[],
     prepare: None,
     claims: &[],
+    session: None,
 };
 
 #[cfg(test)]

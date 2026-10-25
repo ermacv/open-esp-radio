@@ -1,4 +1,7 @@
-use oer_esp32s31_pac::{RxDcoControlField, TxDcPwdetFields, TxIqToneControlFields};
+use crate::phy::{
+    baseband::{TxDcPwdetFields, TxIqToneControlFields},
+    rx_dco::RxDcoControlField,
+};
 
 use super::{
     PhyRouteState, RxDcoControlPrepareError, RxDcoControlRestoreError, TxDcPwdetPrepareError,

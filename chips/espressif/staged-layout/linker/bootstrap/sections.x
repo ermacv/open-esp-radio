@@ -1,80 +1,87 @@
-PROVIDE(interrupt0 = DefaultHandler);
-
-/* Text and constants share the same virtual flash window. Reserve the pages
-   occupied by rodata before placing executable text into that window. */
+/* The ESP image loader places initialized SRAM segments at their linked
+   addresses. Reset clears BSS only; noinit and retained memory are preserved. */
 SECTIONS {
-  .rotext_dummy (NOLOAD) :
-  {
-    . = ALIGN(ALIGNOF(.rodata));
-    . = ALIGN(ALIGNOF(.rodata.wifi));
-    . = . + SIZEOF(.flash.appdesc);
-    . = . + SIZEOF(.rodata);
-    . = . + SIZEOF(.rodata.wifi);
-    /* Keep XIP text on the same MMU page boundary encoded in the
-       second-stage bootloader and application descriptor, after the image
-       headers. */
-    . = ALIGN(MMU_PAGE_BYTES) + IMAGE_SEGMENT_HEADER_BYTES;
-  } > ROTEXT
-}
-INSERT BEFORE .text;
+  .rwtext : ALIGN(4) {
+    _rwtext_start = ABSOLUTE(.);
+    KEEP(*(.init .init.*));
+    _trap_section_origin = ABSOLUTE(.);
+    KEEP(*(.trap .trap.*));
+    *(.rwtext .rwtext.* .rwtext.literal .rwtext.literal.*);
+    . = ALIGN(4);
+    _rwtext_end = ABSOLUTE(.);
+  } > SRAM
 
-SECTIONS {
-  INCLUDE "rwtext.x"
-
-  /* Runtime destination for the canonical benchmark stream. NOLOAD keeps
-     the ESP image loader from treating it as initialized data. */
-  .code_bench.iram (NOLOAD) : ALIGN(64)
-  {
+  .code_bench.iram (NOLOAD) : ALIGN(64) {
     __code_bench_iram_start = ABSOLUTE(.);
-    . = . + (__code_bench_flash_end - __code_bench_flash_start);
+    . += __code_bench_flash_end - __code_bench_flash_start;
     __code_bench_iram_end = ABSOLUTE(.);
-  } > RWTEXT
+  } > SRAM
 
-  INCLUDE "rwdata.x"
-}
+  .data : ALIGN(4) {
+    _data_start = ABSOLUTE(.);
+    /* SOURCE: RISC-V ELF psABI, global-pointer relaxation: signed 12-bit offsets. */
+    __global_pointer$ = . + 0x800;
+    *(.sdata .sdata.* .data .data.* .data1);
+    *(.critical.data .critical.data.*);
+    . = ALIGN(4);
+    _data_end = ABSOLUTE(.);
+  } > SRAM
+  _dram_data_start = _data_start;
 
-ASSERT(__code_bench_iram_end <= ORIGIN(RWTEXT) + LENGTH(RWTEXT),
-       "code benchmark does not fit in internal instruction SRAM");
+  .data.wifi : ALIGN(4) {
+    *(.data_wlog_*.*);
+    . = ALIGN(4);
+  } > SRAM
 
-INCLUDE "bootstrap/flash-sections.x"
-INCLUDE "text.x"
-PROVIDE(__flash_text_start = ADDR(.text));
-PROVIDE(__flash_text_end = ADDR(.text) + SIZEOF(.text));
+  .bss (NOLOAD) : ALIGN(4) {
+    _bss_start = ABSOLUTE(.);
+    *(.sbss .sbss.* .bss .bss.* COMMON);
+    *(.critical.bss .critical.bss.*);
+    . = ALIGN(4);
+    _bss_end = ABSOLUTE(.);
+  } > SRAM
 
-/* The bootstrap owns no PSRAM sections: stage two owns all of PSRAM after the
-   probe page. An input section placed in PSRAM here would be linked at a Flash
-   or SRAM address and never initialized. */
-SECTIONS
-{
-  /* esp-riscv-rt zeroes `.dram2_uninit.bss` at reset; this platform places
-     nothing in the region after the loaded image, so it stays empty. */
-  .dram2_uninit.unsupported (NOLOAD) :
-  {
-    _dram2_uninit_bss_start = ABSOLUTE(.);
-    *(.dram2_uninit.bss .dram2_uninit.bss.* .dram2_uninit .dram2_uninit.*);
-    _dram2_uninit_bss_end = ABSOLUTE(.);
-  } > RWDATA
+  .noinit (NOLOAD) : ALIGN(4) {
+    *(.noinit .noinit.*);
+  } > SRAM
 
-  .psram.unsupported (NOLOAD) :
-  {
+  .stack (NOLOAD) : ALIGN(16) {
+    _stack_end = ABSOLUTE(.);
+    . = ORIGIN(SRAM) + LENGTH(SRAM);
+    _stack_start = ABSOLUTE(.);
+  } > SRAM
+
+  .rtc_fast.persistent RETAINED_ORIGIN (NOLOAD) : ALIGN(4) {
+    *(.rtc_fast.persistent .rtc_fast.persistent.*);
+  } > RETAINED
+
+  .psram.unsupported (NOLOAD) : {
     *(.psram.text .psram.text.* .psram.rodata .psram.rodata.*);
     *(.psram.data .psram.data.* .psram.bss .psram.bss.* .psram.noinit .psram.noinit.*);
-  } > RWDATA
+    *(.dram2_uninit .dram2_uninit.*);
+    *(.rtc_fast.bss .rtc_fast.bss.* .rtc_fast.data .rtc_fast.data.*);
+    *(.rtc_fast.text .rtc_fast.text.* .rtc_fast.literal .rtc_fast.literal.*);
+  } > PSRAM
 }
+
+INCLUDE "bootstrap/flash-sections.x"
+SECTIONS {
+  .text ALIGN(MMU_PAGE_BYTES) + IMAGE_SEGMENT_HEADER_BYTES : {
+    __flash_text_start = ABSOLUTE(.);
+    *(.text .text.* .literal .literal.*);
+    . = ALIGN(4);
+    __flash_text_end = ABSOLUTE(.);
+  } > ROTEXT
+
+  .eh_frame : ALIGN(4) { KEEP(*(.eh_frame .eh_frame.*)); } > RODATA
+  .eh_frame_hdr : ALIGN(4) { *(.eh_frame_hdr); } > RODATA
+  .metadata : { *(.esp.metadata .esp.metadata.*); } > RODATA
+  /DISCARD/ : { *(.comment .note .note.*); }
+}
+
 ASSERT(SIZEOF(.psram.unsupported) == 0,
        "the bootstrap owns no PSRAM sections; stage two owns PSRAM");
-/* The second-stage loader executes from SECOND_STAGE_LOADER_START upwards
-   while it loads this image, so every loaded SRAM segment must end below it. */
 ASSERT(ADDR(.data.wifi) + SIZEOF(.data.wifi) <= SECOND_STAGE_LOADER_START,
        "a loaded bootstrap SRAM segment reaches the second-stage loader");
-INCLUDE "rtc_fast.x"
-INCLUDE "stack.x"
-INCLUDE "metadata.x"
-INCLUDE "eh_frame.x"
-
-/* The trap prologue uses this exact boundary to distinguish an invalid stack
-   in executable SRAM from a valid stack in the data portion of unified SRAM. */
-_dram_data_start = ADDR(.data);
-INCLUDE "hal-defaults.x"
-ASSERT(SIZEOF(.dram2_uninit.unsupported) == 0,
-       "this platform places nothing in .dram2_uninit");
+ASSERT(_stack_start > _stack_end, "the bootstrap has no stack space");
+ASSERT(SIZEOF(.rtc_fast.persistent) <= LENGTH(RETAINED), "retained memory overflow");

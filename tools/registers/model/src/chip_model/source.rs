@@ -21,12 +21,19 @@ pub struct TypeFile {
     pub interrupt_outputs: Vec<InterruptOutput>,
     #[serde(default)]
     pub review: TypeReview,
+    /// Sourced block geometry that is not encoded by a register field.
+    #[serde(default)]
+    pub geometry: Vec<Value>,
     #[serde(default)]
     pub registers: Vec<Register>,
     #[serde(default)]
     pub groups: Vec<Group>,
     #[serde(default)]
     pub commands: Vec<Command>,
+    #[serde(default)]
+    pub interrupt_pairs: Vec<InterruptPair>,
+    #[serde(default)]
+    pub doorbells: Vec<Doorbell>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -218,6 +225,11 @@ pub struct Field {
     pub write_range: Option<WriteRange>,
     #[serde(default)]
     pub write_values_only: bool,
+    /// Hardware value domain of the entire field (reads as well as writes).
+    #[serde(default)]
+    pub value_range: Option<ValueRange>,
+    #[serde(default)]
+    pub pointer: Option<Pointer>,
 }
 
 /// What a read and a write of a field do: the closed set of classes the
@@ -287,7 +299,54 @@ pub struct Value {
     pub name: String,
     pub value: u32,
     #[serde(default)]
+    pub sources: Vec<String>,
+    #[serde(default)]
     pub description: Option<String>,
+}
+
+/// A sourced bounded hardware domain, inclusive.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct ValueRange {
+    pub min: u32,
+    pub max: u32,
+    pub sources: Vec<String>,
+}
+
+/// A hardware pointer: a layout reference, or raw storage in a root region.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Pointer {
+    #[serde(default)]
+    pub points_to: Option<String>,
+    pub placement: String,
+    #[serde(default)]
+    pub member_offset: u32,
+    pub encoding: PointerEncoding,
+    pub sources: Vec<String>,
+}
+
+/// The address image is `(address >> shift) & ((1 << width) - 1)`.
+/// A compressed image uses its placement's base for the omitted high bits.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct PointerEncoding {
+    pub width: u32,
+    pub shift: u32,
+    #[serde(default)]
+    pub low_bits: bool,
+    /// Type-local field supplying high address bits, when hardware has one.
+    #[serde(default)]
+    pub high_field: Option<String>,
+}
+
+/// A type-local status-to-clear relation; several status views may share a clear.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct InterruptPair {
+    pub status: String,
+    pub clear: String,
+    pub sources: Vec<String>,
 }
 
 /// The values a write may give a field, inclusive.
@@ -333,6 +392,19 @@ pub struct Command {
     pub qualifiers: Vec<String>,
     #[serde(default)]
     pub held: Vec<String>,
+    pub sources: Vec<String>,
+}
+
+/// A self-clearing bit outside a command register that software sets to
+/// request one hardware action and the hardware clears when it accepts it:
+/// a read-modify-write of its register may write back the value it read,
+/// as the vendor's own read-modify-writes do.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Doorbell {
+    /// `REGISTER` or `GROUP.REGISTER`.
+    pub register: String,
+    pub field: String,
     pub sources: Vec<String>,
 }
 

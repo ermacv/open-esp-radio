@@ -2,7 +2,7 @@
 
 #![forbid(unsafe_code)]
 
-use crate::types::BluetoothMemoryListSelector;
+use crate::bluetooth::BluetoothMemoryListSelector;
 
 /// One of the two global RX list classes activated by the current S31 memory
 /// manager.
@@ -30,8 +30,8 @@ impl RxMemoryListClass {
     /// receives through a global list.
     pub(crate) const fn select_in_link_state(self, word: u32) -> u32 {
         let class = match self {
-            Self::Scanning => 1,
-            Self::NonScanning => 2,
+            Self::Scanning => crate::layouts::BleLinkStateRxList::CLASS_SCANNING,
+            Self::NonScanning => crate::layouts::BleLinkStateRxList::CLASS_NON_SCANNING,
         };
         crate::layouts::BleLinkStateRxList::from_bits(word)
             .with_class(class)

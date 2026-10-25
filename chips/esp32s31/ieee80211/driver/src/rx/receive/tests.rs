@@ -1,11 +1,11 @@
 //! The receive runner over host models of every owner it drives.
 //!
 //! The interrupt line runs through a leaked [`HandlerCell`] and the same
-//! line functions the image's handlers call. [`Host::p3`] plays the radio
-//! interrupt level: while a routed bank asserts its line, it runs that
-//! bank's handler. The doorbell runs its handler synchronously, as the
-//! software interrupt preempts the radio executor, and then lets the level
-//! serve whatever the handler unmasked. Frames are completed by writing the
+//! line function the image's handler calls, over the host's part of both
+//! bank models. [`Host::p3`] plays the radio interrupt level: while a bank
+//! asserts the line, it runs the handler. The doorbell runs the handler
+//! synchronously, as the software interrupt preempts the radio executor,
+//! and then lets the level serve whatever the handler unmasked. Frames are completed by writing the
 //! descriptor word and the walker's LAST/NEXT, as the DMA engine would.
 
 use core::{
@@ -25,8 +25,11 @@ use oer_esp32s31_hal::ieee80211::dma::{
 };
 use oer_esp32s31_hal::types::{MacInterruptEvents, MacInterruptObservation};
 use oer_esp32s31_ieee80211_mac::{
-    irq::model::{
-        MacInterruptModel, MacInterruptOperation, PowerInterruptModel, PowerInterruptOperation,
+    irq::{
+        epoch::{EpochState, InterruptEpoch},
+        model::{
+            MacInterruptModel, MacInterruptOperation, PowerInterruptModel, PowerInterruptOperation,
+        },
     },
     rx::{RxBufferFullCounter, RxRingError, pool::NetworkRxFrame, pool::RxStageTransactionError},
 };
@@ -34,7 +37,7 @@ use oer_time_virtual::VirtualClock;
 
 use super::*;
 use crate::{
-    irq::{run_doorbell, service_mac_line, service_power_line},
+    irq::{DoorbellAcknowledge, HostActivation, WifiIrqPart, service_wifi_line},
     rx::{
         arena::{WifiRxArena, WifiRxStatic},
         control::ReceiveStopHandle,
@@ -53,17 +56,18 @@ const BUFFER: usize = 1_664;
 const STORAGE: usize = 1_668;
 const SLOTS: usize = 32;
 
-type HostEpoch = ActiveEpoch<Moderated, MacInterruptModel, PowerInterruptModel>;
-type HostLine<X = oer_interrupt_table::signal::host::Host> = WifiIrqLine<HostEpoch, X>;
-type HostStatic = WifiRxStatic<
-    COUNT,
-    BUFFER,
-    STORAGE,
-    SLOTS,
-    oer_interrupt_table::signal::host::Host,
-    HostDma,
-    HostEpoch,
->;
+type HostLine<X = oer_interrupt_table::signal::host::Host> = WifiIrqLine<X>;
+type HostPart = WifiIrqPart<HostLower, (), MacInterruptModel, PowerInterruptModel>;
+type HostStatic =
+    WifiRxStatic<COUNT, BUFFER, STORAGE, SLOTS, oer_interrupt_table::signal::host::Host, HostDma>;
+
+/// The doorbell's lowering half of the host's part: [`HostDoorbell`]
+/// records the lowering before it runs the handler.
+struct HostLower;
+
+impl DoorbellAcknowledge for HostLower {
+    fn acknowledge(&mut self) {}
+}
 type HostStorage = RxDmaStorage<COUNT, BUFFER, STORAGE, HostDma>;
 
 fn leak<T>(value: T) -> &'static mut T {
@@ -74,13 +78,14 @@ fn leak<T>(value: T) -> &'static mut T {
 enum Event {
     PromiscuousOn,
     PromiscuousOff,
+    /// An entry of the handler activated the interrupt epoch.
     Activate,
-    RoutesEnabled { installed: bool, pending: bool },
-    RoutesSilenced,
     RuntimeResume,
     RuntimeStop,
     WalkerStop,
-    Ring { released: usize },
+    Ring {
+        released: usize,
+    },
     Acknowledge,
     MacLine,
     PowerLine,
@@ -90,7 +95,9 @@ enum Event {
 struct Host<X: SignalExecutor = oer_interrupt_table::signal::host::Host> {
     walker: RefCell<RxWalkerModel>,
     log: RefCell<Vec<Event>>,
-    routed: Cell<bool>,
+    /// The radio handler's part: both bank models, closed until a request
+    /// activates them.
+    part: RefCell<HostPart>,
     /// The doorbell rings but its handler never runs.
     deaf: Cell<bool>,
     runtime_active: Cell<u8>,
@@ -111,7 +118,11 @@ impl<X: SignalExecutor> Host<X> {
         Self {
             walker: RefCell::new(RxWalkerModel::new()),
             log: RefCell::new(Vec::new()),
-            routed: Cell::new(false),
+            part: RefCell::new(WifiIrqPart::for_host_test(
+                InterruptEpoch::new(MacInterruptModel::masked(), PowerInterruptModel::masked()),
+                (),
+                HostLower,
+            )),
             deaf: Cell::new(false),
             runtime_active: Cell::new(0),
             mac_started: Cell::new(false),
@@ -128,41 +139,51 @@ impl<X: SignalExecutor> Host<X> {
         core::mem::take(&mut *self.log.borrow_mut())
     }
 
-    fn line<R>(&self, f: impl FnOnce(&mut HostLine<X>) -> R) -> R {
-        self.cell.with(f).expect("the line is installed and idle")
+    fn part<R>(&self, f: impl FnOnce(&mut HostPart) -> R) -> R {
+        f(&mut self.part.borrow_mut())
     }
 
     fn mac(&self) -> MacInterruptModel {
-        self.line(|line| line.epoch().banks().0.clone())
+        self.part(|part| part.epoch().banks().0.clone())
     }
 
     fn power(&self) -> PowerInterruptModel {
-        self.line(|line| line.epoch().banks().1.clone())
+        self.part(|part| part.epoch().banks().1.clone())
     }
 
-    /// The radio interrupt level: run each routed, asserted bank's handler.
+    /// Whether the handler masked both banks of the epoch.
+    fn masked(&self) -> bool {
+        self.part(|part| part.epoch().state() == EpochState::Masked)
+    }
+
+    /// One entry of the radio handler, as the line's vector runs it.
+    fn enter(&self) {
+        let activated = self.part(|part| {
+            let before = part.epoch().state();
+            service_wifi_line(&self.cell, part);
+            before != EpochState::Active && part.epoch().state() == EpochState::Active
+        });
+        if activated {
+            self.record(Event::Activate);
+        }
+    }
+
+    /// The radio interrupt level: while a bank asserts the line, run the
+    /// handler; each entry serves the MAC bank first.
     fn p3(&self) {
         for _ in 0..8 {
-            if !self.routed.get() {
-                return;
-            }
-            let Some((mac, power)) = self.cell.with(|line| {
-                let (mac, power) = line.epoch().banks();
+            let (mac, power) = self.part(|part| {
+                let (mac, power) = part.epoch().banks();
                 (mac.line_asserted(), power.line_asserted())
-            }) else {
-                return;
-            };
-            if !mac && !power {
-                return;
-            }
-            if power {
-                self.record(Event::PowerLine);
-                self.cell.with(service_power_line);
-            }
+            });
             if mac {
                 self.record(Event::MacLine);
-                self.cell.with(service_mac_line);
+            } else if power {
+                self.record(Event::PowerLine);
+            } else {
+                return;
             }
+            self.enter();
         }
     }
 }
@@ -242,26 +263,6 @@ impl<X: SignalExecutor> MacRuntimeStartHardware for HostRadio<X> {
     }
 }
 
-struct HostRoutes<X: SignalExecutor = oer_interrupt_table::signal::host::Host> {
-    host: &'static Host<X>,
-    requests: &'static WifiIrqRequests,
-}
-
-impl<X: SignalExecutor> WifiIrqRoutes for HostRoutes<X> {
-    fn enable(&mut self) {
-        self.host.record(Event::RoutesEnabled {
-            installed: self.host.cell.with(|_| ()).is_some(),
-            pending: self.requests.is_pending(),
-        });
-        self.host.routed.set(true);
-    }
-
-    fn silence(&mut self) {
-        self.host.record(Event::RoutesSilenced);
-        self.host.routed.set(false);
-    }
-}
-
 struct HostDoorbell<X: SignalExecutor = oer_interrupt_table::signal::host::Host> {
     host: &'static Host<X>,
     rx: &'static HostStorage,
@@ -275,7 +276,8 @@ impl<X: SignalExecutor> RadioDoorbell for HostDoorbell<X> {
         if self.host.deaf.get() {
             return;
         }
-        run_doorbell(&self.host.cell, || self.host.record(Event::Acknowledge));
+        self.host.record(Event::Acknowledge);
+        self.host.enter();
         // The level then serves whatever the handler unmasked.
         self.host.p3();
     }
@@ -403,7 +405,7 @@ where
     M: Admission + 'static,
 {
     let host = Host::leaked();
-    let arena: &'static mut WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE, X, HostDma, HostEpoch> =
+    let arena: &'static mut WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE, X, HostDma> =
         leak(bytemuck::Zeroable::zeroed());
     let (parts, stop, frames) =
         WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(arena), signals)
@@ -414,15 +416,17 @@ where
     let (publisher, admission) = owners(counters, parts.returns(), frames, clock);
     let (publisher, admission) = (&*leak(publisher), &*leak(admission));
     let hardware = leak(HostRadio { host });
-    let routes = leak(HostRoutes { host, requests });
     let doorbell = &*leak(HostDoorbell { host, rx });
-    let activate = move || {
-        host.record(Event::Activate);
-        ActiveEpoch::for_host_test(MacInterruptModel::new(), PowerInterruptModel::new())
-    };
     let walker = leak(SharedRxWalker(&host.walker));
     let runner = Box::pin(receive(
-        hardware, walker, activate, parts, &host.cell, routes, doorbell, clock, publisher,
+        hardware,
+        walker,
+        &HostActivation,
+        parts,
+        &host.cell,
+        doorbell,
+        clock,
+        publisher,
         admission,
     ));
     Harness {
@@ -478,7 +482,7 @@ impl<X: SignalExecutor> Harness<X> {
     /// The MAC latches its RX-success event for the completed units.
     fn rx_event(&self) {
         self.host
-            .line(|line| line.epoch_mut().banks_mut().0.latch(rx_success()));
+            .part(|part| part.epoch_mut().banks_mut().0.latch(rx_success()));
     }
 
     fn frame(&mut self, length: u32) {
@@ -502,12 +506,17 @@ impl<X: SignalExecutor> Harness<X> {
             .operation_count(RxWalkerOperation::Stop)
     }
 
-    /// Bring the epoch up and forget its bring-up log.
+    /// Bring the epoch up and forget its bring-up log, the banks' too.
     fn started(mut self) -> Self {
         self.settle();
         assert!(self.host.walker.borrow().walker_enabled);
         self.host.take_log();
         self.host.walker.borrow_mut().clear_operations();
+        self.host.part(|part| {
+            let (mac, power) = part.epoch_mut().banks_mut();
+            mac.clear_operations();
+            power.clear_operations();
+        });
         self
     }
 }
@@ -551,7 +560,7 @@ fn cold_start_never_opens_mac_when_walker_enable_is_unconfirmed() {
 }
 
 #[test]
-fn routes_enable_after_epoch_activation_and_install() {
+fn the_handler_activates_the_epoch_after_the_install() {
     let mut harness = harness();
     // A request left by an earlier epoch is cleared by the install.
     harness.requests.ring(WifiIrqRequest::MaskAll, &Silent);
@@ -560,22 +569,26 @@ fn routes_enable_after_epoch_activation_and_install() {
         harness.host.take_log(),
         [
             Event::PromiscuousOn,
+            Event::Ring { released: 0 },
+            Event::Acknowledge,
             Event::Activate,
-            Event::RoutesEnabled {
-                installed: true,
-                pending: false,
-            },
             Event::RuntimeResume,
         ]
     );
-    // The walker started between the routes and the runtime resume.
+    // The walker started between the activation and the runtime resume.
     let walker = harness.host.walker.borrow();
     assert!(walker.walker_enabled);
     assert_eq!(walker.operation_count(RxWalkerOperation::Enable), 1);
     drop(walker);
-    // Nothing touched the banks; the stale mask was not applied.
-    assert!(harness.host.mac().operations().is_empty());
+    // The activation alone touched the banks; the stale mask was not
+    // applied.
+    assert!(harness.host.mac().operations().matches(&[
+        MacInterruptOperation::MaskAll,
+        MacInterruptOperation::ClearAll,
+        MacInterruptOperation::Publish(oer_esp32s31_hal::types::MacInterruptMask::STATION),
+    ]));
     assert!(harness.host.mac().rx_delivery_enabled());
+    assert!(!harness.requests.is_pending());
     assert!(harness.stop.try_exit().is_none());
 }
 
@@ -752,11 +765,11 @@ fn install_clears_stale_requests_and_receive_proceeds() {
     harness.frame(90);
     harness.settle();
     assert_eq!(harness.report().units, 1);
-    assert!(harness.host.line(|line| !line.masked()));
+    assert!(!harness.host.masked());
 }
 
 #[test]
-fn teardown_is_mask_silence_close_drain_stop_once() {
+fn teardown_is_mask_close_drain_stop_once() {
     let mut harness = harness().started();
     harness.frame(200);
     harness.settle();
@@ -769,7 +782,6 @@ fn teardown_is_mask_silence_close_drain_stop_once() {
         [
             Event::Ring { released: 1 },
             Event::Acknowledge,
-            Event::RoutesSilenced,
             Event::PromiscuousOff,
             Event::RuntimeStop,
             Event::WalkerStop,
@@ -881,13 +893,12 @@ fn service_fault_masks_and_quarantines() {
             Event::MacLine,
             Event::Ring { released: 0 },
             Event::Acknowledge,
-            Event::RoutesSilenced,
             Event::PromiscuousOff,
             Event::RuntimeStop,
             Event::WalkerStop,
         ]
     );
-    assert!(harness.host.line(|line| line.masked()));
+    assert!(harness.host.masked());
     // Poisoned before the stop: the arena waits for a radio reset.
     assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::ResetRequired);
     let report = harness.report();
@@ -993,7 +1004,6 @@ fn a_mask_never_confirmed_quarantines_without_a_stop() {
         harness.host.take_log(),
         [
             Event::Ring { released: 0 },
-            Event::RoutesSilenced,
             Event::PromiscuousOff,
             Event::RuntimeStop,
         ]
@@ -1005,8 +1015,8 @@ fn a_mask_never_confirmed_quarantines_without_a_stop() {
 #[test]
 fn cold_start_refuses_an_occupied_cell_without_opening_mac() {
     let mut first = harness().started();
-    // A second epoch on the same cell: its line is refused and masked by
-    // the executor itself, and its routes are never enabled.
+    // A second epoch on the same cell: its line is refused and no epoch is
+    // activated for it.
     let cell = &first.host.cell;
     let host: &Host = Host::leaked();
     let arena: &'static mut HostStatic = leak(bytemuck::Zeroable::zeroed());
@@ -1022,13 +1032,9 @@ fn cold_start_refuses_an_occupied_cell_without_opening_mac() {
     let mut runner = Box::pin(receive(
         leak(HostRadio { host }),
         leak(SharedRxWalker(&host.walker)),
-        || ActiveEpoch::for_host_test(MacInterruptModel::new(), PowerInterruptModel::new()),
+        &HostActivation,
         parts,
         cell,
-        leak(HostRoutes {
-            host,
-            requests: leak(WifiIrqRequests::new()),
-        }),
         &*leak(HostDoorbell { host, rx: first.rx }),
         &*leak(VirtualClock::<8>::new()),
         &*leak(CountingSink::new(counters)),
@@ -1285,7 +1291,7 @@ fn a_return_while_rx_is_live_is_harmless() {
     assert_eq!(after.doorbell_unmasks, before.doorbell_unmasks + 1);
     assert_eq!((after.service_errors, after.ignored_unmasks), (0, 0));
     assert!(harness.host.mac().rx_delivery_enabled());
-    assert!(harness.host.line(|line| !line.masked()));
+    assert!(!harness.host.masked());
 
     harness.frame(120);
     harness.settle();

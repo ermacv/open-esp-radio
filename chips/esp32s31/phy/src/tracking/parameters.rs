@@ -248,7 +248,7 @@ pub struct PhyParamTrackingCalibrationCompletion {
 
 // Host tests and the vendor probe read back the committed branches;
 // production consumes them through the parent transition.
-#[cfg(any(test, oer_probe))]
+#[cfg(test)]
 impl PhyParamTrackingCalibrationCompletion {
     /// The common calibration references were recalibrated and committed.
     pub const fn common_updated(&self) -> bool {

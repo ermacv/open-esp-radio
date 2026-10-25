@@ -1,14 +1,14 @@
 //! Source-127 timer ownership, readiness and finite task transitions.
 //!
 //! Boot supplies the timer runtime once. This module retains the queue and HAL
-//! phase across task waits and exchanges owners with stable ISR storage; it
+//! phase across task waits and exchanges owners with the timer's gate in the
+//! Bluetooth interrupt handler ([`crate::interrupt::ModemLpTimerPort`]); it
 //! does not own Controller scheduling or HCI command dispatch.
 
 use crate::{
     modem_lp_timer_queue::{
         ModemLpTimerEventCell, ModemLpTimerEventPublication, ModemLpTimerExpiration,
         ModemLpTimerExpirationState, ModemLpTimerSoftwareState, ModemLpTimerSoftwareStateStep,
-        ModemLpTimerStableInterruptStep,
     },
     runtime_resources::ControllerModemTimerRuntime,
 };
@@ -19,10 +19,10 @@ use oer_interrupt_table::signal::{ForeignContext, SignalExecutor};
 
 /// Stable-storage boundary for source-127 task ownership.
 ///
-/// The interrupt platform implements this trait for the same affine lease
-/// returned by [`crate::interrupt::InterruptOwnerStorage`]. Taking an owner leaves the
-/// stable ISR slot empty, so repeated interrupt entry cannot touch MMIO while
-/// task work owns the timer. Only a fully rearmed owner may be restored.
+/// The timer's gate implements it ([`crate::interrupt::ModemLpTimerPort`]).
+/// Taking an owner leaves the gate empty, so repeated interrupt entry cannot
+/// touch MMIO while task work owns the timer. Only a fully rearmed owner may
+/// be restored.
 pub trait ModemLpTimerSoftwareOwnerStorage {
     /// Exact reason task context could not acquire pending work.
     type TakeError;
@@ -41,18 +41,35 @@ pub trait ModemLpTimerSoftwareOwnerStorage {
     ) -> Result<(), (Self::RestoreError, ModemLpTimerInterruptReadyOwner)>;
 }
 
-/// Stable platform dispatch over the published source-127 interrupt owner.
-///
-/// Implementations retain either the ready or software-pending affine owner
-/// in process-wide storage and perform no executor notification themselves.
-pub trait ModemLpTimerInterruptDispatchStorage {
-    /// Exact reason the stable owner could not service this entry.
-    type Error;
+/// Why the timer's gate refused a software exchange.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModemLpTimerPortError {
+    /// The handler handed on no pending owner.
+    NoPendingOwner,
+    /// The handler has not taken the previous rearmed owner.
+    Occupied,
+}
 
-    /// Execute one finite register entry and return its semantic disposition.
-    fn service_modem_lp_timer_interrupt(
+impl<R: crate::interrupt::RadioDoorbell> ModemLpTimerSoftwareOwnerStorage
+    for crate::interrupt::ModemLpTimerPort<crate::interrupt::ChipGate, R>
+{
+    type TakeError = ModemLpTimerPortError;
+    type RestoreError = ModemLpTimerPortError;
+
+    fn take_modem_lp_timer_software_pending(
         &self,
-    ) -> Result<ModemLpTimerStableInterruptStep, Self::Error>;
+    ) -> Result<ModemLpTimerSoftwarePendingOwner, ModemLpTimerPortError> {
+        self.take_pending()
+            .ok_or(ModemLpTimerPortError::NoPendingOwner)
+    }
+
+    fn restore_modem_lp_timer_ready(
+        &self,
+        owner: ModemLpTimerInterruptReadyOwner,
+    ) -> Result<(), (ModemLpTimerPortError, ModemLpTimerInterruptReadyOwner)> {
+        self.restore_ready(owner)
+            .map_err(|owner| (ModemLpTimerPortError::Occupied, owner))
+    }
 }
 
 /// Stable state retained inside the disjoint source-127 task endpoint.
@@ -301,32 +318,16 @@ where
     }
 }
 
-/// Platform boundary for extracting the ready timer after complete IRQ disable.
+/// Drained software timer task; its HAL owner stays with the timer's
+/// interrupt handler, which disables the compare and keeps the owner until
+/// the Controller reset.
 ///
-/// Implementations serialize extraction with binding and interrupt service,
-/// reject any bound route epoch (including quarantine), and return only a ready
-/// owner. Rebinding must reject absent stable owners until explicit restoration.
-pub trait ModemLpTimerRetirementStorage: ModemLpTimerSoftwareOwnerStorage {
-    /// Exact route or stable-owner rejection, without storage mutation.
-    type RetireError;
-
-    /// Take the ready owner only after every route and in-flight handler stopped.
-    fn take_modem_lp_timer_ready_after_routes_disabled(
-        &self,
-    ) -> Result<ModemLpTimerInterruptReadyOwner, Self::RetireError>;
-}
-
-/// Drained software timer task with its actual HAL owner removed from ISR storage.
-///
-/// The started hardware counter remains owned here; this state is not a timer
-/// reset, BTBB stop, or permission to release PHY. Queue and positional epoch
-/// borrows retain their original identity. `resume` restores this exact owner
-/// before CPU routes can be bound again.
-#[must_use = "retain the timer hardware and its originating runtime together"]
+/// This state is not a timer reset, BTBB stop, or permission to release PHY.
+/// Queue and positional epoch borrows retain their original identity.
+#[must_use = "retain the timer runtime with its Controller epoch"]
 pub struct ControllerModemTimerRetired<'runtime, S, const CAPACITY: usize, X: SignalExecutor> {
     storage: &'runtime S,
     runtime: ControllerModemTimerRuntime<'runtime, CAPACITY, X>,
-    owner: ModemLpTimerInterruptReadyOwner,
 }
 
 impl<'runtime, S, const CAPACITY: usize, X: SignalExecutor>
@@ -336,39 +337,36 @@ impl<'runtime, S, const CAPACITY: usize, X: SignalExecutor>
         core::ptr::eq(self.storage, storage)
     }
 
-    pub fn from_maintenance_parts(
-        owner: ModemLpTimerInterruptReadyOwner,
-        runtime: ControllerModemTimerRuntime<'runtime, CAPACITY, X>,
-        storage: &'runtime S,
-    ) -> Self {
-        Self {
-            storage,
-            runtime,
-            owner,
-        }
-    }
-
     pub fn into_shutdown_parts(
         self,
     ) -> (
-        ModemLpTimerInterruptReadyOwner,
         ControllerModemTimerRuntime<'runtime, CAPACITY, X>,
         &'runtime S,
     ) {
-        (self.owner, self.runtime, self.storage)
+        (self.runtime, self.storage)
     }
 }
 
-impl<'runtime, S: ModemLpTimerRetirementStorage, const CAPACITY: usize, X: SignalExecutor>
+impl<'runtime, S: ModemLpTimerSoftwareOwnerStorage, const CAPACITY: usize, X: SignalExecutor>
     ControllerModemTimerTask<'runtime, S, CAPACITY, X>
 {
-    /// Observe whether task work has drained before attempting IRQ shutdown.
+    /// Observe whether task work has drained before stopping the timer.
     ///
     /// This takes no hardware owner. An ISR can publish work after this check;
-    /// `try_retire` must recheck after all routes have been disabled. Outside
-    /// the worker wake's executor the task is never ready: only that context
-    /// observes the handoff.
+    /// `try_retire` rechecks. Outside the worker wake's executor the task is
+    /// never ready: only that context observes the handoff.
     pub fn retirement_ready(&self) -> bool {
+        self.drained().is_ok()
+    }
+
+    fn drained(
+        &self,
+    ) -> Result<
+        (),
+        crate::modem_timer_retirement::ControllerModemTimerRetirementError<
+            core::convert::Infallible,
+        >,
+    > {
         crate::modem_timer_retirement::retire_when_drained(
             matches!(self.phase, ControllerModemTimerTaskPhase::Idle),
             self.runtime.queue_is_empty(),
@@ -376,11 +374,11 @@ impl<'runtime, S: ModemLpTimerRetirementStorage, const CAPACITY: usize, X: Signa
             self.runtime.events().is_pending(),
             || Ok::<_, core::convert::Infallible>(()),
         )
-        .is_ok()
     }
 
-    /// Return hardware and software ownership only after all task work drains.
-    /// Rejection retains the entire task, including active HAL phases and events.
+    /// Retire the software task only after all its work drained; the
+    /// hardware owner stays with the timer's handler. Rejection retains the
+    /// entire task, including active HAL phases and events.
     #[allow(
         clippy::result_large_err,
         reason = "rejection retains all affine task phases"
@@ -390,25 +388,16 @@ impl<'runtime, S: ModemLpTimerRetirementStorage, const CAPACITY: usize, X: Signa
     ) -> Result<
         ControllerModemTimerRetired<'runtime, S, CAPACITY, X>,
         (
-            crate::modem_timer_retirement::ControllerModemTimerRetirementError<S::RetireError>,
+            crate::modem_timer_retirement::ControllerModemTimerRetirementError<
+                core::convert::Infallible,
+            >,
             Self,
         ),
     > {
-        let owner = crate::modem_timer_retirement::retire_when_drained(
-            matches!(self.phase, ControllerModemTimerTaskPhase::Idle),
-            self.runtime.queue_is_empty(),
-            self.runtime.worker_wake().is_pending(),
-            self.runtime.events().is_pending(),
-            || {
-                self.storage
-                    .take_modem_lp_timer_ready_after_routes_disabled()
-            },
-        );
-        match owner {
-            Ok(owner) => Ok(ControllerModemTimerRetired {
+        match self.drained() {
+            Ok(()) => Ok(ControllerModemTimerRetired {
                 storage: self.storage,
                 runtime: self.runtime,
-                owner,
             }),
             Err(error) => Err((error, self)),
         }
@@ -418,25 +407,8 @@ impl<'runtime, S: ModemLpTimerRetirementStorage, const CAPACITY: usize, X: Signa
 impl<'runtime, S: ModemLpTimerSoftwareOwnerStorage, const CAPACITY: usize, X: SignalExecutor>
     ControllerModemTimerRetired<'runtime, S, CAPACITY, X>
 {
-    /// Restore the same timer owner and software epoch before rebinding IRQ.
-    /// Rejection retains the complete retired task for a corrected retry.
-    #[allow(
-        clippy::result_large_err,
-        reason = "restore rejection returns the exact HAL owner"
-    )]
-    pub fn resume(
-        self,
-    ) -> Result<ControllerModemTimerTask<'runtime, S, CAPACITY, X>, (S::RestoreError, Self)> {
-        match self.storage.restore_modem_lp_timer_ready(self.owner) {
-            Ok(()) => Ok(ControllerModemTimerTask::new(self.storage, self.runtime)),
-            Err((error, owner)) => Err((
-                error,
-                Self {
-                    storage: self.storage,
-                    runtime: self.runtime,
-                    owner,
-                },
-            )),
-        }
+    /// Resume the same software epoch; its owner never left the handler.
+    pub fn resume(self) -> ControllerModemTimerTask<'runtime, S, CAPACITY, X> {
+        ControllerModemTimerTask::new(self.storage, self.runtime)
     }
 }

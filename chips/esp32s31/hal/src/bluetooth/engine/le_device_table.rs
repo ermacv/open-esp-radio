@@ -15,7 +15,7 @@
 
 use core::pin::Pin;
 
-use crate::bluetooth::{BluetoothDeviceTableEntryCount, DeviceTablePublication};
+use crate::bluetooth::DeviceTablePublication;
 use crate::layouts::*;
 
 use crate::bluetooth::engine::{ControllerDmaSpace, Placement};
@@ -114,8 +114,7 @@ impl LeDeviceTable {
     /// Hardware's view of the table after the last change: its first entry
     /// and the number of entries.
     pub(crate) fn publication(&self) -> DeviceTablePublication {
-        let count = BluetoothDeviceTableEntryCount::new(self.members as u32)
-            .expect("the capacity fits the count field");
+        let count = u8::try_from(self.members).expect("the capacity fits the count field");
         #[allow(unsafe_code, reason = "the table vouches for its storage")]
         // SAFETY: the table holds its storage `Pin<&'static mut>` from `Placed`;
         // the linker proves its physical placement, `members` never

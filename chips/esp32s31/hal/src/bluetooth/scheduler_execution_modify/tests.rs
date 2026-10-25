@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, vec::Vec};
 
-use oer_esp32s31_pac::{
+use crate::bluetooth::registers::{
     BluetoothSchedulerExecutionModifyDisposition as Disposition,
     BluetoothSchedulerHardwareListIndex,
 };

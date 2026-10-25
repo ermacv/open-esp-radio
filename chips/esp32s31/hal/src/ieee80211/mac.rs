@@ -28,9 +28,10 @@ use crate::types::{
 
 use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
-use oer_esp32s31_pac::{
-    CoexistenceLowPowerClockObservation, MacInterruptSetup as PacMacInterruptSetup,
-    SharedRadioRegisters, WifiRadioRegisters,
+use crate::{
+    ieee80211::registers::{WifiRadioRegisters, WifiRxDmaRegisters},
+    modem::SharedRadioRegisters,
+    types::CoexistenceLowPowerClockObservation,
 };
 
 /// Complete identity of one hardware MAC interface.
@@ -42,24 +43,18 @@ pub struct MacInterfaceIdentity {
 }
 
 /// The owners one cold MAC transaction borrows: a clocked Wi-Fi client's MAC
-/// and interrupt setup, with the shared radio owner borrowed from the arbiter
-/// lease.
+/// and RX walker, with the shared radio owner borrowed from the arbiter
+/// lease. The MAC's interrupt banks are the radio interrupt handler's and
+/// stay masked through the cold transition.
 struct ColdRegisters<'registers> {
     mac: &'registers mut WifiRadioRegisters,
-    rx_dma: &'registers mut oer_esp32s31_pac::WifiRxDmaRegisters,
-    interrupts: &'registers mut PacMacInterruptSetup,
+    rx_dma: &'registers mut WifiRxDmaRegisters,
     shared: &'registers mut SharedRadioRegisters,
 }
 
 impl ColdRegisters<'_> {
-    fn parts(
-        &mut self,
-    ) -> (
-        &mut WifiRadioRegisters,
-        &mut SharedRadioRegisters,
-        &mut PacMacInterruptSetup,
-    ) {
-        (self.mac, self.shared, self.interrupts)
+    fn parts(&mut self) -> (&mut WifiRadioRegisters, &mut SharedRadioRegisters) {
+        (self.mac, self.shared)
     }
 }
 
@@ -75,15 +70,13 @@ pub struct WifiMacColdHal<'registers> {
 impl<'registers> WifiMacColdHal<'registers> {
     pub(crate) fn from_leased(
         mac: &'registers mut WifiRadioRegisters,
-        rx_dma: &'registers mut oer_esp32s31_pac::WifiRxDmaRegisters,
-        interrupts: &'registers mut PacMacInterruptSetup,
+        rx_dma: &'registers mut WifiRxDmaRegisters,
         shared: &'registers mut SharedRadioRegisters,
     ) -> Self {
         Self {
             registers: ColdRegisters {
                 mac,
                 rx_dma,
-                interrupts,
                 shared,
             },
         }
@@ -132,23 +125,9 @@ impl<'registers> WifiMacColdHal<'registers> {
         self.mac().hold_mac_runtime();
     }
 
-    pub fn prepare_interrupts(&mut self, event_mask: crate::types::MacInterruptMask) {
-        let (mac, _, interrupts) = self.registers.parts();
-        mac.prepare_mac_interrupts(interrupts, event_mask);
-    }
-
-    pub fn initialize_hal_tail(
-        &mut self,
-        event_mask: crate::types::MacInterruptMask,
-        slow_clock_calibration: crate::types::MacRtcCalibration,
-    ) {
-        let ColdRegisters {
-            mac,
-            rx_dma,
-            interrupts,
-            ..
-        } = &mut self.registers;
-        mac.initialize_mac_hal_tail(rx_dma, interrupts, event_mask, slow_clock_calibration)
+    pub fn initialize_hal_tail(&mut self, slow_clock_calibration: crate::types::MacRtcCalibration) {
+        let ColdRegisters { mac, rx_dma, .. } = &mut self.registers;
+        mac.initialize_mac_hal_tail(rx_dma, slow_clock_calibration)
     }
 
     /// Request the cold MAC start.
@@ -156,7 +135,7 @@ impl<'registers> WifiMacColdHal<'registers> {
     /// SOURCE: complete pinned `libpp[hal_mac.o]::hal_init`, offsets
     /// `0x00..0x3a`. The vendor then waits forever for the ready edge; the
     /// caller samples it with [`Self::sample_handshake_ready`] under its own
-    /// deadline and ends the handshake with [`Self::finish_handshake`].
+    /// deadline.
     pub fn request_handshake(&mut self) {
         self.registers.parts().0.request_mac_cold_start();
     }
@@ -166,16 +145,9 @@ impl<'registers> WifiMacColdHal<'registers> {
         self.registers.parts().0.sample_mac_cold_start_ready()
     }
 
-    /// Mask and clear the MAC interrupts once the handshake saw the ready
-    /// edge.
-    pub fn finish_handshake(&mut self) {
-        self.registers.parts().2.mask_all_mac_interrupts();
-        self.registers.parts().2.clear_all_mac_interrupts();
-    }
-
     pub fn initialize_he_prefix(&mut self) {
-        let (mac, shared, _) = self.registers.parts();
-        mac.initialize_mac_he_prefix(shared);
+        let (mac, shared) = self.registers.parts();
+        mac.initialize_mac_he_prefix(shared.radio_phy().phy_agc_oracle_wifi_bb());
     }
 
     pub fn initialize_tx_power(&mut self, table: &MacTxPowerTable) {
@@ -183,8 +155,12 @@ impl<'registers> WifiMacColdHal<'registers> {
     }
 
     pub fn initialize_he_suffix(&mut self) {
-        let (mac, shared, _) = self.registers.parts();
-        mac.initialize_mac_he_suffix(shared);
+        let (mac, shared) = self.registers.parts();
+        mac.initialize_mac_he_suffix(
+            shared
+                .radio_phy_mut()
+                .phy_frequency_channel_oracle_wifi_mac_mut(),
+        );
     }
 
     pub fn initialize_last_rx_buffer_table(&mut self) {
@@ -214,7 +190,7 @@ impl<'registers> WifiMacColdHal<'registers> {
             shared,
             ..
         } = &mut self.registers;
-        mac.initialize_mac_txrx_suffix(shared, rx_dma);
+        mac.initialize_mac_txrx_suffix(shared.shared_radio_init_control_mut(), rx_dma);
     }
 
     pub fn program_interface_address(&mut self, interface: MacInterface, address: [u8; 6]) {

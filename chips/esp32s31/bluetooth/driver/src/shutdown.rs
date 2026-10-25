@@ -1,34 +1,33 @@
 //! Shutdown of a stopped Controller epoch.
 //!
-//! Its caller first stops its Controller runtime, drains the source-127 task
-//! and removes the CPU routes (no composition in this repository does); it
-//! then recovers the interrupt output
-//! and the ready timer owner from stable ISR storage.
-//! [`retire`](crate::shutdown::retire) releases the Controller output and
-//! returns a drained Controller to the shared actor. The actor leaves the
-//! shared PHY domain and BTBB before reset, releases clocks/coexistence/power,
-//! and closes RF only after the last client leaves.
-//! [`ControllerRetired::shut_down`](crate::shutdown::ControllerRetired::shut_down) finally resets the Controller domains and
-//! returns the clocked client with the complete controller arena, which no hardware
-//! references after the reset.
+//! Its caller first stops its Controller runtime and drains the source-127
+//! task. [`retire`] then releases the Controller output with the bank's
+//! interrupt handler, closes the bank's gate (the released bank and the
+//! handler's scheduler endpoint leave the handler), retires the scheduler
+//! channel and has the timer's handler disable its compare; the interrupt
+//! route stays. The shared actor leaves the shared PHY domain and BTBB before
+//! reset, releases clocks/coexistence/power, and closes RF only after the last
+//! client leaves. [`ControllerRetired::shut_down`] resets the Controller
+//! domains, and [`ControllerResetTimerPending::reunite`] takes the timer from
+//! its handler and returns the clocked client with the complete controller
+//! arena, which no hardware references after the reset.
 
 use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
 
 use oer_esp32s31_hal::power::PlatformClockBackend;
 
 use oer_esp32s31_hal::bluetooth::engine::{
-    EngineShutDown, EngineShutdownError, EngineShutdownFailure,
+    EngineOutputReleaseError, EngineResetTimerPending, EngineShutDown, EngineShutdownError,
+    EngineShutdownFailure, scheduler::interrupt::SchedulerDoorbell,
 };
 use oer_esp32s31_hal::{
-    bluetooth::{
-        BluetoothControllerOutputReleaseError, InterruptOutputAfterRoutesOwner,
-        InterruptOutputReleasedOwner, ModemLpTimerInterruptReadyOwner,
-    },
+    bluetooth::{InterruptOutputReleasedOwner, ModemLpTimerCompareDisabled},
     domain::RadioDomain,
 };
 use oer_interrupt_table::signal::{ForeignContext, SignalExecutor};
 
 use crate::{
+    interrupt::{BluetoothInterruptGate, ChipGate, GateError, RadioDoorbell},
     resources::TaskResources,
     runtime_resources::{
         ControllerEventCells, ControllerPoweredTaskRuntime, ControllerTaskRetirementError,
@@ -40,8 +39,10 @@ use crate::{
 pub enum ControllerShutdownError {
     /// A scheduler or controller-time worker still holds work.
     Task(ControllerTaskRetirementError),
-    /// The idle-Controller check before releasing the output failed.
-    Output(BluetoothControllerOutputReleaseError),
+    /// The release of the controller output refused or its exchange failed.
+    Output(EngineOutputReleaseError),
+    /// The interrupt handler's gate refused or its exchange failed.
+    Gate(GateError),
     /// The Controller reset was rejected or did not read back.
     Reset(EngineShutdownError),
     /// The shutdown ran outside the event cells' executor, which alone
@@ -52,8 +53,8 @@ pub enum ControllerShutdownError {
 /// Failed shutdown retaining every owner it received.
 ///
 /// A rejection leaves hardware as it was, but the running epoch has already
-/// lost its routes and runtime, so no transition resumes it; the owners stay
-/// retained until the chip resets.
+/// lost its runtime, so no transition resumes it; the owners stay retained
+/// (an owner its handler still holds stays there) until the chip resets.
 #[must_use = "a failed shutdown retains the Controller until the chip resets"]
 pub struct ControllerShutdownFailure<X: SignalExecutor, M: ControllerMemory> {
     error: ControllerShutdownError,
@@ -68,18 +69,16 @@ pub struct ControllerShutdownFailure<X: SignalExecutor, M: ControllerMemory> {
 enum Retained<X: SignalExecutor, M: ControllerMemory> {
     Task {
         task: ControllerPoweredTaskRuntime<'static, X, M>,
-        output: InterruptOutputAfterRoutesOwner,
-        timer: ModemLpTimerInterruptReadyOwner,
     },
     Output {
         task: TaskResources<M>,
-        output: InterruptOutputAfterRoutesOwner,
-        timer: ModemLpTimerInterruptReadyOwner,
+        output: InterruptOutputReleasedOwner,
     },
     Reset {
         failure: EngineShutdownFailure<M>,
     },
     Retired(ControllerRetired<M>),
+    ResetTimerPending(ControllerResetTimerPending<M>),
 }
 
 impl<X: SignalExecutor, M: ControllerMemory> ControllerShutdownFailure<X, M> {
@@ -97,65 +96,84 @@ impl<X: SignalExecutor, M: ControllerMemory> core::fmt::Debug for ControllerShut
     }
 }
 
-/// A retired Controller awaiting the actor's PHY/BTBB leave and reset.
+/// A retired Controller awaiting the actor's PHY/BTBB leave and reset: its
+/// output is released and its timer's handler disabled the compare.
 #[must_use = "the retired Controller must be shut down"]
 pub struct ControllerRetired<M: ControllerMemory> {
     task: TaskResources<M>,
     output: InterruptOutputReleasedOwner,
-    timer: ModemLpTimerInterruptReadyOwner,
+    compare: ModemLpTimerCompareDisabled,
+}
+
+/// The reset Controller, awaiting the timer its handler gives up.
+#[must_use = "the reset Controller returns its arena with its timer"]
+pub struct ControllerResetTimerPending<M: ControllerMemory> {
+    engine: EngineResetTimerPending<M>,
 }
 
 /// Clocked client and the entire CPU-owned arena after verified reset.
 pub type ControllerShutDown<M> = EngineShutDown<M>;
 
-/// Retire a stopped epoch: take the task owner from its endpoint, release
-/// the Controller output. The shared actor performs PHY/BTBB leave before
-/// the reset. BUSY samples of the output release settle on `clock`.
+/// Retire a stopped epoch: release the Controller output with the bank's
+/// handler over the scheduler channel `bell` reaches, close the bank's gate,
+/// retire the channel and have the timer's handler disable its compare.
+/// BUSY samples of the release settle in the handler.
 ///
 /// # Errors
 ///
-/// A worker still holds work or the Controller is not idle.
+/// A worker still holds work, the Controller is not idle, or the gate
+/// refused; an owner its handler still holds stays there.
 #[allow(
     clippy::result_large_err,
     reason = "the failure retains every owner of the epoch"
 )]
-pub fn retire<X: SignalExecutor, M: ControllerMemory>(
-    task: ControllerPoweredTaskRuntime<'static, X, M>,
-    output: InterruptOutputAfterRoutesOwner,
-    timer: ModemLpTimerInterruptReadyOwner,
-    clock: &impl oer_time::Clock,
+pub async fn retire<X: SignalExecutor, M: ControllerMemory, R: RadioDoorbell>(
+    mut task: ControllerPoweredTaskRuntime<'static, X, M>,
+    gate: &mut BluetoothInterruptGate<ChipGate, X, R>,
+    bell: &impl SchedulerDoorbell,
 ) -> Result<ControllerRetired<M>, ControllerShutdownFailure<X, M>> {
-    let mut task = match task.retire() {
+    let failed = |error, task| {
+        Err(ControllerShutdownFailure {
+            error,
+            _retained: Retained::Task { task },
+        })
+    };
+    if let Err(error) = task.stopped_for_output_release() {
+        return failed(ControllerShutdownError::Task(error), task);
+    }
+    let released = match task.task_owner().release_controller_output(bell).await {
+        Ok(released) => released,
+        Err(error) => return failed(ControllerShutdownError::Output(error), task),
+    };
+    let (output, scheduler) = match gate.close(released).await {
+        Ok(closed) => closed,
+        Err(error) => return failed(ControllerShutdownError::Gate(error), task),
+    };
+    if let Err((error, _scheduler)) = task
+        .task_owner()
+        .engine()
+        .retire_scheduler_interrupts(scheduler)
+    {
+        return failed(
+            ControllerShutdownError::Output(EngineOutputReleaseError::Channel(error)),
+            task,
+        );
+    }
+    let task = match task.retire() {
         Ok(task) => task,
-        Err((error, task)) => {
-            return Err(ControllerShutdownFailure {
-                error: ControllerShutdownError::Task(error),
-                _retained: Retained::Task {
-                    task,
-                    output,
-                    timer,
-                },
-            });
-        }
+        Err((error, task)) => return failed(ControllerShutdownError::Task(error), task),
     };
-    let output = match task.release_controller_output(output, clock) {
-        Ok(output) => output,
-        Err((error, output)) => {
-            return Err(ControllerShutdownFailure {
-                error: ControllerShutdownError::Output(error),
-                _retained: Retained::Output {
-                    task,
-                    output,
-                    timer,
-                },
-            });
-        }
-    };
-    Ok(ControllerRetired {
-        task,
-        output,
-        timer,
-    })
+    match gate.stop_timer().await {
+        Ok(compare) => Ok(ControllerRetired {
+            task,
+            output,
+            compare,
+        }),
+        Err(error) => Err(ControllerShutdownFailure {
+            error: ControllerShutdownError::Gate(error),
+            _retained: Retained::Output { task, output },
+        }),
+    }
 }
 
 impl<M: ControllerMemory> ControllerRetired<M> {
@@ -169,8 +187,8 @@ impl<M: ControllerMemory> ControllerRetired<M> {
         self.task.hal()
     }
 
-    /// Reset the Controller domains, reunite the drained timer and return
-    /// the clocked client with the complete controller arena.
+    /// Reset the Controller domains and await the timer its handler gives
+    /// up after the reset.
     ///
     /// `cells` are the event cells of the retired epoch; their stale
     /// notifications are discarded so the next epoch starts quiet. Only
@@ -188,7 +206,7 @@ impl<M: ControllerMemory> ControllerRetired<M> {
         self,
         radio: &mut RadioDomain<B, T>,
         cells: &ControllerEventCells<X>,
-    ) -> Result<ControllerShutDown<M>, ControllerShutdownFailure<X, M>> {
+    ) -> Result<ControllerResetTimerPending<M>, ControllerShutdownFailure<X, M>> {
         // Before the reset: a foreign context could not discard the
         // notifications after it.
         if let Err(ForeignContext) = cells.is_quiet() {
@@ -200,16 +218,42 @@ impl<M: ControllerMemory> ControllerRetired<M> {
         let Self {
             task,
             output,
-            timer,
+            compare,
         } = self;
-        match task.shut_down(radio, output, timer) {
-            Ok(returned) => {
+        match task.shut_down(radio, output, compare) {
+            Ok(engine) => {
                 let _cleared = cells.clear_notifications_after_reset();
-                Ok(returned)
+                Ok(ControllerResetTimerPending { engine })
             }
             Err(failure) => Err(ControllerShutdownFailure {
                 error: ControllerShutdownError::Reset(failure.error()),
                 _retained: Retained::Reset { failure },
+            }),
+        }
+    }
+}
+
+impl<M: ControllerMemory> ControllerResetTimerPending<M> {
+    /// Take the timer from its handler, which gives it up only after the
+    /// reset, and return the clocked client with the complete arena.
+    ///
+    /// # Errors
+    ///
+    /// The gate refused or its exchange failed; the timer stays with its
+    /// handler.
+    #[allow(
+        clippy::result_large_err,
+        reason = "the failure retains every owner of the epoch"
+    )]
+    pub async fn reunite<X: SignalExecutor, R: RadioDoorbell>(
+        self,
+        gate: &mut BluetoothInterruptGate<ChipGate, X, R>,
+    ) -> Result<ControllerShutDown<M>, ControllerShutdownFailure<X, M>> {
+        match gate.take_timer(&self.engine).await {
+            Ok(timer) => Ok(self.engine.reunite(timer)),
+            Err(error) => Err(ControllerShutdownFailure {
+                error: ControllerShutdownError::Gate(error),
+                _retained: Retained::ResetTimerPending(self),
             }),
         }
     }

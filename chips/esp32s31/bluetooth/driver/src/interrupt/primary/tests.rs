@@ -67,9 +67,9 @@ impl Backend {
 }
 
 impl PrimaryInterruptBackend for Backend {
-    fn capture_primary_and_acknowledge(&mut self) -> BluetoothPrimaryInterruptEpoch {
+    fn capture_primary_and_acknowledge(&mut self) -> Option<BluetoothPrimaryInterruptEpoch> {
         self.operations.push(Operation::PrimaryEpoch);
-        self.epoch.take().expect("one primary epoch")
+        self.epoch.take()
     }
 
     fn capture_scheduler_reference_gate(
@@ -152,6 +152,17 @@ fn busy_reference_gate_preserves_reference_then_uses_a_fresh_work_read() {
             Operation::Work
         ]
     );
+}
+
+#[test]
+fn a_clear_bank_captures_nothing_and_publishes_nothing() {
+    let mut backend = Backend::dynamic(false, false, false, false, false, false);
+    backend.epoch = None;
+    let capture = execute_primary_interrupt_capture(&mut backend);
+    assert_eq!(capture, PrimaryInterruptCapture(0));
+    assert_eq!(backend.operations, [Operation::PrimaryEpoch]);
+    let cell = SchedulerWakeCell::new(oer_interrupt_table::signal::host::deferred_signal());
+    assert_eq!(cell.publish_from_interrupt(capture), None);
 }
 
 #[test]

@@ -8,7 +8,7 @@
 
 #![forbid(unsafe_code)]
 
-use crate::bluetooth::engine::sram_link::ControllerSramLinkAddress;
+use crate::bluetooth::engine::sram_link::ControllerSramLink;
 
 use crate::bluetooth::engine::shared_layout::BufferHeaderImage;
 use crate::layouts::*;
@@ -103,14 +103,14 @@ const TX_HEADER: BufferHeaderImage = BufferHeaderImage {
 const EMPTY_TX_CURSOR: BufferHeaderImage = BufferHeaderImage {
     completion: BleBufferHeaderCompletion::ZERO.with_done(true),
     allocation: BleBufferHeaderAllocation::ZERO
-        .with_llid(1)
+        .with_llid(crate::layouts::BleBufferHeaderAllocation::LLID_DATA_CONTINUATION)
         .expect("reviewed LLID fits"),
     ..BufferHeaderImage::ZERO
 };
 /// SOURCE: pinned `memMgmt_3.o` common TX packet allocation class and initial state.
 const TX_PACKET_ALLOCATION: BleTxPacketPrefixAllocation = BleTxPacketPrefixAllocation::from_bits(0)
-    .with_class(2)
-    .with_state(0);
+    .with_class(crate::layouts::BleTxPacketPrefixAllocation::CLASS_COMMON_TX)
+    .with_state(crate::layouts::BleTxPacketPrefixAllocation::STATE_INITIAL);
 
 impl LeTxBufferHeaderStorage {
     pub(super) const fn new() -> Self {
@@ -124,12 +124,12 @@ impl LeTxBufferHeaderStorage {
     pub(super) fn initialize_bound_tx_with_successor<const N: usize>(
         &self,
         packet: LeTxPacketAddress<N>,
-        successor: Option<ControllerSramLinkAddress>,
+        successor: Option<ControllerSramLink<BleBufferHeader>>,
     ) {
         BufferHeaderImage {
-            next: BleBufferHeaderNext::from_bits(
-                successor.map_or(0, ControllerSramLinkAddress::compressed_image),
-            ),
+            next: BleBufferHeaderNext::ZERO
+                .with_address(successor.map(ControllerSramLink::reference))
+                .expect("a bound link is encodable"),
             packet_base: BleBufferHeaderPacketBase::ZERO
                 .with_address(packet.base)
                 .expect("the placed TX buffer address is encodable"),
@@ -147,15 +147,16 @@ impl LeTxBufferHeaderStorage {
         EMPTY_TX_CURSOR.write(&self.layout);
     }
     #[cfg(test)]
-    pub(super) fn successor_image(&self) -> u32 {
-        self.layout.next().read().address()
+    pub(super) fn successor_address(&self) -> Option<u32> {
+        self.layout.next().read().address_address()
     }
-    pub(super) fn link_successor(&self, successor: ControllerSramLinkAddress) {
+    pub(super) fn link_successor(&self, successor: ControllerSramLink<BleBufferHeader>) {
         self.layout.next().write(
             self.layout
                 .next()
                 .read()
-                .with_address_from(BleBufferHeaderNext::from_bits(successor.compressed_image())),
+                .with_address(Some(successor.reference()))
+                .expect("a bound link is encodable"),
         );
     }
     pub(super) fn transmission_completed(&self) -> bool {

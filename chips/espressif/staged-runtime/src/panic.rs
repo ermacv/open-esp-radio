@@ -273,10 +273,14 @@ fn record<'a>(info: &'a core::panic::PanicInfo<'_>) -> PanicDetails<'a> {
 
 #[cfg(all(target_arch = "riscv32", feature = "panic-hook"))]
 unsafe extern "Rust" {
-    /// The image's record of its own state after the platform's record. It
+    /// The image's record of its own state after the platform's record, in
+    /// the fatal path with the other hart stopped (or why it is not). It
     /// formats nothing, like the entry: it runs in every context's stack
     /// bound.
-    fn oer_platform_panic_hook(details: &PanicDetails<'_>);
+    fn oer_platform_panic_hook(
+        details: &PanicDetails<'_>,
+        stop: Result<&crate::fatal::StopTheWorld<'_>, crate::fatal::StopError>,
+    );
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -284,14 +288,16 @@ unsafe extern "Rust" {
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     let details = record(info);
     #[cfg(feature = "panic-hook")]
-    // SAFETY: the image defines this function with the declared signature;
-    // the link fails without it.
-    unsafe {
-        oer_platform_panic_hook(&details)
-    };
+    crate::fatal::reset_recording(|stop| {
+        // SAFETY: the image defines this function with the declared
+        // signature; the link fails without it.
+        unsafe { oer_platform_panic_hook(&details, stop) }
+    });
     #[cfg(not(feature = "panic-hook"))]
-    let _ = details;
-    crate::fatal::reset()
+    {
+        let _ = details;
+        crate::fatal::reset()
+    }
 }
 
 /// The last [`FILE_BYTES`] of `file`, zero-padded, and how many there are.

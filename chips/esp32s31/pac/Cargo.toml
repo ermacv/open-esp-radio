@@ -5,27 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Closed typed ESP32-S31 radio peripheral access crate"
-
-[features]
-# Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
-test-support = []
+description = "The ESP32-S31 PAC: the exact hardware model generated from the chip's register model"
 
 [dependencies]
 oer-espressif-analog = { path = "../../espressif/analog" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
 oer-mmio = { path = "../../../portable/mmio" }
-oer-espressif-efuse = { path = "../../espressif/efuse" }
-oer-espressif-watchdog = { path = "../../espressif/watchdog" }
-oer-espressif-boot = { path = "../../espressif/boot" }
-oer-memory = { path = "../../../portable/memory" }
-oer-espressif-ieee80211-pac = { path = "../../espressif/ieee80211-pac" }
-oer-esp32s31-pac-raw = { path = "../pac-raw", features = ["critical-section"] }
 
-
-[dev-dependencies]
-oer-time = { path = "../../../portable/time" }
-oer-time-virtual = { path = "../../../portable/time-virtual" }
 
 [lints]
 workspace = true

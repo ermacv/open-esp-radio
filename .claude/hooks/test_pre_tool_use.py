@@ -30,17 +30,12 @@ class Edits(unittest.TestCase):
     def test_generated_files_are_regenerated_not_edited(self):
         for tool, path, command in [
             ("Edit", "/w/chips/esp32s31/pac/src/generated.rs", "cargo registers generate"),
-            ("Write", "chips/espressif/ieee80211-pac-raw/src/lib.rs", "cargo registers generate"),
-            ("Edit", "/w/registers/esp32s31/published/radio.svd", "cargo registers generate"),
-            ("Edit", "registers/esp32s31/published/platform.bindings.toml", "cargo registers generate"),
-            ("Edit", "/w/knowledge/esp32s31/vendor/facts/provenance.toml", "re-deriving"),
-            ("Write", "knowledge/esp32s31/vendor/facts/names/libble_app.toml", "re-deriving"),
-            ("Edit", "/w/chips/esp32s31/registers/published/radio.svd", "cargo registers generate"),
-            ("Edit", "chips/espressif/registers/ieee80211/published/mac.bindings.toml", "cargo registers generate"),
+            ("Write", "chips/esp32s31/pac/src/generated.rs", "cargo registers generate --chip"),
+            ("Edit", "/w/chips/esp32s31/layout/linker/dma-window.x", "cargo registers generate --chip"),
+            ("Edit", "/w/chips/esp32s31/vendor/facts/idf-function-signatures.toml", "cargo registers signatures"),
+            ("Write", "chips/esp32s31/vendor/facts/idf-function-signatures.provenance.toml", "cargo registers signatures"),
             ("Edit", "/w/chips/esp32s31/vendor/facts/provenance.toml", "re-deriving"),
             ("Write", "chips/esp32c5/vendor/facts/names/libpp.toml", "re-deriving"),
-            ("Edit", "/w/firmware/platform/esp32s31/linker/dma-window.x", "cargo registers generate"),
-            ("Edit", "/w/portable/platform/esp32s31-layout/linker/dma-window.x", "cargo registers generate"),
             ("Write", "/w/chips/esp32s31/vendor/phy-baselines/4d59230d/wifi-cold.json", "phy-baseline generate"),
         ]:
             self.assert_blocked(tool, path, command)
@@ -48,14 +43,14 @@ class Edits(unittest.TestCase):
     def test_handwritten_neighbours_stay_editable(self):
         for path in [
             "/w/chips/esp32s31/pac/src/lib.rs",
-            "/w/registers/esp32s31/model/device.toml",
-            "/w/chips/esp32s31/registers/model/device.toml",
+            "/w/chips/esp32s31/registers/chip.toml",
+            "/w/chips/esp32s31/registers/types/timg.toml",
+            "/w/chips/esp32s31/registers/layouts/wifi-rx-dma-descriptor.toml",
+            "/w/chips/esp32s31/registers/policy.toml",
             "/w/chips/esp32s31/vendor/artifacts.toml",
             "/w/chips/esp32s31/vendor/facts/names/README.md",
-            "/w/knowledge/esp32s31/vendor/facts/names/README.md",
-            "/w/knowledge/esp32s31/vendor/artifacts.toml",
             "/w/.claude/hooks/pre_tool_use.py",
-            "/w/firmware/platform/espressif/linker/runtime/sections.x",
+            "/w/chips/espressif/staged-layout/linker/runtime/sections.x",
             "/w/chips/esp32s31/vendor/phy-baselines/README.md",
         ]:
             self.assertEqual(run("Edit", file_path=path), (0, ""), path)
@@ -67,9 +62,10 @@ class Reads(unittest.TestCase):
         self.assertEqual(status, 2)
         self.assertIn("grep it with an explicit path", stderr)
         for command in [
-            "head -n 50 registers/esp32s31/published/radio.svd",
-            "cd x && cat knowledge/esp32s31/vendor/facts/provenance.toml",
-            "git show HEAD:chips/esp32s31/pac-raw/src/lib.rs",
+            "head -n 50 chips/esp32s31/pac/src/generated.rs",
+            "cd x && cat chips/esp32s31/vendor/facts/provenance.toml",
+            "git show HEAD:chips/esp32s31/pac/src/generated.rs",
+            "cat chips/esp32s31/vendor/facts/idf-function-signatures.toml",
             "cat chips/esp32s31/vendor/phy-baselines/4d59230d/wifi-cold.json",
         ]:
             status, stderr = run("Bash", command=command)
@@ -83,7 +79,8 @@ class Reads(unittest.TestCase):
             "cargo build -p oer-xtask",
             "pkill -f cargo",
             "sleep 30",
-            "grep -n x registers/esp32s31/published/radio.svd",
+            "grep -n x chips/esp32s31/pac/src/generated.rs",
+            "cat chips/esp32s31/layout/linker/dma-window.x",
         ]:
             self.assertEqual(run("Bash", command=command), (0, ""), command)
 

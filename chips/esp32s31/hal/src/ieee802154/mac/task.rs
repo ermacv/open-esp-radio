@@ -5,10 +5,10 @@
 //! ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`), unless a step names
 //! another source.
 
-use oer_esp32s31_pac::ieee802154_mac::{
+use oer_esp32s31_pac::ieee802154::{
     command::Opcode,
     ed_config::{CcaMode, EdSampleMode},
-    event_enable, rx_abort_enable, tx_abort_enable,
+    event_enable, rx_abort_enable, security_key, tx_abort_enable,
 };
 use oer_espressif_ieee802154_engine::coex::CoexPti;
 use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
@@ -51,9 +51,6 @@ const TXRX_SWITCH_DELAY: Bits<10> = Bits::constant::<117>();
 ///
 /// SOURCE: BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET.
 const TX_OFF_DELAY: Bits<6> = Bits::constant::<5>();
-
-/// The one image `ieee802154_ll_enhack_generate_done_notify` writes.
-const ENHANCED_ACK_NOTIFY_IMAGE: u32 = 1;
 
 /// One five-bit coexistence priority of the MAC's PTI fields.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -259,8 +256,8 @@ const fn context(index: Ieee802154MultipanIndex) -> Index<4> {
     }
 }
 
-/// The four transmit-security key words, in write order.
-const KEY_WORDS: [Index<4>; 4] = [
+/// The transmit-security key words, in write order, checked against the PAC.
+const KEY_WORDS: [Index<{ security_key::COUNT }>; security_key::COUNT] = [
     Index::constant::<0>(),
     Index::constant::<1>(),
     Index::constant::<2>(),
@@ -439,9 +436,7 @@ fn set_tx_abort_all(writer: &mut tx_abort_enable::W, enable: bool) {
 impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// `ieee802154_ll_set_cmd`: write one command image from zero.
     pub(crate) fn issue(&mut self, opcode: Opcode) {
-        self.mac.write_command(|writer| {
-            writer.set_opcode(opcode);
-        });
+        self.mac.write_command(opcode, |_| {});
     }
 
     /// Mask every MAC event, the two unnamed ones included.
@@ -794,7 +789,9 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// `ieee802154_ll_enhack_generate_done_notify`: write its one image.
     pub(crate) fn notify_enhanced_ack_generated(&mut self) {
         self.mac.write_enhanced_ack_notify(|writer| {
-            writer.set_notify_image(ENHANCED_ACK_NOTIFY_IMAGE);
+            writer.set_notify_image(
+                oer_esp32s31_pac::ieee802154::enhanced_ack_notify::NotifyImage::GenerateDone.bits(),
+            );
         });
     }
 
@@ -853,12 +850,12 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
 
     /// `ieee802154_ll_set_tx_addr`: the placed frame the transmitter reads.
     pub(crate) fn set_tx_address(&mut self, address: DmaWindowAddress) {
-        self.mac.write_tx_dma_address(address);
+        self.mac.write_tx_dma_address(address, |_| {});
     }
 
     /// `ieee802154_ll_set_rx_addr`: the placed frame the receiver writes.
     pub(crate) fn set_rx_address(&mut self, address: DmaWindowAddress) {
-        self.mac.write_rx_dma_address(address);
+        self.mac.write_rx_dma_address(address, |_| {});
     }
 
     /// `ieee802154_ll_set_ed_duration`: the public LL's sixteen-bit

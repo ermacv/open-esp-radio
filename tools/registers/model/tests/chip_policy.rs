@@ -140,6 +140,7 @@ offset = 0x28
 name = "ADDR"
 bits = "31:0"
 class = "plain"
+pointer = { points-to = "RX_DESCRIPTOR", placement = "dma-window", encoding = { width = 32, shift = 0 }, sources = ["SRC_HEADER"] }
 
 [[registers]]
 name = "STATE"
@@ -158,6 +159,11 @@ offset = 0x30
 name = "KEY"
 bits = "7:0"
 class = "write-only"
+
+[[interrupt-pairs]]
+status = "INT_RAW"
+clear = "INT_CLR"
+sources = ["SRC_HEADER"]
 "#;
 
 const ETM: &str = r#"
@@ -351,7 +357,7 @@ placement = ["dma-window"]
 const ROOT: &str = r#"
 schema = 4
 chip = "testchip"
-interrupt-sources = { count = 0, sources = ["SRC_HEADER"] }
+interrupt-sources = { count = 2, sources = ["SRC_HEADER"] }
 types = ["types/timer.toml", "types/etm.toml", "types/counter.toml", "types/pll.toml"]
 layouts = ["layouts/rx-descriptor.toml"]
 
@@ -390,6 +396,18 @@ base = 0x60004000
 extent = { size = 0x1000 }
 sources = ["SRC_HEADER"]
 
+[[interrupts]]
+name = "TIMER0_INTR"
+source = 0
+instance = "TIMER0"
+sources = ["SRC_HEADER"]
+
+[[interrupts]]
+name = "TIMER1_INTR"
+source = 1
+instance = "TIMER1"
+sources = ["SRC_HEADER"]
+
 [[analog-i2c.instances]]
 name = "PLL"
 type = "PLL"
@@ -424,6 +442,7 @@ registers = ["CONFIG", "VALUE", "LOAD", "FIFO", "ALARM_%s", "ADDR", "STATE", "WO
 [[partitions.parts]]
 name = "Irq"
 instance = "TIMER0"
+interrupt = "TIMER0_INTR"
 registers = ["INT_ENA", "INT_RAW", "INT_CLR"]
 observes = ["VALUE"]
 irq-side = true
@@ -549,7 +568,6 @@ sources = ["SRC_HEADER"]
 [[interrupt-snapshots]]
 name = "timer0_interrupt"
 status = "TIMER0.INT_RAW"
-clear = "TIMER0.INT_CLR"
 sources = ["SRC_DRIVER"]
 
 [[field-reads]]
@@ -571,7 +589,6 @@ sources = ["SRC_DRIVER"]
 [[pointer-fields]]
 name = "timer0_descriptor"
 field = "TIMER0.ADDR.ADDR"
-points-to = "RX_DESCRIPTOR"
 sources = ["SRC_DRIVER"]
 
 [[full-register-writes]]
@@ -1247,10 +1264,10 @@ rejects!(
     ErrorKind::Transaction(_)
 );
 rejects!(
-    pointer_to_unknown_layout,
+    pointer_without_hardware_fact,
     [(
-        "points-to = \"RX_DESCRIPTOR\"",
-        "points-to = \"TX_DESCRIPTOR\""
+        "field = \"TIMER0.ADDR.ADDR\"",
+        "field = \"TIMER0.CONFIG.DIV\""
     )],
     ErrorKind::Pointer(_)
 );
@@ -1258,9 +1275,9 @@ rejects!(
     full_write_takes_one_value,
     [(
         "domain = \"AlarmImage\"",
-        "domain = \"AlarmImage\"\nplacement = \"dma-window\""
+        "domain = \"AlarmImage\"\npointer = true"
     )],
-    ErrorKind::Transaction(_)
+    ErrorKind::Pointer(_)
 );
 rejects!(
     modify_takes_domain_or_value,
@@ -1390,8 +1407,112 @@ rejects!(
     ErrorKind::Register(_)
 );
 rejects!(
-    snapshot_clear_word_class,
-    [("clear = \"TIMER0.INT_CLR\"", "clear = \"TIMER0.INT_ENA\"")],
+    handler_part_names_its_interrupt,
+    [("interrupt = \"TIMER0_INTR\"\n", "")],
+    ErrorKind::Interrupt(_)
+);
+rejects!(
+    part_interrupt_is_bound_to_its_instance,
+    [("interrupt = \"TIMER0_INTR\"", "interrupt = \"TIMER1_INTR\"")],
+    ErrorKind::Interrupt(_)
+);
+rejects!(
+    one_part_serves_an_interrupt,
+    [(
+        "name = \"Task\"\ninstance = \"TIMER0\"\n",
+        "name = \"Task\"\ninstance = \"TIMER0\"\ninterrupt = \"TIMER0_INTR\"\n"
+    )],
+    ErrorKind::Interrupt(_)
+);
+/// A second source of `TIMER0` beside `TIMER0_INTR`, as a part whose one
+/// bank acknowledges two sources needs.
+fn two_timer_sources() -> TestResult<Fixture> {
+    let fixture = Fixture::new()?;
+    fixture
+        .edit(
+            "root.toml",
+            "interrupt-sources = { count = 2,",
+            "interrupt-sources = { count = 3,",
+        )?
+        .edit(
+            "root.toml",
+            "[[interrupts]]\nname = \"TIMER1_INTR\"",
+            "[[interrupts]]\nname = \"TIMER0_NRT_INTR\"\nsource = 2\ninstance = \"TIMER0\"\nsources = [\"SRC_HEADER\"]\n\n[[interrupts]]\nname = \"TIMER1_INTR\"",
+        )?;
+    Ok(fixture)
+}
+
+#[test]
+fn part_serves_every_source_its_bank_acknowledges() -> TestResult {
+    let fixture = two_timer_sources()?;
+    fixture.edit(
+        "policy.toml",
+        "interrupt = \"TIMER0_INTR\"",
+        "interrupt = [\"TIMER0_INTR\", \"TIMER0_NRT_INTR\"]",
+    )?;
+    let policy = fixture.load()?;
+    let irq = policy
+        .file()
+        .partitions
+        .iter()
+        .flat_map(|partition| &partition.parts)
+        .find(|part| part.name == "Irq")
+        .ok_or("the fixture has its Irq part")?;
+    assert_eq!(irq.interrupt, ["TIMER0_INTR", "TIMER0_NRT_INTR"]);
+    Ok(())
+}
+
+#[test]
+fn every_listed_interrupt_is_bound_to_the_part_instance() -> TestResult {
+    let fixture = two_timer_sources()?;
+    fixture.edit(
+        "policy.toml",
+        "interrupt = \"TIMER0_INTR\"",
+        "interrupt = [\"TIMER0_INTR\", \"TIMER1_INTR\"]",
+    )?;
+    assert!(matches!(fixture.rejection()?.kind, ErrorKind::Interrupt(_)));
+    Ok(())
+}
+
+#[test]
+fn a_listed_interrupt_is_served_once() -> TestResult {
+    let fixture = two_timer_sources()?;
+    fixture
+        .edit(
+            "policy.toml",
+            "interrupt = \"TIMER0_INTR\"",
+            "interrupt = [\"TIMER0_INTR\", \"TIMER0_NRT_INTR\"]",
+        )?
+        .edit(
+            "policy.toml",
+            "name = \"Task\"\ninstance = \"TIMER0\"\n",
+            "name = \"Task\"\ninstance = \"TIMER0\"\ninterrupt = \"TIMER0_NRT_INTR\"\n",
+        )?;
+    assert!(matches!(fixture.rejection()?.kind, ErrorKind::Interrupt(_)));
+    Ok(())
+}
+
+rejects!(
+    a_list_names_each_interrupt_once,
+    [(
+        "interrupt = \"TIMER0_INTR\"",
+        "interrupt = [\"TIMER0_INTR\", \"TIMER0_INTR\"]"
+    )],
+    ErrorKind::Interrupt(_)
+);
+rejects!(
+    handler_part_names_an_interrupt_in_its_list,
+    [("interrupt = \"TIMER0_INTR\"", "interrupt = []")],
+    ErrorKind::Interrupt(_)
+);
+rejects!(
+    part_interrupt_is_a_source_of_the_root,
+    [("interrupt = \"TIMER0_INTR\"", "interrupt = \"MISSING\"")],
+    ErrorKind::Interrupt(_)
+);
+rejects!(
+    snapshot_status_needs_an_interrupt_pair,
+    [("status = \"TIMER0.INT_RAW\"", "status = \"TIMER0.VALUE\"")],
     ErrorKind::Snapshot(_)
 );
 rejects!(
@@ -1400,7 +1521,7 @@ rejects!(
         "status = \"TIMER0.INT_RAW\"",
         "status = \"TIMER0.ALARM_%s\""
     )],
-    ErrorKind::Transaction(_)
+    ErrorKind::Snapshot(_)
 );
 rejects!(
     masks_names_an_enable_word,
@@ -1609,78 +1730,73 @@ fn integer_writers_cannot_forge_a_pointer() -> TestResult {
 }
 
 #[test]
-fn pointer_encoding_fills_its_field() -> TestResult {
+fn full_pointer_write_references_hardware_fact() -> TestResult {
     let fixture = Fixture::new()?;
-    fixture.edit(
-        "policy.toml",
-        "points-to = \"RX_DESCRIPTOR\"",
-        "points-to = \"RX_DESCRIPTOR\"\nencoding = \"ble-compressed\"",
-    )?;
+    fixture.edit("policy.toml", "domain = \"AlarmImage\"", "pointer = true")?;
     assert!(matches!(kind_of(&fixture)?, ErrorKind::Pointer(_)));
-    Ok(())
-}
-
-#[test]
-fn pointer_targets_a_layout_in_the_dma_window() -> TestResult {
-    let fixture = Fixture::new()?;
     fixture.edit(
-        "root.toml",
-        "[[layout-placements]]\nlayout = \"RX_DESCRIPTOR\"\nregions = [\"dma-window\"]",
-        "",
-    )?;
-    assert!(matches!(kind_of(&fixture)?, ErrorKind::Pointer(_)));
-    Ok(())
-}
-
-#[test]
-fn compressed_pointer_names_a_word() -> TestResult {
-    let fixture = Fixture::new()?;
-    fixture
-        .edit(
-            "types/timer.toml",
-            "name = \"ADDR\"\nbits = \"31:0\"",
-            "name = \"ADDR\"\nbits = \"19:0\"",
-        )?
-        .edit(
-            "policy.toml",
-            "points-to = \"RX_DESCRIPTOR\"",
-            "points-to = \"RX_DESCRIPTOR\"\nencoding = \"ble-compressed\"\nmember-offset = 4",
-        )?;
-    fixture.load()?;
-    fixture.edit("policy.toml", "member-offset = 4", "member-offset = 1")?;
-    assert!(matches!(kind_of(&fixture)?, ErrorKind::Pointer(_)));
-    Ok(())
-}
-
-#[test]
-fn buffer_address_lies_in_the_dma_window() -> TestResult {
-    let fixture = Fixture::new()?;
-    fixture.edit(
-        "policy.toml",
-        "domain = \"AlarmImage\"",
-        "placement = \"dma-window\"",
+        "types/timer.toml",
+        "name = \"ALARM\"\nbits = \"31:0\"\nclass = \"plain\"",
+        "name = \"ALARM\"\nbits = \"31:0\"\nclass = \"plain\"\npointer = { placement = \"dma-window\", encoding = { width = 32, shift = 0 }, sources = [\"SRC_HEADER\"] }",
     )?;
     fixture.load()?;
+    Ok(())
+}
+
+#[test]
+fn hardware_pointer_is_protected_without_a_policy_pointer_operation() -> TestResult {
+    let fixture = Fixture::new()?;
     fixture
-        .edit("root.toml", "name = \"dma-window\"", "name = \"scratch\"")?
-        .edit(
-            "types/../layouts/rx-descriptor.toml",
-            "placement = [\"dma-window\"]\n",
-            "",
-        )?
-        .edit(
-            "root.toml",
-            "[[layout-placements]]\nlayout = \"RX_DESCRIPTOR\"\nregions = [\"dma-window\"]",
-            "",
-        )?
         .remove("pointer-fields", "timer0_descriptor")?
         .remove("field-or-modifies", "point_timer0_descriptor")?
-        .edit(
-            "policy.toml",
-            "placement = \"dma-window\"",
-            "placement = \"scratch\"",
-        )?;
+        .append(FORGE_IMAGE)?;
     assert!(matches!(kind_of(&fixture)?, ErrorKind::Pointer(_)));
+    Ok(())
+}
+
+#[test]
+fn policy_cannot_redeclare_pointer_facts() -> TestResult {
+    for fact in [
+        "points-to = \"RX_DESCRIPTOR\"",
+        "encoding = \"ble-compressed\"",
+        "member-offset = 4",
+        "placement = \"dma-window\"",
+    ] {
+        let fixture = Fixture::new()?;
+        fixture.edit(
+            "policy.toml",
+            "name = \"timer0_descriptor\"",
+            &format!("name = \"timer0_descriptor\"\n{fact}"),
+        )?;
+        assert!(matches!(kind_of(&fixture)?, ErrorKind::Parse(_)));
+    }
+    Ok(())
+}
+
+#[test]
+fn policy_references_bounded_and_enum_hardware_domains() -> TestResult {
+    for fact in [
+        "value-range = { min = 0, max = 65535, sources = [\"SRC_HEADER\"] }",
+        "values = [{ name = \"LOW\", value = 0, sources = [\"SRC_HEADER\"] }, { name = \"HIGH\", value = 15, sources = [\"SRC_HEADER\"] }]",
+    ] {
+        let fixture = Fixture::new()?;
+        fixture.edit(
+            "types/timer.toml",
+            "name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"",
+            &format!("name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"\n{fact}"),
+        )?;
+        fixture.append(
+            "\n[[field-domains]]\nname = \"HardwareDivider\"\nfield = \"TIMER0.CONFIG.DIV\"\n",
+        )?;
+        fixture.append("\n[[field-replace-modifies]]\nname = \"replace_from_hardware_domain\"\nfields = [{ field = \"TIMER0.CONFIG.DIV\", source-bit-offset = 0 }]\ndomain = \"HardwareDivider\"\nsources = [\"SRC_DRIVER\"]\n")?;
+        fixture.load()?;
+        fixture.edit(
+            "policy.toml",
+            "name = \"HardwareDivider\"\nfield = \"TIMER0.CONFIG.DIV\"",
+            "name = \"HardwareDivider\"\nfield = \"TIMER0.CONFIG.EN\"",
+        )?;
+        assert!(matches!(kind_of(&fixture)?, ErrorKind::Domain(_)));
+    }
     Ok(())
 }
 
@@ -1797,9 +1913,12 @@ fn snapshot_samples_only_readable_status_fields() -> TestResult {
             "name = \"INT_RAW\"\noffset = 0x08\n\n[[registers.fields]]\nname = \"T0\"\nbits = \"0\"\nclass = \"read-only\"",
             &format!("name = \"INT_RAW\"\noffset = 0x08\n\n[[registers.fields]]\nname = \"T0\"\nbits = \"0\"\nclass = \"{class}\""),
         )?;
-        let error = fixture.rejection()?;
-        assert_eq!(error.entity, "timer0_interrupt");
-        assert!(matches!(error.kind, ErrorKind::Snapshot(_)), "{error}");
+        // The type's interrupt pair already refuses an unreadable status.
+        let error = match fixture.load() {
+            Ok(_) => return Err("the fixture loaded".into()),
+            Err(error) => error.to_string(),
+        };
+        assert!(error.contains("interrupt pair"), "{error}");
     }
     Ok(())
 }
@@ -1963,7 +2082,7 @@ fn snapshot_acknowledgement_checks_unsampled_zero_lanes() -> TestResult {
         .edit(
             "types/timer.toml",
             "name = \"T1\"\nbits = \"1\"\nclass = \"write-one-to-clear\"",
-            "name = \"T1\"\nbits = \"2\"\nclass = \"write-one-to-clear\"\nwrite-range = { min = 1, max = 1 }",
+            "name = \"T1\"\nbits = \"1\"\nclass = \"write-one-to-clear\"\n\n[[registers.fields]]\nname = \"T2\"\nbits = \"2\"\nclass = \"write-one-to-clear\"\nwrite-range = { min = 1, max = 1 }",
         )?
         .remove("fixed-register-images", "acknowledge_timer0_masked")?
         .remove("fixed-register-images", "acknowledge_timer0_consumed")?;
@@ -2213,8 +2332,8 @@ fn consumed_snapshot(constraint: &str, event: &str, fields: &str) -> TestResult<
         )?
         .edit(
             "policy.toml",
-            "clear = \"TIMER0.INT_CLR\"\n",
-            &format!("clear = \"TIMER0.INT_CLR\"\n{event}{fields}"),
+            "status = \"TIMER0.INT_RAW\"\n",
+            &format!("status = \"TIMER0.INT_RAW\"\n{event}{fields}"),
         )?;
     Ok(fixture)
 }
@@ -2361,8 +2480,8 @@ fn whole_word_bits_belong_to_writes_from_zero_alone() -> TestResult {
         ),
         // A snapshot.
         (
-            "clear = \"TIMER0.INT_CLR\"\n",
-            "clear = \"TIMER0.INT_CLR\"\nwhole-word-bits = { value = 4, sources = [\"SRC_HEADER\"] }\n",
+            "status = \"TIMER0.INT_RAW\"\n",
+            "status = \"TIMER0.INT_RAW\"\nwhole-word-bits = { value = 4, sources = [\"SRC_HEADER\"] }\n",
         ),
     ] {
         let error = rejected(&[(from, to)])?;
@@ -2420,5 +2539,84 @@ fn shared_word_never_writes_one_to_a_write_one_to_clear_flag() -> TestResult {
             "{error}"
         );
     }
+    Ok(())
+}
+
+#[test]
+fn positioned_enum_reference_supplies_masked_images_at_its_field() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timer.toml",
+        "name = \"EN\"\nbits = \"31\"\nclass = \"plain\"",
+        "name = \"EN\"\nbits = \"31\"\nclass = \"plain\"\nvalues = [{ name = \"OFF\", value = 0 }, { name = \"ON\", value = 1 }]",
+    )?;
+    fixture.append(
+        "\n[[field-domains]]\nname = \"PositionedEnable\"\nfield = \"TIMER0.CONFIG.EN\"\npositioned = true\n\n[[masked-register-modifies]]\nname = \"positioned_mask_image\"\nregister = \"TIMER0.CONFIG\"\ndomain = \"PositionedEnable\"\npreserve-mask = 0x7fffffff\ninput-mask = 0x80000000\nset-mask = 0\nsources = [\"SRC_DRIVER\"]\n",
+    )?;
+    fixture.load()?;
+    // The input is exactly the field's lane: a wider input is no copy of it.
+    fixture.edit(
+        "policy.toml",
+        "preserve-mask = 0x7fffffff\ninput-mask = 0x80000000",
+        "preserve-mask = 0x3fffffff\ninput-mask = 0xc0000000",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Transaction(_)));
+    // Without `positioned` the values stand at bit zero, outside the input.
+    fixture
+        .edit(
+            "policy.toml",
+            "preserve-mask = 0x3fffffff\ninput-mask = 0xc0000000",
+            "preserve-mask = 0x7fffffff\ninput-mask = 0x80000000",
+        )?
+        .edit("policy.toml", "positioned = true\n", "")?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Transaction(_)));
+    Ok(())
+}
+
+#[test]
+fn positioned_domain_takes_only_its_own_register() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timer.toml",
+        "name = \"EN\"\nbits = \"31\"\nclass = \"plain\"",
+        "name = \"EN\"\nbits = \"31\"\nclass = \"plain\"\nvalues = [{ name = \"OFF\", value = 0 }, { name = \"ON\", value = 1 }]",
+    )?;
+    fixture.append(
+        "\n[[field-domains]]\nname = \"PositionedEnable\"\nfield = \"TIMER0.CONFIG.EN\"\npositioned = true\n\n[[masked-register-modifies]]\nname = \"positioned_mask_image\"\nregister = \"TIMER1.CONFIG\"\ndomain = \"PositionedEnable\"\npreserve-mask = 0x7fffffff\ninput-mask = 0x80000000\nset-mask = 0\nsources = [\"SRC_DRIVER\"]\n",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Transaction(_)));
+    Ok(())
+}
+
+#[test]
+fn referenced_ranges_bound_writes_and_cannot_be_shifted_or_redeclared() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timer.toml",
+        "name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"",
+        "name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"\nvalue-range = { min = 0, max = 15, sources = [\"SRC_HEADER\"] }",
+    )?;
+    fixture
+        .remove("masked-register-modifies", "set_timer0_divider")?
+        .remove(
+            "field-replace-modifies",
+            "replace_timer0_divider_from_argument",
+        )?
+        .remove("indexed-bit-set-modifies", "set_timer0_divider_bit")?
+        .remove("bounded-domains", "Divider")?
+        .append("\n[[field-domains]]\nname = \"Divider\"\nfield = \"TIMER0.CONFIG.DIV\"\n")?;
+    fixture.load()?;
+    fixture.append("\n[[bounded-domains]]\nname = \"Divider\"\ndescription = \"Duplicate.\"\nmin = 0\nmax = 15\nsources = [\"SRC_HEADER\"]\n")?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Duplicate(_)));
+    fixture.remove("bounded-domains", "Divider")?.edit(
+        "policy.toml",
+        "[[field-domains]]",
+        "[[field-domains]]\npositioned = true",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Domain(_)));
+    fixture
+        .edit("policy.toml", "positioned = true\n", "")?
+        .edit("policy.toml", "domain = \"Divider\"", "value = 16")?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::WriteConstraint(_)));
     Ok(())
 }

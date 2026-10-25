@@ -7,7 +7,9 @@
 
 use super::restore::Restore;
 use crate::owner::{SharedPhyAccess, phy_parts_mut};
-use oer_esp32s31_pac::RadioPhyRegisters;
+use crate::phy::RadioPhyRegisters;
+
+pub mod ops;
 
 /// Named minimum settle between asserting SAR-I2C reset and enabling power.
 pub const SAR_I2C_RESET_SETTLE_MICROS: u32 = 1;
@@ -34,14 +36,15 @@ trait TemperaturePort {
     fn sensor_power(&mut self, enabled: bool);
 }
 
-impl TemperaturePort for RadioPhyRegisters {
+impl<P: crate::phy::registers::RadioPlacement> TemperaturePort for RadioPhyRegisters<P> {
     fn cold_readout_prefix(&mut self) {
         // SOURCE: complete phy_tsens_read_init, before its tail call to the
         // linked IDF phy_set_tsens_power override. Preserve all four RMWs.
-        self.enable_temperature_sensor_register_bank();
-        self.set_temperature_sensor_clock(true);
-        self.enable_temperature_sensor_phy_readout();
-        self.enable_temperature_sensor_phy_conversion();
+        let blocks = &mut self.peripherals;
+        ops::enable_register_bank(&mut blocks.lp_tsens);
+        ops::set_clock(&mut blocks.lp_periclkrst, true);
+        ops::enable_phy_readout(&mut blocks.lp_tsens);
+        ops::enable_phy_conversion(&mut blocks.lp_tsens);
     }
     fn sar_reset_released(&mut self, released: bool) {
         self.set_analog_i2c_reset_released(released);
@@ -50,17 +53,13 @@ impl TemperaturePort for RadioPhyRegisters {
         self.set_analog_i2c_power(enabled);
     }
     fn sensor_clock(&mut self, enabled: bool) {
-        self.set_temperature_sensor_clock(enabled);
+        ops::set_clock(&mut self.peripherals.lp_periclkrst, enabled);
     }
     fn sensor_reset(&mut self, asserted: bool) {
-        self.set_temperature_sensor_reset(asserted);
+        ops::set_reset(&mut self.peripherals.lp_periclkrst, asserted);
     }
     fn sensor_power(&mut self, enabled: bool) {
-        if enabled {
-            self.enable_temperature_sensor_power();
-        } else {
-            self.disable_temperature_sensor_power();
-        }
+        ops::set_power(&mut self.peripherals.lp_tsens, enabled);
     }
 }
 
@@ -144,9 +143,9 @@ pub fn release(registers: &mut impl SharedPhyAccess) -> Result<(), TemperaturePo
     state.resources_mut().release_with(phy)
 }
 
-/// Sample one unsigned sensor code through the owner-bound PAC read.
+/// Sample one unsigned sensor code.
 pub fn read_code(registers: &impl SharedPhyAccess) -> u8 {
-    crate::phy_pac(registers).read_temperature_sensor_code()
+    ops::read_code(&crate::phy_blocks(registers).lp_tsens)
 }
 
 #[cfg(test)]

@@ -101,7 +101,7 @@ being executed in bits 23:20. Every scheduler function takes BUSY from the
 MAC diagnostic pair instead of that register: it writes the complete selector
 image `0x38` to `0x2010_11e8`, reads `0x2010_11ec` until two consecutive
 complete reads are equal and tests bit 7. BUSY below always means this
-sample. The vendor loop is unbounded. Here one PAC call is one selection and
+sample. The vendor loop is unbounded. Here one HAL sample is one selection and
 two reads, and the HAL repeats it until the named settle `DIAGNOSTIC_SETTLE`
 (20 µs on the caller's clock) has passed; the Controller treats an unsettled
 sample as a scheduler fault.

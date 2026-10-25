@@ -1212,9 +1212,9 @@ minimum_free_bytes = 16
     fn a_linked_starter_with_core_one_unused_fails() {
         let (_directory, policy) = policy_with(POLICY, "");
         for name in [
-            "esp_hal::system::CpuControl::start_app_core::<closure>",
-            "esp_hal::system::CpuControl::unpark_core",
-            "esp_hal::soc::cpu_control::start_core1",
+            "oer_esp32s31_hal::cores::Cores::start_hart1::<closure>",
+            "<oer_esp32s31_hal::cores::Cores>::start_hart1",
+            "oer_esp32s31_hal::cores::Cores::start_hart1",
         ] {
             let image = image(&with(Some(starter(name))), &[("cpu0_stack", 0, 1024)]);
             let error = cores::audit_runtime(&image, &policy, &chip())
@@ -1229,30 +1229,10 @@ minimum_free_bytes = 16
         }
         // A function that only resembles a starter is none.
         let image = image(
-            &with(Some(starter("esp_hal::system::park_core"))),
+            &with(Some(starter("oer_esp32s31_hal::cores::Cores::park"))),
             &[("cpu0_stack", 0, 1024)],
         );
         cores::audit_runtime(&image, &policy, &chip()).unwrap();
-    }
-
-    #[test]
-    fn a_linked_cross_core_call_fails_in_every_image() {
-        let (_directory, policy) = policy_with(POLICY, "");
-        for name in [
-            "<esp_hal::interrupt::ipc::Ipc>::call_function",
-            "esp_hal::interrupt::ipc::implem::dispatch",
-            "esp_hal::interrupt::ipc::implem::ipc_handler::<0usize>",
-        ] {
-            let image = image(&with(Some(starter(name))), &[("cpu0_stack", 0, 1024)]);
-            let error = cores::audit_runtime(&image, &policy, &chip())
-                .unwrap_err()
-                .to_string();
-            assert!(
-                error.contains("cross-core call") && error.contains(name),
-                "{error}"
-            );
-            assert!(cores::audit_bootstrap(&image, &chip()).is_err());
-        }
     }
 
     #[test]
@@ -1302,7 +1282,7 @@ minimum_free_bytes = 16
         for (root, proven) in [("leaf", true), ("indirect", false)] {
             let (_directory, policy) = policy_with(&USED.replace("ROOT", root), ASM_REVIEW);
             let image = image(
-                &with(Some(starter("esp_hal::system::CpuControl::start_app_core"))),
+                &with(Some(starter("oer_esp32s31_hal::cores::Cores::start_hart1"))),
                 &[("cpu0_stack", 0, 1024), ("cpu1_stack", 0x400, 1024)],
             );
             cores::audit_runtime(&image, &policy, &chip()).unwrap();

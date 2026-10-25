@@ -119,23 +119,11 @@ flash-tuning-reference-bytes = 0x1_0000
 harts = [0, 1]
 irq-stack-guard-bytes = { "0" = 4096, "1" = 1024 }
 
-# What releases core 1 from the reset the esp-hal fork holds it in
-# (chips/esp32s31/notes/core1-boot.md). An image links none of these unless its
-# stack policy declares core 1 used and proves its roots; the image gate
-# looks the patterns up among the linked functions. `ipc` is the cross-core
-# call, which the fork's `ipc` feature (off in every image) links; no image
-# links any of it until the call is typed.
+# Only the HAL core controller may release hart 1. An image must declare
+# that hart's roots and prove its stack policy before it links a starter.
 [core-start]
-ipc = [
-    "esp_hal::interrupt::ipc::*",
-    "<esp_hal::interrupt::ipc::*",
-]
-starters = [
-    "*CpuControl*::start_app_core*",
-    "*CpuControl*::unpark_core*",
-    "*::start_core1*",
-    "*Cores*::start_hart1*",
-]
+ipc = []
+starters = ["*Cores*::start_hart1*"]
 
 # The Rust probe images of the vendor comparison (firmware/probes),
 # in build order: the artifact role each serves. The Bluetooth probe returns
@@ -150,11 +138,11 @@ package = "oer-firmware-probes-esp32s31-register"
 
 # Why the core last reset, which the host reads through JTAG after a power
 # cycle: the board lost power only if it reads a power-on reset. The field is
-# the platform publication's (chips/esp32s31/registers/publication/platform.toml), with
-# its evidence; cause 1 is the power-on reset of ESP-IDF 4d59230d's
+# the chip root's (chips/esp32s31/registers/chip.toml), with its evidence;
+# cause 1 is the power-on reset of ESP-IDF 4d59230d's
 # `components/soc/esp32s31/register/soc/lp_clkrst_reg.h`.
 [reset-cause]
-field = "LP_AON_RESET_CAUSE.HPCORE0_RESET_CAUSE.HPCORE0_RESET_CAUSE"
+field = "LP_AON_CLKRST.LP_AONCLKRST_HPCORE0_RESET_CAUSE.LP_AONCLKRST_HPCORE0_RESET_CAUSE"
 power-on = 1
 
 [hil]

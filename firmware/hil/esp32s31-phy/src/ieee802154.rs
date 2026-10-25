@@ -1,5 +1,4 @@
 //! Image-local RX diagnostic assembly; no block runtime API.
-use crate::MacToken;
 use oer_diagnostics::{DiagPath, Note};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
@@ -8,7 +7,9 @@ use oer_esp32s31_hal::{
         Ieee802154Cold,
         engine::{self, DetachedIeee802154Engine, Ieee802154Engine},
         ll::Ieee802154MacOwners,
+        mac::Ieee802154InterruptOwner,
     },
+    power::ChipClocks,
     root::Ieee802154RadioPartition,
 };
 use oer_esp32s31_knowledge::tx_power::ESP32S31_TX_POWER_LEVELS;
@@ -20,7 +21,6 @@ use oer_esp32s31_phy::{
     },
     *,
 };
-use oer_espressif_esp_hal_radio::EspHalClocks;
 use oer_espressif_ieee802154_engine::{
     channel::Ieee802154Channel,
     coex::{Ieee802154CoexPriorities, Ieee802154Coexistence},
@@ -33,6 +33,7 @@ use oer_espressif_ieee802154_engine::{
     types::Ieee802154RxStatus,
 };
 use oer_hil_protocol::base::RejectReason;
+use oer_interrupt_table::Silent;
 use oer_memory::HandlerCell;
 use oer_radio_regulatory::{
     Country, FrequencySpan, PowerLimits, RegulatoryDomain, Rule, RuleFlags,
@@ -42,9 +43,10 @@ use static_cell::StaticCell;
 
 type Result<T> = core::result::Result<T, RejectReason>;
 
-// MAC IRQ and every engine entry run on the same hart at P2. They cannot
-// preempt one another. No borrow crosses await; P1 and P3 never enter this
-// cell. HandlerCell rejects reentry without waiting or sharing a lock.
+// The MAC's source is routed nowhere: the radio task (P2) polls the running
+// engine's events and makes every other engine entry, so none preempts
+// another. No borrow crosses await; P1 and P3 never enter this cell.
+// HandlerCell rejects reentry without waiting or sharing a lock.
 static ENGINE: HandlerCell<Option<Running>> = HandlerCell::new();
 static STORAGE: StaticCell<Option<Running>> = StaticCell::new();
 
@@ -66,16 +68,30 @@ impl Running {
     }
 }
 
-pub fn interrupt() {
+/// How often the radio task polls the running engine's events: well inside
+/// the 4 ms a 127-byte PSDU lasts on air at the 2.4 GHz PHY's 250 kbit/s, so
+/// a poll finds at most one new frame per receive slot.
+const POLL_PERIOD: oer_time::Duration = oer_time::Duration::from_millis(1);
+
+/// When the radio task polls the running engine next; `None` without one.
+pub fn poll_deadline() -> Option<oer_time::Instant> {
     ENGINE
-        .with(|running| {
-            let running = running.as_mut().expect("routed MAC IRQ has an engine");
+        .with(|running| running.is_some())
+        .unwrap_or(false)
+        .then(|| EmbassyClock.now().saturating_add(POLL_PERIOD))
+}
+
+/// Serve the running engine's events and return its delivered slots. A
+/// slot the engine refuses fails the session, which its exit reports.
+pub fn poll() {
+    let _entered = ENGINE.with(|running| {
+        if let Some(running) = running.as_mut() {
             running.engine.isr(&mut running.env);
-            running
-                .recycle()
-                .expect("RX diagnostic returns every delivered slot");
-        })
-        .expect("P2 MAC entries cannot reenter");
+            if running.recycle().is_err() {
+                running.env.failed = true;
+            }
+        }
+    });
 }
 
 pub struct Rx {
@@ -84,7 +100,7 @@ pub struct Rx {
     coex: Option<Coexisting<Ieee802154Client>>,
     power: Option<CommonPower<Ieee802154Client>>,
     route: Option<RegisteredIeee802154OperationalRoute>,
-    irq: MacToken,
+    silent: Option<Silent<Ieee802154InterruptOwner>>,
     buffers: Option<oer_esp32s31_hal::dma_static::Placed<Ieee802154EngineBuffers>>,
     detached: Option<DetachedIeee802154Engine>,
 }
@@ -92,7 +108,7 @@ impl Rx {
     pub fn new(
         partition: Ieee802154RadioPartition,
         absent: CoexAbsent<Ieee802154Client>,
-        irq: MacToken,
+        silent: Silent<Ieee802154InterruptOwner>,
     ) -> Self {
         assert!(
             ENGINE.install(STORAGE.init(None)).is_ok(),
@@ -104,7 +120,7 @@ impl Rx {
             coex: None,
             power: None,
             route: None,
-            irq,
+            silent: Some(silent),
             buffers: Some(engine::claim_buffers().expect("one placed MAC storage claim")),
             detached: None,
         }
@@ -112,8 +128,8 @@ impl Rx {
 
     pub async fn enter(
         &mut self,
-        domain: &mut RadioDomain<oer_espressif_esp_hal_radio::EspHal, ConcurrentPhy>,
-        clocks: &EspHalClocks,
+        domain: &mut RadioDomain<ChipClocks, ConcurrentPhy>,
+        clocks: &ChipClocks,
         channel: u8,
         power_dbm: i8,
     ) -> Result<()> {
@@ -191,8 +207,9 @@ impl Rx {
             interrupts,
             route,
         } = RegisteredIeee802154Operational::new(foundation, member);
-        let interrupts = interrupts.activate(&mut task);
-        let mac = Ieee802154MacOwners::new(task, interrupts);
+        let silent = self.silent.take().ok_or(RejectReason::Internal)?;
+        let interrupts = interrupts.arm(&mut task);
+        let mac = Ieee802154MacOwners::new(task, interrupts, silent);
         let mut engine = match self.detached.take() {
             Some(detached) => detached.rebind(mac),
             None => Ieee802154Engine::place(
@@ -238,16 +255,14 @@ impl Rx {
             })
             .ok_or(RejectReason::Internal)??;
         self.route = Some(route);
-        oer_espressif_esp_hal_irq::enable(&self.irq).map_err(|_| failed("154-irq-on"))?;
         Ok(())
     }
 
     pub async fn exit(
         &mut self,
-        domain: &mut RadioDomain<oer_espressif_esp_hal_radio::EspHal, ConcurrentPhy>,
+        domain: &mut RadioDomain<ChipClocks, ConcurrentPhy>,
     ) -> Result<()> {
-        // Same P2 as the IRQ, with no yield until it is unrouted and stopped.
-        oer_espressif_esp_hal_irq::disable(&self.irq);
+        // Same P2 task as the polls, with no yield until the engine stopped.
         let mut running = ENGINE
             .with(Option::take)
             .flatten()
@@ -271,7 +286,8 @@ impl Rx {
             }
         };
         self.detached = Some(detached);
-        let (mut task, interrupts) = mac.into_parts();
+        let (mut task, interrupts, silent) = mac.into_parts();
+        self.silent = Some(silent);
         let interrupts = interrupts.deactivate(&mut task);
         let (foundation, member) = self
             .route

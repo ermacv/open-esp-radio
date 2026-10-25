@@ -4,8 +4,7 @@
 use std::{vec, vec::Vec};
 
 use oer_esp32s31_pac::{
-    RadioPartitions,
-    ieee802154_mac::command::Opcode,
+    ieee802154::command::Opcode,
     modem_etm::{ch_event, ch_task},
 };
 use oer_espressif_ieee802154_engine::types::{
@@ -14,7 +13,6 @@ use oer_espressif_ieee802154_engine::types::{
     Ieee802154MultipanIndex, Ieee802154RxAbortEnableSet, Ieee802154RxAbortReasonObservation,
     Ieee802154TxAbortEnableSet,
 };
-use oer_mmio::Index;
 
 use super::{
     Ieee802154Pti,
@@ -35,18 +33,27 @@ fn mask(events: &[Ieee802154Event]) -> Ieee802154EventMask {
 }
 
 #[test]
-fn the_partition_splits_and_rejoins_without_register_access() {
-    let RadioPartitions { ieee802154, .. } = RadioPartitions::for_host_test();
-    let (task, interrupts) = super::split(ieee802154);
-    let _partition = super::reunite(task, interrupts);
+fn assembling_host_owners_performs_no_register_access() {
+    let mut memory = HostMemory::filled(0xa5a5_a5a5);
+    let before = (
+        memory.mac.clone(),
+        memory.etm.clone(),
+        memory.baseband.clone(),
+    );
+    let _ = memory.owners();
+    assert_eq!((memory.mac, memory.etm, memory.baseband), before);
 }
 
 #[test]
-fn activation_enables_the_runtime_baseline_and_teardown_masks_it_again() {
+fn arming_masks_the_events_and_the_session_enables_then_masks_them() {
     let mut memory = HostMemory::filled(u32::MAX);
     let (mut task, setup) = memory.owners();
-    let interrupts = setup.activate(&mut task);
+    let interrupts = setup.arm(&mut task);
+    // Arming leaves every event masked: nothing is raised before a handler
+    // holds the owner (`enable_events` takes the binding's proof).
+    assert!(task.foundation_snapshot().events_masked());
 
+    task.publish_runtime_events();
     let events = task.mac_part().read_event_enable();
     for (enabled, served) in [
         (events.tx_done(), true),
@@ -80,8 +87,14 @@ fn activation_enables_the_runtime_baseline_and_teardown_masks_it_again() {
     );
     assert!(!(tx.rx_ack_stop() || tx.tx_stop() || tx.rx_ack_crc_error()));
     assert_eq!(tx.tx_abort_en_25_30().get(), 0);
-    // Activation acknowledged the stale sample it took.
+    // Arming acknowledged the stale sample it took.
     assert!(interrupts.events().contains(Ieee802154Event::TxDone));
+
+    // The session's end masks every event and keeps the aborts.
+    task.mask_events();
+    let foundation = task.foundation_snapshot();
+    assert!(foundation.events_masked());
+    assert!(!foundation.rx_aborts_masked());
 
     let setup = interrupts.deactivate(&mut task);
     let foundation = task.foundation_snapshot();
@@ -95,7 +108,7 @@ fn activation_enables_the_runtime_baseline_and_teardown_masks_it_again() {
 fn clearing_events_acknowledges_only_the_sampled_events_the_mask_selects() {
     let mut memory = HostMemory::filled(u32::MAX);
     let (mut task, setup) = memory.owners();
-    let mut interrupts = setup.activate(&mut task);
+    let mut interrupts = setup.arm(&mut task);
     // The stale acknowledgement left every event asserted, the two unnamed
     // ones included.
     assert!(interrupts.events().classification().is_err());
@@ -364,29 +377,27 @@ fn the_etm_routes_program_their_own_channel() {
     let (mut task, _setup) = memory.owners();
     task.set_etm_route(Ieee802154EtmRoute::Timer0ToTxStart);
     task.set_etm_route(Ieee802154EtmRoute::Timer1ToRxStart);
-    let channel0 = Index::constant::<0>();
-    let channel1 = Index::constant::<1>();
     let etm = task.etm_part();
     assert_eq!(
-        etm.read_ch_event(channel0).id_variant(),
+        etm.read_ch0_event().id_variant(),
         Some(ch_event::Id::Ieee802154Timer0Overflow)
     );
     assert_eq!(
-        etm.read_ch_task(channel0).id_variant(),
+        etm.read_ch0_task().id_variant(),
         Some(ch_task::Id::Ieee802154TxStart)
     );
     assert_eq!(
-        etm.read_ch_event(channel1).id_variant(),
+        etm.read_ch1_event().id_variant(),
         Some(ch_event::Id::Ieee802154Timer1Overflow)
     );
     assert_eq!(
-        etm.read_ch_task(channel1).id_variant(),
+        etm.read_ch1_task().id_variant(),
         Some(ch_task::Id::Ieee802154RxStart)
     );
 
     task.set_etm_route(Ieee802154EtmRoute::Timer0ToCcaTx);
     assert_eq!(
-        task.etm_part().read_ch_task(channel0).id_variant(),
+        task.etm_part().read_ch0_task().id_variant(),
         Some(ch_task::Id::Ieee802154EdTrigTx)
     );
 }

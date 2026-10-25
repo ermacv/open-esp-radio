@@ -14,11 +14,13 @@ use oer_esp32s31_bluetooth_driver::{
         runner::{ClockRequests, Limits, Memory, Runner},
     },
     radio::ControllerLifecycle,
-    runtime_resources::{ControllerEventCells, ControllerRuntimeResources},
+    runtime_resources::ControllerRuntimeResources,
     shutdown,
 };
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::{
+    power::ChipClocks,
+    root::Root,
     bluetooth::engine::{
         ArenaError, BluetoothArena, ChipDma, Engine, EpochScope, PoolScope,
         SchedulerAllocationConfig, with_epoch_async, with_pool_async,
@@ -37,12 +39,11 @@ use oer_esp32s31_radio_client::{
     wifi::Wifi,
 };
 use oer_esp32s31_radio_system::{BluetoothActor, BluetoothAttachment, Esp32s31Radio, RadioSystem};
-use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
 use oer_radio_regulatory::{Country, PowerLimits, RegulatoryDomain};
 use oer_time::{Clock, Duration, Timer};
 
 type Shared = Esp32s31Radio<
-    EspHalClocks,
+    ChipClocks,
     oer_espressif_executor::Cooperative<EmbassyClock>,
     NoopPhyTargetObserver,
 >;
@@ -50,8 +51,6 @@ type Actor = RadioSystem<Wifi, RcSlow, Shared, EmbassyClock>;
 type Arena = BluetoothArena<0, 0, 0, 0, 0, 0>;
 mod lifecycle;
 oer_esp32s31_hal::dma_static! {static ARENA:Arena=zeroed in ".dma.bss.bluetooth.dtm";}
-static CELLS: ControllerEventCells<X> =
-    ControllerEventCells::new(&irq::SCHEDULER_SIGNAL, &irq::TIMER_SIGNAL);
 
 oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2).
@@ -71,6 +70,7 @@ oer_espressif_executor::tasks! {
             channel: bridge::FrontendChannel,
             power: TxPower,
         ) = host::serve;
+        rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
     }
 }
 
@@ -81,8 +81,8 @@ pub(crate) struct Boot {
     coex: Option<CoexAbsent<BluetoothClient>>,
     cell: Option<MembershipCell<Bluetooth>>,
     bell: &'static irq::SchedulerBell,
-    timer: Option<&'static mut irq::TimerPort>,
-    routes: Option<irq::Inactive>,
+    port: Option<&'static mut irq::TimerPort>,
+    gate: Option<irq::Gate>,
     arena: Option<Placed<Arena>>,
     port_epoch: u64,
     reply: Option<(rpc::Command, bridge::Response)>,
@@ -148,8 +148,15 @@ pub fn permission(profile: Profile) -> (Permission, TxPower) {
 
 pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let previous = oer_espressif_staged_runtime::panic::take_previous();
-    let p = esp_hal::init(esp_hal::Config::default());
-    let (psram, adopted) = handoff.adopt(INTERRUPT_TABLE, board::BootstrapPsram(p.PSRAM));
+    let Some(root) = Root::take() else {
+        crate::fail("root-taken")
+    };
+    let runtime = root.into_runtime();
+    let (_psram, mut adopted) = handoff.adopt(
+        INTERRUPT_TABLE,
+        runtime.interrupts.controller,
+        board::BootstrapPsram,
+    );
     if previous.is_some() {
         usb::early_text(b"OER-B0-BRINGUP: previous panic\r\n");
     }
@@ -157,89 +164,88 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         usb::early_text(b"OER-B0-BRINGUP: unconfigured\r\n");
         oer_espressif_staged_runtime::idle();
     };
-    let tokens = Interrupts::take().expect("one image interrupt table");
-    let factory = oer_esp32s31_hal::platform::FactoryIdentity::read(
-        oer_espressif_esp_hal_soc::handoff::take_efuse()
-        .expect("the image takes the eFuse words once"),
-    );
+    let Some(tokens) = Interrupts::take() else {
+        crate::fail("interrupt-table")
+    };
+    let factory = oer_esp32s31_hal::platform::FactoryIdentity::read(runtime.efuse);
     let base = factory.base_mac();
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
         base_mac_address: base,
         mac_extension: factory.mac_extension(),
     };
-    let singletons = RadioSingletons {
-        i2c_ana_mst: p.I2C_ANA_MST,
-        modem_syscon: p.MODEM_SYSCON,
-        modem_lpcon: p.MODEM_LPCON,
-        wifi: p.WIFI,
-        bt: p.BT,
-        ieee802154: p.IEEE802154,
-        lp_tsens: p.LP_TSENS,
+    let (domain, parts) = runtime.radio.split::<ChipClocks, _>(ConcurrentPhy::new());
+    let (Some((end, _)), Some((inbox, cell)), Some(lp)) = (
+        oer_esp32s31_radio_client::claim(),
+        bluetooth::claim(),
+        LpClock::<RcSlow>::claim(),
+    ) else {
+        crate::fail("claim")
     };
-    let (hardware, clocks) = take_radio(singletons, &psram, todo!("integration PR: bootstrap root provides PllPowerReleased"));
-    let (domain, parts) =
-        hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
-    let (end, _) = oer_esp32s31_radio_client::claim().expect("one shared actor");
-    let (inbox, cell) = bluetooth::claim().expect("one BLE membership");
     let backend = Esp32s31Radio::new(
         domain,
         parts.wifi_coex,
-        clocks,
+        runtime.clocks,
         oer_espressif_executor::Cooperative::new(EmbassyClock),
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
     );
-    let actor = RadioSystem::new(
-        end,
-        backend,
-        EmbassyClock,
-        LpClock::<RcSlow>::claim().expect("one LP source"),
+    let actor = RadioSystem::new(end, backend, EmbassyClock, lp);
+    let timer = runtime.system_timer;
+    oer_espressif_executor::init::<2, _, _>(
+        oer_espressif_executor::systimer::SystemTimer {
+            comparators: timer.comparators,
+            counter: timer.counter,
+        },
+        adopted.router(),
+        tokens.radio_alarm,
+        timer.alarm0,
     );
-    oer_espressif_executor::init::<2, _>(p.SYSTIMER, tokens.radio_alarm);
-    oer_espressif_executor::bind::<0, _>(tokens.app_alarm);
-    let (bell, timer, doorbell) =
-        irq::initialize(SoftwareInterrupt::new(p.FROM_CPU_INTR3), tokens.doorbell);
-    let bell = SCHEDULER.init(bell);
+    oer_espressif_executor::bind::<0, _, _>(adopted.router(), tokens.app_alarm, timer.alarm1);
+    let software = runtime.software_interrupts;
+    let Ok(bound) = irq::bind(adopted.router(), tokens.bt, software.line3, software.irq3) else {
+        crate::fail("bluetooth-interrupts")
+    };
+    let Some(bell) = SCHEDULER.try_init(bound.bell) else {
+        crate::fail("scheduler-bell")
+    };
     let _ = bridge::clock_state();
-    let radio = X::new(SoftwareInterrupt::new(p.FROM_CPU_INTR2)).start(tokens.radio, LEVELS);
-    let boot = BOOT.init_with(|| Boot {
+    let radio = X::new(software.line2).start(adopted.router(), tokens.radio, software.irq2, LEVELS);
+    let Some(arena) = ARENA.take() else {
+        crate::fail("arena")
+    };
+    let Some(boot) = BOOT.try_init(Boot {
         actor: Some(actor),
         inbox: Some(inbox),
         cold: Some(ColdOwner::from_partition(parts.bluetooth)),
         coex: Some(parts.bluetooth_coex),
         cell: Some(cell),
         bell,
-        timer: Some(timer),
-        routes: Some(irq::Inactive::new(
-            tokens.primary,
-            tokens.nrt,
-            tokens.timer,
-            doorbell,
-        )),
-        arena: Some(ARENA.take().expect("one static arena")),
+        port: Some(bound.port),
+        gate: Some(bound.gate),
+        arena: Some(arena),
         port_epoch: 0,
         reply: None,
         profile,
         address: base,
-    });
-    RadioTasks::driver(&radio, boot).expect("one P2 driver task");
-    RadioTasks::supervisor(&radio).expect("one P2 port supervisor");
-    let app = Executor::<0>::new(SoftwareInterrupt::new(p.FROM_CPU_INTR0));
-    adopted.enable_interrupts();
-    app.run(tokens.wake, |spawner| {
+    }) else {
+        crate::fail("boot")
+    };
+    if RadioTasks::driver(&radio, boot).is_err() || RadioTasks::supervisor(&radio).is_err() {
+        crate::fail("radio-tasks");
+    }
+    let (console, pads) = usb::open(adopted.router(), tokens.console_usb);
+    let app = Executor::<0>::new(software.line0);
+    let mut router = adopted.enable_interrupts();
+    let rng = host::Rng::new(runtime.entropy, EmbassyClock);
+    let watchdog = runtime.watchdogs.rtc;
+    app.run(&mut router, tokens.wake, software.irq0, move |spawner| {
         let (_, power) = permission(profile);
-        let rng = host::Rng::new(
-            oer_espressif_esp_hal_soc::handoff::take_entropy(p.RNG, p.LP_PERI),
-            EmbassyClock,
-        );
-        let (console, pads) = usb::open(
-            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(p.USB_DEVICE)
-                .expect("no early record holds the USB Serial/JTAG at the console handoff"),
-            tokens.console_usb,
-        );
-        AppTasks::serve(spawner, console, pads, rng, bridge::frontend(), power)
-            .expect("one HCI task");
+        if AppTasks::serve(spawner, console, pads, rng, bridge::frontend(), power).is_err()
+            || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
+        {
+            crate::fail("app-tasks");
+        }
     })
 }
 async fn hold<T>(owner: &mut T) -> ! {
@@ -272,7 +278,10 @@ static WORKER: static_cell::ConstStaticCell<oer_memory::StaticPlace<Worker>> =
 #[define_opaque(Worker)]
 fn worker(boot: &'static mut Boot) -> Worker {
     async move {
-        let timer: &'static irq::TimerPort = boot.timer.take().expect("one P2 timer handover");
+        let Some(timer) = boot.port.take() else {
+            hold(boot).await
+        };
+        let timer: &'static irq::TimerPort = timer;
         loop {
             let (command, reply) = bridge::command().await;
             if command.operation != rpc::Operation::Enable

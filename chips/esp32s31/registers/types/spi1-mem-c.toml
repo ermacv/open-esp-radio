@@ -454,6 +454,7 @@ reserved = { mask = 0xfff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTE
 
 [[registers.fields]]
 name = "SPI_MEM_USR_COMMAND_VALUE"
+values = [{ name = "QIO_READ", value = 235, sources = ["S31_ROM_FLASH_READ_CODES"] }, { name = "DIO_READ", value = 187, sources = ["S31_ROM_FLASH_READ_CODES"] }, { name = "QOUT_READ", value = 107, sources = ["S31_ROM_FLASH_READ_CODES"] }, { name = "DOUT_READ", value = 59, sources = ["S31_ROM_FLASH_READ_CODES"] }, { name = "FAST_READ", value = 11, sources = ["S31_ROM_FLASH_READ_CODES"] }, { name = "SLOW_READ", value = 3, sources = ["S31_ROM_FLASH_READ_CODES"] }]
 bits = "15:0"
 class = "plain"
 description = "The value of command."

@@ -3,9 +3,9 @@
 //!
 //! [`receive`] owns one receive epoch from bring-up to park:
 //!
-//! - **Bring-up.** Prepare the ring, open promiscuous receive, activate the
-//!   interrupt epoch (routes still silent), install the interrupt line
-//!   (which clears a stale request), enable the routes, start the walker
+//! - **Bring-up.** Prepare the ring, open promiscuous receive, install the
+//!   interrupt line (which clears a stale request), ask the radio handler to
+//!   activate the interrupt epoch (the binding's proof), start the walker
 //!   after its settle, start the prepared MAC with that live ring's DMA proof.
 //! - **Receive.** Wait for an interrupt fact or the stop request, then run
 //!   [`service`] until the frontier drained and every buffer the sink
@@ -26,7 +26,7 @@
 //!   (report-only).
 //! - **Teardown**, on the stop request or a fault, in this order: mask both
 //!   banks through the doorbell and wait for the masked fact (bounded);
-//!   silence the routes; close promiscuous receive and request the MAC
+//!   close promiscuous receive and request the MAC
 //!   runtime stop; wait until no lease is staged, no buffer is detached and
 //!   the MAC runtime is idle (bounded); stop the walker exactly once. A fault
 //!   poisons the arena before the stop; a refused stop poisons it after, and
@@ -51,11 +51,7 @@ use oer_esp32s31_ieee80211_mac::{
         MacRuntimeStartHardware, MacRuntimeStopHardware, MacSnifferHardware,
         activate_promiscuous_receive, deactivate_promiscuous_receive,
     },
-    irq::{
-        MacInterrupt, MacPowerInterrupt,
-        consumer::{ForeignContext, IrqConsumer, PowerIrqConsumer},
-        epoch::{ActiveEpoch, Moderated},
-    },
+    irq::consumer::{ForeignContext, IrqConsumer, PowerIrqConsumer},
     rx::{RxBufferFullCounter, RxDma, RxRingLive, pool::RxStagePool},
 };
 use oer_memory::HandlerCell;
@@ -71,7 +67,7 @@ use super::{
 };
 use crate::{
     datapath::DatapathRxProgress,
-    irq::{RadioDoorbell, WifiIrqLine, WifiIrqRequest, WifiIrqRequests, WifiIrqRoutes},
+    irq::{RadioDoorbell, WifiIrqActivation, WifiIrqLine, WifiIrqRequest, WifiIrqRequests},
 };
 
 /// Immediate self-wakes before a continuation waits on the timer.
@@ -102,10 +98,10 @@ pub const DRAIN_POLL: Duration = Duration::from_micros(100);
 /// `hardware` is the task's MAC (the `WifiMacHal` of `RadioAccess` on
 /// the chip) and `rx_dma` its RX DMA engine (`WifiRxDmaEngine`), the two
 /// halves `RadioAccess::split_rx_dma` lends.
-/// `activate` activates the moderated interrupt epoch (on the chip
-/// `InactiveEpoch::activate_rx_moderated` with the image's mask); it runs
-/// while the routes are silent. `cell` is the image's static cell its MAC,
-/// WDEVPWR and doorbell handlers run the line through. `publisher` and
+/// `bound` is the router's proof that the image's interrupt table binds the
+/// radio handler's part ([`Bound`](oer_interrupt_table::Bound) of a
+/// [`WifiIrqPart`](crate::irq::WifiIrqPart)); the activation takes it. `cell` is the image's static cell that handler runs
+/// the line through. `publisher` and
 /// `admission` take the staged units ([`QueueSink`](super::upper::QueueSink)
 /// and [`CountingAdmission`](super::sink::CountingAdmission) in W1).
 ///
@@ -119,9 +115,7 @@ pub async fn receive<
     X: SignalExecutor,
     H,
     W,
-    I,
-    P,
-    R,
+    V,
     D,
     T,
     E,
@@ -134,19 +128,9 @@ pub async fn receive<
 >(
     hardware: &mut H,
     rx_dma: &mut W,
-    activate: impl FnOnce() -> ActiveEpoch<Moderated, I, P>,
-    parts: WifiRxParts<
-        'static,
-        COUNT,
-        BUFFER,
-        STORAGE,
-        STAGE_SLOTS,
-        S,
-        ActiveEpoch<Moderated, I, P>,
-        X,
-    >,
-    cell: &'static HandlerCell<WifiIrqLine<ActiveEpoch<Moderated, I, P>, X>>,
-    routes: &mut R,
+    bound: &V,
+    parts: WifiRxParts<'static, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, X>,
+    cell: &'static HandlerCell<WifiIrqLine<X>>,
     doorbell: &D,
     timer: &T,
     publisher: &E,
@@ -155,9 +139,7 @@ pub async fn receive<
 where
     H: MacSnifferHardware + MacRuntimeStartHardware + MacRuntimeStopHardware + RxBufferFullCounter,
     W: RxDma,
-    I: MacInterrupt,
-    P: MacPowerInterrupt,
-    R: WifiIrqRoutes,
+    V: WifiIrqActivation,
     D: RadioDoorbell,
     T: Timer,
     E: Publisher<'static, BUFFER, STAGE_SLOTS>,
@@ -188,7 +170,6 @@ where
         requests,
         counters,
         control: &mut control,
-        routes,
         doorbell,
         timer,
         publisher,
@@ -213,12 +194,10 @@ where
         }
     };
     activate_promiscuous_receive(receiver.hardware);
-    let _installed = match line.install(activate(), cell) {
+    let _installed = match line.install(cell) {
         Ok(installed) => installed,
-        Err(refused) => {
-            // No handler can run this line: the cell holds another one and
-            // the routes were never enabled, so the executor masks it.
-            refused.epoch_mut().mask_all();
+        Err(_refused) => {
+            // The cell holds another line: no epoch is activated.
             deactivate_promiscuous_receive(receiver.hardware);
             return receiver
                 .park(WifiRxExit {
@@ -228,7 +207,7 @@ where
                 .await;
         }
     };
-    receiver.routes.enable();
+    receiver.requests.activate(bound, receiver.doorbell);
 
     let cause = match frontier
         .start_with_storage(receiver.timer, receiver.rx_dma, receiver.rx)
@@ -252,7 +231,6 @@ pub(super) struct Receiver<
     'r,
     H,
     W,
-    R,
     D,
     T,
     E,
@@ -273,7 +251,6 @@ pub(super) struct Receiver<
     pub(super) requests: &'static WifiIrqRequests,
     pub(super) counters: &'static WifiRxCounters,
     pub(super) control: &'r mut ReceiveRunnerControl<'static>,
-    pub(super) routes: &'r mut R,
     pub(super) doorbell: &'r D,
     pub(super) timer: &'r T,
     pub(super) publisher: &'r E,
@@ -289,7 +266,6 @@ pub(super) struct Receiver<
 impl<
     H,
     W,
-    R,
     D,
     T,
     E,
@@ -300,11 +276,10 @@ impl<
     const STAGE_SLOTS: usize,
     S,
     X: SignalExecutor,
-> Receiver<'_, H, W, R, D, T, E, M, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, X>
+> Receiver<'_, H, W, D, T, E, M, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, X>
 where
     H: MacSnifferHardware + MacRuntimeStopHardware + RxBufferFullCounter,
     W: RxDma,
-    R: WifiIrqRoutes,
     D: RadioDoorbell,
     T: Timer,
     E: Publisher<'static, BUFFER, STAGE_SLOTS>,
@@ -568,7 +543,6 @@ where
         };
 
         let masked = self.mask_all().await;
-        self.routes.silence();
         deactivate_promiscuous_receive(self.hardware);
         self.hardware.request_mac_runtime_stop();
         if !masked {

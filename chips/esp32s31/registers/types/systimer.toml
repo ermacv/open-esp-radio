@@ -51,96 +51,6 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PAC
 [review.entity."CONF.CLK_EN"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
 
-[review.entity."TARGET0_HI"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET0_HI.TIMER_TARGET0_HI"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET1_HI"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET1_HI.TIMER_TARGET1_HI"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET2_HI"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET2_HI.TIMER_TARGET2_HI"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET0_LO"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET0_LO.TIMER_TARGET0_LO"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET1_LO"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET1_LO.TIMER_TARGET1_LO"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET2_LO"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET2_LO.TIMER_TARGET2_LO"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET0_CONF"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET0_CONF.TARGET0_PERIOD"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET0_CONF.TARGET0_PERIOD_MODE"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET0_CONF.TARGET0_TIMER_UNIT_SEL"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET1_CONF"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET1_CONF.TARGET1_PERIOD"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET1_CONF.TARGET1_PERIOD_MODE"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET1_CONF.TARGET1_TIMER_UNIT_SEL"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET2_CONF"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET2_CONF.TARGET2_PERIOD"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET2_CONF.TARGET2_PERIOD_MODE"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."TARGET2_CONF.TARGET2_TIMER_UNIT_SEL"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."COMP0_LOAD"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."COMP0_LOAD.TIMER_COMP0_LOAD"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."COMP1_LOAD"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."COMP1_LOAD.TIMER_COMP1_LOAD"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."COMP2_LOAD"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
-[review.entity."COMP2_LOAD.TIMER_COMP2_LOAD"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
-
 [review.entity."INT_ENA"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
 
@@ -184,6 +94,36 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PAC
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
 
 [review.entity."INT_CLR.TARGET2_INT_CLR"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET%s_HI"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET%s_HI.HI"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET%s_LO"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET%s_LO.LO"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET%s_CONF"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET%s_CONF.PERIOD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET%s_CONF.PERIOD_MODE"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."TARGET%s_CONF.TIMER_UNIT_SEL"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."COMP%s_LOAD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[review.entity."COMP%s_LOAD.LOAD"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
 
 [[registers]]
@@ -348,154 +288,57 @@ class = "plain"
 description = "Configures the value to be loaded to UNIT1, low 32 bits."
 
 [[registers]]
-name = "TARGET0_HI"
+name = "TARGET%s_HI"
 offset = 0x1c
-description = "Alarm value to be loaded to COMP0, high 20 bits"
+dim = { count = 3, stride = 0x8 }
+description = "Comparator %s's alarm target, high 20 bits."
 reset = { value = 0x0 }
 reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
 
 [[registers.fields]]
-name = "TIMER_TARGET0_HI"
+name = "HI"
 bits = "19:0"
 class = "plain"
 description = "Configures the alarm value to be loaded to COMP0, high 20 bits."
 
 [[registers]]
-name = "TARGET0_LO"
+name = "TARGET%s_LO"
 offset = 0x20
-description = "Alarm value to be loaded to COMP0, low 32 bits"
+dim = { count = 3, stride = 0x8 }
+description = "Comparator %s's alarm target, low 32 bits."
 reset = { value = 0x0 }
 
 [[registers.fields]]
-name = "TIMER_TARGET0_LO"
+name = "LO"
 bits = "31:0"
 class = "plain"
 description = "Configures the alarm value to be loaded to COMP0, low 32 bits."
 
 [[registers]]
-name = "TARGET1_HI"
-offset = 0x24
-description = "Alarm value to be loaded to COMP1, high 20 bits"
-reset = { value = 0x0 }
-reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
-
-[[registers.fields]]
-name = "TIMER_TARGET1_HI"
-bits = "19:0"
-class = "plain"
-description = "Configures the alarm value to be loaded to COMP1, high 20 bits."
-
-[[registers]]
-name = "TARGET1_LO"
-offset = 0x28
-description = "Alarm value to be loaded to COMP1, low 32 bits"
-reset = { value = 0x0 }
-
-[[registers.fields]]
-name = "TIMER_TARGET1_LO"
-bits = "31:0"
-class = "plain"
-description = "Configures the alarm value to be loaded to COMP1, low 32 bits."
-
-[[registers]]
-name = "TARGET2_HI"
-offset = 0x2c
-description = "Alarm value to be loaded to COMP2, high 20 bits"
-reset = { value = 0x0 }
-reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
-
-[[registers.fields]]
-name = "TIMER_TARGET2_HI"
-bits = "19:0"
-class = "plain"
-description = "Configures the alarm value to be loaded to COMP2, high 20 bits."
-
-[[registers]]
-name = "TARGET2_LO"
-offset = 0x30
-description = "Alarm value to be loaded to COMP2, low 32 bits"
-reset = { value = 0x0 }
-
-[[registers.fields]]
-name = "TIMER_TARGET2_LO"
-bits = "31:0"
-class = "plain"
-description = "Configures the alarm value to be loaded to COMP2, low 32 bits."
-
-[[registers]]
-name = "TARGET0_CONF"
+name = "TARGET%s_CONF"
 offset = 0x34
-description = "Configure COMP0 alarm mode"
+dim = { count = 3, stride = 0x4 }
+description = "Comparator %s's alarm mode: its period, period mode and counter unit."
 reset = { value = 0x0 }
 reserved = { mask = 0x3c000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
 
 [[registers.fields]]
-name = "TARGET0_PERIOD"
+name = "PERIOD"
 bits = "25:0"
 class = "plain"
 description = "Configures COMP0 alarm period."
 
 [[registers.fields]]
-name = "TARGET0_PERIOD_MODE"
+name = "PERIOD_MODE"
 bits = "30"
 class = "plain"
 description = "Selects the two alarm modes for COMP0. \\\\ 0: Target mode\\\\ 1: Period mode\\\\"
 
 [[registers.fields]]
-name = "TARGET0_TIMER_UNIT_SEL"
+name = "TIMER_UNIT_SEL"
 bits = "31"
 class = "plain"
 description = "Chooses the counter value for comparison with COMP0.\\\\ 0: Use the count value from UNIT$0\\\\ 1: Use the count value from UNIT$1\\\\"
-
-[[registers]]
-name = "TARGET1_CONF"
-offset = 0x38
-description = "Configure COMP1 alarm mode"
-reset = { value = 0x0 }
-reserved = { mask = 0x3c000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
-
-[[registers.fields]]
-name = "TARGET1_PERIOD"
-bits = "25:0"
-class = "plain"
-description = "Configures COMP1 alarm period."
-
-[[registers.fields]]
-name = "TARGET1_PERIOD_MODE"
-bits = "30"
-class = "plain"
-description = "Selects the two alarm modes for COMP1. See details in SYSTIMER_TARGET0_PERIOD_MODE."
-
-[[registers.fields]]
-name = "TARGET1_TIMER_UNIT_SEL"
-bits = "31"
-class = "plain"
-description = "Chooses the counter value for comparison with COMP1. See details in SYSTIMER_TARGET0_TIMER_UNIT_SEL."
-
-[[registers]]
-name = "TARGET2_CONF"
-offset = 0x3c
-description = "Configure COMP2 alarm mode"
-reset = { value = 0x0 }
-reserved = { mask = 0x3c000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
-
-[[registers.fields]]
-name = "TARGET2_PERIOD"
-bits = "25:0"
-class = "plain"
-description = "Configures COMP2 alarm period."
-
-[[registers.fields]]
-name = "TARGET2_PERIOD_MODE"
-bits = "30"
-class = "plain"
-description = "Configures Configures the two alarm modes for COMP2. See details in SYSTIMER_TARGET0_PERIOD_MODE."
-
-[[registers.fields]]
-name = "TARGET2_TIMER_UNIT_SEL"
-bits = "31"
-class = "plain"
-description = "Chooses the counter value for comparison with COMP2. See details in SYSTIMER_TARGET0_TIMER_UNIT_SEL."
 
 [[registers]]
 name = "UNIT0_VALUE_HI"
@@ -548,43 +391,18 @@ class = "read-only"
 description = "Represents UNIT1 read value, low 32 bits."
 
 [[registers]]
-name = "COMP0_LOAD"
+name = "COMP%s_LOAD"
 offset = 0x50
-description = "COMP0 synchronization register"
+dim = { count = 3, stride = 0x4 }
+description = "Comparator %s's load strobe: it takes the staged target and mode."
 reset = { value = 0x0 }
 reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
 
 [[registers.fields]]
-name = "TIMER_COMP0_LOAD"
+name = "LOAD"
 bits = "0"
 class = "write-trigger"
 description = "Configures whether or not to enable COMP0 synchronization, i.e., reload the alarm value/period to COMP0.\\\\ 0: No effect \\\\ 1: Enable COMP0 synchronization\\\\"
-
-[[registers]]
-name = "COMP1_LOAD"
-offset = 0x54
-description = "COMP1 synchronization register"
-reset = { value = 0x0 }
-reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
-
-[[registers.fields]]
-name = "TIMER_COMP1_LOAD"
-bits = "0"
-class = "write-trigger"
-description = "Configures whether or not to enable COMP1 synchronization, i.e., reload the alarm value/period to COMP1. \\\\ 0: No effect \\\\ 1: Enable COMP1 synchronization\\\\"
-
-[[registers]]
-name = "COMP2_LOAD"
-offset = 0x58
-description = "COMP2 synchronization register"
-reset = { value = 0x0 }
-reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
-
-[[registers.fields]]
-name = "TIMER_COMP2_LOAD"
-bits = "0"
-class = "write-trigger"
-description = "Configures whether or not to enable COMP2 synchronization, i.e., reload the alarm value/period to COMP2.\\\\ 0: No effect \\\\ 1: Enable COMP2 synchronization\\\\"
 
 [[registers]]
 name = "UNIT0_LOAD"

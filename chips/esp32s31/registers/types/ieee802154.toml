@@ -1264,6 +1264,7 @@ description = "Write-only enhanced-ack generation-done notification word. The pu
 
 [[registers.fields]]
 name = "NOTIFY_IMAGE"
+values = [{ name = "GENERATE_DONE", value = 1 }]
 bits = "31:0"
 class = "write-only"
 
@@ -1437,7 +1438,7 @@ description = "Complete transmit frame-buffer address written by the public comm
 name = "ADDRESS"
 bits = "31:0"
 class = "write-only"
-write-range = { min = 0x0, max = 0xffffffff }
+pointer = { placement = "dma-window", encoding = { width = 0x20, shift = 0x0 }, sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"] }
 
 [[registers]]
 name = "TXDMA_ERR"
@@ -1459,7 +1460,7 @@ description = "Complete receive frame-buffer address written by the public commo
 name = "ADDRESS"
 bits = "31:0"
 class = "write-only"
-write-range = { min = 0x0, max = 0xffffffff }
+pointer = { placement = "dma-window", encoding = { width = 0x20, shift = 0x0 }, sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"] }
 
 [[registers]]
 name = "RXDMA_ERR"

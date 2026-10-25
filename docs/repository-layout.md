@@ -29,14 +29,14 @@ protocols/  sans-IO protocols and their vocabularies (no_std)
   hil/          the HIL protocol and its trace header
 portable/   generic support no protocol or chip owns (no_std)
   time/ time-virtual/ memory/ sync/ trace/ interrupt-table/ wire/
-  riscv/        architectural RISC-V constants (CSR numbers and fields)
+  riscv/        architectural RISC-V constants and instructions
   embassy/      bindings to Embassy (time, net)
   hil-agent/    the agent core the HIL images run
 chips/      everything about Espressif hardware
-  espressif/    IP shared by Espressif chips: Wi-Fi MAC PAC, analog, modem
+  espressif/    IP shared by Espressif chips: analog, modem
                 clock, coexistence, the 802.15.4 engine, Wi-Fi policy, the
-                staged boot (bootstrap, runtime, layout), executor and
-                esp-hal bindings, the chip facts model (facts/) and the
+                staged boot (bootstrap, runtime, layout), executor,
+                the chip facts model (facts/) and the
                 family and ISA fact layers (platform/); registers/ and notes/
                 shared by the chips
   esp32s31/ esp32c5/   (esp32c5 lies outside the Cargo workspace and CI)
@@ -44,7 +44,7 @@ chips/      everything about Espressif hardware
                 chip knowledge, and the chip's data:
                 platform/   chip, module and board fact layers, partitions, ROM
                             functions, stack budgets
-                registers/  the reviewed register model and its publications
+                registers/  block types, layouts, chip root, evidence and ownership policy
                 notes/      recovered facts and research notes
                 vendor/     the vendor pins and generated facts
 firmware/   images for a chip: apps/ bootstrap/ hil/ probes/, ESP-IDF peers/ and vendor/
@@ -139,12 +139,12 @@ and runs is a thin wrapper over `cargo fw` and the program.
 | run an app on a board | `cargo fw run w1 --board s31-a` | `firmware/apps/w1`, `tools/image/cli` |
 | run a HIL scenario | `cargo hil run <scenario>` (builds through the image pipeline), or `--images <dir>` for images built before | `firmware/hil/*` and `tools/hil/` speak `protocols/hil/protocol` |
 | add a HIL message | edit `protocols/hil/protocol` | both sides build against one definition |
-| compare a HAL leaf with the vendor | `cargo fw probe <package>`, then `cargo vendor-check` with the probe ELF | hook under `cfg(oer_probe)` in `chips/`; catalog code in `tools/probe/` |
+| compare a HAL leaf with the vendor | `cargo fw probe <package>`, then `cargo vendor-check` with the probe ELF | an entry over the public API in `firmware/probes/`; catalog code in `tools/probe/` |
 | trace, profile or force a path in an image | declare `instrumentation = ["trace" \| "profile" \| "debug-control"]` under the image's `[package.metadata.open-radio]`, then `cargo fw build <image>` | code under `cfg(oer_trace)`, `cfg(oer_profile)` or `cfg(oer_debug_control)`; `tools/image/build/src/instrumentation.rs` |
 | run the 802.15.4 vendor stand | `cargo run -p oer-tool-vendor-ieee802154-esp32s31-cli -- compare <scenario>` | vendor driver and `chips/espressif/ieee802154-engine` meet at the low-level boundary |
 | declare an image's task stacks proven | `task-stack = "proven"` under the image's `[package.metadata.open-radio]`, then `cargo fw build <image>` | `tools/image/build/src/task_stack.rs`; the check in `tools/image/checks/src/stack.rs` |
 | check an image's stack | `cargo fw build <image>` | `tools/image/checks` reads the ELF |
-| add a register field | edit `chips/<chip>/registers/`, `cargo registers generate` | `chips/<chip>/pac` |
+| add a register field | edit `chips/<chip>/registers/`, `cargo registers generate --chip <chip>` | `chips/<chip>/pac` |
 
 ## Known deviations
 

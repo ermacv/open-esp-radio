@@ -30,7 +30,7 @@ use pin_project::pin_project;
 
 use crate::bluetooth::engine::{
     scheduler_item::{SchedulerItemCompletionStatus, SchedulerItemHeader},
-    sram_link::ControllerSramLinkAddress,
+    sram_link::SchedulerItemLink,
 };
 
 /// Role kinds whose items share scheduler list zero.
@@ -90,8 +90,6 @@ impl SchedulerAllocationNumbers {
 const SCANNER_NUMBERS: u16 = 3;
 /// Numbers between the scanner and DTM that the vendor reserves privately.
 const PRIVATE_NUMBERS_BEFORE_DTM: u16 = 5 + 4;
-/// Largest number that fits item word `+0x20[11:0]`.
-const MAX_ALLOCATION_NUMBER: u32 = 0x0fff;
 
 impl SchedulerAllocationConfig {
     /// Capture the product limits. `None` when the DTM number would not fit
@@ -106,7 +104,7 @@ impl SchedulerAllocationConfig {
             + connections as u32
             + PRIVATE_NUMBERS_BEFORE_DTM as u32
             + periodic_syncs as u32;
-        if dtm > MAX_ALLOCATION_NUMBER {
+        if dtm > crate::layouts::BleSchedulerItemAllocationNumber::VALUE_MAX {
             return None;
         }
         Some(Self {
@@ -254,7 +252,7 @@ pub(crate) trait SchedulerRoleStorage:
     #[doc(hidden)]
     fn item_layout(&self, item: usize) -> &BleSchedulerItem;
     #[doc(hidden)]
-    fn item_link(binding: &Self::Binding, item: usize) -> ControllerSramLinkAddress;
+    fn item_link(binding: &Self::Binding, item: usize) -> SchedulerItemLink;
     /// Return the graph to its allocation-time image and report the
     /// matching role state.
     #[doc(hidden)]
@@ -479,7 +477,7 @@ impl<'pool, 'epoch, S: SchedulerRoleStorage, const N: usize>
             return Err(SchedulerPoolError::NotPrepared);
         }
         let header = SchedulerItemHeader::new(self.graph(index).item_layout(item));
-        header.set_completion_link(0);
+        header.link_completion(None);
         self.states[index] = InstanceState::Acquired {
             listed: listed | 1 << item,
             withheld,
@@ -651,11 +649,11 @@ pub(crate) struct SchedulerRoleCpu<'pool, S: SchedulerRoleStorage> {
 /// Item memory of one pool, as seen by the executor.
 pub(crate) trait SchedulerItemSource: sealed::Sealed {
     #[doc(hidden)]
-    fn item_link(&self, id: SchedulerItemId) -> ControllerSramLinkAddress;
+    fn item_link(&self, id: SchedulerItemId) -> SchedulerItemLink;
     #[doc(hidden)]
     fn item_layout(&self, id: SchedulerItemId) -> &BleSchedulerItem;
     #[doc(hidden)]
-    fn listed_item(&self, link: ControllerSramLinkAddress) -> Option<SchedulerItemId>;
+    fn listed_item(&self, address: u32) -> Option<SchedulerItemId>;
 }
 
 impl<S: SchedulerRoleStorage, const N: usize> sealed::Sealed for SchedulerRolePool<'_, '_, S, N> {}
@@ -663,7 +661,7 @@ impl<S: SchedulerRoleStorage, const N: usize> sealed::Sealed for SchedulerRolePo
 impl<S: SchedulerRoleStorage, const N: usize> SchedulerItemSource
     for SchedulerRolePool<'_, '_, S, N>
 {
-    fn item_link(&self, id: SchedulerItemId) -> ControllerSramLinkAddress {
+    fn item_link(&self, id: SchedulerItemId) -> SchedulerItemLink {
         S::item_link(&self.bindings[id.instance()], id.item())
     }
 
@@ -675,7 +673,7 @@ impl<S: SchedulerRoleStorage, const N: usize> SchedulerItemSource
         self.graph(id.instance()).item_layout(id.item())
     }
 
-    fn listed_item(&self, link: ControllerSramLinkAddress) -> Option<SchedulerItemId> {
+    fn listed_item(&self, address: u32) -> Option<SchedulerItemId> {
         (0..N)
             .flat_map(|instance| {
                 (0..S::ITEMS).map(move |item| SchedulerItemId {
@@ -687,34 +685,26 @@ impl<S: SchedulerRoleStorage, const N: usize> SchedulerItemSource
                     item: item as u8,
                 })
             })
-            .find(|id| self.is_listed(*id) && self.item_link(*id) == link)
+            .find(|id| self.is_listed(*id) && self.item_link(*id).controller_address() == address)
     }
 }
 
 /// Sealed, statically dispatched pool set for one scheduler item space.
 #[doc(hidden)]
 pub(crate) trait SchedulerItemSources: sealed::Sealed {
-    fn item_link(&self, id: SchedulerItemId) -> Option<ControllerSramLinkAddress>;
+    fn item_link(&self, id: SchedulerItemId) -> Option<SchedulerItemLink>;
     fn item_layout(&self, id: SchedulerItemId) -> Option<&BleSchedulerItem>;
-    fn listed_item(
-        &self,
-        kind: SchedulerRoleKind,
-        link: ControllerSramLinkAddress,
-    ) -> Option<SchedulerItemId>;
+    fn listed_item(&self, kind: SchedulerRoleKind, address: u32) -> Option<SchedulerItemId>;
 }
 impl sealed::Sealed for () {}
 impl SchedulerItemSources for () {
-    fn item_link(&self, _: SchedulerItemId) -> Option<ControllerSramLinkAddress> {
+    fn item_link(&self, _: SchedulerItemId) -> Option<SchedulerItemLink> {
         None
     }
     fn item_layout(&self, _: SchedulerItemId) -> Option<&BleSchedulerItem> {
         None
     }
-    fn listed_item(
-        &self,
-        _: SchedulerRoleKind,
-        _: ControllerSramLinkAddress,
-    ) -> Option<SchedulerItemId> {
+    fn listed_item(&self, _: SchedulerRoleKind, _: u32) -> Option<SchedulerItemId> {
         None
     }
 }
@@ -725,7 +715,7 @@ impl<P: SchedulerItemSources, S: SchedulerRoleStorage, const N: usize> sealed::S
 impl<P: SchedulerItemSources, S: SchedulerRoleStorage, const N: usize> SchedulerItemSources
     for (P, &SchedulerRolePool<'_, '_, S, N>)
 {
-    fn item_link(&self, id: SchedulerItemId) -> Option<ControllerSramLinkAddress> {
+    fn item_link(&self, id: SchedulerItemId) -> Option<SchedulerItemLink> {
         if N != 0 && id.kind == S::KIND {
             Some(self.1.item_link(id))
         } else {
@@ -739,15 +729,11 @@ impl<P: SchedulerItemSources, S: SchedulerRoleStorage, const N: usize> Scheduler
             self.0.item_layout(id)
         }
     }
-    fn listed_item(
-        &self,
-        kind: SchedulerRoleKind,
-        link: ControllerSramLinkAddress,
-    ) -> Option<SchedulerItemId> {
+    fn listed_item(&self, kind: SchedulerRoleKind, address: u32) -> Option<SchedulerItemId> {
         if N != 0 && kind == S::KIND {
-            SchedulerItemSource::listed_item(self.1, link)
+            SchedulerItemSource::listed_item(self.1, address)
         } else {
-            self.0.listed_item(kind, link)
+            self.0.listed_item(kind, address)
         }
     }
 }
@@ -783,38 +769,39 @@ impl<P: SchedulerItemSources> SchedulerItemSpace<P> {
         )
     }
     /// Controller link of the item.
-    pub(crate) fn link(&self, id: SchedulerItemId) -> ControllerSramLinkAddress {
+    pub(crate) fn link(&self, id: SchedulerItemId) -> SchedulerItemLink {
         self.sources
             .item_link(id)
             .expect("the space holds the pool of every listed item")
     }
     /// Resolve submitted items in role-kind order, independent of insertion
     /// order. Storage stays pinned while hardware may follow any listed link.
-    pub(crate) fn listed_item(&self, link: ControllerSramLinkAddress) -> Option<SchedulerItemId> {
+    pub(crate) fn listed_item(&self, link: SchedulerItemLink) -> Option<SchedulerItemId> {
+        self.listed_address(link.controller_address())
+    }
+    /// Resolve the item at a hardware-observed address, as for
+    /// [`Self::listed_item`]: the address is an outside identity.
+    pub(crate) fn listed_address(&self, address: u32) -> Option<SchedulerItemId> {
         SchedulerRoleKind::ALL
             .into_iter()
-            .find_map(|kind| self.sources.listed_item(kind, link))
+            .find_map(|kind| self.sources.listed_item(kind, address))
     }
 
     /// Prepare a listed item for insertion; see the scheduler item header.
     pub(crate) fn prepare_for_list(
         &self,
         id: SchedulerItemId,
-        previous: Option<ControllerSramLinkAddress>,
-        next: Option<ControllerSramLinkAddress>,
+        previous: Option<SchedulerItemLink>,
+        next: Option<SchedulerItemLink>,
     ) {
         self.header(id).prepare_for_list(previous, next);
     }
 
-    pub(crate) fn set_next(&self, id: SchedulerItemId, next: Option<ControllerSramLinkAddress>) {
+    pub(crate) fn set_next(&self, id: SchedulerItemId, next: Option<SchedulerItemLink>) {
         self.header(id).link_hardware_next(next);
     }
 
-    pub(crate) fn set_previous(
-        &self,
-        id: SchedulerItemId,
-        previous: Option<ControllerSramLinkAddress>,
-    ) {
+    pub(crate) fn set_previous(&self, id: SchedulerItemId, previous: Option<SchedulerItemLink>) {
         self.header(id).link_previous(previous);
     }
 

@@ -3,7 +3,7 @@ use super::{
     LegacyAdvertisingSchedulerItemWords,
 };
 use crate::bluetooth::engine::test_images::{advertising_item, priority};
-use crate::bluetooth::engine::{ControllerSramLinkAddress, LeTxPower};
+use crate::bluetooth::engine::{LeTxPower, sram_link::model_link};
 use crate::layouts::*;
 
 fn zero_link_state() -> LegacyAdvertisingLinkStateWords {
@@ -41,7 +41,7 @@ fn zero_item() -> LegacyAdvertisingSchedulerItemWords {
 
 fn reset(dbm: i8) -> LegacyAdvertisingLinkStateWords {
     zero_link_state().reset(
-        ControllerSramLinkAddress::new(0x2f00_1000).expect("controller SRAM"),
+        model_link(0x2f00_1000),
         LegacyAdvertisingOwnAddress::Public,
         LeTxPower::from_dbm(dbm).expect("provider level"),
         priority(),
@@ -81,14 +81,15 @@ fn the_power_leaves_the_rate_word_untouched() {
 fn reset_retains_the_previous_upper_pointer_lane_and_opaque_event_lanes() {
     let mut initial = zero_link_state();
     initial.word_00 = BleLinkStateTxPath::from_bits(
-        ControllerSramLinkAddress::new(0x2f04_2000)
+        BleLinkStateTxPath::ZERO
+            .with_header(Some(crate::dma_address::model_reference(0x2f04_2000)))
             .expect("previous bound cursor")
-            .compressed_image()
+            .bits()
             | 0x6000_0000,
     );
     initial.word_60 = BleLinkStateEvent::from_bits(0xa5a5_0000);
     let result = initial.reset(
-        ControllerSramLinkAddress::new(0x2f00_1000).expect("reset TX header"),
+        model_link(0x2f00_1000),
         LegacyAdvertisingOwnAddress::Public,
         LeTxPower::from_dbm(9).expect("provider power"),
         priority(),

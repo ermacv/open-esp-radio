@@ -6,11 +6,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
     BitwiseComposedDomain, BoundedDomain, Constraint, Context, DomainValue, EnumDomain, Error,
-    ErrorKind, FlagDomain, Holder, Index, InputTransform, InterruptSnapshot, PartId,
-    PointerEncoding, PolicyFile, Projection, Target, WholeWordBits, Word, field_mask, field_ones,
-    lower_snake, ownership::Coverage, stored, upper_camel, upper_snake,
+    ErrorKind, FlagDomain, Holder, Index, InputTransform, InterruptSnapshot, PartId, PolicyFile,
+    Projection, Target, WholeWordBits, Word, field_mask, field_ones, lower_snake,
+    ownership::Coverage, stored, upper_camel, upper_snake,
 };
-use crate::chip_model::{ChipModel, ExpandedField, FieldClass};
+use crate::chip_model::{ExpandedField, Field, FieldClass, Value};
 
 /// A declared domain; a register-bound one names its register.
 #[derive(Clone, Copy)]
@@ -18,11 +18,26 @@ enum Domain<'a> {
     Flag(&'a FlagDomain),
     Enum(&'a EnumDomain),
     Bounded(&'a BoundedDomain),
+    /// A field's values, at the field's bits when the shift is nonzero,
+    /// with the field's word and lane.
+    Field(&'a Field, u8, (Target, u32)),
     Opaque(Target),
     Composed(&'a BitwiseComposedDomain, Target),
 }
 
 impl<'a> Domain<'a> {
+    fn projected(self) -> bool {
+        match self {
+            Self::Bounded(domain) => domain.min == 0,
+            Self::Enum(_) => true,
+            Self::Field(field, ..) => field
+                .value_range
+                .as_ref()
+                .is_none_or(|range| range.min == 0),
+            _ => false,
+        }
+    }
+
     fn bound(self) -> Option<Target> {
         match self {
             Self::Opaque(target) | Self::Composed(_, target) => Some(target),
@@ -37,6 +52,17 @@ impl<'a> Domain<'a> {
             Self::Flag(domain) => or(&domain.values),
             Self::Enum(domain) => or(&domain.values),
             Self::Bounded(domain) => ones_through(domain.max),
+            Self::Field(field, shift, _) => {
+                field.value_range.as_ref().map_or_else(
+                    || {
+                        field
+                            .values
+                            .iter()
+                            .fold(0, |mask, value| mask | value.value)
+                    },
+                    |range| ones_through(range.max),
+                ) << shift
+            }
             Self::Opaque(_) => u32::MAX,
             Self::Composed(domain, _) => domain.output_mask,
         }
@@ -47,6 +73,12 @@ impl<'a> Domain<'a> {
         match self {
             Self::Enum(domain) => Values::List(&domain.values),
             Self::Bounded(domain) => Values::Range(domain.min, domain.max),
+            Self::Field(field, shift, _) => field
+                .value_range
+                .as_ref()
+                .map_or(Values::FieldList(&field.values, shift), |range| {
+                    Values::Range(range.min, range.max)
+                }),
             Self::Flag(_) | Self::Opaque(_) | Self::Composed(..) => Values::Any,
         }
     }
@@ -58,6 +90,7 @@ enum Values<'a> {
     Fixed(u32),
     Range(u32, u32),
     List(&'a [DomainValue]),
+    FieldList(&'a [Value], u8),
     /// Any subset of these bits, including zero for unacknowledged events.
     Bits(u32),
     /// Unknown to the loader: a combination of flags, an opaque or composed
@@ -75,6 +108,9 @@ impl Values<'_> {
             Self::Fixed(value) => constraint.admits(value),
             Self::Range(min, max) => constraint.admits_range(min, max),
             Self::List(values) => values.iter().all(|value| constraint.admits(value.value)),
+            Self::FieldList(values, shift) => values
+                .iter()
+                .all(|value| constraint.admits(value.value << shift)),
             Self::Bits(mask) => constraint.admits_bits(mask),
             Self::Any => false,
         }
@@ -153,7 +189,6 @@ struct Checker<'a, 'm> {
     index: &'a Index<'m>,
     coverage: &'a Coverage,
     file: &'a PolicyFile,
-    model: &'a ChipModel,
     domains: BTreeMap<&'a str, Domain<'a>>,
     templates: Vec<TemplateOwner>,
     /// The clear words of the interrupt snapshots.
@@ -176,7 +211,6 @@ pub(super) fn check(
     index: &Index<'_>,
     coverage: &Coverage,
     file: &PolicyFile,
-    model: &ChipModel,
 ) -> Result<BTreeMap<String, PartId>, Error> {
     let templates = index
         .templates
@@ -203,7 +237,6 @@ pub(super) fn check(
         index,
         coverage,
         file,
-        model,
         domains: BTreeMap::new(),
         templates,
         clears: BTreeSet::new(),
@@ -224,7 +257,7 @@ pub(super) fn check(
     Ok(checker.owners)
 }
 
-impl<'a> Checker<'a, '_> {
+impl<'a, 'm: 'a> Checker<'a, 'm> {
     fn error(&self, entity: impl Into<String>, kind: ErrorKind) -> Error {
         self.context.error(entity, kind)
     }
@@ -257,6 +290,57 @@ impl<'a> Checker<'a, '_> {
         }
         for domain in &file.bounded_domains {
             self.declare(&domain.name, &domain.description, Domain::Bounded(domain))?;
+        }
+        for domain in &file.field_domains {
+            let (target, field) = self.field(&domain.name, &domain.field)?;
+            let source = self
+                .word(&domain.name, target)?
+                .source(field)
+                .ok_or_else(|| {
+                    self.error(&domain.name, ErrorKind::UnknownField(domain.field.clone()))
+                })?;
+            if source.value_range.is_none() && source.values.is_empty() {
+                return Err(self.error(
+                    &domain.name,
+                    ErrorKind::Domain("referenced field has no value domain".into()),
+                ));
+            }
+            let bits = source
+                .values
+                .iter()
+                .fold(0u64, |bits, value| bits | u64::from(value.value));
+            // A positioned domain's values stand at the field's own bits:
+            // the shift is the field's, never a copy of it.
+            let shift = if domain.positioned {
+                u8::try_from(field.low).unwrap_or(u8::MAX)
+            } else {
+                0
+            };
+            if (source.value_range.is_some() && domain.positioned)
+                || (bits << shift) > u64::from(u32::MAX)
+            {
+                return Err(self.error(&domain.name, ErrorKind::Domain("a positioned domain is an enum field's values at the field's bits; bounded field domains are unpositioned".into())));
+            }
+            let lane = (target, field_mask(field));
+            if let Some(description) = &domain.description {
+                self.context.description(&domain.name, description)?;
+            }
+            if !upper_camel(&domain.name) {
+                return Err(self.error(
+                    &domain.name,
+                    ErrorKind::InvalidName("field domain name must be UpperCamelCase".into()),
+                ));
+            }
+            if self
+                .domains
+                .insert(&domain.name, Domain::Field(source, shift, lane))
+                .is_some()
+            {
+                return Err(self.error(
+                    &domain.name,
+                    ErrorKind::Duplicate(format!("domain {}", domain.name)),
+                ));
+            }
         }
         for domain in &file.opaque_domains {
             let target = self.register(&domain.name, &domain.register)?;
@@ -399,7 +483,7 @@ impl<'a> Checker<'a, '_> {
         Ok((target, field))
     }
 
-    fn word(&self, entity: &str, target: Target) -> Result<&Word<'_>, Error> {
+    fn word(&self, entity: &str, target: Target) -> Result<&Word<'m>, Error> {
         self.index
             .first(target)
             .ok_or_else(|| self.error(entity, ErrorKind::UnknownRegister(entity.to_owned())))
@@ -656,7 +740,27 @@ impl<'a> Checker<'a, '_> {
                     ),
                 ));
             }
-            let mask = status_word.declared() & clear_word.declared();
+            let mut mask = status_word.declared() & clear_word.declared();
+            if !snapshot.events.is_empty() {
+                let mut events = 0;
+                for reference in &snapshot.events {
+                    let (target, field) = self.field(entity, reference)?;
+                    if target != Target::Word(status) || field_mask(field) & !mask != 0 {
+                        return Err(self.error(
+                            entity,
+                            ErrorKind::Snapshot(format!(
+                                "event {reference} is no field of {} its clear word acknowledges",
+                                snapshot.status
+                            )),
+                        ));
+                    }
+                    if events & field_mask(field) != 0 {
+                        return Err(self.error(entity, ErrorKind::Duplicate(reference.clone())));
+                    }
+                    events |= field_mask(field);
+                }
+                mask = events;
+            }
             if mask == 0 {
                 return Err(self.error(
                     entity,
@@ -827,6 +931,11 @@ impl<'a> Checker<'a, '_> {
             match self.domain(entity, &operation.domain, target)? {
                 Domain::Opaque(_) => {}
                 Domain::Bounded(domain) if domain.min == 0 && domain.max == u32::MAX => {}
+                Domain::Field(field, 0, _)
+                    if field
+                        .value_range
+                        .as_ref()
+                        .is_some_and(|range| range.min == 0 && range.max == u32::MAX) => {}
                 _ => {
                     return Err(self.error(
                         entity,
@@ -1004,51 +1113,37 @@ impl<'a> Checker<'a, '_> {
         Ok(())
     }
 
-    /// The lanes of the full-register writes of a DMA reference or buffer
-    /// address, before any transaction is checked against them. A write
-    /// whose field does not resolve fails its own check later.
+    /// Hardware pointer lanes are protected even when policy exposes no pointer operation.
     fn addresses(&mut self) {
-        let file = self.file;
-        for write in &file.full_register_writes {
-            if write.points_to.is_none() && write.placement.is_none() {
-                continue;
-            }
-            let Some((target, position)) = self.index.field(&write.field) else {
-                continue;
-            };
-            for word in self.index.reach(target) {
-                if let Some(field) = self
-                    .index
-                    .word(word)
-                    .and_then(|word| word.fields().get(position))
+        for (position, word) in self.index.words.iter().enumerate() {
+            for field in word.fields() {
+                if word
+                    .source(field)
+                    .is_some_and(|source| source.pointer.is_some())
                 {
-                    *self.addresses.entry(word).or_default() |= field_mask(field);
+                    *self.pointers.entry(position).or_default() |= field_mask(field);
+                }
+            }
+        }
+        for write in &self.file.full_register_writes {
+            if write.pointer
+                && let Some((target, position)) = self.index.field(&write.field)
+            {
+                for index in self.index.reach(target) {
+                    if let Some(field) = self
+                        .index
+                        .word(index)
+                        .and_then(|word| word.fields().get(position))
+                    {
+                        *self.addresses.entry(index).or_default() |= field_mask(field);
+                    }
                 }
             }
         }
     }
 
-    /// A layout a `DmaRef` may refer to: placed in the DMA window alone.
-    fn dma_layout(&self, entity: &str, name: &str) -> Result<u32, Error> {
-        self.model
-            .layouts()
-            .iter()
-            .find(|layout| layout.name == name && layout.is_dma_target())
-            .map(|layout| layout.size)
-            .ok_or_else(|| {
-                self.error(
-                    entity,
-                    ErrorKind::Pointer(format!(
-                        "{name} is no word or array layout placed in the {} region alone",
-                        crate::layouts::DMA_REGION
-                    )),
-                )
-            })
-    }
-
     fn pointers(&mut self) -> Result<(), Error> {
-        let file = self.file;
-        for pointer in &file.pointer_fields {
+        for pointer in &self.file.pointer_fields {
             let entity = pointer.name.as_str();
             self.begin(entity, &pointer.sources)?;
             let (target, field) = self.field(entity, &pointer.field)?;
@@ -1058,66 +1153,22 @@ impl<'a> Checker<'a, '_> {
                 matches!(field.class, FieldClass::Plain | FieldClass::WriteOnly),
                 "a pointer",
             )?;
-            let word = self.word(entity, target)?;
-            let fits = match pointer.encoding {
-                None => field.width == 32,
-                Some(PointerEncoding::BleCompressed) => field.width == 20,
-                Some(PointerEncoding::LowBits) => field.width < 32,
-            };
-            if !fits {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Pointer(format!(
-                        "{} is {} bits wide, which its encoding does not fill",
-                        pointer.field, field.width
-                    )),
-                ));
-            }
-            if word.constraint(field).is_some()
-                || word
-                    .source(field)
-                    .is_some_and(|source| !source.values.is_empty())
+            if self
+                .word(entity, target)?
+                .source(field)
+                .is_none_or(|source| source.pointer.is_none())
             {
                 return Err(self.error(
                     entity,
-                    ErrorKind::Pointer(format!(
-                        "{} has named values or a write constraint",
-                        pointer.field
-                    )),
-                ));
-            }
-            let size = self.dma_layout(entity, &pointer.points_to)?;
-            if pointer.member_offset >= size
-                || (pointer.encoding == Some(PointerEncoding::BleCompressed)
-                    && !pointer.member_offset.is_multiple_of(4))
-            {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Pointer(
-                        "member-offset lies outside the layout or, compressed, off a word"
-                            .to_owned(),
-                    ),
+                    ErrorKind::Pointer(format!("{} has no hardware pointer fact", pointer.field)),
                 ));
             }
             let mask = field_mask(field);
             if self.lanes(target, &self.addresses).any & mask != 0 {
                 return Err(self.error(
                     entity,
-                    ErrorKind::Pointer(format!(
-                        "{} is written by a full-register write of an address",
-                        pointer.field
-                    )),
+                    ErrorKind::Pointer("field already has a full-register pointer write".into()),
                 ));
-            }
-            if self.lanes(target, &self.pointers).any & mask != 0 {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Duplicate(format!("pointer field {}", pointer.field)),
-                ));
-            }
-            let words = self.index.reach(target).collect::<Vec<_>>();
-            for word in words {
-                *self.pointers.entry(word).or_default() |= mask;
             }
             self.store(entity, target, mask, false)?;
         }
@@ -1150,51 +1201,26 @@ impl<'a> Checker<'a, '_> {
                 "a write from zero",
             )?;
             let mask = field_mask(field);
-            let values = match (&write.domain, &write.points_to, &write.placement) {
-                (Some(domain), None, None) => {
+            let values = match (&write.domain, write.pointer) {
+                (Some(domain), false) => {
                     self.no_dma(entity, target, mask)?;
                     self.domain(entity, domain, target)?.values()
                 }
-                (None, Some(layout), None) => {
-                    self.dma_layout(entity, layout)?;
+                (None, true)
+                    if word
+                        .source(field)
+                        .is_some_and(|source| source.pointer.is_some()) =>
+                {
                     Values::Any
                 }
-                (None, None, Some(region)) => {
-                    if region != crate::layouts::DMA_REGION
-                        || !self
-                            .model
-                            .ram_regions()
-                            .iter()
-                            .any(|known| known.name == *region)
-                    {
-                        return Err(self.error(
-                            entity,
-                            ErrorKind::Pointer(format!(
-                                "a buffer address lies in the {} region of the root",
-                                crate::layouts::DMA_REGION
-                            )),
-                        ));
-                    }
-                    Values::Any
-                }
-                _ => {
-                    return Err(self.error(
-                        entity,
-                        ErrorKind::Transaction(
-                            "takes exactly one of domain, points-to and placement".to_owned(),
-                        ),
-                    ));
-                }
-            };
-            if write.domain.is_none() && self.lanes(target, &self.pointers).any & mask != 0 {
-                return Err(self.error(
+                _ => return Err(self.error(
                     entity,
-                    ErrorKind::Pointer(format!(
-                        "{} is a pointer field, set from its image",
-                        write.field
-                    )),
-                ));
-            }
+                    ErrorKind::Pointer(
+                        "takes a domain or pointer = true referencing the field's hardware fact"
+                            .into(),
+                    ),
+                )),
+            };
             self.constrained(entity, word, field, values)?;
             self.store(entity, target, mask, true)?;
         }
@@ -1564,8 +1590,21 @@ impl<'a> Checker<'a, '_> {
                 ));
             }
             // An opaque domain is a raw word its input mask selects from;
-            // every other domain's values fit the input mask.
+            // every other domain's values fit the input mask. A positioned
+            // field domain's input is exactly its field's lane.
             let domain = self.domain(entity, &modify.domain, target)?;
+            if let Domain::Field(_, shift, (word, lane)) = domain
+                && shift != 0
+                && (word != target || modify.input_mask != lane)
+            {
+                return Err(self.error(
+                    entity,
+                    ErrorKind::Transaction(format!(
+                        "the positioned domain {} takes exactly its field's lane of {} as input",
+                        modify.domain, modify.register
+                    )),
+                ));
+            }
             if !matches!(domain, Domain::Opaque(_)) && domain.bits() & !modify.input_mask != 0 {
                 return Err(self.error(
                     entity,
@@ -1602,9 +1641,7 @@ impl<'a> Checker<'a, '_> {
             }
             let admitted = match (modify.domain.as_deref(), modify.value) {
                 (Some(name), None) => match self.domain(entity, name, target)? {
-                    domain @ (Domain::Bounded(BoundedDomain { min: 0, .. }) | Domain::Enum(_)) => {
-                        domain.bits()
-                    }
+                    domain if domain.projected() => domain.bits(),
                     _ => {
                         return Err(self.error(
                             entity,
@@ -1654,14 +1691,11 @@ impl<'a> Checker<'a, '_> {
                 None => None,
             };
             let admitted = match (domain, modify.value) {
-                (
-                    Some(
-                        domain @ (Domain::Bounded(BoundedDomain { min: 0, .. })
-                        | Domain::Enum(_)
-                        | Domain::Composed(..)),
-                    ),
-                    None,
-                ) => transform.map_or(domain.bits(), |transform| transform.retain_mask),
+                (Some(domain), None)
+                    if domain.projected() || matches!(domain, Domain::Composed(..)) =>
+                {
+                    transform.map_or(domain.bits(), |transform| transform.retain_mask)
+                }
                 (Some(_), None) => {
                     return Err(self.error(
                         entity,
@@ -1718,6 +1752,15 @@ impl<'a> Checker<'a, '_> {
             let below = match self.domain(entity, &modify.domain, target)? {
                 Domain::Bounded(domain) => domain.min == 0 && domain.max < width,
                 Domain::Enum(domain) => domain.values.iter().all(|value| value.value < width),
+                Domain::Field(field, shift, _) => field.value_range.as_ref().map_or_else(
+                    || {
+                        field
+                            .values
+                            .iter()
+                            .all(|value| (value.value << shift) < width)
+                    },
+                    |range| range.min == 0 && range.max < width,
+                ),
                 _ => false,
             };
             if !below {

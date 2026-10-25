@@ -91,7 +91,7 @@ fn an_event_lowers_one_unlinked_item_per_channel() {
     );
     let (graph, _, _) = pool.shared(&instance).unwrap();
     for item in &graph.items {
-        assert_eq!(item.header().hardware_next_image(), 0);
+        assert_eq!(item.header().hardware_next_address(), None);
         // Each channel item carries the event's coexistence lanes.
         assert_eq!(
             {
@@ -183,7 +183,7 @@ fn finishing_an_event_restores_the_allocation_image() {
     let (graph, binding, _) = pool.shared(&instance).unwrap();
     assert_eq!(
         graph.link_state.scheduler_head(),
-        binding.items[0].controller_address().address()
+        binding.items[0].controller_address()
     );
 }
 

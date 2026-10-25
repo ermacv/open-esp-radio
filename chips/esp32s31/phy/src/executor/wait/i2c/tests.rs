@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    analog::i2c::{PhyI2cError, fields, registers},
+    analog::i2c::{PhyI2cError, analog_i2c},
     calibration::cold::{PhyColdI2cRequest, PhyColdI2cTransaction},
 };
 use oer_time::Duration;
@@ -8,11 +8,14 @@ use oer_time_virtual::VirtualClock;
 
 #[test]
 fn final_read_or_write_edge_succeeds_at_the_settle_boundary() {
-    let address = registers::RFPLL_CAPACITOR_LOW;
+    let address = analog_i2c::rfpll::capacitor_low::ADDRESS;
     for request in [
         PhyColdI2cRequest::read_byte(address),
         PhyColdI2cRequest::write_byte(address, 13),
-        PhyColdI2cRequest::write_field(fields::TXRF_RC_CALIBRATION_ENABLE, 1),
+        PhyColdI2cRequest::write_field(
+            analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
+            1,
+        ),
     ] {
         let clock: VirtualClock = VirtualClock::default();
         let mut state = PhyColdI2cTransaction::new(request);
@@ -58,7 +61,7 @@ fn final_read_or_write_edge_succeeds_at_the_settle_boundary() {
 fn a_masked_read_at_the_boundary_gets_one_final_write_attempt_and_claims_no_busy_write() {
     let clock: VirtualClock = VirtualClock::default();
     let mut state = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_field(
-        fields::TXRF_RC_CALIBRATION_ENABLE,
+        analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
         1,
     ));
     state.read_started().unwrap();
@@ -93,8 +96,9 @@ fn a_masked_read_at_the_boundary_gets_one_final_write_attempt_and_claims_no_busy
 #[test]
 fn busy_hardware_still_times_out_and_does_not_consume_a_result() {
     let clock: VirtualClock = VirtualClock::default();
-    let mut state =
-        PhyColdI2cTransaction::new(PhyColdI2cRequest::read_byte(registers::RFPLL_CAPACITOR_LOW));
+    let mut state = PhyColdI2cTransaction::new(PhyColdI2cRequest::read_byte(
+        analog_i2c::rfpll::capacitor_low::ADDRESS,
+    ));
     state.read_started().unwrap();
     let completed = complete(
         &clock,
@@ -116,8 +120,9 @@ fn busy_hardware_still_times_out_and_does_not_consume_a_result() {
 #[test]
 fn terminal_states_and_errors_do_not_issue_another_hardware_edge() {
     let clock: VirtualClock = VirtualClock::default();
-    let mut state =
-        PhyColdI2cTransaction::new(PhyColdI2cRequest::read_byte(registers::RFPLL_CAPACITOR_LOW));
+    let mut state = PhyColdI2cTransaction::new(PhyColdI2cRequest::read_byte(
+        analog_i2c::rfpll::capacitor_low::ADDRESS,
+    ));
     assert_eq!(
         complete(&clock, &mut state, PhyColdI2cTransaction::action, |_, _| {
             Err("edge")
@@ -143,7 +148,7 @@ fn publication_crossing_the_deadline_still_gets_its_first_ready_or_busy_observat
         let clock: VirtualClock = VirtualClock::default();
         let started = clock.now();
         let mut state = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_byte(
-            registers::RFPLL_CAPACITOR_LOW,
+            analog_i2c::rfpll::capacitor_low::ADDRESS,
             13,
         ));
         let mut samples = 0;

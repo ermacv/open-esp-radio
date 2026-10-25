@@ -1812,4 +1812,4 @@ name = "HEAD_POINTER"
 bits = "19:0"
 class = "plain"
 description = "Compressed four-byte-aligned 0x2f-prefixed SRAM hardware-list head. Zero denotes no published head."
-write-range = { min = 0x0, max = 0xfffff }
+pointer = { points-to = "BLE_SCHEDULER_ITEM", placement = "dma-window", encoding = { width = 0x14, shift = 0x2 }, sources = ["BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION"] }

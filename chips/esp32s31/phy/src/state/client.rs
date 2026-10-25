@@ -346,7 +346,7 @@ impl PhyClientState {
     /// Host models and validation fixtures use this constructor. The result
     /// never describes a hardware partition, so it cannot authorize a hardware
     /// operation that checks [`Self::describes`].
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub(crate) fn without_registration(period_micros: u64) -> Self {
         Self::empty(period_micros, None)
     }
@@ -825,25 +825,6 @@ impl fmt::Debug for PhyPendingTracking {
 }
 
 impl PhyPendingTracking {
-    /// A probe image's model fixture (`cfg(oer_probe)`): no registration or
-    /// physical admission proof.
-    #[cfg(oer_probe)]
-    pub(crate) fn for_probe(request: PhyParamTrackRequest, policy: PhyParamTrackingPolicy) -> Self {
-        let mut owner = PhyClientState::without_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS);
-        owner.bits = if request.wifi() { WIFI_BIT } else { 0 }
-            | if request.bluetooth_ieee802154() {
-                BLUETOOTH_BIT
-            } else {
-                0
-            };
-        owner.tracker_model_armed = owner.bits != 0;
-        Self {
-            owner,
-            request,
-            transition: PhyParamTrackingTransition::new(request, policy),
-        }
-    }
-
     /// Whether this request's registration still describes `hardware`.
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn describes(

@@ -33,7 +33,7 @@ facts at build time; the host checks read the same facts.
   architecture](architecture.md#execution) and [image checks](../tools/image/checks/README.md).
 - `.hot.text` places code in SRAM for performance:
   [`place_rx_hot_path!`](../chips/esp32s31/hal/src/ieee80211/dma.rs).
-- Assembly, riscv-rt and esp-hal use `.trap`, `.rwtext` and
+- The staged platform uses `.trap`, `.rwtext` and
   `.flash.critical.text` conventions collected by the
   [runtime linker script](../chips/espressif/staged-layout/linker/runtime/sections.x).
 
@@ -60,7 +60,7 @@ contracts: [Hardware memory](hardware-memory.md).
   stack has a proven bound from its root; an unused stack is `unused = true`,
   an explicit 0 bytes, which the image gate proves from the linked image.
   Starting code on a core without a declared and proven root is a build
-  error. On S31 core 1 is unused in every image: the esp-hal fork holds it in
+  error. On S31 core 1 is unused in every image: the HAL core controller keeps it in
   reset ([how core 1 starts](../chips/esp32s31/notes/core1-boot.md)), the
   staged boot stops any hart but 0, no image links a core starter
   (`[core-start]` of `chip.toml`, also forbidden in `clippy.toml`) and no
@@ -73,11 +73,6 @@ contracts: [Hardware memory](hardware-memory.md).
   nor does the S31 HAL's, the one that gives the cores' owner its only start
   of hart 1 (`Cores::start_hart1`,
   [cores rustdoc](../chips/esp32s31/hal/src/cores.rs)).
-- esp-hal's cross-core call (IPC) is off in every image: the fork's `ipc`
-  feature is not enabled, and no interrupt line is taken without its entry
-  in the image's table: each line's vector calls that entry's handler alone. The image
-  gate fails an image that links any `esp_hal::interrupt::ipc` function
-  (`ipc` of `[core-start]` in `chip.toml`) until the call is typed.
 - CPU0's task stack is in PSRAM; each used hart has an SRAM interrupt stack
   with a guard region, a debug trigger and stack painting:
   [stacks rustdoc](../chips/espressif/staged-runtime/src/stacks.rs).

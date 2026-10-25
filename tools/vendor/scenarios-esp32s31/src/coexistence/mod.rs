@@ -1,4 +1,2 @@
-//! Coexistence schedule and timer comparisons against the pinned
-//! `libcoexist.a`.
-pub mod coex;
+//! Coexistence timer comparisons against the pinned `libcoexist.a`.
 pub mod coex_hw;

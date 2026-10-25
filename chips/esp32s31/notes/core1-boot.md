@@ -30,17 +30,18 @@ place that starts core 1 (`esp_cpu_unstall(1)`, clock and reset release,
 core 1's clocks and holds `GLOBAL_RST_EN`.
 
 A stale non-zero boot address left by an earlier image is the one way ROM
-hands core 1 to code nobody started: `esp_hal` clears it in `pre_system_reset`
-and holds core 1 in reset from `pre_init` (below), and the early start of both
-stages stops a hart other than 0 (`require_boot_hart`, the stage-two entry).
+hands core 1 to code nobody started: the bootstrap clears it and holds core 1
+in reset (below), and the entries of both stages (`_start` of the bootstrap,
+`_runtime_start` of stage two) stop a hart other than 0 before any code runs.
 
-## 2. The esp-hal fork holds core 1 in reset
+## 2. The bootstrap holds core 1 in reset
 
-`esp-hal/src/soc/esp32s31/mod.rs::pre_init` on the primary core calls
-`internal_park_core(AppCpu, true)` (stall code `0x86`) and `disable_core1()`
-(core and CLIC clocks off, `core1_global_rst_en` set). Only
-`cpu_control::start_core1`, reached from `CpuControl::start_app_core*`,
-undoes it.
+The HAL's SoC initialization (`oer_esp32s31_hal::boot::soc`, `contain_hart1`),
+which the bootstrap runs first, requests core 1's stall, gates its core and
+CLIC clocks, sets its global reset and clears its ROM boot address
+(SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/cpu_control.rs:6-96`,
+ESP-IDF `system_internal.c:61-100`). Only `Cores::start_hart1` undoes it; it
+exists under the HAL's `cpu1-runs` feature, which the crate refuses.
 
 ## 3. Nothing in an image reaches the starter
 

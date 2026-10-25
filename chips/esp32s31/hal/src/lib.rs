@@ -6,8 +6,11 @@
 
 //! ESP32-S31 register transactions and affine radio ownership.
 //!
-//! [`root`] owns the protocol-neutral radio root and composes the restricted
-//! PAC partitions into exclusive protocol routes. [`domain`] holds the shared
+//! [`root`] claims the chip once and splits the PAC's partitions by domain:
+//! the bootstrap's owners ([`boot`]), the platform ([`platform`], [`cores`],
+//! [`watchdog`], [`usb_serial_jtag`], [`executor`]) and the protocol-neutral
+//! radio root, which composes the radio partitions into exclusive protocol
+//! routes. [`domain`] holds the shared
 //! radio partitions and PHY state of concurrently running protocols, owned by
 //! value by the radio system. [`owner`] holds the running Wi-Fi MAC owner and
 //! grants bounded capabilities; [`ieee80211::client`] brings Wi-Fi up as a
@@ -22,10 +25,11 @@ extern crate std;
 
 use core::future::Future;
 
-use oer_esp32s31_pac::{
-    MacInterruptRegisters as PacMacInterruptRegisters, MacInterruptSetup as PacMacInterruptSetup,
-    MacPowerInterruptRegisters as PacMacPowerInterruptRegisters, RadioPhyRegisters,
+use crate::ieee80211::registers::{
+    MacInterruptRegisters as PacMacInterruptRegisters,
+    MacPowerInterruptRegisters as PacMacPowerInterruptRegisters,
 };
+use crate::phy::RadioPhyRegisters;
 
 pub mod bluetooth;
 pub mod boot;
@@ -39,13 +43,17 @@ pub mod coex;
 pub mod cores;
 
 pub mod domain;
+pub mod executor;
+pub mod modem;
 pub mod power;
 pub mod root;
 pub mod types;
 
 pub mod owner;
 
-pub(crate) use owner::{phy_pac, phy_pac_mut, sealed};
+#[cfg(target_arch = "riscv32")]
+pub(crate) use owner::phy_pac_mut;
+pub(crate) use owner::{phy_blocks, phy_blocks_mut, sealed};
 
 pub mod ieee80211;
 pub mod ieee802154;
@@ -58,8 +66,4 @@ pub mod dma_static;
 pub mod phy;
 pub mod platform;
 pub mod usb_serial_jtag;
-/// Bridges of isolated probe images (`cfg(oer_probe)`).
-#[cfg(oer_probe)]
-#[doc(hidden)]
-pub mod validation;
 pub mod watchdog;

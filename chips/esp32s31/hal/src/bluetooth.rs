@@ -20,22 +20,20 @@ use crate::power::PlatformClockBackend;
 
 use core::fmt;
 
-use oer_esp32s31_pac::{
+use registers::{
     BluetoothDirectionFindingDisabledBaselinePrepared, BluetoothInterruptRegisters,
-    BluetoothInterruptSetup as PacBluetoothInterruptSetup, BluetoothModemLpTimerRegisters,
+    BluetoothInterruptSetup as RegistersBluetoothInterruptSetup, BluetoothModemLpTimerRegisters,
     BluetoothPhyRegisterInitInputs, BluetoothTaskRegisters,
 };
 
-use crate::{
-    domain::{
-        BluetoothClient, BtbbAcquired, BtbbError, CoexAbsent, CommonPower, CommonPowerExitFailure,
-        CommonRadioPowerError, LowPowerClockError, ModemClockError, PlatformClockProvider,
-        RadioDomain,
-    },
-    root::BluetoothPartition,
+use crate::domain::{
+    BluetoothClient, BtbbAcquired, BtbbError, CoexAbsent, CommonPower, CommonPowerExitFailure,
+    CommonRadioPowerError, LowPowerClockError, ModemClockError, PlatformClockProvider, RadioDomain,
 };
+pub use registers::{BluetoothControllerParts, BluetoothModemLpTimerParts};
 
 mod controller_time;
+pub(crate) mod registers;
 mod scheduler_execution_lock;
 mod scheduler_execution_modify;
 mod scheduler_stop;
@@ -50,13 +48,18 @@ use oer_time::settle::{self, Settle, Unsettled};
 pub use scheduler_execution_lock::BluetoothSchedulerExecutionLock;
 pub use scheduler_execution_modify::BluetoothSchedulerExecutionModify;
 pub use scheduler_stop::BluetoothSchedulerStop;
-pub use shutdown::{BluetoothControllerReset, BluetoothShutdownError, BluetoothShutdownFailure};
+pub use shutdown::{
+    BluetoothControllerReset, BluetoothControllerResetTimerPending, BluetoothShutdownError,
+    BluetoothShutdownFailure,
+};
 
-pub use oer_esp32s31_pac::{
+pub use crate::modem::{
+    BluetoothLowPowerClockObservation, ModemSysconBluetoothObservation, SharedModemClockObservation,
+};
+pub use registers::{
     BlePhyEtmRouteDisabled, BluetoothControllerHalInitConfig, BluetoothControllerLatchedTime,
     BluetoothControllerOutputReleaseError, BluetoothControllerTimeScale,
-    BluetoothDeviceTableEntryCount, BluetoothDeviceTablePublished, BluetoothHalInitPeriod,
-    BluetoothHalInitScale, BluetoothLowPowerClockObservation,
+    BluetoothDeviceTablePublished, BluetoothHalInitPeriod, BluetoothHalInitScale,
     BluetoothLowPowerRuntimeControlObservation, BluetoothMemoryListSelector,
     BluetoothMemoryListSlot, BluetoothMicrosecondDeltaProjection,
     BluetoothModemLpTimerCompareDisposition, BluetoothModemLpTimerCounterObservation,
@@ -80,10 +83,9 @@ pub use oer_esp32s31_pac::{
     BluetoothSchedulerSkipDisposition, BluetoothSchedulerSkipPublished,
     BluetoothSchedulerSkipResult, BluetoothSchedulerSoftwareListRemovalIdle,
     BluetoothSchedulerSoftwareListRemovalInterruptStep, BluetoothSchedulerStopped,
-    BluetoothSchedulerWorkObservation, ModemSysconBluetoothObservation,
-    PlatformClockPowerObservation, SharedModemClockObservation,
+    BluetoothSchedulerWorkObservation,
 };
-use oer_esp32s31_pac::{
+use registers::{
     BluetoothMemoryListPointerImage, BluetoothSchedulerExecutionLockRequest,
     BluetoothSchedulerHardwareListHead, BluetoothSchedulerHardwareListHeadEmptyObserved,
     BluetoothSchedulerHardwareListHeadPublished,
@@ -92,13 +94,35 @@ use oer_esp32s31_pac::{
     BluetoothSchedulerSoftwareListRemovalJoin, BluetoothSchedulerStoppedHeadRetirement,
 };
 
+/// The Bluetooth parts of the PAC root: the controller with modem ETM
+/// channel two, the modem low-power timer with modem ETM channels four
+/// through seven, and the interrupt bank.
+#[must_use = "dropping a radio partition permanently loses its register authority"]
+pub struct BluetoothPartition {
+    /// The controller partition and modem ETM channel two.
+    pub controller: BluetoothControllerParts,
+    /// The modem low-power timer and modem ETM channels four through seven.
+    pub modem_lp_timer: BluetoothModemLpTimerParts,
+    /// The interrupt bank and the scheduler's diagnostic pair.
+    pub interrupts: oer_esp32s31_pac::ownership::BluetoothInterruptPeripherals,
+}
+
 /// The Bluetooth partition split into its task registers, modem low-power
 /// timer and inactive interrupt bank.
 struct Partition {
     task: BluetoothTaskRegisters,
     modem_lp_timer: BluetoothModemLpTimerRegisters,
-    interrupts: PacBluetoothInterruptSetup,
+    interrupts: RegistersBluetoothInterruptSetup,
 }
+
+/// The type naming the interrupt sources of the controller's bank: the
+/// primary source 124 and the NRT source 133, which one handler samples and
+/// acknowledges through the bank (`InterruptSources`).
+pub type BluetoothInterruptBankSources = oer_esp32s31_pac::bt_mac::BluetoothInterruptBank;
+
+/// The type naming the modem low-power timer's interrupt source 127
+/// (`InterruptSource`).
+pub type ModemLpTimerSource = oer_esp32s31_pac::modem_pwr::BtdmRuntimeControl;
 
 /// Unpowered Bluetooth client holding its partition.
 ///
@@ -112,12 +136,16 @@ pub struct ColdOwner {
 impl ColdOwner {
     /// Take the partition of a concurrent split. This performs no MMIO.
     pub fn from_partition(partition: BluetoothPartition) -> Self {
-        let (controller, modem_lp_timer, interrupts) = partition.into_parts();
+        let BluetoothPartition {
+            controller,
+            modem_lp_timer,
+            interrupts,
+        } = partition;
         Self {
             partition: Partition {
                 task: BluetoothTaskRegisters::new(controller),
-                modem_lp_timer,
-                interrupts,
+                modem_lp_timer: BluetoothModemLpTimerRegisters::new(modem_lp_timer),
+                interrupts: RegistersBluetoothInterruptSetup::new(interrupts),
             },
         }
     }
@@ -129,7 +157,11 @@ impl ColdOwner {
             modem_lp_timer,
             interrupts,
         } = self.partition;
-        BluetoothPartition::from_parts(task.into_partition(), modem_lp_timer, interrupts)
+        BluetoothPartition {
+            controller: task.into_parts(),
+            modem_lp_timer: modem_lp_timer.into_parts(),
+            interrupts: interrupts.into_partition(),
+        }
     }
 
     /// Enter common radio power as the Bluetooth client.
@@ -465,20 +497,61 @@ impl ControllerEpoch {
 }
 
 impl TaskOwner {
-    /// Reset the stopped Controller, reunite the drained timer and return to
-    /// the clocked owner with the proof of the reset.
+    /// Reset the stopped Controller and await the timer its handler gives
+    /// up after the reset.
     ///
     /// The caller has released Controller output, drained the source-127
-    /// owner and left the shared PHY domain and BTBB baseband. The Controller
-    /// retains every published memory owner until this operation completes.
+    /// software work, had the timer's handler disable its compare and left
+    /// the shared PHY domain and BTBB baseband. The Controller retains every
+    /// published memory owner until the reunion.
     #[doc(hidden)]
     pub fn shut_down<B: PlatformClockBackend, T>(
         self,
         radio: &mut RadioDomain<B, T>,
         output: InterruptOutputReleasedOwner,
-        timer: ModemLpTimerInterruptReadyOwner,
-    ) -> Result<(ClockedOwner, BluetoothControllerReset), BluetoothShutdownFailure> {
-        shutdown::shut_down(self, radio, output.registers, timer.timer)
+        compare: ModemLpTimerCompareDisabled,
+    ) -> Result<BluetoothControllerResetTimerPending, BluetoothShutdownFailure> {
+        shutdown::shut_down(self, radio, output.registers, compare)
+    }
+
+    /// Admit the release of the controller output: no controller-time
+    /// request is in flight. Touches no register.
+    ///
+    /// # Errors
+    ///
+    /// [`BluetoothControllerOutputReleaseError::ControllerTimePending`].
+    pub fn admit_output_release(
+        &mut self,
+    ) -> Result<BluetoothOutputReleaseAdmitted, BluetoothControllerOutputReleaseError> {
+        if self.time_latch.in_flight() {
+            return Err(BluetoothControllerOutputReleaseError::ControllerTimePending);
+        }
+        Ok(BluetoothOutputReleaseAdmitted { _private: () })
+    }
+
+    /// After the handler's idle sample, check that no scheduler list names
+    /// hardware-visible memory. Writes nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`BluetoothControllerOutputReleaseError::PublishedHead`]; the list is
+    /// left unchanged.
+    pub fn confirm_scheduler_heads_absent(
+        &mut self,
+        _sampled: BluetoothOutputIdleSampled,
+    ) -> Result<BluetoothSchedulerHeadsAbsent, BluetoothControllerOutputReleaseError> {
+        self.registers.confirm_scheduler_heads_absent()?;
+        Ok(BluetoothSchedulerHeadsAbsent { _private: () })
+    }
+
+    /// After the handler masked the dynamic scheduler sources, disable
+    /// scheduler RUN and fence.
+    pub fn disable_scheduler_run(
+        &mut self,
+        _masked: BluetoothDynamicSourcesMasked,
+    ) -> BluetoothSchedulerRunDisabled {
+        self.registers.disable_scheduler_run();
+        BluetoothSchedulerRunDisabled { _private: () }
     }
 
     /// Reunite a quiescent, untouched task with the exact inactive interrupt
@@ -579,20 +652,22 @@ impl TaskOwner {
         self.reunitable = false;
         #[allow(
             unsafe_code,
-            reason = "the PAC transaction points the hardware at the storage"
+            reason = "the BLE PHY transaction points the hardware at the storage"
         )]
         // SAFETY: `storage` binds both pointed objects to `'static`,
-        // volatile-only controller SRAM of the BLE PHY engine; the PAC contract's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
+        // volatile-only controller SRAM of the BLE PHY engine; the transaction's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
         unsafe {
-            self.registers
-                .enable_ble_base_stack_hardware(radio.registers_mut(), storage.inputs);
+            self.registers.enable_ble_base_stack_hardware(
+                &mut radio.registers_mut().shared_radio.bt_v32_baseband,
+                storage.inputs,
+            );
         }
     }
 
     /// Execute the complete reviewed 49-operation controller HAL-init body
     /// at the upper controller lifecycle's verified transition.
     ///
-    /// The SRAM prefix it publishes is the fixed `0x2f` of the PAC's register
+    /// The SRAM prefix it publishes is the fixed `0x2f` of its register
     /// image, so every compressed address the Controller follows resolves
     /// into that SRAM window. The caller does not infer scheduler, PHY, BTBB,
     /// Link-Layer or HCI readiness from return.
@@ -716,12 +791,12 @@ impl ModemLpTimerCounterStartedOwner {
         self.runtime_control
     }
 
-    /// Transfer the unique started timer into stable source-127 ISR storage.
+    /// The unique started timer as the source-127 handler holds it.
     ///
-    /// This transition performs no MMIO and exposes no raw PAC owner. The
-    /// platform must store the returned value before enabling the CPU route
-    /// and recover it only after that route is disabled and no hard handler
-    /// remains in flight.
+    /// This transition performs no MMIO and exposes no raw register owner.
+    /// The timer's handler starts the timer and keeps the returned owner
+    /// until the Controller reset, lending it to the task only for software
+    /// work.
     pub fn stage_for_interrupt(self) -> ModemLpTimerInterruptReadyOwner {
         ModemLpTimerInterruptReadyOwner { timer: self.timer }
     }
@@ -789,7 +864,7 @@ pub enum ModemLpTimerHandlerRegisterStep {
 
 /// Opaque HAL owner retained while source-127 software work is pending.
 ///
-/// This owner has no raw PAC escape and cannot be rearmed until the no-RTOS
+/// This owner has no raw register escape and cannot be rearmed until the no-RTOS
 /// timer runtime supplies the missing software transition and final register
 /// read.
 #[must_use = "software timer work and the final hardware read remain pending"]
@@ -846,7 +921,30 @@ impl ModemLpTimerSoftwarePendingOwner {
     }
 }
 
+/// The timer's handler disabled the compare of its stopped epoch: the
+/// Controller may reset.
+#[derive(Debug)]
+#[must_use = "the disabled compare admits the Controller reset"]
+pub struct ModemLpTimerCompareDisabled {
+    _private: (),
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl ModemLpTimerCompareDisabled {
+    #[doc(hidden)]
+    pub const fn for_host_test() -> Self {
+        Self { _private: () }
+    }
+}
+
 impl ModemLpTimerInterruptReadyOwner {
+    /// Disable the compare once the software queue of the epoch drained,
+    /// before the Controller reset; the handler keeps the owner until then.
+    pub fn disable_compare_for_shutdown(&mut self) -> ModemLpTimerCompareDisabled {
+        self.timer.disable_compare();
+        ModemLpTimerCompareDisabled { _private: () }
+    }
+
     /// Perform one finite source-127 register classification.
     ///
     /// The unique ISR-staged owner is the authority for exactly one register
@@ -913,21 +1011,18 @@ impl core::fmt::Debug for TaskOwnerReuniteFailure {
 /// Opaque inactive owner of the controller interrupt partition.
 #[must_use = "the inactive Bluetooth interrupt owner must be staged or reunited"]
 pub struct InterruptSetupOwner {
-    registers: PacBluetoothInterruptSetup,
+    registers: RegistersBluetoothInterruptSetup,
     reunitable: bool,
 }
 
 impl InterruptSetupOwner {
     /// Execute the reviewed baseline clear/enable/output preparation.
     ///
-    /// The controller lifecycle owns completed HAL-init and quiescent dynamic
-    /// sources. The returned state remains retained until stable ISR storage
-    /// is ready.
-    ///
-    /// The caller runs it after the completed controller HAL-init, with
-    /// quiescent dynamic sources and the primary and NRT CPU routes still
-    /// inactive: an order of the Controller's lifecycle, which publishes no
-    /// memory to the hardware.
+    /// The bank's interrupt handler runs it when the task opens the epoch,
+    /// after the completed controller HAL-init and with quiescent dynamic
+    /// sources: an order of the Controller's lifecycle, which publishes no
+    /// memory to the hardware. The handler holds the prepared bank, so no
+    /// armed source reaches a line whose handler lacks it.
     pub fn prepare_controller_output(self) -> InterruptOutputPreparedOwner {
         InterruptOutputPreparedOwner {
             registers: self.registers.prepare_controller_output(),
@@ -935,26 +1030,26 @@ impl InterruptSetupOwner {
     }
 }
 
-/// Controller IRQ output prepared but not yet transferred into stable ISR
-/// storage or bound to a CPU route.
+/// Controller IRQ output prepared in the bank's handler, not yet staged.
 #[must_use = "the prepared Bluetooth output must be staged or released"]
 pub struct InterruptOutputPreparedOwner {
-    registers: oer_esp32s31_pac::BluetoothInterruptOutputPrepared,
+    registers: registers::BluetoothInterruptOutputPrepared,
 }
 
 impl InterruptOutputPreparedOwner {
-    /// Transfer the register partition to the state required by shared ISR
-    /// storage before either platform route is enabled.
-    pub fn stage_for_cpu_routes(self) -> InterruptRegistersOwner {
+    /// The prepared bank as its handler holds it for the epoch.
+    pub fn stage_for_handler(self) -> InterruptRegistersOwner {
         InterruptRegistersOwner {
-            registers: self.registers.stage_for_cpu_routes(),
+            registers: self.registers.stage_for_handler(),
             #[cfg(feature = "bluetooth-engine")]
             diagnostic_selection: DiagnosticSelection::None,
+            fault_acknowledged: false,
+            released: false,
         }
     }
 
-    /// Execute the reviewed controller-output release transaction after CPU
-    /// routes have been removed.
+    /// Execute the reviewed controller-output release transaction on a bank
+    /// that never reached its handler's epoch.
     ///
     /// Dynamic Link-Layer sources must already be quiescent. This transaction
     /// alone is not controller, packet, BTBB, PHY or clock teardown. Even on
@@ -968,12 +1063,21 @@ impl InterruptOutputPreparedOwner {
     }
 }
 
-/// Opaque interrupt-register owner staged for primary and NRT CPU routes.
-#[must_use = "the staged Bluetooth interrupt owner must be deactivated"]
+/// The interrupt bank as the handler of sources 124 and 133 holds it for
+/// one epoch: from the prepared output to its release.
+///
+/// The bank shares one line with the other Bluetooth sources, so every
+/// capture first samples and writes nothing when its status is clear. A
+/// primary fault the handler acknowledges stays recorded and refuses the
+/// output release; once the output is released, no scheduler-run group is
+/// enabled again.
+#[must_use = "the Bluetooth interrupt bank leaves its handler only released"]
 pub struct InterruptRegistersOwner {
     registers: BluetoothInterruptRegisters,
     #[cfg(feature = "bluetooth-engine")]
     diagnostic_selection: DiagnosticSelection,
+    fault_acknowledged: bool,
+    released: bool,
 }
 
 #[cfg(feature = "bluetooth-engine")]
@@ -985,22 +1089,32 @@ enum DiagnosticSelection {
 
 impl InterruptRegistersOwner {
     /// Prepare the dynamic interrupt groups required immediately before a
-    /// scheduler run publication.
-    pub fn prepare_scheduler_run_interrupts(&mut self) -> BluetoothSchedulerRunInterruptsPrepared {
-        self.registers.prepare_scheduler_run_interrupts()
+    /// scheduler run publication; `None` once the output is released.
+    pub fn prepare_scheduler_run_interrupts(
+        &mut self,
+    ) -> Option<BluetoothSchedulerRunInterruptsPrepared> {
+        if self.released {
+            return None;
+        }
+        Some(self.registers.prepare_scheduler_run_interrupts())
     }
 
-    /// Capture and acknowledge one complete opaque NRT source-133 epoch.
+    /// Capture and acknowledge one complete opaque NRT source-133 epoch;
+    /// `None`, writing nothing, when both snapshots are clear.
     ///
-    /// This preserves the PAC sample/sample/acknowledge/acknowledge order. It
+    /// This preserves the sample/sample/acknowledge/acknowledge order. It
     /// deliberately performs no feature dispatch and publishes no task wake.
-    pub fn capture_nrt_and_acknowledge(&mut self) -> BluetoothNrtInterruptAcknowledged {
+    pub fn capture_nrt_and_acknowledge(&mut self) -> Option<BluetoothNrtInterruptAcknowledged> {
         self.registers.capture_nrt_and_acknowledge()
     }
 
-    /// Capture, acknowledge and retain one complete primary source-124 epoch.
-    pub fn capture_primary_and_acknowledge(&mut self) -> BluetoothPrimaryInterruptEpoch {
-        self.registers.capture_primary_and_acknowledge()
+    /// Capture, acknowledge and retain one complete primary source-124
+    /// epoch; `None`, writing nothing, when both status words are clear. A
+    /// fault it acknowledges refuses the output release of this epoch.
+    pub fn capture_primary_and_acknowledge(&mut self) -> Option<BluetoothPrimaryInterruptEpoch> {
+        let epoch = self.registers.capture_primary_and_acknowledge()?;
+        self.fault_acknowledged |= epoch.fault_sources().is_fault();
+        Some(epoch)
     }
 
     /// Sample scheduler BUSY through the diagnostic pair for the bank-one
@@ -1017,7 +1131,7 @@ impl InterruptRegistersOwner {
 
     /// Clear the scheduler reference selected by the source-124 gate.
     ///
-    /// The returned affine token proves the ordered PAC write and device fence.
+    /// The returned affine token proves the ordered write and device fence.
     /// The open scheduler's software consistency is structural and does not
     /// reproduce the vendor's intrusive-list callback.
     pub fn clear_scheduler_reference(&mut self) -> BluetoothSchedulerReferenceCleared {
@@ -1117,126 +1231,189 @@ impl InterruptRegistersOwner {
         result
     }
 
-    /// Return the register partition to output-prepared ownership after both
-    /// CPU routes have been disabled and shared ISR access has ended.
+    /// Admit the release on an idle BUSY sample, taken within `settle`,
+    /// with no primary fault pending or acknowledged during the epoch.
+    /// Writes nothing.
     ///
-    /// The returned state requires the terminal idle/head/fault preflight
-    /// before it can release Controller output.
-    pub fn deactivate(self) -> InterruptOutputAfterRoutesOwner {
-        InterruptOutputAfterRoutesOwner {
-            _registers: self.registers.deactivate(),
-        }
-    }
-}
-
-/// Controller interrupt bank recovered from stable ISR storage after both CPU
-/// routes were disabled.
-///
-/// Checked output release requires the matching task registers and fresh
-/// scheduler/head/fault observations. No direct setup or cold conversion exists.
-#[must_use = "post-route interrupt ownership awaits dynamic-source quiescence"]
-pub struct InterruptOutputAfterRoutesOwner {
-    _registers: oer_esp32s31_pac::BluetoothInterruptOutputPrepared,
-}
-
-impl InterruptOutputAfterRoutesOwner {
-    /// Sample scheduler BUSY within `settle` for one release step.
-    fn capture_scheduler_busy<C: oer_time::Clock + ?Sized>(
+    /// # Errors
+    ///
+    /// The sample did not settle, the scheduler is busy, or a fault is
+    /// pending or was acknowledged.
+    pub fn sample_idle_output<C: oer_time::Clock + ?Sized>(
         &mut self,
+        _admitted: &BluetoothOutputReleaseAdmitted,
         settle: Settle<'_, C>,
-    ) -> Result<BluetoothSchedulerBusyObservation, BluetoothControllerOutputReleaseError> {
-        settle::settle(settle, || self._registers.capture_scheduler_busy())
-            .map_err(|Unsettled| BluetoothControllerOutputReleaseError::SchedulerBusyUnsettled)
+    ) -> Result<BluetoothOutputIdleSampled, BluetoothControllerOutputReleaseError> {
+        let busy = self.release_busy_sample(settle)?;
+        self.registers
+            .sample_idle_output(busy, self.fault_acknowledged)?;
+        Ok(BluetoothOutputIdleSampled { _private: () })
     }
 
-    /// Observe quiescence while retaining the prepared, unrouted output bank.
-    pub fn validate_idle_controller<C: oer_time::Clock + ?Sized>(
+    /// Mask the dynamic scheduler sources and fence, once the task found no
+    /// list head published.
+    pub fn mask_output_dynamic_sources(
         &mut self,
-        task: &mut TaskOwner,
-        settle: Settle<'_, C>,
-    ) -> Result<(), BluetoothControllerOutputReleaseError> {
-        if task.time_latch.in_flight() {
-            return Err(BluetoothControllerOutputReleaseError::ControllerTimePending);
-        }
-        let busy = self.capture_scheduler_busy(settle)?;
-        self._registers
-            .validate_idle_controller(&mut task.registers, busy)
+        _heads: &BluetoothSchedulerHeadsAbsent,
+    ) -> BluetoothDynamicSourcesMasked {
+        self.registers.mask_output_dynamic_sources();
+        BluetoothDynamicSourcesMasked { _private: () }
     }
 
-    /// Revalidate quiescence after maintenance and return the same prepared bank.
-    /// This does not enable CPU routes or publish either ISR owner.
-    pub fn try_reactivate_idle_controller_output<C: oer_time::Clock + ?Sized>(
-        mut self,
-        task: &mut TaskOwner,
+    /// Acknowledge the dynamic sources and release the controller output,
+    /// once the task disabled RUN, on a fresh idle BUSY sample within
+    /// `settle` with no fault pending or acknowledged. Faults are never
+    /// cleared.
+    ///
+    /// # Errors
+    ///
+    /// The sample did not settle, the scheduler is busy, or a fault is
+    /// pending or was acknowledged; the output stays prepared.
+    pub fn release_idle_output<C: oer_time::Clock + ?Sized>(
+        &mut self,
+        _run: &BluetoothSchedulerRunDisabled,
         settle: Settle<'_, C>,
-    ) -> Result<InterruptRegistersOwner, (BluetoothControllerOutputReleaseError, Self)> {
-        if let Err(error) = self.validate_idle_controller(task, settle) {
-            return Err((error, self));
+    ) -> Result<BluetoothOutputReleased, BluetoothControllerOutputReleaseError> {
+        let busy = self.release_busy_sample(settle)?;
+        self.registers
+            .release_idle_output(busy, self.fault_acknowledged)?;
+        self.released = true;
+        Ok(BluetoothOutputReleased { _private: () })
+    }
+
+    /// Whether the output of this epoch is released.
+    pub const fn output_released(&self) -> bool {
+        self.released
+    }
+
+    /// The released bank, leaving its handler. Performs no MMIO.
+    ///
+    /// # Errors
+    ///
+    /// The output of this owner is not released; the owner comes back.
+    pub fn into_released(
+        self,
+        _released: BluetoothOutputReleased,
+    ) -> Result<InterruptOutputReleasedOwner, Self> {
+        if !self.released {
+            return Err(self);
         }
-        Ok(InterruptRegistersOwner {
-            registers: self._registers.stage_for_cpu_routes(),
-            #[cfg(feature = "bluetooth-engine")]
-            diagnostic_selection: DiagnosticSelection::None,
+        Ok(InterruptOutputReleasedOwner {
+            registers: self.registers.into_released(),
         })
     }
 
-    /// Mask and acknowledge the idle scheduler's dynamic sources, then release
-    /// Controller output. A busy scheduler, published head, pending time latch,
-    /// unsettled BUSY sample or primary fault retains both owners. Rejection
-    /// can leave RUN disabled; it never authorizes reactivation, memory
-    /// reclamation or cold reunion.
-    ///
-    /// BUSY is sampled twice within `settle` each: before the
-    /// dynamic sources are masked and after the fence that disables RUN.
-    pub fn try_release_idle_controller_output<C: oer_time::Clock + ?Sized>(
-        mut self,
-        task: &mut TaskOwner,
+    fn release_busy_sample<C: oer_time::Clock + ?Sized>(
+        &mut self,
         settle: Settle<'_, C>,
-    ) -> Result<InterruptOutputReleasedOwner, (BluetoothControllerOutputReleaseError, Self)> {
-        if task.time_latch.in_flight() {
-            return Err((
-                BluetoothControllerOutputReleaseError::ControllerTimePending,
-                self,
-            ));
-        }
-        let quiesced = match self.capture_scheduler_busy(settle).and_then(|busy| {
-            self._registers
-                .quiesce_idle_controller_output(&mut task.registers, busy)
-        }) {
-            Ok(quiesced) => quiesced,
-            Err(error) => return Err((error, self)),
-        };
-        let busy = match self.capture_scheduler_busy(settle) {
-            Ok(busy) => busy,
-            Err(error) => return Err((error, self)),
-        };
-        match self._registers.try_release_idle_controller_output(
-            &mut task.registers,
-            quiesced,
-            busy,
-        ) {
-            Ok(registers) => Ok(InterruptOutputReleasedOwner { registers }),
-            Err((error, registers)) => Err((
-                error,
-                Self {
-                    _registers: registers,
-                },
-            )),
-        }
+    ) -> Result<BluetoothSchedulerBusyObservation, BluetoothControllerOutputReleaseError> {
+        self.capture_scheduler_busy(settle)
+            .map_err(|Unsettled| BluetoothControllerOutputReleaseError::SchedulerBusyUnsettled)
     }
 }
 
-/// Output released after the post-route, idle-scheduler hardware preflight.
-/// No active IRQ or setup conversion is exposed; retain it through RF close.
+/// The task admitted the output release: no controller-time request is in
+/// flight.
+#[derive(Debug)]
+#[must_use = "the admission feeds the handler's idle sample"]
+pub struct BluetoothOutputReleaseAdmitted {
+    _private: (),
+}
+
+/// The handler sampled an idle scheduler without a fault.
+#[derive(Debug)]
+#[must_use = "the idle sample feeds the task's list-head check"]
+pub struct BluetoothOutputIdleSampled {
+    _private: (),
+}
+
+/// The task found no scheduler list head published.
+#[derive(Debug)]
+#[must_use = "the empty lists admit the handler's mask"]
+pub struct BluetoothSchedulerHeadsAbsent {
+    _private: (),
+}
+
+/// The handler masked the dynamic scheduler sources and fenced.
+#[derive(Debug)]
+#[must_use = "the masked sources admit the task's RUN disable"]
+pub struct BluetoothDynamicSourcesMasked {
+    _private: (),
+}
+
+/// The task disabled scheduler RUN and fenced.
+#[derive(Debug)]
+#[must_use = "the disabled RUN admits the handler's release"]
+pub struct BluetoothSchedulerRunDisabled {
+    _private: (),
+}
+
+/// The handler released the controller output of its epoch.
+#[derive(Debug)]
+#[must_use = "the released output lets the bank leave its handler"]
+pub struct BluetoothOutputReleased {
+    _private: (),
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl BluetoothOutputReleaseAdmitted {
+    #[doc(hidden)]
+    pub const fn for_host_test() -> Self {
+        Self { _private: () }
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl BluetoothOutputIdleSampled {
+    #[doc(hidden)]
+    pub const fn for_host_test() -> Self {
+        Self { _private: () }
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl BluetoothSchedulerHeadsAbsent {
+    #[doc(hidden)]
+    pub const fn for_host_test() -> Self {
+        Self { _private: () }
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl BluetoothDynamicSourcesMasked {
+    #[doc(hidden)]
+    pub const fn for_host_test() -> Self {
+        Self { _private: () }
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl BluetoothSchedulerRunDisabled {
+    #[doc(hidden)]
+    pub const fn for_host_test() -> Self {
+        Self { _private: () }
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl BluetoothOutputReleased {
+    #[doc(hidden)]
+    pub const fn for_host_test() -> Self {
+        Self { _private: () }
+    }
+}
+
+/// The released interrupt bank after its handler's epoch: no active IRQ or
+/// setup conversion is exposed; it is retained through the Controller reset.
 #[must_use = "released output must remain paired with its stopped Controller"]
 pub struct InterruptOutputReleasedOwner {
-    registers: PacBluetoothInterruptSetup,
+    registers: RegistersBluetoothInterruptSetup,
 }
 
 /// Exclusive finite borrow of the Bluetooth controller task-side registers.
 ///
-/// This type deliberately exposes neither `Deref`, a raw PAC accessor nor a
-/// constructor. New operations belong here only after their PAC transaction
+/// This type deliberately exposes neither `Deref`, a raw register accessor nor a
+/// constructor. New operations belong here only after their register transaction
 /// and lifecycle prerequisites are independently bounded.
 pub struct ControllerHal<'registers> {
     registers: &'registers mut BluetoothTaskRegisters,
@@ -1365,7 +1542,7 @@ impl DirectionFindingDescriptor {
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub(crate) struct DeviceTablePublication {
     first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
-    count: BluetoothDeviceTableEntryCount,
+    count: u8,
 }
 
 impl DeviceTablePublication {
@@ -1377,7 +1554,7 @@ impl DeviceTablePublication {
     #[allow(unsafe_code, reason = "the HAL engine's codec vouches for the storage")]
     pub(crate) const unsafe fn new(
         first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
-        count: BluetoothDeviceTableEntryCount,
+        count: u8,
     ) -> Self {
         Self { first_entry, count }
     }
@@ -1390,7 +1567,7 @@ impl DeviceTablePublication {
     }
 
     /// Number of entries.
-    pub const fn count(&self) -> BluetoothDeviceTableEntryCount {
+    pub const fn count(&self) -> u8 {
         self.count
     }
 }
@@ -1427,7 +1604,7 @@ impl RxChainHead {
 
 /// HAL ownership of the controller-global disabled-CTE publication.
 ///
-/// The restricted PAC proof remains private, so upper Controller layers can
+/// The register-level proof remains private, so upper Controller layers can
 /// retain the hardware epoch without depending on a register-level type.
 #[must_use = "the disabled-CTE publication must retain its pinned workspace"]
 pub struct DirectionFindingDisabledBaselineOwner {
@@ -1574,10 +1751,10 @@ impl ControllerHal<'_> {
     ) -> DirectionFindingDisabledBaselineOwner {
         #[allow(
             unsafe_code,
-            reason = "the PAC transaction points the hardware at the descriptor"
+            reason = "the register transaction points the hardware at the descriptor"
         )]
         // SAFETY: `descriptor` binds it to the `'static`, volatile-only
-        // direction-finding workspace in controller SRAM; the PAC contract's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
+        // direction-finding workspace in controller SRAM; the transaction's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
         let prepared = unsafe {
             self.registers
                 .prepare_direction_finding_disabled_baseline(descriptor.address)
@@ -1690,11 +1867,11 @@ impl ControllerHal<'_> {
         }
         #[allow(
             unsafe_code,
-            reason = "the PAC scanner start relies on the published RX list"
+            reason = "the scanner start relies on the published RX list"
         )]
         // SAFETY: the scanning RX list of this epoch is published from a
         // memory-crate chain in `'static`, volatile-only controller SRAM
-        // (`RxChainHead`); the PAC contract's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
+        // (`RxChainHead`); the transaction's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
         Ok(unsafe { self.registers.publish_scan_start() })
     }
 
@@ -1711,10 +1888,10 @@ impl ControllerHal<'_> {
     ) -> BluetoothDeviceTablePublished {
         #[allow(
             unsafe_code,
-            reason = "the PAC transaction points the hardware at the table"
+            reason = "the register transaction points the hardware at the table"
         )]
         // SAFETY: `table` binds `count` entries from `first_entry` to the
-        // `'static`, volatile-only device table in controller SRAM; the PAC contract's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
+        // `'static`, volatile-only device table in controller SRAM; the transaction's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
         unsafe {
             self.registers
                 .publish_device_table(table.first_entry, table.count)
@@ -1764,13 +1941,13 @@ impl ControllerHal<'_> {
     }
 
     /// Order prior descriptor writes and publish one scheduler hardware-list
-    /// head through the restricted PAC.
+    /// head through the register owner.
     ///
     /// # Safety
     ///
     /// The caller must retain the scheduler insertion epoch, completed
     /// descriptor initialization, graph lifetime and task/interrupt
-    /// serialization required by the underlying PAC transaction. The PAC
+    /// serialization required by the underlying register transaction. It
     /// orders those prior SRAM writes before the MMIO head update.
     #[doc(hidden)]
     #[allow(
@@ -1783,7 +1960,7 @@ impl ControllerHal<'_> {
         head: Option<crate::layouts::DmaRef<crate::layouts::BleSchedulerItem>>,
     ) -> BluetoothSchedulerHardwareListHeadPublished {
         // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the PAC transaction's prerequisites.
+        // which states the register transaction's prerequisites.
         unsafe {
             self.registers
                 .publish_scheduler_hardware_list_head(index, head)
@@ -1806,7 +1983,7 @@ impl ControllerHal<'_> {
         command: BluetoothSchedulerInsertionCommand,
     ) -> BluetoothSchedulerInsertionCommandStartCleared {
         // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the PAC transaction's prerequisites.
+        // which states the register transaction's prerequisites.
         unsafe {
             self.registers
                 .clear_scheduler_insertion_command_start(command)
@@ -1919,7 +2096,7 @@ impl ControllerHal<'_> {
         }
     }
 
-    /// Publish one scheduler skip request through the restricted PAC.
+    /// Publish one scheduler skip request through the register owner.
     ///
     /// # Safety
     ///
@@ -1936,7 +2113,7 @@ impl ControllerHal<'_> {
         request: BluetoothSchedulerSkipRequest,
     ) -> BluetoothSchedulerSkipPublished {
         // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the PAC transaction's prerequisites.
+        // which states the register transaction's prerequisites.
         unsafe { self.registers.publish_scheduler_skip(request) }
     }
 
@@ -1974,7 +2151,7 @@ impl ControllerHal<'_> {
         index: BluetoothSchedulerHardwareListIndex,
     ) -> BluetoothSchedulerCancellationIndexed {
         // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the PAC transaction's prerequisites.
+        // which states the register transaction's prerequisites.
         unsafe { self.registers.index_scheduler_cancellation(index) }
     }
 
@@ -2007,8 +2184,8 @@ impl ControllerHal<'_> {
         self.registers.release_scheduler_cancellation(requested)
     }
 
-    /// Publish the synchronous BTMAC scheduler event through the restricted
-    /// PAC after the matching head and dynamic interrupts are prepared.
+    /// Publish the synchronous BTMAC scheduler event through the register
+    /// owner after the matching head and dynamic interrupts are prepared.
     #[doc(hidden)]
     pub(crate) fn publish_scheduler_run_event(
         &mut self,
@@ -2019,7 +2196,7 @@ impl ControllerHal<'_> {
     }
 
     /// Publish the final scheduler hardware RUN command through the
-    /// restricted PAC. The consumed event retains the complete run prologue.
+    /// register owner. The consumed event retains the complete run prologue.
     #[doc(hidden)]
     pub fn publish_scheduler_hardware_run_command(
         &mut self,
@@ -2110,7 +2287,7 @@ impl ControllerHal<'_> {
         request: BluetoothSchedulerLockModifyRequest,
     ) -> BluetoothSchedulerLockModifyPublished {
         // SAFETY: this method forwards the identical descriptor-lifetime and
-        // serialization obligations to the restricted PAC transaction.
+        // serialization obligations to the register transaction.
         unsafe { self.registers.publish_scheduler_lock_modify(request) }
     }
 
@@ -2167,7 +2344,7 @@ mod sealed {
     }
 }
 
-/// Sealed conversion from the exclusive PAC task owner to one finite
+/// Sealed conversion from the exclusive task owner to one finite
 /// controller HAL borrow.
 ///
 /// This conversion proves aliasing only. It deliberately does not manufacture
@@ -2188,7 +2365,7 @@ mod sealed {
 /// ```
 #[doc(hidden)]
 pub trait ControllerHalBorrow: sealed::ControllerHalBorrow {
-    /// Borrow the controller registers without exposing their PAC owner.
+    /// Borrow the controller registers without exposing their register owner.
     fn borrow_bluetooth_controller(&mut self) -> ControllerHal<'_> {
         let owner = sealed::ControllerHalBorrow::bluetooth_task_owner_mut(self);
         owner.reunitable = false;

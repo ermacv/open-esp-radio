@@ -3,18 +3,9 @@
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 //! Scheduler-free static task executor and time driver for Espressif
-//! staged-boot applications; a chip feature selects the chip of esp-hal.
-//!
-//! This crate owns only task execution, executor wake-up and timer-queue
-//! integration. It does
-//! not own radio policy, board electrical parameters, credentials, sockets or
-//! a host protocol. Timer observations, idle accounting and poll timing,
-//! compiled for an image that declares the profile class (`cfg(oer_profile)`),
-//! describe only its own execution. Applications supply esp-hal's software
-//! interrupt lines and system timer explicitly, with the tokens of their
-//! sources in the image's interrupt table; each is consumed by its platform
-//! handoff, and the executor drives our typed blocks (`FROM_CPU_0..3`, the
-//! SYSTIMER comparators and its shared counter latch) from then on.
+//! staged-boot applications. The reset root supplies owned HAL blocks;
+//! interrupt parts are bound through the image's typed interrupt router.
+//! The executor owns task execution, wake-up and timer-queue integration.
 //!
 //! - Each executor's tasks are declared by [`tasks!`] into static slots and
 //!   polled by a direct call per task; [`task`] describes the slots, the
@@ -28,9 +19,9 @@
 //!   application.
 //! - `Doorbell<SWI>` is a software interrupt at the radio interrupts' level
 //!   (P3, `FROM_CPU` line 3) that the radio executor rings to have a request
-//!   applied there; its handler starts with `DoorbellAcknowledger::acknowledge`. Making it
-//!   takes a `SameLevel`, which checks when the image compiles that it shares
-//!   the radio interrupt's level and core.
+//!   applied there; its handler starts with `DoorbellAcknowledger::acknowledge`. Its line
+//!   is a source of the radio handler's part: the ringing half takes the
+//!   router's `Bound` proof of that part (`Doorbell::new`).
 //! - The time driver (`init`, `bind`) gives each executor its own timer
 //!   queue and SYSTIMER comparator, whose alarm (`alarm_interrupt::<N>`) only
 //!   acknowledges and pends; one executor writes the SYSTIMER registers. No
@@ -44,13 +35,12 @@ mod context;
 #[cfg(feature = "chip")]
 mod cooperative;
 #[cfg(any(feature = "chip", test))]
-mod counter;
-#[cfg(any(feature = "chip", test))]
 mod deadline_cell;
 #[cfg(feature = "chip")]
 mod doorbell;
 #[cfg(feature = "chip")]
 mod executor;
+pub mod hardware;
 #[cfg(any(feature = "chip", test))]
 mod level;
 #[cfg(any(feature = "chip", test))]
@@ -71,7 +61,7 @@ mod time_driver;
 mod timer_queue;
 
 #[cfg(feature = "chip")]
-pub use doorbell::{Doorbell, DoorbellAcknowledger, LineAcknowledger};
+pub use doorbell::{Doorbell, DoorbellAcknowledger, DoorbellLine, LineAcknowledger};
 #[cfg(feature = "chip")]
 pub use executor::{
     Executor, InterruptExecutor, LevelOrder, SameLevel, interrupt_handler, ready_peers,

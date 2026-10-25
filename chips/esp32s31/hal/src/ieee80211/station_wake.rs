@@ -4,9 +4,9 @@
 //! records whether a schedule runs for the Wi-Fi route, so an interval change
 //! reaches only a running schedule.
 
-use oer_esp32s31_pac::WifiRadioRegisters;
+use crate::ieee80211::registers::WifiRadioRegisters;
 
-use oer_esp32s31_pac::StaTbttSchedule;
+use crate::ieee80211::registers::StaTbttSchedule;
 
 /// Why a station TBTT schedule operation was refused.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

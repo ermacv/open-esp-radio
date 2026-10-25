@@ -1,3 +1,5 @@
+use crate::analog::i2c::analog_i2c;
+
 use super::*;
 use crate::analog::rfpll::RfpllFrequencyAction;
 use std::vec::Vec;
@@ -17,7 +19,7 @@ fn channel_visits_update_nrx_once_before_each_measured_pair() {
         ) {
             let wrong = if matches!(action, PhyDcodeAction::Rfpll(_)) {
                 PhyDcodeCompletion::Rfpll(RfpllFrequencyCompletion::MaskedRead {
-                    field: fields::RFPLL_LOCK_STATUS,
+                    field: analog_i2c::rfpll::lock_status::LOCK_STATUS,
                     value: 0,
                 })
             } else {
@@ -178,14 +180,14 @@ fn external_lowering_covers_every_dcode_operation_class() {
     ));
     assert!(matches!(
         PhyDcodeExternalBinding::lower(PhyDcodeAction::WriteMasked {
-            field: fields::RFPLL_DCODE_0_SOURCE_SELECT,
+            field: analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
             value: 0,
         }),
         Ok(PhyDcodeExternalBinding::I2c(_))
     ));
     assert!(matches!(
         PhyDcodeExternalBinding::lower(PhyDcodeAction::ReadMasked {
-            field: fields::RFPLL_INTERNAL_DCODE_0,
+            field: analog_i2c::rfpll::internal_dcode_0::INTERNAL_DCODE_0,
         }),
         Ok(PhyDcodeExternalBinding::I2c(_))
     ));

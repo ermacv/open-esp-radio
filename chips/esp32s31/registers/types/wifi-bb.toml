@@ -1164,13 +1164,15 @@ name = "FORCED_GAIN_ENABLE"
 bits = "23"
 class = "plain"
 description = "Enables the forced receive-gain index in FORCED_GAIN_INDEX. Complete phy_force_rx_gain and the Wi-Fi path of librftest force_rx_gain replace it with the low bit of their enable argument; librftest clears it and waits 5 us after writing the index before setting it. Complete phy_enable_agc and the delayed tail of phy_pbus_force_mode pulse it."
+values = [{ name = "DISABLED", value = 0x0, description = "Disable the selected runtime AGC behavior.", sources = ["ROM_REV0_PHY_ANT_DFT_CFG", "ROM_REV0_PHY_FORCE_RX_GAIN", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Enable the selected runtime AGC behavior.", sources = ["ROM_REV0_PHY_ANT_DFT_CFG", "ROM_REV0_PHY_FORCE_RX_GAIN", "S31_ESP_PACS_SVD"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "FORCED_GAIN_INDEX"
 bits = "31:24"
 class = "plain"
 description = "Receive-gain table index applied while FORCED_GAIN_ENABLE is set. Complete phy_force_rx_gain and the Wi-Fi path of librftest force_rx_gain write their gain argument here before the enable bit; complete phy_agc_reg_init and the delayed phy_pbus_force_mode tail write 0x32 into bits 31:24 before pulsing bit 23, so a PBus work-mode transition replaces any previously forced index."
-write-range = { min = 0x0, max = 0xff }
+value-range = { min = 0x0, max = 0xff, sources = ["ROM_REV0_PHY_FORCE_RX_GAIN"] }
 
 [[registers.fields]]
 name = "BITS_15_22_OPAQUE"
@@ -1546,7 +1548,7 @@ name = "BIT_11_OPAQUE"
 bits = "11"
 class = "plain"
 description = "Complete phy_ant_dft_cfg writes zero to disable antenna diversity and one to enable it."
-values = [{ name = "DISABLED", value = 0, description = "Disable the recovered antenna-diversity path." }, { name = "ENABLED", value = 1, description = "Enable the recovered antenna-diversity path." }]
+values = [{ name = "DISABLED", value = 0x0, description = "Disable the recovered antenna-diversity path.", sources = ["ROM_REV0_PHY_ANT_DFT_CFG", "ROM_REV0_PHY_FORCE_RX_GAIN", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Enable the recovered antenna-diversity path.", sources = ["ROM_REV0_PHY_ANT_DFT_CFG", "ROM_REV0_PHY_FORCE_RX_GAIN", "S31_ESP_PACS_SVD"] }]
 write-values-only = true
 
 [[registers.fields]]
@@ -1808,6 +1810,8 @@ description = "Complete phy_bb_txpwr_track publishes enable plus two initializat
 name = "TRACK_ENABLE"
 bits = "0"
 class = "plain"
+values = [{ name = "DISABLED", value = 0x0, description = "Disable PHY baseband TX-power tracking.", sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Enable PHY baseband TX-power tracking.", sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG", "S31_ESP_PACS_SVD"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "BITS_1_4_OPAQUE"
@@ -1910,7 +1914,7 @@ name = "ENABLE"
 bits = "22"
 class = "plain"
 description = "Complete phy_config_hccfr writes zero to disable HCCFR and one to enable it."
-values = [{ name = "DISABLED", value = 0, description = "Disable HCCFR processing." }, { name = "ENABLED", value = 1, description = "Enable HCCFR processing." }]
+values = [{ name = "DISABLED", value = 0x0, description = "Disable HCCFR processing.", sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Enable HCCFR processing.", sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"] }]
 write-values-only = true
 
 [[registers.fields]]
@@ -1935,7 +1939,7 @@ name = "VALUE"
 bits = "11:0"
 class = "plain"
 description = "Complete phy_config_hccfr retains the caller value to this twelve-bit field; every representable field image is accepted by the recovered leaf."
-write-range = { min = 0x0, max = 0xfff }
+value-range = { min = 0x0, max = 0xfff, sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"] }
 
 [[registers.fields]]
 name = "BITS_12_31_OPAQUE"
@@ -1953,7 +1957,7 @@ name = "FORCE_ENABLE"
 bits = "0"
 class = "plain"
 description = "Complete phy_force_iccfr writes zero to disable the forced ICCFR value and one to enable it."
-values = [{ name = "DISABLED", value = 0, description = "Use the ordinary ICCFR value path." }, { name = "ENABLED", value = 1, description = "Use the forced ICCFR value." }]
+values = [{ name = "DISABLED", value = 0x0, description = "Use the ordinary ICCFR value path.", sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "Use the forced ICCFR value.", sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"] }]
 write-values-only = true
 
 [[registers.fields]]
@@ -1961,17 +1965,21 @@ name = "FORCE_VALUE"
 bits = "12:1"
 class = "plain"
 description = "Complete phy_force_iccfr retains the caller value to this twelve-bit field; every representable field image is accepted by the recovered leaf."
-write-range = { min = 0x0, max = 0xfff }
+value-range = { min = 0x0, max = 0xfff, sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"] }
 
 [[registers.fields]]
 name = "FORCE_MODE_LOW"
 bits = "13"
 class = "plain"
+values = [{ name = "LOW", value = 0x0, description = "Publish the zero forced-ICCFR mode image.", sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"] }, { name = "HIGH", value = 0x1, description = "Publish the one forced-ICCFR mode image.", sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "FORCE_MODE_HIGH"
 bits = "14"
 class = "plain"
+values = [{ name = "LOW", value = 0x0, description = "Publish the zero forced-ICCFR mode image.", sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"] }, { name = "HIGH", value = 0x1, description = "Publish the one forced-ICCFR mode image.", sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL", "S31_ESP_PACS_SVD"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "FORCE_TRIGGER"
@@ -2538,7 +2546,7 @@ description = "Complete phy_bb_cbw_chan_cfg replaces the low two-bit CBW-derived
 name = "BITS_0_1_OPAQUE"
 bits = "1:0"
 class = "plain"
-write-range = { min = 0x0, max = 0x3 }
+value-range = { min = 0x0, max = 0x3, sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }
 
 [[registers]]
 name = "CHANNEL_CBW_CONTROL_1"
@@ -2549,13 +2557,13 @@ description = "Complete phy_bb_cbw_chan_cfg performs two fresh-read CBW-derived 
 name = "BITS_0_1_OPAQUE"
 bits = "1:0"
 class = "plain"
-write-range = { min = 0x0, max = 0x3 }
+value-range = { min = 0x0, max = 0x3, sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }
 
 [[registers.fields]]
 name = "BITS_2_4_OPAQUE"
 bits = "4:2"
 class = "plain"
-write-range = { min = 0x0, max = 0x7 }
+value-range = { min = 0x0, max = 0x7, sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }
 
 [[registers.fields]]
 name = "VHT_SUPPORT"

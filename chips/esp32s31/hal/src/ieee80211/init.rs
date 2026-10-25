@@ -44,9 +44,8 @@ pub use crate::types::{MacInterruptMask, MacTxPowerPair, MacTxPowerTable};
 
 /// Station event mask, with HE BSS-color collision disabled.
 ///
-/// Applications activate the disjoint ISR register capability only after
-/// installing their final handler storage, but the bit policy itself remains
-/// part of the MAC lifecycle. Queue collisions are sampled from TX_COMMON;
+/// The radio interrupt handler publishes it when it activates an epoch; the
+/// bit policy itself remains part of the MAC lifecycle. Queue collisions are sampled from TX_COMMON;
 /// the independent HE color event has no station consumer yet.
 pub const MAC_STATION_INTERRUPT_MASK: MacInterruptMask = MacInterruptMask::STATION;
 
@@ -181,16 +180,17 @@ pub async fn initialize_wifi_mac<
     // callback result retains whether the platform actually supplied a
     // calibration. The hardware mapping remains explicit in the HAL adapter.
     let slow_clock_calibration = platform.mac_slow_clock_calibration();
-    mmio.initialize_hal_tail(MAC_STATION_INTERRUPT_MASK, slow_clock_calibration);
+    mmio.initialize_hal_tail(slow_clock_calibration);
 
     // Complete seventeen-edge COEX/PTI tail. Query values in the blob's exact
     // callback order before handing the finite program to its PAC owner.
     let coex_pti = MacColdCoexPti::query(platform);
     mmio.initialize_cold_coex(coex_pti);
 
-    // Prepare only the IRQ suffix of `hal_enable_mac`. The core-enable edge
-    // belongs to the runtime owner before its first BASE publication.
-    mmio.prepare_mac_interrupts(MAC_STATION_INTERRUPT_MASK);
+    // The IRQ suffix of `hal_enable_mac`, the station mask's publication,
+    // belongs to the radio interrupt handler, which publishes it when it
+    // activates an epoch; the core-enable edge belongs to the runtime owner
+    // before its first BASE publication.
 
     // `wifi_set_rx_policy(0)` publishes both valid interface addresses after
     // `hal_init`; the address-valid bits are part of the S31 RX start gate even

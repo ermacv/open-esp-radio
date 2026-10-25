@@ -1,9 +1,6 @@
 //! Ownership boundary for the direct pre-COEX tail of `hal_init`.
 
-use crate::{
-    ieee80211::mac::WifiMacColdHal,
-    types::{MacInterruptMask, MacRtcCalibration},
-};
+use crate::{ieee80211::mac::WifiMacColdHal, types::MacRtcCalibration};
 
 /// Availability of the platform slow-clock calibration used by the MAC RTC.
 ///
@@ -37,23 +34,11 @@ impl MacSlowClockCalibration {
 }
 
 pub trait MacColdHalTailHardware {
-    fn initialize_hal_tail(
-        &mut self,
-        event_mask: MacInterruptMask,
-        slow_clock_calibration: MacSlowClockCalibration,
-    );
+    fn initialize_hal_tail(&mut self, slow_clock_calibration: MacSlowClockCalibration);
 }
 
 impl MacColdHalTailHardware for WifiMacColdHal<'_> {
-    fn initialize_hal_tail(
-        &mut self,
-        event_mask: MacInterruptMask,
-        slow_clock_calibration: MacSlowClockCalibration,
-    ) {
-        WifiMacColdHal::initialize_hal_tail(
-            self,
-            event_mask,
-            slow_clock_calibration.register_value(),
-        );
+    fn initialize_hal_tail(&mut self, slow_clock_calibration: MacSlowClockCalibration) {
+        WifiMacColdHal::initialize_hal_tail(self, slow_clock_calibration.register_value());
     }
 }

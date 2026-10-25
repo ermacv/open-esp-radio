@@ -1,7 +1,7 @@
 //! List-zero publications through the task HAL owner and the typed P3 replies.
 
 use super::super::interrupt::{SchedulerDoorbell, SchedulerInterruptError, SchedulerTaskHalf};
-use crate::bluetooth::engine::ControllerSramLinkAddress;
+use crate::bluetooth::engine::SchedulerItemLink;
 use crate::bluetooth::{
     BluetoothSchedulerCancellationIndexed, BluetoothSchedulerCancellationRequested,
     BluetoothSchedulerCancellationSourceAcknowledged, BluetoothSchedulerExecutionLock,
@@ -44,20 +44,12 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
     type Publications = HalPublications;
     type StartError = SchedulerInterruptError;
 
-    fn publish_execution_lock(
-        &mut self,
-        at: ControllerSramLinkAddress,
-    ) -> BluetoothSchedulerExecutionLock {
+    fn publish_execution_lock(&mut self, at: SchedulerItemLink) -> BluetoothSchedulerExecutionLock {
         // SAFETY: `at` names a submitted item in 'static pool storage, and
         // the executor keeps it listed until the lock is released.
         unsafe {
             self.controller.admit_scheduler_execution_lock(
-                BluetoothSchedulerExecutionLockRequest::new(
-                    crate::bluetooth::engine::layout_reference::controller_reference(
-                        at.controller_address().address(),
-                    ),
-                    LIST,
-                ),
+                BluetoothSchedulerExecutionLockRequest::new(at.reference(), LIST),
             )
         }
     }
@@ -85,33 +77,25 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
 
     fn publish_lock_modify(
         &mut self,
-        at: ControllerSramLinkAddress,
+        at: SchedulerItemLink,
     ) -> BluetoothSchedulerLockModifyPublished {
         // SAFETY: `at` names the newly linked item in 'static pool storage;
         // the executor holds list zero until the request leaves START.
         unsafe {
             self.controller
                 .publish_scheduler_lock_modify(BluetoothSchedulerLockModifyRequest::new(
-                    crate::bluetooth::engine::layout_reference::controller_reference(
-                        at.controller_address().address(),
-                    ),
+                    at.reference(),
                     LIST,
                 ))
         }
     }
 
-    fn publish_head(&mut self, at: Option<ControllerSramLinkAddress>) {
+    fn publish_head(&mut self, at: Option<SchedulerItemLink>) {
         // SAFETY: the executor finished every descriptor write of the list it
         // publishes; each item lives in 'static pool storage.
         let _published = unsafe {
-            self.controller.publish_scheduler_hardware_list_head(
-                LIST,
-                at.map(|at| {
-                    crate::bluetooth::engine::layout_reference::controller_reference(
-                        at.controller_address().address(),
-                    )
-                }),
-            )
+            self.controller
+                .publish_scheduler_hardware_list_head(LIST, at.map(|at| at.reference()))
         };
     }
 
@@ -150,17 +134,12 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
         let _released = self.controller.release_scheduler_cancellation(cancellation);
     }
 
-    fn publish_skip(&mut self, at: ControllerSramLinkAddress) -> BluetoothSchedulerSkipPublished {
+    fn publish_skip(&mut self, at: SchedulerItemLink) -> BluetoothSchedulerSkipPublished {
         // SAFETY: `at` names a detached item that its pool keeps submitted in
         // 'static storage until the cancellation releases it.
         unsafe {
             self.controller
-                .publish_scheduler_skip(BluetoothSchedulerSkipRequest::new(
-                    crate::bluetooth::engine::layout_reference::controller_reference(
-                        at.controller_address().address(),
-                    ),
-                    LIST,
-                ))
+                .publish_scheduler_skip(BluetoothSchedulerSkipRequest::new(at.reference(), LIST))
         }
     }
 
@@ -226,7 +205,7 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
 
     async fn start(
         &mut self,
-        at: ControllerSramLinkAddress,
+        at: SchedulerItemLink,
     ) -> Result<
         BluetoothSchedulerHardwareRunCommandPublished,
         SchedulerStartError<SchedulerInterruptError>,
@@ -234,14 +213,8 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
         // SAFETY: the executor linked every listed item before returning the
         // head; each lives in 'static pool storage, and the scheduler is idle.
         let published = unsafe {
-            self.controller.publish_scheduler_hardware_list_head(
-                LIST,
-                Some(
-                    crate::bluetooth::engine::layout_reference::controller_reference(
-                        at.controller_address().address(),
-                    ),
-                ),
-            )
+            self.controller
+                .publish_scheduler_hardware_list_head(LIST, Some(at.reference()))
         };
         let interrupts = self
             .interrupts
@@ -281,15 +254,11 @@ impl SchedulerHardware<HalPublications> {
         let raw = controller.observe_scheduler_hardware_list_head(LIST);
         let head = match raw.address() {
             None => None,
-            Some(address) => {
-                let link = ControllerSramLinkAddress::new(address.address())
-                    .map_err(|_| SchedulerHardwareError::ForeignHead)?;
-                Some(
-                    items
-                        .listed_item(link)
-                        .ok_or(SchedulerHardwareError::ForeignHead)?,
-                )
-            }
+            Some(address) => Some(
+                items
+                    .listed_address(address)
+                    .ok_or(SchedulerHardwareError::ForeignHead)?,
+            ),
         };
         Ok(crate::bluetooth::engine::scheduler::SchedulerHardwareSnapshot { busy, head })
     }

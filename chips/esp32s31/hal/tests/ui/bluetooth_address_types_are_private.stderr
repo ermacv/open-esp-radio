@@ -7,7 +7,7 @@ error[E0432]: unresolved import `oer_esp32s31_hal::bluetooth::BluetoothControlle
 help: a similar name exists in the module
    |
 13 - use oer_esp32s31_hal::bluetooth::BluetoothControllerSramAddress; // ui-error: E0432
-13 + use oer_esp32s31_hal::bluetooth::BluetoothControllerReset; // ui-error: E0432
+13 + use oer_esp32s31_hal::bluetooth::BluetoothControllerParts; // ui-error: E0432
    |
 
 error[E0432]: unresolved import `oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalReady`
@@ -70,39 +70,33 @@ note: the struct `DirectionFindingDescriptor` is defined here
    | pub(crate) struct DirectionFindingDescriptor {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-error[E0603]: struct `BluetoothControllerSramAddress` is private
-  --> tests/ui/bluetooth_address_types_are_private.rs:15:30
+error[E0603]: module `registers` is private
+  --> tests/ui/bluetooth_address_types_are_private.rs:15:34
    |
-15 | use oer_esp32s31_hal::types::BluetoothControllerSramAddress as RawControllerAddress; // ui-error: E0603
-   |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private struct
+15 | use oer_esp32s31_hal::bluetooth::registers::BluetoothTaskRegisters; // ui-error: E0603
+   |                                  ^^^^^^^^^  ---------------------- struct `BluetoothTaskRegisters` is not publicly re-exported
+   |                                  |
+   |                                  private module
    |
-note: the struct `BluetoothControllerSramAddress` is defined here
-  --> src/types.rs
+note: the module `registers` is defined here
+  --> src/bluetooth.rs
    |
-   |     BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: import `BluetoothControllerSramAddress` directly
-   |
-15 - use oer_esp32s31_hal::types::BluetoothControllerSramAddress as RawControllerAddress; // ui-error: E0603
-15 + use oer_esp32s31_pac::bluetooth::memory_lists::BluetoothControllerSramAddress; // ui-error: E0603
-   |
+   | pub(crate) mod registers;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
 
-error[E0603]: struct `BluetoothPhyRegisterInitInputs` is private
-  --> tests/ui/bluetooth_address_types_are_private.rs:17:30
+error[E0603]: module `registers` is private
+  --> tests/ui/bluetooth_address_types_are_private.rs:17:34
    |
-17 | use oer_esp32s31_hal::types::BluetoothPhyRegisterInitInputs; // ui-error: E0603
-   |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private struct
+17 | use oer_esp32s31_hal::bluetooth::registers::BluetoothPhyRegisterInitInputs; // ui-error: E0603
+   |                                  ^^^^^^^^^  ------------------------------ struct `BluetoothPhyRegisterInitInputs` is not publicly re-exported
+   |                                  |
+   |                                  private module
    |
-note: the struct `BluetoothPhyRegisterInitInputs` is defined here
-  --> src/types.rs
+note: the module `registers` is defined here
+  --> src/bluetooth.rs
    |
-   |     BluetoothPhyRegisterInitInputs,
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: import `BluetoothPhyRegisterInitInputs` directly
-   |
-17 - use oer_esp32s31_hal::types::BluetoothPhyRegisterInitInputs; // ui-error: E0603
-17 + use oer_esp32s31_pac::bluetooth::phy::BluetoothPhyRegisterInitInputs; // ui-error: E0603
-   |
+   | pub(crate) mod registers;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
 
 error[E0603]: enum `BluetoothSchedulerSoftwareListRemovalJoin` is private
   --> tests/ui/bluetooth_address_types_are_private.rs:19:34
@@ -117,6 +111,5 @@ note: the enum `BluetoothSchedulerSoftwareListRemovalJoin` is defined here
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 help: import `BluetoothSchedulerSoftwareListRemovalJoin` directly
    |
-19 - use oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalJoin; // ui-error: E0603
-19 + use oer_esp32s31_pac::bluetooth::scheduler::runtime::BluetoothSchedulerSoftwareListRemovalJoin; // ui-error: E0603
-   |
+19 | use oer_esp32s31_hal::bluetooth::registers::scheduler::runtime::BluetoothSchedulerSoftwareListRemovalJoin; // ui-error: E0603
+   |                                  +++++++++++++++++++++++++++++++

@@ -3,7 +3,7 @@ use crate::{
     CoexTimerIndex, model::CoexRequest, timer_index,
 };
 
-#[cfg(any(test, oer_probe))]
+#[cfg(test)]
 use crate::{CoexClient, CoexClientRequest, CoexClockHardware, program_timer};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -56,7 +56,7 @@ impl CoexCore {
     /// The explicit enabled guard is Rust lifecycle policy. With that
     /// precondition satisfied, unmapped events follow `coex_core_request` and
     /// return the vendor invalid-event status instead of becoming no-ops.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn request_wifi<H: CoexTimerHardware, C: CoexClockHardware>(
         &mut self,
         hardware: &mut H,
@@ -66,7 +66,7 @@ impl CoexCore {
         self.request(hardware, clock, CoexClient::Wifi, request)
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn request_bluetooth<H: CoexTimerHardware, C: CoexClockHardware>(
         &mut self,
         hardware: &mut H,
@@ -76,7 +76,7 @@ impl CoexCore {
         self.request(hardware, clock, CoexClient::Bluetooth, request)
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     fn request<H: CoexTimerHardware, C: CoexClockHardware>(
         &mut self,
         hardware: &mut H,

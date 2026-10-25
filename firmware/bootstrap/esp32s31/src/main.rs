@@ -2,155 +2,152 @@
 #![no_std]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
-//! The ESP32-S31 bootstrap: the staged boot's chip-neutral steps
-//! (`oer-espressif-staged-bootstrap`) around this board's PSRAM and its
-//! 120-MHz Flash tuning, which needs the stage-two copy made first and a
-//! cold XIP span.
-
-esp_bootloader_esp_idf::esp_app_desc!(
-    "0.1.0",
-    "oer-firmware-bootstrap-esp32s31",
-    "00:00:00",
-    "2026-07-31",
-    "6.1",
-    oer_esp32s31_board::FLASH_MMU_PAGE_SIZE_BYTES,
-    0,
-    u16::MAX,
-    0
-);
-
+//! S31 cold boot: one reset root, bounded boot sequences, then stage two.
 use core::mem::size_of;
-
-use oer_esp32s31_board as board;
+use oer_esp32s31_hal::{self as hal, boot};
 use oer_esp32s31_layout::LAYOUT;
-use oer_espressif_esp_hal_soc::FlashMmu;
+use oer_espressif_boot::{BootFailure, cache, clock, flash, mmu, psram, watchdog::BootWatchdogs};
 use oer_espressif_staged_bootstrap::{self as staged, fail, print};
 use static_cell::ConstStaticCell;
 
+staged::app_descriptor!(
+    "0.1.0",
+    "oer-firmware-bootstrap-esp32s31",
+    LAYOUT.mmu_page_bytes
+);
+
 const FLASH_TUNING_REFERENCE_WORDS: usize =
     LAYOUT.flash_tuning_reference_bytes as usize / size_of::<u32>();
-
-/// The stage-two entry the packed runtime's header names, known at build time:
-/// `hand_off` jumps to it and halts if the header read at boot differs.
 const RUNTIME_ENTRY: usize = staged::runtime_entry(include_bytes!(env!("PSRAM_RUNTIME_BIN")));
+const FLASH_CAPACITY_BYTES: u32 = include!(concat!(env!("OUT_DIR"), "/flash-capacity.rs"));
 
-// This is the load image, not its runtime placement. The bootstrap copies and
-// verifies it at the bootloader's qualified 80 MHz setting before changing
-// the Flash timing. The tuning sweep uses a separate, still-cold XIP span.
-// SAFETY: `.psram.runtime.payload` is the bootstrap linker script's
-// read-only flash input section for the packed stage two; nothing writes it.
+// SAFETY: the linker owns this immutable payload section in flash.
 #[used]
 #[unsafe(link_section = ".psram.runtime.payload")]
 static RUNTIME_PAYLOAD: [u8; include_bytes!(env!("PSRAM_RUNTIME_BIN")).len()] =
     *include_bytes!(env!("PSRAM_RUNTIME_BIN"));
 
-// Flash tuning must not sample pages already pulled into cache by the runtime
-// copy. This private reference span is physically separate from the stage-two
-// image and contains an incompressible deterministic pattern.
-//
-// SOURCE: pinned esp-hal fork, `esp-hal/src/flash.rs::Flash::tune_120mhz`,
-// which requires at least fifteen distinct 4-KiB XIP pages.
-// SAFETY: `.flash.tuning.reference` is the bootstrap linker script's
-// read-only flash section of its own XIP pages; only the tuning reads it.
+// SAFETY: a disjoint, cold flash span, never executed or read after tuning.
 #[used]
 #[unsafe(link_section = ".flash.tuning.reference")]
 static FLASH_TUNING_REFERENCE: [u32; FLASH_TUNING_REFERENCE_WORDS] = flash_tuning_reference();
 
-// Flash tuning compares complete XIP pages while the flash cache is disabled,
-// so its 124-KiB scratch area must live in internal SRAM. Keeping this unique
-// owner static prevents the early-boot stack from being consumed by a
-// short-lived local array; tune_120mhz still validates every original page.
-static FLASH_TUNING_SCRATCH: ConstStaticCell<[u32; esp_hal::flash::FLASH_TUNING_SCRATCH_WORDS]> =
-    ConstStaticCell::new([0; esp_hal::flash::FLASH_TUNING_SCRATCH_WORDS]);
+// The full-page sweep reference is owned static SRAM, never the boot stack.
+static FLASH_TUNING_SCRATCH: ConstStaticCell<[u32; flash::TUNING_SCRATCH_WORDS]> =
+    ConstStaticCell::new([0; flash::TUNING_SCRATCH_WORDS]);
 
-#[esp_hal::main]
-fn main() -> ! {
+// SAFETY: the reset entry calls this symbol after stack/BSS initialization.
+// Its code must remain in SRAM while the flash timing changes.
+#[unsafe(no_mangle)]
+#[unsafe(link_section = ".rwtext.bootstrap_main")]
+extern "C" fn bootstrap_main() -> ! {
+    // The root claims the chip once and installs the console's parts for the
+    // early writer, so it comes before any output; the boot-hart check of
+    // `start` prints nothing before it fails.
+    let root = hal::root::Root::take();
     staged::start();
-
-    let mut peripherals = esp_hal::init(esp_hal::Config::default());
-    print("OER_BOOT bootstrap=INIT\r\n");
-    apply_brownout_policy(&mut peripherals.I2C_ANA_MST);
+    let root = root.unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=root-taken\r\n"));
+    let mut hardware = root
+        .into_bootstrap()
+        .unwrap_or_else(|_| fail("OER_BOOT bootstrap=FAIL reason=monotonic\r\n"));
+    let deadline = boot::BootDeadline::start(&hardware.monotonic, boot::BOOT_BUDGET);
+    hardware
+        .soc
+        .initialize(&deadline)
+        .unwrap_or_else(|_| fail("OER_BOOT bootstrap=FAIL reason=soc-init\r\n"));
+    let watchdogs = BootWatchdogs::take_over(
+        hardware.main_watchdog0,
+        hardware.rtc_watchdog,
+        hardware.super_watchdog,
+    );
+    hardware
+        .brownout
+        .apply_idf_policy(&deadline)
+        .unwrap_or_else(|_| fail("OER_BOOT bootstrap=FAIL reason=brownout-policy\r\n"));
     print("OER_BOOT bootstrap=BROWNOUT\r\n");
-    let mut flash_mmu = FlashMmu::new(peripherals.SPI0);
-    let mut flash =
-        match esp_hal::flash::Flash::new(peripherals.FLASH, esp_hal::flash::Config::default()) {
-            Ok(flash) => flash,
-            Err(_) => fail("OER_BOOT bootstrap=FAIL reason=flash-init\r\n"),
-        };
 
-    let psram = board::initialize_psram(peripherals.PSRAM);
-    let (psram_base, psram_size) = psram.raw_parts();
-    // SAFETY: `initialize_psram` mapped and initialized the board's PSRAM
-    // at `psram_base..psram_base + psram_size` (word aligned) for reads and
-    // writes; `psram` stays alive and mapped until `hand_off` and the boot
-    // uses that region nowhere else, so `stage` owns it exclusively.
-    let staged = unsafe { staged::stage(&LAYOUT, &RUNTIME_PAYLOAD, psram_base, psram_size) };
+    let rates = checked(clock::bring_up(
+        &mut hardware.clock,
+        &mut hardware.active_power,
+        boot::CpuProfile::Mhz160.clock(),
+        boot::CLOCK_WAITS,
+        &deadline,
+    ));
+    print("OER_BOOT bootstrap=INIT\r\n");
+    let memory = checked(psram::bring_up(
+        psram::PsramOwners {
+            clock: &mut hardware.clock,
+            active: &mut hardware.active_power,
+            psram: &mut hardware.psram,
+            cache: &mut hardware.cache,
+        },
+        boot::octal_psram(LAYOUT.psram.length),
+        hardware.psram_window,
+        boot::CACHE_GEOMETRY,
+        boot::PSRAM_WAITS,
+        &deadline,
+    ));
 
-    let tuning_address = FLASH_TUNING_REFERENCE.as_ptr() as usize;
-    let tuning_physical_start = flash_mmu
-        .physical_address(tuning_address)
-        .unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=tuning-physical\r\n"));
-    // SAFETY: the reference span is this bootstrap's own cold Flash rodata,
-    // read by nothing else; stage two was copied from a disjoint range first.
-    if unsafe {
-        flash.tune_120mhz(
-            esp_hal::flash::FlashXipRegion {
-                physical_start: tuning_physical_start,
-                virtual_start: tuning_address,
-                size: size_of::<[u32; FLASH_TUNING_REFERENCE_WORDS]>(),
-            },
-            FLASH_TUNING_SCRATCH.take(),
+    // SAFETY: successful bring_up mapped and initialized this complete PSRAM
+    // window; the reset root owns it exclusively and retains every owner
+    // until the nonreturning jump. stage checks it against LAYOUT.
+    let image = unsafe {
+        staged::stage(
+            &LAYOUT,
+            &RUNTIME_PAYLOAD,
+            memory.mapped.virtual_start as *mut u8,
+            memory.mapped.len as usize,
         )
-    }
-    .is_err()
-    {
-        fail("OER_BOOT bootstrap=FAIL reason=flash-tune\r\n");
-    }
+    };
+    let tuning_virtual = FLASH_TUNING_REFERENCE.as_ptr() as u32;
+    let tuning_physical = checked(mmu::physical_address(
+        &mut hardware.flash,
+        hardware.flash_window,
+        mmu::MmuTarget::Flash,
+        tuning_virtual,
+    ));
+    checked(flash::tune(
+        flash::TuningOwners {
+            flash: &mut hardware.flash,
+            clock: &mut hardware.clock,
+            cache: &mut hardware.cache,
+            xip: &boot::XipRegion::new(&FLASH_TUNING_REFERENCE),
+        },
+        boot::flash_geometry(FLASH_CAPACITY_BYTES),
+        flash::TuningRegion {
+            physical_start: tuning_physical,
+            virtual_start: tuning_virtual,
+            bytes: size_of::<[u32; FLASH_TUNING_REFERENCE_WORDS]>() as u32,
+        },
+        &boot::FLASH_TIMING_CANDIDATES,
+        FLASH_TUNING_SCRATCH.take(),
+        boot::TUNING_WAITS,
+        &deadline,
+    ));
     print("OER_BOOT bootstrap=FLASH_TUNED\r\n");
-    // Do not read the tuning span again. Every candidate deliberately fetches
-    // a distinct page, and rejected timings can leave corrupted cache lines
-    // behind until a future S31 cache-invalidate primitive is available. The
-    // region is disposable; stage two was copied from a disjoint range first.
-    staged::hand_off::<RUNTIME_ENTRY>(staged)
+    let published = checked(cache::publish_code(
+        &mut hardware.cache,
+        boot::CACHE_GEOMETRY,
+        image.load_address() as u32,
+        image.payload_len() as u32,
+        boot::CACHE_SYNC,
+        &deadline,
+    ));
+    staged::hand_off::<RUNTIME_ENTRY>(image, published, || {
+        let _stopped = watchdogs.hand_off();
+    })
 }
 
-/// Replace the bootloader's analog mode-1 brownout reset with ESP-IDF's
-/// application policy, once, before the application runs, and stop the boot
-/// unless the detector reads back in that policy.
-///
-/// SOURCE: ESP-IDF 4d59230d `esp_brownout_init`
-/// (`components/esp_hw_support/power_supply/brownout.c`), run at startup by
-/// `init_brownout` (`components/esp_system/startup_funcs.c`). The ESP32-S31
-/// has no `ESP_BROWNOUT_USE_INTR`, so it configures mode 0 with the hardware
-/// reset enabled, flash and RF power-down, at `ESP_BROWNOUT_DET_LVL` 7
-/// (about 2.4 V), the S31 default of
-/// `components/esp_hw_support/power_supply/port/esp32s31/Kconfig.power`.
-/// `BrownoutConfig::default()` is that configuration; `brownout::configure`
-/// follows `brownout_hal_config`. The threshold is an analog register that
-/// esp-hal writes but does not read back, so the check covers the detector's
-/// mode, actions and waits.
-fn apply_brownout_policy(analog_bus: &mut esp_hal::peripherals::I2C_ANA_MST<'_>) {
-    use esp_hal::rtc_cntl::brownout::{self, BrownoutConfig};
-
-    brownout::configure(analog_bus, BrownoutConfig::default());
-    let lp_ana = esp_hal::peripherals::LP_ANA::regs();
-    let mode0 = lp_ana.bod_mode0_cntl().read();
-    let mode1 = lp_ana.bod_mode1_cntl().read();
-    // A clear `BOD_MODE1_FIB` hands mode 1 to software
-    // (`brownout_ll_ana_reset_enable`).
-    let mode1_software = !lp_ana.fib_enable().read().bod_mode1_fib().bit();
-    let configured = mode1_software
-        && !mode1.bod_mode1_reset_ena().bit()
-        && mode0.bod_mode0_reset_ena().bit()
-        && mode0.bod_mode0_reset_sel().bit()
-        && mode0.bod_mode0_intr_ena().bit()
-        && mode0.bod_mode0_pd_rf_ena().bit()
-        && mode0.bod_mode0_close_flash_ena().bit()
-        && mode0.bod_mode0_reset_wait().bits() == 0x3ff
-        && mode0.bod_mode0_intr_wait().bits() == 2;
-    if !configured {
-        fail("OER_BOOT bootstrap=FAIL reason=brownout-policy\r\n");
-    }
+fn checked<T>(result: Result<T, BootFailure>) -> T {
+    result.unwrap_or_else(|error| {
+        print("OER_BOOT bootstrap=FAIL reason=");
+        print(error.reason());
+        if let Some(wait) = error.wait() {
+            print(" wait=");
+            print(wait);
+        }
+        fail("\r\n")
+    })
 }
 
 const fn flash_tuning_reference() -> [u32; FLASH_TUNING_REFERENCE_WORDS] {

@@ -22,6 +22,8 @@ pub struct PolicyFile {
     #[serde(default)]
     pub enum_domains: Vec<EnumDomain>,
     #[serde(default)]
+    pub field_domains: Vec<FieldDomain>,
+    #[serde(default)]
     pub bounded_domains: Vec<BoundedDomain>,
     #[serde(default)]
     pub opaque_domains: Vec<OpaqueDomain>,
@@ -99,6 +101,12 @@ pub struct Part {
     /// Owned by an interrupt handler, not a task.
     #[serde(default)]
     pub irq_side: bool,
+    /// The interrupt sources of the root (their names) whose handler the
+    /// part serves: one name, or a list when one bank of the part
+    /// acknowledges several sources. Each is bound to the part's instance
+    /// and named by no other part. An interrupt handler's part names one.
+    #[serde(default, deserialize_with = "one_or_many")]
+    pub interrupt: Vec<String>,
     /// Reached by every execution context at once through `&self`.
     #[serde(default)]
     pub shared: bool,
@@ -112,6 +120,20 @@ pub struct Part {
     pub description: Option<String>,
     #[serde(default)]
     pub sources: Vec<String>,
+}
+
+/// A string, or a list of strings.
+fn one_or_many<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(String),
+        Many(Vec<String>),
+    }
+    Ok(match OneOrMany::deserialize(deserializer)? {
+        OneOrMany::One(name) => vec![name],
+        OneOrMany::Many(names) => names,
+    })
 }
 
 /// `count` elements of template `register` from index `first`.
@@ -245,9 +267,15 @@ pub struct InterruptSnapshot {
     pub name: String,
     /// `INSTANCE.REGISTER`: one element.
     pub status: String,
-    /// `INSTANCE.REGISTER`: one element of write-one-to-clear or
-    /// write-trigger fields; `status` itself when it holds only
-    /// write-one-to-clear fields.
+    /// `INSTANCE.REGISTER.FIELD`: the status fields the snapshot samples,
+    /// when not every field its clear word acknowledges.
+    #[serde(default)]
+    pub events: Vec<String>,
+    /// `INSTANCE.REGISTER`, not written in the file: the clear element the
+    /// status register's type pairs with it (`[[interrupt-pairs]]`), or
+    /// `status` itself when it holds only write-one-to-clear fields. The
+    /// loader resolves it.
+    #[serde(skip)]
     pub clear: String,
     /// The event the caller consumed elsewhere, whose one selected field of
     /// `consumed-fields` the acknowledgement writes beside the sample.
@@ -290,47 +318,40 @@ pub struct PartitionImageRead {
     pub sources: Vec<String>,
 }
 
-/// A write of the whole word from zero with one field's typed value:
-/// exactly one of `domain`, `points-to` and `placement`.
+/// A policy name for a complete value domain declared by a hardware field.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct FieldDomain {
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub field: String,
+    /// The domain's values stand at the field's own bits in a register
+    /// image (a masked register modify's input), not from bit zero.
+    #[serde(default)]
+    pub positioned: bool,
+}
+
+/// A write of the whole word from zero, using a domain or its field's pointer fact.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct FullRegisterWrite {
     pub name: String,
-    /// `INSTANCE.REGISTER.FIELD`.
     pub field: String,
     #[serde(default)]
     pub domain: Option<String>,
-    /// A memory layout of the root: the value is a DMA reference to it.
     #[serde(default)]
-    pub points_to: Option<String>,
-    /// A RAM region of the root: the value is a buffer address in it.
-    #[serde(default)]
-    pub placement: Option<String>,
+    pub pointer: bool,
     pub sources: Vec<String>,
 }
 
-/// A field set only from the image of a typed DMA reference.
+/// A typed pointer-image operation over the field's hardware pointer fact.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct PointerField {
     pub name: String,
-    /// `INSTANCE.REGISTER.FIELD`.
     pub field: String,
-    pub points_to: String,
-    #[serde(default)]
-    pub member_offset: u32,
-    #[serde(default)]
-    pub encoding: Option<PointerEncoding>,
     pub sources: Vec<String>,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "kebab-case")]
-pub enum PointerEncoding {
-    /// Nonzero 20-bit word index under the 0x2f SRAM prefix.
-    BleCompressed,
-    /// The address's low bits, as wide as the field.
-    LowBits,
 }
 
 /// A write from zero of `fields` of one register.

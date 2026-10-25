@@ -9,7 +9,7 @@
 //! [`Router::silent`] proves a source no entry binds is routed nowhere, for
 //! a driver that polls its events.
 
-use oer_mmio::InterruptSource;
+use oer_mmio::{InterruptSource, InterruptSources};
 
 use crate::{Binding, Entry, Table, line_control};
 
@@ -133,11 +133,11 @@ pub enum Error {
 /// is enabled and routed: the only way to enable the peripheral's interrupt.
 /// Neither `Copy` nor `Clone`; only [`Router::bind`] makes one.
 #[must_use = "the bound part's interrupt is enabled only with this proof"]
-pub struct Bound<P> {
+pub struct Bound<P: InterruptSources> {
     _part: core::marker::PhantomData<fn() -> P>,
 }
 
-impl<P> core::fmt::Debug for Bound<P> {
+impl<P: InterruptSources> core::fmt::Debug for Bound<P> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str("Bound")
     }
@@ -148,37 +148,37 @@ impl<P: InterruptSource> Bound<P> {
     pub const SOURCE: u16 = P::SOURCE;
 }
 
-/// The proof that the source of `P` is routed nowhere on the router's hart
-/// and that no entry of the table binds it, so the router never routes it:
+/// The proof that every source of `P` is routed nowhere on the router's
+/// hart and that no entry of the table binds one, so the router never routes it:
 /// a driver that polls `P`'s events may enable them without a handler.
 /// Neither `Copy` nor `Clone`; only [`Router::silent`] makes one.
 ///
 /// On a chip of several harts each hart's router silences its own bank at
 /// its install; the table binds the source on none of them.
 #[must_use = "the polled part's events are enabled only with this proof"]
-pub struct Silent<P> {
+pub struct Silent<P: InterruptSources> {
     _part: core::marker::PhantomData<fn() -> P>,
 }
 
-impl<P> core::fmt::Debug for Silent<P> {
+impl<P: InterruptSources> core::fmt::Debug for Silent<P> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str("Silent")
     }
 }
 
 /// What a driver takes before it enables the interrupt events of a part of
-/// source `P::SOURCE`: [`Bound<P>`] (a handler holds the part and its line
+/// sources `P::SOURCES`: [`Bound<P>`] (a handler holds the part and its line
 /// is routed) or [`Silent<P>`] (no line receives the source). Sealed: only
 /// the router makes either.
-pub trait EventAuthority<P: InterruptSource>: sealed::Sealed {}
+pub trait EventAuthority<P: InterruptSources>: sealed::Sealed {}
 
-impl<P: InterruptSource> EventAuthority<P> for Bound<P> {}
-impl<P: InterruptSource> EventAuthority<P> for Silent<P> {}
+impl<P: InterruptSources> EventAuthority<P> for Bound<P> {}
+impl<P: InterruptSources> EventAuthority<P> for Silent<P> {}
 
 mod sealed {
     pub trait Sealed {}
-    impl<P> Sealed for super::Bound<P> {}
-    impl<P> Sealed for super::Silent<P> {}
+    impl<P: super::InterruptSources> Sealed for super::Bound<P> {}
+    impl<P: super::InterruptSources> Sealed for super::Silent<P> {}
 }
 
 /// What [`Router::bind`] refused, with the token and the part it gives back.
@@ -200,6 +200,22 @@ impl<E: Entry> core::fmt::Debug for Refused<E> {
 pub struct Router<C: Controller> {
     pub(crate) controller: C,
     table: &'static Table,
+}
+
+/// Whether `sources` holds a source, and each lies inside a matrix of
+/// `count` sources: a part's sources at compile time.
+const fn inside_matrix(sources: &[u16], count: u16) -> bool {
+    if sources.is_empty() {
+        return false;
+    }
+    let mut rest = sources;
+    while let [source, tail @ ..] = rest {
+        rest = tail;
+        if *source >= count {
+            return false;
+        }
+    }
+    true
 }
 
 /// The entries of `table` the build holds, on `hart`.
@@ -238,8 +254,8 @@ impl<C: Controller> Router<C> {
     }
 
     /// Bind `token`'s entry: move `part` where only the entry's handler
-    /// reaches it, configure and enable the entry's line, then route the
-    /// source to it. The source is the part's ([`InterruptSource`]).
+    /// reaches it, configure and enable the entry's line, then route each
+    /// of the part's sources ([`InterruptSources`]) to it.
     ///
     /// # Errors
     ///
@@ -294,7 +310,7 @@ impl<C: Controller> Router<C> {
     ) -> Result<Bound<E::Part>, Refused<E>> {
         const {
             assert!(
-                <E::Part as InterruptSource>::SOURCE < C::SOURCES,
+                inside_matrix(<E::Part as InterruptSources>::SOURCES, C::SOURCES),
                 "the entry's source is no source of the controller"
             );
             assert!(
@@ -306,7 +322,12 @@ impl<C: Controller> Router<C> {
                 "the entry's level is no level of the controller's lines"
             );
         };
-        let source = <E::Part as InterruptSource>::SOURCE;
+        let sources = <E::Part as InterruptSources>::SOURCES;
+        // A part has a source (checked at compile time).
+        let source = match sources {
+            [first, ..] => *first,
+            [] => 0,
+        };
         let current = self.controller.hart();
         let refuse = |error, token, part| Err(Refused { error, token, part });
         if E::HART != current {
@@ -320,8 +341,10 @@ impl<C: Controller> Router<C> {
                 part,
             );
         }
-        if !present(self.table, current).any(|binding| {
-            binding.source == source && binding.line == E::LINE && binding.level == E::LEVEL
+        if let Some(&source) = sources.iter().find(|&&source| {
+            !present(self.table, current).any(|binding| {
+                binding.source == source && binding.line == E::LINE && binding.level == E::LEVEL
+            })
         }) {
             return refuse(Error::NotInTable { source }, token, part);
         }
@@ -343,41 +366,44 @@ impl<C: Controller> Router<C> {
             self.controller
                 .set_line(E::LINE, LineState::bound(E::LEVEL, C::LEVEL_BITS))
                 .expect("the entry's line is a line of the controller");
-            self.controller
-                .route(source, E::LINE)
-                .expect("the entry's source and line are the controller's");
+            for &source in sources {
+                self.controller
+                    .route(source, E::LINE)
+                    .expect("the entry's source and line are the controller's");
+            }
         }
         Ok(Bound {
             _part: core::marker::PhantomData,
         })
     }
 
-    /// Prove that `P`'s source is routed nowhere on this hart and that no
-    /// entry of the table binds it: the router, its one writer, never
-    /// routes it then. A driver that polls `P`'s events takes the proof
-    /// before it enables them.
+    /// Prove that each of `P`'s sources is routed nowhere on this hart and
+    /// that no entry of the table binds one: the router, their one writer,
+    /// never routes them then. A driver that polls `P`'s events takes the
+    /// proof before it enables them.
     ///
     /// # Errors
     ///
-    /// [`Error::Bindable`] when an entry of the table, on any hart, binds the
-    /// source; [`Error::ForeignRoute`] when the source is routed.
-    pub fn silent<P: InterruptSource>(&self) -> Result<Silent<P>, Error> {
+    /// [`Error::Bindable`] when an entry of the table, on any hart, binds a
+    /// source; [`Error::ForeignRoute`] when a source is routed.
+    pub fn silent<P: InterruptSources>(&self) -> Result<Silent<P>, Error> {
         const {
             assert!(
-                P::SOURCE < C::SOURCES,
+                inside_matrix(P::SOURCES, C::SOURCES),
                 "the part's source is no source of the controller"
             );
         };
-        let source = P::SOURCE;
-        if self
-            .table
-            .iter()
-            .any(|binding| binding.handler.is_some() && binding.source == source)
-        {
-            return Err(Error::Bindable { source });
-        }
-        if let Some(line) = self.controller.routed(source) {
-            return Err(Error::ForeignRoute { source, line });
+        for &source in P::SOURCES {
+            if self
+                .table
+                .iter()
+                .any(|binding| binding.handler.is_some() && binding.source == source)
+            {
+                return Err(Error::Bindable { source });
+            }
+            if let Some(line) = self.controller.routed(source) {
+                return Err(Error::ForeignRoute { source, line });
+            }
         }
         Ok(Silent {
             _part: core::marker::PhantomData,

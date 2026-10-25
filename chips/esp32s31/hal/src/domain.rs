@@ -21,16 +21,14 @@
 //! The domain is not a coexistence grant: it serializes register access, not
 //! air time.
 
-use oer_esp32s31_pac::{
-    BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, BluetoothTaskRegisters, RadioPhyRegisters,
-    SharedRadioRegisters, WifiRadioRegisters,
-};
+use crate::bluetooth::registers::BluetoothTaskRegisters;
+use crate::ieee80211::registers::WifiRadioRegisters;
 
 pub use crate::clock::{
     BluetoothClient, CommonPower, CommonPowerExitFailure, CommonRadioPowerError, Ieee802154Client,
     RadioClient, RadioClientKind, WifiClient,
 };
-#[cfg(any(test, oer_probe))]
+#[cfg(test)]
 use crate::coex::PhyGrantProtectError;
 use crate::coex::{
     CoexEventId, CoexPti, CoexPtiTable, CoexTimerBank, PHY_GRANT_PROTECT_EVENT, PhyGrantProtect,
@@ -261,7 +259,8 @@ pub enum LowPowerClockError {
     AlreadySelected,
     /// Bluetooth does not select its low-power timer clock.
     NotSelected,
-    /// The platform clock owner refused the timer gate reference.
+    /// The platform clock owner refused to take or give back the timer
+    /// gate reference.
     PlatformClock(PlatformClockError),
 }
 
@@ -468,7 +467,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
 
     /// Record a programmed PHY grant-protect request without register
     /// access, so a host test or a probe image can check the release alone.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     #[doc(hidden)]
     pub fn hold_phy_grant_protect_for_host_test(&mut self) {
         self.state.phy_grant_protected = true;
@@ -723,7 +722,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// protocol capability that also borrows its own registers.
     pub(crate) fn phy_parts_mut(
         &mut self,
-    ) -> (&mut oer_esp32s31_pac::RadioPhyRegisters, &mut PhyRouteState) {
+    ) -> (&mut crate::phy::RadioPhyRegisters, &mut PhyRouteState) {
         let state = self.state_mut();
         (state.registers.radio_phy_mut(), &mut state.phy)
     }
@@ -733,7 +732,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     pub(crate) fn phy_parts_with_attachment(
         &mut self,
     ) -> (
-        &mut oer_esp32s31_pac::RadioPhyRegisters,
+        &mut crate::phy::RadioPhyRegisters,
         &mut PhyRouteState,
         &mut T,
     ) {
@@ -856,7 +855,9 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     ///
     /// # Errors
     ///
-    /// Bluetooth does not select its clock.
+    /// Bluetooth does not select its clock, or the platform refused to take
+    /// the timer gate reference back: the sources stay deselected and the
+    /// reference stays held, for a retry.
     pub fn deselect_bluetooth_low_power_clock(
         &mut self,
         _owner: &BluetoothTaskRegisters,
@@ -866,7 +867,11 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
             return Err(LowPowerClockError::NotSelected);
         };
         deselect_bluetooth_low_power_clock(state.registers.radio_phy_mut());
-        timer.release();
+        if let Err(refused) = timer.release() {
+            let error = refused.error();
+            state.bluetooth_low_power_clock = Some(refused.into_guard());
+            return Err(LowPowerClockError::PlatformClock(error));
+        }
         Ok(())
     }
 
@@ -1073,7 +1078,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     }
 
     /// Borrow the PHY grant-protect request for one maintenance operation.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn phy_grant_protect(&mut self) -> PhyGrantProtect<'_> {
         let state = self.state_mut();
         let pti = state.coex_pti.pti(PHY_GRANT_PROTECT_EVENT);
@@ -1089,7 +1094,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// # Errors
     ///
     /// The request is already programmed; nothing is written.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn acquire_phy_grant_protect(&mut self) -> Result<(), PhyGrantProtectError> {
         self.phy_grant_protect().acquire()
     }
@@ -1099,7 +1104,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// # Errors
     ///
     /// No request is programmed; nothing is written.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn release_phy_grant_protect(&mut self) -> Result<(), PhyGrantProtectError> {
         self.phy_grant_protect().release()
     }
@@ -1154,8 +1159,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// protocol registers.
     /// Registers of the radio-PHY partition image [`Self::phy_register_image`]
     /// reads.
-    pub const PHY_REGISTER_IMAGE_LEN: usize =
-        oer_esp32s31_pac::RadioPhyRegisters::REGISTER_IMAGE_LEN;
+    pub const PHY_REGISTER_IMAGE_LEN: usize = crate::phy::RadioPhyRegisters::REGISTER_IMAGE_LEN;
 
     /// Registers of the radio-PHY partition image.
     pub const fn phy_register_image_len(&self) -> usize {
@@ -1194,3 +1198,8 @@ pub(crate) fn deselect_bluetooth_low_power_clock(phy: &mut RadioPhyRegisters) {
 
 #[cfg(test)]
 mod tests;
+
+use crate::{
+    modem::{BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, SharedRadioRegisters},
+    phy::RadioPhyRegisters,
+};

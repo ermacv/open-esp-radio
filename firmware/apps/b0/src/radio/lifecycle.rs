@@ -22,17 +22,20 @@ impl<'p, 'e> ControllerFactory<Memory<'p, 'e>> for Factory<'p, 'e> {
         )
     }
 }
-pub type Life<'p, 'e> = ControllerLifecycle<Factory<'p, 'e>, FactoryError, X, Memory<'p, 'e>, 1>;
+pub type Life<'p, 'e> =
+    ControllerLifecycle<Factory<'p, 'e>, FactoryError, X, Memory<'p, 'e>, irq::Bell, 1>;
 pub fn new<'p, 'e>(
     arena: Placed<Arena>,
     pool: PoolScope<'p>,
     epoch: EpochScope<'e>,
+    gate: irq::Gate,
     address: [u8; 6],
 ) -> Life<'p, 'e> {
     ControllerLifecycle::new(
         Factory { arena, pool, epoch },
-        ControllerRuntimeResources::new(&CELLS),
-        &CELLS,
+        ControllerRuntimeResources::new(&irq::CELLS),
+        &irq::CELLS,
+        gate,
         oer_bluetooth_hci::BluetoothPublicDeviceAddress::from_canonical_bytes(address),
     )
 }

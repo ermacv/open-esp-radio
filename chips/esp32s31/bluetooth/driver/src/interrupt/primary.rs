@@ -38,7 +38,7 @@ impl PrimaryInterruptCapture {
 }
 
 trait PrimaryInterruptBackend {
-    fn capture_primary_and_acknowledge(&mut self) -> BluetoothPrimaryInterruptEpoch;
+    fn capture_primary_and_acknowledge(&mut self) -> Option<BluetoothPrimaryInterruptEpoch>;
     fn capture_scheduler_reference_gate(
         &mut self,
     ) -> Result<BluetoothSchedulerReferenceGateObservation, Unsettled>;
@@ -52,7 +52,7 @@ struct PrimaryHardware<'a, C: oer_time::Clock> {
 }
 
 impl<C: oer_time::Clock> PrimaryInterruptBackend for PrimaryHardware<'_, C> {
-    fn capture_primary_and_acknowledge(&mut self) -> BluetoothPrimaryInterruptEpoch {
+    fn capture_primary_and_acknowledge(&mut self) -> Option<BluetoothPrimaryInterruptEpoch> {
         self.interrupts.capture_primary_and_acknowledge()
     }
     fn capture_scheduler_reference_gate(
@@ -72,7 +72,10 @@ impl<C: oer_time::Clock> PrimaryInterruptBackend for PrimaryHardware<'_, C> {
 fn execute_primary_interrupt_capture(
     backend: &mut impl PrimaryInterruptBackend,
 ) -> PrimaryInterruptCapture {
-    let epoch = backend.capture_primary_and_acknowledge();
+    // A clear bank (the shared line raised by another source) wrote nothing.
+    let Some(epoch) = backend.capture_primary_and_acknowledge() else {
+        return PrimaryInterruptCapture(0);
+    };
     let fault = epoch.fault_sources();
     // These positional captures also gate the hardware suffix: baseline or
     // unreviewed sources must not perform its diagnostic/read/write protocol.
