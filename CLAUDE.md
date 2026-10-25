@@ -18,6 +18,12 @@ system these rules serve.
   method accesses, not only its type name.
 - **No compatibility layers.** Change an interface together with all its
   callers: no deprecated aliases, re-export shims or fallback paths.
+- **No esp-hal, no bridges.** esp-hal, esp-pacs, esp-riscv-rt and
+  esp-metadata are being removed, and nothing is built on them: no adapter
+  that takes their singletons (`take_*`, `assume_exclusive` handoffs), no
+  `handoff = true` partitions, no shared-word inventory, no allowlist entry.
+  New code is written against our own PAC, HAL and root as if they were
+  already gone; existing bridges are deleted, not extended.
 - **Compile time first.** Every check that can run at compile time runs there.
 - **Panics.** Input from outside never panics: frames from the air, any peer
   value (counters, PNs, sequence numbers, lengths, indices), host and API
