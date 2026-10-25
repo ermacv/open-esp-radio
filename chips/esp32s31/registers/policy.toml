@@ -144,7 +144,7 @@ instance = "SYSTIMER"
 registers = ["UNIT0_OP", "UNIT0_VALUE_HI", "UNIT0_VALUE_LO"]
 shared = true
 description = "The counter latch of system timer unit zero, which every context reads for the current time."
-sources = ["ESP_IDF_4D59230D_S31_SYSTIMER"]
+sources = ["ESP_IDF_4D59230D_S31_SYSTIMER", "ESP_IDF_4D59230D_S31_SYSTIMER_LL"]
 
 [[partitions.parts]]
 name = "SystimerAcknowledge"
@@ -241,71 +241,6 @@ registers = ["INT_STATUS_REG_0", "INT_STATUS_REG_1", "INT_STATUS_REG_2", "INT_ST
 shared = true
 description = "The pending sources at INTERRUPT_CORE1, which every context polls."
 sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
-
-[[partitions]]
-name = "UnexposedPeripherals"
-member = "unexposed"
-description = "Source-qualified MMIO views retained for bit-use coverage. No production transaction or read-safe snapshot exposes these tokens."
-
-[[partitions.parts]]
-name = "BtV32CteAntennaMap"
-instance = "BT_BB"
-registers = ["ANTENNA_MAP_ENTRY%s"]
-
-[[partitions.parts]]
-name = "CoexExternalObserved"
-instance = "COEX"
-registers = ["WORD_00B4_OPAQUE", "WORD_00B8_OPAQUE"]
-
-[[partitions.parts]]
-name = "ModemRadioCoreLowObservedFe"
-instance = "FE"
-registers = ["WORD_0470_OPAQUE", "WORD_0474_OPAQUE"]
-
-[[partitions.parts]]
-name = "ModemRadioCoreLowObservedBtMac"
-instance = "BT_MAC"
-registers = ["WORD_0018_OPAQUE", "WORD_0038_OPAQUE", "WORD_0048_OPAQUE", "WORD_006C_OPAQUE", "WORD_0088_OPAQUE", "WORD_00D0_OPAQUE", "WORD_00D4_OPAQUE", "WORD_022C_OPAQUE", "WORD_0230_OPAQUE", "WORD_026C_OPAQUE", "WORD_0270_OPAQUE", "WORD_0274_OPAQUE", "WORD_0278_OPAQUE", "WORD_0298_OPAQUE", "WORD_02AC_OPAQUE", "WORD_02B0_OPAQUE", "WORD_02B4_OPAQUE", "WORD_02B8_OPAQUE", "WORD_02BC_OPAQUE", "WORD_02C0_OPAQUE", "WORD_0380_OPAQUE", "WORD_03D8_OPAQUE", "WORD_03DC_OPAQUE", "WORD_03E0_OPAQUE", "WORD_03E4_OPAQUE", "WORD_03F4_OPAQUE", "WORD_03FC_OPAQUE", "WORD_0430_OPAQUE", "WORD_0434_OPAQUE", "WORD_0438_OPAQUE", "WORD_043C_OPAQUE", "WORD_0450_OPAQUE", "WORD_045C_OPAQUE", "WORD_0470_OPAQUE", "WORD_047C_OPAQUE", "WORD_04B0_OPAQUE", "WORD_04BC_OPAQUE", "WORD_04C4_OPAQUE", "WORD_04C8_OPAQUE", "WORD_04CC_OPAQUE", "WORD_0508_OPAQUE", "WORD_0510_OPAQUE", "WORD_0514_OPAQUE", "WORD_0518_OPAQUE", "WORD_0524_OPAQUE", "WORD_0528_OPAQUE", "WORD_0548_OPAQUE", "WORD_0980_OPAQUE", "WORD_098C_OPAQUE", "WORD_0994_OPAQUE", "WORD_0FFC_OPAQUE"]
-
-[[partitions.parts]]
-name = "ModemRadioCoreLowObservedBtBb"
-instance = "BT_BB"
-registers = ["WORD_0018_OPAQUE", "WORD_0084_OPAQUE", "WORD_0088_OPAQUE", "WORD_0090_OPAQUE", "WORD_00AC_OPAQUE", "WORD_01B0_OPAQUE", "WORD_0454_OPAQUE", "WORD_0458_OPAQUE", "WORD_0460_OPAQUE", "WORD_0464_OPAQUE"]
-
-[[partitions.parts]]
-name = "ModemRadioCoreLowObservedWifiMac"
-instance = "WIFI_MAC"
-registers = ["WORD_0090_OPAQUE", "WORD_0094_OPAQUE", "WORD_00A4_OPAQUE", "WORD_00AC_OPAQUE", "WORD_03A8_OPAQUE", "WORD_0494_OPAQUE", "WORD_04C4_OPAQUE", "WORD_04C8_OPAQUE", "WORD_04CC_OPAQUE", "WORD_04D0_OPAQUE", "WORD_04D4_OPAQUE", "WORD_0C50_OPAQUE", "WORD_0C74_OPAQUE", "WORD_0C94_OPAQUE", "WORD_0CFC_OPAQUE", "WORD_0D0C_OPAQUE", "WORD_0D1C_OPAQUE", "WORD_0D2C_OPAQUE", "WORD_0E3C_OPAQUE", "WORD_0E74_OPAQUE", "WORD_0E7C_OPAQUE", "WORD_0E80_OPAQUE", "WORD_0E84_OPAQUE", "WORD_0E88_OPAQUE", "WORD_0EF0_OPAQUE", "WORD_0EF8_OPAQUE", "WORD_0EFC_OPAQUE", "WORD_0F00_OPAQUE", "WORD_0F04_OPAQUE", "WORD_0F6C_OPAQUE", "WORD_0F74_OPAQUE", "WORD_0F78_OPAQUE", "WORD_0F7C_OPAQUE", "WORD_0F80_OPAQUE", "WORD_0FE8_OPAQUE", "WORD_0FF0_OPAQUE", "WORD_0FF4_OPAQUE", "WORD_0FF8_OPAQUE", "WORD_0FFC_OPAQUE", "WORD_1064_OPAQUE", "WORD_106C_OPAQUE", "WORD_1070_OPAQUE", "WORD_1074_OPAQUE", "WORD_1078_OPAQUE", "WORD_10E0_OPAQUE", "WORD_10E8_OPAQUE", "WORD_10EC_OPAQUE", "WORD_10F0_OPAQUE", "WORD_10F4_OPAQUE", "WORD_115C_OPAQUE", "WORD_1164_OPAQUE", "WORD_1168_OPAQUE", "WORD_116C_OPAQUE", "WORD_1170_OPAQUE", "WORD_11D8_OPAQUE", "WORD_11E0_OPAQUE", "WORD_11E4_OPAQUE", "WORD_11E8_OPAQUE", "WORD_11EC_OPAQUE", "WORD_1254_OPAQUE", "WORD_125C_OPAQUE", "WORD_1260_OPAQUE", "WORD_1264_OPAQUE", "WORD_1268_OPAQUE", "WORD_12D0_OPAQUE", "WORD_12D8_OPAQUE", "WORD_12DC_OPAQUE", "WORD_12E0_OPAQUE", "WORD_12E4_OPAQUE", "WORD_134C_OPAQUE", "WORD_1354_OPAQUE", "WORD_1358_OPAQUE", "WORD_135C_OPAQUE", "WORD_1360_OPAQUE", "WORD_13D0_OPAQUE", "WORD_13D4_OPAQUE", "WORD_13DC_OPAQUE", "WORD_144C_OPAQUE", "WORD_1450_OPAQUE", "WORD_1458_OPAQUE", "WORD_14C8_OPAQUE", "WORD_14CC_OPAQUE", "WORD_14D4_OPAQUE", "WORD_1544_OPAQUE", "WORD_1548_OPAQUE", "WORD_1550_OPAQUE", "WORD_2000_OPAQUE"]
-
-[[partitions.parts]]
-name = "ModemRadioCoreLowObservedWifiBb"
-instance = "WIFI_BB"
-registers = ["WORD_00DC_OPAQUE", "WORD_01D4_OPAQUE", "WORD_0414_OPAQUE", "WORD_0418_OPAQUE", "WORD_0C2C_OPAQUE"]
-
-[[partitions.parts]]
-name = "ModemRadioCoreLowObservedModemTimer"
-instance = "MODEM_TIMER"
-registers = ["WORD_017C_OPAQUE"]
-
-[[partitions.parts]]
-name = "ModemRadioCoreLowObservedModemEtm"
-instance = "MODEM_ETM"
-registers = ["WORD_0144_OPAQUE"]
-
-[[partitions.parts]]
-name = "ModemRadioCoreLowObservedBleAccelerator"
-instance = "BLE_ACCELERATOR"
-registers = ["WORD_0030_OPAQUE", "WORD_0034_OPAQUE", "WORD_00C0_OPAQUE"]
-
-[[partitions.parts]]
-name = "ModemRadioCoreMidObservedBtdm"
-instance = "BTDM"
-registers = ["WORD_0008_OPAQUE", "WORD_000C_OPAQUE", "WORD_0010_OPAQUE", "WORD_0014_OPAQUE", "WORD_0018_OPAQUE", "WORD_001C_OPAQUE", "WORD_0020_OPAQUE", "WORD_0024_OPAQUE", "WORD_0028_OPAQUE", "WORD_002C_OPAQUE", "WORD_0030_OPAQUE", "WORD_0034_OPAQUE", "WORD_0038_OPAQUE", "WORD_003C_OPAQUE", "WORD_0040_OPAQUE", "WORD_0044_OPAQUE", "WORD_0048_OPAQUE", "WORD_004C_OPAQUE", "WORD_0050_OPAQUE", "WORD_0054_OPAQUE", "WORD_0058_OPAQUE", "WORD_005C_OPAQUE", "WORD_0060_OPAQUE", "WORD_0064_OPAQUE", "WORD_0068_OPAQUE", "WORD_006C_OPAQUE", "WORD_0070_OPAQUE", "WORD_0074_OPAQUE", "WORD_0078_OPAQUE", "WORD_007C_OPAQUE", "WORD_0080_OPAQUE", "WORD_0084_OPAQUE", "WORD_00F4_OPAQUE", "WORD_01F8_OPAQUE", "WORD_07FC_OPAQUE", "WORD_0804_OPAQUE", "WORD_0808_OPAQUE", "WORD_080C_OPAQUE", "WORD_0810_OPAQUE", "WORD_0814_OPAQUE", "WORD_0818_OPAQUE", "WORD_081C_OPAQUE", "WORD_0824_OPAQUE", "WORD_0828_OPAQUE", "WORD_082C_OPAQUE", "WORD_0830_OPAQUE", "WORD_0834_OPAQUE", "WORD_0838_OPAQUE", "WORD_083C_OPAQUE", "WORD_0844_OPAQUE", "WORD_0848_OPAQUE", "WORD_084C_OPAQUE", "WORD_0850_OPAQUE", "WORD_0854_OPAQUE", "WORD_0858_OPAQUE", "WORD_085C_OPAQUE", "WORD_0860_OPAQUE", "WORD_0864_OPAQUE", "WORD_0868_OPAQUE", "WORD_086C_OPAQUE", "WORD_0870_OPAQUE", "WORD_0874_OPAQUE", "WORD_0878_OPAQUE", "WORD_087C_OPAQUE", "WORD_0880_OPAQUE", "WORD_0884_OPAQUE", "WORD_0888_OPAQUE", "WORD_088C_OPAQUE", "WORD_0890_OPAQUE", "WORD_0894_OPAQUE", "WORD_0898_OPAQUE", "WORD_089C_OPAQUE", "WORD_08A0_OPAQUE", "WORD_08A4_OPAQUE", "WORD_08A8_OPAQUE", "WORD_0FF8_OPAQUE", "WORD_0FFC_OPAQUE"]
-
-[[partitions.parts]]
-name = "ModemRadioCoreMidObservedModemPwr"
-instance = "MODEM_PWR"
-registers = ["WORD_0848_OPAQUE", "WORD_0850_OPAQUE", "WORD_0864_OPAQUE", "WORD_086C_OPAQUE", "WORD_0874_OPAQUE", "WORD_08D0_OPAQUE"]
 
 [[partitions]]
 name = "WifiMacPeripherals"
@@ -1037,6 +972,61 @@ reason = "No owner yet."
 instance = "MODEM_ETM"
 elements = [{ register = "CH%s_EVENT", first = 3, count = 1 }, { register = "CH%s_TASK", first = 3, count = 1 }]
 reason = "Modem event-task matrix channel three: no owner uses it."
+
+[[unclaimed]]
+instance = "BLE_ACCELERATOR"
+registers = ["WORD_0030_OPAQUE", "WORD_0034_OPAQUE", "WORD_00C0_OPAQUE"]
+reason = "Observed in vendor sources for bit-use coverage only: no transaction or read-safe snapshot reaches these words."
+
+[[unclaimed]]
+instance = "BTDM"
+registers = ["WORD_0008_OPAQUE", "WORD_000C_OPAQUE", "WORD_0010_OPAQUE", "WORD_0014_OPAQUE", "WORD_0018_OPAQUE", "WORD_001C_OPAQUE", "WORD_0020_OPAQUE", "WORD_0024_OPAQUE", "WORD_0028_OPAQUE", "WORD_002C_OPAQUE", "WORD_0030_OPAQUE", "WORD_0034_OPAQUE", "WORD_0038_OPAQUE", "WORD_003C_OPAQUE", "WORD_0040_OPAQUE", "WORD_0044_OPAQUE", "WORD_0048_OPAQUE", "WORD_004C_OPAQUE", "WORD_0050_OPAQUE", "WORD_0054_OPAQUE", "WORD_0058_OPAQUE", "WORD_005C_OPAQUE", "WORD_0060_OPAQUE", "WORD_0064_OPAQUE", "WORD_0068_OPAQUE", "WORD_006C_OPAQUE", "WORD_0070_OPAQUE", "WORD_0074_OPAQUE", "WORD_0078_OPAQUE", "WORD_007C_OPAQUE", "WORD_0080_OPAQUE", "WORD_0084_OPAQUE", "WORD_00F4_OPAQUE", "WORD_01F8_OPAQUE", "WORD_07FC_OPAQUE", "WORD_0804_OPAQUE", "WORD_0808_OPAQUE", "WORD_080C_OPAQUE", "WORD_0810_OPAQUE", "WORD_0814_OPAQUE", "WORD_0818_OPAQUE", "WORD_081C_OPAQUE", "WORD_0824_OPAQUE", "WORD_0828_OPAQUE", "WORD_082C_OPAQUE", "WORD_0830_OPAQUE", "WORD_0834_OPAQUE", "WORD_0838_OPAQUE", "WORD_083C_OPAQUE", "WORD_0844_OPAQUE", "WORD_0848_OPAQUE", "WORD_084C_OPAQUE", "WORD_0850_OPAQUE", "WORD_0854_OPAQUE", "WORD_0858_OPAQUE", "WORD_085C_OPAQUE", "WORD_0860_OPAQUE", "WORD_0864_OPAQUE", "WORD_0868_OPAQUE", "WORD_086C_OPAQUE", "WORD_0870_OPAQUE", "WORD_0874_OPAQUE", "WORD_0878_OPAQUE", "WORD_087C_OPAQUE", "WORD_0880_OPAQUE", "WORD_0884_OPAQUE", "WORD_0888_OPAQUE", "WORD_088C_OPAQUE", "WORD_0890_OPAQUE", "WORD_0894_OPAQUE", "WORD_0898_OPAQUE", "WORD_089C_OPAQUE", "WORD_08A0_OPAQUE", "WORD_08A4_OPAQUE", "WORD_08A8_OPAQUE", "WORD_0FF8_OPAQUE", "WORD_0FFC_OPAQUE"]
+reason = "Observed in vendor sources for bit-use coverage only: no transaction or read-safe snapshot reaches these words."
+
+[[unclaimed]]
+instance = "BT_BB"
+registers = ["WORD_0018_OPAQUE", "WORD_0084_OPAQUE", "WORD_0088_OPAQUE", "WORD_0090_OPAQUE", "WORD_00AC_OPAQUE", "WORD_01B0_OPAQUE", "WORD_0454_OPAQUE", "WORD_0458_OPAQUE", "WORD_0460_OPAQUE", "WORD_0464_OPAQUE", "ANTENNA_MAP_ENTRY%s"]
+reason = "Observed in vendor sources for bit-use coverage only: no transaction or read-safe snapshot reaches these words."
+
+[[unclaimed]]
+instance = "BT_MAC"
+registers = ["WORD_0018_OPAQUE", "WORD_0038_OPAQUE", "WORD_0048_OPAQUE", "WORD_006C_OPAQUE", "WORD_0088_OPAQUE", "WORD_00D0_OPAQUE", "WORD_00D4_OPAQUE", "WORD_022C_OPAQUE", "WORD_0230_OPAQUE", "WORD_026C_OPAQUE", "WORD_0270_OPAQUE", "WORD_0274_OPAQUE", "WORD_0278_OPAQUE", "WORD_0298_OPAQUE", "WORD_02AC_OPAQUE", "WORD_02B0_OPAQUE", "WORD_02B4_OPAQUE", "WORD_02B8_OPAQUE", "WORD_02BC_OPAQUE", "WORD_02C0_OPAQUE", "WORD_0380_OPAQUE", "WORD_03D8_OPAQUE", "WORD_03DC_OPAQUE", "WORD_03E0_OPAQUE", "WORD_03E4_OPAQUE", "WORD_03F4_OPAQUE", "WORD_03FC_OPAQUE", "WORD_0430_OPAQUE", "WORD_0434_OPAQUE", "WORD_0438_OPAQUE", "WORD_043C_OPAQUE", "WORD_0450_OPAQUE", "WORD_045C_OPAQUE", "WORD_0470_OPAQUE", "WORD_047C_OPAQUE", "WORD_04B0_OPAQUE", "WORD_04BC_OPAQUE", "WORD_04C4_OPAQUE", "WORD_04C8_OPAQUE", "WORD_04CC_OPAQUE", "WORD_0508_OPAQUE", "WORD_0510_OPAQUE", "WORD_0514_OPAQUE", "WORD_0518_OPAQUE", "WORD_0524_OPAQUE", "WORD_0528_OPAQUE", "WORD_0548_OPAQUE", "WORD_0980_OPAQUE", "WORD_098C_OPAQUE", "WORD_0994_OPAQUE", "WORD_0FFC_OPAQUE"]
+reason = "Observed in vendor sources for bit-use coverage only: no transaction or read-safe snapshot reaches these words."
+
+[[unclaimed]]
+instance = "COEX"
+registers = ["WORD_00B4_OPAQUE", "WORD_00B8_OPAQUE"]
+reason = "Observed in vendor sources for bit-use coverage only: no transaction or read-safe snapshot reaches these words."
+
+[[unclaimed]]
+instance = "FE"
+registers = ["WORD_0470_OPAQUE", "WORD_0474_OPAQUE"]
+reason = "Observed in vendor sources for bit-use coverage only: no transaction or read-safe snapshot reaches these words."
+
+[[unclaimed]]
+instance = "MODEM_ETM"
+registers = ["WORD_0144_OPAQUE"]
+reason = "Observed in vendor sources for bit-use coverage only: no transaction or read-safe snapshot reaches these words."
+
+[[unclaimed]]
+instance = "MODEM_PWR"
+registers = ["WORD_0848_OPAQUE", "WORD_0850_OPAQUE", "WORD_0864_OPAQUE", "WORD_086C_OPAQUE", "WORD_0874_OPAQUE", "WORD_08D0_OPAQUE"]
+reason = "Observed in vendor sources for bit-use coverage only: no transaction or read-safe snapshot reaches these words."
+
+[[unclaimed]]
+instance = "MODEM_TIMER"
+registers = ["WORD_017C_OPAQUE"]
+reason = "Observed in vendor sources for bit-use coverage only: no transaction or read-safe snapshot reaches these words."
+
+[[unclaimed]]
+instance = "WIFI_BB"
+registers = ["WORD_00DC_OPAQUE", "WORD_01D4_OPAQUE", "WORD_0414_OPAQUE", "WORD_0418_OPAQUE", "WORD_0C2C_OPAQUE"]
+reason = "Observed in vendor sources for bit-use coverage only: no transaction or read-safe snapshot reaches these words."
+
+[[unclaimed]]
+instance = "WIFI_MAC"
+registers = ["WORD_0090_OPAQUE", "WORD_0094_OPAQUE", "WORD_00A4_OPAQUE", "WORD_00AC_OPAQUE", "WORD_03A8_OPAQUE", "WORD_0494_OPAQUE", "WORD_04C4_OPAQUE", "WORD_04C8_OPAQUE", "WORD_04CC_OPAQUE", "WORD_04D0_OPAQUE", "WORD_04D4_OPAQUE", "WORD_0C50_OPAQUE", "WORD_0C74_OPAQUE", "WORD_0C94_OPAQUE", "WORD_0CFC_OPAQUE", "WORD_0D0C_OPAQUE", "WORD_0D1C_OPAQUE", "WORD_0D2C_OPAQUE", "WORD_0E3C_OPAQUE", "WORD_0E74_OPAQUE", "WORD_0E7C_OPAQUE", "WORD_0E80_OPAQUE", "WORD_0E84_OPAQUE", "WORD_0E88_OPAQUE", "WORD_0EF0_OPAQUE", "WORD_0EF8_OPAQUE", "WORD_0EFC_OPAQUE", "WORD_0F00_OPAQUE", "WORD_0F04_OPAQUE", "WORD_0F6C_OPAQUE", "WORD_0F74_OPAQUE", "WORD_0F78_OPAQUE", "WORD_0F7C_OPAQUE", "WORD_0F80_OPAQUE", "WORD_0FE8_OPAQUE", "WORD_0FF0_OPAQUE", "WORD_0FF4_OPAQUE", "WORD_0FF8_OPAQUE", "WORD_0FFC_OPAQUE", "WORD_1064_OPAQUE", "WORD_106C_OPAQUE", "WORD_1070_OPAQUE", "WORD_1074_OPAQUE", "WORD_1078_OPAQUE", "WORD_10E0_OPAQUE", "WORD_10E8_OPAQUE", "WORD_10EC_OPAQUE", "WORD_10F0_OPAQUE", "WORD_10F4_OPAQUE", "WORD_115C_OPAQUE", "WORD_1164_OPAQUE", "WORD_1168_OPAQUE", "WORD_116C_OPAQUE", "WORD_1170_OPAQUE", "WORD_11D8_OPAQUE", "WORD_11E0_OPAQUE", "WORD_11E4_OPAQUE", "WORD_11E8_OPAQUE", "WORD_11EC_OPAQUE", "WORD_1254_OPAQUE", "WORD_125C_OPAQUE", "WORD_1260_OPAQUE", "WORD_1264_OPAQUE", "WORD_1268_OPAQUE", "WORD_12D0_OPAQUE", "WORD_12D8_OPAQUE", "WORD_12DC_OPAQUE", "WORD_12E0_OPAQUE", "WORD_12E4_OPAQUE", "WORD_134C_OPAQUE", "WORD_1354_OPAQUE", "WORD_1358_OPAQUE", "WORD_135C_OPAQUE", "WORD_1360_OPAQUE", "WORD_13D0_OPAQUE", "WORD_13D4_OPAQUE", "WORD_13DC_OPAQUE", "WORD_144C_OPAQUE", "WORD_1450_OPAQUE", "WORD_1458_OPAQUE", "WORD_14C8_OPAQUE", "WORD_14CC_OPAQUE", "WORD_14D4_OPAQUE", "WORD_1544_OPAQUE", "WORD_1548_OPAQUE", "WORD_1550_OPAQUE", "WORD_2000_OPAQUE"]
+reason = "Observed in vendor sources for bit-use coverage only: no transaction or read-safe snapshot reaches these words."
 
 [[unclaimed]]
 instance = "MODEM_SYSCON"
@@ -2200,12 +2190,6 @@ register = "IEEE802154.TIMER1_VALUE"
 sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 
 [[opaque-domains]]
-name = "MacInterruptClearImage"
-description = "Register-specific event image written to the MAC interrupt clear register."
-register = "WIFI_MAC.CLEAR"
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT"]
-
-[[opaque-domains]]
 name = "StationTsfLowWord"
 description = "Low word of one station TSF value; sequencing remains owned by the station-TSF capability."
 register = "MODEM_PWR.VALUE_LOW"
@@ -2419,6 +2403,8 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 name = "acknowledge_mac_tx_completion"
 status = "WIFI_MAC.COMPLETE_CLEAR"
 clear = "WIFI_MAC.COMPLETE_CLEAR"
+consumed-event = "The selected ordinary queue's completion, which the TX path read in COMPLETE_STATE."
+consumed-fields = ["WIFI_MAC.COMPLETE_CLEAR.QUEUE_0", "WIFI_MAC.COMPLETE_CLEAR.QUEUE_1", "WIFI_MAC.COMPLETE_CLEAR.QUEUE_2", "WIFI_MAC.COMPLETE_CLEAR.QUEUE_3"]
 sources = ["BLOB_LIBPP_HAL_MAC_TX", "PROMOTED_LMAC_TX"]
 
 [[field-reads]]
@@ -2986,7 +2972,8 @@ sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS", "PUBLIC_ESP32S
 
 [[zero-based-field-writes]]
 name = "publish_phy_i2c_read_mask"
-fields = ["I2C_ANA_MST.ANA_CONF1.ANA_CONF1", "I2C_ANA_MST.ANA_CONF1.ANA_STATUS1"]
+fields = ["I2C_ANA_MST.ANA_CONF1.ANA_CONF1"]
+whole-word-bits = { value = 0xff000000, sources = ["ROM_REV0_PHY_I2C"] }
 sources = ["ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
 
 [[zero-based-field-writes]]
@@ -3080,20 +3067,6 @@ register = "WIFI_MAC.CLEAR"
 value = 0xffffffff
 masks = "WIFI_MAC.ENABLE"
 sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT"]
-
-[[fixed-register-images]]
-name = "acknowledge_mac_power_tsf_timer"
-register = "MODEM_PWR.CLEAR"
-value = 0x000000f0
-masks = "MODEM_PWR.ENABLE"
-sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
-
-[[fixed-register-images]]
-name = "acknowledge_mac_power_sta_tbtt"
-register = "MODEM_PWR.CLEAR"
-value = 8
-masks = "MODEM_PWR.ENABLE"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
 
 [[fixed-register-images]]
 name = "clear_bluetooth_scheduler_reference"

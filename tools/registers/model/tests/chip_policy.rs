@@ -2199,3 +2199,226 @@ fn full_read_returns_every_word_value() -> TestResult {
     assert!(matches!(kind_of(&fixture)?, ErrorKind::Domain(_)));
     Ok(())
 }
+
+/// The fixture with a `T2` acknowledgement in `INT_CLR` that no status
+/// field samples, with `constraint`, and the timer snapshot consuming
+/// `fields` for `event`.
+fn consumed_snapshot(constraint: &str, event: &str, fields: &str) -> TestResult<Fixture> {
+    let fixture = Fixture::new()?;
+    fixture
+        .edit(
+            "types/timer.toml",
+            INT_CLR_W1C,
+            &format!("{INT_CLR_W1C}\n\n[[registers.fields]]\nname = \"T2\"\nbits = \"2\"\nclass = \"write-one-to-clear\"\n{constraint}"),
+        )?
+        .edit(
+            "policy.toml",
+            "clear = \"TIMER0.INT_CLR\"\n",
+            &format!("clear = \"TIMER0.INT_CLR\"\n{event}{fields}"),
+        )?;
+    Ok(fixture)
+}
+
+const CONSUMED_EVENT: &str = "consumed-event = \"The caller read timer 2's event elsewhere.\"\n";
+const CONSUMED_T2: &str = "consumed-fields = [\"TIMER0.INT_CLR.T2\"]\n";
+
+#[test]
+fn snapshot_acknowledges_a_consumed_event_beside_its_sample() -> TestResult {
+    let policy = consumed_snapshot("", CONSUMED_EVENT, CONSUMED_T2)?.load()?;
+    assert_eq!(
+        policy.owner("timer0_interrupt").map(Holder::Part),
+        Some(part(0, 1))
+    );
+    let fields = &policy.file().interrupt_snapshots[0].consumed_fields;
+    assert_eq!(fields, &["TIMER0.INT_CLR.T2"]);
+    Ok(())
+}
+
+#[test]
+fn consumed_event_lane_takes_its_constraint() -> TestResult {
+    // Unconsumed, the lane is written zero, which the field admits.
+    consumed_snapshot("write-range = { min = 0, max = 0 }", "", "")?.load()?;
+    let error = consumed_snapshot(
+        "write-range = { min = 0, max = 0 }",
+        CONSUMED_EVENT,
+        CONSUMED_T2,
+    )?
+    .rejection()?;
+    assert_eq!(error.entity, "timer0_interrupt");
+    assert!(
+        matches!(error.kind, ErrorKind::WriteConstraint(_)),
+        "{error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn consumed_event_names_one_bit_acknowledgements_of_its_clear_word() -> TestResult {
+    for (event, fields, expected) in [
+        ("", CONSUMED_T2, "snapshot"),
+        (CONSUMED_EVENT, "", "snapshot"),
+        ("consumed-event = \" \"\n", CONSUMED_T2, "description"),
+        (
+            CONSUMED_EVENT,
+            "consumed-fields = [\"TIMER0.INT_ENA.T0\"]\n",
+            "snapshot",
+        ),
+        (
+            CONSUMED_EVENT,
+            "consumed-fields = [\"TIMER0.CONFIG.DIV\"]\n",
+            "snapshot",
+        ),
+        (
+            CONSUMED_EVENT,
+            "consumed-fields = [\"TIMER0.INT_CLR.T2\", \"TIMER0.INT_CLR.T2\"]\n",
+            "duplicate",
+        ),
+    ] {
+        let error = consumed_snapshot("", event, fields)?.rejection()?;
+        assert_eq!(error.entity, "timer0_interrupt", "{error}");
+        let matched = match expected {
+            "snapshot" => matches!(error.kind, ErrorKind::Snapshot(_)),
+            "description" => matches!(error.kind, ErrorKind::MissingDescription),
+            _ => matches!(error.kind, ErrorKind::Duplicate(_)),
+        };
+        assert!(matched, "{error}");
+    }
+    Ok(())
+}
+
+/// The fixture with a read-only `STATUS` bit 8 beside `WO.KEY` and one
+/// more write from zero, `extra`, appended.
+fn whole_word_bits(extra: &str) -> TestResult<Fixture> {
+    let fixture = Fixture::new()?;
+    fixture
+        .edit(
+            "types/timer.toml",
+            "name = \"KEY\"\nbits = \"7:0\"\nclass = \"write-only\"",
+            "name = \"KEY\"\nbits = \"7:0\"\nclass = \"write-only\"\n\n[[registers.fields]]\nname = \"STATUS\"\nbits = \"8\"\nclass = \"read-only\"",
+        )?
+        .append(extra)?;
+    Ok(fixture)
+}
+
+const KEY_WHOLE: &str = "\n[[zero-based-field-writes]]\nname = \"store_key_whole\"\nfields = [\"TIMER0.WO.KEY\"]\nwhole-word-bits = { value = VALUE, sources = SOURCES }\nsources = [\"SRC_DRIVER\"]\n";
+
+fn key_whole(value: &str, sources: &str) -> String {
+    KEY_WHOLE
+        .replace("VALUE", value)
+        .replace("SOURCES", sources)
+}
+
+#[test]
+fn write_from_zero_stores_sourced_whole_word_bits() -> TestResult {
+    // A read-only bit and a bit of no field.
+    let policy = whole_word_bits(&key_whole("0x80000100", "[\"SRC_HEADER\"]"))?.load()?;
+    assert_eq!(
+        policy.owner("store_key_whole").map(Holder::Part),
+        Some(part(0, 0))
+    );
+    Ok(())
+}
+
+#[test]
+fn whole_word_bits_reach_no_written_field() -> TestResult {
+    for (extra, entity) in [
+        // A plain bit outside the input fields.
+        (
+            "\n[[zero-based-field-writes]]\nname = \"store_enable_whole\"\nfields = [\"TIMER0.CONFIG.EN\"]\nwhole-word-bits = { value = 1, sources = [\"SRC_HEADER\"] }\nsources = [\"SRC_DRIVER\"]\n".to_owned(),
+            "store_enable_whole",
+        ),
+        // A bit of the input fields.
+        (key_whole("0x00000180", "[\"SRC_HEADER\"]"), "store_key_whole"),
+    ] {
+        let error = whole_word_bits(&extra)?.rejection()?;
+        assert_eq!(error.entity, entity, "{error}");
+        assert!(
+            matches!(
+                error.kind,
+                ErrorKind::FieldClass(_) | ErrorKind::Transaction(_)
+            ),
+            "{error}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn whole_word_bits_cite_their_sources() -> TestResult {
+    let error = whole_word_bits(&key_whole("0x00000100", "[]"))?.rejection()?;
+    assert_eq!(error.entity, "store_key_whole");
+    assert!(matches!(error.kind, ErrorKind::InvalidSources), "{error}");
+    Ok(())
+}
+
+#[test]
+fn whole_word_bits_belong_to_writes_from_zero_alone() -> TestResult {
+    for (from, to) in [
+        // A read-modify-write.
+        (
+            "name = \"enable_timer0\"\nfields = [{ field = \"TIMER0.CONFIG.EN\", source-bit-offset = 0 }]\n",
+            "name = \"enable_timer0\"\nfields = [{ field = \"TIMER0.CONFIG.EN\", source-bit-offset = 0 }]\nwhole-word-bits = { value = 0x40000000, sources = [\"SRC_HEADER\"] }\n",
+        ),
+        // A snapshot.
+        (
+            "clear = \"TIMER0.INT_CLR\"\n",
+            "clear = \"TIMER0.INT_CLR\"\nwhole-word-bits = { value = 4, sources = [\"SRC_HEADER\"] }\n",
+        ),
+    ] {
+        let error = rejected(&[(from, to)])?;
+        assert!(matches!(error.kind, ErrorKind::Parse(_)), "{error}");
+    }
+    Ok(())
+}
+
+/// The fixture with a `VALID` flag of `class` at bit 29 of the shared
+/// counter's update word.
+fn shared_update_flag(class: &str) -> TestResult<Fixture> {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/counter.toml",
+        "name = \"UPDATE\"\nbits = \"0\"\nclass = \"write-trigger\"",
+        &format!("name = \"UPDATE\"\nbits = \"0\"\nclass = \"write-trigger\"\n\n[[registers.fields]]\nname = \"VALID\"\nbits = \"29\"\nclass = \"{class}\""),
+    )?;
+    Ok(fixture)
+}
+
+#[test]
+fn shared_strobe_leaves_a_write_one_to_clear_flag_zero() -> TestResult {
+    let policy = shared_update_flag("write-one-to-clear")?.load()?;
+    let Some(Claim::Whole(Holder::Part(counter))) = policy.claim("COUNTER.UPDATE") else {
+        return Err("a part holds the update word".into());
+    };
+    assert!(policy.part(*counter).ok_or("a part")?.shared);
+    Ok(())
+}
+
+#[test]
+fn shared_word_never_writes_one_to_a_write_one_to_clear_flag() -> TestResult {
+    // No strobe: the only write is an acknowledgement.
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/counter.toml",
+        "name = \"UPDATE\"\nbits = \"0\"\nclass = \"write-trigger\"",
+        "name = \"UPDATE\"\nbits = \"0\"\nclass = \"write-one-to-clear\"",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Shared(_)));
+    // A strobe image or a read-modify-write that writes the flag one.
+    for extra in [
+        "\n[[fixed-register-images]]\nname = \"strobe_and_clear\"\nregister = \"COUNTER.UPDATE\"\nvalue = 0x20000001\nsources = [\"SRC_DRIVER\"]\n",
+        "\n[[field-or-modifies]]\nname = \"strobe_and_clear\"\nfields = [{ field = \"COUNTER.UPDATE.VALID\", source-bit-offset = 0 }]\nvalue = 1\nsources = [\"SRC_DRIVER\"]\n",
+    ] {
+        let fixture = shared_update_flag("write-one-to-clear")?;
+        fixture.append(extra)?;
+        let error = fixture.rejection()?;
+        assert_eq!(error.entity, "strobe_and_clear");
+        assert!(
+            matches!(
+                error.kind,
+                ErrorKind::WriteOneToClear(_) | ErrorKind::Register(_) | ErrorKind::Shared(_)
+            ),
+            "{error}"
+        );
+    }
+    Ok(())
+}

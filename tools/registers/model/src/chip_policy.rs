@@ -35,7 +35,8 @@ pub use source::{
     FixedRegisterSequence, FlagDomain, FullRegisterRead, FullRegisterWrite, IndexedBitSetModify,
     InputTransform, InterruptSnapshot, MaskedRegisterModify, OpaqueDomain, POLICY_SCHEMA, Part,
     Partition, PartitionImageRead, PointerEncoding, PointerField, PolicyFile, Projection,
-    SampledBitZeroWrite, SequenceStep, Triggers, Unclaimed, ZeroBasedFieldWrite, ZeroRegisterWrite,
+    SampledBitZeroWrite, SequenceStep, Triggers, Unclaimed, WholeWordBits, ZeroBasedFieldWrite,
+    ZeroRegisterWrite,
 };
 
 /// One part: its partition's position in the file and its own in the

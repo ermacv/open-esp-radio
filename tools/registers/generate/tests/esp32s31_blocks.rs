@@ -234,7 +234,6 @@ fn unestablished_facts_stay_unestablished() {
 
 #[test]
 fn the_esp32s31_policy_loads_over_the_root() {
-    use oer_registers_contracts::FactAccuracy;
     use oer_registers_model::chip_model::FieldClass;
 
     let evidence = evidence();
@@ -276,27 +275,51 @@ fn the_esp32s31_policy_loads_over_the_root() {
     assert_eq!(holder("CH0"), "ModemEtmIeee802154");
     assert_eq!(holder("CH2"), "ModemEtmBluetoothPhy");
     assert_eq!(holder("CH7"), "ModemEtmBluetooth");
-    // The counter latch every context reads stays shared: software only
-    // reads its valid flag, which the update strobe restarts.
+    // The counter latch every context reads stays shared: its update
+    // strobe writes zero into the write-one-to-clear valid flag.
     let Some(Claim::Whole(Holder::Part(counter))) = policy.claim("SYSTIMER.UNIT0_OP") else {
         panic!("a part holds the counter latch");
     };
     assert!(policy.part(*counter).expect("a part").shared);
+    let class = |identity: &str| model.field(identity).expect("the field exists").class;
     assert_eq!(
-        model
-            .field("SYSTIMER.UNIT0_OP.TIMER_UNIT0_VALUE_VALID")
-            .expect("the flag exists")
-            .class,
+        class("SYSTIMER.UNIT0_OP.TIMER_UNIT0_VALUE_VALID"),
+        FieldClass::WriteOneToClear
+    );
+    // The ROM stores the read mask whole; the header's read-only high byte
+    // takes the fixed ones of that store and no setter.
+    assert_eq!(
+        class("I2C_ANA_MST.ANA_CONF1.ANA_STATUS1"),
         FieldClass::ReadOnly
     );
-    // The ROM writes the read mask's high byte; that it is stored is not
-    // established.
-    let high = model
-        .field("I2C_ANA_MST.ANA_CONF1.ANA_STATUS1")
-        .expect("the high byte exists");
-    assert_eq!(high.class, FieldClass::Plain);
-    assert!(high.review.sources.iter().any(|s| s == "ROM_REV0_PHY_I2C"));
-    assert_eq!(high.review.accuracy, Some(FactAccuracy::Unknown));
+    let file = policy.file();
+    let mask = file
+        .zero_based_field_writes
+        .iter()
+        .find(|write| write.name == "publish_phy_i2c_read_mask")
+        .expect("the read-mask publication exists");
+    assert_eq!(mask.fields, ["I2C_ANA_MST.ANA_CONF1.ANA_CONF1"]);
+    assert_eq!(
+        mask.whole_word_bits.as_ref().map(|bits| bits.value),
+        Some(0xff00_0000)
+    );
+    // The TX completion acknowledgement writes its sample and the selected
+    // queue's consumed event.
+    let completion = file
+        .interrupt_snapshots
+        .iter()
+        .find(|snapshot| snapshot.name == "acknowledge_mac_tx_completion")
+        .expect("the completion snapshot exists");
+    assert_eq!(completion.consumed_fields.len(), 4);
+    assert_eq!(
+        owner("acknowledge_mac_tx_completion"),
+        ("WifiMacPeripherals", "WifiMacTxCommon")
+    );
+    // Words no transaction reaches are unclaimed, not an owner's.
+    assert!(matches!(
+        policy.claim("MODEM_ETM.WORD_0144_OPAQUE"),
+        Some(Claim::Whole(Holder::Unclaimed(_)))
+    ));
     // A vendor block without a driver is unclaimed, not a catch-all part.
     assert!(matches!(
         policy.claim("UART0.FIFO"),
