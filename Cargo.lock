@@ -2934,6 +2934,15 @@ name = "oer-espressif-analog"
 version = "0.1.0"
 
 [[package]]
+name = "oer-espressif-boot"
+version = "0.1.0"
+dependencies = [
+ "oer-espressif-watchdog",
+ "oer-time",
+ "oer-time-virtual",
+]
+
+[[package]]
 name = "oer-espressif-coex"
 version = "0.1.0"
 dependencies = [
