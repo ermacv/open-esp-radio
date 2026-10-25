@@ -23,8 +23,10 @@
 
 use oer_esp32s31_pac::{
     BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, BluetoothTaskRegisters, RadioPhyRegisters,
-    SharedRadioRegisters, WifiRadioRegisters,
+    SharedRadioRegisters,
 };
+
+use crate::ieee80211::registers::WifiRadioRegisters;
 
 pub use crate::clock::{
     BluetoothClient, CommonPower, CommonPowerExitFailure, CommonRadioPowerError, Ieee802154Client,

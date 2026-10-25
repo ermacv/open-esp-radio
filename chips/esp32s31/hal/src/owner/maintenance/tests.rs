@@ -66,14 +66,19 @@ fn release_rechecks_hardware_instead_of_reusing_admission_observation() {
     assert_eq!((hardware.mac_reads, hardware.walker_reads), (4, 3));
 }
 
-fn setup() -> super::MacInterruptSetup {
-    super::MacInterruptSetup {
-        inner: oer_esp32s31_pac::RadioPartitions::for_host_test().wifi_interrupts,
-    }
+/// Stand-ins for the two owners: the confirmation only moves them.
+#[derive(Debug, Eq, PartialEq)]
+struct Registers(u8);
+
+#[derive(Debug, Eq, PartialEq)]
+struct Interrupts(u8);
+
+fn setup() -> Interrupts {
+    Interrupts(2)
 }
 
-fn registers() -> super::RadioAccess {
-    super::RadioAccess::claim_for_host_test()
+fn registers() -> Registers {
+    Registers(1)
 }
 
 #[test]
@@ -84,8 +89,9 @@ fn shutdown_confirmation_returns_the_same_frontier_only_after_a_stopped_check() 
             .expect("active MAC must reject final-client shutdown");
     assert_eq!(rejected.error, Error::MacActive { state: 2 });
 
-    let (_registers, _setup) =
+    let (registers, setup) =
         super::confirm_stopped(rejected.registers, rejected.interrupts, |_| Ok(()))
             .ok()
             .expect("stopped hardware must return the unchanged ownership frontier");
+    assert_eq!((registers, setup), (Registers(1), Interrupts(2)));
 }

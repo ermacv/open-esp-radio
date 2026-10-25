@@ -5,7 +5,6 @@
 //! and host models share the same state machine without exposing the generated
 //! PAC above the register leaf.
 
-use crate::dma_address;
 use core::marker::PhantomData;
 
 use crate::ieee80211::dma::{
@@ -13,9 +12,12 @@ use crate::ieee80211::dma::{
     rx_ring::{RxArenaWords, RxDescriptorTable},
 };
 
-use oer_esp32s31_pac::{MacRxDmaSnapshot, WifiRxDmaRegisters};
+use crate::ieee80211::registers::{WifiRxDmaRegisters, rx::dma::MacRxDmaSnapshot};
 
 use crate::layouts::{DmaRef, WifiRxDmaDescriptor};
+
+/// The DMA addresses of one RX descriptor table: its ring, then R.
+pub type RxDescriptorAddresses = crate::dma_address::PlacedTable<WifiRxDmaDescriptor>;
 
 /// Unforgeable authority for mutating one validated RX descriptor walker.
 ///
@@ -29,7 +31,6 @@ use crate::layouts::{DmaRef, WifiRxDmaDescriptor};
 /// `RX_DESCRIPTOR_BASE`: every live publication goes through the reload
 /// doorbell.
 pub struct RxDmaBinding<'storage> {
-    reserved_address: u32,
     reserved_head: DmaRef<WifiRxDmaDescriptor>,
     /// The table, for a model walker that follows its links.
     #[cfg(any(test, feature = "test-support"))]
@@ -253,7 +254,7 @@ impl<'storage> RxWalkerTable<'storage> {
         &self,
         low: u32,
     ) -> Option<&'storage crate::ieee80211::dma::descriptor::RxDescriptor> {
-        const LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+        const LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
         let reserved_offset = u32::try_from(self.ring.len())
             .ok()?
             .checked_mul(DESCRIPTOR_BYTES)?;
@@ -270,13 +271,11 @@ impl<'storage> RxWalkerTable<'storage> {
 }
 
 impl<'storage> RxDmaBinding<'storage> {
-    #[allow(
-        unsafe_code,
-        reason = "ring construction retains the descriptor owner for the DMA epoch"
-    )]
+    /// The binding of `table`, whose descriptors' DMA addresses are
+    /// `descriptors`: its ring, then R.
     pub(crate) fn new<const COUNT: usize>(
         table: &'storage RxDescriptorTable<COUNT>,
-        descriptor_base: u32,
+        descriptors: RxDescriptorAddresses,
         arena: &'storage RxArenaWords,
     ) -> Option<Self> {
         if COUNT == 0 || u8::try_from(COUNT).is_err() {
@@ -287,22 +286,15 @@ impl<'storage> RxDmaBinding<'storage> {
         // descriptors, then R, so R lies exactly one descriptor after the
         // ring and the table has no padding.
         let reserved_offset = u32::try_from(COUNT).ok()?.checked_mul(DESCRIPTOR_BYTES)?;
-        if range_len != reserved_offset.checked_add(DESCRIPTOR_BYTES)? {
+        if range_len != reserved_offset.checked_add(DESCRIPTOR_BYTES)?
+            || descriptors.len() != COUNT + 1
+        {
             return None;
         }
-        let reserved_address = descriptor_base.checked_add(reserved_offset)?;
-        // SAFETY: `descriptor_base` is the DMA address of `table`, whose last
-        // descriptor R lies `reserved_offset` bytes in (checked above). The
-        // binding retains the table borrow, which only `RxDmaStorage` lends;
-        // its first ring requires static storage (`prepare_ring`), so R stays
-        // allocated for the DMA epoch. Native models have no asynchronous DMA
-        // actor.
-        let reserved_head = unsafe { dma_address::placed_link(reserved_address) }?;
         Some(Self {
-            reserved_address,
-            reserved_head,
+            reserved_head: descriptors.element(COUNT)?,
             #[cfg(any(test, feature = "test-support"))]
-            table: RxWalkerTable::new(descriptor_base, table.ring(), table.reserved()),
+            table: RxWalkerTable::new(descriptors.base(), table.ring(), table.reserved()),
             arena,
         })
     }
@@ -310,7 +302,7 @@ impl<'storage> RxDmaBinding<'storage> {
     /// The DMA address of the reserved descriptor R, the only value
     /// `RX_DESCRIPTOR_BASE` is ever given.
     pub const fn reserved_address(&self) -> u32 {
-        self.reserved_address
+        self.reserved_head.bits()
     }
 
     /// The reference `RX_DESCRIPTOR_BASE` is given: R.

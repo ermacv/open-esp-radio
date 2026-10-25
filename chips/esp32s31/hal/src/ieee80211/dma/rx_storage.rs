@@ -12,12 +12,12 @@ use core::{
 };
 
 use crate::dma_static::Placed;
-use crate::layouts::WifiRxDmaDescriptorControl;
+use crate::layouts::{DmaWindowAddress, WifiRxDmaDescriptorControl};
 use oer_memory::{ExternalRxBuffer, ExternalRxReturn, ExternalRxReturnState};
 
 use crate::ieee80211::dma::{
     descriptor::RxDescriptor,
-    rx_dma::RxDma,
+    rx_dma::{RxDescriptorAddresses, RxDma},
     rx_ring::{
         RX_BUFFER_SENTINEL, RxArenaWords, RxCompletedDescriptor, RxCompletedUnit,
         RxCompletedUnitFrontier, RxDescriptorTable, RxDmaArenaState, RxDmaBufferAddresses,
@@ -584,7 +584,10 @@ pub struct PlacedRxDma<
     S: DmaSpace = ChipDma,
 > {
     storage: &'static RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>,
-    descriptor_base: u32,
+    /// The typed DMA addresses of the storage's ring and R.
+    descriptors: RxDescriptorAddresses,
+    /// The typed DMA address of R's buffer.
+    reserved_buffer: DmaWindowAddress,
 }
 
 impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace>
@@ -597,7 +600,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
 
     /// The DMA address of descriptor 0.
     pub const fn descriptor_base(&self) -> u32 {
-        self.descriptor_base
+        self.descriptors.base()
     }
 
     /// Prepare the first ring in memory without publishing BASE.
@@ -624,7 +627,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         self,
         mmio: &mut M,
     ) -> Result<RxRingPrepared<'static, COUNT>, RxRingError> {
-        self.storage.prepare_ring_bound(mmio, self.descriptor_base)
+        self.storage
+            .prepare_ring_bound(mmio, self.descriptors, self.reserved_buffer)
     }
 }
 
@@ -637,7 +641,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             buffers: [const { RxDmaBuffer::new() }; COUNT],
             reserved_buffer: RxDmaBuffer::new(),
             descriptor_buffer_offsets: [const { AtomicU8::new(0) }; COUNT],
-            buffer_addresses: [0; COUNT],
+            buffer_addresses: RxDmaBufferAddresses::new(),
             arena: RxArenaWords::new(),
             space: PhantomData,
         }
@@ -757,14 +761,24 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         storage.validate_descriptor_rotation(rotation)?;
         for descriptor_index in 0..COUNT {
             let buffer_id = (descriptor_index + rotation) % COUNT;
-            let address = storage.buffer_dma_address(&storage.buffers[buffer_id])?;
-            storage.buffer_addresses[descriptor_index] = address;
+            let address = storage.placed_buffer_address(&storage.buffers[buffer_id])?;
+            storage.buffer_addresses.record(descriptor_index, address);
         }
         storage.bind_descriptor_rotation(rotation)?;
-        let descriptor_base = storage.descriptor_base_address()?;
+        let base = storage.descriptor_base_address()?;
+        // SAFETY: `base` is the DMA address of this placed storage's
+        // descriptor table: COUNT ring descriptors and R behind them,
+        // 12-byte and aligned (`RxDescriptorTable` is `repr(C)`). The
+        // consumed `Placed` proves the static lies in the DMA window, and
+        // the `'static` storage stays allocated for every DMA epoch.
+        #[allow(unsafe_code, reason = "the placed RX arena's descriptor table")]
+        let descriptors = unsafe { RxDescriptorAddresses::new(base, COUNT + 1) }
+            .ok_or(RxDmaStorageError::AddressWidth)?;
+        let reserved_buffer = storage.placed_buffer_address(&storage.reserved_buffer)?;
         Ok(PlacedRxDma {
             storage,
-            descriptor_base,
+            descriptors,
+            reserved_buffer,
         })
     }
 
@@ -826,7 +840,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     fn prepare_ring_bound<'storage, M: RxDma>(
         &'storage self,
         mmio: &mut M,
-        descriptor_base: u32,
+        descriptors: RxDescriptorAddresses,
+        reserved_buffer: DmaWindowAddress,
     ) -> Result<RxRingPrepared<'storage, COUNT>, RxRingError> {
         let buffer_addresses = &self.buffer_addresses;
         match self.lifecycle_state() {
@@ -844,28 +859,25 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             RxDmaArenaState::claim_prepared(self.arena.lifecycle()),
             "RX initial owner invariant"
         );
-        let prepared = match self.reserved_buffer_address() {
-            Ok(reserved_buffer_address) => RxRingStopped::prepare_inner(
-                mmio,
-                &self.descriptors,
-                descriptor_base,
-                buffer_addresses,
-                reserved_buffer_address,
-                buffer_size,
-                |index| {
-                    // SAFETY: stopped-ring preparation owns every descriptor and
-                    // the storage's own address table binds `index` to this
-                    // arena.
-                    unsafe { self.prepare_stopped_buffer(index) }
-                },
-                || {
-                    // SAFETY: stopped-ring preparation owns R and its buffer.
-                    unsafe { self.reserved_buffer.prepare_for_stopped_ring() }
-                },
-                &self.arena,
-            ),
-            Err(error) => Err(error),
-        };
+        let prepared = RxRingStopped::prepare_inner(
+            mmio,
+            &self.descriptors,
+            descriptors,
+            buffer_addresses,
+            reserved_buffer,
+            buffer_size,
+            |index| {
+                // SAFETY: stopped-ring preparation owns every descriptor and
+                // the storage's own address table binds `index` to this
+                // arena.
+                unsafe { self.prepare_stopped_buffer(index) }
+            },
+            || {
+                // SAFETY: stopped-ring preparation owns R and its buffer.
+                unsafe { self.reserved_buffer.prepare_for_stopped_ring() }
+            },
+            &self.arena,
+        );
         if prepared.is_err() {
             // Preparation may have failed while disabling an unexpectedly
             // live walker. Without the returned ring capability there is no
@@ -1308,18 +1320,32 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         S::address(self, self.descriptors.ring().as_ptr()).ok_or(RxDmaStorageError::AddressWidth)
     }
 
-    /// The DMA address of R's buffer in this arena's space.
-    fn reserved_buffer_address(&self) -> Result<u32, RxRingError> {
-        self.buffer_dma_address(&self.reserved_buffer)
-            .map_err(|_| RxRingError::Address)
-    }
-
-    /// The DMA address of `buffer`, one of this arena's buffers.
+    /// The DMA address of `buffer`, one of this arena's buffers, as an
+    /// integer for comparisons.
     fn buffer_dma_address(
         &self,
         buffer: &RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>,
     ) -> Result<u32, RxDmaStorageError> {
         S::address(self, buffer.0.get()).ok_or(RxDmaStorageError::AddressWidth)
+    }
+
+    /// The typed DMA address of `buffer`, one of this placed arena's
+    /// buffers.
+    ///
+    /// Only [`Self::place_rotated`] calls it, with the storage the consumed
+    /// `Placed` proved to lie in the DMA window.
+    #[allow(unsafe_code, reason = "a buffer of the placed RX arena")]
+    fn placed_buffer_address(
+        &self,
+        buffer: &RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>,
+    ) -> Result<DmaWindowAddress, RxDmaStorageError> {
+        let address = self.buffer_dma_address(buffer)?;
+        // SAFETY: `address` is the DMA address of a buffer of this storage,
+        // which `place_rotated` received as a consumed `Placed`: the link
+        // keeps it in the DMA window and the `'static` storage stays
+        // allocated for every DMA epoch. A host model's synthetic address is
+        // recorded, never dereferenced.
+        Ok(unsafe { crate::dma_address::placed(address) })
     }
 }
 

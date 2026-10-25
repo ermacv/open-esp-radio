@@ -23,7 +23,7 @@ pub const MAX_ENCODED_MPDU_LEN: usize = 0x3fff;
 /// descriptors or outside the ring.
 #[inline]
 pub fn cursor_ring_index(low: u32, ring_base: u32, count: usize) -> Option<usize> {
-    const BITS: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+    const BITS: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     let offset = low.wrapping_sub(ring_base & BITS) & BITS;
     if !offset.is_multiple_of(DESCRIPTOR_BYTES) {
         return None;

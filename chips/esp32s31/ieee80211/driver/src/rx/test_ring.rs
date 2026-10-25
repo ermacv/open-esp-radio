@@ -53,7 +53,7 @@ impl Ring {
         let placed = RxDmaStorage::place(Placed::host(Box::leak(Box::new(Storage::new()))))
             .expect("the host storage has a layout");
         let storage: &'static Storage = placed.storage();
-        let buffers: &'static [u32; COUNT] = storage.buffer_addresses();
+        let buffers: &'static [u32; COUNT] = storage.buffer_addresses().bits();
         let base = placed.descriptor_base();
         let mut walker = RxWalkerModel::new();
         let live = placed

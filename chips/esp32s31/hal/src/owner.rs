@@ -12,8 +12,8 @@ use crate::{
 
 use super::*;
 
+use crate::ieee80211::registers::{WifiRadioRegisters, WifiRxDmaRegisters};
 use crate::phy::restore::PhyRouteState;
-use oer_esp32s31_pac::WifiRadioRegisters;
 
 pub mod maintenance;
 
@@ -432,7 +432,7 @@ impl RadioAccess {
 
     pub(crate) fn from_clocked(
         registers: WifiRadioRegisters,
-        rx_dma: oer_esp32s31_pac::WifiRxDmaRegisters,
+        rx_dma: WifiRxDmaRegisters,
         station_wake: StationWakeState,
         initialized: bool,
     ) -> Self {
@@ -448,7 +448,7 @@ impl RadioAccess {
         self,
     ) -> (
         WifiRadioRegisters,
-        oer_esp32s31_pac::WifiRxDmaRegisters,
+        WifiRxDmaRegisters,
         StationWakeState,
         bool,
     ) {

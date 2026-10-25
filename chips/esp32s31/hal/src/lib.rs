@@ -22,10 +22,11 @@ extern crate std;
 
 use core::future::Future;
 
-use oer_esp32s31_pac::{
+use crate::ieee80211::registers::{
     MacInterruptRegisters as PacMacInterruptRegisters, MacInterruptSetup as PacMacInterruptSetup,
-    MacPowerInterruptRegisters as PacMacPowerInterruptRegisters, RadioPhyRegisters,
+    MacPowerInterruptRegisters as PacMacPowerInterruptRegisters,
 };
+use crate::phy::RadioPhyRegisters;
 
 pub mod bluetooth;
 pub mod boot;
