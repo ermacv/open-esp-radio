@@ -96,14 +96,17 @@ Equal CLIC levels on one hart cannot preempt each other.
 
 The radio executor never writes the registers a P3 handler owns. It records
 a request in memory both sides see and rings the `Doorbell`, a software
-interrupt (`FROM_CPU` line 3) at the P3 level: `ring` fences and raises the
-line. The doorbell's handler first lowers
-the interrupt through its owned `DoorbellAcknowledger`, then takes the requests, so a ring after the
-take is not lost. Making the doorbell consumes its software interrupt, so no
-executor can use the line, and takes a `SameLevel` of the radio interrupt's
-and the doorbell's table entries, which checks when the image compiles that
-both share one level and one core. The request protocol belongs to the
-driver whose handler applies it.
+interrupt (`FROM_CPU` line 3) that is one source of the radio handler's part:
+`ring` fences and raises the line. `Doorbell::split` consumes the software
+interrupt, so no executor can use the line, and hands out the
+`DoorbellAcknowledger` for that part and the unbound `DoorbellLine`; only
+`Doorbell::new::<Member, Composite>(line, &Bound<Composite>)` makes the
+ringing half, once the router bound a part whose sources hold the line's
+(`Member::SOURCE` in `Composite::SOURCES`, checked when the image compiles).
+A part of the line alone is the acknowledger itself, which names the line's
+source. The handler first lowers the interrupt through the acknowledger,
+then takes the requests, so a ring after the take is not lost. The request
+protocol belongs to the driver whose handler applies it.
 
 Portable protocol policy cannot depend on this execution domain. The
 architecture audit follows transitive normal/build dependencies to enforce
@@ -125,5 +128,6 @@ interrupts never borrow the comparator writer or a task's timer queue.
 The interrupt table uses numeric levels and harts and each part's
 `InterruptSource`, with no vendor enum. Executor start and timer binding
 consume the table token and interrupt part through `Router::bind`. Doorbell
-setup returns its acknowledger before the image binds the handler's part.
+setup returns its acknowledger before the image binds the handler's part,
+and its ringing half only after.
 No constructor performs an unsafe hardware claim or a singleton handoff.

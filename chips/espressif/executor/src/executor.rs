@@ -238,8 +238,8 @@ impl<High, Mid, Low> Clone for LevelOrder<High, Mid, Low> {
 impl<High, Mid, Low> Copy for LevelOrder<High, Mid, Low> {}
 
 /// Two entries at one level on one core, checked when the image is compiled:
-/// a radio interrupt (`Radio`, P3) and the [`Doorbell`](crate::Doorbell)
-/// (`Bell`) whose handler applies requests to that interrupt's registers.
+/// a radio interrupt (`Radio`, P3) and a peer entry (`Bell`) whose handler
+/// may run between that interrupt's handler runs but never inside one.
 /// Equal levels on one hart cannot preempt each other. The host tests of
 /// `level` cover the refusals.
 pub struct SameLevel<Radio, Bell> {

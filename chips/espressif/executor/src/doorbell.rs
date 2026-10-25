@@ -3,65 +3,68 @@
 //! The radio executor (P2) cannot write the registers the radio interrupts
 //! (P3) own without sharing them with a handler that preempts it. It records
 //! a request in memory both sides see and rings the doorbell; the doorbell's
-//! handler runs at P3, after or before the radio handlers but never inside
-//! one, and applies the request. [`SameLevel`] proves when the image compiles
-//! that the doorbell's entry has the radio interrupt's level and core.
+//! line is one source of the radio interrupt's part, so the handler that
+//! holds the radio registers runs at P3 and applies the request.
+//!
+//! [`Doorbell::split`] takes the line from the reset root and hands out the
+//! lowering half ([`DoorbellAcknowledger`]) for the handler's part and the
+//! unbound line ([`DoorbellLine`]). Only the binding of that part makes the
+//! ringing half: [`Doorbell::new`] takes the router's [`Bound`] proof of a
+//! part whose sources hold the line's, checked when the image compiles. A
+//! part of the line alone binds the acknowledger itself, which names the
+//! line's source.
 //!
 //! The doorbell consumes its software interrupt, so no executor can be woken
-//! through the same line. Its handler, named in the image's interrupt table,
-//! first calls [`DoorbellAcknowledger::acknowledge`], then takes the requests: a ring after that
-//! raises the interrupt again and is not lost.
+//! through the same line. Its handler first calls
+//! [`DoorbellAcknowledger::acknowledge`], then takes the requests: a ring
+//! after that raises the interrupt again and is not lost.
 
 use core::sync::atomic::{Ordering, fence};
 
-use oer_interrupt_table::Entry;
+use oer_interrupt_table::{Bound, InterruptSource, InterruptSources};
 
 use crate::chip::{Line, platform, software_interrupt_source};
-use crate::executor::SameLevel;
 use crate::software_line::SoftwareLine;
 
-/// The radio doorbell on software interrupt `SWI` (`FROM_CPU_INTR<SWI>`).
+/// The radio doorbell on software interrupt `SWI` (`FROM_CPU_INTR<SWI>`):
+/// the ringing half.
 pub struct Doorbell<const SWI: u8> {
     line: Line,
 }
 
-/// Check that `Bell` is the token of software interrupt `SWI`.
-const fn bell_source<const SWI: u8, Bell: Entry>()
-where
-    Bell::Part: oer_interrupt_table::InterruptSource,
-{
-    assert!(
-        <Bell::Part as oer_interrupt_table::InterruptSource>::SOURCE
-            == software_interrupt_source(SWI) as u16,
-        "the token is not the doorbell's software interrupt"
-    );
+/// Software interrupt `SWI`'s line before the binding of the part it is a
+/// source of: it rings nothing until [`Doorbell::new`] takes the binding's
+/// proof.
+#[must_use = "the line rings only through the doorbell its binding makes"]
+pub struct DoorbellLine<const SWI: u8> {
+    line: Line,
+}
+
+/// Whether `source` is one of `sources`, at compile time.
+const fn holds(sources: &[u16], source: u16) -> bool {
+    let mut rest = sources;
+    while let [first, tail @ ..] = rest {
+        if *first == source {
+            return true;
+        }
+        rest = tail;
+    }
+    false
 }
 
 macro_rules! impl_doorbell {
     ($number:literal, $block:ident, $take:ident) => {
         impl Doorbell<$number> {
-            /// The doorbell on `interrupt`, whose source `bell` is the token of;
-            /// `level` proves that it shares the radio interrupt's level and core.
-            /// Moves the line's block from the reset root and lowers a stale
-            /// raise. Bind the interrupt part through the router only after
-            /// the handler owns the returned acknowledger.
-            pub fn new<Radio, Bell>(
+            /// Move the line's block from the reset root and lower a stale
+            /// raise: the lowering half for the handler's part, and the line
+            /// that rings once the part is bound.
+            pub fn split(
                 interrupt: platform::$block,
-                level: SameLevel<Radio, Bell>,
-            ) -> (Self, DoorbellAcknowledger<$number>)
-            where
-                Radio: Entry,
-                Bell: Entry,
-                Bell::Part: oer_interrupt_table::InterruptSource,
-            {
-                const { bell_source::<$number, Bell>() };
-                let _ = level;
+            ) -> (DoorbellLine<$number>, DoorbellAcknowledger<$number>) {
                 let line = crate::chip::$take(interrupt);
                 line.lower();
-                // Return both owners before the image enables the route: the
-                // handler must own its acknowledger before any ring can reach it.
                 (
-                    Self { line },
+                    DoorbellLine { line },
                     DoorbellAcknowledger {
                         line: LineAcknowledger { line },
                     },
@@ -77,6 +80,33 @@ impl_doorbell!(2, FromCpu2, own_line_2);
 impl_doorbell!(3, FromCpu3, own_line_3);
 
 impl<const SWI: u8> Doorbell<SWI> {
+    /// The ringing half of `line`, once `bound` proves that the image's
+    /// interrupt table binds `Composite`, whose sources hold `Member`'s, the
+    /// line's own: its handler then serves every ring. A part of the line
+    /// alone is its own member (each [`InterruptSource`] is
+    /// [`InterruptSources`]).
+    ///
+    /// A member that is not the line, or that the bound part does not hold,
+    /// fails to compile (the constant's assertion, `E0080`).
+    pub fn new<Member, Composite>(line: DoorbellLine<SWI>, bound: &Bound<Composite>) -> Self
+    where
+        Member: InterruptSource,
+        Composite: InterruptSources,
+    {
+        const {
+            assert!(
+                Member::SOURCE == software_interrupt_source(SWI),
+                "the member is not the doorbell's software interrupt"
+            );
+            assert!(
+                holds(Composite::SOURCES, Member::SOURCE),
+                "the bound part does not hold the doorbell's software interrupt"
+            );
+        };
+        let _bound = bound;
+        Self { line: line.line }
+    }
+
     /// Raise the doorbell. The fence orders the caller's request writes
     /// before the raise; on ESP32-S31 the raise reads the line back, so it
     /// has reached the interrupt matrix when this returns. Never waits.
@@ -100,9 +130,15 @@ impl<const SWI: u8> LineAcknowledger<SWI> {
     }
 }
 
-/// The acknowledgement and route authority moved into the doorbell's ISR.
+/// The doorbell's lowering half, which its handler's part holds: inside a
+/// part of several sources, or as the part of the line alone, whose source
+/// it names.
 pub struct DoorbellAcknowledger<const SWI: u8> {
     line: LineAcknowledger<SWI>,
+}
+
+impl<const SWI: u8> InterruptSource for DoorbellAcknowledger<SWI> {
+    const SOURCE: u16 = software_interrupt_source(SWI);
 }
 
 impl<const SWI: u8> DoorbellAcknowledger<SWI> {
