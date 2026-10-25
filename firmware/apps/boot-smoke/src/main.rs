@@ -77,11 +77,16 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let executor = Executor::<0>::new(software.line0);
     let mut router = adopted.enable_interrupts();
     let watchdog = runtime.watchdogs.rtc;
-    executor.run(&mut router, interrupts.wake, software.irq0, move |spawner| {
-        if Tasks::rtc_watchdog(spawner, watchdog).is_err() {
-            unreachable!("the watchdog's task starts once");
-        }
-    })
+    executor.run(
+        &mut router,
+        interrupts.wake,
+        software.irq0,
+        move |spawner| {
+            if Tasks::rtc_watchdog(spawner, watchdog).is_err() {
+                unreachable!("the watchdog's task starts once");
+            }
+        },
+    )
 }
 
 /// Feed the RTC watchdog for good: the image resets when this executor

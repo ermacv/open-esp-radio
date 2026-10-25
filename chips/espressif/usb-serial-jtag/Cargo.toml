@@ -13,7 +13,6 @@ embedded-io-async = "0.7.0"
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 oer-memory = { path = "../../../portable/memory" }
-static_cell.workspace = true
 
 [dev-dependencies]
 oer-interrupt-table = { path = "../../../portable/interrupt-table", features = ["host-signal"] }

@@ -1,11 +1,12 @@
 # ESP32-S31 staged application boot
 
-This platform composes ESP-HAL for ESP32-S31-Function-CoreBoard-1. It has no
+This platform composes the reset root (`oer-esp32s31-hal`) for
+ESP32-S31-Function-CoreBoard-1. It has no
 test protocol, radio role, executor or network-stack dependency.
 
 | Component | Responsibility |
 | --- | --- |
-| `board` | Board-specific 16-MiB PSRAM at 250 MHz and 16-MiB Flash configuration; adoption of the live mapping |
+| `board` | Board facts (the PSRAM window, the flash MMU page, the antenna gain and power limits); adoption of the live PSRAM mapping |
 | `bootstrap` | Flash entry, PSRAM initialization, image validation/CRC, relocation, Flash tuning and non-returning handoff |
 | `runtime` | Stage-two entry, SRAM section initialization, mapping adoption, vector handoff, per-core interrupt stacks and the image's one panic entry |
 | `layout` | Address map (`LAYOUT`, generated from the chip facts), the stage-two placement and the stage-two header/checksum shared with the host packer and auditor |
@@ -58,11 +59,15 @@ It does not return or carry Rust peripheral owners across the image boundary.
 Stage-two assembly initializes application data and SRAM interrupt/DMA sections
 before entering `runtime_main`, which the image defines with
 `oer_espressif_staged_runtime::entry!`; it hands the image's `main` the one
-`Handoff`. The application calls `esp_hal::init`, then
-`handoff.adopt(INTERRUPT_TABLE, controller, BootstrapPsram(peripherals.PSRAM))`:
+`Handoff`. The application takes the reset root (`Root::take`, then
+`into_runtime`), then
+`handoff.adopt(INTERRUPT_TABLE, runtime.interrupts.controller, BootstrapPsram)`:
 the board's `BootstrapPsram` implements the staged layout's
 `AdoptsBootstrapMapping`, the promise that it adopts the bootstrap's mapping
-without resetting or remapping PSRAM. The board does not link the runtime,
+without resetting or remapping PSRAM; stage two owns no PSRAM, cache or MMU
+register, so adoption writes nothing. `into_runtime` arms the RTC watchdog:
+every image's executor feeds it from a task
+(`ArmedRtcWatchdog::feed_every`). The board does not link the runtime,
 whose panic entry would otherwise reach the bootstrap through the board.
 `adopt` installs the per-core SRAM interrupt stack and the runtime's vectors
 (`mtvec` names the exception entry, `mtvt` the hart's table) and takes the
@@ -86,9 +91,7 @@ level, the class and the hart (`u8` each) and the handler address at offset 8
 `portable/interrupt-table` keep that layout. Binding an entry moves its part
 where only its handler reaches it, writes the line and then the route, and
 returns the `Bound` proof the driver takes before it enables the
-peripheral's interrupt. esp-hal's PMP region setup
-(`ESP_HAL_CONFIG_ENABLE_PMP`) is off in the root Cargo configuration, because
-its single no-execute data region would span stage two's PSRAM code.
+peripheral's interrupt.
 
 Every image uses one placement: PSRAM for code, ordinary data and a 192-KiB
 CPU0 task stack; SRAM for interrupt entries, hot code, critical state, DMA
@@ -97,21 +100,19 @@ its task stack and its interrupt stack are an explicit 0 bytes in every image,
 which the image gate proves (see [Stacks](../../../docs/memory.md#stacks)). These board sizes are not universal
 chip capabilities.
 
-Because code runs from PSRAM, the adopted mapping keeps the PSRAM function
-clock, and through it MPLL, referenced in ESP-HAL's clock tree for the life of
-the image. A driver that releases MPLL therefore never powers it down under
-PSRAM.
+Because code runs from PSRAM, the adopted mapping holds MPLL as a permanent
+reference for the life of the image: the platform clock owner's count of
+MPLL never reaches zero while PSRAM is in use, so a driver that releases MPLL
+never powers it down under PSRAM.
 
 ## Boot state on the board
 
-Reads on the board show what the bootloader leaves and what esp-hal relies on:
+Reads on the board show what the bootloader leaves:
 
 - The `espflash`-bundled ESP-IDF bootloader already programs PMA entry 7 as
-  the locked 64 MiB NAPOT external-memory aperture at `0x5000_0000`, the
-  value esp-hal's `pre_init` writes; entry 15 covers the flash window
-  `0x4000_0000` (512 MiB), entries 12-14 the internal memories, and entry 8 is
-  unused. Newer ESP-IDF bootloaders that put the flash window top in entry 7
-  would conflict with esp-hal's locked write.
+  the locked 64 MiB NAPOT external-memory aperture at `0x5000_0000`; entry
+  15 covers the flash window `0x4000_0000` (512 MiB), entries 12-14 the
+  internal memories, and entry 8 is unused.
 - A Flash MMU entry implements bits 0-10 and 13 of the content word: the
   page-number field the PAC publishes as 10 bits (`PADDR`, with bit 10 as
   `ACCESS_SPIRAM`) is the 11-bit value mask of ESP-IDF's `ext_mem_defs.h`;
@@ -123,13 +124,11 @@ Reads on the board show what the bootloader leaves and what esp-hal relies on:
   after setting it, `TRNG.DATE.CLK_EN` reads zero while the TRNG still
   produces changing output; ESP-IDF's `rng_ll_is_enabled` checks only the
   LP clock and reset, and so does `entropy::source_status`.
-- Disabling the TIMG watchdog through esp-hal holds: no reset arrives past
-  the armed timeout.
 
 ## Brownout detector policy
 
 The ESP-IDF bootloader leaves its analog mode-1 brownout reset armed. The
-bootstrap replaces it once, right after `esp_hal::init` and before the
+bootstrap replaces it once, right after the SoC initialization and before the
 application runs, with ESP-IDF's application policy, as `esp_brownout_init`
 does at startup: mode 0 at level 7 (about 2.4 V), with the hardware reset,
 flash power-down and RF power-down, and no brownout interrupt (the ESP32-S31
@@ -139,12 +138,12 @@ policy sets the threshold and powers the flash and RF down before the reset.
 The bootstrap then reads the detector's mode, actions and waits back and
 prints `OER_BOOT bootstrap=BROWNOUT`, or stops with
 `reason=brownout-policy`, so every boot checks it; the threshold is an
-analog register esp-hal writes but cannot read back. Every image boots
+analog register that cannot be read back. Every image boots
 through the bootstrap, so the detector is configured before the
 application, and before the radio platform takes the analog bus. Rejected:
 keeping the bootloader's mode-1 reset, a project-specific level, action or
 interrupt, and applying the policy in the radio platform constructor, which
-pulled esp-hal's critical section into PHY code compared with the vendor
+pulled a critical section into PHY code compared with the vendor
 library; disabling the detector is never an option.
 
 ## Recovery after a lockup

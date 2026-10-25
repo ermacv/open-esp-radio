@@ -73,7 +73,10 @@ impl PsramMapping {
 unsafe impl oer_espressif_staged_layout::handoff::AdoptsBootstrapMapping for BootstrapPsram {
     type Mapping = PsramMapping;
 
-    fn adopt(self, _handoff: &oer_espressif_staged_layout::handoff::StageTwoHandoff) -> PsramMapping {
+    fn adopt(
+        self,
+        _handoff: &oer_espressif_staged_layout::handoff::StageTwoHandoff,
+    ) -> PsramMapping {
         PsramMapping {
             range: PSRAM_BASE_ADDRESS..PSRAM_BASE_ADDRESS + PSRAM_SIZE_BYTES,
         }

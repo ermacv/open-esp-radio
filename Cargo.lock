@@ -2202,7 +2202,6 @@ dependencies = [
  "oer-diagnostics",
  "oer-interrupt-table",
  "oer-memory",
- "static_cell",
 ]
 
 [[package]]
@@ -2260,10 +2259,14 @@ dependencies = [
 name = "oer-firmware-apps-radio-root"
 version = "0.1.0"
 dependencies = [
+ "oer-diagnostics",
+ "oer-embassy-time",
  "oer-esp32s31-board",
  "oer-esp32s31-hal",
  "oer-esp32s31-layout",
+ "oer-espressif-executor",
  "oer-espressif-staged-runtime",
+ "oer-time",
 ]
 
 [[package]]

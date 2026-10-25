@@ -77,10 +77,7 @@ fn a_refused_line_reports_the_writer_error() {
 fn a_note_over_the_endpoint_waits_for_the_host_and_arrives_whole() {
     let block = Shared::default();
     let interrupt: &'static Interrupt<Host, Irq> = Box::leak(Box::new(Interrupt::new()));
-    let signal = interrupt
-        .install(Irq(block.clone()))
-        .expect("a new interrupt takes its registers");
-    let mut endpoint = Endpoint::new(Task(block.clone()), signal);
+    let mut endpoint = Endpoint::new(Task(block.clone()), interrupt.signal());
     let note = Note::w3_pass();
     let mut write = pin!(write_note(&mut endpoint, &note));
     loop {
@@ -91,7 +88,7 @@ fn a_note_over_the_endpoint_waits_for_the_host_and_arrives_whole() {
             }
             Poll::Pending => {
                 block.lock().host_reads();
-                assert!(interrupt.service());
+                interrupt.service(&mut Irq(block.clone()));
             }
         }
     }

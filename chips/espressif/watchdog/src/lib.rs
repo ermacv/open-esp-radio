@@ -465,7 +465,9 @@ impl<R: MainWatchdogEnable> StoppedMainWatchdog<R> {
 ///
 /// The ROM arms it with flash boot protection and the ESP-IDF bootloader
 /// arms it again (stage 0 an RTC reset, nine seconds by default) before the
-/// image runs; `esp_hal::init` disables it in every image today.
+/// image runs; the bootstrap disables it right before its jump, and stage
+/// two arms it again ([`RtcWatchdog::arm_rtc_reset`]) for its executor to
+/// feed.
 ///
 /// SOURCE: ESP-IDF 4d59230d `bootloader_init.c:76-104`.
 pub struct RtcWatchdog<R: RtcWatchdogRegisters>(R);

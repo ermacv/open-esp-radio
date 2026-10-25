@@ -13,8 +13,9 @@
 //! held. The console's driver takes only a free block; then every early
 //! record goes to the driver. The driver is one duplex [`Endpoint`]
 //! (`embedded-io-async` `Read` and `Write`) of one task and its
-//! [`Interrupt`]: the handler reads the pending events, acknowledges exactly
-//! those and raises the endpoint's static
+//! [`Interrupt`]: the handler, which holds the interrupt's registers as its
+//! table entry's part, reads the pending events, acknowledges exactly those
+//! and raises the endpoint's static
 //! [`IrqSignal`](oer_interrupt_table::signal::IrqSignal); it calls no
 //! waker, and the interrupt enables belong to the task, which sets them once,
 //! so the two share no register and no lock. A fatal path takes only a free
@@ -29,7 +30,7 @@ mod lines;
 pub mod ownership;
 
 pub use endpoint::{Endpoint, Error};
-pub use interrupt::{AlreadyInstalled, Interrupt};
+pub use interrupt::Interrupt;
 pub use lines::{NoteError, write_note};
 
 /// The bytes of one full-speed bulk packet: the size of the IN FIFO.

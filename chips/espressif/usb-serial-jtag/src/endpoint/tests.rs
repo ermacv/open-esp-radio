@@ -29,10 +29,7 @@ impl Console {
     fn new() -> Self {
         let block = Shared::default();
         let interrupt: &'static Interrupt<Host, Irq> = Box::leak(Box::new(Interrupt::new()));
-        let signal = interrupt
-            .install(Irq(block.clone()))
-            .expect("a new interrupt takes its registers");
-        let endpoint = Endpoint::new(Task(block.clone()), signal);
+        let endpoint = Endpoint::new(Task(block.clone()), interrupt.signal());
         Self {
             block,
             endpoint,
@@ -44,7 +41,7 @@ impl Console {
 /// The host reads the packet in flight, and the interrupt fires.
 fn host_reads(block: &Shared, interrupt: &'static Interrupt<Host, Irq>) {
     block.lock().host_reads();
-    assert!(interrupt.service());
+    interrupt.service(&mut Irq(block.clone()));
 }
 
 fn poll<F: Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
@@ -84,7 +81,7 @@ fn an_event_from_before_the_hand_over_completes_nothing() {
     } = Console::new();
     // IN-empty is set after reset: the event is pending before any write.
     block.lock().events.in_empty = true;
-    assert!(interrupt.service());
+    interrupt.service(&mut Irq(block.clone()));
     let mut write = pin!(endpoint.write(b"ok"));
     assert!(
         poll(write.as_mut()).is_pending(),
@@ -105,7 +102,7 @@ fn an_event_without_room_keeps_the_write_waiting() {
     assert!(poll(write.as_mut()).is_pending());
     // An IN-empty of an earlier packet arrives late: the FIFO is still full.
     block.lock().events.in_empty = true;
-    assert!(interrupt.service());
+    interrupt.service(&mut Irq(block.clone()));
     assert!(poll(write.as_mut()).is_pending(), "no room yet");
     host_reads(&block, interrupt);
     assert_eq!(poll(write.as_mut()), Poll::Ready(Ok(4)));
@@ -167,7 +164,7 @@ fn a_read_takes_what_the_host_sent_and_waits_for_more() {
         let mut read = pin!(endpoint.read(&mut buffer));
         assert!(poll(read.as_mut()).is_pending(), "nothing was sent");
         block.lock().host_sends(b"abc");
-        assert!(interrupt.service());
+        interrupt.service(&mut Irq(block.clone()));
         assert_eq!(poll(read.as_mut()), Poll::Ready(Ok(3)));
     }
     assert_eq!(&buffer[..3], b"abc");
@@ -181,7 +178,7 @@ fn a_short_buffer_leaves_the_rest_for_the_next_read() {
         interrupt,
     } = Console::new();
     block.lock().host_sends(b"abcdef");
-    assert!(interrupt.service());
+    interrupt.service(&mut Irq(block.clone()));
     let mut buffer = [0; 4];
     assert_eq!(poll(pin!(endpoint.read(&mut buffer))), Poll::Ready(Ok(4)));
     assert_eq!(poll(pin!(endpoint.read(&mut buffer))), Poll::Ready(Ok(2)));
@@ -198,7 +195,7 @@ fn an_abandoned_read_loses_no_byte_and_no_event() {
     let mut buffer = [0; 8];
     assert!(poll(pin!(endpoint.read(&mut buffer))).is_pending());
     block.lock().host_sends(b"hi");
-    assert!(interrupt.service());
+    interrupt.service(&mut Irq(block.clone()));
     // The select that polled the read chose another branch and dropped it.
     {
         let mut write = pin!(endpoint.write(b"x"));
@@ -232,8 +229,8 @@ fn the_handler_raises_only_what_it_acknowledged() {
         block, interrupt, ..
     } = Console::new();
     block.lock().host_sends(b"z");
-    assert!(interrupt.service());
-    assert!(interrupt.service());
+    interrupt.service(&mut Irq(block.clone()));
+    interrupt.service(&mut Irq(block.clone()));
     assert_eq!(
         block.lock().acknowledged,
         vec![
