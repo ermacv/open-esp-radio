@@ -531,6 +531,156 @@ the root's source count cites all those lines. Missing bounds, gaps and
 duplicate source identities are errors. For S31, unbound reasons name the
 unresolved flash/PSRAM controller pair and the PMT/PMU alias conflict.
 
+### Ownership policy (`schema = 6`)
+
+`chip_policy::ChipPolicy::load(path, model, evidence)` reads the ownership
+policy over a loaded `ChipModel`. Generation still reads the schema-5
+policy, which names curated peripherals; it moves to this one together with
+the model.
+
+The policy holds ownership and transactions only. A **part** is the words
+of one MMIO instance one owner holds; a **partition** is one owner, a
+generated owner type holding parts of any number of instances, with no
+limit on the parts of one instance. Every word (an expanded element: a
+register, a `dim` element or a group element) of every MMIO instance is
+held by exactly one part or is explicitly unclaimed: nothing claims "the
+rest" of an instance or of the chip. Analog-I2C instances are reached
+through their I2C master's words and are not partitioned.
+
+```toml
+schema = 6
+chip = "esp32s31"                 # the root's chip
+
+[[partitions]]
+name = "Ieee802154Peripherals"    # owner type, UpperCamelCase
+member = "ieee802154"             # its member in the generated root
+description = "The IEEE 802.15.4 MAC and its event channels."
+
+[[partitions.parts]]
+name = "Task"                     # UpperCamelCase, unique in the partition
+instance = "IEEE802154"
+registers = ["CONFIG", "ED_CONFIG", "RX_STATUS", "TX_STATUS"]
+
+[[partitions.parts]]
+name = "Irq"
+instance = "IEEE802154"
+registers = ["EVENT_STATUS", "EVENT_CLEAR"]
+observes = ["RX_STATUS", "TX_STATUS", "ED_CONFIG"]
+irq-side = true
+description = "The handler samples and acknowledges events and reads the RX and TX status."
+sources = ["IDF_IEEE802154_LL"]
+
+[[partitions.parts]]
+name = "Etm"
+instance = "MODEM_ETM"
+registers = ["CHANNEL_ENABLE"]
+elements = [{ register = "CH%s_EVENT", first = 0, count = 2 }]
+triggers = [{ register = "CHANNEL_ENABLE_SET", fields = ["CH0", "CH1"] }]
+description = "Event channels zero and one."
+sources = ["IDF_IEEE802154_ETM"]
+
+[[partitions]]
+name = "SystemTimerPeripherals"
+member = "system_timer"
+description = "The system timer."
+
+[[partitions.parts]]
+name = "Counter"
+instance = "SYSTIMER"
+registers = ["UNIT0_VALUE_HI", "UNIT0_VALUE_LO", "UNIT0_OP"]
+shared = true
+description = "The counter latch every context reads."
+sources = ["IDF_SYSTIMER"]
+
+[[unclaimed]]
+instances = ["UART1", "UART2"]    # whole instances
+reason = "No driver uses them."
+
+[[unclaimed]]
+instance = "MODEM_ETM"            # or words of one instance
+registers = ["CH3_EVENT"]
+triggers = [{ register = "CHANNEL_ENABLE_SET", fields = ["CH3"] }]
+reason = "Event channel three is unused."
+
+[[fixed-register-images]]
+name = "enable_ieee802154_etm_channel0"
+register = "MODEM_ETM.CHANNEL_ENABLE_SET"
+value = 0x00000001
+sources = ["IDF_IEEE802154_ETM"]
+
+[[field-replace-modifies]]
+name = "set_ieee802154_channel"
+fields = [{ field = "IEEE802154.CONFIG.CHANNEL", source-bit-offset = 0 }]
+domain = "Channel"
+sources = ["IDF_IEEE802154_LL"]
+```
+
+A part selects words of its `instance` by `registers` (element names
+below the instance, `STATUS`, `REGCLK_1`, `T1.CONFIG`, or a template key
+holding `%s`, `CH%s_EVENT`, which selects every element), `elements`
+(`count` elements of one template from index `first`) and `triggers`. Only
+a word whose fields are all one-bit `write-trigger` fields is split by
+field (`triggers`): each of its fields is then held by exactly one part or
+unclaimed. Field-level ownership of any other word does not exist. An
+`[[unclaimed]]` entry takes either `instances` (whole instances, which no
+part names) or `instance` with the same selectors, and a nonblank
+`reason`.
+
+A part's flags:
+
+| Flag | Meaning | Rule |
+| --- | --- | --- |
+| `observes` | registers of the instance it reads | each reads without a side effect and is held by another part |
+| `irq-side` | an interrupt handler owns it | not `shared` |
+| `shared` | every context reaches it through `&self` | each word is a side-effect-free read, write-trigger strobes or one `plain` or `write-only` field stored whole; no FIFO, data port, command, `read-clears` or `write-one-to-clear`; no `observes`, `triggers`, `read-only`, `irq-side`; no transaction |
+| `read-only` | the owner only reads its words | each word reads without a side effect; no `triggers`; no writing transaction |
+| `copy` | the read-only owner is `Copy` | only with `read-only` |
+
+A part with any flag, `observes` or `triggers` has a `description` and
+`sources`. Partitions have unique names and members, a description and at
+least one part; a part selects at least one word.
+
+Domains (`flag-domains`, `enum-domains`, `bounded-domains`,
+`opaque-domains`, `bitwise-composed-domains`) keep their schema-5 shape;
+an opaque or bitwise-composed domain names its `register` and is used on
+it alone. Transactions name `INSTANCE.REGISTER` and
+`INSTANCE.REGISTER.FIELD` of the root, a template key for every element
+(`MODEM_ETM.CH%s_EVENT.ID`), and take no `peripheral` or `exposure`. The
+kinds are `interrupt-snapshots` (`status`, `clear`), `field-reads`,
+`full-register-reads`, `partition-image-reads`, `full-register-writes`,
+`pointer-fields`, `zero-based-field-writes` (`fields`),
+`sampled-bit-zero-writes`, `zero-register-writes`,
+`fixed-register-images`, `fixed-register-sequences` (each step one
+element), `masked-register-modifies`, `field-or-modifies`,
+`field-clear-modifies`, `field-replace-modifies` and
+`indexed-bit-set-modifies` (a bounded domain of indices below the field's
+width). Names are unique `lower_snake_case` across all transactions; the
+fields of one transaction lie in one register.
+
+What a transaction may reach follows the field class:
+
+| Transaction | Fields it may write or read | Its register |
+| --- | --- | --- |
+| read | not `write-only`, `write-trigger` or `read-clears` | reads without a side effect: no FIFO, read side effect or `read-clears` field |
+| write from zero (full, zero-based, sampled bit, pointer, zero register) | `plain`, `write-only`, `write-trigger`, `hardware-written` (a pointer: not `write-trigger`; a sampled bit: one readable bit) | no FIFO or command register |
+| read-modify-write | `plain`, `hardware-written` | reads without a side effect; no command register, data port, `write-only` or `write-one-to-clear` field |
+| fixed image or sequence step | sets bits of `plain`, `write-only`, `write-trigger`, `set-only`, `self-clearing`, `hardware-written`; with `whole-word` also undeclared bits and `read-only` fields | no FIFO or command register |
+
+A `write-one-to-clear` field is written only by its snapshot's
+acknowledgement. A snapshot's status word reads without a side effect, its
+clear word is one element of `write-one-to-clear` fields that acknowledge
+whole status fields; no other transaction writes a clear word except a
+fixed image naming one proof, `masks` (an enable word of `plain` or
+`hardware-written` fields of the same part, cleared first) or
+`consumed-event`. A sequence step never writes a clear word.
+
+Every transaction reaches the words of one part: a template reference
+needs every element held by that part, and a write to a split trigger word
+reaches the part holding the fields its value sets. A transaction on an
+unclaimed word or field, or on words of two parts, fails. Every check runs
+on load and fails with a typed `chip_policy::Error` that names the file
+and the entity.
+
 ## Analog-I2C space
 
 The chip manifest's `indirect-spaces = ["analog/phy.toml"]` selects one

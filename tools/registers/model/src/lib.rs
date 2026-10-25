@@ -22,6 +22,7 @@ mod analog_render;
 mod bits;
 pub mod chip_import;
 pub mod chip_model;
+pub mod chip_policy;
 mod descriptions;
 pub use bits::BitStates;
 mod draft;
