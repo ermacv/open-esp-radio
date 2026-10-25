@@ -152,7 +152,7 @@ fn per_hart_allocations_keep_both_guard_bottoms_aligned_without_growing_other_st
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     for chip in ["esp32s31", "esp32c5"] {
         let profile = oer_chip_profile::Profile::load(&root, chip).unwrap();
-        let contract = profile.interrupts.unwrap();
+        let contract = profile.facts.interrupts.unwrap();
         let mut sizes = [0; 2];
         for &hart in &contract.harts {
             sizes[hart as usize] = contract
@@ -162,7 +162,7 @@ fn per_hart_allocations_keep_both_guard_bottoms_aligned_without_growing_other_st
         let bytes = link(
             contract.harts.len() as u32,
             sizes,
-            profile.memory.as_ref().unwrap().sram.origin,
+            profile.facts.memory.as_ref().unwrap().sram.origin,
         )
         .unwrap();
         let elf = oer_analysis_elf::Elf::parse(&bytes).unwrap();

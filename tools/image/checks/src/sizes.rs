@@ -161,7 +161,7 @@ impl Measurements {
         for stack in &audit.stacks {
             measured.task(&image, stack)?;
         }
-        if !bootstrap && profile.interrupts.is_some() {
+        if !bootstrap && profile.facts.interrupts.is_some() {
             measured.interrupts(&image, &crate::interrupts::interrupt_stacks_of(&image)?)?;
         }
         Ok(measured)
@@ -170,15 +170,20 @@ impl Measurements {
     pub(crate) fn of(image: &Image, profile: &Profile) -> Result<Self> {
         let file = oer_analysis_elf::Elf::parse(&image.elf)?;
         let memory = profile
+            .facts
             .memory
             .as_ref()
             .ok_or("sizes: chip has no memory map")?;
         // Retained SRAM is outside the placement gate's application SRAM
         // range; take it from the chip's canonical staged layout.
-        let retained = match profile.id.as_str() {
+        let retained = match profile.facts.id.as_str() {
             "esp32s31" => oer_esp32s31_layout::LAYOUT.retained,
             "esp32c5" => oer_esp32c5_layout::LAYOUT.retained,
-            _ => return Err(format!("sizes: no retained memory layout for {}", profile.id).into()),
+            _ => {
+                return Err(
+                    format!("sizes: no retained memory layout for {}", profile.facts.id).into(),
+                );
+            }
         };
         let mut out = Self::default();
         for section in file.sections().filter(|section| section.allocated) {

@@ -513,11 +513,16 @@ fn bootstrap_exports_a_rom_summary_the_runtime_does_not_apply_and_its_coverage_r
         ],
         &[("stack_bottom", 0, 0), ("stack_top", 0x100, 0)],
     );
-    let profile: oer_chip_profile::Profile = toml::from_str(
+    let chip = tempfile::tempdir().unwrap();
+    let layer = chip.path().join("chips/esp32c5/platform/chip.toml");
+    std::fs::create_dir_all(layer.parent().unwrap()).unwrap();
+    std::fs::write(
+        &layer,
         r#"
-schema = 1
+schema = 2
 id = "esp32c5"
 family = "espressif"
+isa = "rv32imac"
 rust-target = "riscv32imac-unknown-none-elf"
 boot = "staged"
 espflash-chip = "esp32c5"
@@ -533,7 +538,9 @@ flash-xip = { origin = 0x10000, length = 0x1000 }
 task-stacks = "sram"
 "#,
     )
-    .expect("the synthetic chip profile is valid");
+    .unwrap();
+    let profile = oer_chip_profile::Profile::load(chip.path(), "esp32c5")
+        .expect("the synthetic chip profile is valid");
     let (directory, policy) = policy_with(BASE, ASM_REVIEW);
     let input = CheckInput {
         root: directory.path(),
@@ -1090,15 +1097,7 @@ fn reviews_match_without_crate_disambiguators_only() {
 fn the_repository_policies_load() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
-    for (path, text) in [
-        (
-            "chips/esp32c5/platform/chip.toml",
-            include_str!("../../../../../chips/esp32c5/platform/chip.toml"),
-        ),
-        (
-            "chips/esp32s31/platform/chip.toml",
-            include_str!("../../../../../chips/esp32s31/platform/chip.toml"),
-        ),
+    for (path, text) in oer_espressif_facts::tracked::FILES.iter().copied().chain([
         (
             "chips/esp32c5/platform/stack.toml",
             include_str!("../../../../../chips/esp32c5/platform/stack.toml"),
@@ -1111,7 +1110,7 @@ fn the_repository_policies_load() {
             "chips/espressif/staged-layout/stack-coverage.toml",
             include_str!("../../../../../chips/espressif/staged-layout/stack-coverage.toml"),
         ),
-    ] {
+    ]) {
         let path = root.join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
@@ -1363,7 +1362,7 @@ fn a_root_that_reaches_forbidden_rom_fails() {
         )
         .expect("the synthetic image is valid")
     };
-    let forbidden = [oer_chip_profile::RomRange {
+    let forbidden = [oer_espressif_facts::RomRange {
         name: "radio".into(),
         start: ROM + 4,
         end: ROM + 8,

@@ -45,7 +45,7 @@ pub use build_log::{BuildLog, BuildStepFailed};
 
 pub use cargo::LAYOUT_SEED_ENV;
 use oer_chip_profile::policy::StackPolicy;
-pub use oer_chip_profile::{Boot, FlashMap};
+pub use oer_espressif_facts::{Boot, FlashMap};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -172,7 +172,7 @@ pub fn check(spec: &ImageSpec, check: RuntimeCheck) -> Result<()> {
 /// The profile of `chip` at `root`, which must name its flash map.
 pub fn profile(root: &Path, chip: &str) -> Result<oer_chip_profile::Profile> {
     let profile = oer_chip_profile::Profile::load(root, chip)?;
-    if profile.flash.is_none() {
+    if profile.facts.flash.is_none() {
         return Err(
             format!("platform/{chip}/chip.toml names no [flash] map for its images").into(),
         );
@@ -207,7 +207,7 @@ fn runtime_command(
             "--profile",
             FIRMWARE_PROFILE,
             "--target",
-            &profile.rust_target,
+            &profile.facts.rust_target,
         ])
         .args(application.feature_arguments())
         .env("CARGO_INCREMENTAL", "0");
@@ -228,7 +228,7 @@ fn runtime_command(
             instrumentation,
             &spec.root,
             &linker_cache(&spec.root),
-            &profile.rust_target,
+            &profile.facts.rust_target,
         ),
     )?;
     Ok(command)

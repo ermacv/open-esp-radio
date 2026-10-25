@@ -144,7 +144,8 @@ pub struct Image {
     pub resources: Box<oer_analysis_riscv_model::AnalysisResources>,
     /// Retained analysis and ELF allocations, reserved beside bound evidence.
     pub retained_bytes: u64,
-    /// Chip selectors apply even when an image supplies its own stack layout.
+    /// The family's selectors, which apply even when an image supplies its
+    /// own stack layout.
     pub observed_functions: Vec<String>,
 }
 
@@ -193,21 +194,25 @@ impl Image {
         elf: Vec<u8>,
         inputs: &mut oer_os_durable::inputs::Inputs,
     ) -> Result<Self> {
-        let rom = profile
-            .rom
-            .as_ref()
-            .ok_or_else(|| format!("chips/{}/platform/chip.toml names no [rom] ELF", profile.id))?;
-        let rom_path =
-            oer_tool_pins::artifacts::ensure_with_inputs(root, &profile.id, &rom.elf, inputs)?;
+        let rom = profile.facts.rom.as_ref().ok_or_else(|| {
+            format!(
+                "chips/{}/platform/chip.toml names no [rom] ELF",
+                profile.facts.id
+            )
+        })?;
+        let rom_path = oer_tool_pins::artifacts::ensure_with_inputs(
+            root,
+            &profile.facts.id,
+            &rom.elf,
+            inputs,
+        )?;
         let rom_elf = inputs.read(&rom_path)?;
         let summaries = match &rom.summaries {
             Some(path) => parse_summaries(&inputs.read_to_string(&root.join(path))?)?,
             None => Vec::new(),
         };
         let mut image = Self::new(elf, &[&rom_elf], &summaries, Contract::of(profile))?;
-        image.observed_functions =
-            StackPolicy::load_with_inputs(&root.join(profile.stack_policy()), inputs)?
-                .observed_functions;
+        image.observed_functions = profile.facts.observed_functions.clone();
         Ok(image)
     }
 

@@ -6,7 +6,9 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use oer_chip_profile::{BluetoothMode, Profile, Start, WifiBand};
+use oer_chip_profile::Profile;
+
+use oer_espressif_facts::{BluetoothMode, Start, WifiBand};
 use oer_lab_model::Stand;
 
 use crate::Result;
@@ -42,7 +44,7 @@ pub(crate) fn init(root: &Path, cli: InitCli) -> Result<std::process::ExitCode> 
         };
         let profile = chips
             .iter()
-            .find(|profile| profile.id == chip)
+            .find(|profile| profile.facts.id == chip)
             .ok_or_else(|| {
                 format!(
                     "board {} is a {chip}, which no chip profile names",
@@ -79,7 +81,7 @@ fn stand_file(host: &str, boards: &[(String, &Profile)]) -> String {
     let _ = writeln!(text, "id = {host:?}\nair = \"exclusive\"");
     let mut counts = std::collections::BTreeMap::<&str, u32>::new();
     for (mac, profile) in boards {
-        let count = counts.entry(profile.id.as_str()).or_default();
+        let count = counts.entry(profile.facts.id.as_str()).or_default();
         *count += 1;
         let radios = radios(profile)
             .iter()
@@ -90,9 +92,9 @@ fn stand_file(host: &str, boards: &[(String, &Profile)]) -> String {
             text,
             "\n[[board]]\nid = \"{}-{}\"\nusb-serial = \"{mac}\"\nchip = \"{}\"\n\
              radios = [{radios}]\nroles = [\"dut\", \"peer\"]\nreset = [{}]\n",
-            profile.id,
+            profile.facts.id,
             count,
-            profile.id,
+            profile.facts.id,
             reset(profile)
                 .iter()
                 .map(|step| format!("{step:?}"))
@@ -105,7 +107,7 @@ fn stand_file(host: &str, boards: &[(String, &Profile)]) -> String {
 
 /// The radios a board of `profile`'s chip carries: all its chip's.
 fn radios(profile: &Profile) -> Vec<&'static str> {
-    let properties = &profile.properties;
+    let properties = &profile.facts.properties;
     let mut radios = Vec::new();
     for band in &properties.wifi_bands {
         radios.push(match band {
@@ -125,7 +127,7 @@ fn radios(profile: &Profile) -> Vec<&'static str> {
 /// The reset ladder of a board on no hub: an RTS reset through USB
 /// Serial/JTAG where the chip's start policy allows one, then JTAG.
 fn reset(profile: &Profile) -> Vec<&'static str> {
-    match profile.flash.as_ref().map(|flash| flash.start) {
+    match profile.facts.flash.as_ref().map(|flash| flash.start) {
         Some(Start::PowerOn) => vec!["jtag"],
         _ => vec!["usb-jtag-rts", "jtag"],
     }

@@ -22,7 +22,7 @@ fn all(root: &std::path::Path) -> Result<Vec<Probe>> {
     Ok(oer_chip_profile::Profile::all(root)?
         .into_iter()
         .flat_map(|profile| {
-            let chip = profile.id.clone();
+            let chip = profile.facts.id.clone();
             profile.probe.into_iter().map(move |probe| Probe {
                 chip: chip.clone(),
                 probe,

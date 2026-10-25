@@ -2,7 +2,7 @@
 
 use super::{InterruptStacks, Result};
 use oer_analysis_elf::{Elf, StorageBounds};
-use oer_chip_profile::{InterruptContract, Memory};
+use oer_espressif_facts::{InterruptContract, Memory};
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 

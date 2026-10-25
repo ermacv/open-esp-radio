@@ -7,7 +7,7 @@ by `cargo fw` or `cargo hil`; ordinary and bootstrap links are unaffected.
 
 The first link uses the contract maximum. A proven product bound selects
 `align16(ceil(bound * (100 + margin) / 100)) + guard`, with the 10% margin
-from `chip.toml`. A hart whose interrupt stack the image policy declares
+of the family layer (`chips/espressif/platform/family.toml`). A hart whose interrupt stack the image policy declares
 unused (`[core.N.interrupt_stack] unused = true`, S31 hart 1 in every image)
 gets 0 bytes in both links and takes no part in the sizing. Partial bounds,
 diagnostic and probe images retain the maximum for each used hart. Existing

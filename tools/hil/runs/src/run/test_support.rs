@@ -103,14 +103,15 @@ pub fn integrated_session(target_directory: &Path) -> RunSession {
 pub const TEST_CHIP: &str = "chip-a";
 
 /// The fixture chip's profile (`chips/chip-a/platform/chip.toml`).
-pub const TEST_CHIP_PROFILE: &str = "schema = 1\nid = \"chip-a\"\nfamily = \"f\"\n\
-    rust-target = \"riscv32imafc-unknown-none-elf\"\nboot = \"staged\"\n\
+pub const TEST_CHIP_PROFILE: &str = "schema = 2\nid = \"chip-a\"\nfamily = \"f\"\n\
+    isa = \"rv32imafc\"\nrust-target = \"riscv32imafc-unknown-none-elf\"\nboot = \"staged\"\n\
     espflash-chip = \"esp32c6\"\nrevisions = []\n\
     [properties]\nwifi-bands = []\nbluetooth = []\nieee802154 = false\ncores = 1\n\
     [flash]\nbootloader = 0x2000\npartition-table = 0x8000\napplication = 0x10000\n\
     otadata = 0xd000\npartitions = \"chips/chip-a/platform/partitions/applications.csv\"\n\
-    application-encoding = { mode = \"qio\", frequency-mhz = 80, size-mib = 16 }\n\
-    bootloader-mode = \"dio\"\nstart = \"reset\"\n";
+    application-encoding = { mode = \"qio\", frequency-mhz = 80 }\n\
+    bootloader-mode = \"dio\"\nstart = \"reset\"\n\
+    [module]\nname = \"module-a\"\nflash = { size-mib = 16 }\n";
 
 pub fn write_test_build_materials(root: &Path) {
     for relative in [

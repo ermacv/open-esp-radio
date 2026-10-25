@@ -1,5 +1,7 @@
 //! Link-time allocation within the interrupt contract's maximum.
 
+use alloc::format;
+
 use crate::{InterruptContract, Result};
 
 impl InterruptContract {
@@ -48,13 +50,12 @@ impl InterruptContract {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::string::ToString;
 
     fn contract(chip: &str) -> InterruptContract {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        crate::Profile::load(&root, chip)
-            .unwrap()
+        crate::tests::tracked(chip)
             .interrupts
-            .unwrap()
+            .expect("a staged chip has an interrupt contract")
     }
 
     #[test]

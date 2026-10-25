@@ -46,7 +46,7 @@ impl Project {
     /// missing project.
     pub fn new(root: &Path, name: &str) -> Result<Self> {
         crate::manifest_path(root, name)?;
-        Ok(Self(oer_chip_profile::Profile::load(root, name)?.id))
+        Ok(Self(oer_chip_profile::Profile::load(root, name)?.facts.id))
     }
 
     pub fn name(&self) -> &str {
@@ -61,8 +61,8 @@ impl Project {
     /// The chip's ROM as its profile's `[rom]` names it: the pinned ROM
     /// ELF's artifact id and the reviewed summaries of the ROM functions its
     /// images call, relative to the root; `None` for a chip without one.
-    pub fn rom(&self, root: &Path) -> Result<Option<oer_chip_profile::Rom>> {
-        Ok(oer_chip_profile::Profile::load(root, &self.0)?.rom)
+    pub fn rom(&self, root: &Path) -> Result<Option<oer_espressif_facts::Rom>> {
+        Ok(oer_chip_profile::Profile::load(root, &self.0)?.facts.rom)
     }
 
     /// Directory of the chip's typed vendor scenario library.

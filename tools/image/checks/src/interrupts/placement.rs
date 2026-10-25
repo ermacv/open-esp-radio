@@ -5,7 +5,8 @@ use super::{InterruptStacks, Result, cached_hook_references, code::Role};
 use crate::stack::Image;
 use oer_analysis_elf::{Elf, SymbolKind};
 use oer_analysis_riscv_stack::{Analysis, HartStack};
-use oer_chip_profile::{Profile, Region};
+use oer_chip_profile::Profile;
+use oer_espressif_facts::Region;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Write as _};
 
@@ -80,7 +81,7 @@ impl Sram {
     fn of(elf: &Elf<'_>, profile: &Profile, region: Region) -> Self {
         let symbols = elf.addresses();
         let mut ranges = Vec::new();
-        if let Some(placement) = &profile.placement {
+        if let Some(placement) = &profile.facts.placement {
             for rule in &placement.range {
                 if rule.region != "sram" {
                     continue;
@@ -117,7 +118,7 @@ impl Sram {
             region,
             source: format!(
                 "chips/{}/platform/chip.toml [memory].sram; application-owned SRAM_START..SRAM_SEG_END; ROM boot-stack side above the end is already excluded (source: chips/{}/layout/src/lib.rs, ESP-IDF memory map)",
-                profile.id, profile.id
+                profile.facts.id, profile.facts.id
             ),
             ranges,
             placed,

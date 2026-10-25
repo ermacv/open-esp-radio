@@ -2,7 +2,8 @@
 //! The chip facts that two sources state: each pair is held equal by value,
 //! so the one that changes alone fails here.
 //!
-//! The sources are a chip's `chip.toml`, its `LAYOUT` (the linker scripts and
+//! The sources are a chip's resolved facts (`oer-espressif-facts`: its
+//! layers from the ISA to the board), its `LAYOUT` (the linker scripts and
 //! the bootstrap read it), the stage-two header and the zeroed sections of
 //! `oer-espressif-staged-layout`, the `two-harts` feature of the images and
 //! the S31 reset-cause table of `oer-esp32s31-knowledge`.
@@ -14,9 +15,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_chip_profile::{Profile, Region};
+use oer_chip_profile::Profile;
+use oer_espressif_facts::{Facts, Region};
 use oer_espressif_staged_layout::{
     Layout, Region as LayoutRegion,
+    memory::BOOTSTRAP_PSRAM_BYTES,
     stage_two::{self, Header},
     zeroed::RUNTIME_ZEROED_REGIONS,
 };
@@ -26,35 +29,8 @@ const CHIPS: [(&str, Layout); 2] = [
     ("esp32c5", oer_esp32c5_layout::LAYOUT),
 ];
 
-fn repository() -> tempfile::TempDir {
-    let directory = tempfile::tempdir().unwrap();
-    for (path, text) in [
-        (
-            "chips/esp32c5/platform/chip.toml",
-            include_str!("../../../../chips/esp32c5/platform/chip.toml"),
-        ),
-        (
-            "chips/esp32s31/platform/chip.toml",
-            include_str!("../../../../chips/esp32s31/platform/chip.toml"),
-        ),
-        (
-            "chips/esp32c5/platform/partitions/applications.csv",
-            include_str!("../../../../chips/esp32c5/platform/partitions/applications.csv"),
-        ),
-        (
-            "chips/esp32s31/platform/partitions/applications.csv",
-            include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
-        ),
-    ] {
-        let path = directory.path().join(path);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, text).unwrap();
-    }
-    directory
-}
-
-fn profile(id: &str) -> Profile {
-    Profile::load(repository().path(), id).unwrap()
+fn profile(id: &str) -> Facts {
+    Profile::tracked(id).unwrap().facts
 }
 
 fn region(region: LayoutRegion) -> Region {
@@ -66,7 +42,7 @@ fn region(region: LayoutRegion) -> Region {
 
 /// What differs between a chip's `chip.toml [memory]`, `[placement]` and
 /// `[interrupts]` and its `LAYOUT`.
-fn memory_mismatches(profile: &Profile, layout: &Layout) -> Vec<String> {
+fn memory_mismatches(profile: &Facts, layout: &Layout) -> Vec<String> {
     let mut found = Vec::new();
     let mut check = |name: &str, toml: Option<Region>, layout: Region| {
         if toml != Some(layout) {
@@ -148,7 +124,7 @@ fn memory_map_is_the_layout() {
 fn a_changed_memory_fact_on_either_side_is_reported() {
     for (id, layout) in CHIPS {
         let base = profile(id);
-        let moved = |mutate: &dyn Fn(&mut Profile)| {
+        let moved = |mutate: &dyn Fn(&mut Facts)| {
             let mut profile = base.clone();
             mutate(&mut profile);
             memory_mismatches(&profile, &layout)
@@ -170,7 +146,7 @@ fn a_changed_memory_fact_on_either_side_is_reported() {
 }
 
 /// What differs between `[staged]` and the code that states the same facts.
-fn staged_mismatches(profile: &Profile) -> Vec<String> {
+fn staged_mismatches(profile: &Facts) -> Vec<String> {
     let mut found = Vec::new();
     let staged = profile.staged.as_ref().expect("a staged chip has [staged]");
 
@@ -184,6 +160,13 @@ fn staged_mismatches(profile: &Profile) -> Vec<String> {
             "zeroed inputs: only in chip.toml {:?}, only in zeroed.rs {:?}",
             toml.difference(&code).collect::<Vec<_>>(),
             code.difference(&toml).collect::<Vec<_>>()
+        ));
+    }
+
+    if staged.bootstrap_psram_bytes != BOOTSTRAP_PSRAM_BYTES {
+        found.push(format!(
+            "bootstrap PSRAM page: facts {:#x}, memory.rs {BOOTSTRAP_PSRAM_BYTES:#x}",
+            staged.bootstrap_psram_bytes
         ));
     }
 
@@ -240,7 +223,7 @@ fn staged_boot_contract_is_the_code() {
 #[test]
 fn a_changed_staged_fact_on_either_side_is_reported() {
     let base = profile("esp32s31");
-    let changed = |mutate: &dyn Fn(&mut Profile)| {
+    let changed = |mutate: &dyn Fn(&mut Facts)| {
         let mut profile = base.clone();
         mutate(&mut profile);
         staged_mismatches(&profile)
@@ -269,6 +252,10 @@ fn a_changed_staged_fact_on_either_side_is_reported() {
     );
     assert_eq!(
         changed(&|p| p.staged.as_mut().unwrap().stage_two.magic ^= 1).len(),
+        1
+    );
+    assert_eq!(
+        changed(&|p| p.staged.as_mut().unwrap().bootstrap_psram_bytes += 4).len(),
         1
     );
     assert_eq!(
@@ -345,7 +332,7 @@ fn runtime_features() -> Vec<(PathBuf, String, bool)> {
 /// What differs between a chip's core count, `LAYOUT.harts`, the interrupt
 /// contract's harts and the `two-harts` feature of its images.
 fn core_mismatches(
-    profile: &Profile,
+    profile: &Facts,
     layout: &Layout,
     images: &[(PathBuf, String, bool)],
 ) -> Vec<String> {

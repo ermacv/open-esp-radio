@@ -174,7 +174,7 @@ pub(crate) fn execute_workload(
 /// chip whose profile names no interrupt contract has no bound to hold.
 fn check_interrupt_stacks(chip: &str, elf: Option<&Path>, evidence: &mut ExecutionEvidence) {
     let bounded = oer_chip_profile::Profile::load(&oer_os_process::built_root(), chip)
-        .is_ok_and(|profile| profile.interrupts.is_some());
+        .is_ok_and(|profile| profile.facts.interrupts.is_some());
     if !bounded {
         return;
     }

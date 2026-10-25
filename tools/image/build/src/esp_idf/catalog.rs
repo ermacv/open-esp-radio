@@ -162,6 +162,7 @@ pub fn bundle(
     let directory = idf::output(root, &entry.project(root)).join("build");
     only_boot_files(&directory)?;
     let flash = crate::profile(root, &entry.chip)?
+        .facts
         .flash
         .ok_or_else(|| format!("{} names no flash map", entry.chip))?;
     let (bootloader, partition_table) = super::flash_files(&directory, &flash)?;

@@ -342,7 +342,7 @@ pub fn packages(
                 .ok_or("unsupported HIL class")?
                 .package,
             "--target",
-            &profile.rust_target,
+            &profile.facts.rust_target,
             "--locked",
         ])
         .args(["--no-default-features", "--features", &features])

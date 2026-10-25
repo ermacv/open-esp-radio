@@ -458,7 +458,7 @@ pub fn run(root: &Path, chip: &str, budget: &Budget) -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
     // The flash a linked image's rodata sits in is read-only at run time,
     // whatever its section flags say.
-    let read_only = match oer_chip_profile::Profile::load(root, chip)?.memory {
+    let read_only = match oer_chip_profile::Profile::load(root, chip)?.facts.memory {
         Some(memory) => vec![ReadOnlyWindow {
             start: memory.flash_xip.origin,
             length: u64::from(memory.flash_xip.length),

@@ -10,19 +10,19 @@ fn chips(root: &Path) -> Vec<oer_chip_profile::Profile> {
     let chips = oer_chip_profile::Profile::all(root)
         .unwrap()
         .into_iter()
-        .filter(|profile| profile.flash.is_some())
+        .filter(|profile| profile.facts.flash.is_some())
         .collect::<Vec<_>>();
     assert!(!chips.is_empty());
     chips
 }
 
 /// Byte 2 of an ESP image header: its flash mode.
-fn mode_byte(mode: oer_chip_profile::FlashMode) -> u8 {
+fn mode_byte(mode: oer_espressif_facts::FlashMode) -> u8 {
     match mode {
-        oer_chip_profile::FlashMode::Qio => 0,
-        oer_chip_profile::FlashMode::Qout => 1,
-        oer_chip_profile::FlashMode::Dio => 2,
-        oer_chip_profile::FlashMode::Dout => 3,
+        oer_espressif_facts::FlashMode::Qio => 0,
+        oer_espressif_facts::FlashMode::Qout => 1,
+        oer_espressif_facts::FlashMode::Dio => 2,
+        oer_espressif_facts::FlashMode::Dout => 3,
     }
 }
 
@@ -69,7 +69,7 @@ fn the_flash_map_is_the_partition_tables() {
     let repository = repository();
     let root = repository.path();
     for profile in chips(&root) {
-        let flash = profile.flash.unwrap();
+        let flash = profile.facts.flash.unwrap();
         let table = partitions(&root, &flash).unwrap();
         let application = table
             .iter()
@@ -91,7 +91,7 @@ fn the_boot_files_are_encoded_into_the_bundle() {
     let repository = repository();
     let root = repository.path();
     for profile in chips(&root) {
-        let flash = profile.flash.clone().unwrap();
+        let flash = profile.facts.flash.clone().unwrap();
         let directory = tempfile::tempdir().unwrap();
         let application = directory.path().join("app.bin");
         std::fs::write(&application, b"application").unwrap();
@@ -100,7 +100,7 @@ fn the_boot_files_are_encoded_into_the_bundle() {
         let output = directory.path().join("bundle");
         let bundle = around(
             &root,
-            &profile.id,
+            &profile.facts.id,
             &application,
             BootFiles::Encode { elf: &elf_path },
             &output,
@@ -139,7 +139,7 @@ fn the_boot_files_are_encoded_into_the_bundle() {
         assert!(
             around(
                 &root,
-                &profile.id,
+                &profile.facts.id,
                 &application,
                 BootFiles::Given {
                     bootloader: &application,
@@ -153,7 +153,7 @@ fn the_boot_files_are_encoded_into_the_bundle() {
         // bootloader.
         let given = around(
             &root,
-            &profile.id,
+            &profile.facts.id,
             &application,
             BootFiles::Given {
                 bootloader: &bundle.bootloader(),
@@ -169,7 +169,7 @@ fn the_boot_files_are_encoded_into_the_bundle() {
         assert!(
             around(
                 &root,
-                &profile.id,
+                &profile.facts.id,
                 &application,
                 BootFiles::Given {
                     bootloader: &bundle.bootloader(),
@@ -187,9 +187,9 @@ fn the_application_and_the_bootloader_are_encoded_in_the_flash_maps_modes() {
     let repository = repository();
     let root = repository.path();
     for profile in chips(&root) {
-        let flash = profile.flash.clone().unwrap();
+        let flash = profile.facts.flash.clone().unwrap();
         let csv = root.join(&flash.partitions);
-        let chip = encode::chip(&profile.espflash_chip).unwrap();
+        let chip = encode::chip(&profile.facts.espflash_chip).unwrap();
         let application = encode::encode(
             &elf(),
             chip,

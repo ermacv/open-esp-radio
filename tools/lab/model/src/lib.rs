@@ -130,8 +130,8 @@ impl Radio {
     }
 
     /// Whether a chip with `properties` has this radio.
-    fn on(self, properties: &oer_chip_profile::Properties) -> bool {
-        use oer_chip_profile::{BluetoothMode, WifiBand};
+    fn on(self, properties: &oer_espressif_facts::Properties) -> bool {
+        use oer_espressif_facts::{BluetoothMode, WifiBand};
         match self {
             Self::Wifi2g4 => properties.wifi_bands.contains(&WifiBand::Band2g4),
             Self::Wifi5g => properties.wifi_bands.contains(&WifiBand::Band5g),
@@ -256,7 +256,7 @@ impl Board {
         let name = &self.id;
         let profile = chips
             .iter()
-            .find(|profile| profile.id == self.chip)
+            .find(|profile| profile.facts.id == self.chip)
             .ok_or_else(|| {
                 format!(
                     "board `{name}`: chip `{}` has no profile (portable/{}/platform/chip.toml)",
@@ -266,7 +266,7 @@ impl Board {
         match self
             .radios
             .iter()
-            .find(|radio| !radio.on(&profile.properties))
+            .find(|radio| !radio.on(&profile.facts.properties))
         {
             Some(radio) => Err(format!(
                 "board `{name}`: an {} has no {} radio",
@@ -797,7 +797,7 @@ fn ids_of(boards: &[&Board]) -> String {
 }
 
 fn identifier(field: &str, value: &str) -> Result<()> {
-    if oer_chip_profile::valid_identifier(value) {
+    if oer_espressif_facts::valid_identifier(value) {
         Ok(())
     } else {
         Err(format!(

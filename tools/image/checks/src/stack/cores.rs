@@ -37,6 +37,7 @@ fn linked(image: &Image, patterns: &[String]) -> Vec<String> {
 /// The linked functions that start a core.
 fn linked_starters(image: &Image, profile: &Profile) -> Vec<String> {
     profile
+        .facts
         .core_start
         .as_ref()
         .map_or_else(Vec::new, |core_start| linked(image, &core_start.starters))
@@ -47,6 +48,7 @@ fn linked_starters(image: &Image, profile: &Profile) -> Vec<String> {
 /// level's analysis.
 fn linked_ipc(image: &Image, profile: &Profile) -> Result<()> {
     let ipc = profile
+        .facts
         .core_start
         .as_ref()
         .map_or_else(Vec::new, |core_start| linked(image, &core_start.ipc));
@@ -70,7 +72,7 @@ fn linked_bytes(image: &Image, bottom: &str, top: &str) -> Result<Option<u64>> {
 /// Prove the runtime `image`'s unused cores and return the report: every
 /// core with its two stacks, used or proven unused.
 pub fn audit_runtime(image: &Image, policy: &StackPolicy, profile: &Profile) -> Result<String> {
-    policy.check_cores(profile.properties.cores)?;
+    policy.check_cores(profile.facts.properties.cores)?;
     let unused_tasks = policy.unused_task_cores();
     let unused_interrupts = policy.unused_interrupt_cores();
     linked_ipc(image, profile)?;

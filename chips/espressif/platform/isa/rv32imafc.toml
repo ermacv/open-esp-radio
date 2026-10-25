@@ -1,0 +1,7 @@
+# RV32IMAFC: the RV32I base with integer multiplication and division, atomics,
+# single-precision floating point and compressed instructions. A chip's
+# chip.toml extends the ISA of its harts.
+schema = 2
+isa = "rv32imafc"
+# The bare-metal Rust target of this ISA, checked against `isa`.
+rust-target = "riscv32imafc-unknown-none-elf"

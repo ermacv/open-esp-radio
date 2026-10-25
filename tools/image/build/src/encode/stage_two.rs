@@ -6,7 +6,7 @@
 //! pipeline does not link; both check the shared fixture
 //! `chips/espressif/staged-layout/fixtures/stage-two.txt`, so they agree.
 use crate::Result;
-use oer_chip_profile::StageTwo;
+use oer_espressif_facts::StageTwo;
 use std::{fs, path::Path};
 
 /// The little-endian word at byte `offset` of `bytes`.

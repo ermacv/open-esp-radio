@@ -51,13 +51,13 @@ mod tests {
             application: 0x10000,
             otadata: 0xd000,
             partitions: "platform/chip-a/partitions/applications.csv".into(),
-            application_encoding: oer_chip_profile::FlashSettings {
-                mode: oer_chip_profile::FlashMode::Qio,
+            application_encoding: oer_espressif_facts::FlashSettings {
+                mode: oer_espressif_facts::FlashMode::Qio,
                 frequency_mhz: 80,
                 size_mib: 16,
             },
-            bootloader_mode: oer_chip_profile::FlashMode::Dio,
-            start: oer_chip_profile::Start::PowerOn,
+            bootloader_mode: oer_espressif_facts::FlashMode::Dio,
+            start: oer_espressif_facts::Start::PowerOn,
         }
     }
 

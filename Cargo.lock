@@ -2625,6 +2625,7 @@ dependencies = [
  "oer-esp32c5-layout",
  "oer-esp32s31-knowledge",
  "oer-esp32s31-layout",
+ "oer-espressif-facts",
  "oer-espressif-staged-layout",
  "oer-os-durable",
  "serde",
@@ -2985,6 +2986,14 @@ dependencies = [
  "portable-atomic",
  "riscv",
  "static_cell",
+]
+
+[[package]]
+name = "oer-espressif-facts"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "toml",
 ]
 
 [[package]]
@@ -3737,6 +3746,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "oer-chip-profile",
+ "oer-espressif-facts",
  "oer-hil-analysis",
  "oer-hil-family-lower-mac",
  "oer-hil-family-system",
@@ -4007,6 +4017,7 @@ dependencies = [
  "object 0.39.1",
  "oer-analysis-elf",
  "oer-chip-profile",
+ "oer-espressif-facts",
  "oer-image-checks",
  "oer-image-esp-idf",
  "oer-os-durable",
@@ -4033,6 +4044,7 @@ dependencies = [
  "oer-chip-profile",
  "oer-esp32c5-layout",
  "oer-esp32s31-layout",
+ "oer-espressif-facts",
  "oer-os-durable",
  "oer-os-process",
  "oer-os-toolchain",
@@ -4097,6 +4109,7 @@ dependencies = [
  "espflash",
  "hex",
  "oer-chip-profile",
+ "oer-espressif-facts",
  "oer-image-build",
  "oer-lab-model",
  "oer-lab-router",
@@ -4115,6 +4128,7 @@ name = "oer-lab-model"
 version = "0.1.0"
 dependencies = [
  "oer-chip-profile",
+ "oer-espressif-facts",
  "oer-os-durable",
  "serde",
  "serde_json",
@@ -4399,6 +4413,7 @@ dependencies = [
  "oer-analysis-blobray-riscv",
  "oer-analysis-riscv-lift",
  "oer-analysis-riscv-model",
+ "oer-espressif-facts",
  "oer-tool-pins",
  "serde",
  "serde_json",
@@ -4484,6 +4499,7 @@ dependencies = [
  "oer-chip-profile",
  "oer-diagnostics",
  "oer-espressif-esp-hal-radio",
+ "oer-espressif-facts",
  "oer-firmware-apps-w3",
  "oer-hil-lab",
  "oer-hil-link",
@@ -4532,6 +4548,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "oer-chip-profile",
+ "oer-espressif-facts",
  "oer-lab-arbiter",
  "oer-lab-board",
  "oer-lab-model",
@@ -4569,6 +4586,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "oer-chip-profile",
+ "oer-espressif-facts",
  "oer-os-command-tree",
  "oer-os-durable",
  "oer-os-process",

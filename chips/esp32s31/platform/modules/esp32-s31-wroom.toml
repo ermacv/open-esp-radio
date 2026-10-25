@@ -1,0 +1,13 @@
+# The module layer: the ESP32-S31 WROOM module that
+# ESP32-S31-Function-CoreBoard-1 carries, with the flash and PSRAM fitted on
+# it. Its boards (../boards/) extend it.
+schema = 2
+extends = "../chip.toml"
+
+# The fitted memories as every S31 image has run with them: the 16-MiB flash
+# the application image header names and the 16-MiB PSRAM the bootstrap maps
+# (chips/esp32s31/board).
+[module]
+name = "ESP32-S31-WROOM"
+flash = { size-mib = 16 }
+psram = { size-mib = 16 }

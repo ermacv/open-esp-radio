@@ -296,13 +296,15 @@ a `stop` requires a question to the owner. The build README gives a W3 example.
 
 ## Reachability reports
 
-The stack policy's `observed_functions` selects demangled linked function
+The family's `observed-functions`
+([`family.toml`](../../../chips/espressif/platform/family.toml)) and an
+image stack policy's `observed_functions` select demangled linked function
 names, examining every alias and the analysed ROM companions. `*` matches
 any substring; every other character is literal. An extending image policy
-appends selectors to its chip policy. Empty and duplicate selectors are errors.
-The chip selectors also apply when an image defines an independent stack
+appends selectors to its base. Empty and duplicate selectors are errors.
+The family selectors also apply when an image defines an independent stack
 layout instead of extending the chip policy, as W3 does. Report selection is
-the union of chip and image selectors, deduplicated before matching.
+the union of family and image selectors, deduplicated before matching.
 The chip policies select `core::fmt::write`, `Formatter` methods, the runtime
 `Argument::fmt` entry, debug builders, `Write::write_fmt`, and the `fmt`
 implementations of Debug, Display, Binary, Octal, LowerHex, UpperHex, Pointer,

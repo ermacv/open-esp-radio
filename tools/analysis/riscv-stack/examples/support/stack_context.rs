@@ -70,8 +70,13 @@ pub fn derive<'m>(
         println!("stack-context-gap\tinstalled sp differs from the task storage top");
         return Ok(None);
     }
-    let placement = profile.placement.as_ref().ok_or("missing placement")?;
+    let placement = profile
+        .facts
+        .placement
+        .as_ref()
+        .ok_or("missing placement")?;
     let irq = profile
+        .facts
         .interrupts
         .as_ref()
         .ok_or("missing interrupt contract")?;

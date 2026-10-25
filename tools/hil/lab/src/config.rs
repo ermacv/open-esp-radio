@@ -776,6 +776,7 @@ impl LabConfig {
                 .into_iter()
                 .next()
                 .expect("the tree has a chip")
+                .facts
                 .id,
             stand: oer_lab_model::Stand::parse(
                 "schema = 1\n[stand]\nid = \"test-cell\"\nair = \"exclusive\"\n",
