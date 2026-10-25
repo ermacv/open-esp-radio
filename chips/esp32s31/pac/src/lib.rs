@@ -117,10 +117,10 @@ pub use generated::{
     ble_hw_positional_word_1ff0, ble_hw_positional_word_891c, ble_hw_resolving_list,
     ble_hw_runtime_control, ble_iso_scheduler_notify, ble_scan_backoff, ble_sync_publication,
     bluetooth_controller_core, bluetooth_interrupt_bank, bluetooth_reset_idle_status_0,
-    bluetooth_scheduler_interrupt_runtime, bt_v3_2_cte, btdm_runtime_control,
-    btdm_scheduler_table, btmac_ble_phy_init, phy_baseband_config_oracle,
-    phy_btagc_recovered, shared_baseband_reset_idle_status, shared_baseband_tx_timing,
-    shared_radio_init_control, zbbb_radio_control,
+    bluetooth_scheduler_interrupt_runtime, bt_v3_2_cte, btdm_runtime_control, btdm_scheduler_table,
+    btmac_ble_phy_init, phy_baseband_config_oracle, phy_btagc_recovered,
+    shared_baseband_reset_idle_status, shared_baseband_tx_timing, shared_radio_init_control,
+    zbbb_radio_control,
 };
 
 /// The generated partitions the radio root hands the Bluetooth LE and shared

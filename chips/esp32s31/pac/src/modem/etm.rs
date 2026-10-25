@@ -19,16 +19,8 @@ use crate::generated::modem_etm::{ModemEtmBluetooth, ModemEtmBluetoothPhy, Modem
 /// IEEE 802.15.4's and the Bluetooth ones.
 pub(crate) fn split(
     peripherals: crate::generated::peripheral_ownership::ModemEtmPeripherals,
-) -> (
-    ModemEtmIeee802154,
-    ModemEtmBluetoothPhy,
-    ModemEtmBluetooth,
-) {
+) -> (ModemEtmIeee802154, ModemEtmBluetoothPhy, ModemEtmBluetooth) {
     let crate::generated::peripheral_ownership::ModemEtmPeripherals { modem_etm } = peripherals;
     let (ieee802154, phy, bluetooth) = modem_etm.divide();
-    (
-        ieee802154,
-        phy,
-        bluetooth,
-    )
+    (ieee802154, phy, bluetooth)
 }

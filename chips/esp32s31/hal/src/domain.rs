@@ -24,8 +24,8 @@
 mod btbb;
 
 use oer_esp32s31_pac::{
-    BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, RadioPhyRegisters,
-    SharedRadioRegisters, WifiRadioRegisters,
+    BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, RadioPhyRegisters, SharedRadioRegisters,
+    WifiRadioRegisters,
 };
 
 use crate::bluetooth::registers::BluetoothTaskRegisters;

@@ -5,14 +5,13 @@
 //! register block, raw accessor, or generic MMIO capability is re-exported.
 
 pub use oer_esp32s31_pac::{
-    CfrValue, CoexTimerClientValue, CoexTimerClockDividerMinusOne,
-    CoexTimerClockSource, CoexTimerPtiValue, CoexTimerRegister,
-    CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource,
-    ExtraSoftApRxBlockAckEntrySnapshot, ForcedRxGain, MAC_TX_POWER_RATE_COUNT,
-    MacApReceivePolicySnapshot, MacAssociationId, MacCcmpKeyIdentity, MacCoexPrioritySnapshot,
-    MacDelaySlot, MacExtraSoftApRxBlockAckEntryIndex, MacHe20PeerConfig, MacHe20PeerError,
-    MacHeBeamformingReportProfile, MacHeBeamformingReportProfileError, MacHeBssColor,
-    MacHeDefaultPacketExtensionDuration, MacHeErSuAckRateProfile, MacHeFecCoding,
+    CfrValue, CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource,
+    CoexTimerPtiValue, CoexTimerRegister, CoexistenceLowPowerClockObservation,
+    CoexistenceLowPowerClockSource, ExtraSoftApRxBlockAckEntrySnapshot, ForcedRxGain,
+    MAC_TX_POWER_RATE_COUNT, MacApReceivePolicySnapshot, MacAssociationId, MacCcmpKeyIdentity,
+    MacCoexPrioritySnapshot, MacDelaySlot, MacExtraSoftApRxBlockAckEntryIndex, MacHe20PeerConfig,
+    MacHe20PeerError, MacHeBeamformingReportProfile, MacHeBeamformingReportProfileError,
+    MacHeBssColor, MacHeDefaultPacketExtensionDuration, MacHeErSuAckRateProfile, MacHeFecCoding,
     MacHeGuardIntervalAndLtf, MacHeMcs, MacHePacketPaddingDuration, MacHeRate,
     MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
     MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot, MacHeTxFormat, MacHeTxParameters,
