@@ -1,6 +1,7 @@
 extern crate std;
 
 use std::rc::Rc;
+use std::sync::{Barrier, atomic::AtomicUsize};
 
 use super::*;
 
@@ -176,4 +177,58 @@ fn the_cell_drops_a_held_value() {
         cell.hold(0, |_| ()).expect("a free cell holds");
     }
     assert_eq!(Rc::strong_count(&value), 1);
+}
+
+#[test]
+fn contending_lends_and_keyed_holds_publish_complete_changes() {
+    for keyed in [false, true] {
+        let cell = ClaimCell::new();
+        cell.install([0_usize; 2]).expect("an empty cell installs");
+        let completed = AtomicUsize::new(0);
+        let start = Barrier::new(8);
+        std::thread::scope(|scope| {
+            for _ in 0..8 {
+                scope.spawn(|| {
+                    start.wait();
+                    for _ in 0..1_000 {
+                        let change = |value: &mut [usize; 2]| {
+                            assert_eq!(value[0], value[1], "a complete previous change");
+                            value[0] += 1;
+                            std::thread::yield_now();
+                            value[1] += 1;
+                        };
+                        let result = if keyed {
+                            cell.hold(0, change).map(|held| held.value)
+                        } else {
+                            cell.lend(change)
+                        };
+                        match result {
+                            Ok(()) => {
+                                completed.fetch_add(1, Ordering::SeqCst);
+                            }
+                            // A keyed contender may lose the second CAS
+                            // after observing the idle held state.
+                            Err(Claim::Lent | Claim::Kept) if keyed => {}
+                            Err(Claim::Lent) => {}
+                            Err(error) => panic!("an installed cell stays accessible: {error:?}"),
+                        }
+                    }
+                });
+            }
+        });
+        let completed = completed.load(Ordering::SeqCst);
+        assert!(completed > 0, "at least one caller changed the value");
+        let value = if keyed {
+            assert_eq!(cell.take(), Err(Claim::Kept));
+            cell.hold(0, |value| *value)
+                .expect("the same key still holds the cell")
+                .value
+        } else {
+            cell.take().expect("the driver takes the free cell")
+        };
+        assert_eq!(
+            value, [completed; 2],
+            "every completed change was published"
+        );
+    }
 }
