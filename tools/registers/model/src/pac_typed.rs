@@ -2166,10 +2166,10 @@ impl<'a> TypedBlock<'a> {
                     output,
                     "/// The snapshot without `{0}` unless `keep`: it is then not acknowledged.\n\
                      pub const fn retain_{1}(self, keep: bool) -> Self {{\n\
-                     if keep {{ self }} else {{ Self(self.0 & !0x{2:08x}) }}\n}}\n",
+                     if keep {{ self }} else {{ Self({2}) }}\n}}\n",
                     field.info.name,
                     field.method.trim_start_matches("r#"),
-                    field.mask()
+                    without_field(field.mask())
                 );
             }
             output.push_str("}\n\n");
@@ -2736,6 +2736,16 @@ impl<'a> TypedBlock<'a> {
             );
         }
         Ok(())
+    }
+}
+
+/// A snapshot's bits without the field of `mask`: no AND at all when the
+/// field is the whole word.
+fn without_field(mask: u32) -> String {
+    if mask == u32::MAX {
+        "0".to_owned()
+    } else {
+        format!("self.0 & !0x{mask:08x}")
     }
 }
 
@@ -3551,10 +3561,10 @@ impl<'a> TypedRegister<'a> {
                     output,
                     "/// The snapshot without `{0}` unless `keep`: it is then not acknowledged.\n\
                      pub const fn retain_{1}(self, keep: bool) -> Self {{\n\
-                     if keep {{ self }} else {{ Self(self.0 & !0x{2:08x}) }}\n}}\n",
+                     if keep {{ self }} else {{ Self({2}) }}\n}}\n",
                     field.info.name,
                     field.method.trim_start_matches("r#"),
-                    field.mask()
+                    without_field(field.mask())
                 );
             }
             output.push_str("}\n\n");

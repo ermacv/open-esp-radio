@@ -1185,6 +1185,27 @@ fn a_reviewed_fixed_image_is_the_one_other_store_of_a_clear_register() {
 }
 
 #[test]
+fn a_whole_word_event_field_is_dropped_from_a_snapshot_without_an_and() {
+    let rust = snapshot_pack()
+        .render_typed_rust(
+            &svd(
+                &(register("STATUS", 0, "read-only", "", &field("PENDING", 0, 32, ""))
+                    + &register(
+                        "CLEAR",
+                        4,
+                        "write-only",
+                        "<modifiedWriteValues>oneToClear</modifiedWriteValues>",
+                        &field("PENDING", 0, 32, ""),
+                    )),
+            ),
+            &Default::default(),
+        )
+        .expect("the whole-word snapshot renders");
+    assert!(rust.contains("if keep { self } else { Self(0) }"), "{rust}");
+    assert!(!rust.contains("& !0xffffffff"), "{rust}");
+}
+
+#[test]
 fn a_status_field_acknowledged_in_part_is_refused() {
     refused(
         &snapshot_pack(),
