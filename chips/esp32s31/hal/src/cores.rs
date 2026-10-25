@@ -158,8 +158,8 @@ pub enum CoresError {
 
 /// Wait for the hardware to report `hart` stalled (`stalled`) or running,
 /// within `polls` reads.
-fn confirm<P: Placement, Q: Placement, R: Placement, S: Placement>(
-    words: &CoreControlRegisters<P, Q, R, S>,
+fn confirm<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
+    words: &CoreControlRegisters<P, Q, R, S, T>,
     hart: HpCore,
     stalled: bool,
     polls: u32,
@@ -175,8 +175,8 @@ fn confirm<P: Placement, Q: Placement, R: Placement, S: Placement>(
 }
 
 /// Request that `hart` stall and wait for the hardware to confirm it.
-fn stall<P: Placement, Q: Placement, R: Placement, S: Placement>(
-    words: &mut CoreControlRegisters<P, Q, R, S>,
+fn stall<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
+    words: &mut CoreControlRegisters<P, Q, R, S, T>,
     hart: HpCore,
     polls: u32,
 ) -> Result<(), Unconfirmed> {
@@ -186,8 +186,8 @@ fn stall<P: Placement, Q: Placement, R: Placement, S: Placement>(
 
 /// Request that `hart` run and wait for the hardware to report it no longer
 /// stalled.
-fn run<P: Placement, Q: Placement, R: Placement, S: Placement>(
-    words: &mut CoreControlRegisters<P, Q, R, S>,
+fn run<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
+    words: &mut CoreControlRegisters<P, Q, R, S, T>,
     hart: HpCore,
     polls: u32,
 ) -> Result<(), Unconfirmed> {
@@ -206,8 +206,8 @@ pub enum Stopped {
 }
 
 /// Stop the hart that is not `this` and confirm it.
-fn stop_other<P: Placement, Q: Placement, R: Placement, S: Placement>(
-    words: &mut CoreControlRegisters<P, Q, R, S>,
+fn stop_other<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
+    words: &mut CoreControlRegisters<P, Q, R, S, T>,
     this: HpCore,
     polls: u32,
 ) -> Result<Stopped, Unconfirmed> {
@@ -218,7 +218,7 @@ fn stop_other<P: Placement, Q: Placement, R: Placement, S: Placement>(
     stall(words, other, polls).map(|()| Stopped::Stalled)
 }
 
-/// Where hart 1 starts after its reset: the ROM's boot address word.
+/// Where hart 1 starts after its reset: the owned ROM boot handoff word.
 pub(crate) trait BootAddress {
     /// Make hart 1's ROM jump to `entry`; zero keeps it waiting in the ROM.
     fn set(&mut self, entry: u32);
@@ -233,64 +233,14 @@ pub(crate) trait BootAddress {
 /// `components/esp_system/port/soc/esp32s31/system_internal.c:61-100`
 /// (`esp_restart_noos_inner`: clear the APP CPU boot address before
 /// resetting the cores, with the APP CPU stalled on the core-0 path).
-fn prepare_reset<P: Placement, Q: Placement, R: Placement, S: Placement>(
-    words: &mut CoreControlRegisters<P, Q, R, S>,
-    boot: &mut impl BootAddress,
+fn prepare_reset<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
+    words: &mut CoreControlRegisters<P, Q, R, S, T>,
     this: HpCore,
 ) {
-    boot.set(0);
+    words.set(0);
     let other = other(this);
     words.reset_core(other);
     words.request_stall(other);
-}
-
-/// The ROM routines this module calls.
-pub(crate) mod rom {
-    /// The ROM's boot address of hart 1.
-    pub(crate) struct Rom;
-
-    #[cfg(target_arch = "riscv32")]
-    #[allow(unsafe_code, reason = "the ROM routines' declarations")]
-    unsafe extern "C" {
-        /// SOURCE: the pinned ESP32-S31 rev0 ROM (`esp32s31_rev0_rom.elf`,
-        /// `chips/esp32s31/vendor/artifacts.toml`): Blobray's function
-        /// record of `ets_set_appcpu_boot_addr` stores its argument whole to
-        /// `LP_SYS.BOOT_ADDR_HP_CORE1` (0x20700164) and returns.
-        fn ets_set_appcpu_boot_addr(entry: u32);
-        /// SOURCE: the same ROM: `software_reset` sets `LP_SYS.SYS_CTRL`'s
-        /// `SYS_SW_RST` (0x20700008 bit 1), which resets the HP system.
-        fn software_reset() -> !;
-    }
-
-    impl super::BootAddress for Rom {
-        #[cfg(target_arch = "riscv32")]
-        #[allow(unsafe_code, reason = "a ROM routine")]
-        fn set(&mut self, entry: u32) {
-            // SAFETY: the routine stores `entry` to the ROM's boot address
-            // word, which nothing of the image reads, and touches no other
-            // memory.
-            unsafe { ets_set_appcpu_boot_addr(entry) };
-        }
-
-        /// The host has no ROM.
-        #[cfg(not(target_arch = "riscv32"))]
-        fn set(&mut self, _entry: u32) {}
-    }
-
-    /// Reset the HP system through the ROM.
-    #[cfg(target_arch = "riscv32")]
-    #[allow(unsafe_code, reason = "a ROM routine")]
-    pub(super) fn system_reset() -> ! {
-        // SAFETY: the routine requests the system reset and does not return.
-        unsafe { software_reset() }
-    }
-
-    /// The host has no ROM.
-    #[cfg(not(target_arch = "riscv32"))]
-    #[expect(clippy::panic, reason = "no host code resets the chip")]
-    pub(super) fn system_reset() -> ! {
-        panic!("the system reset is the chip ROM's")
-    }
 }
 
 /// The cores' owner: hart 1's start, park, stall and run. One exists per
@@ -368,11 +318,10 @@ impl Cores {
     #[cfg(feature = "cpu1-runs")]
     pub fn start_hart1(&mut self, entry: extern "C" fn() -> !) -> Result<(), CoresError> {
         self.operate(|words| {
-            let mut boot = rom::Rom;
-            boot.set(0);
+            words.set(0);
             run(words, HpCore::Core1, STALL_POLLS)?;
             words.release_core1();
-            boot.set(entry as usize as u32);
+            words.set(entry as usize as u32);
             Ok(())
         })?
         .map_err(|Unconfirmed| CoresError::Unconfirmed)
@@ -391,8 +340,8 @@ fn operate<W, T>(
 }
 
 /// How hart 1 stands.
-fn hart1<P: Placement, Q: Placement, R: Placement, S: Placement>(
-    words: &CoreControlRegisters<P, Q, R, S>,
+fn hart1<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
+    words: &CoreControlRegisters<P, Q, R, S, T>,
 ) -> Hart1 {
     if words.core1_held() {
         Hart1::Held
@@ -405,8 +354,8 @@ fn hart1<P: Placement, Q: Placement, R: Placement, S: Placement>(
 
 /// Request hart 1's stall, then hold it in reset with its clocks gated, as
 /// ESP-IDF's single-core start leaves it.
-pub(crate) fn park_hart1<P: Placement, Q: Placement, R: Placement, S: Placement>(
-    words: &mut CoreControlRegisters<P, Q, R, S>,
+pub(crate) fn park_hart1<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
+    words: &mut CoreControlRegisters<P, Q, R, S, T>,
 ) {
     words.request_stall(HpCore::Core1);
     words.hold_core1();
@@ -519,8 +468,8 @@ pub fn stop_the_world<'a>(fatal: &Fatal<'a>) -> Result<StopTheWorld<'a>, StopErr
     })
 }
 
-fn stop_with<P: Placement, Q: Placement, R: Placement, S: Placement>(
-    cell: &ClaimCell<CoreControlRegisters<P, Q, R, S>>,
+fn stop_with<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
+    cell: &ClaimCell<CoreControlRegisters<P, Q, R, S, T>>,
     hart: HpCore,
     polls: u32,
 ) -> Result<Stopped, StopError> {
@@ -550,8 +499,8 @@ pub const RESET_UNPREPARED: &str = "reset-unprepared";
 
 /// Reset the chip from `fatal`'s path, as the boot ROM expects it: UART0's
 /// clock restored, no boot address for hart 1, the other hart reset and
-/// stalled, then the ROM's system reset, which does not return. UART0's
-/// clock has its own cell, so every path restores it unless the other
+/// stalled, then the system reset trigger and a terminal interrupt wait.
+/// UART0's clock has its own cell, so every path restores it unless the other
 /// hart's fatal path took it first to restore it itself.
 ///
 /// A path that cannot hold the core-control words writes the console's
@@ -560,11 +509,17 @@ pub const RESET_UNPREPARED: &str = "reset-unprepared";
 /// resets the chip. No second owner of the words is made.
 pub fn software_reset(fatal: Fatal<'_>) -> AwaitWatchdog {
     restore_uart0_with(&UART0_CLOCK, fatal.hart);
-    match reset_with(&CORE_CONTROL, &mut rom::Rom, fatal.hart) {
-        Ok(()) => {
-            oer_mmio::fence();
-            rom::system_reset()
-        }
+    match reset_with(&CORE_CONTROL, fatal.hart) {
+        Ok(()) => loop {
+            #[cfg(target_arch = "riscv32")]
+            oer_riscv::wait_for_interrupt();
+            #[cfg(not(target_arch = "riscv32"))]
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "the host has no WFI; this reset path is terminal"
+            )]
+            core::hint::spin_loop();
+        },
         Err(reason) => {
             let _held_or_written =
                 crate::usb_serial_jtag::fatal_note(&Note::runtime_fail(RESET_UNPREPARED));
@@ -583,13 +538,17 @@ fn restore_uart0_with<P: Placement>(
         .is_ok()
 }
 
-/// Prepare the reset holding the words, or say why they could not be held.
-fn reset_with<P: Placement, Q: Placement, R: Placement, S: Placement>(
-    cell: &ClaimCell<CoreControlRegisters<P, Q, R, S>>,
-    boot: &mut impl BootAddress,
+/// Prepare and trigger the reset holding the words, or say why they
+/// could not be held.
+fn reset_with<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
+    cell: &ClaimCell<CoreControlRegisters<P, Q, R, S, T>>,
     hart: HpCore,
 ) -> Result<(), StopError> {
-    match cell.hold(key(hart), |words| prepare_reset(words, boot, hart)) {
+    match cell.hold(key(hart), |words| {
+        prepare_reset(words, hart);
+        oer_mmio::fence();
+        words.request_system_reset();
+    }) {
         Ok(Held { value: (), .. }) => Ok(()),
         Err(Claim::Empty) => Err(StopError::NotInstalled),
         Err(Claim::Lent) => Err(StopError::Busy),

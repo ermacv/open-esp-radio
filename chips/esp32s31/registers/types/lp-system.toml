@@ -1,0 +1,84 @@
+# Curated partial vendor block; offsets and access classes are from the pinned
+# header. The chip root supplies the base, and policy supplies ownership.
+schema = 3
+
+[type]
+name = "LP_SYSTEM_REG"
+description = "Low-power system control and the HP core 1 boot handoff word."
+sources = ["ESP_IDF_4D59230D_S31_LP_SYSTEM_REG", "ROM_REV0_CORE_BOOT_ADDRESS"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_S31_LP_SYSTEM_REG"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "partial"
+naming = "vendor"
+
+[[registers]]
+name = "LP_SYSTEM_REG_SYS_CTRL"
+offset = 0x8
+description = "System controls, software reset triggers and LP core wakeup status."
+reset = { value = 0x1fffc7f8, mask = 0xffffcfff }
+
+[[registers.fields]]
+name = "LP_SYSTEM_REG_LP_CORE_DISABLE"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "LP_SYSTEM_REG_SYS_SW_RST"
+bits = "1"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "LP_SYSTEM_REG_FORCE_DOWNLOAD_BOOT"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "LP_SYSTEM_REG_DIG_FIB"
+bits = "10:3"
+class = "plain"
+
+[[registers.fields]]
+name = "LP_SYSTEM_REG_IO_MUX_RESET_DISABLE"
+bits = "11"
+class = "plain"
+
+[[registers.fields]]
+name = "LP_SYSTEM_REG_ANA_FIB"
+bits = "20:14"
+class = "read-only"
+
+[[registers.fields]]
+name = "LP_SYSTEM_REG_LP_FIB_SEL"
+bits = "28:21"
+class = "plain"
+
+[[registers.fields]]
+name = "LP_SYSTEM_REG_LP_CORE_ETM_WAKEUP_FLAG_CLR"
+bits = "29"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "LP_SYSTEM_REG_LP_CORE_ETM_WAKEUP_FLAG"
+bits = "30"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "LP_SYSTEM_REG_SYSTIMER_STALL_SEL"
+bits = "31"
+class = "plain"
+
+[[registers]]
+name = "LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1"
+offset = 0x164
+description = "The boot ROM's HP core 1 entry address; zero leaves the core waiting."
+reset = { value = 0 }
+# SOURCE: pinned rev0 ROM ets_set_appcpu_boot_addr stores the argument whole.
+data-port = { sources = ["ROM_REV0_CORE_BOOT_ADDRESS"] }
+
+[[registers.fields]]
+name = "LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1"
+bits = "31:0"
+class = "plain"

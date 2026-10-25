@@ -11,29 +11,30 @@ use crate::platform::core_control::{
 };
 
 use super::{
-    BootAddress, CoresError, Hart1, HpCore, StopError, Stopped, hart1, operate, park_hart1,
-    prepare_reset, reset_with, restore_uart0_with, stop_with,
+    CoresError, Hart1, HpCore, StopError, Stopped, hart1, operate, park_hart1, prepare_reset,
+    reset_with, restore_uart0_with, stop_with,
 };
 
-type HostRegisters<'a> = CoreControlRegisters<Host<'a>, Host<'a>, Host<'a>, Host<'a>>;
+type HostRegisters<'a> = CoreControlRegisters<Host<'a>, Host<'a>, Host<'a>, Host<'a>, Host<'a>>;
 
-/// Host memory of the four blocks; the stall status reads `status_fill`.
-struct Memory([Vec<u32>; 4]);
+/// Host memory of the five blocks; the stall status reads `status_fill`.
+struct Memory([Vec<u32>; 5]);
 
 impl Memory {
     fn new(status_fill: u32) -> Self {
-        let [stall, status, clocks, reset] = HOST_SIZES;
+        let [stall, status, clocks, reset, system] = HOST_SIZES;
         Self([
             vec![0; stall / 4],
             vec![status_fill; status / 4],
             vec![0; clocks / 4],
             vec![0; reset / 4],
+            vec![u32::MAX; system / 4],
         ])
     }
 
     fn registers(&mut self) -> HostRegisters<'_> {
-        let [stall, status, clocks, reset] = &mut self.0;
-        CoreControlRegisters::host(stall, status, clocks, reset)
+        let [stall, status, clocks, reset, system] = &mut self.0;
+        CoreControlRegisters::host(stall, status, clocks, reset, system)
             .expect("host memory holds the blocks")
     }
 
@@ -42,16 +43,6 @@ impl Memory {
         let cell = ClaimCell::new();
         assert!(cell.install(self.registers()).is_ok());
         cell
-    }
-}
-
-/// Records the boot addresses written.
-#[derive(Default)]
-struct Boot(Vec<u32>);
-
-impl BootAddress for Boot {
-    fn set(&mut self, entry: u32) {
-        self.0.push(entry);
     }
 }
 
@@ -140,9 +131,10 @@ fn a_stall_the_hardware_never_reports_is_unconfirmed_and_the_reset_still_holds_t
         Err(StopError::Unconfirmed)
     );
     // The words stay the fatal path's: its reset still prepares the ROM.
-    let mut boot = Boot::default();
-    assert_eq!(reset_with(&cell, &mut boot, HpCore::Core0), Ok(()));
-    assert_eq!(boot.0, [0]);
+    assert_eq!(reset_with(&cell, HpCore::Core0), Ok(()));
+    drop(cell);
+    assert_eq!(memory.0[4][0x164 / 4], 0);
+    assert_eq!(memory.0[4][0x8 / 4], 0x9fff_ffff);
 }
 
 #[test]
@@ -150,21 +142,19 @@ fn a_lost_or_busy_election_touches_no_word() {
     let mut memory = Memory::new(u32::MAX);
     let cell = memory.cell();
     assert!(stop_with(&cell, HpCore::Core1, 4).is_ok());
-    let mut boot = Boot::default();
-    assert_eq!(
-        reset_with(&cell, &mut boot, HpCore::Core0),
-        Err(StopError::Lost)
-    );
-    assert!(boot.0.is_empty(), "the loser prepares nothing");
+    assert_eq!(reset_with(&cell, HpCore::Core0), Err(StopError::Lost));
+
     drop(cell);
+    assert!(
+        memory.0[4].iter().all(|word| *word == u32::MAX),
+        "the losing hart never writes LP_SYS"
+    );
 
     let mut idle = Memory::new(u32::MAX);
     let before = idle.0.clone();
     let cell = idle.cell();
-    let mut boot = Boot::default();
-    let during = operate(&cell, |_| reset_with(&cell, &mut boot, HpCore::Core0));
+    let during = operate(&cell, |_| reset_with(&cell, HpCore::Core0));
     assert_eq!(during, Ok(Err(StopError::Busy)));
-    assert!(boot.0.is_empty());
     drop(cell);
     assert_eq!(idle.0, before, "no word changed");
 }
@@ -172,14 +162,13 @@ fn a_lost_or_busy_election_touches_no_word() {
 #[test]
 fn the_reset_clears_the_boot_address_and_resets_and_stalls_the_other_hart() {
     let mut memory = Memory::new(0);
-    let mut boot = Boot::default();
-    prepare_reset(&mut memory.registers(), &mut boot, HpCore::Core0);
-    assert_eq!(boot.0, [0]);
+    prepare_reset(&mut memory.registers(), HpCore::Core0);
+    assert_eq!(memory.0[4][0x164 / 4], 0);
     let registers = memory.registers();
     assert!(registers.stall_requested(HpCore::Core1));
     assert!(!registers.stall_requested(HpCore::Core0));
     drop(registers);
-    let [_, _, _, reset] = &memory.0;
+    let [_, _, _, reset, _] = &memory.0;
     assert_eq!(
         reset.iter().filter(|word| **word != 0).count(),
         1,
@@ -192,29 +181,20 @@ fn a_reset_after_the_stop_keeps_its_words_and_one_without_them_touches_nothing()
     let mut memory = Memory::new(u32::MAX);
     let cell = memory.cell();
     assert!(stop_with(&cell, HpCore::Core1, 4).is_ok());
-    let mut boot = Boot::default();
-    assert_eq!(reset_with(&cell, &mut boot, HpCore::Core1), Ok(()));
-    assert_eq!(boot.0, [0]);
-    let mut other = Boot::default();
-    assert_eq!(
-        reset_with(&cell, &mut other, HpCore::Core0),
-        Err(StopError::Lost)
-    );
-    assert!(
-        other.0.is_empty(),
-        "the loser leaves the reset to the watchdog"
-    );
+    assert_eq!(reset_with(&cell, HpCore::Core1), Ok(()));
+    assert_eq!(reset_with(&cell, HpCore::Core0), Err(StopError::Lost));
+    drop(cell);
+    assert_eq!(memory.0[4][0x164 / 4], 0);
+    assert_eq!(memory.0[4][0x8 / 4], 0x9fff_ffff);
 }
 
 #[test]
 fn a_reset_without_installed_words_is_left_to_the_watchdog() {
     let cell = ClaimCell::<HostRegisters<'_>>::new();
-    let mut boot = Boot::default();
     assert_eq!(
-        reset_with(&cell, &mut boot, HpCore::Core0),
+        reset_with(&cell, HpCore::Core0),
         Err(StopError::NotInstalled)
     );
-    assert!(boot.0.is_empty());
 }
 
 /// Host memory of UART0's clock block, every bit clear: a restore opens its
@@ -240,9 +220,8 @@ fn a_reset_that_cannot_hold_the_core_control_words_still_restores_uart0() {
     );
     // The cores' owner runs an operation the fatal path interrupted.
     let during = operate(&core_cell, |_| {
-        let mut boot = Boot::default();
         (
-            reset_with(&core_cell, &mut boot, HpCore::Core0),
+            reset_with(&core_cell, HpCore::Core0),
             restore_uart0_with(&uart0, HpCore::Core0),
         )
     });

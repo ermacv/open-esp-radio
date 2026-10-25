@@ -39,14 +39,5 @@ sram = [
     { name = "data", start = 0x2f07e600, end = 0x2f080000, kept = "running" },
 ]
 
-# Only entry points declared and called by our code. libc and vendor radio
-# ROM scripts are not link inputs; compiler_builtins supplies memory routines.
-[[rom.functions]]
-name = "software_reset"
-address = 0x2f800094
-source = "SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/esp_rom/esp32s31/ld/esp32s31.rom.ld:52"
-
-[[rom.functions]]
-name = "ets_set_appcpu_boot_addr"
-address = 0x2f8000a8
-source = "SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/esp_rom/esp32s31/ld/esp32s31.rom.ld:57"
+# No ROM entry points are called by our code. libc and vendor radio ROM
+# scripts are not link inputs; compiler_builtins supplies memory routines.

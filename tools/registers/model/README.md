@@ -886,7 +886,10 @@ What a write does with the lanes it does not set:
 - a read-modify-write and a readable word's trigger keep the value read in
   `plain`, `read-only`, `debug-only` fields, doorbells, reserved bits and
   the bits of no field, and write zero to triggers, command bits and
-  zero-only fields;
+  zero-only fields; a readable mixed word's explicit trigger additionally
+  writes zero to every write-one-to-clear or set-only lane. Such a trigger
+  exists only when each field can safely be replayed or zeroed by its class
+  and write constraints. It grants no generic modify of that word;
 - a command start keeps the same lanes and writes zero to triggers,
   write-one-to-clear and set-only lanes; a lane it can neither keep nor
   zero (`write-only`, `hardware-written`, `unknown`) is a render error;

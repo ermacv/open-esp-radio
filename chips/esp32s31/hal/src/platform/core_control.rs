@@ -1,6 +1,7 @@
 //! Core control over the root's parts: each HP core's stall request and
 //! stall status, HP core 1's clocks and global reset, each core's software
-//! CPU reset, and UART0's function clock, which the boot ROM prints through
+//! CPU reset, HP core 1's boot address, the system reset trigger and
+//! UART0's function clock, which the boot ROM prints through
 //! after a software reset.
 
 use super::HpCore;
@@ -9,6 +10,7 @@ use oer_esp32s31_pac::{
     hp_system::HpSysCoreStallStatus,
     instances,
     lp_aonclkrst::LpAonClkrstCoreReset,
+    lp_system_reg::LpSysCoreControl,
     ownership::{CoreControlPeripherals, Uart0ClockPeripherals},
     pmu::PmuCpuStall,
 };
@@ -43,11 +45,13 @@ pub struct CoreControlRegisters<
     Q: Placement = Fixed<{ instances::hp_sys::BASE }>,
     R: Placement = Fixed<{ instances::hp_sys_clkrst::BASE }>,
     S: Placement = Fixed<{ instances::lp_aon_clkrst::BASE }>,
+    T: Placement = Fixed<{ instances::lp_sys::BASE }>,
 > {
     stall: PmuCpuStall<P>,
     status: HpSysCoreStallStatus<Q>,
     clocks: HpSysClkrstCore<R>,
     reset: LpAonClkrstCoreReset<S>,
+    system: LpSysCoreControl<T>,
 }
 
 /// UART0's function clock word.
@@ -64,12 +68,14 @@ impl CoreControlRegisters {
             hp_sys_core_stall_status,
             hp_sys_clkrst_core,
             lp_aon_clkrst_core_reset,
+            lp_sys_core_control,
         } = peripherals;
         Self {
             stall: pmu_cpu_stall,
             status: hp_sys_core_stall_status,
             clocks: hp_sys_clkrst_core,
             reset: lp_aon_clkrst_core_reset,
+            system: lp_sys_core_control,
         }
     }
 }
@@ -81,7 +87,31 @@ impl Uart0ClockRegisters {
     }
 }
 
-impl<P: Placement, Q: Placement, R: Placement, S: Placement> CoreControlRegisters<P, Q, R, S> {
+impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement> crate::cores::BootAddress
+    for CoreControlRegisters<P, Q, R, S, T>
+{
+    /// SOURCE: pinned rev0 ROM `ets_set_appcpu_boot_addr` (Blobray
+    /// function-records): one whole-word store of the argument, then return.
+    fn set(&mut self, entry: u32) {
+        self.system.write_boot_addr_hp_core1(entry);
+    }
+}
+
+impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
+    CoreControlRegisters<P, Q, R, S, T>
+{
+    /// Request the HP system reset without acknowledging LP wakeup status.
+    ///
+    /// SOURCE: pinned rev0 ROM `software_reset` (Blobray function-records)
+    /// reads SYS_CTRL, sets SYS_SW_RST and writes it back. Unlike that ROM
+    /// write, this trigger writes zero to the WTC wakeup flag, preserving
+    /// the event rather than acknowledging it. ESP-IDF 4d59230d
+    /// `components/soc/esp32s31/register/soc/lp_system_reg.h:47-120` defines
+    /// the WT, WTC and R/W lanes; ordinary fields keep the value read.
+    pub(crate) fn request_system_reset(&mut self) {
+        self.system.trigger_sys_ctrl_sys_sw_rst();
+    }
+
     /// Request that `core` stall, keeping the other core's request.
     pub fn request_stall(&mut self, core: HpCore) {
         self.set_code(core, STALL);
@@ -197,6 +227,7 @@ impl<'a>
         oer_mmio::Host<'a>,
         oer_mmio::Host<'a>,
         oer_mmio::Host<'a>,
+        oer_mmio::Host<'a>,
     >
 {
     /// Each block over its own host memory from its instance's base.
@@ -205,12 +236,14 @@ impl<'a>
         status: &'a mut [u32],
         clocks: &'a mut [u32],
         reset: &'a mut [u32],
+        system: &'a mut [u32],
     ) -> Result<Self, oer_mmio::HostTooSmall> {
         Ok(Self {
             stall: PmuCpuStall::host(stall)?,
             status: HpSysCoreStallStatus::host(status)?,
             clocks: HpSysClkrstCore::host(clocks)?,
             reset: LpAonClkrstCoreReset::host(reset)?,
+            system: LpSysCoreControl::host(system)?,
         })
     }
 }
@@ -218,11 +251,12 @@ impl<'a>
 /// The bytes of host memory each block needs, in the order
 /// [`CoreControlRegisters::host`] takes them.
 #[cfg(any(test, feature = "test-support"))]
-pub const HOST_SIZES: [usize; 4] = [
+pub const HOST_SIZES: [usize; 5] = [
     instances::pmu::SIZE,
     instances::hp_sys::SIZE,
     instances::hp_sys_clkrst::SIZE,
     instances::lp_aon_clkrst::SIZE,
+    instances::lp_sys::SIZE,
 ];
 
 #[cfg(any(test, feature = "test-support"))]

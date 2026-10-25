@@ -1253,3 +1253,61 @@ fn sourced_block_geometry_is_rendered() {
         ""
     );
 }
+
+#[test]
+fn mixed_word_triggers_keep_rw_and_unassigned_bits_and_zero_wtc_and_other_wt() {
+    let rust = rendered_with(&[(
+        "types/radio.toml",
+        "name = \"KEY\"\nbits = \"15:8\"\nclass = \"write-only\"",
+        "name = \"EVENT\"\nbits = \"8\"\nclass = \"write-one-to-clear\"\n\n[[registers.fields]]\nname = \"START\"\nbits = \"16\"\nclass = \"write-trigger\"\n\n[[registers.fields]]\nname = \"OTHER\"\nbits = \"17\"\nclass = \"write-trigger\"",
+    )]);
+    assert!(!rust.contains("pub fn modify_mixed("));
+    assert!(!rust.contains("pub fn write_mixed("));
+    assert!(!rust.contains("unsafe {"));
+    let output = run(
+        &rust,
+        r#"
+fn main() {
+    for initial in [0, u32::MAX, 0x8102_0101, 0x0003_0100] {
+        let mut memory = [0_u32; 0x40];
+        memory[0x50 / 4] = initial;
+        {
+            let (mut task, _) = radio::radio0_host(&mut memory).expect("host block");
+            task.trigger_mixed_start();
+        }
+        assert_eq!(memory[0x50 / 4], (initial & !0x0003_0100) | 0x0001_0000);
+        {
+            let (mut task, _) = radio::radio0_host(&mut memory).expect("host block");
+            task.trigger_mixed_other();
+        }
+        assert_eq!(memory[0x50 / 4], (initial & !0x0003_0100) | 0x0002_0000);
+    }
+    println!("mixed triggers preserve RW and never acknowledge WTC");
+}
+"#,
+    );
+    assert_eq!(
+        output.trim(),
+        "mixed triggers preserve RW and never acknowledge WTC"
+    );
+}
+
+#[test]
+fn a_mixed_trigger_requires_safe_replay_of_every_other_lane() {
+    for lane in [
+        "class = \"write-one-to-clear\"\nwrite-values-only = true\nvalues = [{ name = \"ACK\", value = 1 }]",
+        "class = \"hardware-written\"",
+        "class = \"unknown\"",
+        "class = \"self-clearing\"",
+    ] {
+        let replacement = format!(
+            "name = \"EVENT\"\nbits = \"8\"\n{lane}\n\n[[registers.fields]]\nname = \"PENDING\"\nbits = \"9\"\nclass = \"write-one-to-clear\"\n\n[[registers.fields]]\nname = \"START\"\nbits = \"16\"\nclass = \"write-trigger\""
+        );
+        let rust = rendered_with(&[(
+            "types/radio.toml",
+            "name = \"KEY\"\nbits = \"15:8\"\nclass = \"write-only\"",
+            &replacement,
+        )]);
+        assert!(!rust.contains("pub fn trigger_mixed_start("), "{lane}");
+    }
+}
