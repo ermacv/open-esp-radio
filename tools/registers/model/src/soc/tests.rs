@@ -3,8 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{RegisterApi, SocInputs, SocRender, StrictnessOverlay, render_soc};
 use crate::HeaderTree;
 
-const PIN: &str = "schema = 1\nesp-idf = \"4d59230ddff16327812782151ef0afef202dc6d7\"\n\
-                   esp-hal = \"1f646c5af4f4ca2774f493783581237fea2379dc\"\n";
+const PIN: &str = "schema = 1\nesp-idf = \"4d59230ddff16327812782151ef0afef202dc6d7\"\n";
 const REG: &str = "components/soc/test/register/soc/timer_reg.h";
 const LAYOUT: &str = "components/soc/test/register/soc/timer_struct.h";
 const INTERRUPTS: &str = "components/soc/test/include/soc/interrupts.h";
@@ -1271,6 +1270,18 @@ fn the_interrupt_enum_has_the_svd_and_overlay_sources_but_no_source_count() {
 }
 
 #[test]
+fn an_esp_hal_overlay_pin_is_refused() {
+    let error = StrictnessOverlay::parse(&format!(
+        "{PIN}esp-hal = \"1f646c5af4f4ca2774f493783581237fea2379dc\"\n"
+    ))
+    .expect_err("esp-hal is not an overlay pin");
+    assert!(
+        error.to_string().contains("unknown field `esp-hal`"),
+        "{error}"
+    );
+}
+
+#[test]
 fn every_overlay_entry_names_vendor_geometry_and_cites_a_source() {
     let missing = soc(
         &config(),
@@ -1284,7 +1295,12 @@ fn every_overlay_entry_names_vendor_geometry_and_cites_a_source() {
         missing.to_string().contains("not in the vendor SVD"),
         "{missing}"
     );
-    for source in ["\"\"", "\"esp-idf:path\"", "\"vendor says so\""] {
+    for source in [
+        "\"\"",
+        "\"esp-idf:path\"",
+        "\"esp-hal:esp-hal/src/test.rs:1\"",
+        "\"vendor says so\"",
+    ] {
         let error = soc(
             &config(),
             &config_h(),

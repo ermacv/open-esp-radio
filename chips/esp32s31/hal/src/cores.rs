@@ -289,10 +289,10 @@ trait BootAddress {
 /// boot address is cleared before the reset pulse, so a running hart 1
 /// that the pulse sends into the ROM finds no entry of this image.
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/system.rs` (`software_reset`) and
-/// `esp-hal/src/soc/esp32s31/cpu_control.rs` (`pre_system_reset`), which
-/// clear the boot address after the stall; ESP-IDF 4d59230d
-/// `components/esp_system/port/soc/esp32s31/system_internal.c`.
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/esp_system/port/soc/esp32s31/system_internal.c:61-100`
+/// (`esp_restart_noos_inner`: clear the APP CPU boot address before
+/// resetting the cores, with the APP CPU stalled on the core-0 path).
 fn prepare_reset<P: Placement, Q: Placement, R: Placement, S: Placement>(
     words: &mut CoreControlRegisters<P, Q, R, S>,
     boot: &mut impl BootAddress,

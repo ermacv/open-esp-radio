@@ -10,8 +10,9 @@ use crate::generated::soc::cache::{self, Cache};
 
 /// The caches a sync command acts on (`SYNC_MAP`).
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/cache.rs:3-4` (data
-/// cache 0x10, both instruction caches 0x03); ESP-IDF 4d59230d
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:160-166`
+/// (data cache BIT(4), both instruction caches BIT(0) | BIT(1)) and
 /// `components/soc/esp32s31/register/soc/cache_reg.h:1630-1640`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CacheMap {

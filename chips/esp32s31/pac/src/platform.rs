@@ -159,9 +159,9 @@ impl<P: Placement, Q: Placement> EntropyRegisters<P, Q> {
 
     /// The generator's clock, sampling and health-test state.
     ///
-    /// SOURCE: esp-hal 1f646c5 `esp-hal/src/rng/trng.rs:50-66`
-    /// (`TrngSource::status`), from ESP-IDF's `rng_ll_enable` configuration
-    /// (`components/hal/esp32s31/include/hal/rng_ll.h:163-178`).
+    /// SOURCE: ESP-IDF 4d59230d
+    /// `components/hal/esp32s31/include/hal/rng_ll.h:163-178`
+    /// (`rng_ll_enable`: clocks, reset, sampling and health-test configuration).
     pub fn status(&self) -> EntropyStatus {
         let clock = self.clock.read_rng_ctrl();
         let conf = self.trng.read_conf();

@@ -18,8 +18,11 @@ pub use oer_espressif_watchdog::{
 /// The main watchdogs' microsecond tick on the chip's 40 MHz XTAL, their
 /// clock source.
 ///
-/// SOURCE: esp-hal 1f646c5 `esp-metadata-generated/src/_generated_esp32s31.rs:3207-3209`
-/// (`xtal_clk_frequency` is 40 MHz).
+/// SOURCE: ESP-IDF 4d59230d
+/// `components/soc/esp32s31/include/soc/clk_tree_defs.h:125-127`
+/// (the chip's XTAL is 40 MHz) and
+/// `components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h:273-283`
+/// (`mwdt_ll_set_clock_source`: XTAL).
 pub const MAIN_WATCHDOG_TICK: MicrosecondTick = match MicrosecondTick::from_source_hz(40_000_000) {
     Some(tick) => tick,
     None => panic!("40 MHz is a whole number of megahertz"),

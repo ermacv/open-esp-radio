@@ -5,13 +5,11 @@
 # `esp-idf:` citation below against the cited line. The entries state what
 # the headers do not, or correct the SVD: offsets, read side effects, FIFO
 # ports, enumerated values, and the interrupt sources the SVD does not list.
-# Every entry cites its source: `esp-idf:<path>:<line>` at the pin below,
-# `esp-hal:<path>:<line>` at the esp-hal pin, or `trm:<section>`. The
-# generated `../published/soc.report.toml` lists every renamed field and
-# every register the pass narrowed.
+# Every entry cites its source: `esp-idf:<path>:<line>` at the pin below
+# or `trm:<section>`. The generated `../published/soc.report.toml` lists
+# every renamed field and every register the pass narrowed.
 schema = 1
 esp-idf = "4d59230ddff16327812782151ef0afef202dc6d7"
-esp-hal = "1f646c5af4f4ca2774f493783581237fea2379dc"
 
 
 # The pinned ESP-IDF header of each vendor peripheral: its `*_reg.h` states
