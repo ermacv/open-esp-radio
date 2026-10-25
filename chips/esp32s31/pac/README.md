@@ -9,7 +9,7 @@ over it is the HAL's, each vendor step with its `SOURCE:`.
 
 | File | What it holds |
 | --- | --- |
-| [`src/generated.rs`](src/generated.rs) | Generated, never edited: a module per block type with its register modules (masks, offsets, `R`, `W`, `Snapshot`, value types) and the owners of its parts; the field accessors of each field's class; typed DMA pointers; `Interrupt` and `instances` (bases, sizes, bound sources); `ownership` (the partitions, `Claims`, `partition`); the irreducible policy items (whole-word images, masked acknowledgements, interrupt snapshots, whole-word-bits writes); `layouts`; `analog_i2c` |
+| [`src/generated.rs`](src/generated.rs) | Generated, never edited: a module per block type with its register modules (masks, offsets, `R`, `W`, `Snapshot`, value types) and the owners of its parts; the field accessors of each field's class; typed DMA pointers; `Interrupt` and `instances` (bases, sizes, bound sources); `ownership` (the partitions, `Claims`, `partition`); the irreducible policy items (whole-word images, masked acknowledgements, interrupt snapshots, whole-word-bits writes, pointer ORs); `layouts`; `analog_i2c` |
 | [`src/lib.rs`](src/lib.rs) | The root: `take()` claims every part once and returns the partitions |
 
 - **Accessors by class.** Reads, read-modify-writes that keep every bit

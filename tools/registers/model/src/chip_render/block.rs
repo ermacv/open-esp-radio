@@ -422,6 +422,27 @@ impl Template<'_> {
             .fold(self.reserved_reset, |image, bits| image | bits)
     }
 
+    /// The write-trigger fields a write may set: not zero-only.
+    pub(super) fn settable_triggers(&self) -> impl Iterator<Item = &FieldPlan<'_>> {
+        self.fields
+            .iter()
+            .filter(|field| field.class == FieldClass::WriteTrigger && !field.zero)
+    }
+
+    /// A word whose every writable field is a write trigger, at least two of
+    /// them settable: one write may set several together (`T`).
+    pub(super) fn trigger_set(&self) -> bool {
+        self.api()
+            && !self.fifo
+            && !self.port
+            && !self.command
+            && self.settable_triggers().count() >= 2
+            && self
+                .fields
+                .iter()
+                .all(|field| matches!(field.class, FieldClass::WriteTrigger | FieldClass::ReadOnly))
+    }
+
     /// The bits of the doorbells.
     pub(super) fn doorbells(&self) -> u32 {
         self.mask_of(|field| field.doorbell)
@@ -995,6 +1016,46 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
                 field.stem,
                 field.write_type(None),
             );
+            // A pointer takes a typed reference or the zero image, the null
+            // reference; never an integer.
+            if field.setter == Setter::Pointer {
+                let _ = writeln!(
+                    output,
+                    "/// Set `{}` to the zero image: no address.\n#[inline]\npub fn clear_{}(&mut self) -> &mut Self {{\nself.0 &= 0x{:08x};\nself\n}}\n",
+                    field.field.name,
+                    field.stem,
+                    !field.mask(),
+                );
+            }
+        }
+        output.push_str("}\n\n");
+    }
+    if template.trigger_set() {
+        output.push_str(
+            "/// The write-trigger fields one write of the register sets together;\n\
+             /// every other bit of the write is zero or its fixed value.\n\
+             pub struct T(pub(super) u32);\n\nimpl T {\n",
+        );
+        for field in template.settable_triggers() {
+            if field.width == 1 {
+                let _ = writeln!(
+                    output,
+                    "/// Set the write-trigger field `{}`.\n#[inline]\npub fn {}(&mut self) -> &mut Self {{\nself.0 |= 0x{:08x};\nself\n}}\n",
+                    field.field.name,
+                    field.method(),
+                    field.mask(),
+                );
+            } else {
+                let _ = writeln!(
+                    output,
+                    "/// Set the write-trigger field `{}` to `value`.\n#[inline]\npub fn {}(&mut self, value: {}) -> &mut Self {{\nself.0 = (self.0 & 0x{:08x}) | {};\nself\n}}\n",
+                    field.field.name,
+                    field.method(),
+                    field.write_type(None),
+                    !field.mask(),
+                    field.positioned(),
+                );
+            }
         }
         output.push_str("}\n\n");
     }
@@ -1391,6 +1452,24 @@ fn render_owned(
                 call.write(&image)
             );
         }
+    }
+    if template.trigger_set() && template.triggered() {
+        let image = if template.zero_image() == 0 {
+            "triggers.0".to_owned()
+        } else {
+            format!("0x{:08x} | triggers.0", template.zero_image())
+        };
+        let _ = writeln!(
+            body,
+            "/// Write to the write-trigger fields of `{name}` the change sets, in one\n\
+             /// write, starting each one's hardware action once; every other bit is\n\
+             /// zero or its fixed value.\n\
+             #[inline]\npub fn trigger_{stem}(&mut self{index}, change: impl FnOnce(&mut {module}::T)) {{\n\
+             let mut triggers = {module}::T(0);\n\
+             change(&mut triggers);\n\
+             self.0.{};\n}}\n",
+            call.write(&image)
+        );
     }
     if template.modifiable() {
         for field in template.fields.iter().filter(|field| field.doorbell) {

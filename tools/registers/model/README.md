@@ -836,6 +836,7 @@ nothing else adds one.
 | `modify_<register>(&mut self, change)`; `change` takes `&mut <register>::W`, whose `set_<field>(value)` sets one field | a readable register whose write-back replays nothing: every other bit keeps the value read, every trigger, command bit and zero-only field is zero |
 | `write_<register>(&mut self, <required>..., change)`, the same `W` from zero | a register with writable fields and no readable one, or a readable one with `write-only` lanes and only `plain`, `read-only`, trigger and write-one-to-clear fields beside them; the fields no write may leave zero are arguments |
 | `trigger_<register>_<field>(&mut self)`, or with `value` for a wider field | each `write-trigger` field whose writes are not zero only, and each doorbell |
+| `trigger_<register>(&mut self, change)`; `change` takes `&mut <register>::T`, whose `<field>()` (or `<field>(value)`) sets one trigger | a word whose every field is `write-trigger` or `read-only`, at least two triggers settable: several triggers in one write |
 | `<register>_<doorbell>_pending(&self) -> bool` | each doorbell |
 | `start_<register>_<command>(&mut self, <qualifier>: bool, ...) -> Result<(), CommandBusy>` and `<register>_<command>_busy(&self) -> bool` | each command of a `[[commands]]` register |
 | `sample_<register>(&self) -> <register>::Snapshot` and `acknowledge_<register>(&mut self, snapshot)` | a register of only `write-one-to-clear` fields |
@@ -852,7 +853,8 @@ unless a narrower `write-range` bounds it: then it takes a bounded
 `<Field>Range`. A field with `values` has a `<field>_variant()` getter. A
 field with a `pointer` fact takes `oer_mmio::DmaRef<Layout>` of its target
 layout, or the window's `DmaWindowAddress` for a raw buffer, and stores its
-encoding (`member-offset` added, shifted, its width kept); a high field has
+encoding (`member-offset` added, shifted, its width kept), and
+`clear_<field>()` stores its zero image, no address; a high field has
 `set_<field>_prefix()` alone and a write from zero starts from its prefix. A
 register a read changes has no accessor, and a field whose class gives no
 setter has none.
@@ -909,8 +911,9 @@ What a write does with the lanes it does not set:
 - **Policy items.** Only the items field accessors cannot express render:
   `whole-word` fixed images, fixed images with a `masks` (masked first,
   whole-word or not) or `consumed-event` proof, interrupt snapshots (with
-  the consumed field as an `Option` argument) and zero-based writes with
-  `whole-word-bits`. Each becomes a method of the part that owns it; every
+  the consumed field as an `Option` argument), zero-based writes with
+  `whole-word-bits` and field-or-modifies of a pointer field (a typed
+  reference's image ORed into a fresh read). Each becomes a method of the part that owns it; every
   other transaction is HAL code over the accessors.
 
 ### Linker fragment

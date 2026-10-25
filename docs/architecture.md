@@ -178,7 +178,7 @@ moves; ownership, orchestration and wiring are rebuilt.
   by class, typed value domains and DMA pointers, interrupt sources,
   ownership parts, memory layouts, the analog-I2C dictionary and the few
   policy items accessors cannot express (whole-word images, masked
-  acknowledgements, interrupt snapshots). It has no handwritten module and
+  acknowledgements, interrupt snapshots, pointer ORs). It has no handwritten module and
   no logic. Register sets, phased sequencing, polls, retries, interrupt
   routing and lifecycle policy belong to the HAL, each vendor step with its
   `SOURCE:` ([PAC](../chips/esp32s31/pac/README.md),

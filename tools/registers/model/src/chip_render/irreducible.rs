@@ -8,7 +8,9 @@
 //!   consumed (`consumed-event`);
 //! - an interrupt snapshot: a status word sampled into an affine token and
 //!   acknowledged, exactly as sampled, in its clear word;
-//! - a write from zero storing sourced `whole-word-bits` beside its fields.
+//! - a write from zero storing sourced `whole-word-bits` beside its fields;
+//! - a field-or-modify of a pointer field: the vendor's OR of a typed
+//!   reference's image into a fresh read.
 //!
 //! Every other transaction of the policy is a sequence of field accessors
 //! and belongs to the HAL.
@@ -186,6 +188,13 @@ pub(super) fn render(
             names::ident(&image.name)
         );
     }
+    for modify in file
+        .field_or_modifies
+        .iter()
+        .filter(|modify| modify.domain.is_none() && modify.value.is_none() && mine(&modify.name))
+    {
+        render_pointer_or(body, plan, owner, model, modify)?;
+    }
     for snapshot in file
         .interrupt_snapshots
         .iter()
@@ -250,6 +259,77 @@ pub(super) fn render(
             names::ident(&write.name)
         );
     }
+    Ok(())
+}
+
+/// A field-or-modify of one pointer field from input bit zero, with
+/// neither domain nor value (the policy proves it takes a typed
+/// reference's image): the vendor's OR of that image into a fresh read,
+/// which a field accessor, replacing the field, cannot express.
+fn render_pointer_or(
+    body: &mut String,
+    plan: &TypePlan<'_>,
+    owner: &Owner<'_>,
+    model: &ChipModel,
+    modify: &crate::chip_policy::FieldBitModify,
+) -> Result<(), Error> {
+    let entity = modify.name.as_str();
+    let [projection] = modify.fields.as_slice() else {
+        return Err(Error::new(
+            entity,
+            "it ORs an address into more than one field",
+        ));
+    };
+    let Some((register, name)) = projection.field.rsplit_once('.') else {
+        return Err(Error::new(entity, "it names no field"));
+    };
+    let target = element(entity, plan, owner, model, register)?;
+    let field = target
+        .template
+        .fields
+        .iter()
+        .find(|field| field.field.name == name)
+        .filter(|field| field.pointer.is_some() && field.setter())
+        .ok_or_else(|| {
+            Error::new(
+                entity,
+                format!("{} is no pointer field a write sets", projection.field),
+            )
+        })?;
+    if !target.template.modifiable() {
+        return Err(Error::new(
+            entity,
+            format!("{register} is not read and written back"),
+        ));
+    }
+    let read = target.read(entity, owner)?;
+    let zero = target.template.write_zero();
+    let kept = if zero == 0 {
+        read
+    } else {
+        format!("{read} & 0x{:08x}", !zero)
+    };
+    let write = target.write(
+        entity,
+        owner,
+        &format!("{kept} | {}", field.positioned()),
+        field.mask(),
+    )?;
+    doc(
+        body,
+        &format!(
+            "OR the image of `value` into `{}` of a fresh read; every other bit keeps\n/// the value read, every write-trigger field is zero",
+            field.field.name
+        ),
+        register,
+        &modify.sources,
+    );
+    let _ = writeln!(
+        body,
+        "#[inline]\npub fn {}(&mut self, value: {}) {{\n{write};\n}}\n",
+        names::ident(&modify.name),
+        field.write_type(Some(&target.template.module()))
+    );
     Ok(())
 }
 
