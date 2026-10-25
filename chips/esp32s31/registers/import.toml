@@ -1,0 +1,300 @@
+# The ESP32-S31 vendor blocks `cargo registers import` writes into block
+# types (`types/`) and the chip root (`chip.toml`): every block a PAC, HAL,
+# platform or firmware consumer uses, from the pinned vendor SVD and the
+# pinned ESP-IDF headers (`vendor/artifacts.toml`). A type is the header's
+# device layout; an instance is the SVD's peripheral, or the `reg_base.h`
+# block for one the SVD lacks.
+schema = 1
+chip = "esp32s31"
+svd = "esp-pacs/esp32s31/svd/esp32s31.base.svd"
+esp-idf = "esp-idf"
+overlay = "model/strictness.toml"
+root = "chip.toml"
+types-directory = "types"
+evidence = "evidence/imported.toml"
+interrupts = "components/soc/esp32s31/include/soc/interrupts.h"
+bases = [
+    "components/soc/esp32s31/register/soc/reg_base.h",
+    "components/soc/esp32s31/include/modem/reg_base.h",
+]
+
+[[types]]
+name = "CACHE"
+description = "The L1 and L2 caches: control, synchronization, preload, lock and the access-fault interrupts."
+registers = "components/soc/esp32s31/register/soc/cache_reg.h"
+layout = "components/soc/esp32s31/register/soc/cache_struct.h"
+
+[[types.instances]]
+name = "CACHE"
+svd = "CACHE"
+base = "DR_REG_CACHE_BASE"
+
+[[types]]
+name = "EFUSE"
+description = "The eFuse controller: the read-back eFuse blocks, the programming data, commands and status."
+registers = "components/soc/esp32s31/register/soc/efuse_reg.h"
+layout = "components/soc/esp32s31/register/soc/efuse_struct.h"
+
+[[types.instances]]
+name = "EFUSE"
+svd = "EFUSE"
+base = "DR_REG_EFUSE_BASE"
+
+[[types]]
+name = "HP_ALIVE_SYS"
+description = "The HP always-on system registers."
+registers = "components/soc/esp32s31/register/soc/hp_alive_sys_reg.h"
+layout = "components/soc/esp32s31/register/soc/hp_alive_sys_struct.h"
+
+[[types.instances]]
+name = "HP_ALIVE_SYS"
+svd = "HP_ALIVE_SYS"
+base = "DR_REG_HP_ALIVE_SYS_BASE"
+
+[[types]]
+name = "HP_SYSTEM"
+description = "The HP system registers: software interrupts between the cores, core stall status, pad and memory controls."
+registers = "components/soc/esp32s31/register/soc/hp_system_reg.h"
+layout = "components/soc/esp32s31/register/soc/hp_system_struct.h"
+
+[[types.instances]]
+name = "HP_SYS"
+svd = "HP_SYS"
+base = "DR_REG_HP_SYS_BASE"
+
+[[types]]
+name = "HP_SYS_CLKRST"
+description = "The HP clock and reset controller: the root clock, the clock gates, dividers and resets of the HP peripherals and cores."
+registers = "components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h"
+layout = "components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h"
+
+[[types.instances]]
+name = "HP_SYS_CLKRST"
+svd = "HP_SYS_CLKRST"
+base = "DR_REG_HP_SYS_CLKRST_BASE"
+
+[[types]]
+name = "IOMUX_MSPI_PIN"
+description = "The pad controls of the flash and PSRAM SPI pins."
+registers = "components/soc/esp32s31/register/soc/iomux_mspi_pin_reg.h"
+layout = "components/soc/esp32s31/register/soc/iomux_mspi_pin_struct.h"
+
+[[types.instances]]
+name = "IOMUX_MSPI_PIN"
+svd = "IOMUX_MSPI_PIN"
+base = "DR_REG_IOMUX_MSPI_PIN_BASE"
+
+[[types]]
+name = "LP_ANA"
+description = "The LP analog peripheral registers: brownout detector, reset sources and the analog power controls."
+registers = "components/soc/esp32s31/register/soc/lp_analog_peri_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_analog_peri_struct.h"
+
+[[types.instances]]
+name = "LP_ANA_PERI"
+svd = "LP_ANA_PERI"
+base = "DR_REG_LP_ANA_BASE"
+
+[[types]]
+name = "LP_AONCLKRST"
+description = "The LP always-on clock and reset controller: the slow and fast clock sources, the LP resets and the reset causes."
+registers = "components/soc/esp32s31/register/soc/lp_clkrst_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_clkrst_struct.h"
+
+[[types.instances]]
+name = "LP_AON_CLKRST"
+svd = "LP_AON_CLKRST"
+base = "DR_REG_LP_AONCLKRST_BASE"
+
+[[types]]
+name = "LP_PERI_CLKRST"
+description = "The LP peripheral clock and reset controller."
+registers = "components/soc/esp32s31/register/soc/lp_peri_clkrst_reg.h"
+layout = "components/soc/esp32s31/register/soc/lp_peri_clkrst_struct.h"
+
+[[types.instances]]
+name = "LP_PERICLKRST"
+svd = "LP_PERICLKRST"
+base = "DR_REG_LP_PERICLKRST_BASE"
+
+[[types]]
+name = "PMU"
+description = "The power management unit: power states of the HP and LP domains, the modem power domain and the cores' stall requests."
+registers = "components/soc/esp32s31/register/soc/pmu_reg.h"
+layout = "components/soc/esp32s31/register/soc/pmu_struct.h"
+
+[[types.instances]]
+name = "PMU"
+svd = "PMU"
+base = "DR_REG_PMU_BASE"
+
+[[types]]
+name = "RTC_WDT"
+description = "The RTC watchdog and the super watchdog."
+registers = "components/soc/esp32s31/register/soc/rtc_wdt_reg.h"
+layout = "components/soc/esp32s31/register/soc/rtc_wdt_struct.h"
+
+[[types.instances]]
+name = "LP_WDT"
+svd = "LP_WDT"
+base = "DR_REG_RTC_WDT_BASE"
+
+[[types]]
+name = "SOC_ETM"
+description = "The SoC event task matrix: channel event and task selection and the event status."
+registers = "components/soc/esp32s31/register/soc/soc_etm_reg.h"
+layout = "components/soc/esp32s31/register/soc/soc_etm_struct.h"
+
+[[types.instances]]
+name = "SOC_ETM"
+svd = "SOC_ETM"
+base = "DR_REG_SOC_ETM_BASE"
+
+[[types]]
+name = "SPI_MEM_C"
+description = "The flash SPI controller's cache side (SPI0): timing, MMU entries and the access-fault status."
+registers = "components/soc/esp32s31/register/soc/spi_mem_c_reg.h"
+layout = "components/soc/esp32s31/register/soc/spi_mem_c_struct.h"
+
+[[types.instances]]
+name = "SPI0"
+svd = "SPI0"
+base = "DR_REG_FLASH_SPI0_BASE"
+
+[[types]]
+name = "SPI1_MEM_C"
+description = "The flash SPI controller's command side (SPI1): user commands, their data words and the flash status."
+registers = "components/soc/esp32s31/register/soc/spi1_mem_c_reg.h"
+layout = "components/soc/esp32s31/register/soc/spi1_mem_c_struct.h"
+
+[[types.instances]]
+name = "SPI1"
+svd = "SPI1"
+base = "DR_REG_FLASH_SPI1_BASE"
+
+[[types]]
+name = "SPI_MEM_S"
+description = "The PSRAM SPI controller's cache side: PSRAM timing, MMU entries and the access-fault status."
+registers = "components/soc/esp32s31/register/soc/spi_mem_s_reg.h"
+layout = "components/soc/esp32s31/register/soc/spi_mem_s_struct.h"
+
+[[types.instances]]
+name = "MEMSPI2"
+svd = "MEMSPI2"
+base = "DR_REG_PSRAM_MSPI0_BASE"
+
+[[types]]
+name = "SPI1_MEM_S"
+description = "The PSRAM SPI controller's command side: user commands and their data words."
+registers = "components/soc/esp32s31/register/soc/spi1_mem_s_reg.h"
+layout = "components/soc/esp32s31/register/soc/spi1_mem_s_struct.h"
+
+[[types.instances]]
+name = "MEMSPI3"
+svd = "MEMSPI3"
+base = "DR_REG_PSRAM_MSPI1_BASE"
+
+[[types]]
+name = "SYSTIMER"
+description = "The system timer: two counter units and three comparators."
+registers = "components/soc/esp32s31/register/soc/systimer_reg.h"
+layout = "components/soc/esp32s31/register/soc/systimer_struct.h"
+
+[[types.instances]]
+name = "SYSTIMER"
+svd = "SYSTIMER"
+base = "DR_REG_SYSTIMER_BASE"
+
+[[types]]
+name = "TIMG"
+description = "A timer group: two general-purpose timers, the main watchdog and the RTC slow clock calibration."
+registers = "components/soc/esp32s31/register/soc/timer_group_reg.h"
+layout = "components/soc/esp32s31/register/soc/timer_group_struct.h"
+
+[[types.instances]]
+name = "TIMG0"
+svd = "TIMG0"
+base = "DR_REG_TIMERG0_BASE"
+
+[[types.instances]]
+name = "TIMG1"
+svd = "TIMG1"
+base = "DR_REG_TIMERG1_BASE"
+
+[[types]]
+name = "TRNG"
+description = "The true random number generator."
+registers = "components/soc/esp32s31/register/soc/trng_reg.h"
+layout = "components/soc/esp32s31/register/soc/trng_struct.h"
+
+[[types.instances]]
+name = "TRNG"
+svd = "TRNG"
+base = "DR_REG_TRNG_BASE"
+
+[[types]]
+name = "TSENS"
+description = "The temperature sensor."
+registers = "components/soc/esp32s31/register/soc/tsens_reg.h"
+layout = "components/soc/esp32s31/register/soc/tsens_struct.h"
+
+[[types.instances]]
+name = "LP_TSENS"
+svd = "LP_TSENS"
+base = "DR_REG_TSENS_BASE"
+
+[[types]]
+name = "USB_SERIAL_JTAG"
+description = "The USB Serial/JTAG controller: its endpoint FIFOs, interrupts, pads and memory power."
+registers = "components/soc/esp32s31/register/soc/usb_serial_jtag_reg.h"
+layout = "components/soc/esp32s31/register/soc/usb_serial_jtag_struct.h"
+
+[[types.instances]]
+name = "USB_DEVICE"
+svd = "USB_DEVICE"
+base = "DR_REG_USB_SERIAL_JTAG_BASE"
+
+[[types]]
+name = "INTERRUPT_CORE"
+description = "One core's interrupt matrix: the CPU interrupt line and the remap level of each interrupt source."
+registers = "components/soc/esp32s31/register/soc/interrupt_core0_reg.h"
+layout = "components/soc/esp32s31/register/soc/interrupt_core0_struct.h"
+
+[[types.instances]]
+name = "INTERRUPT_CORE0"
+base = "DR_REG_INTERRUPT_CORE0_BASE"
+
+[[types.instances]]
+name = "INTERRUPT_CORE1"
+base = "DR_REG_INTERRUPT_CORE1_BASE"
+registers = "components/soc/esp32s31/register/soc/interrupt_core1_reg.h"
+layout = "components/soc/esp32s31/register/soc/interrupt_core1_struct.h"
+
+[[types]]
+name = "MODEM_SYSCON"
+description = "The modem system controller: the clocks and resets of the Wi-Fi, Bluetooth and IEEE 802.15.4 blocks, the front end and the modem memories."
+registers = "components/soc/esp32s31/include/modem/modem_syscon_reg.h"
+layout = "components/soc/esp32s31/include/modem/modem_syscon_struct.h"
+
+[[types.instances]]
+name = "MODEM_SYSCON"
+base = "DR_REG_MODEM_SYSCON_BASE"
+
+[[types]]
+name = "MODEM_LPCON"
+description = "The modem low-power controller: the modem's low-power clocks, their sources and dividers, and its low-power resets."
+registers = "components/soc/esp32s31/include/modem/modem_lpcon_reg.h"
+layout = "components/soc/esp32s31/include/modem/modem_lpcon_struct.h"
+
+[[types.instances]]
+name = "MODEM_LPCON"
+base = "DR_REG_MODEM_LPCON_BASE"
+
+[[types]]
+name = "I2C_ANA_MST"
+description = "The analog-I2C master that reaches the radio's analog blocks."
+registers = "components/soc/esp32s31/include/modem/i2c_ana_mst_reg.h"
+
+[[types.instances]]
+name = "I2C_ANA_MST"
+base = "DR_REG_I2C_ANA_MST_BASE"

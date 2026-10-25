@@ -1,0 +1,377 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "TRNG"
+description = "The true random number generator."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "CONF"
+offset = 0x0
+description = "CFG reg"
+reset = { value = 0x40000000 }
+
+[[registers.fields]]
+name = "NOISE_SOURCE_SEL"
+bits = "4:0"
+class = "plain"
+description = "sel noise source"
+
+[[registers.fields]]
+name = "NOISE_POS_SEL"
+bits = "9:5"
+class = "plain"
+description = "sel noise pos"
+
+[[registers.fields]]
+name = "REPETITION_VALUE_C"
+bits = "18:10"
+class = "plain"
+description = "parameter"
+
+[[registers.fields]]
+name = "ADPATIVE_VALUE_C"
+bits = "27:19"
+class = "plain"
+description = "parameter"
+
+[[registers.fields]]
+name = "FIFO_RESET"
+bits = "28"
+class = "write-trigger"
+description = "fifo_reset"
+
+[[registers.fields]]
+name = "RANDOM_OUTPUT_MODE"
+bits = "29"
+class = "plain"
+description = "standart and nonstandart output"
+
+[[registers.fields]]
+name = "NOISE_CRC_EN"
+bits = "30"
+class = "plain"
+description = "standart and nonstandart output"
+
+[[registers.fields]]
+name = "SAMPLE_ENABLE"
+bits = "31"
+class = "plain"
+description = "1: enable rng sample loop"
+
+[[registers]]
+name = "DEBUG_CONF"
+offset = 0x4
+description = "reserved"
+reset = { value = 0x800 }
+reserved = { mask = 0x80000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H"] }
+
+[[registers.fields]]
+name = "STARTUP_TEST_START"
+bits = "0"
+class = "write-trigger"
+description = "startup start"
+
+[[registers.fields]]
+name = "STARTUP_TEST_LIMIT"
+bits = "16:1"
+class = "plain"
+description = "startup limit"
+
+[[registers.fields]]
+name = "DEBUG_DATA"
+bits = "24:17"
+class = "read-only"
+description = "debug data"
+
+[[registers.fields]]
+name = "DEBUG_MODE"
+bits = "25"
+class = "plain"
+description = "1 for debug mode 0 for nomarl mode"
+
+[[registers.fields]]
+name = "HEALTH_TEST_ERROR_CODE"
+bits = "28:26"
+class = "read-only"
+description = "error code"
+
+[[registers.fields]]
+name = "HEALTH_TEST_END"
+bits = "29"
+class = "write-trigger"
+description = "health test end"
+
+[[registers.fields]]
+name = "HEALTH_TEST_BYPASS"
+bits = "30"
+class = "plain"
+description = "health test bypass"
+
+[[registers]]
+name = "CONDITION_KEY0"
+offset = 0x8
+description = "condition key reg"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "CONDITION_KEY0"
+bits = "31:0"
+class = "plain"
+description = "condition key"
+
+[[registers]]
+name = "CONDITION_KEY1"
+offset = 0xc
+description = "condition key reg"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "CONDITION_KEY1"
+bits = "31:0"
+class = "plain"
+description = "condition key"
+
+[[registers]]
+name = "CONDITION_KEY2"
+offset = 0x10
+description = "condition key reg"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "CONDITION_KEY2"
+bits = "31:0"
+class = "plain"
+description = "condition key"
+
+[[registers]]
+name = "CONDITION_KEY3"
+offset = 0x14
+description = "condition key reg"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "CONDITION_KEY3"
+bits = "31:0"
+class = "plain"
+description = "condition key"
+
+[[registers]]
+name = "CONDITION_KEY4"
+offset = 0x18
+description = "condition key reg"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "CONDITION_KEY4"
+bits = "31:0"
+class = "plain"
+description = "condition key"
+
+[[registers]]
+name = "CONDITION_KEY5"
+offset = 0x1c
+description = "condition key reg"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "CONDITION_KEY5"
+bits = "31:0"
+class = "plain"
+description = "condition key"
+
+[[registers]]
+name = "CONDITION_KEY6"
+offset = 0x20
+description = "condition key reg"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "CONDITION_KEY6"
+bits = "31:0"
+class = "plain"
+description = "condition key"
+
+[[registers]]
+name = "CONDITION_KEY7"
+offset = 0x24
+description = "condition key reg"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "CONDITION_KEY7"
+bits = "31:0"
+class = "plain"
+description = "condition key"
+
+[[registers]]
+name = "INT_ENA"
+offset = 0x28
+description = "Read only register for error and done"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H"] }
+
+[[registers.fields]]
+name = "ERROR_INT_ENA"
+bits = "0"
+class = "plain"
+description = "error flag"
+
+[[registers]]
+name = "INT_RAW"
+offset = 0x2c
+description = "Read only register for error and done"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H"] }
+
+[[registers.fields]]
+name = "ERROR_INT_RAW"
+bits = "0"
+class = "write-one-to-clear"
+description = "error flag"
+
+[[registers]]
+name = "INT_CLR"
+offset = 0x30
+description = "Read only register for error and done"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H"] }
+
+[[registers.fields]]
+name = "ERROR_INT_CLR"
+bits = "0"
+class = "write-trigger"
+description = "error flag"
+
+[[registers]]
+name = "INT_ST"
+offset = 0x34
+description = "Read only register for error and done"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H"] }
+
+[[registers.fields]]
+name = "ERROR_INT_ST"
+bits = "0"
+class = "read-only"
+description = "error flag"
+
+[[registers]]
+name = "ARBIT_CFG"
+offset = 0x38
+description = "arbit cfg"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffe0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H"] }
+
+[[registers.fields]]
+name = "ARBIT_PRIORITY_0"
+bits = "3:0"
+class = "plain"
+description = "reg_arbit_priority_0"
+
+[[registers.fields]]
+name = "ARBIT_PRIORITY_1"
+bits = "7:4"
+class = "plain"
+description = "reg_arbit_priority_1"
+
+[[registers.fields]]
+name = "ARBIT_PRIORITY_2"
+bits = "11:8"
+class = "plain"
+description = "reg_arbit_priority_2"
+
+[[registers.fields]]
+name = "ARBIT_PRIORITY_3"
+bits = "15:12"
+class = "plain"
+description = "reg_arbit_priority_3"
+
+[[registers.fields]]
+name = "ARBIT_EN"
+bits = "16"
+class = "plain"
+description = "reg_arbit_en"
+
+[[registers]]
+name = "SW_READ"
+offset = 0x3c
+description = "sw read random reg"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "SW_RANDOM_DATA"
+bits = "31:0"
+class = "read-only"
+description = "sw read random reg"
+
+[[registers]]
+name = "SW_READ_ST"
+offset = 0x40
+description = "sw read st reg"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H"] }
+
+[[registers.fields]]
+name = "SW_DATA_VALID"
+bits = "0"
+class = "read-only"
+description = "sw random data st"
+
+[[registers.fields]]
+name = "SW_RANDOM_REQ"
+bits = "1"
+class = "write-trigger"
+description = "sw read random req"
+
+[[registers]]
+name = "CRC_DATA"
+offset = 0x44
+description = "sw read data"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "SW_CRC_RANDOM_DATA"
+bits = "31:0"
+class = "read-only"
+description = "sw read crc random data"
+
+[[registers]]
+name = "CRC_SYNC_DATA"
+offset = 0x48
+description = "sw read data sync"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "SW_CRC_RANDOM_DATA_SYNC"
+bits = "31:0"
+class = "read-only"
+description = "sw read crc random sync data"
+
+[[registers]]
+name = "DATE"
+offset = 0xfc
+description = "Date register."
+reset = { value = 0x250730 }
+reserved = { mask = 0xe0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TRNG_REG_H"] }
+
+[[registers.fields]]
+name = "DATE"
+bits = "27:0"
+class = "plain"
+description = "TRNG date information"
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "28"
+class = "plain"
+description = "clock enable"

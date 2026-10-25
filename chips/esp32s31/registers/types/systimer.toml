@@ -1,0 +1,628 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "SYSTIMER"
+description = "The system timer: two counter units and three comparators."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "CONF"
+offset = 0x0
+description = "Configure system timer clock"
+reset = { value = 0x46000000 }
+reserved = { mask = 0x3ffffd, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "ETM_EN"
+bits = "1"
+class = "plain"
+description = "Configures whether or not to enable generation of ETM events.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "TARGET2_WORK_EN"
+bits = "22"
+class = "plain"
+description = "Configures whether or not to enable COMP2.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "TARGET1_WORK_EN"
+bits = "23"
+class = "plain"
+description = "Configures whether or not to enable COMP1. See details in SYSTIMER_TARGET2_WORK_EN."
+
+[[registers.fields]]
+name = "TARGET0_WORK_EN"
+bits = "24"
+class = "plain"
+description = "Configures whether or not to enable COMP0. See details in SYSTIMER_TARGET2_WORK_EN."
+
+[[registers.fields]]
+name = "TIMER_UNIT1_CORE1_STALL_EN"
+bits = "25"
+class = "plain"
+description = "Configures whether or not UNIT1 is stalled when CORE1 is stalled. \\\\ 0: UNIT1 is not stalled. \\\\ 1: UNIT1 is stalled.\\\\"
+
+[[registers.fields]]
+name = "TIMER_UNIT1_CORE0_STALL_EN"
+bits = "26"
+class = "plain"
+description = "Configures whether or not UNIT1 is stalled when CORE0 is stalled. See details in SYSTIMER_TIMER_UNIT1_CORE1_STALL_EN."
+
+[[registers.fields]]
+name = "TIMER_UNIT0_CORE1_STALL_EN"
+bits = "27"
+class = "plain"
+description = "Configures whether or not UNIT0 is stalled when CORE1 is stalled. See details in SYSTIMER_TIMER_UNIT1_CORE1_STALL_EN."
+
+[[registers.fields]]
+name = "TIMER_UNIT0_CORE0_STALL_EN"
+bits = "28"
+class = "plain"
+description = "Configures whether or not UNIT0 is stalled when CORE0 is stalled. See details in SYSTIMER_TIMER_UNIT1_CORE1_STALL_EN."
+
+[[registers.fields]]
+name = "TIMER_UNIT1_WORK_EN"
+bits = "29"
+class = "plain"
+description = "Configures whether or not to enable UNIT1. \\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "TIMER_UNIT0_WORK_EN"
+bits = "30"
+class = "plain"
+description = "Configures whether or not to enable UNIT0. \\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "31"
+class = "plain"
+description = "Configures register clock gating. \\\\ 0: Only enable needed clock for register read or write operations. \\\\ 1: Register clock is always enabled for read and write operations. \\\\"
+
+[[registers]]
+name = "UNIT0_OP"
+offset = 0x4
+description = "Read UNIT0 value to registers"
+reset = { value = 0x0 }
+reserved = { mask = 0x9fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TIMER_UNIT0_VALUE_VALID"
+bits = "29"
+class = "write-one-to-clear"
+description = "Represents UNIT0 value is synchronized and valid."
+
+[[registers.fields]]
+name = "TIMER_UNIT0_UPDATE"
+bits = "30"
+class = "write-trigger"
+description = "Configures whether or not to update timer UNIT0, i.e., reads the UNIT0 count value to SYSTIMER_TIMER_UNIT0_VALUE_HI and SYSTIMER_TIMER_UNIT0_VALUE_LO. \\\\ 0: No effect\\\\ 1: Update timer UNIT0 \\\\"
+
+[[registers]]
+name = "UNIT1_OP"
+offset = 0x8
+description = "Read UNIT1 value to registers"
+reset = { value = 0x0 }
+reserved = { mask = 0x9fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TIMER_UNIT1_VALUE_VALID"
+bits = "29"
+class = "write-one-to-clear"
+description = "Represents UNIT1 value is synchronized and valid."
+
+[[registers.fields]]
+name = "TIMER_UNIT1_UPDATE"
+bits = "30"
+class = "write-trigger"
+description = "Configures whether or not to update timer UNIT1, i.e., reads the UNIT1 count value to SYSTIMER_TIMER_UNIT1_VALUE_HI and SYSTIMER_TIMER_UNIT1_VALUE_LO. \\\\ 0: No effect \\\\ 1: Update timer UNIT1\\\\"
+
+[[registers]]
+name = "UNIT0_LOAD_HI"
+offset = 0xc
+description = "High 20 bits to be loaded to UNIT0"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TIMER_UNIT0_LOAD_HI"
+bits = "19:0"
+class = "plain"
+description = "Configures the value to be loaded to UNIT0, high 20 bits."
+
+[[registers]]
+name = "UNIT0_LOAD_LO"
+offset = 0x10
+description = "Low 32 bits to be loaded to UNIT0"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "TIMER_UNIT0_LOAD_LO"
+bits = "31:0"
+class = "plain"
+description = "Configures the value to be loaded to UNIT0, low 32 bits."
+
+[[registers]]
+name = "UNIT1_LOAD_HI"
+offset = 0x14
+description = "High 20 bits to be loaded to UNIT1"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TIMER_UNIT1_LOAD_HI"
+bits = "19:0"
+class = "plain"
+description = "Configures the value to be loaded to UNIT1, high 20 bits."
+
+[[registers]]
+name = "UNIT1_LOAD_LO"
+offset = 0x18
+description = "Low 32 bits to be loaded to UNIT1"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "TIMER_UNIT1_LOAD_LO"
+bits = "31:0"
+class = "plain"
+description = "Configures the value to be loaded to UNIT1, low 32 bits."
+
+[[registers]]
+name = "TARGET0_HI"
+offset = 0x1c
+description = "Alarm value to be loaded to COMP0, high 20 bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TIMER_TARGET0_HI"
+bits = "19:0"
+class = "plain"
+description = "Configures the alarm value to be loaded to COMP0, high 20 bits."
+
+[[registers]]
+name = "TARGET0_LO"
+offset = 0x20
+description = "Alarm value to be loaded to COMP0, low 32 bits"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "TIMER_TARGET0_LO"
+bits = "31:0"
+class = "plain"
+description = "Configures the alarm value to be loaded to COMP0, low 32 bits."
+
+[[registers]]
+name = "TARGET1_HI"
+offset = 0x24
+description = "Alarm value to be loaded to COMP1, high 20 bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TIMER_TARGET1_HI"
+bits = "19:0"
+class = "plain"
+description = "Configures the alarm value to be loaded to COMP1, high 20 bits."
+
+[[registers]]
+name = "TARGET1_LO"
+offset = 0x28
+description = "Alarm value to be loaded to COMP1, low 32 bits"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "TIMER_TARGET1_LO"
+bits = "31:0"
+class = "plain"
+description = "Configures the alarm value to be loaded to COMP1, low 32 bits."
+
+[[registers]]
+name = "TARGET2_HI"
+offset = 0x2c
+description = "Alarm value to be loaded to COMP2, high 20 bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TIMER_TARGET2_HI"
+bits = "19:0"
+class = "plain"
+description = "Configures the alarm value to be loaded to COMP2, high 20 bits."
+
+[[registers]]
+name = "TARGET2_LO"
+offset = 0x30
+description = "Alarm value to be loaded to COMP2, low 32 bits"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "TIMER_TARGET2_LO"
+bits = "31:0"
+class = "plain"
+description = "Configures the alarm value to be loaded to COMP2, low 32 bits."
+
+[[registers]]
+name = "TARGET0_CONF"
+offset = 0x34
+description = "Configure COMP0 alarm mode"
+reset = { value = 0x0 }
+reserved = { mask = 0x3c000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TARGET0_PERIOD"
+bits = "25:0"
+class = "plain"
+description = "Configures COMP0 alarm period."
+
+[[registers.fields]]
+name = "TARGET0_PERIOD_MODE"
+bits = "30"
+class = "plain"
+description = "Selects the two alarm modes for COMP0. \\\\ 0: Target mode\\\\ 1: Period mode\\\\"
+
+[[registers.fields]]
+name = "TARGET0_TIMER_UNIT_SEL"
+bits = "31"
+class = "plain"
+description = "Chooses the counter value for comparison with COMP0.\\\\ 0: Use the count value from UNIT$0\\\\ 1: Use the count value from UNIT$1\\\\"
+
+[[registers]]
+name = "TARGET1_CONF"
+offset = 0x38
+description = "Configure COMP1 alarm mode"
+reset = { value = 0x0 }
+reserved = { mask = 0x3c000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TARGET1_PERIOD"
+bits = "25:0"
+class = "plain"
+description = "Configures COMP1 alarm period."
+
+[[registers.fields]]
+name = "TARGET1_PERIOD_MODE"
+bits = "30"
+class = "plain"
+description = "Selects the two alarm modes for COMP1. See details in SYSTIMER_TARGET0_PERIOD_MODE."
+
+[[registers.fields]]
+name = "TARGET1_TIMER_UNIT_SEL"
+bits = "31"
+class = "plain"
+description = "Chooses the counter value for comparison with COMP1. See details in SYSTIMER_TARGET0_TIMER_UNIT_SEL."
+
+[[registers]]
+name = "TARGET2_CONF"
+offset = 0x3c
+description = "Configure COMP2 alarm mode"
+reset = { value = 0x0 }
+reserved = { mask = 0x3c000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TARGET2_PERIOD"
+bits = "25:0"
+class = "plain"
+description = "Configures COMP2 alarm period."
+
+[[registers.fields]]
+name = "TARGET2_PERIOD_MODE"
+bits = "30"
+class = "plain"
+description = "Configures Configures the two alarm modes for COMP2. See details in SYSTIMER_TARGET0_PERIOD_MODE."
+
+[[registers.fields]]
+name = "TARGET2_TIMER_UNIT_SEL"
+bits = "31"
+class = "plain"
+description = "Chooses the counter value for comparison with COMP2. See details in SYSTIMER_TARGET0_TIMER_UNIT_SEL."
+
+[[registers]]
+name = "UNIT0_VALUE_HI"
+offset = 0x40
+description = "UNIT0 value, high 20 bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TIMER_UNIT0_VALUE_HI"
+bits = "19:0"
+class = "read-only"
+description = "Represents UNIT0 read value, high 20 bits."
+
+[[registers]]
+name = "UNIT0_VALUE_LO"
+offset = 0x44
+description = "UNIT0 value, low 32 bits"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "TIMER_UNIT0_VALUE_LO"
+bits = "31:0"
+class = "read-only"
+description = "Represents UNIT0 read value, low 32 bits."
+
+[[registers]]
+name = "UNIT1_VALUE_HI"
+offset = 0x48
+description = "UNIT1 value, high 20 bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TIMER_UNIT1_VALUE_HI"
+bits = "19:0"
+class = "read-only"
+description = "Represents UNIT1 read value, high 20 bits."
+
+[[registers]]
+name = "UNIT1_VALUE_LO"
+offset = 0x4c
+description = "UNIT1 value, low 32 bits"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "TIMER_UNIT1_VALUE_LO"
+bits = "31:0"
+class = "read-only"
+description = "Represents UNIT1 read value, low 32 bits."
+
+[[registers]]
+name = "COMP0_LOAD"
+offset = 0x50
+description = "COMP0 synchronization register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TIMER_COMP0_LOAD"
+bits = "0"
+class = "write-trigger"
+description = "Configures whether or not to enable COMP0 synchronization, i.e., reload the alarm value/period to COMP0.\\\\ 0: No effect \\\\ 1: Enable COMP0 synchronization\\\\"
+
+[[registers]]
+name = "COMP1_LOAD"
+offset = 0x54
+description = "COMP1 synchronization register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TIMER_COMP1_LOAD"
+bits = "0"
+class = "write-trigger"
+description = "Configures whether or not to enable COMP1 synchronization, i.e., reload the alarm value/period to COMP1. \\\\ 0: No effect \\\\ 1: Enable COMP1 synchronization\\\\"
+
+[[registers]]
+name = "COMP2_LOAD"
+offset = 0x58
+description = "COMP2 synchronization register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TIMER_COMP2_LOAD"
+bits = "0"
+class = "write-trigger"
+description = "Configures whether or not to enable COMP2 synchronization, i.e., reload the alarm value/period to COMP2.\\\\ 0: No effect \\\\ 1: Enable COMP2 synchronization\\\\"
+
+[[registers]]
+name = "UNIT0_LOAD"
+offset = 0x5c
+description = "UNIT0 synchronization register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TIMER_UNIT0_LOAD"
+bits = "0"
+class = "write-trigger"
+description = "Configures whether or not to reload the value of UNIT0, i.e., reloads the values of SYSTIMER_TIMER_UNIT0_VALUE_HI and SYSTIMER_TIMER_UNIT0_VALUE_LO to UNIT0. \\\\ 0: No effect \\\\ 1: Reload the value of UNIT0\\\\"
+
+[[registers]]
+name = "UNIT1_LOAD"
+offset = 0x60
+description = "UNIT1 synchronization register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TIMER_UNIT1_LOAD"
+bits = "0"
+class = "write-trigger"
+description = "Configures whether or not to reload the value of UNIT1, i.e., reload the values of SYSTIMER_TIMER_UNIT1_VALUE_HI and SYSTIMER_TIMER_UNIT1_VALUE_LO to UNIT1. \\\\ 0: No effect \\\\ 1: Reload the value of UNIT1\\\\"
+
+[[registers]]
+name = "INT_ENA"
+offset = 0x64
+description = "Interrupt enable register of system timer"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TARGET0_INT_ENA"
+bits = "0"
+class = "plain"
+description = "Write 1 to enable SYSTIMER_TARGET0_INT."
+
+[[registers.fields]]
+name = "TARGET1_INT_ENA"
+bits = "1"
+class = "plain"
+description = "Write 1 to enable SYSTIMER_TARGET1_INT."
+
+[[registers.fields]]
+name = "TARGET2_INT_ENA"
+bits = "2"
+class = "plain"
+description = "Write 1 to enable SYSTIMER_TARGET2_INT."
+
+[[registers]]
+name = "INT_RAW"
+offset = 0x68
+description = "Interrupt raw register of system timer"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TARGET0_INT_RAW"
+bits = "0"
+class = "write-one-to-clear"
+description = "The raw interrupt status of SYSTIMER_TARGET0_INT."
+
+[[registers.fields]]
+name = "TARGET1_INT_RAW"
+bits = "1"
+class = "write-one-to-clear"
+description = "The raw interrupt status of SYSTIMER_TARGET1_INT."
+
+[[registers.fields]]
+name = "TARGET2_INT_RAW"
+bits = "2"
+class = "write-one-to-clear"
+description = "The raw interrupt status of SYSTIMER_TARGET2_INT."
+
+[[registers]]
+name = "INT_CLR"
+offset = 0x6c
+description = "Interrupt clear register of system timer"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TARGET0_INT_CLR"
+bits = "0"
+class = "write-trigger"
+description = "Write 1 to clear SYSTIMER_TARGET0_INT."
+
+[[registers.fields]]
+name = "TARGET1_INT_CLR"
+bits = "1"
+class = "write-trigger"
+description = "Write 1 to clear SYSTIMER_TARGET1_INT."
+
+[[registers.fields]]
+name = "TARGET2_INT_CLR"
+bits = "2"
+class = "write-trigger"
+description = "Write 1 to clear SYSTIMER_TARGET2_INT."
+
+[[registers]]
+name = "INT_ST"
+offset = 0x70
+description = "Interrupt status register of system timer"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TARGET0_INT_ST"
+bits = "0"
+class = "read-only"
+description = "The interrupt status of SYSTIMER_TARGET0_INT."
+
+[[registers.fields]]
+name = "TARGET1_INT_ST"
+bits = "1"
+class = "read-only"
+description = "The interrupt status of SYSTIMER_TARGET1_INT."
+
+[[registers.fields]]
+name = "TARGET2_INT_ST"
+bits = "2"
+class = "read-only"
+description = "The interrupt status of SYSTIMER_TARGET2_INT."
+
+[[registers]]
+name = "REAL_TARGET0_LO"
+offset = 0x74
+description = "Actual target value of COMP0, low 32 bits"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "TARGET0_LO_RO"
+bits = "31:0"
+class = "read-only"
+description = "Represents the actual target value of COMP0, low 32 bits."
+
+[[registers]]
+name = "REAL_TARGET0_HI"
+offset = 0x78
+description = "Actual target value of COMP0, high 20 bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TARGET0_HI_RO"
+bits = "19:0"
+class = "read-only"
+description = "Represents the actual target value of COMP0, high 20 bits."
+
+[[registers]]
+name = "REAL_TARGET1_LO"
+offset = 0x7c
+description = "Actual target value of COMP1, low 32 bits"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "TARGET1_LO_RO"
+bits = "31:0"
+class = "read-only"
+description = "Represents the actual target value of COMP1, low 32 bits."
+
+[[registers]]
+name = "REAL_TARGET1_HI"
+offset = 0x80
+description = "Actual target value of COMP1, high 20 bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TARGET1_HI_RO"
+bits = "19:0"
+class = "read-only"
+description = "Represents the actual target value of COMP1, high 20 bits."
+
+[[registers]]
+name = "REAL_TARGET2_LO"
+offset = 0x84
+description = "Actual target value of COMP2, low 32 bits"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "TARGET2_LO_RO"
+bits = "31:0"
+class = "read-only"
+description = "Represents the actual target value of COMP2, low 32 bits."
+
+[[registers]]
+name = "REAL_TARGET2_HI"
+offset = 0x88
+description = "Actual target value of COMP2, high 20 bits"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TARGET2_HI_RO"
+bits = "19:0"
+class = "read-only"
+description = "Represents the actual target value of COMP2, high 20 bits."
+
+[[registers]]
+name = "DATE"
+offset = 0xfc
+description = "Version control register"
+reset = { value = 0x2412270 }
+
+[[registers.fields]]
+name = "DATE"
+bits = "31:0"
+class = "plain"
+description = "Version control register."

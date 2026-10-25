@@ -1,0 +1,547 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "MODEM_LPCON"
+description = "The modem low-power controller: the modem's low-power clocks, their sources and dividers, and its low-power resets."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "TEST_CONF"
+offset = 0x0
+reset = { value = 0x0, mask = 0x1 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "0"
+class = "plain"
+
+[[registers]]
+name = "LP_TIMER_CONF"
+offset = 0x4
+reset = { value = 0x0, mask = 0xffff }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_LP_TIMER_SEL_OSC_SLOW"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_LP_TIMER_SEL_OSC_FAST"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_LP_TIMER_SEL_XTAL"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_LP_TIMER_SEL_XTAL32K"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_LP_TIMER_DIV_NUM"
+bits = "15:4"
+class = "plain"
+
+[[registers]]
+name = "COEX_LP_CLK_CONF"
+offset = 0x8
+reset = { value = 0x0, mask = 0xffff }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_COEX_LP_SEL_OSC_SLOW"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_COEX_LP_SEL_OSC_FAST"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_COEX_LP_SEL_XTAL"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_COEX_LP_SEL_XTAL32K"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_COEX_LP_DIV_NUM"
+bits = "15:4"
+class = "plain"
+
+[[registers]]
+name = "WIFI_LP_CLK_CONF"
+offset = 0xc
+reset = { value = 0x0, mask = 0xffff }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_WIFIPWR_LP_SEL_OSC_SLOW"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFIPWR_LP_SEL_OSC_FAST"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFIPWR_LP_SEL_XTAL"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFIPWR_LP_SEL_XTAL32K"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFIPWR_LP_DIV_NUM"
+bits = "15:4"
+class = "plain"
+
+[[registers]]
+name = "MODEM_SRC_CLK_CONF"
+offset = 0x10
+reset = { value = 0x0, mask = 0x7 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_MODEM_AON_FORCE"
+bits = "1:0"
+class = "plain"
+
+[[registers.fields]]
+name = "MODEM_PWR_CLK_SRC_FO"
+bits = "2"
+class = "plain"
+
+[[registers]]
+name = "MODEM_32K_CLK_CONF"
+offset = 0x14
+reset = { value = 0x0, mask = 0x3 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_MODEM_32K_SEL"
+bits = "1:0"
+class = "plain"
+
+[[registers]]
+name = "CLK_CONF"
+offset = 0x18
+reset = { value = 0x0, mask = 0xf }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_WIFIPWR_EN"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_COEX_EN"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_I2C_MST_EN"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_LP_TIMER_EN"
+bits = "3"
+class = "plain"
+
+[[registers]]
+name = "CLK_CONF_FORCE_ON"
+offset = 0x1c
+reset = { value = 0x0, mask = 0x1f }
+reserved = { mask = 0xffffffe0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_WIFIPWR_FO"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_COEX_FO"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_I2C_MST_FO"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_LP_TIMER_FO"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_FE_MEM_FO"
+bits = "4"
+class = "plain"
+
+[[registers]]
+name = "CLK_CONF_POWER_ST"
+offset = 0x20
+reset = { value = 0x0, mask = 0xffff0000 }
+reserved = { mask = 0xffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_WIFIPWR_ST_MAP"
+bits = "19:16"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_COEX_ST_MAP"
+bits = "23:20"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_I2C_MST_ST_MAP"
+bits = "27:24"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_LP_APB_ST_MAP"
+bits = "31:28"
+class = "plain"
+
+[[registers]]
+name = "RST_CONF"
+offset = 0x24
+reset = { value = 0x0, mask = 0x1f }
+reserved = { mask = 0xffffffe0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "RST_WIFIPWR"
+bits = "0"
+class = "write-only"
+
+[[registers.fields]]
+name = "RST_COEX"
+bits = "1"
+class = "write-only"
+
+[[registers.fields]]
+name = "RST_I2C_MST"
+bits = "2"
+class = "write-only"
+
+[[registers.fields]]
+name = "RST_LP_TIMER"
+bits = "3"
+class = "write-only"
+
+[[registers.fields]]
+name = "RST_DCMEM"
+bits = "4"
+class = "write-only"
+
+[[registers]]
+name = "TICK_CONF"
+offset = 0x28
+reset = { value = 0x27, mask = 0x3f }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_PWR_TICK_TARGET"
+bits = "5:0"
+class = "plain"
+
+[[registers]]
+name = "MEM_CONF"
+offset = 0x2c
+reset = { value = 0x8888888, mask = 0xfffffff }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "DC_MEM_MODE"
+bits = "2:0"
+class = "plain"
+
+[[registers.fields]]
+name = "DC_MEM_FORCE"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "AGC_MEM_MODE"
+bits = "6:4"
+class = "plain"
+
+[[registers.fields]]
+name = "AGC_MEM_FORCE"
+bits = "7"
+class = "plain"
+
+[[registers.fields]]
+name = "PBUS_MEM_MODE"
+bits = "10:8"
+class = "plain"
+
+[[registers.fields]]
+name = "PBUS_MEM_FORCE"
+bits = "11"
+class = "plain"
+
+[[registers.fields]]
+name = "BC_MEM_MODE"
+bits = "14:12"
+class = "plain"
+
+[[registers.fields]]
+name = "BC_MEM_FORCE"
+bits = "15"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_MST_MEM_MODE"
+bits = "18:16"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_MST_MEM_FORCE"
+bits = "19"
+class = "plain"
+
+[[registers.fields]]
+name = "CHAN_FREQ_MEM_MODE"
+bits = "22:20"
+class = "plain"
+
+[[registers.fields]]
+name = "CHAN_FREQ_MEM_FORCE"
+bits = "23"
+class = "plain"
+
+[[registers.fields]]
+name = "CFR_MEM_MODE"
+bits = "26:24"
+class = "plain"
+
+[[registers.fields]]
+name = "CFR_MEM_FORCE"
+bits = "27"
+class = "plain"
+
+[[registers]]
+name = "MEM_RF1_AUX_CTRL"
+offset = 0x30
+reset = { value = 0x2070 }
+
+[[registers.fields]]
+name = "MODEM_PWR_RF1_AUX_CTRL"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "MEM_RF2_AUX_CTRL"
+offset = 0x34
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "MODEM_PWR_RF2_AUX_CTRL"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "APB_MEM_SEL"
+offset = 0x38
+reset = { value = 0x0, mask = 0xfffff }
+reserved = { mask = 0xfff00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "CHAN_FREQ_MEM_EN"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "PBUS_MEM_EN"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "AGC_MEM_EN"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "CFR_MEM_EN"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "PWR_MEM_BASE"
+bits = "19:4"
+class = "plain"
+
+[[registers]]
+name = "DCMEM_VALID_0"
+offset = 0x3c
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "DCMEM_VALID_0"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "DCMEM_VALID_1"
+offset = 0x40
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "DCMEM_VALID_1"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "DCMEM_VALID_2"
+offset = 0x44
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "DCMEM_VALID_2"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "DCMEM_VALID_3"
+offset = 0x48
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "DCMEM_VALID_3"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "MODEM_INTR_WAKEUP_CONF"
+offset = 0x4c
+reset = { value = 0x3fff, mask = 0x3fff }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "WIFI_MAC_INTR_WAKEUP_EN"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "WIFI_MAC_NMI_WAKEUP_EN"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "WIFI_PWR_INTR_WAKEUP_EN"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "WIFI_BB_INTR_WAKEUP_EN"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "BT_MAC_INTR_WAKEUP_EN"
+bits = "4"
+class = "plain"
+
+[[registers.fields]]
+name = "BT_BB_INTR_WAKEUP_EN"
+bits = "5"
+class = "plain"
+
+[[registers.fields]]
+name = "BT_BB_NMI_WAKEUP_EN"
+bits = "6"
+class = "plain"
+
+[[registers.fields]]
+name = "LP_TIMER_INTR_WAKEUP_EN"
+bits = "7"
+class = "plain"
+
+[[registers.fields]]
+name = "COEX_INTR_WAKEUP_EN"
+bits = "8"
+class = "plain"
+
+[[registers.fields]]
+name = "BLE_TIMER_INTR_WAKEUP_EN"
+bits = "9"
+class = "plain"
+
+[[registers.fields]]
+name = "BLE_SEC_INTR_WAKEUP_EN"
+bits = "10"
+class = "plain"
+
+[[registers.fields]]
+name = "I2C_MST_INTR_WAKEUP_EN"
+bits = "11"
+class = "plain"
+
+[[registers.fields]]
+name = "ZB_MAC_INTR_WAKEUP_EN"
+bits = "12"
+class = "plain"
+
+[[registers.fields]]
+name = "BT_MAC_INT1_WAKEUP_EN"
+bits = "13"
+class = "plain"
+
+[[registers]]
+name = "MODEM_INTR_STATUS"
+offset = 0x50
+reset = { value = 0x0, mask = 0x3fff }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_INTR_VECTOR"
+bits = "13:0"
+class = "read-only"
+
+[[registers]]
+name = "MEM_CONF2"
+offset = 0x54
+reset = { value = 0x4, mask = 0xf }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "PWR_MEM_MODE_SEL"
+bits = "3:0"
+class = "plain"
+
+[[registers]]
+name = "DATE"
+offset = 0x58
+reset = { value = 0x2508150, mask = 0xfffffff }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"] }
+
+[[registers.fields]]
+name = "DATE"
+bits = "27:0"
+class = "plain"

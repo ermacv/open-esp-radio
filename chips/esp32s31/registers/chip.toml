@@ -1,0 +1,328 @@
+# The esp32s31 chip root of the imported register blocks, written by
+# `cargo registers import` (registers/import.toml).
+schema = 4
+chip = "esp32s31"
+types = [
+    "types/cache.toml",
+    "types/efuse.toml",
+    "types/hp-alive-sys.toml",
+    "types/hp-sys-clkrst.toml",
+    "types/hp-system.toml",
+    "types/i2c-ana-mst.toml",
+    "types/interrupt-core.toml",
+    "types/iomux-mspi-pin.toml",
+    "types/lp-ana.toml",
+    "types/lp-aonclkrst.toml",
+    "types/lp-peri-clkrst.toml",
+    "types/modem-lpcon.toml",
+    "types/modem-syscon.toml",
+    "types/pmu.toml",
+    "types/rtc-wdt.toml",
+    "types/soc-etm.toml",
+    "types/spi-mem-c.toml",
+    "types/spi-mem-s.toml",
+    "types/spi1-mem-c.toml",
+    "types/spi1-mem-s.toml",
+    "types/systimer.toml",
+    "types/timg.toml",
+    "types/trng.toml",
+    "types/tsens.toml",
+    "types/usb-serial-jtag.toml",
+]
+
+[[instances]]
+name = "CACHE"
+type = "CACHE"
+base = 0x2c000000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L114", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "EFUSE"
+type = "EFUSE"
+base = 0x20715000
+extent = { size = 0x710 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L96", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "HP_ALIVE_SYS"
+type = "HP_ALIVE_SYS"
+base = 0x20589000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L81", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "HP_SYS"
+type = "HP_SYSTEM"
+base = 0x20586000
+extent = { size = 0x33c }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L78", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "HP_SYS_CLKRST"
+type = "HP_SYS_CLKRST"
+base = 0x20587000
+extent = { size = 0x200 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L79", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "IOMUX_MSPI_PIN"
+type = "IOMUX_MSPI_PIN"
+base = 0x20584000
+extent = { size = 0x48 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L76", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "LP_ANA_PERI"
+type = "LP_ANA"
+base = 0x20702000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L85", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "LP_AON_CLKRST"
+type = "LP_AONCLKRST"
+base = 0x20701000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L84", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "LP_PERICLKRST"
+type = "LP_PERI_CLKRST"
+base = 0x20710000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L92", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "PMU"
+type = "PMU"
+base = 0x20704000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L87", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "LP_WDT"
+type = "RTC_WDT"
+base = 0x20801000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L98", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "SOC_ETM"
+type = "SOC_ETM"
+base = 0x20393000
+extent = { size = 0x278 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L40", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "SPI0"
+type = "SPI_MEM_C"
+base = 0x20500000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L50", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "SPI1"
+type = "SPI1_MEM_C"
+base = 0x20501000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L51", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "MEMSPI2"
+type = "SPI_MEM_S"
+base = 0x20502000
+extent = { size = 0x1000 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L52", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "MEMSPI3"
+type = "SPI1_MEM_S"
+base = 0x20503000
+extent = { size = 0x1000 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L53", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "SYSTIMER"
+type = "SYSTIMER"
+base = 0x20399000
+extent = { size = 0x100 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L45", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "TIMG0"
+type = "TIMG"
+base = 0x20580000
+extent = { size = 0x100 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L71", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "TIMG1"
+type = "TIMG"
+base = 0x20581000
+extent = { size = 0x100 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L72", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "TRNG"
+type = "TRNG"
+base = 0x20814000
+extent = { size = 0x100 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L107", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "LP_TSENS"
+type = "TSENS"
+base = 0x20818000
+extent = { size = 0x38 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L111", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "USB_DEVICE"
+type = "USB_SERIAL_JTAG"
+base = 0x20391000
+extent = { size = 0x84 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L38", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "INTERRUPT_CORE0"
+type = "INTERRUPT_CORE"
+base = 0x20585000
+extent = { size = 0x800 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L137"]
+
+[[instances]]
+name = "INTERRUPT_CORE1"
+type = "INTERRUPT_CORE"
+base = 0x20585800
+extent = { size = 0x800 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L138"]
+
+[[instances]]
+name = "MODEM_SYSCON"
+type = "MODEM_SYSCON"
+base = 0x20109c00
+extent = { size = 0x34 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_REG_BASE_H_L20"]
+
+[[instances]]
+name = "MODEM_LPCON"
+type = "MODEM_LPCON"
+base = 0x2010f000
+extent = { size = 0x5c }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_REG_BASE_H_L22"]
+
+[[instances]]
+name = "I2C_ANA_MST"
+type = "I2C_ANA_MST"
+base = 0x2010f800
+extent = { size = 0x40 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_REG_BASE_H_L24"]
+
+[[interrupts]]
+name = "USB_SERIAL_JTAG"
+source = 2
+instance = "USB_DEVICE"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L21", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "TIMERGRP0_T0"
+source = 25
+instance = "TIMG0"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L44", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "TIMERGRP0_T1"
+source = 26
+instance = "TIMG0"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L45", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "TIMERGRP0_WDT"
+source = 27
+instance = "TIMG0"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L46", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "TIMERGRP1_T0"
+source = 28
+instance = "TIMG1"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L47", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "TIMERGRP1_T1"
+source = 29
+instance = "TIMG1"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L48", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "TIMERGRP1_WDT"
+source = 30
+instance = "TIMG1"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L49", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "SYSTIMER_TARGET0"
+source = 33
+instance = "SYSTIMER"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L52", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "SYSTIMER_TARGET1"
+source = 34
+instance = "SYSTIMER"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L53", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "SYSTIMER_TARGET2"
+source = 35
+instance = "SYSTIMER"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L54", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "CACHE"
+source = 69
+instance = "CACHE"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L88", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "HP_SYSREG"
+source = 113
+instance = "HP_SYS"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L132", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "LP_WDT"
+source = 136
+instance = "LP_WDT"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L155", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "PMU_REG_0"
+source = 141
+instance = "PMU"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L160", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "PMU_REG_1"
+source = 142
+instance = "PMU"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L161", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "LP_ANAPERI"
+source = 143
+instance = "LP_ANA_PERI"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L162", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "LP_TSENS"
+source = 150
+instance = "LP_TSENS"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L169", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[interrupts]]
+name = "LP_TRNG"
+source = 154
+instance = "TRNG"
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_SOC_INTERRUPTS_H_L173", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]

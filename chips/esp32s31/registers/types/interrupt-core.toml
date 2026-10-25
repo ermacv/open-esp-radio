@@ -1,0 +1,3499 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "INTERRUPT_CORE"
+description = "One core's interrupt matrix: the CPU interrupt line and the remap level of each interrupt source."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "SYS_ICM_INTR_MAP"
+offset = 0x0
+description = "SYS_ICM_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "SYS_ICM_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "SYS_ICM_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AXI_PERF_MON_INTR_MAP"
+offset = 0x4
+description = "AXI_PERF_MON_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AXI_PERF_MON_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AXI_PERF_MON_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "USB_DEVICE_INTR_MAP"
+offset = 0x8
+description = "USB_DEVICE_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "USB_DEVICE_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "USB_DEVICE_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "SDIO_HOST_INTR_MAP"
+offset = 0xc
+description = "SDIO_HOST_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "SDIO_HOST_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "SDIO_HOST_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "SPI2_INTR_MAP"
+offset = 0x10
+description = "SPI2_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "SPI2_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "SPI2_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "SPI3_INTR_MAP"
+offset = 0x14
+description = "SPI3_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "SPI3_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "SPI3_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "I2S0_INTR_MAP"
+offset = 0x18
+description = "I2S0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "I2S0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "I2S0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "I2S1_INTR_MAP"
+offset = 0x1c
+description = "I2S1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "I2S1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "I2S1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "UHCI0_INTR_MAP"
+offset = 0x20
+description = "UHCI0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "UHCI0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "UHCI0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "UART0_INTR_MAP"
+offset = 0x24
+description = "UART0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "UART0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "UART0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "UART1_INTR_MAP"
+offset = 0x28
+description = "UART1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "UART1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "UART1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "UART2_INTR_MAP"
+offset = 0x2c
+description = "UART2_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "UART2_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "UART2_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "UART3_INTR_MAP"
+offset = 0x30
+description = "UART3_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "UART3_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "UART3_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LCD_CAM_INTR_MAP"
+offset = 0x34
+description = "LCD_CAM_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LCD_CAM_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LCD_CAM_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "PWM0_INTR_MAP"
+offset = 0x38
+description = "PWM0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "PWM0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "PWM0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "PWM1_INTR_MAP"
+offset = 0x3c
+description = "PWM1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "PWM1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "PWM1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "PWM2_INTR_MAP"
+offset = 0x40
+description = "PWM2_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "PWM2_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "PWM2_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "PWM3_INTR_MAP"
+offset = 0x44
+description = "PWM3_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "PWM3_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "PWM3_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CAN0_INTR_MAP"
+offset = 0x48
+description = "CAN0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CAN0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CAN0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CAN0_TIMER_INTR_MAP"
+offset = 0x4c
+description = "CAN0_TIMER_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CAN0_TIMER_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CAN0_TIMER_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CAN1_INTR_MAP"
+offset = 0x50
+description = "CAN1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CAN1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CAN1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CAN1_TIMER_INTR_MAP"
+offset = 0x54
+description = "CAN1_TIMER_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CAN1_TIMER_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CAN1_TIMER_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "RMT_INTR_MAP"
+offset = 0x58
+description = "RMT_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "RMT_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "RMT_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "I2C0_INTR_MAP"
+offset = 0x5c
+description = "I2C0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "I2C0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "I2C0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "I2C1_INTR_MAP"
+offset = 0x60
+description = "I2C1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "I2C1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "I2C1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "TIMERGRP0_T0_INTR_MAP"
+offset = 0x64
+description = "TIMERGRP0_T0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "TIMERGRP0_T0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "TIMERGRP0_T0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "TIMERGRP0_T1_INTR_MAP"
+offset = 0x68
+description = "TIMERGRP0_T1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "TIMERGRP0_T1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "TIMERGRP0_T1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "TIMERGRP0_WDT_INTR_MAP"
+offset = 0x6c
+description = "TIMERGRP0_WDT_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "TIMERGRP0_WDT_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "TIMERGRP0_WDT_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "TIMERGRP1_T0_INTR_MAP"
+offset = 0x70
+description = "TIMERGRP1_T0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "TIMERGRP1_T0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "TIMERGRP1_T0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "TIMERGRP1_T1_INTR_MAP"
+offset = 0x74
+description = "TIMERGRP1_T1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "TIMERGRP1_T1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "TIMERGRP1_T1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "TIMERGRP1_WDT_INTR_MAP"
+offset = 0x78
+description = "TIMERGRP1_WDT_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "TIMERGRP1_WDT_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "TIMERGRP1_WDT_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LEDC0_INTR_MAP"
+offset = 0x7c
+description = "LEDC0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LEDC0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LEDC0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LEDC1_INTR_MAP"
+offset = 0x80
+description = "LEDC1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LEDC1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LEDC1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "SYSTIMER_TARGET0_INTR_MAP"
+offset = 0x84
+description = "SYSTIMER_TARGET0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "SYSTIMER_TARGET0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "SYSTIMER_TARGET0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "SYSTIMER_TARGET1_INTR_MAP"
+offset = 0x88
+description = "SYSTIMER_TARGET1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "SYSTIMER_TARGET1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "SYSTIMER_TARGET1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "SYSTIMER_TARGET2_INTR_MAP"
+offset = 0x8c
+description = "SYSTIMER_TARGET2_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "SYSTIMER_TARGET2_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "SYSTIMER_TARGET2_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AHB_PDMA_IN_CH0_INTR_MAP"
+offset = 0x90
+description = "AHB_PDMA_IN_CH0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AHB_PDMA_IN_CH0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AHB_PDMA_IN_CH0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AHB_PDMA_IN_CH1_INTR_MAP"
+offset = 0x94
+description = "AHB_PDMA_IN_CH1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AHB_PDMA_IN_CH1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AHB_PDMA_IN_CH1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AHB_PDMA_IN_CH2_INTR_MAP"
+offset = 0x98
+description = "AHB_PDMA_IN_CH2_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AHB_PDMA_IN_CH2_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AHB_PDMA_IN_CH2_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AHB_PDMA_IN_CH3_INTR_MAP"
+offset = 0x9c
+description = "AHB_PDMA_IN_CH3_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AHB_PDMA_IN_CH3_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AHB_PDMA_IN_CH3_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AHB_PDMA_IN_CH4_INTR_MAP"
+offset = 0xa0
+description = "AHB_PDMA_IN_CH4_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AHB_PDMA_IN_CH4_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AHB_PDMA_IN_CH4_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AHB_PDMA_OUT_CH0_INTR_MAP"
+offset = 0xa4
+description = "AHB_PDMA_OUT_CH0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AHB_PDMA_OUT_CH0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AHB_PDMA_OUT_CH0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AHB_PDMA_OUT_CH1_INTR_MAP"
+offset = 0xa8
+description = "AHB_PDMA_OUT_CH1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AHB_PDMA_OUT_CH1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AHB_PDMA_OUT_CH1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AHB_PDMA_OUT_CH2_INTR_MAP"
+offset = 0xac
+description = "AHB_PDMA_OUT_CH2_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AHB_PDMA_OUT_CH2_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AHB_PDMA_OUT_CH2_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AHB_PDMA_OUT_CH3_INTR_MAP"
+offset = 0xb0
+description = "AHB_PDMA_OUT_CH3_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AHB_PDMA_OUT_CH3_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AHB_PDMA_OUT_CH3_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AHB_PDMA_OUT_CH4_INTR_MAP"
+offset = 0xb4
+description = "AHB_PDMA_OUT_CH4_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AHB_PDMA_OUT_CH4_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AHB_PDMA_OUT_CH4_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "ASRC_CHNL0_INTR_MAP"
+offset = 0xb8
+description = "ASRC_CHNL0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "ASRC_CHNL0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "ASRC_CHNL0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "ASRC_CHNL1_INTR_MAP"
+offset = 0xbc
+description = "ASRC_CHNL1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "ASRC_CHNL1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "ASRC_CHNL1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AXI_PDMA_IN_CH0_INTR_MAP"
+offset = 0xc0
+description = "AXI_PDMA_IN_CH0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AXI_PDMA_IN_CH0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AXI_PDMA_IN_CH0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AXI_PDMA_IN_CH1_INTR_MAP"
+offset = 0xc4
+description = "AXI_PDMA_IN_CH1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AXI_PDMA_IN_CH1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AXI_PDMA_IN_CH1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AXI_PDMA_IN_CH2_INTR_MAP"
+offset = 0xc8
+description = "AXI_PDMA_IN_CH2_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AXI_PDMA_IN_CH2_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AXI_PDMA_IN_CH2_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AXI_PDMA_OUT_CH0_INTR_MAP"
+offset = 0xcc
+description = "AXI_PDMA_OUT_CH0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AXI_PDMA_OUT_CH0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AXI_PDMA_OUT_CH0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AXI_PDMA_OUT_CH1_INTR_MAP"
+offset = 0xd0
+description = "AXI_PDMA_OUT_CH1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AXI_PDMA_OUT_CH1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AXI_PDMA_OUT_CH1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AXI_PDMA_OUT_CH2_INTR_MAP"
+offset = 0xd4
+description = "AXI_PDMA_OUT_CH2_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AXI_PDMA_OUT_CH2_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AXI_PDMA_OUT_CH2_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "RSA_INTR_MAP"
+offset = 0xd8
+description = "RSA_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "RSA_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "RSA_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "AES_INTR_MAP"
+offset = 0xdc
+description = "AES_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "AES_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "AES_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "SHA_INTR_MAP"
+offset = 0xe0
+description = "SHA_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "SHA_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "SHA_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "ECC_INTR_MAP"
+offset = 0xe4
+description = "ECC_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "ECC_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "ECC_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "ECDSA_INTR_MAP"
+offset = 0xe8
+description = "ECDSA_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "ECDSA_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "ECDSA_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "KM_INTR_MAP"
+offset = 0xec
+description = "KM_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "KM_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "KM_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "RMA_INTR_MAP"
+offset = 0xf0
+description = "RMA_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "RMA_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "RMA_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "GPIO_INTR0_MAP"
+offset = 0xf4
+description = "GPIO_INTR0 mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "GPIO_INTR0_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "GPIO_INTR0_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "GPIO_INTR1_MAP"
+offset = 0xf8
+description = "GPIO_INTR1 mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "GPIO_INTR1_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "GPIO_INTR1_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "GPIO_INTR2_MAP"
+offset = 0xfc
+description = "GPIO_INTR2 mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "GPIO_INTR2_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "GPIO_INTR2_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "GPIO_INTR3_MAP"
+offset = 0x100
+description = "GPIO_INTR3 mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "GPIO_INTR3_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "GPIO_INTR3_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CPU_INTR_FROM_CPU_0_MAP"
+offset = 0x104
+description = "CPU_INTR_FROM_CPU_0 mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_INTR_FROM_CPU_0_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CPU_INTR_FROM_CPU_0_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CPU_INTR_FROM_CPU_1_MAP"
+offset = 0x108
+description = "CPU_INTR_FROM_CPU_1 mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_INTR_FROM_CPU_1_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CPU_INTR_FROM_CPU_1_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CPU_INTR_FROM_CPU_2_MAP"
+offset = 0x10c
+description = "CPU_INTR_FROM_CPU_2 mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_INTR_FROM_CPU_2_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CPU_INTR_FROM_CPU_2_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CPU_INTR_FROM_CPU_3_MAP"
+offset = 0x110
+description = "CPU_INTR_FROM_CPU_3 mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_INTR_FROM_CPU_3_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CPU_INTR_FROM_CPU_3_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CACHE_INTR_MAP"
+offset = 0x114
+description = "CACHE_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CACHE_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CACHE_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CPU_APM_M0_INTR_MAP"
+offset = 0x118
+description = "CPU_APM_M0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_APM_M0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CPU_APM_M0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CPU_APM_M1_INTR_MAP"
+offset = 0x11c
+description = "CPU_APM_M1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_APM_M1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CPU_APM_M1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CPU_APM_M2_INTR_MAP"
+offset = 0x120
+description = "CPU_APM_M2_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_APM_M2_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CPU_APM_M2_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CPU_APM_M3_INTR_MAP"
+offset = 0x124
+description = "CPU_APM_M3_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_APM_M3_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CPU_APM_M3_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_MEM_APM_M0_INTR_MAP"
+offset = 0x128
+description = "HP_MEM_APM_M0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MEM_APM_M0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_MEM_APM_M0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_MEM_APM_M1_INTR_MAP"
+offset = 0x12c
+description = "HP_MEM_APM_M1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MEM_APM_M1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_MEM_APM_M1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_MEM_APM_M2_INTR_MAP"
+offset = 0x130
+description = "HP_MEM_APM_M2_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MEM_APM_M2_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_MEM_APM_M2_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_MEM_APM_M3_INTR_MAP"
+offset = 0x134
+description = "HP_MEM_APM_M3_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MEM_APM_M3_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_MEM_APM_M3_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_MEM_APM_M4_INTR_MAP"
+offset = 0x138
+description = "HP_MEM_APM_M4_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MEM_APM_M4_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_MEM_APM_M4_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_MEM_APM_M5_INTR_MAP"
+offset = 0x13c
+description = "HP_MEM_APM_M5_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_MEM_APM_M5_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_MEM_APM_M5_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CPU_PERI0_TIMEOUT_INTR_MAP"
+offset = 0x140
+description = "CPU_PERI0_TIMEOUT_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_PERI0_TIMEOUT_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CPU_PERI0_TIMEOUT_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CPU_PERI1_TIMEOUT_INTR_MAP"
+offset = 0x144
+description = "CPU_PERI1_TIMEOUT_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_PERI1_TIMEOUT_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CPU_PERI1_TIMEOUT_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_PERI0_TIMEOUT_INTR_MAP"
+offset = 0x148
+description = "HP_PERI0_TIMEOUT_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PERI0_TIMEOUT_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_PERI0_TIMEOUT_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_PERI1_TIMEOUT_INTR_MAP"
+offset = 0x14c
+description = "HP_PERI1_TIMEOUT_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PERI1_TIMEOUT_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_PERI1_TIMEOUT_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_APM_M0_INTR_MAP"
+offset = 0x150
+description = "HP_APM_M0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_APM_M0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_APM_M0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_APM_M1_INTR_MAP"
+offset = 0x154
+description = "HP_APM_M1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_APM_M1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_APM_M1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_APM_M2_INTR_MAP"
+offset = 0x158
+description = "HP_APM_M2_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_APM_M2_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_APM_M2_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_APM_M3_INTR_MAP"
+offset = 0x15c
+description = "HP_APM_M3_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_APM_M3_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_APM_M3_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_APM_M4_INTR_MAP"
+offset = 0x160
+description = "HP_APM_M4_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_APM_M4_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_APM_M4_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_APM_M5_INTR_MAP"
+offset = 0x164
+description = "HP_APM_M5_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_APM_M5_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_APM_M5_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_APM_M6_INTR_MAP"
+offset = 0x168
+description = "HP_APM_M6_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_APM_M6_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_APM_M6_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_PERI0_PMS_INTR_MAP"
+offset = 0x16c
+description = "HP_PERI0_PMS_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PERI0_PMS_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_PERI0_PMS_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_PERI1_PMS_INTR_MAP"
+offset = 0x170
+description = "HP_PERI1_PMS_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PERI1_PMS_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_PERI1_PMS_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CPU0_PERI_PMS_INTR_MAP"
+offset = 0x174
+description = "CPU0_PERI_PMS_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CPU0_PERI_PMS_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CPU0_PERI_PMS_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CPU1_PERI_PMS_INTR_MAP"
+offset = 0x178
+description = "CPU1_PERI_PMS_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CPU1_PERI_PMS_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CPU1_PERI_PMS_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "FLASH_MSPI_INTR_MAP"
+offset = 0x17c
+description = "FLASH_MSPI_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "FLASH_MSPI_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "FLASH_MSPI_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LPI_INTR_MAP"
+offset = 0x180
+description = "LPI_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LPI_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LPI_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "PMT_INTR_MAP"
+offset = 0x184
+description = "PMT_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "PMT_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "PMT_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "SBD_INTR_MAP"
+offset = 0x188
+description = "SBD_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "SBD_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "SBD_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "USB_OTGHS_INTR_MAP"
+offset = 0x18c
+description = "USB_OTGHS_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "USB_OTGHS_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "USB_OTGHS_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "USB_OTGHS_ENDP_MULTI_PROC_INTR_MAP"
+offset = 0x190
+description = "USB_OTGHS_ENDP_MULTI_PROC_INTR mapping register"
+reset = { value = 0x0, mask = 0x3f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "USB_OTGHS_ENDP_MULTI_PROC_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "USB_OTGHS_ENDP_MULTI_PROC_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "default: 0; Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "JPEG_INTR_MAP"
+offset = 0x194
+description = "JPEG_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "JPEG_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "JPEG_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "PPA_INTR_MAP"
+offset = 0x198
+description = "PPA_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "PPA_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "PPA_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CORE0_TRACE_INTR_MAP"
+offset = 0x19c
+description = "CORE0_TRACE_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CORE0_TRACE_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CORE0_TRACE_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CORE1_TRACE_INTR_MAP"
+offset = 0x1a0
+description = "CORE1_TRACE_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CORE1_TRACE_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CORE1_TRACE_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "DMA2D_IN_CH0_INTR_MAP"
+offset = 0x1a4
+description = "DMA2D_IN_CH0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "DMA2D_IN_CH0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "DMA2D_IN_CH0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "DMA2D_IN_CH1_INTR_MAP"
+offset = 0x1a8
+description = "DMA2D_IN_CH1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "DMA2D_IN_CH1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "DMA2D_IN_CH1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "DMA2D_IN_CH2_INTR_MAP"
+offset = 0x1ac
+description = "DMA2D_IN_CH2_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "DMA2D_IN_CH2_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "DMA2D_IN_CH2_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "DMA2D_OUT_CH0_INTR_MAP"
+offset = 0x1b0
+description = "DMA2D_OUT_CH0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "DMA2D_OUT_CH0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "DMA2D_OUT_CH0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "DMA2D_OUT_CH1_INTR_MAP"
+offset = 0x1b4
+description = "DMA2D_OUT_CH1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "DMA2D_OUT_CH1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "DMA2D_OUT_CH1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "DMA2D_OUT_CH2_INTR_MAP"
+offset = 0x1b8
+description = "DMA2D_OUT_CH2_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "DMA2D_OUT_CH2_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "DMA2D_OUT_CH2_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "DMA2D_OUT_CH3_INTR_MAP"
+offset = 0x1bc
+description = "DMA2D_OUT_CH3_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "DMA2D_OUT_CH3_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "DMA2D_OUT_CH3_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "PSRAM_MSPI_INTR_MAP"
+offset = 0x1c0
+description = "PSRAM_MSPI_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "PSRAM_MSPI_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "PSRAM_MSPI_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_SYSREG_INTR_MAP"
+offset = 0x1c4
+description = "HP_SYSREG_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SYSREG_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_SYSREG_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "PCNT0_INTR_MAP"
+offset = 0x1c8
+description = "PCNT0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "PCNT0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "PCNT0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "PCNT1_INTR_MAP"
+offset = 0x1cc
+description = "PCNT1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "PCNT1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "PCNT1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_PAU_INTR_MAP"
+offset = 0x1d0
+description = "HP_PAU_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PAU_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_PAU_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_PARLIO_RX_INTR_MAP"
+offset = 0x1d4
+description = "HP_PARLIO_RX_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PARLIO_RX_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_PARLIO_RX_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "HP_PARLIO_TX_INTR_MAP"
+offset = 0x1d8
+description = "HP_PARLIO_TX_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PARLIO_TX_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "HP_PARLIO_TX_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "BUS_MONITOR_INTR_MAP"
+offset = 0x1dc
+description = "BUS_MONITOR_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "BUS_MONITOR_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "BUS_MONITOR_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MODEM_WIFI_MAC_INTR_MAP"
+offset = 0x1e0
+description = "MODEM_WIFI_MAC_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_WIFI_MAC_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MODEM_WIFI_MAC_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MODEM_WIFI_MAC_NMI_INTR_MAP"
+offset = 0x1e4
+description = "MODEM_WIFI_MAC_NMI_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_WIFI_MAC_NMI_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MODEM_WIFI_MAC_NMI_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MODEM_WIFI_PWR_INTR_MAP"
+offset = 0x1e8
+description = "MODEM_WIFI_PWR_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_WIFI_PWR_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MODEM_WIFI_PWR_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MODEM_WIFI_BB_INTR_MAP"
+offset = 0x1ec
+description = "MODEM_WIFI_BB_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_WIFI_BB_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MODEM_WIFI_BB_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MODEM_BT_MAC_INTR_MAP"
+offset = 0x1f0
+description = "MODEM_BT_MAC_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_BT_MAC_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MODEM_BT_MAC_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MODEM_BT_BB_INTR_MAP"
+offset = 0x1f4
+description = "MODEM_BT_BB_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_BT_BB_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MODEM_BT_BB_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MODEM_BT_BB_NMI_INTR_MAP"
+offset = 0x1f8
+description = "MODEM_BT_BB_NMI_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_BT_BB_NMI_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MODEM_BT_BB_NMI_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MODEM_LP_TIMER_INTR_MAP"
+offset = 0x1fc
+description = "MODEM_LP_TIMER_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_LP_TIMER_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MODEM_LP_TIMER_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MODEM_COEX_INTR_MAP"
+offset = 0x200
+description = "MODEM_COEX_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_COEX_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MODEM_COEX_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MODEM_BLE_TIMER_INTR_MAP"
+offset = 0x204
+description = "MODEM_BLE_TIMER_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_BLE_TIMER_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MODEM_BLE_TIMER_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MODEM_BLE_SEC_INTR_MAP"
+offset = 0x208
+description = "MODEM_BLE_SEC_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_BLE_SEC_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MODEM_BLE_SEC_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MODEM_I2C_MST_INTR_MAP"
+offset = 0x20c
+description = "MODEM_I2C_MST_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_I2C_MST_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MODEM_I2C_MST_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MODEM_ZB_MAC_INTR_MAP"
+offset = 0x210
+description = "MODEM_ZB_MAC_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_ZB_MAC_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MODEM_ZB_MAC_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MODEM_BT_MAC_INT1_INTR_MAP"
+offset = 0x214
+description = "MODEM_BT_MAC_INT1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_BT_MAC_INT1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MODEM_BT_MAC_INT1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "CORDIC_INTR_MAP"
+offset = 0x218
+description = "CORDIC_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "CORDIC_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "CORDIC_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "ZERO_DET_INTR_MAP"
+offset = 0x21c
+description = "ZERO_DET_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "ZERO_DET_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "ZERO_DET_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_WDT_INTR_MAP"
+offset = 0x220
+description = "LP_WDT_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_WDT_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_WDT_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_TIMER_REG_0_INTR_MAP"
+offset = 0x224
+description = "LP_TIMER_REG_0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_TIMER_REG_0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_TIMER_REG_0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_TIMER_REG_1_INTR_MAP"
+offset = 0x228
+description = "LP_TIMER_REG_1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_TIMER_REG_1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_TIMER_REG_1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MB_HP_INTR_MAP"
+offset = 0x22c
+description = "MB_HP_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MB_HP_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MB_HP_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "MB_LP_INTR_MAP"
+offset = 0x230
+description = "MB_LP_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "MB_LP_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "MB_LP_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "PMU_REG_0_INTR_MAP"
+offset = 0x234
+description = "PMU_REG_0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "PMU_REG_0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "PMU_REG_0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "PMU_REG_1_INTR_MAP"
+offset = 0x238
+description = "PMU_REG_1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "PMU_REG_1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "PMU_REG_1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_ANAPERI_INTR_MAP"
+offset = 0x23c
+description = "LP_ANAPERI_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ANAPERI_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_ANAPERI_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_ADC_INTR_MAP"
+offset = 0x240
+description = "LP_ADC_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ADC_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_ADC_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_DAC_INTR_MAP"
+offset = 0x244
+description = "LP_DAC_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_DAC_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_DAC_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_GPIO_INTR_MAP"
+offset = 0x248
+description = "LP_GPIO_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_GPIO_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_GPIO_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_I2C_INTR_MAP"
+offset = 0x24c
+description = "LP_I2C_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_I2C_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_I2C_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_SPI_INTR_MAP"
+offset = 0x250
+description = "LP_SPI_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_SPI_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_SPI_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_TOUCH_INTR_MAP"
+offset = 0x254
+description = "LP_TOUCH_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_TOUCH_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_TOUCH_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_TSENS_INTR_MAP"
+offset = 0x258
+description = "LP_TSENS_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_TSENS_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_TSENS_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_UART_INTR_MAP"
+offset = 0x25c
+description = "LP_UART_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_UART_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_UART_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_EFUSE_INTR_MAP"
+offset = 0x260
+description = "LP_EFUSE_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_EFUSE_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_EFUSE_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_SW_INTR_MAP"
+offset = 0x264
+description = "LP_SW_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_SW_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_SW_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_TRNG_INTR_MAP"
+offset = 0x268
+description = "LP_TRNG_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_TRNG_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_TRNG_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_SYSREG_INTR_MAP"
+offset = 0x26c
+description = "LP_SYSREG_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_SYSREG_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_SYSREG_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_APM_M0_INTR_MAP"
+offset = 0x270
+description = "LP_APM_M0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_APM_M0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_APM_M0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_APM_M1_INTR_MAP"
+offset = 0x274
+description = "LP_APM_M1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_APM_M1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_APM_M1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_APM_M2_INTR_MAP"
+offset = 0x278
+description = "LP_APM_M2_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_APM_M2_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_APM_M2_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_APM_M3_INTR_MAP"
+offset = 0x27c
+description = "LP_APM_M3_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_APM_M3_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_APM_M3_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_PERI0_PMS_INTR_MAP"
+offset = 0x280
+description = "LP_PERI0_PMS_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_PERI0_PMS_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_PERI0_PMS_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_PERI1_PMS_INTR_MAP"
+offset = 0x284
+description = "LP_PERI1_PMS_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_PERI1_PMS_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_PERI1_PMS_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_HUK_INTR_MAP"
+offset = 0x288
+description = "LP_HUK_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_HUK_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_HUK_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_PERI_TIMEOUT_INTR_MAP"
+offset = 0x28c
+description = "LP_PERI_TIMEOUT_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_PERI_TIMEOUT_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_PERI_TIMEOUT_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_AHB_PDMA_IN_CH0_INTR_MAP"
+offset = 0x290
+description = "LP_AHB_PDMA_IN_CH0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AHB_PDMA_IN_CH0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_AHB_PDMA_IN_CH0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_AHB_PDMA_IN_CH1_INTR_MAP"
+offset = 0x294
+description = "LP_AHB_PDMA_IN_CH1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AHB_PDMA_IN_CH1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_AHB_PDMA_IN_CH1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_AHB_PDMA_OUT_CH0_INTR_MAP"
+offset = 0x298
+description = "LP_AHB_PDMA_OUT_CH0_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AHB_PDMA_OUT_CH0_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_AHB_PDMA_OUT_CH0_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_AHB_PDMA_OUT_CH1_INTR_MAP"
+offset = 0x29c
+description = "LP_AHB_PDMA_OUT_CH1_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AHB_PDMA_OUT_CH1_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_AHB_PDMA_OUT_CH1_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "LP_SW_INVALID_SLEEP_INTR_MAP"
+offset = 0x2a0
+description = "LP_SW_INVALID_SLEEP_INTR mapping register"
+reset = { value = 0x0, mask = 0x33f }
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "LP_SW_INVALID_SLEEP_INTR_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures the interrupt source into one CPU interrupt."
+
+[[registers.fields]]
+name = "LP_SW_INVALID_SLEEP_INTR_PASS_LEVEL"
+bits = "9:8"
+class = "plain"
+description = "Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level."
+
+[[registers]]
+name = "SIG_IDX_ASSERT_IN_SEC"
+offset = 0x2a4
+description = "reserved"
+reset = { value = 0x0, mask = 0xfff }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers]]
+name = "INT_STATUS_REG_0"
+offset = 0x2a8
+description = "Status register for interrupt sources 0 ~ 31"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INT_STATUS_0"
+bits = "31:0"
+class = "read-only"
+description = "Represents the status of the interrupt sources within interrupt-index-range 0 ~ 31. Each bit corresponds to one interrupt source 0:The corresponding interrupt source triggered an interrupt 1:No interrupt triggered"
+
+[[registers]]
+name = "INT_STATUS_REG_1"
+offset = 0x2ac
+description = "Status register for interrupt sources 32 ~ 63"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INT_STATUS_1"
+bits = "31:0"
+class = "read-only"
+description = "Represents the status of the interrupt sources within interrupt-index-range 32 ~ 63. Each bit corresponds to one interrupt source 0:The corresponding interrupt source triggered an interrupt 1:No interrupt triggered"
+
+[[registers]]
+name = "INT_STATUS_REG_2"
+offset = 0x2b0
+description = "Status register for interrupt sources 64 ~ 95"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INT_STATUS_2"
+bits = "31:0"
+class = "read-only"
+description = "Represents the status of the interrupt sources within interrupt-index-range 64 ~ 95. Each bit corresponds to one interrupt source 0:The corresponding interrupt source triggered an interrupt 1:No interrupt triggered"
+
+[[registers]]
+name = "INT_STATUS_REG_3"
+offset = 0x2b4
+description = "Status register for interrupt sources 96 ~ 127"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INT_STATUS_3"
+bits = "31:0"
+class = "read-only"
+description = "Represents the status of the interrupt sources within interrupt-index-range 96 ~ 127. Each bit corresponds to one interrupt source 0:The corresponding interrupt source triggered an interrupt 1:No interrupt triggered"
+
+[[registers]]
+name = "INT_STATUS_REG_4"
+offset = 0x2b8
+description = "Status register for interrupt sources 128 ~ 159"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INT_STATUS_4"
+bits = "31:0"
+class = "read-only"
+description = "Represents the status of the interrupt sources within interrupt-index-range 128 ~ 159. Each bit corresponds to one interrupt source 0:The corresponding interrupt source triggered an interrupt 1:No interrupt triggered"
+
+[[registers]]
+name = "INT_STATUS_REG_5"
+offset = 0x2bc
+description = "Status register for interrupt sources 160 ~ 168"
+reset = { value = 0x0, mask = 0x1ff }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "INT_STATUS_5"
+bits = "8:0"
+class = "read-only"
+description = "Represents the status of the interrupt sources within interrupt-index-range 160 ~ 168. Each bit corresponds to one interrupt source 0:The corresponding interrupt source triggered an interrupt 1:No interrupt triggered"
+
+[[registers]]
+name = "SRC_PASS_IN_S_STATUS_0"
+offset = 0x2c0
+description = "supervisor-mode PASS_IN status register for interrupt sources 0 ~ 31"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INT_SRC_PASS_IN_S_STATUS_0"
+bits = "31:0"
+class = "read-only"
+description = "Represents the supervisor-mode PASS_IN status of the interrupt sources within interrupt-index-range 0 ~ 31. Each bit corresponds to one interrupt source 0:The corresponding interrupt source is not PASS in supervisor-mode. 1:The corresponding interrupt source is PASS in supervisor-mode."
+
+[[registers]]
+name = "SRC_PASS_IN_S_STATUS_1"
+offset = 0x2c4
+description = "supervisor-mode PASS_IN status register for interrupt sources 32 ~ 63"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INT_SRC_PASS_IN_S_STATUS_1"
+bits = "31:0"
+class = "read-only"
+description = "Represents the supervisor-mode PASS_IN status of the interrupt sources within interrupt-index-range 32 ~ 63. Each bit corresponds to one interrupt source 0:The corresponding interrupt source is not PASS in supervisor-mode. 1:The corresponding interrupt source is PASS in supervisor-mode."
+
+[[registers]]
+name = "SRC_PASS_IN_S_STATUS_2"
+offset = 0x2c8
+description = "supervisor-mode PASS_IN status register for interrupt sources 64 ~ 95"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INT_SRC_PASS_IN_S_STATUS_2"
+bits = "31:0"
+class = "read-only"
+description = "Represents the supervisor-mode PASS_IN status of the interrupt sources within interrupt-index-range 64 ~ 95. Each bit corresponds to one interrupt source 0:The corresponding interrupt source is not PASS in supervisor-mode. 1:The corresponding interrupt source is PASS in supervisor-mode."
+
+[[registers]]
+name = "SRC_PASS_IN_S_STATUS_3"
+offset = 0x2cc
+description = "supervisor-mode PASS_IN status register for interrupt sources 96 ~ 127"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INT_SRC_PASS_IN_S_STATUS_3"
+bits = "31:0"
+class = "read-only"
+description = "Represents the supervisor-mode PASS_IN status of the interrupt sources within interrupt-index-range 96 ~ 127. Each bit corresponds to one interrupt source 0:The corresponding interrupt source is not PASS in supervisor-mode. 1:The corresponding interrupt source is PASS in supervisor-mode."
+
+[[registers]]
+name = "SRC_PASS_IN_S_STATUS_4"
+offset = 0x2d0
+description = "supervisor-mode PASS_IN status register for interrupt sources 128 ~ 159"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INT_SRC_PASS_IN_S_STATUS_4"
+bits = "31:0"
+class = "read-only"
+description = "Represents the supervisor-mode PASS_IN status of the interrupt sources within interrupt-index-range 128 ~ 159. Each bit corresponds to one interrupt source 0:The corresponding interrupt source is not PASS in supervisor-mode. 1:The corresponding interrupt source is PASS in supervisor-mode."
+
+[[registers]]
+name = "SRC_PASS_IN_S_STATUS_5"
+offset = 0x2d4
+description = "supervisor-mode PASS_IN status register for interrupt sources 160 ~ 168"
+reset = { value = 0x0, mask = 0x1ff }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "INT_SRC_PASS_IN_S_STATUS_5"
+bits = "8:0"
+class = "read-only"
+description = "Represents the supervisor-mode PASS_IN status of the interrupt sources with interrupt-index-range 160 ~ 168. Each bit corresponds to one interrupt source 0:The corresponding interrupt source is not PASS in supervisor-mode. 1:The corresponding interrupt source is PASS in supervisor-mode."
+
+[[registers]]
+name = "SRC_PASS_IN_M_STATUS_0"
+offset = 0x2d8
+description = "machine-mode PASS_IN_M status register for interrupt sources 0 ~ 31"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INT_SRC_PASS_IN_M_STATUS_0"
+bits = "31:0"
+class = "read-only"
+description = "Represents the machine-mode PASS_IN status of the interrupt sources within interrupt-index-range 0 ~ 31. Each bit corresponds to one interrupt source 0:The corresponding interrupt source is not PASS in machine-mode. 1:The corresponding interrupt source is PASS in machine-mode."
+
+[[registers]]
+name = "SRC_PASS_IN_M_STATUS_1"
+offset = 0x2dc
+description = "machine-mode PASS_IN_M status register for interrupt sources 32 ~ 63"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INT_SRC_PASS_IN_M_STATUS_1"
+bits = "31:0"
+class = "read-only"
+description = "Represents the machine-mode PASS_IN status of the interrupt sources within interrupt-index-range 32 ~ 63. Each bit corresponds to one interrupt source 0:The corresponding interrupt source is not PASS in machine-mode. 1:The corresponding interrupt source is PASS in machine-mode."
+
+[[registers]]
+name = "SRC_PASS_IN_M_STATUS_2"
+offset = 0x2e0
+description = "machine-mode PASS_IN_M status register for interrupt sources 64 ~ 95"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INT_SRC_PASS_IN_M_STATUS_2"
+bits = "31:0"
+class = "read-only"
+description = "Represents the machine-mode PASS_IN status of the interrupt sources within interrupt-index-range 64 ~ 95. Each bit corresponds to one interrupt source 0:The corresponding interrupt source is not PASS in machine-mode. 1:The corresponding interrupt source is PASS in machine-mode."
+
+[[registers]]
+name = "SRC_PASS_IN_M_STATUS_3"
+offset = 0x2e4
+description = "machine-mode PASS_IN_M status register for interrupt sources 96 ~ 127"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INT_SRC_PASS_IN_M_STATUS_3"
+bits = "31:0"
+class = "read-only"
+description = "Represents the machine-mode PASS_IN status of the interrupt sources within interrupt-index-range 96 ~ 127. Each bit corresponds to one interrupt source 0:The corresponding interrupt source is not PASS in machine-mode. 1:The corresponding interrupt source is PASS in machine-mode."
+
+[[registers]]
+name = "SRC_PASS_IN_M_STATUS_4"
+offset = 0x2e8
+description = "machine-mode PASS_IN_M status register for interrupt sources 128 ~ 159"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INT_SRC_PASS_IN_M_STATUS_4"
+bits = "31:0"
+class = "read-only"
+description = "Represents the machine-mode PASS_IN status of the interrupt sources within interrupt-index-range 128 ~ 159. Each bit corresponds to one interrupt source 0:The corresponding interrupt source is not PASS in machine-mode. 1:The corresponding interrupt source is PASS in machine-mode."
+
+[[registers]]
+name = "SRC_PASS_IN_M_STATUS_5"
+offset = 0x2ec
+description = "machine-mode PASS_IN_M status register for interrupt sources 160 ~ 168"
+reset = { value = 0x0, mask = 0x1ff }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "INT_SRC_PASS_IN_M_STATUS_5"
+bits = "8:0"
+class = "read-only"
+description = "Represents the machine-mode PASS_IN status of the interrupt sources with interrupt-index-range 160 ~ 168. Each bit corresponds to one interrupt source 0:The corresponding interrupt source is not PASS in machine-mode. 1:The corresponding interrupt source is PASS in machine-mode."
+
+[[registers]]
+name = "CONFIG_STATE"
+offset = 0x2f0
+description = "reserved"
+reset = { value = 0x0, mask = 0x3 }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers]]
+name = "S_STATUS"
+offset = 0x2f4
+description = "reserved"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers]]
+name = "M_STATUS"
+offset = 0x2f8
+description = "reserved"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers]]
+name = "CLOCK_GATE"
+offset = 0x2fc
+description = "Interrupt clock gating configure register"
+reset = { value = 0x0, mask = 0x1 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "REG_CLK_EN"
+bits = "0"
+class = "plain"
+description = "Interrupt clock gating configure register"
+
+[[registers]]
+name = "INTERRUPT_DATE"
+offset = 0x7fc
+description = "Version control register"
+reset = { value = 0x2509110, mask = 0xfffffff }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE0_REG_H", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_INTERRUPT_CORE1_REG_H"] }
+
+[[registers.fields]]
+name = "INTERRUPT_DATE"
+bits = "27:0"
+class = "plain"
+description = "Version control register"

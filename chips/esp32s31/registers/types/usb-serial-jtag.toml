@@ -1,0 +1,1104 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "USB_SERIAL_JTAG"
+description = "The USB Serial/JTAG controller: its endpoint FIFOs, interrupts, pads and memory power."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "EP1"
+offset = 0x0
+description = "FIFO access for the CDC-ACM data IN and OUT endpoints."
+reset = { value = 0x0 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+fifo = { sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H_L16", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_STRUCT_H_L30"] }
+
+[[registers.fields]]
+name = "RDWR_BYTE"
+bits = "7:0"
+class = "plain"
+description = "Write and read byte data to/from UART Tx/Rx FIFO through this field. When USB_SERIAL_JTAG_SERIAL_IN_EMPTY_INT is set, then user can write data (up to 64 bytes) into UART Tx FIFO. When USB_SERIAL_JTAG_SERIAL_OUT_RECV_PKT_INT is set, user can check USB_SERIAL_JTAG_OUT_EP1_WR_ADDR USB_SERIAL_JTAG_OUT_EP0_RD_ADDR to know how many data is received, then read data from UART Rx FIFO."
+
+[[registers]]
+name = "EP1_CONF"
+offset = 0x4
+description = "Configuration and control registers for the CDC-ACM FIFOs."
+reset = { value = 0x2 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "WR_DONE"
+bits = "0"
+class = "write-trigger"
+description = "Set this bit to indicate writing byte data to UART Tx FIFO is done."
+
+[[registers.fields]]
+name = "SERIAL_IN_EP_DATA_FREE"
+bits = "1"
+class = "read-only"
+description = "1'b1: Indicate UART Tx FIFO is not full and can write data into in. After writing USB_SERIAL_JTAG_WR_DONE, this bit would be 0 until data in UART Tx FIFO is read by USB Host."
+
+[[registers.fields]]
+name = "SERIAL_OUT_EP_DATA_AVAIL"
+bits = "2"
+class = "read-only"
+description = "1'b1: Indicate there is data in UART Rx FIFO."
+
+[[registers]]
+name = "INT_RAW"
+offset = 0x8
+description = "Interrupt raw status register."
+reset = { value = 0x8 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "JTAG_IN_FLUSH_INT_RAW"
+bits = "0"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when flush cmd is received for IN endpoint 2 of JTAG."
+
+[[registers.fields]]
+name = "SOF_INT_RAW"
+bits = "1"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when SOF frame is received."
+
+[[registers.fields]]
+name = "SERIAL_OUT_RECV_PKT_INT_RAW"
+bits = "2"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when Serial Port OUT Endpoint received one packet."
+
+[[registers.fields]]
+name = "SERIAL_IN_EMPTY_INT_RAW"
+bits = "3"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when Serial Port IN Endpoint is empty."
+
+[[registers.fields]]
+name = "PID_ERR_INT_RAW"
+bits = "4"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when pid error is detected."
+
+[[registers.fields]]
+name = "CRC5_ERR_INT_RAW"
+bits = "5"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when CRC5 error is detected."
+
+[[registers.fields]]
+name = "CRC16_ERR_INT_RAW"
+bits = "6"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when CRC16 error is detected."
+
+[[registers.fields]]
+name = "STUFF_ERR_INT_RAW"
+bits = "7"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when stuff error is detected."
+
+[[registers.fields]]
+name = "IN_TOKEN_REC_IN_EP1_INT_RAW"
+bits = "8"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when IN token for IN endpoint 1 is received."
+
+[[registers.fields]]
+name = "USB_BUS_RESET_INT_RAW"
+bits = "9"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when usb bus reset is detected."
+
+[[registers.fields]]
+name = "OUT_EP1_ZERO_PAYLOAD_INT_RAW"
+bits = "10"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when OUT endpoint 1 received packet with zero palyload."
+
+[[registers.fields]]
+name = "OUT_EP2_ZERO_PAYLOAD_INT_RAW"
+bits = "11"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when OUT endpoint 2 received packet with zero palyload."
+
+[[registers.fields]]
+name = "RTS_CHG_INT_RAW"
+bits = "12"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when level of RTS from usb serial channel is changed."
+
+[[registers.fields]]
+name = "DTR_CHG_INT_RAW"
+bits = "13"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when level of DTR from usb serial channel is changed."
+
+[[registers.fields]]
+name = "GET_LINE_CODE_INT_RAW"
+bits = "14"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when level of GET LINE CODING request is received."
+
+[[registers.fields]]
+name = "SET_LINE_CODE_INT_RAW"
+bits = "15"
+class = "write-one-to-clear"
+description = "The raw interrupt bit turns to high level when level of SET LINE CODING request is received."
+
+[[registers]]
+name = "INT_ST"
+offset = 0xc
+description = "Interrupt status register."
+reset = { value = 0x0 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "JTAG_IN_FLUSH_INT_ST"
+bits = "0"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_JTAG_IN_FLUSH_INT interrupt."
+
+[[registers.fields]]
+name = "SOF_INT_ST"
+bits = "1"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_SOF_INT interrupt."
+
+[[registers.fields]]
+name = "SERIAL_OUT_RECV_PKT_INT_ST"
+bits = "2"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_SERIAL_OUT_RECV_PKT_INT interrupt."
+
+[[registers.fields]]
+name = "SERIAL_IN_EMPTY_INT_ST"
+bits = "3"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_SERIAL_IN_EMPTY_INT interrupt."
+
+[[registers.fields]]
+name = "PID_ERR_INT_ST"
+bits = "4"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_PID_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "CRC5_ERR_INT_ST"
+bits = "5"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_CRC5_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "CRC16_ERR_INT_ST"
+bits = "6"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_CRC16_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "STUFF_ERR_INT_ST"
+bits = "7"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_STUFF_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "IN_TOKEN_REC_IN_EP1_INT_ST"
+bits = "8"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_IN_TOKEN_REC_IN_EP1_INT interrupt."
+
+[[registers.fields]]
+name = "USB_BUS_RESET_INT_ST"
+bits = "9"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_USB_BUS_RESET_INT interrupt."
+
+[[registers.fields]]
+name = "OUT_EP1_ZERO_PAYLOAD_INT_ST"
+bits = "10"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_OUT_EP1_ZERO_PAYLOAD_INT interrupt."
+
+[[registers.fields]]
+name = "OUT_EP2_ZERO_PAYLOAD_INT_ST"
+bits = "11"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_OUT_EP2_ZERO_PAYLOAD_INT interrupt."
+
+[[registers.fields]]
+name = "RTS_CHG_INT_ST"
+bits = "12"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_RTS_CHG_INT interrupt."
+
+[[registers.fields]]
+name = "DTR_CHG_INT_ST"
+bits = "13"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_DTR_CHG_INT interrupt."
+
+[[registers.fields]]
+name = "GET_LINE_CODE_INT_ST"
+bits = "14"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_GET_LINE_CODE_INT interrupt."
+
+[[registers.fields]]
+name = "SET_LINE_CODE_INT_ST"
+bits = "15"
+class = "read-only"
+description = "The raw interrupt status bit for the USB_SERIAL_JTAG_SET_LINE_CODE_INT interrupt."
+
+[[registers]]
+name = "INT_ENA"
+offset = 0x10
+description = "Interrupt enable status register."
+reset = { value = 0x0 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "JTAG_IN_FLUSH_INT_ENA"
+bits = "0"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_JTAG_IN_FLUSH_INT interrupt."
+
+[[registers.fields]]
+name = "SOF_INT_ENA"
+bits = "1"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_SOF_INT interrupt."
+
+[[registers.fields]]
+name = "SERIAL_OUT_RECV_PKT_INT_ENA"
+bits = "2"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_SERIAL_OUT_RECV_PKT_INT interrupt."
+
+[[registers.fields]]
+name = "SERIAL_IN_EMPTY_INT_ENA"
+bits = "3"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_SERIAL_IN_EMPTY_INT interrupt."
+
+[[registers.fields]]
+name = "PID_ERR_INT_ENA"
+bits = "4"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_PID_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "CRC5_ERR_INT_ENA"
+bits = "5"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_CRC5_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "CRC16_ERR_INT_ENA"
+bits = "6"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_CRC16_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "STUFF_ERR_INT_ENA"
+bits = "7"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_STUFF_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "IN_TOKEN_REC_IN_EP1_INT_ENA"
+bits = "8"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_IN_TOKEN_REC_IN_EP1_INT interrupt."
+
+[[registers.fields]]
+name = "USB_BUS_RESET_INT_ENA"
+bits = "9"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_USB_BUS_RESET_INT interrupt."
+
+[[registers.fields]]
+name = "OUT_EP1_ZERO_PAYLOAD_INT_ENA"
+bits = "10"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_OUT_EP1_ZERO_PAYLOAD_INT interrupt."
+
+[[registers.fields]]
+name = "OUT_EP2_ZERO_PAYLOAD_INT_ENA"
+bits = "11"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_OUT_EP2_ZERO_PAYLOAD_INT interrupt."
+
+[[registers.fields]]
+name = "RTS_CHG_INT_ENA"
+bits = "12"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_RTS_CHG_INT interrupt."
+
+[[registers.fields]]
+name = "DTR_CHG_INT_ENA"
+bits = "13"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_DTR_CHG_INT interrupt."
+
+[[registers.fields]]
+name = "GET_LINE_CODE_INT_ENA"
+bits = "14"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_GET_LINE_CODE_INT interrupt."
+
+[[registers.fields]]
+name = "SET_LINE_CODE_INT_ENA"
+bits = "15"
+class = "plain"
+description = "The interrupt enable bit for the USB_SERIAL_JTAG_SET_LINE_CODE_INT interrupt."
+
+[[registers]]
+name = "INT_CLR"
+offset = 0x14
+description = "Interrupt clear status register."
+reset = { value = 0x0 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "JTAG_IN_FLUSH_INT_CLR"
+bits = "0"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_JTAG_IN_FLUSH_INT interrupt."
+
+[[registers.fields]]
+name = "SOF_INT_CLR"
+bits = "1"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_JTAG_SOF_INT interrupt."
+
+[[registers.fields]]
+name = "SERIAL_OUT_RECV_PKT_INT_CLR"
+bits = "2"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_SERIAL_OUT_RECV_PKT_INT interrupt."
+
+[[registers.fields]]
+name = "SERIAL_IN_EMPTY_INT_CLR"
+bits = "3"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_SERIAL_IN_EMPTY_INT interrupt."
+
+[[registers.fields]]
+name = "PID_ERR_INT_CLR"
+bits = "4"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_PID_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "CRC5_ERR_INT_CLR"
+bits = "5"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_CRC5_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "CRC16_ERR_INT_CLR"
+bits = "6"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_CRC16_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "STUFF_ERR_INT_CLR"
+bits = "7"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_STUFF_ERR_INT interrupt."
+
+[[registers.fields]]
+name = "IN_TOKEN_REC_IN_EP1_INT_CLR"
+bits = "8"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_IN_TOKEN_IN_EP1_INT interrupt."
+
+[[registers.fields]]
+name = "USB_BUS_RESET_INT_CLR"
+bits = "9"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_USB_BUS_RESET_INT interrupt."
+
+[[registers.fields]]
+name = "OUT_EP1_ZERO_PAYLOAD_INT_CLR"
+bits = "10"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_OUT_EP1_ZERO_PAYLOAD_INT interrupt."
+
+[[registers.fields]]
+name = "OUT_EP2_ZERO_PAYLOAD_INT_CLR"
+bits = "11"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_OUT_EP2_ZERO_PAYLOAD_INT interrupt."
+
+[[registers.fields]]
+name = "RTS_CHG_INT_CLR"
+bits = "12"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_RTS_CHG_INT interrupt."
+
+[[registers.fields]]
+name = "DTR_CHG_INT_CLR"
+bits = "13"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_DTR_CHG_INT interrupt."
+
+[[registers.fields]]
+name = "GET_LINE_CODE_INT_CLR"
+bits = "14"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_GET_LINE_CODE_INT interrupt."
+
+[[registers.fields]]
+name = "SET_LINE_CODE_INT_CLR"
+bits = "15"
+class = "write-trigger"
+description = "Set this bit to clear the USB_SERIAL_JTAG_SET_LINE_CODE_INT interrupt."
+
+[[registers]]
+name = "CONF0"
+offset = 0x18
+description = "PHY hardware configuration."
+reset = { value = 0x4200 }
+reserved = { mask = 0xfffe0001, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "EXCHG_PINS_OVERRIDE"
+bits = "1"
+class = "plain"
+description = "Enable software control USB D+ D- exchange"
+
+[[registers.fields]]
+name = "EXCHG_PINS"
+bits = "2"
+class = "plain"
+description = "USB D+ D- exchange"
+
+[[registers.fields]]
+name = "VREFH"
+bits = "4:3"
+class = "plain"
+description = "Control single-end input high threshold,1.76V to 2V, step 80mV"
+
+[[registers.fields]]
+name = "VREFL"
+bits = "6:5"
+class = "plain"
+description = "Control single-end input low threshold,0.8V to 1.04V, step 80mV"
+
+[[registers.fields]]
+name = "VREF_OVERRIDE"
+bits = "7"
+class = "plain"
+description = "Enable software control input threshold"
+
+[[registers.fields]]
+name = "PAD_PULL_OVERRIDE"
+bits = "8"
+class = "plain"
+description = "Enable software control USB D+ D- pullup pulldown"
+
+[[registers.fields]]
+name = "DP_PULLUP"
+bits = "9"
+class = "plain"
+description = "Control USB D+ pull up."
+
+[[registers.fields]]
+name = "DP_PULLDOWN"
+bits = "10"
+class = "plain"
+description = "Control USB D+ pull down."
+
+[[registers.fields]]
+name = "DM_PULLUP"
+bits = "11"
+class = "plain"
+description = "Control USB D- pull up."
+
+[[registers.fields]]
+name = "DM_PULLDOWN"
+bits = "12"
+class = "plain"
+description = "Control USB D- pull down."
+
+[[registers.fields]]
+name = "PULLUP_VALUE"
+bits = "13"
+class = "plain"
+description = "Control pull up value."
+
+[[registers.fields]]
+name = "USB_PAD_ENABLE"
+bits = "14"
+class = "plain"
+description = "Enable USB pad function."
+
+[[registers.fields]]
+name = "USB_JTAG_BRIDGE_EN"
+bits = "15"
+class = "plain"
+description = "Set this bit usb_jtag, the connection between usb_jtag and internal JTAG is disconnected, and MTMS, MTDI, MTCK are output through GPIO Matrix, MTDO is input through GPIO Matrix."
+
+[[registers.fields]]
+name = "USB_PHY_TX_EDGE_SEL"
+bits = "16"
+class = "plain"
+description = "Control at which clock edge the dp and dm are sent to USB PHY, 0: tx output at clock negative edge. 1: tx output at clock positive edge."
+
+[[registers]]
+name = "TEST"
+offset = 0x1c
+description = "Registers used for debugging the PHY."
+reset = { value = 0x30 }
+reserved = { mask = 0xffffff80, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "ENABLE"
+bits = "0"
+class = "plain"
+description = "Enable test of the USB pad"
+
+[[registers.fields]]
+name = "USB_OE"
+bits = "1"
+class = "plain"
+description = "USB pad oen in test"
+
+[[registers.fields]]
+name = "TX_DP"
+bits = "2"
+class = "plain"
+description = "USB D+ tx value in test"
+
+[[registers.fields]]
+name = "TX_DM"
+bits = "3"
+class = "plain"
+description = "USB D- tx value in test"
+
+[[registers.fields]]
+name = "RX_RCV"
+bits = "4"
+class = "read-only"
+description = "USB RCV value in test"
+
+[[registers.fields]]
+name = "RX_DP"
+bits = "5"
+class = "read-only"
+description = "USB D+ rx value in test"
+
+[[registers.fields]]
+name = "RX_DM"
+bits = "6"
+class = "read-only"
+description = "USB D- rx value in test"
+
+[[registers]]
+name = "JFIFO_ST"
+offset = 0x20
+description = "JTAG FIFO status and control registers."
+reset = { value = 0x44 }
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "IN_FIFO_CNT"
+bits = "1:0"
+class = "read-only"
+description = "JTAT in fifo counter."
+
+[[registers.fields]]
+name = "IN_FIFO_EMPTY"
+bits = "2"
+class = "read-only"
+description = "1: JTAG in fifo is empty."
+
+[[registers.fields]]
+name = "IN_FIFO_FULL"
+bits = "3"
+class = "read-only"
+description = "1: JTAG in fifo is full."
+
+[[registers.fields]]
+name = "OUT_FIFO_CNT"
+bits = "5:4"
+class = "read-only"
+description = "JTAT out fifo counter."
+
+[[registers.fields]]
+name = "OUT_FIFO_EMPTY"
+bits = "6"
+class = "read-only"
+description = "1: JTAG out fifo is empty."
+
+[[registers.fields]]
+name = "OUT_FIFO_FULL"
+bits = "7"
+class = "read-only"
+description = "1: JTAG out fifo is full."
+
+[[registers.fields]]
+name = "IN_FIFO_RESET"
+bits = "8"
+class = "plain"
+description = "Write 1 to reset JTAG in fifo."
+
+[[registers.fields]]
+name = "OUT_FIFO_RESET"
+bits = "9"
+class = "plain"
+description = "Write 1 to reset JTAG out fifo."
+
+[[registers]]
+name = "FRAM_NUM"
+offset = 0x24
+description = "Last received SOF frame index register."
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "SOF_FRAME_INDEX"
+bits = "10:0"
+class = "read-only"
+description = "Frame index of received SOF frame."
+
+[[registers]]
+name = "IN_EP0_ST"
+offset = 0x28
+description = "Control IN endpoint status information."
+reset = { value = 0x1 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "IN_EP0_STATE"
+bits = "1:0"
+class = "read-only"
+description = "State of IN Endpoint 0."
+
+[[registers.fields]]
+name = "IN_EP0_WR_ADDR"
+bits = "8:2"
+class = "read-only"
+description = "Write data address of IN endpoint 0."
+
+[[registers.fields]]
+name = "IN_EP0_RD_ADDR"
+bits = "15:9"
+class = "read-only"
+description = "Read data address of IN endpoint 0."
+
+[[registers]]
+name = "IN_EP1_ST"
+offset = 0x2c
+description = "CDC-ACM IN endpoint status information."
+reset = { value = 0x1 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "IN_EP1_STATE"
+bits = "1:0"
+class = "read-only"
+description = "State of IN Endpoint 1."
+
+[[registers.fields]]
+name = "IN_EP1_WR_ADDR"
+bits = "8:2"
+class = "read-only"
+description = "Write data address of IN endpoint 1."
+
+[[registers.fields]]
+name = "IN_EP1_RD_ADDR"
+bits = "15:9"
+class = "read-only"
+description = "Read data address of IN endpoint 1."
+
+[[registers]]
+name = "IN_EP2_ST"
+offset = 0x30
+description = "CDC-ACM interrupt IN endpoint status information."
+reset = { value = 0x1 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "IN_EP2_STATE"
+bits = "1:0"
+class = "read-only"
+description = "State of IN Endpoint 2."
+
+[[registers.fields]]
+name = "IN_EP2_WR_ADDR"
+bits = "8:2"
+class = "read-only"
+description = "Write data address of IN endpoint 2."
+
+[[registers.fields]]
+name = "IN_EP2_RD_ADDR"
+bits = "15:9"
+class = "read-only"
+description = "Read data address of IN endpoint 2."
+
+[[registers]]
+name = "IN_EP3_ST"
+offset = 0x34
+description = "JTAG IN endpoint status information."
+reset = { value = 0x1 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "IN_EP3_STATE"
+bits = "1:0"
+class = "read-only"
+description = "State of IN Endpoint 3."
+
+[[registers.fields]]
+name = "IN_EP3_WR_ADDR"
+bits = "8:2"
+class = "read-only"
+description = "Write data address of IN endpoint 3."
+
+[[registers.fields]]
+name = "IN_EP3_RD_ADDR"
+bits = "15:9"
+class = "read-only"
+description = "Read data address of IN endpoint 3."
+
+[[registers]]
+name = "OUT_EP0_ST"
+offset = 0x38
+description = "Control OUT endpoint status information."
+reset = { value = 0x0 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "OUT_EP0_STATE"
+bits = "1:0"
+class = "read-only"
+description = "State of OUT Endpoint 0."
+
+[[registers.fields]]
+name = "OUT_EP0_WR_ADDR"
+bits = "8:2"
+class = "read-only"
+description = "Write data address of OUT endpoint 0. When USB_SERIAL_JTAG_SERIAL_OUT_RECV_PKT_INT is detected, there are USB_SERIAL_JTAG_OUT_EP0_WR_ADDR-2 bytes data in OUT EP0."
+
+[[registers.fields]]
+name = "OUT_EP0_RD_ADDR"
+bits = "15:9"
+class = "read-only"
+description = "Read data address of OUT endpoint 0."
+
+[[registers]]
+name = "OUT_EP1_ST"
+offset = 0x3c
+description = "CDC-ACM OUT endpoint status information."
+reset = { value = 0x0 }
+reserved = { mask = 0xff800000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "OUT_EP1_STATE"
+bits = "1:0"
+class = "read-only"
+description = "State of OUT Endpoint 1."
+
+[[registers.fields]]
+name = "OUT_EP1_WR_ADDR"
+bits = "8:2"
+class = "read-only"
+description = "Write data address of OUT endpoint 1. When USB_SERIAL_JTAG_SERIAL_OUT_RECV_PKT_INT is detected, there are USB_SERIAL_JTAG_OUT_EP1_WR_ADDR-2 bytes data in OUT EP1."
+
+[[registers.fields]]
+name = "OUT_EP1_RD_ADDR"
+bits = "15:9"
+class = "read-only"
+description = "Read data address of OUT endpoint 1."
+
+[[registers.fields]]
+name = "OUT_EP1_REC_DATA_CNT"
+bits = "22:16"
+class = "read-only"
+description = "Data count in OUT endpoint 1 when one packet is received."
+
+[[registers]]
+name = "OUT_EP2_ST"
+offset = 0x40
+description = "JTAG OUT endpoint status information."
+reset = { value = 0x0 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "OUT_EP2_STATE"
+bits = "1:0"
+class = "read-only"
+description = "State of OUT Endpoint 2."
+
+[[registers.fields]]
+name = "OUT_EP2_WR_ADDR"
+bits = "8:2"
+class = "read-only"
+description = "Write data address of OUT endpoint 2. When USB_SERIAL_JTAG_SERIAL_OUT_RECV_PKT_INT is detected, there are USB_SERIAL_JTAG_OUT_EP2_WR_ADDR-2 bytes data in OUT EP2."
+
+[[registers.fields]]
+name = "OUT_EP2_RD_ADDR"
+bits = "15:9"
+class = "read-only"
+description = "Read data address of OUT endpoint 2."
+
+[[registers]]
+name = "MISC_CONF"
+offset = 0x44
+description = "Clock enable control"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "0"
+class = "plain"
+description = "1'h1: Force clock on for register. 1'h0: Support clock only when application writes registers."
+
+[[registers]]
+name = "MEM_CONF"
+offset = 0x48
+description = "Memory power control"
+reset = { value = 0x2 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "USB_MEM_PD"
+bits = "0"
+class = "plain"
+description = "1: power down usb memory."
+
+[[registers.fields]]
+name = "USB_MEM_CLK_EN"
+bits = "1"
+class = "plain"
+description = "1: Force clock on for usb memory."
+
+[[registers]]
+name = "CHIP_RST"
+offset = 0x4c
+description = "CDC-ACM chip reset control."
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "RTS"
+bits = "0"
+class = "read-only"
+description = "1: Chip reset is detected from usb serial channel. Software write 1 to clear it."
+
+[[registers.fields]]
+name = "DTR"
+bits = "1"
+class = "read-only"
+description = "1: Chip reset is detected from usb jtag channel. Software write 1 to clear it."
+
+[[registers.fields]]
+name = "USB_UART_CHIP_RST_DIS"
+bits = "2"
+class = "plain"
+description = "Set this bit to disable chip reset from usb serial channel to reset chip."
+
+[[registers]]
+name = "SET_LINE_CODE_W0"
+offset = 0x50
+description = "W0 of SET_LINE_CODING command."
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "DW_DTE_RATE"
+bits = "31:0"
+class = "read-only"
+description = "The value of dwDTERate set by host through SET_LINE_CODING command."
+
+[[registers]]
+name = "SET_LINE_CODE_W1"
+offset = 0x54
+description = "W1 of SET_LINE_CODING command."
+reset = { value = 0x0 }
+reserved = { mask = 0xff000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "BCHAR_FORMAT"
+bits = "7:0"
+class = "read-only"
+description = "The value of bCharFormat set by host through SET_LINE_CODING command."
+
+[[registers.fields]]
+name = "BPARITY_TYPE"
+bits = "15:8"
+class = "read-only"
+description = "The value of bParityTpye set by host through SET_LINE_CODING command."
+
+[[registers.fields]]
+name = "BDATA_BITS"
+bits = "23:16"
+class = "read-only"
+description = "The value of bDataBits set by host through SET_LINE_CODING command."
+
+[[registers]]
+name = "GET_LINE_CODE_W0"
+offset = 0x58
+description = "W0 of GET_LINE_CODING command."
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "GET_DW_DTE_RATE"
+bits = "31:0"
+class = "plain"
+description = "The value of dwDTERate set by software which is requested by GET_LINE_CODING command."
+
+[[registers]]
+name = "GET_LINE_CODE_W1"
+offset = 0x5c
+description = "W1 of GET_LINE_CODING command."
+reset = { value = 0x0 }
+reserved = { mask = 0xff000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "GET_BDATA_BITS"
+bits = "7:0"
+class = "plain"
+description = "The value of bCharFormat set by software which is requested by GET_LINE_CODING command."
+
+[[registers.fields]]
+name = "GET_BPARITY_TYPE"
+bits = "15:8"
+class = "plain"
+description = "The value of bParityTpye set by software which is requested by GET_LINE_CODING command."
+
+[[registers.fields]]
+name = "GET_BCHAR_FORMAT"
+bits = "23:16"
+class = "plain"
+description = "The value of bDataBits set by software which is requested by GET_LINE_CODING command."
+
+[[registers]]
+name = "CONFIG_UPDATE"
+offset = 0x60
+description = "Configuration registers' value update"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "CONFIG_UPDATE"
+bits = "0"
+class = "write-trigger"
+description = "Write 1 to this register would update the value of configure registers from APB clock domain to 48MHz clock domain."
+
+[[registers]]
+name = "SER_AFIFO_CONFIG"
+offset = 0x64
+description = "Serial AFIFO configure register"
+reset = { value = 0x10 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "SERIAL_IN_AFIFO_RESET_WR"
+bits = "0"
+class = "plain"
+description = "Write 1 to reset CDC_ACM IN async FIFO write clock domain."
+
+[[registers.fields]]
+name = "SERIAL_IN_AFIFO_RESET_RD"
+bits = "1"
+class = "plain"
+description = "Write 1 to reset CDC_ACM IN async FIFO read clock domain."
+
+[[registers.fields]]
+name = "SERIAL_OUT_AFIFO_RESET_WR"
+bits = "2"
+class = "plain"
+description = "Write 1 to reset CDC_ACM OUT async FIFO write clock domain."
+
+[[registers.fields]]
+name = "SERIAL_OUT_AFIFO_RESET_RD"
+bits = "3"
+class = "plain"
+description = "Write 1 to reset CDC_ACM OUT async FIFO read clock domain."
+
+[[registers.fields]]
+name = "SERIAL_OUT_AFIFO_REMPTY"
+bits = "4"
+class = "read-only"
+description = "CDC_ACM OUTOUT async FIFO empty signal in read clock domain."
+
+[[registers.fields]]
+name = "SERIAL_IN_AFIFO_WFULL"
+bits = "5"
+class = "read-only"
+description = "CDC_ACM OUT IN async FIFO empty signal in write clock domain."
+
+[[registers]]
+name = "BUS_RESET_ST"
+offset = 0x68
+description = "USB Bus reset status register"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "USB_BUS_RESET_ST"
+bits = "0"
+class = "read-only"
+description = "USB bus reset status. 0: USB-Serial-JTAG is in usb bus reset status. 1: USB bus reset is released."
+
+[[registers]]
+name = "SERIAL_EP_TIMEOUT0"
+offset = 0x6c
+description = "USB uart out endpoint timeout configuration."
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_USB_SERIAL_JTAG_REG_H"] }
+
+[[registers.fields]]
+name = "SERIAL_TIMEOUT_EN"
+bits = "0"
+class = "plain"
+description = "USB serial out ep timeout enable. When a timeout event occurs, serial out ep buffer is automatically cleared and reg_serial_timeout_status is asserted."
+
+[[registers.fields]]
+name = "SERIAL_TIMEOUT_STATUS"
+bits = "1"
+class = "write-one-to-clear"
+description = "Serial out ep triggers a timeout event."
+
+[[registers.fields]]
+name = "SERIAL_TIMEOUT_STATUS_CLR"
+bits = "2"
+class = "write-trigger"
+description = "Write 1 to clear reg_serial_timeout_status."
+
+[[registers]]
+name = "SERIAL_EP_TIMEOUT1"
+offset = 0x70
+description = "USB uart out endpoint timeout configuration."
+reset = { value = 0x494100 }
+
+[[registers.fields]]
+name = "SERIAL_TIMEOUT_MAX"
+bits = "31:0"
+class = "plain"
+description = "USB serial out ep timeout max threshold value, indicates the maximum time that waiting for ESP to take away data in memory. This value is in steps of 20.83ns."
+
+[[registers]]
+name = "DATE"
+offset = 0x80
+description = "Date register"
+reset = { value = 0x2412180 }
+
+[[registers.fields]]
+name = "DATE"
+bits = "31:0"
+class = "plain"
+description = "register version."

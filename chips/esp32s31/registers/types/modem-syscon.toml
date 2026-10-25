@@ -1,0 +1,584 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "MODEM_SYSCON"
+description = "The modem system controller: the clocks and resets of the Wi-Fi, Bluetooth and IEEE 802.15.4 blocks, the front end and the modem memories."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "TEST_CONF"
+offset = 0x0
+reset = { value = 0x100, mask = 0x3ff }
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "MODEM_ANT_FORCE_SEL_BT"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "MODEM_ANT_FORCE_SEL_WIFI"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "FPGA_DEBUG_CLKSWITCH"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "FPGA_DEBUG_CLK80"
+bits = "4"
+class = "plain"
+
+[[registers.fields]]
+name = "FPGA_DEBUG_CLK40"
+bits = "5"
+class = "plain"
+
+[[registers.fields]]
+name = "FPGA_DEBUG_CLK20"
+bits = "6"
+class = "plain"
+
+[[registers.fields]]
+name = "FPGA_DEBUG_CLK10"
+bits = "7"
+class = "plain"
+
+[[registers.fields]]
+name = "MODEM_MEM_MODE_FORCE"
+bits = "8"
+class = "plain"
+
+[[registers.fields]]
+name = "MODEM_DIS_WIFI6_FORCE"
+bits = "9"
+class = "plain"
+
+[[registers]]
+name = "CLK_CONF"
+offset = 0x4
+reset = { value = 0x200002, mask = 0xffe01fff }
+reserved = { mask = 0x1fe000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"] }
+
+[[registers.fields]]
+name = "PWDET_SAR_CLOCK_ENA"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "PWDET_CLK_DIV_NUM"
+bits = "8:1"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_TX_DAC_INV_ENA"
+bits = "9"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_RX_ADC_INV_ENA"
+bits = "10"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_PWDET_ADC_INV_ENA"
+bits = "11"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_I2C_MST_SEL_160M"
+bits = "12"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_DATA_DUMP_MUX"
+bits = "21"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_ETM_EN"
+bits = "22"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_ZB_APB_EN"
+bits = "23"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_ZBMAC_EN"
+bits = "24"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_MODEM_SEC_ECB_EN"
+bits = "25"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_MODEM_SEC_CCM_EN"
+bits = "26"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_MODEM_SEC_BAH_EN"
+bits = "27"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_MODEM_SEC_APB_EN"
+bits = "28"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_MODEM_SEC_EN"
+bits = "29"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_BLE_TIMER_EN"
+bits = "30"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_DATA_DUMP_EN"
+bits = "31"
+class = "plain"
+
+[[registers]]
+name = "CLK_CONF_FORCE_ON"
+offset = 0x8
+reset = { value = 0x0, mask = 0xf00003ff }
+reserved = { mask = 0xffffc00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_WIFIBB_FO"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFIMAC_FO"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFI_APB_FO"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_FE_FO"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_FE_APB_FO"
+bits = "4"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_BTBB_FO"
+bits = "5"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_BTMAC_FO"
+bits = "6"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_BT_APB_FO"
+bits = "7"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_ZBMAC_FO"
+bits = "8"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_ZBMAC_APB_FO"
+bits = "9"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_ETM_FO"
+bits = "28"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_MODEM_SEC_FO"
+bits = "29"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_BLE_TIMER_FO"
+bits = "30"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_DATA_DUMP_FO"
+bits = "31"
+class = "plain"
+
+[[registers]]
+name = "CLK_CONF_POWER_ST"
+offset = 0xc
+reset = { value = 0x0, mask = 0xffffff00 }
+reserved = { mask = 0xff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_ZB_ST_MAP"
+bits = "11:8"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_FE_ST_MAP"
+bits = "15:12"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_BT_ST_MAP"
+bits = "19:16"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFI_ST_MAP"
+bits = "23:20"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_MODEM_PERI_ST_MAP"
+bits = "27:24"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_MODEM_APB_ST_MAP"
+bits = "31:28"
+class = "plain"
+
+[[registers]]
+name = "MODEM_RST_CONF"
+offset = 0x10
+reset = { value = 0x0, mask = 0xefdfff00 }
+reserved = { mask = 0x102000ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"] }
+
+[[registers.fields]]
+name = "RST_WIFIBB"
+bits = "8"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_WIFIMAC"
+bits = "9"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_FE_PWDET_ADC"
+bits = "10"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_FE_DAC"
+bits = "11"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_FE_ADC"
+bits = "12"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_FE_AHB"
+bits = "13"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_FE"
+bits = "14"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_BTMAC_APB"
+bits = "15"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_BTMAC"
+bits = "16"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_BTBB_APB"
+bits = "17"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_BTBB"
+bits = "18"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_COEX_BTMAC_APB"
+bits = "19"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_COEX_BTMAC"
+bits = "20"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_ETM"
+bits = "22"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_ZBMAC_APB"
+bits = "23"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_ZBMAC"
+bits = "24"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_MODEM_ECB"
+bits = "25"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_MODEM_CCM"
+bits = "26"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_MODEM_BAH"
+bits = "27"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_MODEM_SEC"
+bits = "29"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_BLE_TIMER"
+bits = "30"
+class = "plain"
+
+[[registers.fields]]
+name = "RST_DATA_DUMP"
+bits = "31"
+class = "plain"
+
+[[registers]]
+name = "CLK_CONF1"
+offset = 0x14
+reset = { value = 0x0, mask = 0x3fffff }
+reserved = { mask = 0xffc00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_WIFIBB_22M_EN"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFIBB_40M_EN"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFIBB_44M_EN"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFIBB_80M_EN"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFIBB_40X_EN"
+bits = "4"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFIBB_80X_EN"
+bits = "5"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFIBB_40X1_EN"
+bits = "6"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFIBB_80X1_EN"
+bits = "7"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFIBB_160X1_EN"
+bits = "8"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFIMAC_EN"
+bits = "9"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_WIFI_APB_EN"
+bits = "10"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_FE_20M_EN"
+bits = "11"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_FE_40M_EN"
+bits = "12"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_FE_80M_EN"
+bits = "13"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_FE_160M_EN"
+bits = "14"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_FE_APB_EN"
+bits = "15"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_BT_APB_EN"
+bits = "16"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_BTBB_EN"
+bits = "17"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_BTMAC_EN"
+bits = "18"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_FE_PWDET_ADC_EN"
+bits = "19"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_FE_ADC_EN"
+bits = "20"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_FE_DAC_EN"
+bits = "21"
+class = "plain"
+
+[[registers]]
+name = "WIFI_BB_CFG"
+offset = 0x18
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "WIFI_BB_CFG"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "FE_CFG"
+offset = 0x1c
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "FE_CFG"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "MEM_RF1_CONF"
+offset = 0x20
+reset = { value = 0x2070 }
+
+[[registers.fields]]
+name = "MODEM_RF1_MEM_AUX_CTRL"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "MEM_RF2_CONF"
+offset = 0x24
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "MODEM_RF2_MEM_AUX_CTRL"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "BTMAC_CLK_CFG"
+offset = 0x28
+reset = { value = 0x0, mask = 0x1 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_BTMAC_LOW_RATE"
+bits = "0"
+class = "plain"
+
+[[registers]]
+name = "MEM_MODE_CONF"
+offset = 0x2c
+reset = { value = 0x44, mask = 0xff }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_RF1_MEM_SEL"
+bits = "3:0"
+class = "plain"
+
+[[registers.fields]]
+name = "MODEM_RF2_MEM_SEL"
+bits = "7:4"
+class = "plain"
+
+[[registers]]
+name = "DATE"
+offset = 0x30
+reset = { value = 0x2508080, mask = 0xfffffff }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"] }
+
+[[registers.fields]]
+name = "DATE"
+bits = "27:0"
+class = "plain"

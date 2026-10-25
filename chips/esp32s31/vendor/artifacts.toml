@@ -71,6 +71,25 @@ id = "phy-tracking-reference"
 kind = "firmware"
 image = "phy-tracking-reference"
 
+
+# The vendor SVD the register import reads for block geometry: the
+# ermacv/esp-pacs fork's ESP32-S31 base SVD (Apache-2.0), before the
+# fork's svdtools patches.
+[[source]]
+id = "esp-pacs"
+kind = "git"
+repository = "https://github.com/ermacv/esp-pacs"
+revision = "a1f6cf68e199f4ee469dbc7cff9de5539e81d7da"
+
+# ESP-IDF's clock, reset and interrupt-binding sources at the same revision,
+# cited by the chip facts that link a block instance to its gates, resets,
+# clock muxes and interrupt sources; read by no tool.
+[[source]]
+id = "esp-idf-clocks"
+kind = "git"
+repository = "https://github.com/espressif/esp-idf"
+revision = "4d59230ddff16327812782151ef0afef202dc6d7"
+
 [[artifact]]
 id = "libphy"
 source = "esp-phy-lib"
@@ -1603,3 +1622,261 @@ id = "esp-idf/components/esp_hal_mspi/spi_flash_hal_common.inc"
 source = "esp-idf"
 path = "components/esp_hal_mspi/spi_flash_hal_common.inc"
 sha256 = "18b135f6e44078f9ccf3b948fefdb00a26ed10cd4280d549cef4ade17a067bfe"
+
+# The vendor SVD of the register import.
+[[artifact]]
+id = "esp-pacs/esp32s31/svd/esp32s31.base.svd"
+source = "esp-pacs"
+path = "esp32s31/svd/esp32s31.base.svd"
+sha256 = "aab379aadb23b2c1f40e3692291347f6be426d711b2fd4d974259e039d13748c"
+
+# ESP-IDF files the register import reads beyond the soc headers above:
+# blocks the vendor SVD lacks and the files carried-over facts cite.
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/interrupt_core0_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/interrupt_core0_reg.h"
+sha256 = "60785a48a2b2be35670a789bf2e0a82a45f4bd85f110fc18c197de14211f311e"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/interrupt_core0_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/interrupt_core0_struct.h"
+sha256 = "fff9ca086bd0f10f6f931cdf104c27fe80a8edb58f5898de55b966eaf8318f75"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/interrupt_core1_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/interrupt_core1_reg.h"
+sha256 = "e7966b5cda22b0df047182c6f7758c385b95edb991cdc40d0794127fdfdaf335"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/register/soc/interrupt_core1_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/register/soc/interrupt_core1_struct.h"
+sha256 = "5723e9b43bc1bbaf1cd366611d220eec7e3ce505c1a7ce93f67785661d4a1320"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/include/modem/reg_base.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/include/modem/reg_base.h"
+sha256 = "86a9909938d4db06b3d11c4c386a2c3dbdcd9657b6d194a216202b796ada13b9"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/include/modem/modem_syscon_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/include/modem/modem_syscon_reg.h"
+sha256 = "12dac8bcb6a0db17ce9fcdbd0f11a6a2deb72eba960dca91b588fe8e442c45c5"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/include/modem/modem_syscon_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/include/modem/modem_syscon_struct.h"
+sha256 = "1d37b7f4748e9b665ed1bf4f25dc85cd20d25fa5ab2726db82766dd0b506f69e"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/include/modem/modem_lpcon_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/include/modem/modem_lpcon_reg.h"
+sha256 = "8b70d89d270234d39bc6e0ae439a7e63a86cecceff10c9d4ebeccefb81e62752"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/include/modem/modem_lpcon_struct.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/include/modem/modem_lpcon_struct.h"
+sha256 = "af916837fb4c4ed8092fba78a844cc656299acfd63764a420c4c4fdac3472453"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/include/modem/i2c_ana_mst_reg.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/include/modem/i2c_ana_mst_reg.h"
+sha256 = "5e280fafac6ac82f241d7f2a22f04f06ae539e245d11fe6f9db9620c6ee99808"
+
+[[artifact]]
+id = "esp-idf/components/soc/esp32s31/include/soc/ext_mem_defs.h"
+source = "esp-idf"
+path = "components/soc/esp32s31/include/soc/ext_mem_defs.h"
+sha256 = "4985fd8699d6cacfa6d82ede88b0a999077dc21fb1f72ac59e7857e3b89aca18"
+
+[[artifact]]
+id = "esp-idf/components/esp_hal_cache/esp32s31/include/hal/mmu_ll.h"
+source = "esp-idf"
+path = "components/esp_hal_cache/esp32s31/include/hal/mmu_ll.h"
+sha256 = "a642ef42252a57142a0f66a079e9c986f83c16c0e51b103dbd373cc4052a6c93"
+
+[[artifact]]
+id = "esp-idf/components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h"
+source = "esp-idf"
+path = "components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h"
+sha256 = "606a1206ace38f81a00a498255841ae7547b4811f779913650935e84ae7996ac"
+
+# The clock, reset and interrupt-binding sources (`esp-idf-clocks`).
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hal_cache/esp32s31/include/hal/cache_ll.h"
+source = "esp-idf-clocks"
+path = "components/esp_hal_cache/esp32s31/include/hal/cache_ll.h"
+sha256 = "467eedbe7b642e05706d3f04042ba8a663895d82fcc857967b177d35a6c0dd84"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hal_clock/esp32s31/include/hal/clk_gate_ll.h"
+source = "esp-idf-clocks"
+path = "components/esp_hal_clock/esp32s31/include/hal/clk_gate_ll.h"
+sha256 = "520d5205f9e97b147f804bfa0c9daeff8d8a39984dfecfde39a0f222a1cf65e5"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hal_dma/esp32s31/gdma_periph.c"
+source = "esp-idf-clocks"
+path = "components/esp_hal_dma/esp32s31/gdma_periph.c"
+sha256 = "1704c3bff44a4251c37cc69ffdbbe5e463bc29a312373d6fab7eae4cddcc0e08"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hal_dma/esp32s31/include/hal/gdma_ll.h"
+source = "esp-idf-clocks"
+path = "components/esp_hal_dma/esp32s31/include/hal/gdma_ll.h"
+sha256 = "0da59b1ec3cc768303b8569f967bc0a2797d0a1032515e82a69b8dcf6958f851"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hal_gpspi/esp32s31/include/hal/spi_ll.h"
+source = "esp-idf-clocks"
+path = "components/esp_hal_gpspi/esp32s31/include/hal/spi_ll.h"
+sha256 = "659114805a2aaa921ef7ba6af440fdd606761320fd21e0cc0c53a32040831603"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hal_i2c/esp32s31/include/hal/i2c_ll.h"
+source = "esp-idf-clocks"
+path = "components/esp_hal_i2c/esp32s31/include/hal/i2c_ll.h"
+sha256 = "299d2f9970f8a22fd1ace40424bf1250cdd9e8772f2aaf83bc77a42c4f544819"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hal_mspi/esp32s31/include/hal/mspi_ll.h"
+source = "esp-idf-clocks"
+path = "components/esp_hal_mspi/esp32s31/include/hal/mspi_ll.h"
+sha256 = "ffe848974b19517e2ab48927df6c0d0816c5fb52d7bed75f336ae5eb287bcfc2"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hal_regi2c/esp32s31/include/hal/regi2c_ctrl_ll.h"
+source = "esp-idf-clocks"
+path = "components/esp_hal_regi2c/esp32s31/include/hal/regi2c_ctrl_ll.h"
+sha256 = "590a4548f84d2ba30fc8e77d7a6253e913f8553115fba10238cd406587a702f7"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hal_systimer/esp32s31/include/hal/systimer_ll.h"
+source = "esp-idf-clocks"
+path = "components/esp_hal_systimer/esp32s31/include/hal/systimer_ll.h"
+sha256 = "792130ce07bdc66b2546d57c93a6b48686fa9d62db8d8f6f90b77fa415a46ae8"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hal_timg/esp32s31/include/hal/timer_ll.h"
+source = "esp-idf-clocks"
+path = "components/esp_hal_timg/esp32s31/include/hal/timer_ll.h"
+sha256 = "a7aabaddd1d16d008e848e48c211fb50103801ce9f3294d88d67f51209724fa7"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hal_timg/esp32s31/include/hal/timg_ll.h"
+source = "esp-idf-clocks"
+path = "components/esp_hal_timg/esp32s31/include/hal/timg_ll.h"
+sha256 = "c8920308747a82e2e2f3f429a7686c74748c4b6c9464342a1cc74e0df3f138d6"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h"
+source = "esp-idf-clocks"
+path = "components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h"
+sha256 = "61b581140f173c833c1f09468aafc2652c0f7e1123d2c7a2b597ff3712a8c421"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hal_timg/esp32s31/timer_periph.c"
+source = "esp-idf-clocks"
+path = "components/esp_hal_timg/esp32s31/timer_periph.c"
+sha256 = "a5190d9aeebfbe961735ce84f203a147b8c78c93e94d04877294dbab9dccd686"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hal_uart/esp32s31/include/hal/uart_ll.h"
+source = "esp-idf-clocks"
+path = "components/esp_hal_uart/esp32s31/include/hal/uart_ll.h"
+sha256 = "f9ff0ae98e2cc60546bab6257bc01f480346d28d3d96fabf4d9a6dc4520e68af"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hal_usb/esp32s31/include/hal/usb_serial_jtag_ll.h"
+source = "esp-idf-clocks"
+path = "components/esp_hal_usb/esp32s31/include/hal/usb_serial_jtag_ll.h"
+sha256 = "53de35f4def33b0729bbc6e2f716d153dbfb54791d4e67da9886c003e6f6e4e8"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hw_support/include/esp_private/regi2c_ctrl.h"
+source = "esp-idf-clocks"
+path = "components/esp_hw_support/include/esp_private/regi2c_ctrl.h"
+sha256 = "f32891ae10d79c8ee7b2a9fd2d38ad325fd7ba738a8d8c152634369420e00c46"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hw_support/lowpower/port/esp32s31/sleep_clock.c"
+source = "esp-idf-clocks"
+path = "components/esp_hw_support/lowpower/port/esp32s31/sleep_clock.c"
+sha256 = "5742549a43d803df94b7612e22e7212dd7038a6584bf36ba07d3b6ed9e5c2185"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hw_support/modem/modem_clock.c"
+source = "esp-idf-clocks"
+path = "components/esp_hw_support/modem/modem_clock.c"
+sha256 = "e698cc6596430724b2fec5b8e631706f6ae112f12e0ae22119ff9e79b21c69d3"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hw_support/modem/port/esp32s31/modem_clock_impl.c"
+source = "esp-idf-clocks"
+path = "components/esp_hw_support/modem/port/esp32s31/modem_clock_impl.c"
+sha256 = "6b83ade5a0c401e16e03e6aa256366ac7272bb5421965bbcce1b908c11028713"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hw_support/periph_ctrl.c"
+source = "esp-idf-clocks"
+path = "components/esp_hw_support/periph_ctrl.c"
+sha256 = "0489dd751eeb7698d8b4567a4a5b619cf8bb4a3c9e8cc84f517d5211d85d2561"
+
+[[artifact]]
+id = "esp-idf-clocks/components/esp_hw_support/port/esp32s31/esp_clk_tree.c"
+source = "esp-idf-clocks"
+path = "components/esp_hw_support/port/esp32s31/esp_clk_tree.c"
+sha256 = "f6e0484cd913324842e188e2b70ba1328ef185559f58e8645b94b4f54c795252"
+
+[[artifact]]
+id = "esp-idf-clocks/components/hal/esp32s31/include/hal/modem_lpcon_ll.h"
+source = "esp-idf-clocks"
+path = "components/hal/esp32s31/include/hal/modem_lpcon_ll.h"
+sha256 = "5e6ce588f2e029aa3b895b57b0cfdad25efeacfc3cea835cdc320bcd06d5608f"
+
+[[artifact]]
+id = "esp-idf-clocks/components/hal/esp32s31/include/hal/modem_syscon_ll.h"
+source = "esp-idf-clocks"
+path = "components/hal/esp32s31/include/hal/modem_syscon_ll.h"
+sha256 = "565e2246dfd4af00c073b8668ee0b81b2eef9992b24030d814055159fec30b0c"
+
+[[artifact]]
+id = "esp-idf-clocks/components/hal/esp32s31/include/hal/rng_ll.h"
+source = "esp-idf-clocks"
+path = "components/hal/esp32s31/include/hal/rng_ll.h"
+sha256 = "92439ba1ff719ad824d7568dd1107aabdf52f81a91b3573254c0f8cb104dd187"
+
+[[artifact]]
+id = "esp-idf-clocks/components/hal/esp32s31/modem_clock_hal.c"
+source = "esp-idf-clocks"
+path = "components/hal/esp32s31/modem_clock_hal.c"
+sha256 = "6348b8fb6eee516bbcaf73e3706d08ec2b87091ecca97245f2409d22da5bd75e"
+
+[[artifact]]
+id = "esp-idf-clocks/components/ulp/lp_core/lp_core_mailbox.c"
+source = "esp-idf-clocks"
+path = "components/ulp/lp_core/lp_core_mailbox.c"
+sha256 = "4af91f778ecc4fe29992f1bdeeccc64bc0f4121a8b91bdc3d704403997a2013b"
+
+[[artifact]]
+id = "esp-idf-clocks/components/soc/esp32s31/register/soc/cnnt_sys_reg.h"
+source = "esp-idf-clocks"
+path = "components/soc/esp32s31/register/soc/cnnt_sys_reg.h"
+sha256 = "03716f5d9dc2ad761813c3a85a91164e5bbc70a8f9a18b950613fb219bda853b"
+
+[[artifact]]
+id = "esp-idf-clocks/components/soc/esp32s31/register/soc/cnnt_sys_struct.h"
+source = "esp-idf-clocks"
+path = "components/soc/esp32s31/register/soc/cnnt_sys_struct.h"
+sha256 = "cb61b31dd2cd531e1e06dd04624fb60c3e7155b0f8add8a5b7ae8fc50747255e"

@@ -1,0 +1,585 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "IOMUX_MSPI_PIN"
+description = "The pad controls of the flash and PSRAM SPI pins."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_IOMUX_MSPI_PIN_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_IOMUX_MSPI_PIN_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "CLK_EN0"
+offset = 0x0
+description = "apb registers auto clock gating reg"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_IOMUX_MSPI_PIN_REG_H"] }
+
+[[registers.fields]]
+name = "REG_CLK_EN"
+bits = "0"
+class = "plain"
+description = "1: auto clock gating on 0: auto clock gating off"
+
+[[registers]]
+name = "PSRAM_D_PIN0"
+offset = 0x1c
+description = "IOMUX_MSPI_PIN_PSRAM_D_PIN0_REG"
+reset = { value = 0x4000 }
+reserved = { mask = 0xffff0200, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_IOMUX_MSPI_PIN_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PSRAM_D_DLI"
+bits = "3:0"
+class = "plain"
+description = "psram d dli"
+
+[[registers.fields]]
+name = "REG_PSRAM_D_DLC"
+bits = "7:4"
+class = "plain"
+description = "psram d dlc"
+
+[[registers.fields]]
+name = "REG_PSRAM_D_HYS"
+bits = "8"
+class = "plain"
+description = "psram d sl"
+
+[[registers.fields]]
+name = "REG_PSRAM_D_WPU"
+bits = "10"
+class = "plain"
+description = "psram d wpu"
+
+[[registers.fields]]
+name = "REG_PSRAM_D_WPD"
+bits = "11"
+class = "plain"
+description = "psram d wpd"
+
+[[registers.fields]]
+name = "REG_PSRAM_D_DRV"
+bits = "14:12"
+class = "plain"
+description = "psram d drv"
+
+[[registers.fields]]
+name = "REG_PSRAM_D_HOLD"
+bits = "15"
+class = "plain"
+description = "psram d hold"
+
+[[registers]]
+name = "PSRAM_Q_PIN0"
+offset = 0x20
+description = "IOMUX_MSPI_PIN_PSRAM_D_PIN0_REG"
+reset = { value = 0x4000 }
+reserved = { mask = 0xffff0200, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_IOMUX_MSPI_PIN_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PSRAM_Q_DLI"
+bits = "3:0"
+class = "plain"
+description = "psram q dli"
+
+[[registers.fields]]
+name = "REG_PSRAM_Q_DLC"
+bits = "7:4"
+class = "plain"
+description = "psram q dlc"
+
+[[registers.fields]]
+name = "REG_PSRAM_Q_HYS"
+bits = "8"
+class = "plain"
+description = "psram q sl"
+
+[[registers.fields]]
+name = "REG_PSRAM_Q_WPU"
+bits = "10"
+class = "plain"
+description = "psram q wpu"
+
+[[registers.fields]]
+name = "REG_PSRAM_Q_WPD"
+bits = "11"
+class = "plain"
+description = "psram q wpd"
+
+[[registers.fields]]
+name = "REG_PSRAM_Q_DRV"
+bits = "14:12"
+class = "plain"
+description = "psram q drv"
+
+[[registers.fields]]
+name = "REG_PSRAM_Q_HOLD"
+bits = "15"
+class = "plain"
+description = "psram q hold"
+
+[[registers]]
+name = "PSRAM_WP_PIN0"
+offset = 0x24
+description = "IOMUX_MSPI_PIN_PSRAM_D_PIN0_REG"
+reset = { value = 0x4000 }
+reserved = { mask = 0xffff0200, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_IOMUX_MSPI_PIN_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PSRAM_WP_DLI"
+bits = "3:0"
+class = "plain"
+description = "psram wp dli"
+
+[[registers.fields]]
+name = "REG_PSRAM_WP_DLC"
+bits = "7:4"
+class = "plain"
+description = "psram wp dlc"
+
+[[registers.fields]]
+name = "REG_PSRAM_WP_HYS"
+bits = "8"
+class = "plain"
+description = "psram wp sl"
+
+[[registers.fields]]
+name = "REG_PSRAM_WP_WPU"
+bits = "10"
+class = "plain"
+description = "psram wp wpu"
+
+[[registers.fields]]
+name = "REG_PSRAM_WP_WPD"
+bits = "11"
+class = "plain"
+description = "psram wp wpd"
+
+[[registers.fields]]
+name = "REG_PSRAM_WP_DRV"
+bits = "14:12"
+class = "plain"
+description = "psram wp drv"
+
+[[registers.fields]]
+name = "REG_PSRAM_WP_HOLD"
+bits = "15"
+class = "plain"
+description = "psram wp hold"
+
+[[registers]]
+name = "PSRAM_HOLD_PIN0"
+offset = 0x28
+description = "IOMUX_MSPI_PIN_PSRAM_D_PIN0_REG"
+reset = { value = 0x4000 }
+reserved = { mask = 0xffff0200, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_IOMUX_MSPI_PIN_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PSRAM_HOLD_DLI"
+bits = "3:0"
+class = "plain"
+description = "psram hold dli"
+
+[[registers.fields]]
+name = "REG_PSRAM_HOLD_DLC"
+bits = "7:4"
+class = "plain"
+description = "psram hold dlc"
+
+[[registers.fields]]
+name = "REG_PSRAM_HOLD_HYS"
+bits = "8"
+class = "plain"
+description = "psram hold sl"
+
+[[registers.fields]]
+name = "REG_PSRAM_HOLD_WPU"
+bits = "10"
+class = "plain"
+description = "psram hold wpu"
+
+[[registers.fields]]
+name = "REG_PSRAM_HOLD_WPD"
+bits = "11"
+class = "plain"
+description = "psram hold wpd"
+
+[[registers.fields]]
+name = "REG_PSRAM_HOLD_DRV"
+bits = "14:12"
+class = "plain"
+description = "psram hold drv"
+
+[[registers.fields]]
+name = "REG_PSRAM_HOLD_HOLD"
+bits = "15"
+class = "plain"
+description = "psram hold hold"
+
+[[registers]]
+name = "PSRAM_DQ4_PIN0"
+offset = 0x2c
+description = "IOMUX_MSPI_PIN_PSRAM_D_PIN0_REG"
+reset = { value = 0x4000 }
+reserved = { mask = 0xffff0200, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_IOMUX_MSPI_PIN_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ4_DLI"
+bits = "3:0"
+class = "plain"
+description = "psram dq4 dli"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ4_DLC"
+bits = "7:4"
+class = "plain"
+description = "psram dq4 dlc"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ4_HYS"
+bits = "8"
+class = "plain"
+description = "psram dq4 sl"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ4_WPU"
+bits = "10"
+class = "plain"
+description = "psram dq4 wpu"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ4_WPD"
+bits = "11"
+class = "plain"
+description = "psram dq4 wpd"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ4_DRV"
+bits = "14:12"
+class = "plain"
+description = "psram dq4 drv"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ4_HOLD"
+bits = "15"
+class = "plain"
+description = "psram dq4 hold"
+
+[[registers]]
+name = "PSRAM_DQ5_PIN0"
+offset = 0x30
+description = "IOMUX_MSPI_PIN_PSRAM_D_PIN0_REG"
+reset = { value = 0x4000 }
+reserved = { mask = 0xffff0200, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_IOMUX_MSPI_PIN_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ5_DLI"
+bits = "3:0"
+class = "plain"
+description = "psram dq5 dli"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ5_DLC"
+bits = "7:4"
+class = "plain"
+description = "psram dq5 dlc"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ5_HYS"
+bits = "8"
+class = "plain"
+description = "psram dq5 sl"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ5_WPU"
+bits = "10"
+class = "plain"
+description = "psram dq5 wpu"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ5_WPD"
+bits = "11"
+class = "plain"
+description = "psram dq5 wpd"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ5_DRV"
+bits = "14:12"
+class = "plain"
+description = "psram dq5 drv"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ5_HOLD"
+bits = "15"
+class = "plain"
+description = "psram dq5 hold"
+
+[[registers]]
+name = "PSRAM_DQ6_PIN0"
+offset = 0x34
+description = "IOMUX_MSPI_PIN_PSRAM_D_PIN0_REG"
+reset = { value = 0x4000 }
+reserved = { mask = 0xffff0200, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_IOMUX_MSPI_PIN_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ6_DLI"
+bits = "3:0"
+class = "plain"
+description = "psram dq6 dli"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ6_DLC"
+bits = "7:4"
+class = "plain"
+description = "psram dq6 dlc"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ6_HYS"
+bits = "8"
+class = "plain"
+description = "psram dq6 sl"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ6_WPU"
+bits = "10"
+class = "plain"
+description = "psram dq6 wpu"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ6_WPD"
+bits = "11"
+class = "plain"
+description = "psram dq6 wpd"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ6_DRV"
+bits = "14:12"
+class = "plain"
+description = "psram dq6 drv"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ6_HOLD"
+bits = "15"
+class = "plain"
+description = "psram dq6 hold"
+
+[[registers]]
+name = "PSRAM_DQ7_PIN0"
+offset = 0x38
+description = "IOMUX_MSPI_PIN_PSRAM_D_PIN0_REG"
+reset = { value = 0x4000 }
+reserved = { mask = 0xffff0200, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_IOMUX_MSPI_PIN_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ7_DLI"
+bits = "3:0"
+class = "plain"
+description = "psram dq7 dli"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ7_DLC"
+bits = "7:4"
+class = "plain"
+description = "psram dq7 dlc"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ7_HYS"
+bits = "8"
+class = "plain"
+description = "psram dq7 sl"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ7_WPU"
+bits = "10"
+class = "plain"
+description = "psram dq7 wpu"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ7_WPD"
+bits = "11"
+class = "plain"
+description = "psram dq7 wpd"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ7_DRV"
+bits = "14:12"
+class = "plain"
+description = "psram dq7 drv"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQ7_HOLD"
+bits = "15"
+class = "plain"
+description = "psram dq7 hold"
+
+[[registers]]
+name = "PSRAM_DQS_0_PIN0"
+offset = 0x3c
+description = "IOMUX_MSPI_PIN_PSRAM_D_PIN0_REG"
+reset = { value = 0x20000 }
+reserved = { mask = 0xff801000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_IOMUX_MSPI_PIN_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PSRAM_DQS_0_XPD"
+bits = "0"
+class = "plain"
+description = "psram xpd dqs0"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQS_0_PHASE"
+bits = "2:1"
+class = "plain"
+description = "psram dqs0 phase"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQS_0_DLI"
+bits = "6:3"
+class = "plain"
+description = "psram dqs0 dli"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQS_0_DELAY_90"
+bits = "10:7"
+class = "plain"
+description = "psram dqs0 delay 90"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQS_0_HYS"
+bits = "11"
+class = "plain"
+description = "psram dqs0 sl"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQS_0_WPU"
+bits = "13"
+class = "plain"
+description = "psram dqs0 wpu"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQS_0_WPD"
+bits = "14"
+class = "plain"
+description = "psram dqs0 wpd"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQS_0_DRV"
+bits = "17:15"
+class = "plain"
+description = "psram dqs0 drv"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQS_0_DELAY_270"
+bits = "21:18"
+class = "plain"
+description = "psram dqs0 delay 270"
+
+[[registers.fields]]
+name = "REG_PSRAM_DQS_HOLD"
+bits = "22"
+class = "plain"
+description = "psram dqs hold"
+
+[[registers]]
+name = "PSRAM_CK_PIN0"
+offset = 0x40
+description = "IOMUX_MSPI_PIN_PSRAM_D_PIN0_REG"
+reset = { value = 0x4000 }
+reserved = { mask = 0xffff0200, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_IOMUX_MSPI_PIN_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PSRAM_CK_DLI"
+bits = "3:0"
+class = "plain"
+description = "psram ck dli"
+
+[[registers.fields]]
+name = "REG_PSRAM_CK_DLC"
+bits = "7:4"
+class = "plain"
+description = "psram ck dlc"
+
+[[registers.fields]]
+name = "REG_PSRAM_CK_HYS"
+bits = "8"
+class = "plain"
+description = "psram ck sl"
+
+[[registers.fields]]
+name = "REG_PSRAM_CK_WPU"
+bits = "10"
+class = "plain"
+description = "psram ck wpu"
+
+[[registers.fields]]
+name = "REG_PSRAM_CK_WPD"
+bits = "11"
+class = "plain"
+description = "psram ck wpd"
+
+[[registers.fields]]
+name = "REG_PSRAM_CK_DRV"
+bits = "14:12"
+class = "plain"
+description = "psram ck drv"
+
+[[registers.fields]]
+name = "REG_PSRAM_CK_HOLD"
+bits = "15"
+class = "plain"
+description = "psram ck hold"
+
+[[registers]]
+name = "PSRAM_CS_PIN0"
+offset = 0x44
+description = "IOMUX_MSPI_PIN_PSRAM_D_PIN0_REG"
+reset = { value = 0x4000 }
+reserved = { mask = 0xffff0200, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_IOMUX_MSPI_PIN_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PSRAM_CS_DLI"
+bits = "3:0"
+class = "plain"
+description = "psram cs dli"
+
+[[registers.fields]]
+name = "REG_PSRAM_CS_DLC"
+bits = "7:4"
+class = "plain"
+description = "psram cs dlc"
+
+[[registers.fields]]
+name = "REG_PSRAM_CS_HYS"
+bits = "8"
+class = "plain"
+description = "psram cs sl"
+
+[[registers.fields]]
+name = "REG_PSRAM_CS_WPU"
+bits = "10"
+class = "plain"
+description = "psram cs wpu"
+
+[[registers.fields]]
+name = "REG_PSRAM_CS_WPD"
+bits = "11"
+class = "plain"
+description = "psram cs wpd"
+
+[[registers.fields]]
+name = "REG_PSRAM_CS_DRV"
+bits = "14:12"
+class = "plain"
+description = "psram cs drv"
+
+[[registers.fields]]
+name = "REG_PSRAM_CS_HOLD"
+bits = "15"
+class = "plain"
+description = "psram cs hold"

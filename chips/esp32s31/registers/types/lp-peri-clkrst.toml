@@ -1,0 +1,467 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "LP_PERI_CLKRST"
+description = "The LP peripheral clock and reset controller."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "CPU_CTRL"
+offset = 0x4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_CORE_CLK_FORCE_ON"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_CORE_RST_EN"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "ROM_CTRL"
+offset = 0x8
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ROM_FORCE_ON"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_ROM_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "RAM_CTRL"
+offset = 0xc
+description = "need_des"
+reset = { value = 0x40000000 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_RAM_CLK_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_RAM_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "UART_CTRL"
+offset = 0x10
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_UART_CLK_DIV_NUM"
+bits = "27:20"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_UART_CLK_SEL"
+bits = "29:28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_UART_CLK_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_UART_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "I2C_CTRL"
+offset = 0x14
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_I2C_CLK_DIV_NUM"
+bits = "27:20"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_I2C_CLK_SEL"
+bits = "29:28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_I2C_CLK_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_I2C_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "I2CMST_CTRL"
+offset = 0x18
+description = "need_des"
+reset = { value = 0x40000000 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_I2CMST_CLK_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_I2CMST_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "SPI_CTRL"
+offset = 0x1c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_SPI_CLK_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_SPI_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "ADC_CTRL"
+offset = 0x20
+description = "need_des"
+reset = { value = 0x40000004 }
+reserved = { mask = 0xfffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_ADC_DIV_NUM"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_ADC_CLK_SEL"
+bits = "29:28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_ADC_CLK_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_ADC_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "EFUSE_CTRL"
+offset = 0x24
+description = "need_des"
+reset = { value = 0x40000000 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_EFUSE_CLK_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_EFUSE_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "INTR_CTRL"
+offset = 0x28
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_INTR_CLK_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_INTR_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "TOUCH_CTRL"
+offset = 0x2c
+description = "need_des"
+reset = { value = 0x40000000 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_TOUCH_CLK_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_TOUCH_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "TSENS_CTRL"
+offset = 0x30
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_TSENS_CLK_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_TSENS_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "IOMUX_CTRL"
+offset = 0x34
+description = "need_des"
+reset = { value = 0x40000000 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_IOMUX_CLK_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_IOMUX_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "MAILBOX"
+offset = 0x38
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_MAILBOX_CLK_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_MAILBOX_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "RNG_CTRL"
+offset = 0x3c
+description = "need_des"
+reset = { value = 0x40000000 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_RNG_CLK_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_RNG_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "UART_MISC_CTRL"
+offset = 0x40
+description = "need_des"
+reset = { value = 0x40000000 }
+reserved = { mask = 0x1ffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_UART_WAKEUP_FLAG_CLR"
+bits = "0"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_UART_WAKEUP_FLAG"
+bits = "1"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_UART_WAKEUP_EN"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_UART_MEM_FORCE_PD"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_UART_MEM_FORCE_PU"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "CPU"
+offset = 0x44
+description = "need_des"
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LPCORE_DBGM_UNAVAILABLE"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "AHB_DMA_CTRL"
+offset = 0x48
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_AHB_DMA_CLK_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_AHB_DMA_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "DAC_CTRL"
+offset = 0x4c
+description = "need_des"
+reset = { value = 0x4 }
+reserved = { mask = 0xfffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_DAC_DIV_NUM"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_DAC_CLK_SEL"
+bits = "29:28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_DAC_CLK_EN"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "LP_DAC_RST_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "DM_CTRL"
+offset = 0x50
+description = "need_des"
+reset = { value = 0x80000000 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "LP_DM_CLK_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "DATE"
+offset = 0x3fc
+description = "need_des"
+reset = { value = 0x2509110 }
+
+[[registers.fields]]
+name = "DATE"
+bits = "30:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "31"
+class = "plain"
+description = "need_des"

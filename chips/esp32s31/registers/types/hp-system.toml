@@ -1,0 +1,2199 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "HP_SYSTEM"
+description = "The HP system registers: software interrupts between the cores, core stall status, pad and memory controls."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "VER_DATE"
+offset = 0x0
+description = "NA"
+reset = { value = 0x20250402 }
+
+[[registers.fields]]
+name = "HP_REG_VER_DATE"
+bits = "31:0"
+class = "plain"
+description = "NA"
+
+[[registers]]
+name = "HP_CLK_EN"
+offset = 0x4
+description = "NA"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_REG_CLK_EN"
+bits = "0"
+class = "plain"
+description = "NA"
+
+[[registers]]
+name = "HP_CPU_INT_FROM_CPU_0"
+offset = 0x10
+description = "NA"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_CPU_INT_FROM_CPU_0"
+bits = "0"
+class = "plain"
+description = "set 1 will triger a interrupt"
+
+[[registers]]
+name = "HP_CPU_INT_FROM_CPU_1"
+offset = 0x14
+description = "NA"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_CPU_INT_FROM_CPU_1"
+bits = "0"
+class = "plain"
+description = "set 1 will triger a interrupt"
+
+[[registers]]
+name = "HP_CPU_INT_FROM_CPU_2"
+offset = 0x18
+description = "NA"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_CPU_INT_FROM_CPU_2"
+bits = "0"
+class = "plain"
+description = "set 1 will triger a interrupt"
+
+[[registers]]
+name = "HP_CPU_INT_FROM_CPU_3"
+offset = 0x1c
+description = "NA"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_CPU_INT_FROM_CPU_3"
+bits = "0"
+class = "plain"
+description = "set 1 will triger a interrupt"
+
+[[registers]]
+name = "HP_MODEM_DIAG_EN"
+offset = 0x28
+description = "NA"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "HP_REG_MODEM_DIAG_EN"
+bits = "31:0"
+class = "plain"
+description = "set reg_modem_diag_en[15:0] will let hp_probe_out[15:0] used as modem_diag[15:0], set reg_modem_diag_en[31:16] will let lcd_data_out[15:0] used as modem_diag[31:16]"
+
+[[registers]]
+name = "HP_TCM_RAM_PWR_CTRL0"
+offset = 0x3c
+description = "NA"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_REG_HP_TCM_CLK_FORCE_ON"
+bits = "0"
+class = "plain"
+description = "hp_tcm clk gatig force on"
+
+[[registers]]
+name = "HP_ROM_PWR_CTRL0"
+offset = 0x40
+description = "NA"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_REG_HP_ROM_CLK_FORCE_ON"
+bits = "0"
+class = "plain"
+description = "hp_rom clk gating force on"
+
+[[registers]]
+name = "HP_PROBEA_CTRL"
+offset = 0x50
+description = "NA"
+reset = { value = 0x0 }
+reserved = { mask = 0xe0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_REG_PROBE_A_MOD_SEL"
+bits = "15:0"
+class = "plain"
+description = "Tihs field is used to selec probe_group from probe_group0 to probe_group15 for module's probe_out[31:0] in a mode"
+
+[[registers.fields]]
+name = "HP_REG_PROBE_A_TOP_SEL"
+bits = "23:16"
+class = "plain"
+description = "Tihs field is used to selec module's probe_out[31:0] as probe out in a mode"
+
+[[registers.fields]]
+name = "HP_REG_PROBE_L_SEL"
+bits = "25:24"
+class = "plain"
+description = "Tihs field is used to selec probe_out[31:16]"
+
+[[registers.fields]]
+name = "HP_REG_PROBE_H_SEL"
+bits = "27:26"
+class = "plain"
+description = "Tihs field is used to selec probe_out[31:16]"
+
+[[registers.fields]]
+name = "HP_REG_PROBE_GLOBAL_EN"
+bits = "28"
+class = "plain"
+description = "Set this bit to enable global debug probe in hp system."
+
+[[registers]]
+name = "HP_PROBEB_CTRL"
+offset = 0x54
+description = "NA"
+reset = { value = 0x0 }
+reserved = { mask = 0xfe000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_REG_PROBE_B_MOD_SEL"
+bits = "15:0"
+class = "plain"
+description = "Tihs field is used to selec probe_group from probe_group0 to probe_group15 for module's probe_out[31:0] in b mode."
+
+[[registers.fields]]
+name = "HP_REG_PROBE_B_TOP_SEL"
+bits = "23:16"
+class = "plain"
+description = "Tihs field is used to select module's probe_out[31:0] as probe_out in b mode"
+
+[[registers.fields]]
+name = "HP_REG_PROBE_B_EN"
+bits = "24"
+class = "plain"
+description = "Set this bit to enable b mode for debug probe. 1: b mode, 0: a mode."
+
+[[registers]]
+name = "HP_PROBE_OUT"
+offset = 0x5c
+description = "NA"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "HP_REG_PROBE_TOP_OUT"
+bits = "31:0"
+class = "read-only"
+description = "NA"
+
+[[registers]]
+name = "HP_CPU_CORESTALLED_ST"
+offset = 0x64
+description = "NA"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_REG_CORE0_CORESTALLED_ST"
+bits = "0"
+class = "read-only"
+description = "hp core0 corestalled status"
+
+[[registers.fields]]
+name = "HP_REG_CORE1_CORESTALLED_ST"
+bits = "1"
+class = "read-only"
+description = "hp core1 corestalled status"
+
+[[registers]]
+name = "HP_CRYPTO_CTRL"
+offset = 0x70
+description = "NA"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_REG_ENABLE_SPI_MANUAL_ENCRYPT"
+bits = "0"
+class = "plain"
+description = "NA"
+
+[[registers.fields]]
+name = "HP_REG_ENABLE_DOWNLOAD_DB_ENCRYPT"
+bits = "1"
+class = "plain"
+description = "NA"
+
+[[registers.fields]]
+name = "HP_REG_ENABLE_DOWNLOAD_G0CB_DECRYPT"
+bits = "2"
+class = "plain"
+description = "NA"
+
+[[registers.fields]]
+name = "HP_REG_ENABLE_DOWNLOAD_MANUAL_ENCRYPT"
+bits = "3"
+class = "plain"
+description = "NA"
+
+[[registers]]
+name = "HP_IOMUX_FPGA_DEBUG"
+offset = 0x7c
+description = "NA"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_REG_FPGA_DEBUG"
+bits = "0"
+class = "plain"
+description = "iomux fpga debug"
+
+[[registers]]
+name = "RDN_ECO_CS"
+offset = 0x80
+description = "NA"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "REG_HP_SYSTEM_RDN_ECO_EN"
+bits = "0"
+class = "plain"
+description = "NA"
+
+[[registers.fields]]
+name = "REG_HP_SYSTEM_RDN_ECO_RESULT"
+bits = "1"
+class = "read-only"
+description = "NA"
+
+[[registers]]
+name = "HP_TCM_RDN_ECO_CS"
+offset = 0xe4
+description = "NA"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_REG_HP_TCM_RDN_ECO_EN"
+bits = "0"
+class = "plain"
+description = "NA"
+
+[[registers.fields]]
+name = "HP_REG_HP_TCM_RDN_ECO_RESULT"
+bits = "1"
+class = "read-only"
+description = "NA"
+
+[[registers]]
+name = "HP_TCM_RDN_ECO_LOW"
+offset = 0xe8
+description = "NA"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "HP_REG_HP_TCM_RDN_ECO_LOW"
+bits = "31:0"
+class = "plain"
+description = "NA"
+
+[[registers]]
+name = "HP_TCM_RDN_ECO_HIGH"
+offset = 0xec
+description = "NA"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_REG_HP_TCM_RDN_ECO_HIGH"
+bits = "31:0"
+class = "plain"
+description = "NA"
+
+[[registers]]
+name = "HP_CACHE_PWR_CTRL"
+offset = 0x110
+description = "NA"
+reset = { value = 0x0 }
+reserved = { mask = 0xff000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_REG_AC_MEM_FO"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_REG_IC_MEM_FO"
+bits = "15:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_REG_DC_MEM_FO"
+bits = "23:16"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HP_TCM_DATA_DUMP_CTRL"
+offset = 0x114
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "HP_TCM_DATA_DUMP_EN"
+bits = "31:0"
+class = "plain"
+description = "hp tcm_data dump switch"
+
+[[registers]]
+name = "HP_CPU_WAITI_CONF"
+offset = 0x118
+description = "CPU_WAITI configuration register"
+reset = { value = 0x1 }
+reserved = { mask = 0xffffffe0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_CPU_WAIT_MODE_FORCE_ON"
+bits = "0"
+class = "plain"
+description = "Set 1 to force cpu_waiti_clk enable."
+
+[[registers.fields]]
+name = "HP_CPU_WAITI_DELAY_NUM"
+bits = "4:1"
+class = "plain"
+description = "This field used to set delay cycle when cpu enter waiti mode, after delay waiti_clk will close"
+
+[[registers]]
+name = "CORE_DEBUG_RUNSTALL_CONF"
+offset = 0x11c
+description = "Core Debug runstall configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "CORE_DEBUG_RUNSTALL_ENABLE"
+bits = "0"
+class = "plain"
+description = "Set this field to 1 to enable debug runstall feature between HP-core and LP-core."
+
+[[registers]]
+name = "HP_CORE_IBUS_TIMEOUT_CONF"
+offset = 0x124
+description = "need_des"
+reset = { value = 0x1ffff }
+reserved = { mask = 0xfffe0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_CORE_IBUS_TIMEOUT_PROTECT_EN"
+bits = "0"
+class = "plain"
+description = "set this field to 1 to enable hp core0&1 ibus timeout handle"
+
+[[registers.fields]]
+name = "HP_CORE_IBUS_TIMEOUT_THRES"
+bits = "16:1"
+class = "plain"
+description = "This field used to set hp core0&1 ibus timeout threshold"
+
+[[registers]]
+name = "HP_CORE_DBUS_TIMEOUT_CONF"
+offset = 0x128
+description = "need_des"
+reset = { value = 0x1ffff }
+reserved = { mask = 0xfffe0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_CORE_DBUS_TIMEOUT_PROTECT_EN"
+bits = "0"
+class = "plain"
+description = "set this field to 1 to enable hp core0&1 dbus timeout handle"
+
+[[registers.fields]]
+name = "HP_CORE_DBUS_TIMEOUT_THRES"
+bits = "16:1"
+class = "plain"
+description = "This field used to set hp core0&1 dbus timeout threshold"
+
+[[registers]]
+name = "HP_ICM_H2X_CFG"
+offset = 0x138
+description = "need_des"
+reset = { value = 0x12 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_CPU_ICM_H2X_POST_WR_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_CPU_ICM_H2X_CUT_THROUGH_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_CPU_ICM_H2X_BRIDGE_BUSY"
+bits = "2"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SDMMC_ICM_H2X_POST_WR_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SDMMC_ICM_H2X_CUT_THROUGH_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "HP_SDMMC_ICM_H2X_BRIDGE_BUSY"
+bits = "5"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "HP_BITSCRAMBLER_PERI_SEL"
+offset = 0x140
+description = "Bitscrambler Peri Sel"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_BITSCRAMBLER_PERI_RX_SEL"
+bits = "4:0"
+class = "plain"
+description = "Set this field to sel peri with DMA RX interface to connec with bitscrambler: lcd_cam: 5'h1, gpspi2: 5'h2: gpspi3: 5'h3, parl_io:5'h4, aes: 5'h5, sha: 5'h6, adc: 5'h7, i2s0_ch0: 5'h8, i2s0_ch1: 5'h9, i2s0_ch2: 5'ha, i2s0_ch3: 5'hb, i2s1_ch0: 5'hc, i2s1_ch1: 5'hd, i2s1_ch2: 5'he, i2s1_ch3: 5'hf, uhci0: 5'h10, RMT: 5'h11, none: else."
+
+[[registers.fields]]
+name = "HP_BITSCRAMBLER_PERI_TX_SEL"
+bits = "9:5"
+class = "plain"
+description = "Set this field to sel peri with DMA TX interface to connec with bitscrambler: lcd_cam: 5'h1, gpspi2: 5'h2: gpspi3: 5'h3, parl_io:5'h4, aes: 5'h5, sha: 5'h6, adc: 5'h7, i2s0_ch0: 5'h8, i2s0_ch1: 5'h9, i2s0_ch2: 5'ha, i2s0_ch3: 5'hb, i2s1_ch0: 5'hc, i2s1_ch1: 5'hd, i2s1_ch2: 5'he, i2s1_ch3: 5'hf, uhci0: 5'h10, RMT: 5'h11, none: else."
+
+[[registers]]
+name = "GDMA_CTRL"
+offset = 0x148
+description = "N/A"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "DEBUG_CH_NUM"
+bits = "1:0"
+class = "plain"
+description = "N/A"
+
+[[registers]]
+name = "VPU_CTRL"
+offset = 0x158
+description = "N/A"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffe0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "PPA_LSLP_MEM_PD"
+bits = "0"
+class = "plain"
+description = "N/A"
+
+[[registers.fields]]
+name = "JPEG_SDSLP_MEM_PD"
+bits = "1"
+class = "plain"
+description = "N/A"
+
+[[registers.fields]]
+name = "JPEG_LSLP_MEM_PD"
+bits = "2"
+class = "plain"
+description = "N/A"
+
+[[registers.fields]]
+name = "JPEG_DSLP_MEM_PD"
+bits = "3"
+class = "plain"
+description = "N/A"
+
+[[registers.fields]]
+name = "DMA2D_LSLP_MEM_PD"
+bits = "4"
+class = "plain"
+description = "N/A"
+
+[[registers]]
+name = "HP_DESIGN_FOR_VERIFICATION0"
+offset = 0x170
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "HP_DFV0"
+bits = "31:0"
+class = "plain"
+description = "register for DV"
+
+[[registers]]
+name = "HP_DESIGN_FOR_VERIFICATION1"
+offset = 0x174
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "HP_DFV1"
+bits = "31:0"
+class = "plain"
+description = "register for DV"
+
+[[registers]]
+name = "HP_AHB2AXI_BRESP_ERR_INT_RAW"
+offset = 0x188
+description = "NA"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SDMMC_ICM_H2X_BRESP_ERR_INT_RAW"
+bits = "30"
+class = "write-one-to-clear"
+description = "the raw interrupt status of bresp error, triggered when if bresp err occurs in post write mode in ahb2axi."
+
+[[registers.fields]]
+name = "HP_CPU_ICM_H2X_BRESP_ERR_INT_RAW"
+bits = "31"
+class = "write-one-to-clear"
+description = "the raw interrupt status of bresp error, triggered when if bresp err occurs in post write mode in ahb2axi."
+
+[[registers]]
+name = "HP_AHB2AXI_BRESP_ERR_INT_ST"
+offset = 0x18c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SDMMC_ICM_H2X_BRESP_ERR_INT_ST"
+bits = "30"
+class = "read-only"
+description = "the masked interrupt status of sdmmc_icm_h2x_bresp_err"
+
+[[registers.fields]]
+name = "HP_CPU_ICM_H2X_BRESP_ERR_INT_ST"
+bits = "31"
+class = "read-only"
+description = "the masked interrupt status of cpu_icm_h2x_bresp_err"
+
+[[registers]]
+name = "HP_AHB2AXI_BRESP_ERR_INT_ENA"
+offset = 0x190
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SDMMC_ICM_H2X_BRESP_ERR_INT_ENA"
+bits = "30"
+class = "plain"
+description = "Write 1 to enable sdmmc_icm_h2x_bresp_err int"
+
+[[registers.fields]]
+name = "HP_CPU_ICM_H2X_BRESP_ERR_INT_ENA"
+bits = "31"
+class = "plain"
+description = "Write 1 to enable cpu_icm_h2x_bresp_err int"
+
+[[registers]]
+name = "HP_AHB2AXI_BRESP_ERR_INT_CLR"
+offset = 0x194
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SDMMC_ICM_H2X_BRESP_ERR_INT_CLR"
+bits = "30"
+class = "write-trigger"
+description = "Write 1 to clear sdmmc_icm_h2x_bresp_err int"
+
+[[registers.fields]]
+name = "HP_CPU_ICM_H2X_BRESP_ERR_INT_CLR"
+bits = "31"
+class = "write-trigger"
+description = "Write 1 to clear cpu_icm_h2x_bresp_err int"
+
+[[registers]]
+name = "HP_CORE_DMACTIVE_LPCORE"
+offset = 0x1a0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_CORE_DMACTIVE_LPCORE"
+bits = "0"
+class = "read-only"
+description = "hp core dmactive_lpcore value"
+
+[[registers]]
+name = "HP_CORE_ERR_RESP_DIS"
+offset = 0x1a4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_CORE_ERR_RESP_DIS"
+bits = "2:0"
+class = "plain"
+description = "Set bit0 to disable ibus err resp. Set bit1 to disable dbus err resp. Set bit 2 to disable ahb err resp."
+
+[[registers]]
+name = "HP_CORE_TIMEOUT_INT_RAW"
+offset = 0x1a8
+description = "Hp core bus timeout interrupt raw register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc3, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_CORE0_IBUS_TIMEOUT_INT_RAW"
+bits = "2"
+class = "write-one-to-clear"
+description = "the raw interrupt status of hp core0 ibus timeout"
+
+[[registers.fields]]
+name = "HP_CORE1_IBUS_TIMEOUT_INT_RAW"
+bits = "3"
+class = "write-one-to-clear"
+description = "the raw interrupt status of hp core1 ibus timeout"
+
+[[registers.fields]]
+name = "HP_CORE0_DBUS_TIMEOUT_INT_RAW"
+bits = "4"
+class = "write-one-to-clear"
+description = "the raw interrupt status of hp core0 dbus timeout"
+
+[[registers.fields]]
+name = "HP_CORE1_DBUS_TIMEOUT_INT_RAW"
+bits = "5"
+class = "write-one-to-clear"
+description = "the raw interrupt status of hp core1 dbus timeout"
+
+[[registers]]
+name = "HP_CORE_TIMEOUT_INT_ST"
+offset = 0x1ac
+description = "masked interrupt register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc3, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_CORE0_IBUS_TIMEOUT_INT_ST"
+bits = "2"
+class = "read-only"
+description = "the masked interrupt status of hp core0 ibus timeout"
+
+[[registers.fields]]
+name = "HP_CORE1_IBUS_TIMEOUT_INT_ST"
+bits = "3"
+class = "read-only"
+description = "the masked interrupt status of hp core1 ibus timeout"
+
+[[registers.fields]]
+name = "HP_CORE0_DBUS_TIMEOUT_INT_ST"
+bits = "4"
+class = "read-only"
+description = "the masked interrupt status of hp core0 dbus timeout"
+
+[[registers.fields]]
+name = "HP_CORE1_DBUS_TIMEOUT_INT_ST"
+bits = "5"
+class = "read-only"
+description = "the masked interrupt status of hp core1 dbus timeout"
+
+[[registers]]
+name = "HP_CORE_TIMEOUT_INT_ENA"
+offset = 0x1b0
+description = "masked interrupt register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc3, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_CORE0_IBUS_TIMEOUT_INT_ENA"
+bits = "2"
+class = "plain"
+description = "Write 1 to enable hp_core0_ibus_timeout int"
+
+[[registers.fields]]
+name = "HP_CORE1_IBUS_TIMEOUT_INT_ENA"
+bits = "3"
+class = "plain"
+description = "Write 1 to enable hp_core1_ibus_timeout int"
+
+[[registers.fields]]
+name = "HP_CORE0_DBUS_TIMEOUT_INT_ENA"
+bits = "4"
+class = "plain"
+description = "Write 1 to enable hp_core0_dbus_timeout int"
+
+[[registers.fields]]
+name = "HP_CORE1_DBUS_TIMEOUT_INT_ENA"
+bits = "5"
+class = "plain"
+description = "Write 1 to enable hp_core1_dbus_timeout int"
+
+[[registers]]
+name = "HP_CORE_TIMEOUT_INT_CLR"
+offset = 0x1b4
+description = "interrupt clear register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc3, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_CORE0_IBUS_TIMEOUT_INT_CLR"
+bits = "2"
+class = "write-trigger"
+description = "Write 1 to clear hp_core0_ibus_timeout int"
+
+[[registers.fields]]
+name = "HP_CORE1_IBUS_TIMEOUT_INT_CLR"
+bits = "3"
+class = "write-trigger"
+description = "Write 1 to clear hp_core1_ibus_timeout int"
+
+[[registers.fields]]
+name = "HP_CORE0_DBUS_TIMEOUT_INT_CLR"
+bits = "4"
+class = "write-trigger"
+description = "Write 1 to clear hp_core0_dbus_timeout int"
+
+[[registers.fields]]
+name = "HP_CORE1_DBUS_TIMEOUT_INT_CLR"
+bits = "5"
+class = "write-trigger"
+description = "Write 1 to clear hp_core1_dbus_timeout int"
+
+[[registers]]
+name = "HP_CORE_PAD_WAKEUP_EVENT"
+offset = 0x1b8
+description = "pad wakeup event register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_CORE0_PAD_WAKEUP_EVENT"
+bits = "0"
+class = "plain"
+description = "wakeup core0 register"
+
+[[registers.fields]]
+name = "HP_CORE1_PAD_WAKEUP_EVENT"
+bits = "1"
+class = "plain"
+description = "wakeup core1 register"
+
+[[registers]]
+name = "HP_TWAI0_TIMESTAMP_L"
+offset = 0x1c0
+description = "twai0 timestamp low bit reg"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_TWAI0_TIMESTAMP_I"
+bits = "31:0"
+class = "plain"
+description = "This field used to set lower 32bits of timestamp hp twai0"
+
+[[registers]]
+name = "HP_TWAI0_TIMESTAMP_H"
+offset = 0x1c4
+description = "twai0 timestamp high bit reg"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_TWAI0_TIMESTAMP_H"
+bits = "31:0"
+class = "plain"
+description = "This field used to set upper 32bits of timestamp hp twai0"
+
+[[registers]]
+name = "HP_TWAI1_TIMESTAMP_L"
+offset = 0x1c8
+description = "twai1 timestamp low bit reg"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_TWAI1_TIMESTAMP_I"
+bits = "31:0"
+class = "plain"
+description = "This field used to set lower 32bits of timestamp hp twai1"
+
+[[registers]]
+name = "HP_TWAI1_TIMESTAMP_H"
+offset = 0x1cc
+description = "twai1 timestamp high bit reg"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "HP_TWAI1_TIMESTAMP_H"
+bits = "31:0"
+class = "plain"
+description = "This field used to set upper 32bits of timestamp hp twai1"
+
+[[registers]]
+name = "HP_RNG_CFG"
+offset = 0x1d8
+description = "rng cfg register"
+reset = { value = 0x0 }
+reserved = { mask = 0xff00ffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_RNG_CHAIN_CLK_DIV_NUM"
+bits = "23:16"
+class = "plain"
+description = "chain clk div num to pad for debug"
+
+[[registers]]
+name = "HP_PERI_MEM_CLK_FORCE_ON"
+offset = 0x1e0
+description = "hp peri mem clk force on regpster"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_RMT_MEM_CLK_FORCE_ON"
+bits = "0"
+class = "plain"
+description = "Set this bit to force on mem clk in rmt"
+
+[[registers.fields]]
+name = "HP_BITSCRAMBLER_TX_MEM_CLK_FORCE_ON"
+bits = "1"
+class = "plain"
+description = "Set this bit to force on tx mem clk in bitscrambler"
+
+[[registers.fields]]
+name = "HP_BITSCRAMBLER_RX_MEM_CLK_FORCE_ON"
+bits = "2"
+class = "plain"
+description = "Set this bit to force on rx mem clk in bitscrambler"
+
+[[registers.fields]]
+name = "HP_GDMA_MEM_CLK_FORCE_ON"
+bits = "3"
+class = "plain"
+description = "Set this bit to force on mem clk in gdma"
+
+[[registers]]
+name = "PRDYN_ST"
+offset = 0x1e8
+description = "hp system prdyn status register"
+reset = { value = 0xfd7da }
+reserved = { mask = 0xfff02825, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_ROM_PRDYN"
+bits = "1"
+class = "read-only"
+description = "record memory power status"
+
+[[registers.fields]]
+name = "HP_CPU_MEM_PRDYN"
+bits = "3"
+class = "read-only"
+description = "record memory power status"
+
+[[registers.fields]]
+name = "HP_BITSCRAMBLER_MEM_PRDYN"
+bits = "4"
+class = "read-only"
+description = "record memory power status"
+
+[[registers.fields]]
+name = "HP_USB_MEM_PRDYN"
+bits = "6"
+class = "read-only"
+description = "record memory power status"
+
+[[registers.fields]]
+name = "HP_RMT_MEM_PRDYN"
+bits = "7"
+class = "read-only"
+description = "record memory power status"
+
+[[registers.fields]]
+name = "HP_LEDC0_MEM_PRDYN"
+bits = "8"
+class = "read-only"
+description = "record memory power status"
+
+[[registers.fields]]
+name = "HP_KEY_MANAGER_MEM_PRDYN"
+bits = "9"
+class = "read-only"
+description = "record memory power status"
+
+[[registers.fields]]
+name = "HP_VPU_MEM_PRDYN"
+bits = "10"
+class = "read-only"
+description = "record memory power status"
+
+[[registers.fields]]
+name = "HP_GDMA_MEM_PRDYN"
+bits = "12"
+class = "read-only"
+description = "record memory power status"
+
+[[registers.fields]]
+name = "HP_UART_MEM_PRDYN"
+bits = "14"
+class = "read-only"
+description = "record memory power status"
+
+[[registers.fields]]
+name = "HP_CRYPTO_MEM_PRDYN"
+bits = "15"
+class = "read-only"
+description = "record memory power status"
+
+[[registers.fields]]
+name = "HP_FLASH_MSPI_MEM_PRDYN"
+bits = "16"
+class = "read-only"
+description = "record memory power status"
+
+[[registers.fields]]
+name = "HP_PSRAM_MSPI_MEM_PRDYN"
+bits = "17"
+class = "read-only"
+description = "record memory power status"
+
+[[registers.fields]]
+name = "HP_MODEM_MEM_PRDYN"
+bits = "18"
+class = "read-only"
+description = "record memory power status"
+
+[[registers.fields]]
+name = "HP_LEDC1_MEM_PRDYN"
+bits = "19"
+class = "read-only"
+description = "record memory power status"
+
+[[registers]]
+name = "ICM_CFG"
+offset = 0x1ec
+description = "hp system axi icm ctrl register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "ICM_DIS_RD"
+bits = "2:0"
+class = "plain"
+description = "0:mean master can acess slave , 1:mean master can not rd slave ,will returen decerro on axi bus"
+
+[[registers.fields]]
+name = "ICM_DIS_WR"
+bits = "5:3"
+class = "plain"
+description = "0:mean master can acess slave , 1:mean master can not wr slave ,will returen decerro on axi bus"
+
+[[registers.fields]]
+name = "SECURE"
+bits = "8:6"
+class = "plain"
+description = "axi_matrix slave ,0: non-secure, 1: secure , total 3 slave."
+
+[[registers]]
+name = "UART3_MEM_LP_CTRL"
+offset = 0x1f0
+description = "uart memory power control register"
+reset = { value = 0x6 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "UART3_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures uart3 memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "UART3_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down uart3 memory."
+
+[[registers.fields]]
+name = "UART3_MEM_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control uart3 memory, disbale hardware control."
+
+[[registers]]
+name = "RMT_MEM_LP_CTRL"
+offset = 0x204
+description = "rmt memory power control register"
+reset = { value = 0x6 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "RMT_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures rmt memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "RMT_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down rmt memory."
+
+[[registers.fields]]
+name = "RMT_MEM_LP_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control rmt memory, disbale hardware control."
+
+[[registers]]
+name = "LEDC0_MEM_LP_CTRL"
+offset = 0x208
+description = "ledc0 memory power control register"
+reset = { value = 0x6 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "LEDC0_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures ledc0 memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "LEDC0_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down ledc0 memory."
+
+[[registers.fields]]
+name = "LEDC0_MEM_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control ledc0 memory, disbale hardware control."
+
+[[registers]]
+name = "KM_MEM_LP_CTRL"
+offset = 0x20c
+description = "key manager memory power control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "KM_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures km memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "KM_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down km memory."
+
+[[registers.fields]]
+name = "KM_MEM_LP_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control km memory, disbale hardware control."
+
+[[registers]]
+name = "DMA2D_MEM_LP_CTRL"
+offset = 0x210
+description = "vpu memory power control register"
+reset = { value = 0x6 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_SYSTEM_2DDMA_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures 2ddma memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "HP_SYSTEM_2DDMA_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down 2ddma memory."
+
+[[registers.fields]]
+name = "HP_SYSTEM_2DDMA_MEM_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control 2ddma memory, disbale hardware control."
+
+[[registers]]
+name = "AXI_PDMA_MEM_LP_CTRL"
+offset = 0x214
+description = "vpu memory power control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "AXI_PDMA_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures axi_pdma memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "AXI_PDMA_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down axi_pdma memory."
+
+[[registers.fields]]
+name = "AXI_PDMA_MEM_LP_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control axi_pdma memory, disbale hardware control."
+
+[[registers]]
+name = "ECC_MEM_LP_CTRL"
+offset = 0x218
+description = "HP CORE0 & HP CORE1 memory power control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "ECC_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures ecc memory low power mode in low power stage.\\\\ 0: deep sleep\\\\ 1: light sleep\\\\ 2(default): shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "ECC_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down ecc memory."
+
+[[registers.fields]]
+name = "ECC_MEM_LP_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control ecc memory, disbale hardware control."
+
+[[registers]]
+name = "RSA_MEM_LP_CTRL"
+offset = 0x21c
+description = "HP CORE0 & HP CORE1 memory power control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "RSA_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures rsa memory low power mode in low power stage.\\\\ 0: deep sleep\\\\ 1: light sleep\\\\ 2(default): shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "RSA_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down rsa memory."
+
+[[registers.fields]]
+name = "RSA_MEM_LP_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control rsa memory, disbale hardware control."
+
+[[registers]]
+name = "BITSCRAM_MEM_LP_CTRL"
+offset = 0x220
+description = "HP CORE0 & HP CORE1 memory power control register"
+reset = { value = 0x6 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "BITSCRAM_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures bitscram memory low power mode in low power stage.\\\\ 0: deep sleep\\\\ 1: light sleep\\\\ 2(default): shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "BITSCRAM_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down bitscram memory."
+
+[[registers.fields]]
+name = "BITSCRAM_MEM_LP_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control bitscram memory, disbale hardware control."
+
+[[registers]]
+name = "CAN0_MEM_LP_CTRL"
+offset = 0x228
+description = "HP CORE0 & HP CORE1 memory power control register"
+reset = { value = 0x6 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "CAN0_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures can0 memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "CAN0_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down can0 memory."
+
+[[registers.fields]]
+name = "CAN0_MEM_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control can0 memory, disbale hardware control."
+
+[[registers]]
+name = "MSPI_MEM_LP_CTRL"
+offset = 0x234
+description = "HP CORE0 & HP CORE1 memory power control register"
+reset = { value = 0x22 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "PSRAM_MSPI_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures psram_mspi memory low power mode in low power stage.\\\\ 0: deep sleep\\\\ 1: light sleep\\\\ 2(default): shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "PSRAM_MSPI_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down psram_mspi memory."
+
+[[registers.fields]]
+name = "PSRAM_MSPI_MEM_LP_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control psram_mspi memory, disbale hardware control."
+
+[[registers.fields]]
+name = "FLASH_MSPI_MEM_LP_MODE"
+bits = "5:4"
+class = "plain"
+description = "Configures flash_mspi memory low power mode in low power stage.\\\\ 0: deep sleep\\\\ 1: light sleep\\\\ 2(default): shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "FLASH_MSPI_MEM_LP_EN"
+bits = "6"
+class = "plain"
+description = "Set this bit to power down flash_mspi memory."
+
+[[registers.fields]]
+name = "FLASH_MSPI_MEM_LP_FORCE_CTRL"
+bits = "7"
+class = "plain"
+description = "Set this bit to force software control flash_mspi memory, disbale hardware control."
+
+[[registers]]
+name = "HPCORE_MEM_LP_CTRL"
+offset = 0x24c
+description = "HP CORE0 & HP CORE1 memory power control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HPCORE_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures hpcore memory low power mode in low power stage.\\\\ 0: deep sleep\\\\ 1: light sleep\\\\ 2(default): shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "HPCORE_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down hpcore memory."
+
+[[registers.fields]]
+name = "HPCORE_MEM_LP_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control hpcore memory, disbale hardware control."
+
+[[registers]]
+name = "ROM_MEM_LP_CTRL"
+offset = 0x250
+description = "rom power control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "ROM_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures rom low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "ROM_MEM_LP_EN"
+bits = "3:2"
+class = "plain"
+description = "Set this bit to power down rom."
+
+[[registers.fields]]
+name = "ROM_MEM_LP_FORCE_CTRL"
+bits = "5:4"
+class = "plain"
+description = "Set this bit to force software control rom, disbale hardware control."
+
+[[registers]]
+name = "L1_CACHE_MEM_LP_CTRL"
+offset = 0x25c
+description = "HP CORE0 & HP CORE1 memory power control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "L1_CACHE_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures l1_cache memory low power mode in low power stage.\\\\ 0: deep sleep\\\\ 1: light sleep\\\\ 2(default): shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "L1_CACHE_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down l1_cache memory."
+
+[[registers.fields]]
+name = "L1_CACHE_MEM_LP_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control l1_cache memory, disbale hardware control."
+
+[[registers]]
+name = "KYBER_MEM_LP_CTRL"
+offset = 0x260
+description = "HP CORE0 & HP CORE1 memory power control register"
+reset = { value = 0x6 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "KYBER_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures kyber memory low power mode in low power stage.\\\\ 0: deep sleep\\\\ 1: light sleep\\\\ 2(default): shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "KYBER_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down kyber memory."
+
+[[registers.fields]]
+name = "KYBER_MEM_LP_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control kyber memory, disbale hardware control."
+
+[[registers]]
+name = "LCDCAM_MEM_LP_CTRL"
+offset = 0x264
+description = "HP CORE0 & HP CORE1 memory power control register"
+reset = { value = 0x6 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "LCDCAM_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures lcdcam memory low power mode in low power stage.\\\\ 0: deep sleep\\\\ 1: light sleep\\\\ 2(default): shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "LCDCAM_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down lcdcam memory."
+
+[[registers.fields]]
+name = "LCDCAM_MEM_LP_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control lcdcam memory, disbale hardware control."
+
+[[registers]]
+name = "CPU_PERI0_TIMEOUT_CONF"
+offset = 0x268
+description = "CPU_PERI0_TIMEOUT configuration register"
+reset = { value = 0x2ffff }
+reserved = { mask = 0xfffc0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_PERI0_TIMEOUT_THRES"
+bits = "15:0"
+class = "plain"
+description = "Configures the timeout threshold for bus access for accessing CPU peripheral0 register in the number of clock cycles of the clock domain."
+
+[[registers.fields]]
+name = "CPU_PERI0_TIMEOUT_INT_CLR"
+bits = "16"
+class = "write-trigger"
+description = "Write 1 to clear timeout interrupt."
+
+[[registers.fields]]
+name = "CPU_PERI0_TIMEOUT_PROTECT_EN"
+bits = "17"
+class = "plain"
+description = "Configures whether or not to enable timeout protection for accessing CPU peripheral0 registers.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers]]
+name = "CPU_PERI0_TIMEOUT_ADDR"
+offset = 0x26c
+description = "CPU_PERI0_TIMEOUT_ADDR register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "CPU_PERI0_TIMEOUT_ADDR"
+bits = "31:0"
+class = "read-only"
+description = "Represents the address information of abnormal access."
+
+[[registers]]
+name = "CPU_PERI0_TIMEOUT_UID"
+offset = 0x270
+description = "CPU_PERI0_TIMEOUT_UID register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_PERI0_TIMEOUT_UID"
+bits = "7:0"
+class = "read-only"
+description = "Represents the master id[5:0] and master permission[6:5] when trigger timeout. This register will be cleared after the interrupt is cleared."
+
+[[registers]]
+name = "HP_PERI0_TIMEOUT_CONF"
+offset = 0x274
+description = "HP_PERI0_TIMEOUT configuration register"
+reset = { value = 0x2ffff }
+reserved = { mask = 0xfffc0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PERI0_TIMEOUT_THRES"
+bits = "15:0"
+class = "plain"
+description = "Configures the timeout threshold for bus access for accessing CPU peripheral register in the number of clock cycles of the clock domain."
+
+[[registers.fields]]
+name = "HP_PERI0_TIMEOUT_INT_CLR"
+bits = "16"
+class = "write-trigger"
+description = "Write 1 to clear timeout interrupt."
+
+[[registers.fields]]
+name = "HP_PERI0_TIMEOUT_PROTECT_EN"
+bits = "17"
+class = "plain"
+description = "Configures whether or not to enable timeout protection for accessing CPU peripheral registers.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers]]
+name = "HP_PERI0_TIMEOUT_ADDR"
+offset = 0x278
+description = "HP_PERI0_TIMEOUT_ADDR register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "HP_PERI0_TIMEOUT_ADDR"
+bits = "31:0"
+class = "read-only"
+description = "Represents the address information of abnormal access."
+
+[[registers]]
+name = "HP_PERI0_TIMEOUT_UID"
+offset = 0x27c
+description = "HP_PERI0_TIMEOUT_UID register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PERI0_TIMEOUT_UID"
+bits = "7:0"
+class = "read-only"
+description = "Represents the master id[5:0] and master permission[6:5] when trigger timeout. This register will be cleared after the interrupt is cleared."
+
+[[registers]]
+name = "HP_PERI1_TIMEOUT_CONF"
+offset = 0x280
+description = "HP_PERI1_TIMEOUT configuration register"
+reset = { value = 0x2ffff }
+reserved = { mask = 0xfffc0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PERI1_TIMEOUT_THRES"
+bits = "15:0"
+class = "plain"
+description = "Configures the timeout threshold for bus access for accessing CPU peripheral register in the number of clock cycles of the clock domain."
+
+[[registers.fields]]
+name = "HP_PERI1_TIMEOUT_INT_CLR"
+bits = "16"
+class = "write-trigger"
+description = "Write 1 to clear timeout interrupt."
+
+[[registers.fields]]
+name = "HP_PERI1_TIMEOUT_PROTECT_EN"
+bits = "17"
+class = "plain"
+description = "Configures whether or not to enable timeout protection for accessing CPU peripheral registers.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers]]
+name = "HP_PERI1_TIMEOUT_ADDR"
+offset = 0x284
+description = "HP_PERI1_TIMEOUT_ADDR register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "HP_PERI1_TIMEOUT_ADDR"
+bits = "31:0"
+class = "read-only"
+description = "Represents the address information of abnormal access."
+
+[[registers]]
+name = "HP_PERI1_TIMEOUT_UID"
+offset = 0x288
+description = "HP_PERI1_TIMEOUT_UID register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "HP_PERI1_TIMEOUT_UID"
+bits = "7:0"
+class = "read-only"
+description = "Represents the master id[5:0] and master permission[6:5] when trigger timeout. This register will be cleared after the interrupt is cleared."
+
+[[registers]]
+name = "UART0_MEM_LP_CTRL"
+offset = 0x28c
+description = "uart memory power control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "UART0_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures uart0 memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "UART0_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down uart0 memory."
+
+[[registers.fields]]
+name = "UART0_MEM_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control uart0 memory, disbale hardware control."
+
+[[registers]]
+name = "UART1_MEM_LP_CTRL"
+offset = 0x290
+description = "uart memory power control register"
+reset = { value = 0x6 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "UART1_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures uart1 memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "UART1_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down uart1 memory."
+
+[[registers.fields]]
+name = "UART1_MEM_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control uart1 memory, disbale hardware control."
+
+[[registers]]
+name = "UART2_MEM_LP_CTRL"
+offset = 0x294
+description = "uart memory power control register"
+reset = { value = 0x6 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "UART2_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures uart2 memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "UART2_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down uart2 memory."
+
+[[registers.fields]]
+name = "UART2_MEM_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control uart2 memory, disbale hardware control."
+
+[[registers]]
+name = "LEDC1_MEM_LP_CTRL"
+offset = 0x298
+description = "ledc1 memory power control register"
+reset = { value = 0x6 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "LEDC1_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures ledc1 memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "LEDC1_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down ledc1 memory."
+
+[[registers.fields]]
+name = "LEDC1_MEM_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control ledc1 memory, disbale hardware control."
+
+[[registers]]
+name = "PPA_MEM_LP_CTRL"
+offset = 0x29c
+description = "vpu memory power control register"
+reset = { value = 0x6 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "PPA_SPRF_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures ppa_sprf memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "PPA_SPRF_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down ppa_sprf memory."
+
+[[registers.fields]]
+name = "PPA_SPRF_MEM_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control ppa_sprf memory, disbale hardware control."
+
+[[registers]]
+name = "JPEG_MEM_LP_CTRL"
+offset = 0x2a0
+description = "vpu memory power control register"
+reset = { value = 0x6 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "JPEG_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures jpeg memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "JPEG_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down jpeg memory."
+
+[[registers.fields]]
+name = "JPEG_MEM_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control jpeg memory, disbale hardware control."
+
+[[registers]]
+name = "CAN1_MEM_LP_CTRL"
+offset = 0x2a4
+description = "HP CORE0 & HP CORE1 memory power control register"
+reset = { value = 0x6 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "CAN1_MEM_LP_MODE"
+bits = "1:0"
+class = "plain"
+description = "Configures can1 memory low power mode in low power stage.\\\\ 0(default): deep sleep\\\\ 1: light sleep\\\\ 2: shut down\\\\ 3: disable low power stage\\\\"
+
+[[registers.fields]]
+name = "CAN1_MEM_LP_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to power down can1 memory."
+
+[[registers.fields]]
+name = "CAN1_MEM_FORCE_CTRL"
+bits = "3"
+class = "plain"
+description = "Set this bit to force software control can1 memory, disbale hardware control."
+
+[[registers]]
+name = "CPU_PERI1_TIMEOUT_CONF"
+offset = 0x2a8
+description = "CPU_PERI1_TIMEOUT configuration register"
+reset = { value = 0x2ffff }
+reserved = { mask = 0xfffc0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_PERI1_TIMEOUT_THRES"
+bits = "15:0"
+class = "plain"
+description = "Configures the timeout threshold for bus access for accessing CPU peripheral register in the number of clock cycles of the clock domain."
+
+[[registers.fields]]
+name = "CPU_PERI1_TIMEOUT_INT_CLR"
+bits = "16"
+class = "write-trigger"
+description = "Write 1 to clear timeout interrupt."
+
+[[registers.fields]]
+name = "CPU_PERI1_TIMEOUT_PROTECT_EN"
+bits = "17"
+class = "plain"
+description = "Configures whether or not to enable timeout protection for accessing CPU peripheral11 registers.\\\\ 0: Disable\\\\ 1: Enable\\\\"
+
+[[registers]]
+name = "CPU_PERI1_TIMEOUT_ADDR"
+offset = 0x2ac
+description = "CPU_PERI1_TIMEOUT_ADDR register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "CPU_PERI1_TIMEOUT_ADDR"
+bits = "31:0"
+class = "read-only"
+description = "Represents the address information of abnormal access."
+
+[[registers]]
+name = "CPU_PERI1_TIMEOUT_UID"
+offset = 0x2b0
+description = "CPU_PERI1_TIMEOUT_UID register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_PERI1_TIMEOUT_UID"
+bits = "7:0"
+class = "read-only"
+description = "Represents the master id[5:0] and master permission[6:5] when trigger timeout. This register will be cleared after the interrupt is cleared."
+
+[[registers]]
+name = "CPU_ACS_CACHE_MEM_CONF"
+offset = 0x2b4
+description = "CPU access Cache data mem configuration register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_ACCESS_AC0_DATAMEM_EN"
+bits = "0"
+class = "read-only"
+description = "Set this bit to enable CPU accessROMCache0 data mem path"
+
+[[registers.fields]]
+name = "CPU_ACCESS_AC1_DATAMEM_EN"
+bits = "1"
+class = "read-only"
+description = "Set this bit to enable CPU access ROMCache1 data mem path"
+
+[[registers.fields]]
+name = "CPU_ACCESS_IC0_DATAMEM_EN"
+bits = "2"
+class = "plain"
+description = "Set this bit to enable CPU access ICache0 data mem path"
+
+[[registers.fields]]
+name = "CPU_ACCESS_IC1_DATAMEM_EN"
+bits = "3"
+class = "plain"
+description = "Set this bit to enable CPU access ICache1 data mem path"
+
+[[registers.fields]]
+name = "CPU_ACCESS_DC_DATAMEM_EN"
+bits = "4"
+class = "plain"
+description = "Set this bit to enable CPU access DCache data mem path"
+
+[[registers.fields]]
+name = "CPU_ACS_CACHE_MEM_LOCK"
+bits = "5"
+class = "plain"
+description = "Set 1 to lock cpu acs mem data mem path configuration"
+
+[[registers]]
+name = "TCM_PERFORMACE_CTRL"
+offset = 0x2e0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "AHB_TO_TCM_MEM_EN_HOLD"
+bits = "0"
+class = "plain"
+description = "Set 1 to keep TCM mem enable hold when mem access is busy."
+
+[[registers]]
+name = "SDIO_PAD_BIST_CFG"
+offset = 0x2e4
+description = "sdio pad bist control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "SDIO_PAD_BIST_START"
+bits = "0"
+class = "write-trigger"
+description = "Write 1 to start sdio pad bist"
+
+[[registers]]
+name = "SDIO_PAD_BIST_INT_RAW"
+offset = 0x2e8
+description = "sdio pad bist interupt raw register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "SDIO_PAD_BIST_OK_INT_RAW"
+bits = "0"
+class = "write-one-to-clear"
+description = "intr triggered when bist finish and status is bist ok"
+
+[[registers.fields]]
+name = "SDIO_PAD_BIST_FAIL_INT_RAW"
+bits = "1"
+class = "write-one-to-clear"
+description = "intr triggered when bist finish and status is bist fail"
+
+[[registers]]
+name = "SDIO_PAD_BIST_INT_ST"
+offset = 0x2ec
+description = "masked interrupt register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "SDIO_PAD_BIST_OK_INT_ST"
+bits = "0"
+class = "read-only"
+description = "the masked interrupt status of sdio pad bist ok interrupt"
+
+[[registers.fields]]
+name = "SDIO_PAD_BIST_FAIL_INT_ST"
+bits = "1"
+class = "read-only"
+description = "the masked interrupt status of sdio pad bist fail interrupt"
+
+[[registers]]
+name = "SDIO_PAD_BIST_INT_ENA"
+offset = 0x2f0
+description = "interrupt enable register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "SDIO_PAD_BIST_OK_INT_ENA"
+bits = "0"
+class = "plain"
+description = "Write 1 to enable sdio pad bist ok interrupt"
+
+[[registers.fields]]
+name = "SDIO_PAD_BIST_FAIL_INT_ENA"
+bits = "1"
+class = "plain"
+description = "Write 1 to enable sdio pad bist fail interrupt"
+
+[[registers]]
+name = "SDIO_PAD_BIST_INT_CLR"
+offset = 0x2f4
+description = "interrupt clear register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "SDIO_PAD_BIST_OK_INT_CLR"
+bits = "0"
+class = "write-trigger"
+description = "Write 1 to clr sdio pad bist ok interrupt"
+
+[[registers.fields]]
+name = "SDIO_PAD_BIST_FAIL_INT_CLR"
+bits = "1"
+class = "write-trigger"
+description = "Write 1 to clr sdio pad bist fail interrupt"
+
+[[registers]]
+name = "SDIO_PAD_BIST_ST"
+offset = 0x2f8
+description = "sdio pad bist status register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "SDIO_PAD_BIST_RCNT"
+bits = "5:0"
+class = "read-only"
+description = "Indicate number of clock cycles received for pad bist debug"
+
+[[registers]]
+name = "GMAC0_PAD_BIST_CFG"
+offset = 0x2fc
+description = "gmac0 pad bist control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "GMAC0_PAD_BIST_START"
+bits = "0"
+class = "write-trigger"
+description = "Write 1 to start gmac0 pad bist"
+
+[[registers]]
+name = "GMAC0_PAD_BIST_INT_RAW"
+offset = 0x300
+description = "gmac0 pad bist interupt raw register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "GMAC0_PAD_BIST_OK_INT_RAW"
+bits = "0"
+class = "write-one-to-clear"
+description = "intr triggered when bist finish and status is bist ok"
+
+[[registers.fields]]
+name = "GMAC0_PAD_BIST_FAIL_INT_RAW"
+bits = "1"
+class = "write-one-to-clear"
+description = "intr triggered when bist finish and status is bist fail"
+
+[[registers]]
+name = "GMAC0_PAD_BIST_INT_ST"
+offset = 0x304
+description = "masked interrupt register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "GMAC0_PAD_BIST_OK_INT_ST"
+bits = "0"
+class = "read-only"
+description = "the masked interrupt status of gmac0 pad bist ok interrupt"
+
+[[registers.fields]]
+name = "GMAC0_PAD_BIST_FAIL_INT_ST"
+bits = "1"
+class = "read-only"
+description = "the masked interrupt status of gmac0 pad bist fail interrupt"
+
+[[registers]]
+name = "GMAC0_PAD_BIST_INT_ENA"
+offset = 0x308
+description = "interrupt enable register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "GMAC0_PAD_BIST_OK_INT_ENA"
+bits = "0"
+class = "plain"
+description = "Write 1 to enable gmac0 pad bist ok interrupt"
+
+[[registers.fields]]
+name = "GMAC0_PAD_BIST_FAIL_INT_ENA"
+bits = "1"
+class = "plain"
+description = "Write 1 to enable gmac0 pad bist fail interrupt"
+
+[[registers]]
+name = "GMAC0_PAD_BIST_INT_CLR"
+offset = 0x30c
+description = "interrupt clear register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "GMAC0_PAD_BIST_OK_INT_CLR"
+bits = "0"
+class = "write-trigger"
+description = "Write 1 to clr gmac0 pad bist ok interrupt"
+
+[[registers.fields]]
+name = "GMAC0_PAD_BIST_FAIL_INT_CLR"
+bits = "1"
+class = "write-trigger"
+description = "Write 1 to clr gmac0 pad bist fail interrupt"
+
+[[registers]]
+name = "GMAC0_PAD_BIST_ST"
+offset = 0x310
+description = "gmac0 pad bist status register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "GMAC0_PAD_BIST_RCNT"
+bits = "5:0"
+class = "read-only"
+description = "Indicate number of clock cycles received for pad bist debug"
+
+[[registers]]
+name = "GMAC1_PAD_BIST_CFG"
+offset = 0x314
+description = "gmac1 pad bist control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "GMAC1_PAD_BIST_START"
+bits = "0"
+class = "write-trigger"
+description = "Write 1 to start gmac1 pad bist"
+
+[[registers]]
+name = "GMAC1_PAD_BIST_INT_RAW"
+offset = 0x318
+description = "gmac1 pad bist interupt raw register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "GMAC1_PAD_BIST_OK_INT_RAW"
+bits = "0"
+class = "write-one-to-clear"
+description = "intr triggered when bist finish and status is bist ok"
+
+[[registers.fields]]
+name = "GMAC1_PAD_BIST_FAIL_INT_RAW"
+bits = "1"
+class = "write-one-to-clear"
+description = "intr triggered when bist finish and status is bist fail"
+
+[[registers]]
+name = "GMAC1_PAD_BIST_INT_ST"
+offset = 0x31c
+description = "masked interrupt register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "GMAC1_PAD_BIST_OK_INT_ST"
+bits = "0"
+class = "read-only"
+description = "the masked interrupt status of gmac1 pad bist ok interrupt"
+
+[[registers.fields]]
+name = "GMAC1_PAD_BIST_FAIL_INT_ST"
+bits = "1"
+class = "read-only"
+description = "the masked interrupt status of gmac1 pad bist fail interrupt"
+
+[[registers]]
+name = "GMAC1_PAD_BIST_INT_ENA"
+offset = 0x320
+description = "interrupt enable register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "GMAC1_PAD_BIST_OK_INT_ENA"
+bits = "0"
+class = "plain"
+description = "Write 1 to enable gmac1 pad bist ok interrupt"
+
+[[registers.fields]]
+name = "GMAC1_PAD_BIST_FAIL_INT_ENA"
+bits = "1"
+class = "plain"
+description = "Write 1 to enable gmac1 pad bist fail interrupt"
+
+[[registers]]
+name = "GMAC1_PAD_BIST_INT_CLR"
+offset = 0x324
+description = "interrupt clear register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "GMAC1_PAD_BIST_OK_INT_CLR"
+bits = "0"
+class = "write-trigger"
+description = "Write 1 to clr gmac1 pad bist ok interrupt"
+
+[[registers.fields]]
+name = "GMAC1_PAD_BIST_FAIL_INT_CLR"
+bits = "1"
+class = "write-trigger"
+description = "Write 1 to clr gmac1 pad bist fail interrupt"
+
+[[registers]]
+name = "GMAC1_PAD_BIST_ST"
+offset = 0x328
+description = "gmac1 pad bist status register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "GMAC1_PAD_BIST_RCNT"
+bits = "5:0"
+class = "read-only"
+description = "Indicate number of clock cycles received for pad bist debug"
+
+[[registers]]
+name = "CPU_PWAIT_MODE"
+offset = 0x338
+description = "Indicate status of core0 and core1 pwait"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H"] }
+
+[[registers.fields]]
+name = "CPU_PWAIT_MODE"
+bits = "1:0"
+class = "read-only"
+description = "Indicate status of core0 and core1 pwait"

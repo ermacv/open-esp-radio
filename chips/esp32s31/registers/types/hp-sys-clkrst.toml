@@ -1,0 +1,4136 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "HP_SYS_CLKRST"
+description = "The HP clock and reset controller: the root clock, the clock gates, dividers and resets of the HP peripherals and cores."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "SOC_CLK_SEL"
+offset = 0x0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_SOC_CLK_SEL"
+bits = "1:0"
+class = "plain"
+description = "Configures to select the clock source of HP_ROOT_CLK.\\\\ 0 (default): XTAL_CLK\\\\ 1: PLL_F300M_CLK\\\\ 2: RC_FAST_CLK\\\\"
+
+[[registers]]
+name = "CPU_FREQ_CTRL0"
+offset = 0x4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_CPU_CLK_DIV_NUM"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CPU_CLK_DIV_NUMERATOR"
+bits = "10:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CPU_CLK_DIV_DENOMINATOR"
+bits = "13:11"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "MEM_FREQ_CTRL0"
+offset = 0x8
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_MEM_CLK_DIV_NUM"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "SYS_FREQ_CTRL0"
+offset = 0xc
+description = "need_des"
+reset = { value = 0x2 }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_SYS_CLK_DIV_NUM"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SYS_CLK_DIV_NUMERATOR"
+bits = "10:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SYS_CLK_DIV_DENOMINATOR"
+bits = "13:11"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "APB_FREQ_CTRL0"
+offset = 0x10
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_APB_CLK_DIV_NUM"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_APB_CLK_DIV_NUMERATOR"
+bits = "10:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_APB_CLK_DIV_DENOMINATOR"
+bits = "13:11"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "ROOT_CLK_CTRL0"
+offset = 0x14
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_SOC_CLK_UPDATE"
+bits = "0"
+class = "self-clearing"
+description = "need_des"
+
+[[registers]]
+name = "CPU_WFI_DELAY_CTRL0"
+offset = 0x18
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_CPUICM_DELAY_NUM"
+bits = "3:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HPCORE0_CTRL0"
+offset = 0x1c
+description = "need_des"
+reset = { value = 0x3 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_CORE0_CLIC_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CORE0_CPU_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CORE0_GLOBAL_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CORE0_FORCE_NORST"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HPCORE1_CTRL0"
+offset = 0x20
+description = "need_des"
+reset = { value = 0x4 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_CORE1_CLIC_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CORE1_CPU_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CORE1_GLOBAL_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CORE1_FORCE_NORST"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "TRACE_CTRL0"
+offset = 0x24
+description = "need_des"
+reset = { value = 0x3 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_TRACE_CPU_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TRACE_SYS_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TRACE_CPU_CLK_FORCE_ON"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TRACE_SYS_CLK_FORCE_ON"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TRACE0_RST_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TRACE1_RST_EN"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TRACE0_FORCE_NORST"
+bits = "6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TRACE1_FORCE_NORST"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "TCM_CTRL0"
+offset = 0x28
+description = "need_des"
+reset = { value = 0x3 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_TCM_CPU_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TCM_CPU_CLK_FORCE_ON"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TCM_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "TCMMON_CTRL0"
+offset = 0x2c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_TCMMON_CPU_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TCMMON_SYS_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TCMMON_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TCMMON_FORCE_NORST"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "PSRAMMON_CTRL0"
+offset = 0x30
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PSRAM_MON_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PSRAM_MON_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PSRAM_MON_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "ROM_CTRL0"
+offset = 0x34
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_ROM_MEM_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ROM_MEM_CLK_FORCE_ON"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ROM_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "CACHE_CTRL0"
+offset = 0x38
+description = "need_des"
+reset = { value = 0x15249 }
+reserved = { mask = 0xfffc0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_CPU_ACACHE_CPU_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CPU_ACACHE_CPU_CLK_FORCE_ON"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CPU_ACACHE_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ROM_ACACHE_MEM_CLK_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ROM_ACACHE_MEM_CLK_FORCE_ON"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ROM_ACACHE_RST_EN"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CPU_CACHE_CPU_CLK_EN"
+bits = "6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CPU_CACHE_CPU_CLK_FORCE_ON"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CPU_CACHE_RST_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MSPI_CACHE_SYS_CLK_EN"
+bits = "9"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MSPI_CACHE_SYS_CLK_FORCE_ON"
+bits = "10"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MSPI_CACHE_RST_EN"
+bits = "11"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_DCACHE_CLK_EN"
+bits = "12"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_DCACHE_RST_EN"
+bits = "13"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ICACHE0_CLK_EN"
+bits = "14"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ICACHE0_RST_EN"
+bits = "15"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ICACHE1_CLK_EN"
+bits = "16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ICACHE1_RST_EN"
+bits = "17"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "ICM_CTRL0"
+offset = 0x3c
+description = "need_des"
+reset = { value = 0xf }
+reserved = { mask = 0xffffffe0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_ICM_CPU_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ICM_MEM_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ICM_SYS_CLK_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ICM_APB_CLK_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CPUICM_GATED_CLK_FORCE_ON"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "MODEM_CTRL0"
+offset = 0x40
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_MODEM_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "MISC_CTRL0"
+offset = 0x44
+description = "need_des"
+reset = { value = 0xf }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_MISC_CPU_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MISC_SYS_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SYSREG_APB_CLK_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_HP_CLKRST_APB_CLK_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "BUSMON_CTRL0"
+offset = 0x48
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_BUSMON_CORE0_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BUSMON_CORE0_CLK_FORCE_ON"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BUSMON_CORE0_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BUSMON_CORE0_FORCE_NORST"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BUSMON_CORE1_CLK_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BUSMON_CORE1_CLK_FORCE_ON"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BUSMON_CORE1_RST_EN"
+bits = "6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BUSMON_CORE1_FORCE_NORST"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "REMOVE_TMP0"
+offset = 0x4c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_GDMA_CPU_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_VPU_CPU_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_VPU_SYS_CLK_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "PVT0_CTRL0"
+offset = 0x50
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PVT0_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PVT0_TOP_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PVT0_APB_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PVT0_CLK_DIV_NUM"
+bits = "10:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PVT0_CLK_EN"
+bits = "11"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "PVT0_PERI_CTRL0"
+offset = 0x54
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PVT0_PERI_GROUP1_RST_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PVT0_PERI_GROUP2_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PVT0_PERI_GROUP3_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PVT0_PERI_GROUP4_RST_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PVT0_PERI_GROUP1_CLK_EN"
+bits = "4"
+class = "plain"
+description = "TOP power domian pvt clk en"
+
+[[registers.fields]]
+name = "REG_PVT0_PERI_GROUP2_CLK_EN"
+bits = "5"
+class = "plain"
+description = "TOP power domian pvt clk en"
+
+[[registers.fields]]
+name = "REG_PVT0_PERI_GROUP3_CLK_EN"
+bits = "6"
+class = "plain"
+description = "modem power domian pvt clk en"
+
+[[registers.fields]]
+name = "REG_PVT0_PERI_GROUP4_CLK_EN"
+bits = "7"
+class = "plain"
+description = "modem power domian pvt clk en"
+
+[[registers]]
+name = "CRYPTO_CTRL0"
+offset = 0x58
+description = "need_des"
+reset = { value = 0x415555 }
+reserved = { mask = 0xff0c0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_CRYPTO_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_SEC_CLK_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_SEC_RST_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_AES_CLK_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_AES_RST_EN"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_SHA_CLK_EN"
+bits = "6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_SHA_RST_EN"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_RSA_CLK_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_RSA_RST_EN"
+bits = "9"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_DS_CLK_EN"
+bits = "10"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_DS_RST_EN"
+bits = "11"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_ECC_CLK_EN"
+bits = "12"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_ECC_RST_EN"
+bits = "13"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_HMAC_CLK_EN"
+bits = "14"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_HMAC_RST_EN"
+bits = "15"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_ECDSA_CLK_EN"
+bits = "16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_ECDSA_RST_EN"
+bits = "17"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_CLK_SRC_SEL"
+bits = "21:20"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_RMA_CLK_EN"
+bits = "22"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_RMA_RST_EN"
+bits = "23"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "KEY_MANAGER_CTRL0"
+offset = 0x5c
+description = "need_des"
+reset = { value = 0x5 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_KEY_MANAGER_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_KM_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CRYPTO_KM_CLK_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "DPA_CTRL0"
+offset = 0x60
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_SEC_DPA_LEVEL"
+bits = "1:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SEC_DPA_CFG_SEL"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "FLASH_CTRL0"
+offset = 0x64
+description = "need_des"
+reset = { value = 0x781 }
+reserved = { mask = 0xfffe0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_FLASH_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_FLASH_AXI_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_FLASH_APB_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_FLASH_AXI_FORCE_NORST"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_FLASH_APB_FORCE_NORST"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_FLASH_CLK_SRC_SEL"
+bits = "6:5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_FLASH_PLL_CLK_EN"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_FLASH_CORE_CLK_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_FLASH_CORE_CLK_DIV_NUM"
+bits = "16:9"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "PSRAM_CTRL0"
+offset = 0x68
+description = "need_des"
+reset = { value = 0x181 }
+reserved = { mask = 0xfffe0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PSRAM_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PSRAM_AXI_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PSRAM_APB_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PSRAM_AXI_FORCE_NORST"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PSRAM_APB_FORCE_NORST"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PSRAM_CLK_SRC_SEL"
+bits = "6:5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PSRAM_PLL_CLK_EN"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PSRAM_CORE_CLK_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PSRAM_CORE_CLK_DIV_NUM"
+bits = "16:9"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "GPSPI2_CTRL0"
+offset = 0x6c
+description = "need_des"
+reset = { value = 0x800043 }
+reserved = { mask = 0xff000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_GPSPI2_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI2_APB_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI2_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI2_FORCE_NORST"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI2_CLK_SRC_SEL"
+bits = "5:4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI2_HS_CLK_EN"
+bits = "6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI2_HS_CLK_DIV_NUM"
+bits = "14:7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI2_MST_CLK_DIV_NUM"
+bits = "22:15"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI2_MST_CLK_EN"
+bits = "23"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "GPSPI3_CTRL0"
+offset = 0x70
+description = "need_des"
+reset = { value = 0x800043 }
+reserved = { mask = 0xff000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_GPSPI3_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI3_APB_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI3_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI3_FORCE_NORST"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI3_CLK_SRC_SEL"
+bits = "5:4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI3_HS_CLK_EN"
+bits = "6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI3_HS_CLK_DIV_NUM"
+bits = "14:7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI3_MST_CLK_DIV_NUM"
+bits = "22:15"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_GPSPI3_MST_CLK_EN"
+bits = "23"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "GDMA_CTRL0"
+offset = 0x74
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_GDMA_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "AXI_PDMA_CTRL0"
+offset = 0x78
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_AXI_PDMA_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_AXI_PDMA_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_AXI_PDMA_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "AHB_PDMA_CTRL0"
+offset = 0x7c
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_AHB_PDMA_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_AHB_PDMA_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_AHB_PDMA_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "REGDMA_CTRL0"
+offset = 0x80
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_REGDMA_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_REGDMA_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "UHCI_CTRL0"
+offset = 0x84
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_UHCI_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UHCI_APB_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UHCI_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UHCI_FORCE_NORST"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "UART0_CTRL0"
+offset = 0x88
+description = "need_des"
+reset = { value = 0x83 }
+
+[[registers.fields]]
+name = "REG_UART0_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART0_APB_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART0_CORE_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART0_APB_RST_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART0_FORCE_NORST"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART0_CLK_SRC_SEL"
+bits = "6:5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART0_CLK_EN"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART0_SCLK_DIV_NUM"
+bits = "15:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART0_SCLK_DIV_NUMERATOR"
+bits = "23:16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART0_SCLK_DIV_DENOMINATOR"
+bits = "31:24"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "UART1_CTRL0"
+offset = 0x8c
+description = "need_des"
+reset = { value = 0x83 }
+
+[[registers.fields]]
+name = "REG_UART1_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART1_APB_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART1_CORE_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART1_APB_RST_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART1_FORCE_NORST"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART1_CLK_SRC_SEL"
+bits = "6:5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART1_CLK_EN"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART1_SCLK_DIV_NUM"
+bits = "15:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART1_SCLK_DIV_NUMERATOR"
+bits = "23:16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART1_SCLK_DIV_DENOMINATOR"
+bits = "31:24"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "UART2_CTRL0"
+offset = 0x90
+description = "need_des"
+reset = { value = 0x83 }
+
+[[registers.fields]]
+name = "REG_UART2_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART2_APB_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART2_CORE_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART2_APB_RST_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART2_FORCE_NORST"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART2_CLK_SRC_SEL"
+bits = "6:5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART2_CLK_EN"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART2_SCLK_DIV_NUM"
+bits = "15:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART2_SCLK_DIV_NUMERATOR"
+bits = "23:16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART2_SCLK_DIV_DENOMINATOR"
+bits = "31:24"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "UART3_CTRL0"
+offset = 0x94
+description = "need_des"
+reset = { value = 0x83 }
+
+[[registers.fields]]
+name = "REG_UART3_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART3_APB_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART3_CORE_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART3_APB_RST_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART3_FORCE_NORST"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART3_CLK_SRC_SEL"
+bits = "6:5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART3_CLK_EN"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART3_SCLK_DIV_NUM"
+bits = "15:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART3_SCLK_DIV_NUMERATOR"
+bits = "23:16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_UART3_SCLK_DIV_DENOMINATOR"
+bits = "31:24"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "PARLIO_CTRL0"
+offset = 0x98
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PARLIO_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PARLIO_APB_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PARLIO_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PARLIO_FORCE_NORST"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "PARLIO_RX_CTRL0"
+offset = 0x9c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xe0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PARLIO_RX_RST_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PARLIO_RX_FORCE_NORST"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PARLIO_RX_CLK_SRC_SEL"
+bits = "3:2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PARLIO_RX_CLK_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PARLIO_RX_CLK_DIV_NUM"
+bits = "12:5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PARLIO_RX_CLK_DIV_NUMERATOR"
+bits = "20:13"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PARLIO_RX_CLK_DIV_DENOMINATOR"
+bits = "28:21"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "PARLIO_TX_CTRL0"
+offset = 0xa0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xe0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PARLIO_TX_RST_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PARLIO_TX_FORCE_NORST"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PARLIO_TX_CLK_SRC_SEL"
+bits = "3:2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PARLIO_TX_CLK_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PARLIO_TX_CLK_DIV_NUM"
+bits = "12:5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PARLIO_TX_CLK_DIV_NUMERATOR"
+bits = "20:13"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PARLIO_TX_CLK_DIV_DENOMINATOR"
+bits = "28:21"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "BITSRAMBLER_CTRL0"
+offset = 0xa4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_BITSCRAMBLER_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BITSCRAMBLER_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BITSCRAMBLER_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BITSCRAMBLER_RX_SYS_CLK_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BITSCRAMBLER_RX_RST_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BITSCRAMBLER_RX_FORCE_NORST"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BITSCRAMBLER_TX_SYS_CLK_EN"
+bits = "6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BITSCRAMBLER_TX_RST_EN"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BITSCRAMBLER_TX_FORCE_NORST"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "ETM_CTRL0"
+offset = 0xa8
+description = "need_des"
+reset = { value = 0x40 }
+reserved = { mask = 0xffffff81, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_ETM_APB_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ETM_RST_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ETM_FORCE_NORST"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SOC_ETM_CLK_SEL"
+bits = "5:4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SOC_ETM_CLK_EN"
+bits = "6"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "USB_OTGHS_CTRL0"
+offset = 0xac
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_USB_OTGHS_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_USB_OTGHS_SYS_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "DMA2D_CTRL0"
+offset = 0xb0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_DMA2D_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_DMA2D_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_DMA2D_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "PPA_CTRL0"
+offset = 0xb4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PPA_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PPA_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PPA_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "JPEG_CTRL0"
+offset = 0xb8
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_JPEG_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_JPEG_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_JPEG_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "RMT_CTRL0"
+offset = 0xbc
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xc0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_RMT_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_RMT_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_RMT_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_RMT_CLK_SRC_SEL"
+bits = "4:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_RMT_CLK_EN"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_RMT_CLK_DIV_NUM"
+bits = "13:6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_RMT_CLK_DIV_NUMERATOR"
+bits = "21:14"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_RMT_CLK_DIV_DENOMINATOR"
+bits = "29:22"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "SDIO_HOST_CTRL0"
+offset = 0xc0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff006, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_SDMMC_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SDIO_LS_CLK_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SDIO_LS_CLK_DIV_NUM"
+bits = "11:4"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "SDIO_HOST_FUNC_CTRL0"
+offset = 0xc4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfe000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_SDIO_LS_CLK_EDGE_CFG_UPDATE"
+bits = "0"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SDIO_LS_CLK_EDGE_L"
+bits = "4:1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SDIO_LS_CLK_EDGE_H"
+bits = "8:5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SDIO_LS_CLK_EDGE_N"
+bits = "12:9"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SDIO_LS_SLF_CLK_EDGE_SEL"
+bits = "15:13"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SDIO_LS_DRV_CLK_EDGE_SEL"
+bits = "18:16"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SDIO_LS_SAM_CLK_EDGE_SEL"
+bits = "21:19"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SDIO_LS_SLF_CLK_EN"
+bits = "22"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SDIO_LS_DRV_CLK_EN"
+bits = "23"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SDIO_LS_SAM_CLK_EN"
+bits = "24"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "EMAC_CTRL0"
+offset = 0xc8
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_EMAC_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "DSI_CTRL0"
+offset = 0xcc
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_DSI_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "DSI_PHY_CTRL0"
+offset = 0xd0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_MIPI_DSI_DPHY_CLK_SRC_SEL"
+bits = "1:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MIPI_DSI_DPHY_CFG_CLK_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MIPI_DSI_DPHY_PLL_REFCLK_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "DSI_DPI_CTRL0"
+offset = 0xd4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_MIPI_DSI_DPICLK_SRC_SEL"
+bits = "1:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MIPI_DSI_DPICLK_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MIPI_DSI_DPICLK_DIV_NUM"
+bits = "10:3"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "MSPI_PAD_CTRL0"
+offset = 0xd8
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_MSPI_PAD_CTRL_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MSPI_PAD_CTRL_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MSPI_PAD_CTRL_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "I2C0_CTRL0"
+offset = 0xdc
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xe0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_I2C0_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2C0_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2C0_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2C0_CLK_SRC_SEL"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2C0_CLK_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2C0_CLK_DIV_NUM"
+bits = "12:5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2C0_CLK_DIV_NUMERATOR"
+bits = "20:13"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2C0_CLK_DIV_DENOMINATOR"
+bits = "28:21"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "I2C1_CTRL0"
+offset = 0xe0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xe0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_I2C1_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2C1_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2C1_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2C1_CLK_SRC_SEL"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2C1_CLK_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2C1_CLK_DIV_NUM"
+bits = "12:5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2C1_CLK_DIV_NUMERATOR"
+bits = "20:13"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2C1_CLK_DIV_DENOMINATOR"
+bits = "28:21"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "I2S0_CTRL0"
+offset = 0xe4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_I2S0_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S0_APB_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S0_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "I2S0_RX_CTRL0"
+offset = 0xe8
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_I2S0_RX_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S0_RX_CLK_SRC_SEL"
+bits = "2:1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S0_RX_DIV_N"
+bits = "10:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S0_MST_CLK_SEL"
+bits = "11"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "I2S0_RX_DIV_CTRL0"
+offset = 0xec
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_I2S0_RX_DIV_X"
+bits = "8:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S0_RX_DIV_Y"
+bits = "17:9"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S0_RX_DIV_Z"
+bits = "26:18"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S0_RX_DIV_YN1"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "I2S0_TX_CTRL0"
+offset = 0xf0
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_I2S0_TX_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S0_TX_CLK_SRC_SEL"
+bits = "2:1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S0_TX_DIV_N"
+bits = "10:3"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "I2S0_TX_DIV_CTRL0"
+offset = 0xf4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_I2S0_TX_DIV_X"
+bits = "8:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S0_TX_DIV_Y"
+bits = "17:9"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S0_TX_DIV_Z"
+bits = "26:18"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S0_TX_DIV_YN1"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "I2S1_CTRL0"
+offset = 0xf8
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_I2S1_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S1_APB_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S1_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "I2S1_RX_CTRL0"
+offset = 0xfc
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_I2S1_RX_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S1_RX_CLK_SRC_SEL"
+bits = "2:1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S1_RX_DIV_N"
+bits = "10:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S1_MST_CLK_SEL"
+bits = "11"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "I2S1_RX_DIV_CTRL0"
+offset = 0x100
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_I2S1_RX_DIV_X"
+bits = "8:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S1_RX_DIV_Y"
+bits = "17:9"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S1_RX_DIV_Z"
+bits = "26:18"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S1_RX_DIV_YN1"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "I2S1_TX_CTRL0"
+offset = 0x104
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_I2S1_TX_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S1_TX_CLK_SRC_SEL"
+bits = "2:1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S1_TX_DIV_N"
+bits = "10:3"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "I2S1_TX_DIV_CTRL0"
+offset = 0x108
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_I2S1_TX_DIV_X"
+bits = "8:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S1_TX_DIV_Y"
+bits = "17:9"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S1_TX_DIV_Z"
+bits = "26:18"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_I2S1_TX_DIV_YN1"
+bits = "27"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "TWAI0_CTRL0"
+offset = 0x10c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_TWAI0_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TWAI0_CLK_SRC_SEL"
+bits = "2:1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TWAI0_CLK_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TWAI0_RST_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TWAI0_FORCE_NORST"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "TWAI1_CTRL0"
+offset = 0x110
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_TWAI1_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TWAI1_CLK_SRC_SEL"
+bits = "2:1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TWAI1_CLK_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TWAI1_RST_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TWAI1_FORCE_NORST"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "TIMERGRP0_CTRL0"
+offset = 0x114
+description = "need_des"
+reset = { value = 0x921 }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_TIMERGRP0_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP0_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP0_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP0_T0_SRC_SEL"
+bits = "4:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP0_T0_CLK_EN"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP0_T1_SRC_SEL"
+bits = "7:6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP0_T1_CLK_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP0_WDT_SRC_SEL"
+bits = "10:9"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP0_WDT_CLK_EN"
+bits = "11"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "TIMERGRP0_TGRT_CTRL0"
+offset = 0x118
+description = "need_des"
+reset = { value = 0x11 }
+reserved = { mask = 0xffe00000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_TIMERGRP0_TGRT_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP0_TGRT_CLK_SRC_SEL"
+bits = "4:1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP0_TGRT_CLK_DIV_NUM"
+bits = "20:5"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "TIMERGRP1_CTRL0"
+offset = 0x11c
+description = "need_des"
+reset = { value = 0x921 }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_TIMERGRP1_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP1_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP1_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP1_T0_SRC_SEL"
+bits = "4:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP1_T0_CLK_EN"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP1_T1_SRC_SEL"
+bits = "7:6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP1_T1_CLK_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP1_WDT_SRC_SEL"
+bits = "10:9"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TIMERGRP1_WDT_CLK_EN"
+bits = "11"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "SYSTIMER_CTRL0"
+offset = 0x120
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffe0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_SYSTIMER_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SYSTIMER_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SYSTIMER_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SYSTIMER_CLK_SRC_SEL"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SYSTIMER_CLK_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "MCPWM0_CTRL0"
+offset = 0x124
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_MCPWM0_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM0_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM0_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM0_CLK_SRC_SEL"
+bits = "4:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM0_CLK_EN"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM0_CLK_DIV_NUM"
+bits = "13:6"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "MCPWM1_CTRL0"
+offset = 0x128
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_MCPWM1_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM1_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM1_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM1_CLK_SRC_SEL"
+bits = "4:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM1_CLK_EN"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM1_CLK_DIV_NUM"
+bits = "13:6"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "MCPWM2_CTRL0"
+offset = 0x12c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_MCPWM2_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM2_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM2_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM2_CLK_SRC_SEL"
+bits = "4:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM2_CLK_EN"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM2_CLK_DIV_NUM"
+bits = "13:6"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "MCPWM3_CTRL0"
+offset = 0x130
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_MCPWM3_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM3_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM3_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM3_CLK_SRC_SEL"
+bits = "4:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM3_CLK_EN"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MCPWM3_CLK_DIV_NUM"
+bits = "13:6"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "INTRMTX_CTRL0"
+offset = 0x134
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_INTRMTX_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_INTRMTX_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_INTRMTX_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "PCNT_CTRL0"
+offset = 0x138
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PCNT0_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PCNT0_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PCNT0_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PCNT1_APB_CLK_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PCNT1_RST_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PCNT1_FORCE_NORST"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "USB_DEVICE_CTRL0"
+offset = 0x144
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_USB_DEVICE_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LEDC_CTRL0"
+offset = 0x148
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_LEDC0_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LEDC0_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LEDC0_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LEDC0_CLK_SRC_SEL"
+bits = "4:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LEDC0_CLK_EN"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LEDC1_APB_CLK_EN"
+bits = "6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LEDC1_RST_EN"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LEDC1_FORCE_NORST"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LEDC1_CLK_SRC_SEL"
+bits = "10:9"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LEDC1_CLK_EN"
+bits = "11"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LCDCAM_CTRL0"
+offset = 0x14c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffe0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_LCDCAM_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LCDCAM_APB_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LCDCAM_SYS_CLK_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LCDCAM_RST_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LCDCAM_FORCE_NORST"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LCDCAM_LCD_CTRL0"
+offset = 0x150
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xf8000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_LCD_CLK_SRC_SEL"
+bits = "1:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LCD_CLK_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LCD_CLK_DIV_NUM"
+bits = "10:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LCD_CLK_DIV_NUMERATOR"
+bits = "18:11"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LCD_CLK_DIV_DENOMINATOR"
+bits = "26:19"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LCDCAM_LCDCAM_CTRL0"
+offset = 0x154
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xf8000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_LCDCAM_CLK_SRC_SEL"
+bits = "1:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LCDCAM_CLK_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LCDCAM_CLK_DIV_NUM"
+bits = "10:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LCDCAM_CLK_DIV_NUMERATOR"
+bits = "18:11"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LCDCAM_CLK_DIV_DENOMINATOR"
+bits = "26:19"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LCDCAM_CAM_CTRL0"
+offset = 0x158
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xf8000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_CAM_CLK_SRC_SEL"
+bits = "1:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CAM_CLK_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CAM_CLK_DIV_NUM"
+bits = "10:3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CAM_CLK_DIV_NUMERATOR"
+bits = "18:11"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CAM_CLK_DIV_DENOMINATOR"
+bits = "26:19"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "IOMUX_CTRL0"
+offset = 0x15c
+description = "need_des"
+reset = { value = 0x11 }
+reserved = { mask = 0xffffe000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_IOMUX_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_IOMUX_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_IOMUX_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_IOMUX_CLK_SRC_SEL"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_IOMUX_CLK_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_IOMUX_CLK_DIV_NUM"
+bits = "12:5"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HPWDT_CORE0_RST_CTRL0"
+offset = 0x160
+description = "need_des"
+reset = { value = 0x1011 }
+reserved = { mask = 0xfffe0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_HPCORE0_STALL_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_HPCORE0_STALL_WAIT_NUM"
+bits = "8:1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_WDT_HPCORE0_RST_LEN"
+bits = "16:9"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "HPWDT_CORE1_RST_CTRL0"
+offset = 0x164
+description = "need_des"
+reset = { value = 0x1011 }
+reserved = { mask = 0xfffe0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_HPCORE1_STALL_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_HPCORE1_STALL_WAIT_NUM"
+bits = "8:1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_WDT_HPCORE1_RST_LEN"
+bits = "16:9"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "CPU_SRC_FREQ0"
+offset = 0x168
+description = "CPU Source Frequency"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "REG_CPU_SRC_FREQ"
+bits = "31:0"
+class = "read-only"
+description = "cpu source clock frequency, step by 0.25MHz"
+
+[[registers]]
+name = "CPU_CLK_STATUS0"
+offset = 0x16c
+description = "CPU Clock Status"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffe0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_ASIC_OR_FPGA"
+bits = "0"
+class = "read-only"
+description = "0: ASIC mode, 1: FPGA mode"
+
+[[registers.fields]]
+name = "REG_CPU_DIV_EFFECT"
+bits = "1"
+class = "read-only"
+description = "0: Divider bypass, 1: Divider takes effect"
+
+[[registers.fields]]
+name = "REG_CPU_SRC_IS_CPLL"
+bits = "2"
+class = "read-only"
+description = "0: CPU source isn't cpll_400m, 1: CPU Source is cll_400m"
+
+[[registers.fields]]
+name = "REG_CPU_DIV_NUM_CUR"
+bits = "10:3"
+class = "read-only"
+description = "cpu current div number"
+
+[[registers.fields]]
+name = "REG_CPU_DIV_NUMERATOR_CUR"
+bits = "13:11"
+class = "read-only"
+description = "cpu current div numerator"
+
+[[registers.fields]]
+name = "REG_CPU_DIV_DENOMINATOR_CUR"
+bits = "16:14"
+class = "read-only"
+description = "cpu current div denominator"
+
+[[registers]]
+name = "HPCORE_WDT_RESET_SOURCE0"
+offset = 0x170
+description = "need_des"
+reset = { value = 0x2 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_HPCORE0_WDT_RESET_SOURCE_SEL"
+bits = "0"
+class = "plain"
+description = "1'b0: use wdt0 to reset hpcore0, 1'b1: use wdt1 to reset hpcore0"
+
+[[registers.fields]]
+name = "REG_HPCORE1_WDT_RESET_SOURCE_SEL"
+bits = "1"
+class = "plain"
+description = "1'b0: use wdt0 to reset hpcore1, 1'b1: use wdt1 to reset hpcore1"
+
+[[registers]]
+name = "ANA_PLL_CTRL0"
+offset = 0x174
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_PLLA_CAL_END"
+bits = "0"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PLLA_CAL_STOP"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CPU_PLL_CAL_END"
+bits = "2"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CPU_PLL_CAL_STOP"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SDIO_PLL_CAL_END"
+bits = "4"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_SDIO_PLL_CAL_STOP"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BBPLL_CAL_END"
+bits = "6"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_BBPLL_CAL_STOP"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MSPI_CAL_END"
+bits = "8"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_MSPI_CAL_STOP"
+bits = "9"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_PLL_CAL_END"
+bits = "10"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "REF_500M_CTRL0"
+offset = 0x178
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_REF_500M_SEL"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "REF_240M_CTRL0"
+offset = 0x17c
+description = "need_des"
+reset = { value = 0x101 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_REF_240M_CLK_DIV_NUM"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_REF_240M_CLK_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "REF_160M_CTRL0"
+offset = 0x180
+description = "need_des"
+reset = { value = 0x102 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_REF_160M_CLK_DIV_NUM"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_REF_160M_CLK_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "REF_120M_CTRL0"
+offset = 0x184
+description = "need_des"
+reset = { value = 0x103 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_REF_120M_CLK_DIV_NUM"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_REF_120M_CLK_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "REF_80M_CTRL0"
+offset = 0x188
+description = "need_des"
+reset = { value = 0x505 }
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_REF_80M_CLK_DIV_NUM"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_REF_80M_CLK_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_REF_80M_SEL"
+bits = "9"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_REF_80M_MUX_CLK_EN"
+bits = "10"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "REF_60M_CTRL0"
+offset = 0x18c
+description = "need_des"
+reset = { value = 0x107 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_REF_60M_CLK_DIV_NUM"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_REF_60M_CLK_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "REF_20M_CTRL0"
+offset = 0x190
+description = "need_des"
+reset = { value = 0x117 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_REF_20M_CLK_DIV_NUM"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_REF_20M_CLK_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "REF_50M_CTRL0"
+offset = 0x194
+description = "need_des"
+reset = { value = 0x105 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_REF_50M_CLK_DIV_NUM"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_REF_50M_CLK_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "REF_25M_CTRL0"
+offset = 0x198
+description = "need_des"
+reset = { value = 0x10b }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_REF_25M_CLK_DIV_NUM"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_REF_25M_CLK_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "TM_CLK_CTRL0"
+offset = 0x19c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_TM_480M_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TM_240M_CLK_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TM_160M_CLK_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TM_120M_CLK_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TM_80M_CLK_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TM_60M_CLK_EN"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TM_48M_CLK_EN"
+bits = "6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TM_20M_CLK_EN"
+bits = "7"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_TM_250M_CLK_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "DBG0_CLK_CTRL0"
+offset = 0x1a0
+description = "need_des"
+reset = { value = 0x3ff }
+reserved = { mask = 0xfffe0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_DBG_CH0_SEL"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_DBG_CH0_DIV_NUM"
+bits = "15:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_DBG_CH0_EN"
+bits = "16"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "DBG1_CLK_CTRL0"
+offset = 0x1a4
+description = "need_des"
+reset = { value = 0x3ff }
+reserved = { mask = 0xfffe0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_DBG_CH1_SEL"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_DBG_CH1_DIV_NUM"
+bits = "15:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_DBG_CH1_EN"
+bits = "16"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "DBG2_CLK_CTRL0"
+offset = 0x1a8
+description = "need_des"
+reset = { value = 0x3ff }
+reserved = { mask = 0xfffe0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_DBG_CH2_SEL"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_DBG_CH2_DIV_NUM"
+bits = "15:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_DBG_CH2_EN"
+bits = "16"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_CLK_CTRL0"
+offset = 0x1ac
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_LPAON_FOSC_CLK_FORCE_ON"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LPAON_XTAL_CLK_FORCE_ON"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_LPAON_PLL80M_CLK_FORCE_ON"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "AHB_ASRC_CTRL0"
+offset = 0x1b0
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_AHB_ASRC_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_AHB_ASRC_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_AHB_ASRC_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "CORDIC_CTRL0"
+offset = 0x1b4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_CORDIC_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CORDIC_APB_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CORDIC_SYS_CLK_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CORDIC_SYS_RST_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CORDIC_CLK_EN"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CORDIC_CORE_RST_EN"
+bits = "5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CORDIC_FORCE_NORST"
+bits = "6"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CORDIC_CLK_SRC_SEL"
+bits = "8:7"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "ZERO_DET_CTRL0"
+offset = 0x1b8
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffff8000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_ZERO_DET_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ZERO_DET_APB_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ZERO_DET_CLK_EN"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ZERO_DET_CORE_RST_EN"
+bits = "3"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ZERO_DET_FORCE_NORST"
+bits = "4"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ZERO_DET_CLK_SRC_SEL"
+bits = "6:5"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_ZERO_DET_CLK_DIV_NUM"
+bits = "14:7"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "CORDIC_CTRL1"
+offset = 0x1bc
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xff000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_CORDIC_CLK_DIV_NUM"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CORDIC_CLK_DIV_NUMERATOR"
+bits = "15:8"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CORDIC_CLK_DIV_DENONIMATOR"
+bits = "23:16"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "CLK_PWR_DECREASE"
+offset = 0x1c8
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_APB_HW_DECREASE_DIV_NUM"
+bits = "7:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_CPU_WFI_DECREASE_EN"
+bits = "8"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "CNNT_IOMUX_CTRL0"
+offset = 0x1cc
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_CNNT_IOMUX_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "cnnt_iomux clk en"
+
+[[registers]]
+name = "HP_I2CMST_CTRL0"
+offset = 0x1d0
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_HP_I2CMST_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_HP_I2CMST_RST_EN"
+bits = "1"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "REG_HP_I2CMST_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "AXI_PERF_MON_CTRL0"
+offset = 0x1d4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_AXI_PERF_MON_RST_EN"
+bits = "0"
+class = "plain"
+description = "axi_perf_mon rst en"
+
+[[registers.fields]]
+name = "REG_AXI_PERF_MON_CLK_EN"
+bits = "1"
+class = "plain"
+description = "axi_perf_mon clk en"
+
+[[registers.fields]]
+name = "REG_AXI_PERF_MON_FORCE_NORST"
+bits = "2"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "CNNT_SYSREG_CTRL0"
+offset = 0x1d8
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_CNNT_SYSREG_SYS_CLK_EN"
+bits = "0"
+class = "plain"
+description = "cnnt_sysreg clk en"
+
+[[registers]]
+name = "HP_ALIVE_SYSREG_CTRL0"
+offset = 0x1dc
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_HP_ALIVE_SYSREG_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "hp alive_sysreg clk en"
+
+[[registers]]
+name = "MODEM_CONF"
+offset = 0x1e0
+description = "MODEM_APB configuration register"
+reset = { value = 0x25 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "MODEM_APB_CLK_EN"
+bits = "0"
+class = "plain"
+description = "This field indicates if modem_apb clock is enable. 0: disable, 1: enable(default)."
+
+[[registers.fields]]
+name = "MODEM_RST_EN"
+bits = "1"
+class = "plain"
+description = "Set this file as 1 to reset modem-subsystem."
+
+[[registers.fields]]
+name = "MODEM_CLK_EN"
+bits = "2"
+class = "plain"
+description = "This field indicates if modem source clock is enable. 0: disable, 1: enable(default)."
+
+[[registers.fields]]
+name = "MODEM_CLK_SOURCE_SEL"
+bits = "3"
+class = "plain"
+description = "modem clk source sel"
+
+[[registers.fields]]
+name = "MODEM_PLL_CLK_EN"
+bits = "4"
+class = "plain"
+description = "modem clk source pll on"
+
+[[registers.fields]]
+name = "MODEM_XTAL_CLK_EN"
+bits = "5"
+class = "plain"
+description = "modem clk source xtal on"
+
+[[registers]]
+name = "CLK_EN0"
+offset = 0x1f8
+description = "need_des"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_CLK_EN"
+bits = "0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "DATE"
+offset = 0x1fc
+description = "need_des"
+reset = { value = 0x2509110 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
+
+[[registers.fields]]
+name = "REG_DATE"
+bits = "27:0"
+class = "plain"
+description = "Version control register"
+
+[[commands]]
+register = "ROOT_CLK_CTRL0"
+commands = ["REG_SOC_CLK_UPDATE"]
+sources = ["ESP_IDF_4D59230D_ESP_HAL_CLOCK_ESP32S31_INCLUDE_HAL_CLK_TREE_LL_H_L604", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H_L121"]

@@ -1,0 +1,5034 @@
+# Imported by `cargo registers import` from the pinned vendor SVD and
+# ESP-IDF headers (registers/import.toml).
+schema = 3
+
+[type]
+name = "CACHE"
+description = "The L1 and L2 caches: control, synchronization, preload, lock and the access-fault interrupts."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "L1_ICACHE_CTRL"
+offset = 0x0
+description = "L1 instruction Cache(L1-ICache) control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE_SHUT_IBUS0"
+bits = "0"
+class = "plain"
+description = "Configures whether to disable IBUS0 to access icache.\\\\1: Disable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE_SHUT_IBUS1"
+bits = "1"
+class = "plain"
+description = "Configures whether to disable IBUS1 to access icache.\\\\1: Disable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE_SHUT_IBUS2"
+bits = "2"
+class = "plain"
+description = "Configures whether to disable IBUS2 to access ROM cache.\\\\1: Disable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE_SHUT_IBUS3"
+bits = "3"
+class = "plain"
+description = "Configures whether to disable IBUS3 to access ROM cache.\\\\1: Disable\\\\"
+
+[[registers]]
+name = "L1_DCACHE_CTRL"
+offset = 0x4
+description = "L1 data Cache(L1-DCache) control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffe0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_DCACHE_SHUT_DBUS0"
+bits = "0"
+class = "plain"
+description = "Configures whether to disable DBUS0 to access dcache.\\\\1: Disable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_SHUT_DBUS1"
+bits = "1"
+class = "plain"
+description = "Configures whether to disable DBUS1 to access dcache.\\\\1: Disable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_SHUT_DBUS2"
+bits = "2"
+class = "plain"
+description = "Configures whether to disable DBUS2 to access ROM cache.\\\\1: Disable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_SHUT_DBUS3"
+bits = "3"
+class = "plain"
+description = "Configures whether to disable DBUS3 to access ROM cache.\\\\1: Disable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_SHUT_DMA"
+bits = "4"
+class = "debug-only"
+description = "The bit is used to disable DMA access L1-DCache, 0: enable, 1: disable"
+
+[[registers]]
+name = "L1_BYPASS_CACHE_CONF"
+offset = 0x8
+description = "Bypass Cache configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffec, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "BYPASS_L1_ICACHE0_EN"
+bits = "0"
+class = "debug-only"
+description = "Configures bypass L1-ICache0. \\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "BYPASS_L1_ICACHE1_EN"
+bits = "1"
+class = "debug-only"
+description = "Configures bypass L1-ICache1. \\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "BYPASS_L1_DCACHE_EN"
+bits = "4"
+class = "plain"
+description = "Configures bypass L1-DCache. \\\\1: Enable\\\\"
+
+[[registers]]
+name = "L1_CACHE_ATOMIC_CONF"
+offset = 0xc
+description = "L1 Cache atomic feature configure register"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_DCACHE_ATOMIC_EN"
+bits = "0"
+class = "plain"
+description = "Configures atomic feature on L1-DCache when multiple cores access L1-DCache. \\\\1: Enable\\\\"
+
+[[registers]]
+name = "L1_ACACHE_CACHESIZE_CONF"
+offset = 0x10
+description = "L1 Auxiliary Cache CacheSize mode configure register"
+reset = { value = 0x10 }
+reserved = { mask = 0xffffe000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ACACHE_CACHESIZE_256"
+bits = "0"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ACache as 256 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_CACHESIZE_512"
+bits = "1"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ACache as 512 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_CACHESIZE_1K"
+bits = "2"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ACache as 1k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_CACHESIZE_2K"
+bits = "3"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ACache as 2k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_CACHESIZE_4K"
+bits = "4"
+class = "read-only"
+description = "The field is used to configure cachesize of L1-ACache as 4k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_CACHESIZE_8K"
+bits = "5"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ACache as 8k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_CACHESIZE_16K"
+bits = "6"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ACache as 16k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_CACHESIZE_32K"
+bits = "7"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ACache as 32k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_CACHESIZE_64K"
+bits = "8"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ACache as 64k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_CACHESIZE_128K"
+bits = "9"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ACache as 128k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_CACHESIZE_256K"
+bits = "10"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ACache as 256k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_CACHESIZE_512K"
+bits = "11"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ACache as 512k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_CACHESIZE_1024K"
+bits = "12"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ACache as 1024k bytes. This field and all other fields within this register is onehot."
+
+[[registers]]
+name = "L1_ACACHE_BLOCKSIZE_CONF"
+offset = 0x14
+description = "L1 Auxiliary Cache BlockSize mode configure register"
+reset = { value = 0x8 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ACACHE_BLOCKSIZE_8"
+bits = "0"
+class = "debug-only"
+description = "The field is used to configureblocksize of L1-ACache as 8 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_BLOCKSIZE_16"
+bits = "1"
+class = "debug-only"
+description = "The field is used to configureblocksize of L1-ACache as 16 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_BLOCKSIZE_32"
+bits = "2"
+class = "debug-only"
+description = "The field is used to configureblocksize of L1-ACache as 32 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_BLOCKSIZE_64"
+bits = "3"
+class = "read-only"
+description = "The field is used to configureblocksize of L1-ACache as 64 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_BLOCKSIZE_128"
+bits = "4"
+class = "debug-only"
+description = "The field is used to configureblocksize of L1-ACache as 128 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ACACHE_BLOCKSIZE_256"
+bits = "5"
+class = "debug-only"
+description = "The field is used to configureblocksize of L1-ACache as 256 bytes. This field and all other fields within this register is onehot."
+
+[[registers]]
+name = "L1_ICACHE_CACHESIZE_CONF"
+offset = 0x18
+description = "L1 instruction Cache CacheSize mode configure register"
+reset = { value = 0x80 }
+reserved = { mask = 0xffffe000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE_CACHESIZE_256"
+bits = "0"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ICache as 256 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_CACHESIZE_512"
+bits = "1"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ICache as 512 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_CACHESIZE_1K"
+bits = "2"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ICache as 1k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_CACHESIZE_2K"
+bits = "3"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ICache as 2k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_CACHESIZE_4K"
+bits = "4"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ICache as 4k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_CACHESIZE_8K"
+bits = "5"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ICache as 8k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_CACHESIZE_16K"
+bits = "6"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ICache as 16k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_CACHESIZE_32K"
+bits = "7"
+class = "read-only"
+description = "The field is used to configure cachesize of L1-ICache as 32k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_CACHESIZE_64K"
+bits = "8"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ICache as 64k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_CACHESIZE_128K"
+bits = "9"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ICache as 128k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_CACHESIZE_256K"
+bits = "10"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ICache as 256k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_CACHESIZE_512K"
+bits = "11"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ICache as 512k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_CACHESIZE_1024K"
+bits = "12"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-ICache as 1024k bytes. This field and all other fields within this register is onehot."
+
+[[registers]]
+name = "L1_ICACHE_BLOCKSIZE_CONF"
+offset = 0x1c
+description = "L1 instruction Cache BlockSize mode configure register"
+reset = { value = 0x8 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE_BLOCKSIZE_8"
+bits = "0"
+class = "debug-only"
+description = "The field is used to configureblocksize of L1-ICache as 8 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_BLOCKSIZE_16"
+bits = "1"
+class = "debug-only"
+description = "The field is used to configureblocksize of L1-ICache as 16 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_BLOCKSIZE_32"
+bits = "2"
+class = "debug-only"
+description = "The field is used to configureblocksize of L1-ICache as 32 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_BLOCKSIZE_64"
+bits = "3"
+class = "read-only"
+description = "The field is used to configureblocksize of L1-ICache as 64 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_BLOCKSIZE_128"
+bits = "4"
+class = "debug-only"
+description = "The field is used to configureblocksize of L1-ICache as 128 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_ICACHE_BLOCKSIZE_256"
+bits = "5"
+class = "debug-only"
+description = "The field is used to configureblocksize of L1-ICache as 256 bytes. This field and all other fields within this register is onehot."
+
+[[registers]]
+name = "L1_DCACHE_CACHESIZE_CONF"
+offset = 0x20
+description = "L1 data Cache CacheSize mode configure register"
+reset = { value = 0x100 }
+reserved = { mask = 0xffffe000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_DCACHE_CACHESIZE_256"
+bits = "0"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-DCache as 256 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_CACHESIZE_512"
+bits = "1"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-DCache as 512 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_CACHESIZE_1K"
+bits = "2"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-DCache as 1k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_CACHESIZE_2K"
+bits = "3"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-DCache as 2k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_CACHESIZE_4K"
+bits = "4"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-DCache as 4k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_CACHESIZE_8K"
+bits = "5"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-DCache as 8k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_CACHESIZE_16K"
+bits = "6"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-DCache as 16k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_CACHESIZE_32K"
+bits = "7"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-DCache as 32k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_CACHESIZE_64K"
+bits = "8"
+class = "read-only"
+description = "The field is used to configure cachesize of L1-DCache as 64k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_CACHESIZE_128K"
+bits = "9"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-DCache as 128k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_CACHESIZE_256K"
+bits = "10"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-DCache as 256k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_CACHESIZE_512K"
+bits = "11"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-DCache as 512k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_CACHESIZE_1024K"
+bits = "12"
+class = "debug-only"
+description = "The field is used to configure cachesize of L1-DCache as 1024k bytes. This field and all other fields within this register is onehot."
+
+[[registers]]
+name = "L1_DCACHE_BLOCKSIZE_CONF"
+offset = 0x24
+description = "L1 data Cache BlockSize mode configure register"
+reset = { value = 0x8 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_DCACHE_BLOCKSIZE_8"
+bits = "0"
+class = "debug-only"
+description = "The field is used to configureblocksize of L1-DCache as 8 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_BLOCKSIZE_16"
+bits = "1"
+class = "debug-only"
+description = "The field is used to configureblocksize of L1-DCache as 16 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_BLOCKSIZE_32"
+bits = "2"
+class = "debug-only"
+description = "The field is used to configureblocksize of L1-DCache as 32 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_BLOCKSIZE_64"
+bits = "3"
+class = "read-only"
+description = "The field is used to configureblocksize of L1-DCache as 64 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_BLOCKSIZE_128"
+bits = "4"
+class = "debug-only"
+description = "The field is used to configureblocksize of L1-DCache as 128 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L1_DCACHE_BLOCKSIZE_256"
+bits = "5"
+class = "debug-only"
+description = "The field is used to configureblocksize of L1-DCache as 256 bytes. This field and all other fields within this register is onehot."
+
+[[registers]]
+name = "L1_CACHE_WRAP_AROUND_CTRL"
+offset = 0x28
+description = "Cache wrap around control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffec, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_WRAP"
+bits = "0"
+class = "plain"
+description = "Configures whether to enable the critical word first function.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_WRAP"
+bits = "1"
+class = "plain"
+description = "Configures whether to enable the critical word first function.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_WRAP"
+bits = "4"
+class = "plain"
+description = "Configures whether to enable the critical word first function.\\\\1: Enable\\\\"
+
+[[registers]]
+name = "L1_CACHE_MISS_ACCESS_CTRL"
+offset = 0x2c
+description = "Cache wrap around control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffec, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_MISS_DISABLE_ACCESS"
+bits = "0"
+class = "plain"
+description = "Configures whether to enable early restart function.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_MISS_DISABLE_ACCESS"
+bits = "1"
+class = "plain"
+description = "Configures whether to enable early restart function.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_CACHE_MISS_DISABLE_ACCESS"
+bits = "4"
+class = "plain"
+description = "Configures whether to enable early restart function.\\\\1: Enable\\\\"
+
+[[registers]]
+name = "L1_CACHE_FREEZE_CTRL"
+offset = 0x30
+description = "Cache Freeze control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfff8ff88, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_FREEZE_EN"
+bits = "0"
+class = "plain"
+description = "Configures whether to enable freeze operation. It can be cleared by software.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE0_FREEZE_MODE"
+bits = "1"
+class = "plain"
+description = "Configures the freeze mode.\\\\1: Assert hit if a cache miss occurs\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE0_FREEZE_DONE"
+bits = "2"
+class = "read-only"
+description = "Indicates whether the freeze operation has finished.\\\\1: Finished\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_FREEZE_EN"
+bits = "4"
+class = "plain"
+description = "Configures whether to enable freeze operation. It can be cleared by software.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_FREEZE_MODE"
+bits = "5"
+class = "plain"
+description = "Configures the freeze mode.\\\\1: Assert hit if a cache miss occurs\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_FREEZE_DONE"
+bits = "6"
+class = "read-only"
+description = "Indicates whether the freeze operation has finished.\\\\1: Finished\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_FREEZE_EN"
+bits = "16"
+class = "plain"
+description = "Configures whether to enable freeze operation. It can be cleared by software.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_FREEZE_MODE"
+bits = "17"
+class = "plain"
+description = "Configures the freeze mode.\\\\1: Assert hit if a cache miss occurs\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_FREEZE_DONE"
+bits = "18"
+class = "read-only"
+description = "Indicates whether the freeze operation has finished.\\\\1: Finished\\\\"
+
+[[registers]]
+name = "L1_CACHE_DATA_MEM_ACS_CONF"
+offset = 0x34
+description = "Cache data memory access configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffcffcc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_DATA_MEM_RD_EN"
+bits = "0"
+class = "plain"
+description = "Configures whether to enable the configuration bus to read the L1 cache data memory.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE0_DATA_MEM_WR_EN"
+bits = "1"
+class = "plain"
+description = "Configures whether to enable the configuration bus to write the L1 cache data memory.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_DATA_MEM_RD_EN"
+bits = "4"
+class = "plain"
+description = "Configures whether to enable the configuration bus to read the L1 cache data memory.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_DATA_MEM_WR_EN"
+bits = "5"
+class = "plain"
+description = "Configures whether to enable the configuration bus to write the L1 cache data memory.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_DATA_MEM_RD_EN"
+bits = "16"
+class = "plain"
+description = "Configures whether to enable the configuration bus to read the L1 cache data memory.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_DATA_MEM_WR_EN"
+bits = "17"
+class = "plain"
+description = "Configures whether to enable the configuration bus to write the L1 cache data memory.\\\\1: Enable\\\\"
+
+[[registers]]
+name = "L1_CACHE_TAG_MEM_ACS_CONF"
+offset = 0x38
+description = "Cache tag memory access configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffcffcc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_TAG_MEM_RD_EN"
+bits = "0"
+class = "plain"
+description = "Configures whether to enable the configuration bus to read the L1 cache tag memory.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE0_TAG_MEM_WR_EN"
+bits = "1"
+class = "plain"
+description = "Configures whether to enable the configuration bus to write the L1 cache tag memory.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_TAG_MEM_RD_EN"
+bits = "4"
+class = "plain"
+description = "Configures whether to enable the configuration bus to read the L1 cache tag memory.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_TAG_MEM_WR_EN"
+bits = "5"
+class = "plain"
+description = "Configures whether to enable the configuration bus to write the L1 cache tag memory.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_TAG_MEM_RD_EN"
+bits = "16"
+class = "plain"
+description = "Configures whether to enable the configuration bus to read the L1 cache tag memory.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_TAG_MEM_WR_EN"
+bits = "17"
+class = "plain"
+description = "Configures whether to enable the configuration bus to write the L1 cache tag memory.\\\\1: Enable\\\\"
+
+[[registers]]
+name = "L1_ICACHE0_PRELOCK_CONF"
+offset = 0x3c
+description = "L1 instruction Cache 0 prelock configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_PRELOCK_SCT0_EN"
+bits = "0"
+class = "plain"
+description = "Configures whether to enable the prelocking function in Section 0 of icache.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE0_PRELOCK_SCT1_EN"
+bits = "1"
+class = "plain"
+description = "Configures whether to enable the prelocking function in Section 1 of icache.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE0_PRELOCK_RGID"
+bits = "5:2"
+class = "plain"
+description = "Configures the gid of l1 icache0 prelock."
+
+[[registers]]
+name = "L1_ICACHE0_PRELOCK_SCT0_ADDR"
+offset = 0x40
+description = "L1 instruction Cache 0 prelock section0 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE0_PRELOCK_SCT0_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of the first section of prelock on L1-ICache0, which should be used together with L1_ICACHE0_PRELOCK_SCT0_SIZE_REG"
+
+[[registers]]
+name = "L1_ICACHE0_PRELOCK_SCT1_ADDR"
+offset = 0x44
+description = "L1 instruction Cache 0 prelock section1 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE0_PRELOCK_SCT1_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of the second section of prelock on L1-ICache0, which should be used together with L1_ICACHE0_PRELOCK_SCT1_SIZE_REG"
+
+[[registers]]
+name = "L1_ICACHE0_PRELOCK_SCT_SIZE"
+offset = 0x48
+description = "L1 instruction Cache 0 prelock section size configure register"
+reset = { value = 0x3fff3fff }
+reserved = { mask = 0xc000c000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_PRELOCK_SCT0_SIZE"
+bits = "13:0"
+class = "plain"
+description = "Configures the size of the first section of prelock on L1-ICache0, which should be used together with L1_ICACHE0_PRELOCK_SCT0_ADDR_REG"
+
+[[registers.fields]]
+name = "L1_ICACHE0_PRELOCK_SCT1_SIZE"
+bits = "29:16"
+class = "plain"
+description = "Configures the size of the second section of prelock on L1-ICache0, which should be used together with L1_ICACHE0_PRELOCK_SCT1_ADDR_REG"
+
+[[registers]]
+name = "L1_ICACHE1_PRELOCK_CONF"
+offset = 0x4c
+description = "L1 instruction Cache 1 prelock configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE1_PRELOCK_SCT0_EN"
+bits = "0"
+class = "plain"
+description = "Configures whether to enable the prelocking function in Section 0 of icache.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_PRELOCK_SCT1_EN"
+bits = "1"
+class = "plain"
+description = "Configures whether to enable the prelocking function in Section 1 of icache.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_PRELOCK_RGID"
+bits = "5:2"
+class = "plain"
+description = "Configures the gid of l1 icache1 prelock."
+
+[[registers]]
+name = "L1_ICACHE1_PRELOCK_SCT0_ADDR"
+offset = 0x50
+description = "L1 instruction Cache 1 prelock section0 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE1_PRELOCK_SCT0_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Those bits are used to configure the start address of the first section of prelock on L1-ICache1, which should be used together with L1_ICACHE1_PRELOCK_SCT0_SIZE_REG"
+
+[[registers]]
+name = "L1_ICACHE1_PRELOCK_SCT1_ADDR"
+offset = 0x54
+description = "L1 instruction Cache 1 prelock section1 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE1_PRELOCK_SCT1_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of the second section of prelock on L1-ICache1, which should be used together with L1_ICACHE1_PRELOCK_SCT1_SIZE_REG"
+
+[[registers]]
+name = "L1_ICACHE1_PRELOCK_SCT_SIZE"
+offset = 0x58
+description = "L1 instruction Cache 1 prelock section size configure register"
+reset = { value = 0x3fff3fff }
+reserved = { mask = 0xc000c000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE1_PRELOCK_SCT0_SIZE"
+bits = "13:0"
+class = "plain"
+description = "Configures the size of the first section of prelock on L1-ICache1, which should be used together with L1_ICACHE1_PRELOCK_SCT0_ADDR_REG"
+
+[[registers.fields]]
+name = "L1_ICACHE1_PRELOCK_SCT1_SIZE"
+bits = "29:16"
+class = "plain"
+description = "Configures the size of the second section of prelock on L1-ICache1, which should be used together with L1_ICACHE1_PRELOCK_SCT1_ADDR_REG"
+
+[[registers]]
+name = "L1_ICACHE2_PRELOCK_CONF"
+offset = 0x5c
+description = "L1 instruction Cache 2 prelock configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE2_PRELOCK_SCT0_EN"
+bits = "0"
+class = "debug-only"
+description = "Configures the first section of prelock function on L1-ICache2."
+
+[[registers.fields]]
+name = "L1_ICACHE2_PRELOCK_SCT1_EN"
+bits = "1"
+class = "debug-only"
+description = "Configures the second section of prelock function on L1-ICache2."
+
+[[registers.fields]]
+name = "L1_ICACHE2_PRELOCK_RGID"
+bits = "5:2"
+class = "debug-only"
+description = "Configures the gid of l1 icache2 prelock."
+
+[[registers]]
+name = "L1_ICACHE2_PRELOCK_SCT0_ADDR"
+offset = 0x60
+description = "L1 instruction Cache 2 prelock section0 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE2_PRELOCK_SCT0_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of the first section of prelock on L1-ICache2, which should be used together with L1_ICACHE2_PRELOCK_SCT0_SIZE_REG"
+
+[[registers]]
+name = "L1_ICACHE2_PRELOCK_SCT1_ADDR"
+offset = 0x64
+description = "L1 instruction Cache 2 prelock section1 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE2_PRELOCK_SCT1_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of the second section of prelock on L1-ICache2, which should be used together with L1_ICACHE2_PRELOCK_SCT1_SIZE_REG"
+
+[[registers]]
+name = "L1_ICACHE2_PRELOCK_SCT_SIZE"
+offset = 0x68
+description = "L1 instruction Cache 2 prelock section size configure register"
+reset = { value = 0x3fff3fff }
+reserved = { mask = 0xc000c000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE2_PRELOCK_SCT0_SIZE"
+bits = "13:0"
+class = "debug-only"
+description = "Configures the size of the first section of prelock on L1-ICache2, which should be used together with L1_ICACHE2_PRELOCK_SCT0_ADDR_REG"
+
+[[registers.fields]]
+name = "L1_ICACHE2_PRELOCK_SCT1_SIZE"
+bits = "29:16"
+class = "debug-only"
+description = "Configures the size of the second section of prelock on L1-ICache2, which should be used together with L1_ICACHE2_PRELOCK_SCT1_ADDR_REG"
+
+[[registers]]
+name = "L1_ICACHE3_PRELOCK_CONF"
+offset = 0x6c
+description = "L1 instruction Cache 3 prelock configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE3_PRELOCK_SCT0_EN"
+bits = "0"
+class = "debug-only"
+description = "Configures the first section of prelock function on L1-ICache3."
+
+[[registers.fields]]
+name = "L1_ICACHE3_PRELOCK_SCT1_EN"
+bits = "1"
+class = "debug-only"
+description = "Configures the second section of prelock function on L1-ICache3."
+
+[[registers.fields]]
+name = "L1_ICACHE3_PRELOCK_RGID"
+bits = "5:2"
+class = "debug-only"
+description = "Configures the gid of l1 icache3 prelock."
+
+[[registers]]
+name = "L1_ICACHE3_PRELOCK_SCT0_ADDR"
+offset = 0x70
+description = "L1 instruction Cache 3 prelock section0 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE3_PRELOCK_SCT0_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of the first section of prelock on L1-ICache3, which should be used together with L1_ICACHE3_PRELOCK_SCT0_SIZE_REG"
+
+[[registers]]
+name = "L1_ICACHE3_PRELOCK_SCT1_ADDR"
+offset = 0x74
+description = "L1 instruction Cache 3 prelock section1 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE3_PRELOCK_SCT1_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of the second section of prelock on L1-ICache3, which should be used together with L1_ICACHE3_PRELOCK_SCT1_SIZE_REG"
+
+[[registers]]
+name = "L1_ICACHE3_PRELOCK_SCT_SIZE"
+offset = 0x78
+description = "L1 instruction Cache 3 prelock section size configure register"
+reset = { value = 0x3fff3fff }
+reserved = { mask = 0xc000c000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE3_PRELOCK_SCT0_SIZE"
+bits = "13:0"
+class = "debug-only"
+description = "Configures the size of the first section of prelock on L1-ICache3, which should be used together with L1_ICACHE3_PRELOCK_SCT0_ADDR_REG"
+
+[[registers.fields]]
+name = "L1_ICACHE3_PRELOCK_SCT1_SIZE"
+bits = "29:16"
+class = "debug-only"
+description = "Configures the size of the second section of prelock on L1-ICache3, which should be used together with L1_ICACHE3_PRELOCK_SCT1_ADDR_REG"
+
+[[registers]]
+name = "L1_DCACHE_PRELOCK_CONF"
+offset = 0x7c
+description = "L1 data Cache prelock configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_DCACHE_PRELOCK_SCT0_EN"
+bits = "0"
+class = "plain"
+description = "Configures whether to enable the prelocking function in Section 0 of dcache.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_PRELOCK_SCT1_EN"
+bits = "1"
+class = "plain"
+description = "Configures whether to enable the prelocking function in Section 1 of dcache.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_PRELOCK_RGID"
+bits = "5:2"
+class = "plain"
+description = "Configures the gid of l1 dcache prelock."
+
+[[registers]]
+name = "L1_DCACHE_PRELOCK_SCT0_ADDR"
+offset = 0x80
+description = "L1 data Cache prelock section0 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DCACHE_PRELOCK_SCT0_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of the first section of prelock on L1-DCache, which should be used together with L1_DCACHE_PRELOCK_SCT0_SIZE_REG"
+
+[[registers]]
+name = "L1_DCACHE_PRELOCK_SCT1_ADDR"
+offset = 0x84
+description = "L1 data Cache prelock section1 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DCACHE_PRELOCK_SCT1_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of the second section of prelock on L1-DCache, which should be used together with L1_DCACHE_PRELOCK_SCT1_SIZE_REG"
+
+[[registers]]
+name = "L1_DCACHE_PRELOCK_SCT_SIZE"
+offset = 0x88
+description = "L1 data Cache prelock section size configure register"
+reset = { value = 0x3fff3fff }
+reserved = { mask = 0xc000c000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_DCACHE_PRELOCK_SCT0_SIZE"
+bits = "13:0"
+class = "plain"
+description = "Configures the size of the first section of prelock on L1-DCache, which should be used together with L1_DCACHE_PRELOCK_SCT0_ADDR_REG"
+
+[[registers.fields]]
+name = "L1_DCACHE_PRELOCK_SCT1_SIZE"
+bits = "29:16"
+class = "plain"
+description = "Configures the size of the second section of prelock on L1-DCache, which should be used together with L1_DCACHE_PRELOCK_SCT1_ADDR_REG"
+
+[[registers]]
+name = "LOCK_CTRL"
+offset = 0x8c
+description = "Lock-class (manual lock) operation control register"
+reset = { value = 0x4 }
+reserved = { mask = 0xffffff80, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "LOCK_ENA"
+bits = "0"
+class = "self-clearing"
+description = "Configures whether to enable lock operation. It will be cleared by hardware after the locking operation is done.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "UNLOCK_ENA"
+bits = "1"
+class = "self-clearing"
+description = "Configures whether to enable unlock operation. It will be cleared by hardware after the unlocking operation is done.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "LOCK_DONE"
+bits = "2"
+class = "read-only"
+description = "Indicates whether the unlocking or the locking operation has finished.\\\\1: Finished\\\\"
+
+[[registers.fields]]
+name = "LOCK_RGID"
+bits = "6:3"
+class = "plain"
+description = "Configures the gid of cache lock/unlock."
+
+[[registers]]
+name = "LOCK_MAP"
+offset = 0x90
+description = "Lock (manual lock) map configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "LOCK_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures caches in the two-level cache structure will apply this lock/unlock operation. \\\\Other bits: Reserved\\\\"
+
+[[registers]]
+name = "LOCK_ADDR"
+offset = 0x94
+description = "Lock (manual lock) address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "LOCK_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of the lock/unlock operation, which should be used together with CACHE_LOCK_SIZE_REG"
+
+[[registers]]
+name = "LOCK_SIZE"
+offset = 0x98
+description = "Lock (manual lock) size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "LOCK_SIZE"
+bits = "15:0"
+class = "plain"
+description = "Configures the size of the lock/unlock operation, which should be used together with CACHE_LOCK_ADDR_REG"
+
+[[registers]]
+name = "SYNC_CTRL"
+offset = 0x9c
+description = "Sync-class operation control register"
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "INVALIDATE_ENA"
+bits = "0"
+class = "self-clearing"
+description = "Configures whether to enable the invalidation operation. Hardware will clear it once the operation has finished.\\\\Please note that this field, along with the other fields (CLEAN_ENA, WRITEBACK_ENA, WRITEBACK_INVALIDATE_ENA), is mutually exclusive. In other words, only one of these fields can be set to 1 at any given time. \\\\"
+
+[[registers.fields]]
+name = "CLEAN_ENA"
+bits = "1"
+class = "self-clearing"
+description = "Configures whether to enable the clean operation. Hardware will clear it once the operation has finished.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "WRITEBACK_ENA"
+bits = "2"
+class = "self-clearing"
+description = "Configures whether to enable the write-back operation. Hardware will clear it once the operation has finished.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "WRITEBACK_INVALIDATE_ENA"
+bits = "3"
+class = "self-clearing"
+description = "Configures whether to enable the write-back invalidation operation. Hardware will clear it once the operation has finished.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "SYNC_DONE"
+bits = "4"
+class = "read-only"
+description = "Indicates whether the synchronization operation has finished.\\\\1: Finished\\\\"
+
+[[registers.fields]]
+name = "SYNC_RGID"
+bits = "8:5"
+class = "plain"
+description = "Configures the gid of cache sync operation (invalidate, clean, writeback, writeback_invalidate)"
+
+[[registers]]
+name = "SYNC_MAP"
+offset = 0xa0
+description = "Sync map configure register"
+reset = { value = 0x1f }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "SYNC_MAP"
+bits = "5:0"
+class = "plain"
+description = "Configures which cache to perform the locking or the unlocking operation.\\\\Other bits: Reserved\\\\"
+
+[[registers]]
+name = "SYNC_ADDR"
+offset = 0xa4
+description = "Sync address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "SYNC_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of the sync operation, which should be used together with CACHE_SYNC_SIZE_REG"
+
+[[registers]]
+name = "SYNC_SIZE"
+offset = 0xa8
+description = "Sync size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "SYNC_SIZE"
+bits = "27:0"
+class = "plain"
+description = "Configures the size of the sync operation, which should be used together with CACHE_SYNC_ADDR_REG"
+
+[[registers]]
+name = "L1_ICACHE0_PRELOAD_CTRL"
+offset = 0xac
+description = "L1 instruction Cache 0 preload-operation control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_PRELOAD_ENA"
+bits = "0"
+class = "self-clearing"
+description = "Configures whether to enable the preloading operation in icache0. Hardware will clear it once the operation has finished.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE0_PRELOAD_DONE"
+bits = "1"
+class = "read-only"
+description = "Represents whether the preloading operation has finished.\\\\1: Finished\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE0_PRELOAD_ORDER"
+bits = "2"
+class = "plain"
+description = "Configures the direction of the preloading operation.\\\\1: Descending\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE0_PRELOAD_RGID"
+bits = "6:3"
+class = "plain"
+description = "Configures the gid of l1 icache0 preload."
+
+[[registers.fields]]
+name = "L1_ICACHE0_PRELOAD_MODE"
+bits = "7"
+class = "plain"
+description = "Configures the mode of l1 icache0 preload, 0: load data from next level memory, 1: not load data from next level memory."
+
+[[registers]]
+name = "L1_ICACHE0_PRELOAD_ADDR"
+offset = 0xb0
+description = "icache0 preload address configuration register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE0_PRELOAD_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of preload on L1-ICache0, which should be used together with L1_ICACHE0_PRELOAD_SIZE_REG"
+
+[[registers]]
+name = "L1_ICACHE0_PRELOAD_SIZE"
+offset = 0xb4
+description = "L1 instruction Cache 0 preload size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_PRELOAD_SIZE"
+bits = "13:0"
+class = "plain"
+description = "Configures the size of the first section of prelock on L1-ICache0, which should be used together with L1_ICACHE0_PRELOAD_ADDR_REG"
+
+[[registers]]
+name = "L1_ICACHE1_PRELOAD_CTRL"
+offset = 0xb8
+description = "L1 instruction Cache 1 preload-operation control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE1_PRELOAD_ENA"
+bits = "0"
+class = "self-clearing"
+description = "Configures whether to enable the preloading operation in icache1. Hardware will clear it once the operation has finished.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_PRELOAD_DONE"
+bits = "1"
+class = "read-only"
+description = "Represents whether the preloading operation has finished.\\\\1: Finished\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_PRELOAD_ORDER"
+bits = "2"
+class = "plain"
+description = "Configures the direction of the preloading operation.\\\\1: Descending\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_PRELOAD_RGID"
+bits = "6:3"
+class = "plain"
+description = "Configures the gid of l1 icache1 preload."
+
+[[registers.fields]]
+name = "L1_ICACHE1_PRELOAD_MODE"
+bits = "7"
+class = "plain"
+description = "Configures the mode of l1 icache1 preload, 0: load data from next level memory, 1: not load data from next level memory."
+
+[[registers]]
+name = "L1_ICACHE1_PRELOAD_ADDR"
+offset = 0xbc
+description = "icache1 preload address configuration register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE1_PRELOAD_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of preload on L1-ICache1, which should be used together with L1_ICACHE1_PRELOAD_SIZE_REG"
+
+[[registers]]
+name = "L1_ICACHE1_PRELOAD_SIZE"
+offset = 0xc0
+description = "L1 instruction Cache 1 preload size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE1_PRELOAD_SIZE"
+bits = "13:0"
+class = "plain"
+description = "Configures the size of the first section of prelock on L1-ICache1, which should be used together with L1_ICACHE1_PRELOAD_ADDR_REG"
+
+[[registers]]
+name = "L1_ICACHE2_PRELOAD_CTRL"
+offset = 0xc4
+description = "L1 instruction Cache 2 preload-operation control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE2_PRELOAD_ENA"
+bits = "0"
+class = "debug-only"
+description = "Configures preload operation on L1-ICache2. It will be cleared by hardware automatically after preload operation is done."
+
+[[registers.fields]]
+name = "L1_ICACHE2_PRELOAD_DONE"
+bits = "1"
+class = "debug-only"
+description = "The bit is used to indicate whether preload operation is finished or not. 0: not finished. 1: finished."
+
+[[registers.fields]]
+name = "L1_ICACHE2_PRELOAD_ORDER"
+bits = "2"
+class = "debug-only"
+description = "Configures the direction of preload operation. 0: ascending, 1: descending."
+
+[[registers.fields]]
+name = "L1_ICACHE2_PRELOAD_RGID"
+bits = "6:3"
+class = "debug-only"
+description = "Configures the gid of l1 icache2 preload."
+
+[[registers.fields]]
+name = "L1_ICACHE2_PRELOAD_MODE"
+bits = "7"
+class = "debug-only"
+description = "Configures the mode of l1 icache2 preload, 0: load data from next level memory, 1: not load data from next level memory."
+
+[[registers]]
+name = "L1_ICACHE2_PRELOAD_ADDR"
+offset = 0xc8
+description = "L1 instruction Cache 2 preload address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE2_PRELOAD_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of preload on L1-ICache2, which should be used together with L1_ICACHE2_PRELOAD_SIZE_REG"
+
+[[registers]]
+name = "L1_ICACHE2_PRELOAD_SIZE"
+offset = 0xcc
+description = "L1 instruction Cache 2 preload size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE2_PRELOAD_SIZE"
+bits = "13:0"
+class = "debug-only"
+description = "Configures the size of the first section of prelock on L1-ICache2, which should be used together with L1_ICACHE2_PRELOAD_ADDR_REG"
+
+[[registers]]
+name = "L1_ICACHE3_PRELOAD_CTRL"
+offset = 0xd0
+description = "L1 instruction Cache 3 preload-operation control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE3_PRELOAD_ENA"
+bits = "0"
+class = "debug-only"
+description = "Configures preload operation on L1-ICache3. It will be cleared by hardware automatically after preload operation is done."
+
+[[registers.fields]]
+name = "L1_ICACHE3_PRELOAD_DONE"
+bits = "1"
+class = "debug-only"
+description = "The bit is used to indicate whether preload operation is finished or not. 0: not finished. 1: finished."
+
+[[registers.fields]]
+name = "L1_ICACHE3_PRELOAD_ORDER"
+bits = "2"
+class = "debug-only"
+description = "Configures the direction of preload operation. 0: ascending, 1: descending."
+
+[[registers.fields]]
+name = "L1_ICACHE3_PRELOAD_RGID"
+bits = "6:3"
+class = "debug-only"
+description = "Configures the gid of l1 icache3 preload."
+
+[[registers.fields]]
+name = "L1_ICACHE3_PRELOAD_MODE"
+bits = "7"
+class = "debug-only"
+description = "Configures the mode of l1 icache3 preload, 0: load data from next level memory, 1: not load data from next level memory."
+
+[[registers]]
+name = "L1_ICACHE3_PRELOAD_ADDR"
+offset = 0xd4
+description = "L1 instruction Cache 3 preload address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE3_PRELOAD_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of preload on L1-ICache3, which should be used together with L1_ICACHE3_PRELOAD_SIZE_REG"
+
+[[registers]]
+name = "L1_ICACHE3_PRELOAD_SIZE"
+offset = 0xd8
+description = "L1 instruction Cache 3 preload size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE3_PRELOAD_SIZE"
+bits = "13:0"
+class = "debug-only"
+description = "Configures the size of the first section of prelock on L1-ICache3, which should be used together with L1_ICACHE3_PRELOAD_ADDR_REG"
+
+[[registers]]
+name = "L1_DCACHE_PRELOAD_CTRL"
+offset = 0xdc
+description = "L1 data Cache preload-operation control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_DCACHE_PRELOAD_ENA"
+bits = "0"
+class = "self-clearing"
+description = "Configures whether to enable the preloading operation in dcache. Hardware will clear it once the operation has finished.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_PRELOAD_DONE"
+bits = "1"
+class = "read-only"
+description = "Represents whether the preloading operation has finished.\\\\1: Finished\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_PRELOAD_ORDER"
+bits = "2"
+class = "plain"
+description = "Configures the direction of the preloading operation.\\\\1: Descending\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_PRELOAD_RGID"
+bits = "6:3"
+class = "plain"
+description = "Configures the gid of l1 dcache preload."
+
+[[registers.fields]]
+name = "L1_DCACHE_PRELOAD_MODE"
+bits = "7"
+class = "plain"
+description = "Configures the mode of l1 dcache preload, 0: load data from next level memory, 1: not load data from next level memory."
+
+[[registers]]
+name = "L1_DCACHE_PRELOAD_ADDR"
+offset = 0xe0
+description = "dcache preload address configuration register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DCACHE_PRELOAD_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of preload on L1-DCache, which should be used together with L1_DCACHE_PRELOAD_SIZE_REG"
+
+[[registers]]
+name = "L1_DCACHE_PRELOAD_SIZE"
+offset = 0xe4
+description = "L1 data Cache preload size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffc000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_DCACHE_PRELOAD_SIZE"
+bits = "13:0"
+class = "plain"
+description = "Configures the size of the first section of prelock on L1-DCache, which should be used together with L1_DCACHE_PRELOAD_ADDR_REG"
+
+[[registers]]
+name = "L1_ICACHE0_AUTOLOAD_CTRL"
+offset = 0xe8
+description = "L1 instruction Cache 0 autoload-operation control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xffffc0e0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_AUTOLOAD_ENA"
+bits = "0"
+class = "plain"
+description = "Configures whether to enable the autoloading operation in icache0.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE0_AUTOLOAD_DONE"
+bits = "1"
+class = "read-only"
+description = "Indicates whether the autoloading operation in icache0 has finished.\\\\1: Finished\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE0_AUTOLOAD_ORDER"
+bits = "2"
+class = "plain"
+description = "Configures the direction of the autoloading operation in icache0.\\\\1: Descending\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE0_AUTOLOAD_TRIGGER_MODE"
+bits = "4:3"
+class = "plain"
+description = "Configures the trigger mode of the autoloading operation in icache0.\\\\2: Triggered by cache miss or hit\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE0_AUTOLOAD_SCT0_ENA"
+bits = "8"
+class = "plain"
+description = "Configures whether to enable Section 0 for the autoloading operation in icache0.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE0_AUTOLOAD_SCT1_ENA"
+bits = "9"
+class = "plain"
+description = "Configures whether to enable Section 1 for the autoloading operation in icache0.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE0_AUTOLOAD_RGID"
+bits = "13:10"
+class = "plain"
+description = "Configures the gid of l1 icache0 autoload."
+
+[[registers]]
+name = "L1_ICACHE0_AUTOLOAD_SCT0_ADDR"
+offset = 0xec
+description = "L1 instruction Cache 0 autoload section 0 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE0_AUTOLOAD_SCT0_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of the first section for autoload operation on L1-ICache0. Note that it should be used together with L1_ICACHE0_AUTOLOAD_SCT0_SIZE and L1_ICACHE_AUTOLOAD_SCT0_ENA."
+
+[[registers]]
+name = "L1_ICACHE0_AUTOLOAD_SCT0_SIZE"
+offset = 0xf0
+description = "L1 instruction Cache 0 autoload section 0 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_AUTOLOAD_SCT0_SIZE"
+bits = "27:0"
+class = "plain"
+description = "Configures the size of the first section for autoload operation on L1-ICache0. Note that it should be used together with L1_ICACHE0_AUTOLOAD_SCT0_ADDR and L1_ICACHE_AUTOLOAD_SCT0_ENA."
+
+[[registers]]
+name = "L1_ICACHE0_AUTOLOAD_SCT1_ADDR"
+offset = 0xf4
+description = "L1 instruction Cache 0 autoload section 1 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE0_AUTOLOAD_SCT1_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of the second section for autoload operation on L1-ICache0. Note that it should be used together with L1_ICACHE0_AUTOLOAD_SCT1_SIZE and L1_ICACHE_AUTOLOAD_SCT1_ENA."
+
+[[registers]]
+name = "L1_ICACHE0_AUTOLOAD_SCT1_SIZE"
+offset = 0xf8
+description = "L1 instruction Cache 0 autoload section 1 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_AUTOLOAD_SCT1_SIZE"
+bits = "27:0"
+class = "plain"
+description = "Configures the size of the second section for autoload operation on L1-ICache0. Note that it should be used together with L1_ICACHE0_AUTOLOAD_SCT1_ADDR and L1_ICACHE_AUTOLOAD_SCT1_ENA."
+
+[[registers]]
+name = "L1_ICACHE1_AUTOLOAD_CTRL"
+offset = 0xfc
+description = "L1 instruction Cache 1 autoload-operation control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xffffc0e0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE1_AUTOLOAD_ENA"
+bits = "0"
+class = "plain"
+description = "Configures whether to enable the autoloading operation in icache1.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_AUTOLOAD_DONE"
+bits = "1"
+class = "read-only"
+description = "Indicates whether the autoloading operation in icache1 has finished.\\\\1: Finished\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_AUTOLOAD_ORDER"
+bits = "2"
+class = "plain"
+description = "Configures the direction of the autoloading operation in icache1.\\\\1: Descending\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_AUTOLOAD_TRIGGER_MODE"
+bits = "4:3"
+class = "plain"
+description = "Configures the trigger mode of the autoloading operation in icache1.\\\\2: Triggered by cache miss or hit\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_AUTOLOAD_SCT0_ENA"
+bits = "8"
+class = "plain"
+description = "Configures whether to enable Section 0 for the autoloading operation in icache1.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_AUTOLOAD_SCT1_ENA"
+bits = "9"
+class = "plain"
+description = "Configures whether to enable Section 1 for the autoloading operation in icache1.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_ICACHE1_AUTOLOAD_RGID"
+bits = "13:10"
+class = "plain"
+description = "Configures the gid of l1 icache1 autoload."
+
+[[registers]]
+name = "L1_ICACHE1_AUTOLOAD_SCT0_ADDR"
+offset = 0x100
+description = "L1 instruction Cache 1 autoload section 0 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE1_AUTOLOAD_SCT0_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of the first section for autoload operation on L1-ICache1. Note that it should be used together with L1_ICACHE1_AUTOLOAD_SCT0_SIZE and L1_ICACHE_AUTOLOAD_SCT0_ENA."
+
+[[registers]]
+name = "L1_ICACHE1_AUTOLOAD_SCT0_SIZE"
+offset = 0x104
+description = "L1 instruction Cache 1 autoload section 0 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE1_AUTOLOAD_SCT0_SIZE"
+bits = "27:0"
+class = "plain"
+description = "Configures the size of the first section for autoload operation on L1-ICache1. Note that it should be used together with L1_ICACHE1_AUTOLOAD_SCT0_ADDR and L1_ICACHE_AUTOLOAD_SCT0_ENA."
+
+[[registers]]
+name = "L1_ICACHE1_AUTOLOAD_SCT1_ADDR"
+offset = 0x108
+description = "L1 instruction Cache 1 autoload section 1 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE1_AUTOLOAD_SCT1_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of the second section for autoload operation on L1-ICache1. Note that it should be used together with L1_ICACHE1_AUTOLOAD_SCT1_SIZE and L1_ICACHE_AUTOLOAD_SCT1_ENA."
+
+[[registers]]
+name = "L1_ICACHE1_AUTOLOAD_SCT1_SIZE"
+offset = 0x10c
+description = "L1 instruction Cache 1 autoload section 1 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE1_AUTOLOAD_SCT1_SIZE"
+bits = "27:0"
+class = "plain"
+description = "Configures the size of the second section for autoload operation on L1-ICache1. Note that it should be used together with L1_ICACHE1_AUTOLOAD_SCT1_ADDR and L1_ICACHE_AUTOLOAD_SCT1_ENA."
+
+[[registers]]
+name = "L1_ICACHE2_AUTOLOAD_CTRL"
+offset = 0x110
+description = "L1 instruction Cache 2 autoload-operation control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xffffc0e0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE2_AUTOLOAD_ENA"
+bits = "0"
+class = "debug-only"
+description = "Configures and disable autoload operation on L1-ICache2. 1: enable, 0: disable."
+
+[[registers.fields]]
+name = "L1_ICACHE2_AUTOLOAD_DONE"
+bits = "1"
+class = "debug-only"
+description = "The bit is used to indicate whether autoload operation on L1-ICache2 is finished or not. 0: not finished. 1: finished."
+
+[[registers.fields]]
+name = "L1_ICACHE2_AUTOLOAD_ORDER"
+bits = "2"
+class = "debug-only"
+description = "Configures the direction of autoload operation on L1-ICache2. 0: ascending. 1: descending."
+
+[[registers.fields]]
+name = "L1_ICACHE2_AUTOLOAD_TRIGGER_MODE"
+bits = "4:3"
+class = "debug-only"
+description = "The field is used to configure trigger mode of autoload operation on L1-ICache2. 0/3: miss-trigger, 1: hit-trigger, 2: miss-hit-trigger."
+
+[[registers.fields]]
+name = "L1_ICACHE2_AUTOLOAD_SCT0_ENA"
+bits = "8"
+class = "debug-only"
+description = "Configures the first section for autoload operation on L1-ICache2."
+
+[[registers.fields]]
+name = "L1_ICACHE2_AUTOLOAD_SCT1_ENA"
+bits = "9"
+class = "debug-only"
+description = "Configures the second section for autoload operation on L1-ICache2."
+
+[[registers.fields]]
+name = "L1_ICACHE2_AUTOLOAD_RGID"
+bits = "13:10"
+class = "debug-only"
+description = "Configures the gid of l1 icache2 autoload."
+
+[[registers]]
+name = "L1_ICACHE2_AUTOLOAD_SCT0_ADDR"
+offset = 0x114
+description = "L1 instruction Cache 2 autoload section 0 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE2_AUTOLOAD_SCT0_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of the first section for autoload operation on L1-ICache2. Note that it should be used together with L1_ICACHE2_AUTOLOAD_SCT0_SIZE and L1_ICACHE_AUTOLOAD_SCT0_ENA."
+
+[[registers]]
+name = "L1_ICACHE2_AUTOLOAD_SCT0_SIZE"
+offset = 0x118
+description = "L1 instruction Cache 2 autoload section 0 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE2_AUTOLOAD_SCT0_SIZE"
+bits = "27:0"
+class = "debug-only"
+description = "Configures the size of the first section for autoload operation on L1-ICache2. Note that it should be used together with L1_ICACHE2_AUTOLOAD_SCT0_ADDR and L1_ICACHE_AUTOLOAD_SCT0_ENA."
+
+[[registers]]
+name = "L1_ICACHE2_AUTOLOAD_SCT1_ADDR"
+offset = 0x11c
+description = "L1 instruction Cache 2 autoload section 1 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE2_AUTOLOAD_SCT1_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of the second section for autoload operation on L1-ICache2. Note that it should be used together with L1_ICACHE2_AUTOLOAD_SCT1_SIZE and L1_ICACHE_AUTOLOAD_SCT1_ENA."
+
+[[registers]]
+name = "L1_ICACHE2_AUTOLOAD_SCT1_SIZE"
+offset = 0x120
+description = "L1 instruction Cache 2 autoload section 1 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE2_AUTOLOAD_SCT1_SIZE"
+bits = "27:0"
+class = "debug-only"
+description = "Configures the size of the second section for autoload operation on L1-ICache2. Note that it should be used together with L1_ICACHE2_AUTOLOAD_SCT1_ADDR and L1_ICACHE_AUTOLOAD_SCT1_ENA."
+
+[[registers]]
+name = "L1_ICACHE3_AUTOLOAD_CTRL"
+offset = 0x124
+description = "L1 instruction Cache 3 autoload-operation control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xffffc0e0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE3_AUTOLOAD_ENA"
+bits = "0"
+class = "debug-only"
+description = "Configures and disable autoload operation on L1-ICache3. 1: enable, 0: disable."
+
+[[registers.fields]]
+name = "L1_ICACHE3_AUTOLOAD_DONE"
+bits = "1"
+class = "debug-only"
+description = "The bit is used to indicate whether autoload operation on L1-ICache3 is finished or not. 0: not finished. 1: finished."
+
+[[registers.fields]]
+name = "L1_ICACHE3_AUTOLOAD_ORDER"
+bits = "2"
+class = "debug-only"
+description = "Configures the direction of autoload operation on L1-ICache3. 0: ascending. 1: descending."
+
+[[registers.fields]]
+name = "L1_ICACHE3_AUTOLOAD_TRIGGER_MODE"
+bits = "4:3"
+class = "debug-only"
+description = "The field is used to configure trigger mode of autoload operation on L1-ICache3. 0/3: miss-trigger, 1: hit-trigger, 2: miss-hit-trigger."
+
+[[registers.fields]]
+name = "L1_ICACHE3_AUTOLOAD_SCT0_ENA"
+bits = "8"
+class = "debug-only"
+description = "Configures the first section for autoload operation on L1-ICache3."
+
+[[registers.fields]]
+name = "L1_ICACHE3_AUTOLOAD_SCT1_ENA"
+bits = "9"
+class = "debug-only"
+description = "Configures the second section for autoload operation on L1-ICache3."
+
+[[registers.fields]]
+name = "L1_ICACHE3_AUTOLOAD_RGID"
+bits = "13:10"
+class = "debug-only"
+description = "Configures the gid of l1 icache3 autoload."
+
+[[registers]]
+name = "L1_ICACHE3_AUTOLOAD_SCT0_ADDR"
+offset = 0x128
+description = "L1 instruction Cache 3 autoload section 0 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE3_AUTOLOAD_SCT0_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of the first section for autoload operation on L1-ICache3. Note that it should be used together with L1_ICACHE3_AUTOLOAD_SCT0_SIZE and L1_ICACHE_AUTOLOAD_SCT0_ENA."
+
+[[registers]]
+name = "L1_ICACHE3_AUTOLOAD_SCT0_SIZE"
+offset = 0x12c
+description = "L1 instruction Cache 3 autoload section 0 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE3_AUTOLOAD_SCT0_SIZE"
+bits = "27:0"
+class = "debug-only"
+description = "Configures the size of the first section for autoload operation on L1-ICache3. Note that it should be used together with L1_ICACHE3_AUTOLOAD_SCT0_ADDR and L1_ICACHE_AUTOLOAD_SCT0_ENA."
+
+[[registers]]
+name = "L1_ICACHE3_AUTOLOAD_SCT1_ADDR"
+offset = 0x130
+description = "L1 instruction Cache 3 autoload section 1 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE3_AUTOLOAD_SCT1_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of the second section for autoload operation on L1-ICache3. Note that it should be used together with L1_ICACHE3_AUTOLOAD_SCT1_SIZE and L1_ICACHE_AUTOLOAD_SCT1_ENA."
+
+[[registers]]
+name = "L1_ICACHE3_AUTOLOAD_SCT1_SIZE"
+offset = 0x134
+description = "L1 instruction Cache 3 autoload section 1 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers]]
+name = "L1_DCACHE_AUTOLOAD_CTRL"
+offset = 0x138
+description = "L1 data Cache autoload-operation control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xffff00e0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_ENA"
+bits = "0"
+class = "plain"
+description = "Configures whether to enable the autoloading operation in dcache.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_DONE"
+bits = "1"
+class = "read-only"
+description = "Indicates whether the autoloading operation in dcache has finished.\\\\1: Finished\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_ORDER"
+bits = "2"
+class = "plain"
+description = "Configures the direction of the autoloading operation in dcache.\\\\1: Descending\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_TRIGGER_MODE"
+bits = "4:3"
+class = "plain"
+description = "Configures the trigger mode of the autoloading operation in dcache.\\\\2: Triggered by cache miss or hit\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_SCT0_ENA"
+bits = "8"
+class = "plain"
+description = "Configures whether to enable Section 0 for the autoloading operation in dcache.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_SCT1_ENA"
+bits = "9"
+class = "plain"
+description = "Configures whether to enable Section 1 for the autoloading operation in dcache.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_SCT2_ENA"
+bits = "10"
+class = "plain"
+description = "Configures whether to enable Section 2 for the autoloading operation in dcache.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_SCT3_ENA"
+bits = "11"
+class = "plain"
+description = "Configures whether to enable Section 3 for the autoloading operation in dcache.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_RGID"
+bits = "15:12"
+class = "plain"
+description = "Configures the gid of l1 dcache autoload."
+
+[[registers]]
+name = "L1_DCACHE_AUTOLOAD_SCT0_ADDR"
+offset = 0x13c
+description = "L1 data Cache autoload section 0 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_SCT0_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of the first section for autoload operation on L1-DCache. Note that it should be used together with L1_DCACHE_AUTOLOAD_SCT0_SIZE and L1_DCACHE_AUTOLOAD_SCT0_ENA."
+
+[[registers]]
+name = "L1_DCACHE_AUTOLOAD_SCT0_SIZE"
+offset = 0x140
+description = "L1 data Cache autoload section 0 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_SCT0_SIZE"
+bits = "27:0"
+class = "plain"
+description = "Configures the size of the first section for autoload operation on L1-DCache. Note that it should be used together with L1_DCACHE_AUTOLOAD_SCT0_ADDR and L1_DCACHE_AUTOLOAD_SCT0_ENA."
+
+[[registers]]
+name = "L1_DCACHE_AUTOLOAD_SCT1_ADDR"
+offset = 0x144
+description = "L1 data Cache autoload section 1 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_SCT1_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of the second section for autoload operation on L1-DCache. Note that it should be used together with L1_DCACHE_AUTOLOAD_SCT1_SIZE and L1_DCACHE_AUTOLOAD_SCT1_ENA."
+
+[[registers]]
+name = "L1_DCACHE_AUTOLOAD_SCT1_SIZE"
+offset = 0x148
+description = "L1 data Cache autoload section 1 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_SCT1_SIZE"
+bits = "27:0"
+class = "plain"
+description = "Configures the size of the second section for autoload operation on L1-DCache. Note that it should be used together with L1_DCACHE_AUTOLOAD_SCT1_ADDR and L1_DCACHE_AUTOLOAD_SCT1_ENA."
+
+[[registers]]
+name = "L1_DCACHE_AUTOLOAD_SCT2_ADDR"
+offset = 0x14c
+description = "L1 data Cache autoload section 2 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_SCT2_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of the third section for autoload operation on L1-DCache. Note that it should be used together with L1_DCACHE_AUTOLOAD_SCT2_SIZE and L1_DCACHE_AUTOLOAD_SCT2_ENA."
+
+[[registers]]
+name = "L1_DCACHE_AUTOLOAD_SCT2_SIZE"
+offset = 0x150
+description = "L1 data Cache autoload section 2 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_SCT2_SIZE"
+bits = "27:0"
+class = "plain"
+description = "Configures the size of the third section for autoload operation on L1-DCache. Note that it should be used together with L1_DCACHE_AUTOLOAD_SCT2_ADDR and L1_DCACHE_AUTOLOAD_SCT2_ENA."
+
+[[registers]]
+name = "L1_DCACHE_AUTOLOAD_SCT3_ADDR"
+offset = 0x154
+description = "L1 data Cache autoload section 1 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_SCT3_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Configures the start address of the fourth section for autoload operation on L1-DCache. Note that it should be used together with L1_DCACHE_AUTOLOAD_SCT3_SIZE and L1_DCACHE_AUTOLOAD_SCT3_ENA."
+
+[[registers]]
+name = "L1_DCACHE_AUTOLOAD_SCT3_SIZE"
+offset = 0x158
+description = "L1 data Cache autoload section 1 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_DCACHE_AUTOLOAD_SCT3_SIZE"
+bits = "27:0"
+class = "plain"
+description = "Configures the size of the fourth section for autoload operation on L1-DCache. Note that it should be used together with L1_DCACHE_AUTOLOAD_SCT3_ADDR and L1_DCACHE_AUTOLOAD_SCT3_ENA."
+
+[[registers]]
+name = "L1_CACHE_ACS_CNT_INT_ENA"
+offset = 0x15c
+description = "Cache Access Counter Interrupt enable register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffcc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_IBUS0_OVF_INT_ENA"
+bits = "0"
+class = "plain"
+description = "Configures interrupt of one of counters overflow that occurs in L1-ICache0 due to bus0 accesses L1-ICache0."
+
+[[registers.fields]]
+name = "L1_IBUS1_OVF_INT_ENA"
+bits = "1"
+class = "plain"
+description = "Configures interrupt of one of counters overflow that occurs in L1-ICache1 due to bus1 accesses L1-ICache1."
+
+[[registers.fields]]
+name = "L1_DBUS0_OVF_INT_ENA"
+bits = "4"
+class = "plain"
+description = "Configures interrupt of one of counters overflow that occurs in L1-DCache due to bus0 accesses L1-DCache."
+
+[[registers.fields]]
+name = "L1_DBUS1_OVF_INT_ENA"
+bits = "5"
+class = "plain"
+description = "Configures interrupt of one of counters overflow that occurs in L1-DCache due to bus1 accesses L1-DCache."
+
+[[registers]]
+name = "L1_CACHE_ACS_CNT_INT_CLR"
+offset = 0x160
+description = "Cache Access Counter Interrupt clear register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffcc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_IBUS0_OVF_INT_CLR"
+bits = "0"
+class = "write-trigger"
+description = "The bit is used to clear counters overflow interrupt and counters in L1-ICache0 due to bus0 accesses L1-ICache0."
+
+[[registers.fields]]
+name = "L1_IBUS1_OVF_INT_CLR"
+bits = "1"
+class = "write-trigger"
+description = "The bit is used to clear counters overflow interrupt and counters in L1-ICache1 due to bus1 accesses L1-ICache1."
+
+[[registers.fields]]
+name = "L1_DBUS0_OVF_INT_CLR"
+bits = "4"
+class = "write-trigger"
+description = "The bit is used to clear counters overflow interrupt and counters in L1-DCache due to bus0 accesses L1-DCache."
+
+[[registers.fields]]
+name = "L1_DBUS1_OVF_INT_CLR"
+bits = "5"
+class = "write-trigger"
+description = "The bit is used to clear counters overflow interrupt and counters in L1-DCache due to bus1 accesses L1-DCache."
+
+[[registers]]
+name = "L1_CACHE_ACS_CNT_INT_RAW"
+offset = 0x164
+description = "Cache Access Counter Interrupt raw register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_IBUS0_OVF_INT_RAW"
+bits = "0"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L1-ICache0 due to bus0 accesses L1-ICache0."
+
+[[registers.fields]]
+name = "L1_IBUS1_OVF_INT_RAW"
+bits = "1"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L1-ICache1 due to bus1 accesses L1-ICache1."
+
+[[registers.fields]]
+name = "L1_IBUS2_OVF_INT_RAW"
+bits = "2"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L1-ICache2 due to bus2 accesses L1-ICache2."
+
+[[registers.fields]]
+name = "L1_IBUS3_OVF_INT_RAW"
+bits = "3"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L1-ICache3 due to bus3 accesses L1-ICache3."
+
+[[registers.fields]]
+name = "L1_DBUS0_OVF_INT_RAW"
+bits = "4"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L1-DCache due to bus0 accesses L1-DCache."
+
+[[registers.fields]]
+name = "L1_DBUS1_OVF_INT_RAW"
+bits = "5"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L1-DCache due to bus1 accesses L1-DCache."
+
+[[registers.fields]]
+name = "L1_DBUS2_OVF_INT_RAW"
+bits = "6"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L1-DCache due to bus2 accesses L1-DCache."
+
+[[registers.fields]]
+name = "L1_DBUS3_OVF_INT_RAW"
+bits = "7"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L1-DCache due to bus3 accesses L1-DCache."
+
+[[registers]]
+name = "L1_CACHE_ACS_CNT_INT_ST"
+offset = 0x168
+description = "Cache Access Counter Interrupt status register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffcc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_IBUS0_OVF_INT_ST"
+bits = "0"
+class = "read-only"
+description = "The bit indicates the interrupt status of one of counters overflow that occurs in L1-ICache0 due to bus0 accesses L1-ICache0."
+
+[[registers.fields]]
+name = "L1_IBUS1_OVF_INT_ST"
+bits = "1"
+class = "read-only"
+description = "The bit indicates the interrupt status of one of counters overflow that occurs in L1-ICache1 due to bus1 accesses L1-ICache1."
+
+[[registers.fields]]
+name = "L1_DBUS0_OVF_INT_ST"
+bits = "4"
+class = "read-only"
+description = "The bit indicates the interrupt status of one of counters overflow that occurs in L1-DCache due to bus0 accesses L1-DCache."
+
+[[registers.fields]]
+name = "L1_DBUS1_OVF_INT_ST"
+bits = "5"
+class = "read-only"
+description = "The bit indicates the interrupt status of one of counters overflow that occurs in L1-DCache due to bus1 accesses L1-DCache."
+
+[[registers]]
+name = "L1_CACHE_ACS_FAIL_CTRL"
+offset = 0x16c
+description = "Cache Access Fail Configuration register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffe0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_ACS_FAIL_CHECK_MODE"
+bits = "0"
+class = "plain"
+description = "Configures l1 icache0 access fail check mode. 0: the access fail is not propagated to the request, 1: the access fail is propagated to the request"
+
+[[registers.fields]]
+name = "L1_ICACHE1_ACS_FAIL_CHECK_MODE"
+bits = "1"
+class = "plain"
+description = "Configures l1 icache1 access fail check mode. 0: the access fail is not propagated to the request, 1: the access fail is propagated to the request"
+
+[[registers.fields]]
+name = "L1_ICACHE2_ACS_FAIL_CHECK_MODE"
+bits = "2"
+class = "plain"
+description = "Configures l1 icache2 access fail check mode. 0: the access fail is not propagated to the request, 1: the access fail is propagated to the request"
+
+[[registers.fields]]
+name = "L1_ICACHE3_ACS_FAIL_CHECK_MODE"
+bits = "3"
+class = "plain"
+description = "Configures l1 icache3 access fail check mode. 0: the access fail is not propagated to the request, 1: the access fail is propagated to the request"
+
+[[registers.fields]]
+name = "L1_DCACHE_ACS_FAIL_CHECK_MODE"
+bits = "4"
+class = "plain"
+description = "Configures l1 dcache access fail check mode. 0: the access fail is not propagated to the request, 1: the access fail is propagated to the request"
+
+[[registers]]
+name = "L1_CACHE_ACS_FAIL_INT_ENA"
+offset = 0x170
+description = "Cache Access Fail Interrupt enable register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffec, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_FAIL_INT_ENA"
+bits = "0"
+class = "plain"
+description = "Configures interrupt of access fail that occurs in L1-ICache0 due to cpu accesses L1-ICache0."
+
+[[registers.fields]]
+name = "L1_ICACHE1_FAIL_INT_ENA"
+bits = "1"
+class = "plain"
+description = "Configures interrupt of access fail that occurs in L1-ICache1 due to cpu accesses L1-ICache1."
+
+[[registers.fields]]
+name = "L1_DCACHE_FAIL_INT_ENA"
+bits = "4"
+class = "plain"
+description = "Configures interrupt of access fail that occurs in L1-DCache due to cpu accesses L1-DCache."
+
+[[registers]]
+name = "L1_CACHE_ACS_FAIL_INT_CLR"
+offset = 0x174
+description = "L1-Cache Access Fail Interrupt clear register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffec, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_FAIL_INT_CLR"
+bits = "0"
+class = "write-trigger"
+description = "The bit is used to clear interrupt of access fail that occurs in L1-ICache0 due to cpu accesses L1-ICache0."
+
+[[registers.fields]]
+name = "L1_ICACHE1_FAIL_INT_CLR"
+bits = "1"
+class = "write-trigger"
+description = "The bit is used to clear interrupt of access fail that occurs in L1-ICache1 due to cpu accesses L1-ICache1."
+
+[[registers.fields]]
+name = "L1_DCACHE_FAIL_INT_CLR"
+bits = "4"
+class = "write-trigger"
+description = "The bit is used to clear interrupt of access fail that occurs in L1-DCache due to cpu accesses L1-DCache."
+
+[[registers]]
+name = "L1_CACHE_ACS_FAIL_INT_RAW"
+offset = 0x178
+description = "Cache Access Fail Interrupt raw register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffe0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_FAIL_INT_RAW"
+bits = "0"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt of access fail that occurs in L1-ICache0."
+
+[[registers.fields]]
+name = "L1_ICACHE1_FAIL_INT_RAW"
+bits = "1"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt of access fail that occurs in L1-ICache1."
+
+[[registers.fields]]
+name = "L1_ICACHE2_FAIL_INT_RAW"
+bits = "2"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt of access fail that occurs in L1-ICache2."
+
+[[registers.fields]]
+name = "L1_ICACHE3_FAIL_INT_RAW"
+bits = "3"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt of access fail that occurs in L1-ICache3."
+
+[[registers.fields]]
+name = "L1_DCACHE_FAIL_INT_RAW"
+bits = "4"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt of access fail that occurs in L1-DCache."
+
+[[registers]]
+name = "L1_CACHE_ACS_FAIL_INT_ST"
+offset = 0x17c
+description = "Cache Access Fail Interrupt status register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffec, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_FAIL_INT_ST"
+bits = "0"
+class = "read-only"
+description = "The bit indicates the interrupt status of access fail that occurs in L1-ICache0 due to cpu accesses L1-ICache."
+
+[[registers.fields]]
+name = "L1_ICACHE1_FAIL_INT_ST"
+bits = "1"
+class = "read-only"
+description = "The bit indicates the interrupt status of access fail that occurs in L1-ICache1 due to cpu accesses L1-ICache."
+
+[[registers.fields]]
+name = "L1_DCACHE_FAIL_INT_ST"
+bits = "4"
+class = "read-only"
+description = "The bit indicates the interrupt status of access fail that occurs in L1-DCache due to cpu accesses L1-DCache."
+
+[[registers]]
+name = "L1_CACHE_ACS_CNT_CTRL"
+offset = 0x180
+description = "Cache Access Counter enable and clear register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffccffcc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_IBUS0_CNT_ENA"
+bits = "0"
+class = "plain"
+description = "Configures whether to enable IBUS0 counter.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_IBUS1_CNT_ENA"
+bits = "1"
+class = "plain"
+description = "Configures whether to enable IBUS1 counter.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DBUS0_CNT_ENA"
+bits = "4"
+class = "plain"
+description = "Configures whether to enable DBUS0 counter.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_DBUS1_CNT_ENA"
+bits = "5"
+class = "plain"
+description = "Configures whether to enable DBUS1 counter.\\\\1: Enable\\\\"
+
+[[registers.fields]]
+name = "L1_IBUS0_CNT_CLR"
+bits = "16"
+class = "write-trigger"
+description = "Configures whether to clear IBUS0 counter.\\\\1: Clear\\\\"
+
+[[registers.fields]]
+name = "L1_IBUS1_CNT_CLR"
+bits = "17"
+class = "write-trigger"
+description = "Configures whether to clear IBUS1 counter.\\\\1: Clear\\\\"
+
+[[registers.fields]]
+name = "L1_DBUS0_CNT_CLR"
+bits = "20"
+class = "write-trigger"
+description = "Configures whether to clear DBUS0 counter.\\\\1: Clear\\\\"
+
+[[registers.fields]]
+name = "L1_DBUS1_CNT_CLR"
+bits = "21"
+class = "write-trigger"
+description = "Configures whether to clear DBUS1 counter.\\\\1: Clear\\\\"
+
+[[registers]]
+name = "L1_IBUS0_ACS_HIT_CNT"
+offset = 0x184
+description = "L1-ICache bus0 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS0_HIT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of hits when bus0 accesses L1-ICache0."
+
+[[registers]]
+name = "L1_IBUS0_ACS_MISS_CNT"
+offset = 0x188
+description = "L1-ICache bus0 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS0_MISS_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of missing when bus0 accesses L1-ICache0."
+
+[[registers]]
+name = "L1_IBUS0_ACS_CONFLICT_CNT"
+offset = 0x18c
+description = "L1-ICache bus0 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS0_CONFLICT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of access-conflicts when bus0 accesses L1-ICache0."
+
+[[registers]]
+name = "L1_IBUS0_ACS_NXTLVL_RD_CNT"
+offset = 0x190
+description = "L1-ICache bus0 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS0_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of times that L1-ICache accesses L2-Cache due to bus0 accessing L1-ICache0."
+
+[[registers]]
+name = "L1_IBUS1_ACS_HIT_CNT"
+offset = 0x194
+description = "L1-ICache bus1 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS1_HIT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of hits when bus1 accesses L1-ICache1."
+
+[[registers]]
+name = "L1_IBUS1_ACS_MISS_CNT"
+offset = 0x198
+description = "L1-ICache bus1 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS1_MISS_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of missing when bus1 accesses L1-ICache1."
+
+[[registers]]
+name = "L1_IBUS1_ACS_CONFLICT_CNT"
+offset = 0x19c
+description = "L1-ICache bus1 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS1_CONFLICT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of access-conflicts when bus1 accesses L1-ICache1."
+
+[[registers]]
+name = "L1_IBUS1_ACS_NXTLVL_RD_CNT"
+offset = 0x1a0
+description = "L1-ICache bus1 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS1_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of times that L1-ICache accesses L2-Cache due to bus1 accessing L1-ICache1."
+
+[[registers]]
+name = "L1_IBUS2_ACS_HIT_CNT"
+offset = 0x1a4
+description = "L1-ICache bus2 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS2_HIT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of hits when bus2 accesses L1-ICache2."
+
+[[registers]]
+name = "L1_IBUS2_ACS_MISS_CNT"
+offset = 0x1a8
+description = "L1-ICache bus2 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS2_MISS_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of missing when bus2 accesses L1-ICache2."
+
+[[registers]]
+name = "L1_IBUS2_ACS_CONFLICT_CNT"
+offset = 0x1ac
+description = "L1-ICache bus2 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS2_CONFLICT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of access-conflicts when bus2 accesses L1-ICache2."
+
+[[registers]]
+name = "L1_IBUS2_ACS_NXTLVL_RD_CNT"
+offset = 0x1b0
+description = "L1-ICache bus2 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS2_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of times that L1-ICache accesses L2-Cache due to bus2 accessing L1-ICache2."
+
+[[registers]]
+name = "L1_IBUS3_ACS_HIT_CNT"
+offset = 0x1b4
+description = "L1-ICache bus3 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS3_HIT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of hits when bus3 accesses L1-ICache3."
+
+[[registers]]
+name = "L1_IBUS3_ACS_MISS_CNT"
+offset = 0x1b8
+description = "L1-ICache bus3 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS3_MISS_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of missing when bus3 accesses L1-ICache3."
+
+[[registers]]
+name = "L1_IBUS3_ACS_CONFLICT_CNT"
+offset = 0x1bc
+description = "L1-ICache bus3 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS3_CONFLICT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of access-conflicts when bus3 accesses L1-ICache3."
+
+[[registers]]
+name = "L1_IBUS3_ACS_NXTLVL_RD_CNT"
+offset = 0x1c0
+description = "L1-ICache bus3 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_IBUS3_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of times that L1-ICache accesses L2-Cache due to bus3 accessing L1-ICache3."
+
+[[registers]]
+name = "L1_DBUS0_ACS_HIT_CNT"
+offset = 0x1c4
+description = "L1-DCache bus0 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS0_HIT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of hits when bus0 accesses L1-DCache."
+
+[[registers]]
+name = "L1_DBUS0_ACS_MISS_CNT"
+offset = 0x1c8
+description = "L1-DCache bus0 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS0_MISS_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of missing when bus0 accesses L1-DCache."
+
+[[registers]]
+name = "L1_DBUS0_ACS_CONFLICT_CNT"
+offset = 0x1cc
+description = "L1-DCache bus0 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS0_CONFLICT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of access-conflicts when bus0 accesses L1-DCache."
+
+[[registers]]
+name = "L1_DBUS0_ACS_NXTLVL_RD_CNT"
+offset = 0x1d0
+description = "L1-DCache bus0 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS0_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of times that L1-DCache accesses L2-Cache due to bus0 accessing L1-DCache."
+
+[[registers]]
+name = "L1_DBUS0_ACS_NXTLVL_WR_CNT"
+offset = 0x1d4
+description = "L1-DCache bus0 WB-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS0_NXTLVL_WR_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of write back when bus0 accesses L1-DCache."
+
+[[registers]]
+name = "L1_DBUS1_ACS_HIT_CNT"
+offset = 0x1d8
+description = "L1-DCache bus1 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS1_HIT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of hits when bus1 accesses L1-DCache."
+
+[[registers]]
+name = "L1_DBUS1_ACS_MISS_CNT"
+offset = 0x1dc
+description = "L1-DCache bus1 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS1_MISS_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of missing when bus1 accesses L1-DCache."
+
+[[registers]]
+name = "L1_DBUS1_ACS_CONFLICT_CNT"
+offset = 0x1e0
+description = "L1-DCache bus1 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS1_CONFLICT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of access-conflicts when bus1 accesses L1-DCache."
+
+[[registers]]
+name = "L1_DBUS1_ACS_NXTLVL_RD_CNT"
+offset = 0x1e4
+description = "L1-DCache bus1 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS1_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of times that L1-DCache accesses L2-Cache due to bus1 accessing L1-DCache."
+
+[[registers]]
+name = "L1_DBUS1_ACS_NXTLVL_WR_CNT"
+offset = 0x1e8
+description = "L1-DCache bus1 WB-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS1_NXTLVL_WR_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of write back when bus1 accesses L1-DCache."
+
+[[registers]]
+name = "L1_DBUS2_ACS_HIT_CNT"
+offset = 0x1ec
+description = "L1-DCache bus2 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS2_HIT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of hits when bus2 accesses L1-DCache."
+
+[[registers]]
+name = "L1_DBUS2_ACS_MISS_CNT"
+offset = 0x1f0
+description = "L1-DCache bus2 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS2_MISS_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of missing when bus2 accesses L1-DCache."
+
+[[registers]]
+name = "L1_DBUS2_ACS_CONFLICT_CNT"
+offset = 0x1f4
+description = "L1-DCache bus2 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS2_CONFLICT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of access-conflicts when bus2 accesses L1-DCache."
+
+[[registers]]
+name = "L1_DBUS2_ACS_NXTLVL_RD_CNT"
+offset = 0x1f8
+description = "L1-DCache bus2 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS2_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of times that L1-DCache accesses L2-Cache due to bus2 accessing L1-DCache."
+
+[[registers]]
+name = "L1_DBUS2_ACS_NXTLVL_WR_CNT"
+offset = 0x1fc
+description = "L1-DCache bus2 WB-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS2_NXTLVL_WR_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of write back when bus2 accesses L1-DCache."
+
+[[registers]]
+name = "L1_DBUS3_ACS_HIT_CNT"
+offset = 0x200
+description = "L1-DCache bus3 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS3_HIT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of hits when bus3 accesses L1-DCache."
+
+[[registers]]
+name = "L1_DBUS3_ACS_MISS_CNT"
+offset = 0x204
+description = "L1-DCache bus3 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS3_MISS_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of missing when bus3 accesses L1-DCache."
+
+[[registers]]
+name = "L1_DBUS3_ACS_CONFLICT_CNT"
+offset = 0x208
+description = "L1-DCache bus3 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS3_CONFLICT_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of access-conflicts when bus3 accesses L1-DCache."
+
+[[registers]]
+name = "L1_DBUS3_ACS_NXTLVL_RD_CNT"
+offset = 0x20c
+description = "L1-DCache bus3 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS3_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of times that L1-DCache accesses L2-Cache due to bus3 accessing L1-DCache."
+
+[[registers]]
+name = "L1_DBUS3_ACS_NXTLVL_WR_CNT"
+offset = 0x210
+description = "L1-DCache bus3 WB-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DBUS3_NXTLVL_WR_CNT"
+bits = "31:0"
+class = "read-only"
+description = "The register records the number of write back when bus0 accesses L1-DCache."
+
+[[registers]]
+name = "L1_ICACHE0_ACS_FAIL_ID_ATTR"
+offset = 0x214
+description = "L1-ICache0 Access Fail ID/attribution information register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE0_FAIL_ID"
+bits = "15:0"
+class = "read-only"
+description = "The register records the ID of fail-access when cache0 accesses L1-ICache."
+
+[[registers.fields]]
+name = "L1_ICACHE0_FAIL_ATTR"
+bits = "31:16"
+class = "read-only"
+description = "The register records the attribution of fail-access when cache0 accesses L1-ICache."
+
+[[registers]]
+name = "L1_ICACHE0_ACS_FAIL_ADDR"
+offset = 0x218
+description = "L1-ICache0 Access Fail Address information register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE0_FAIL_ADDR"
+bits = "31:0"
+class = "read-only"
+description = "The register records the address of fail-access when cache0 accesses L1-ICache."
+
+[[registers]]
+name = "L1_ICACHE1_ACS_FAIL_ID_ATTR"
+offset = 0x21c
+description = "L1-ICache0 Access Fail ID/attribution information register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE1_FAIL_ID"
+bits = "15:0"
+class = "read-only"
+description = "The register records the ID of fail-access when cache1 accesses L1-ICache."
+
+[[registers.fields]]
+name = "L1_ICACHE1_FAIL_ATTR"
+bits = "31:16"
+class = "read-only"
+description = "The register records the attribution of fail-access when cache1 accesses L1-ICache."
+
+[[registers]]
+name = "L1_ICACHE1_ACS_FAIL_ADDR"
+offset = 0x220
+description = "L1-ICache0 Access Fail Address information register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE1_FAIL_ADDR"
+bits = "31:0"
+class = "read-only"
+description = "The register records the address of fail-access when cache1 accesses L1-ICache."
+
+[[registers]]
+name = "L1_ICACHE2_ACS_FAIL_ID_ATTR"
+offset = 0x224
+description = "L1-ICache0 Access Fail ID/attribution information register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE2_FAIL_ID"
+bits = "15:0"
+class = "read-only"
+description = "The register records the ID of fail-access when cache2 accesses L1-ICache."
+
+[[registers.fields]]
+name = "L1_ICACHE2_FAIL_ATTR"
+bits = "31:16"
+class = "read-only"
+description = "The register records the attribution of fail-access when cache2 accesses L1-ICache."
+
+[[registers]]
+name = "L1_ICACHE2_ACS_FAIL_ADDR"
+offset = 0x228
+description = "L1-ICache0 Access Fail Address information register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE2_FAIL_ADDR"
+bits = "31:0"
+class = "read-only"
+description = "The register records the address of fail-access when cache2 accesses L1-ICache."
+
+[[registers]]
+name = "L1_ICACHE3_ACS_FAIL_ID_ATTR"
+offset = 0x22c
+description = "L1-ICache0 Access Fail ID/attribution information register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE3_FAIL_ID"
+bits = "15:0"
+class = "read-only"
+description = "The register records the ID of fail-access when cache3 accesses L1-ICache."
+
+[[registers.fields]]
+name = "L1_ICACHE3_FAIL_ATTR"
+bits = "31:16"
+class = "read-only"
+description = "The register records the attribution of fail-access when cache3 accesses L1-ICache."
+
+[[registers]]
+name = "L1_ICACHE3_ACS_FAIL_ADDR"
+offset = 0x230
+description = "L1-ICache0 Access Fail Address information register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_ICACHE3_FAIL_ADDR"
+bits = "31:0"
+class = "read-only"
+description = "The register records the address of fail-access when cache3 accesses L1-ICache."
+
+[[registers]]
+name = "L1_DCACHE_ACS_FAIL_ID_ATTR"
+offset = 0x234
+description = "L1-DCache Access Fail ID/attribution information register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DCACHE_FAIL_ID"
+bits = "15:0"
+class = "read-only"
+description = "The register records the ID of fail-access when cache accesses L1-DCache."
+
+[[registers.fields]]
+name = "L1_DCACHE_FAIL_ATTR"
+bits = "31:16"
+class = "read-only"
+description = "The register records the attribution of fail-access when cache accesses L1-DCache."
+
+[[registers]]
+name = "L1_DCACHE_ACS_FAIL_ADDR"
+offset = 0x238
+description = "L1-DCache Access Fail Address information register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L1_DCACHE_FAIL_ADDR"
+bits = "31:0"
+class = "read-only"
+description = "The register records the address of fail-access when cache accesses L1-DCache."
+
+[[registers]]
+name = "L1_CACHE_SYNC_PRELOAD_INT_ENA"
+offset = 0x23c
+description = "L1-Cache Access Fail Interrupt enable register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffd62c, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_PLD_DONE_INT_ENA"
+bits = "0"
+class = "plain"
+description = "Configures interrupt of L1-ICache0 preload-operation. If preload operation is done, interrupt occurs."
+
+[[registers.fields]]
+name = "L1_ICACHE1_PLD_DONE_INT_ENA"
+bits = "1"
+class = "plain"
+description = "Configures interrupt of L1-ICache1 preload-operation. If preload operation is done, interrupt occurs."
+
+[[registers.fields]]
+name = "L1_DCACHE_PLD_DONE_INT_ENA"
+bits = "4"
+class = "plain"
+description = "Configures interrupt of L1-DCache preload-operation. If preload operation is done, interrupt occurs."
+
+[[registers.fields]]
+name = "SYNC_DONE_INT_ENA"
+bits = "6"
+class = "plain"
+description = "Configures interrupt of Cache sync-operation done."
+
+[[registers.fields]]
+name = "L1_ICACHE0_PLD_ERR_INT_ENA"
+bits = "7"
+class = "plain"
+description = "Configures interrupt of L1-ICache0 preload-operation error."
+
+[[registers.fields]]
+name = "L1_ICACHE1_PLD_ERR_INT_ENA"
+bits = "8"
+class = "plain"
+description = "Configures interrupt of L1-ICache1 preload-operation error."
+
+[[registers.fields]]
+name = "L1_DCACHE_PLD_ERR_INT_ENA"
+bits = "11"
+class = "plain"
+description = "Configures interrupt of L1-DCache preload-operation error."
+
+[[registers.fields]]
+name = "SYNC_ERR_INT_ENA"
+bits = "13"
+class = "plain"
+description = "Configures interrupt of Cache sync-operation error."
+
+[[registers]]
+name = "L1_CACHE_SYNC_PRELOAD_INT_CLR"
+offset = 0x240
+description = "Sync Preload operation Interrupt clear register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffd62c, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_PLD_DONE_INT_CLR"
+bits = "0"
+class = "write-trigger"
+description = "The bit is used to clear interrupt that occurs only when L1-ICache0 preload-operation is done."
+
+[[registers.fields]]
+name = "L1_ICACHE1_PLD_DONE_INT_CLR"
+bits = "1"
+class = "write-trigger"
+description = "The bit is used to clear interrupt that occurs only when L1-ICache1 preload-operation is done."
+
+[[registers.fields]]
+name = "L1_DCACHE_PLD_DONE_INT_CLR"
+bits = "4"
+class = "write-trigger"
+description = "The bit is used to clear interrupt that occurs only when L1-DCache preload-operation is done."
+
+[[registers.fields]]
+name = "SYNC_DONE_INT_CLR"
+bits = "6"
+class = "write-trigger"
+description = "The bit is used to clear interrupt that occurs only when Cache sync-operation is done."
+
+[[registers.fields]]
+name = "L1_ICACHE0_PLD_ERR_INT_CLR"
+bits = "7"
+class = "write-trigger"
+description = "The bit is used to clear interrupt of L1-ICache0 preload-operation error."
+
+[[registers.fields]]
+name = "L1_ICACHE1_PLD_ERR_INT_CLR"
+bits = "8"
+class = "write-trigger"
+description = "The bit is used to clear interrupt of L1-ICache1 preload-operation error."
+
+[[registers.fields]]
+name = "L1_DCACHE_PLD_ERR_INT_CLR"
+bits = "11"
+class = "write-trigger"
+description = "The bit is used to clear interrupt of L1-DCache preload-operation error."
+
+[[registers.fields]]
+name = "SYNC_ERR_INT_CLR"
+bits = "13"
+class = "write-trigger"
+description = "The bit is used to clear interrupt of Cache sync-operation error."
+
+[[registers]]
+name = "L1_CACHE_SYNC_PRELOAD_INT_RAW"
+offset = 0x244
+description = "Sync Preload operation Interrupt raw register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffd62c, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_PLD_DONE_INT_RAW"
+bits = "0"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt that occurs only when L1-ICache0 preload-operation is done."
+
+[[registers.fields]]
+name = "L1_ICACHE1_PLD_DONE_INT_RAW"
+bits = "1"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt that occurs only when L1-ICache1 preload-operation is done."
+
+[[registers.fields]]
+name = "L1_DCACHE_PLD_DONE_INT_RAW"
+bits = "4"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt that occurs only when L1-DCache preload-operation is done."
+
+[[registers.fields]]
+name = "SYNC_DONE_INT_RAW"
+bits = "6"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt that occurs only when Cache sync-operation is done."
+
+[[registers.fields]]
+name = "L1_ICACHE0_PLD_ERR_INT_RAW"
+bits = "7"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt that occurs only when L1-ICache0 preload-operation error occurs."
+
+[[registers.fields]]
+name = "L1_ICACHE1_PLD_ERR_INT_RAW"
+bits = "8"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt that occurs only when L1-ICache1 preload-operation error occurs."
+
+[[registers.fields]]
+name = "L1_DCACHE_PLD_ERR_INT_RAW"
+bits = "11"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt that occurs only when L1-DCache preload-operation error occurs."
+
+[[registers.fields]]
+name = "SYNC_ERR_INT_RAW"
+bits = "13"
+class = "write-one-to-clear"
+description = "The raw bit of the interrupt that occurs only when Cache sync-operation error occurs."
+
+[[registers]]
+name = "L1_CACHE_SYNC_PRELOAD_INT_ST"
+offset = 0x248
+description = "L1-Cache Access Fail Interrupt status register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffd62c, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_PLD_DONE_INT_ST"
+bits = "0"
+class = "read-only"
+description = "The bit indicates the status of the interrupt that occurs only when L1-ICache0 preload-operation is done."
+
+[[registers.fields]]
+name = "L1_ICACHE1_PLD_DONE_INT_ST"
+bits = "1"
+class = "read-only"
+description = "The bit indicates the status of the interrupt that occurs only when L1-ICache1 preload-operation is done."
+
+[[registers.fields]]
+name = "L1_DCACHE_PLD_DONE_INT_ST"
+bits = "4"
+class = "read-only"
+description = "The bit indicates the status of the interrupt that occurs only when L1-DCache preload-operation is done."
+
+[[registers.fields]]
+name = "SYNC_DONE_INT_ST"
+bits = "6"
+class = "read-only"
+description = "The bit indicates the status of the interrupt that occurs only when Cache sync-operation is done."
+
+[[registers.fields]]
+name = "L1_ICACHE0_PLD_ERR_INT_ST"
+bits = "7"
+class = "read-only"
+description = "The bit indicates the status of the interrupt of L1-ICache0 preload-operation error."
+
+[[registers.fields]]
+name = "L1_ICACHE1_PLD_ERR_INT_ST"
+bits = "8"
+class = "read-only"
+description = "The bit indicates the status of the interrupt of L1-ICache1 preload-operation error."
+
+[[registers.fields]]
+name = "L1_DCACHE_PLD_ERR_INT_ST"
+bits = "11"
+class = "read-only"
+description = "The bit indicates the status of the interrupt of L1-DCache preload-operation error."
+
+[[registers.fields]]
+name = "SYNC_ERR_INT_ST"
+bits = "13"
+class = "read-only"
+description = "The bit indicates the status of the interrupt of Cache sync-operation error."
+
+[[registers]]
+name = "L1_CACHE_SYNC_PRELOAD_EXCEPTION"
+offset = 0x24c
+description = "Cache Sync/Preload Operation exception register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffccf0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_PLD_ERR_CODE"
+bits = "1:0"
+class = "read-only"
+description = "The value 2 is Only available which means preload size is error in L1-ICache0."
+
+[[registers.fields]]
+name = "L1_ICACHE1_PLD_ERR_CODE"
+bits = "3:2"
+class = "read-only"
+description = "The value 2 is Only available which means preload size is error in L1-ICache1."
+
+[[registers.fields]]
+name = "L1_DCACHE_PLD_ERR_CODE"
+bits = "9:8"
+class = "read-only"
+description = "The value 2 is Only available which means preload size is error in L1-DCache."
+
+[[registers.fields]]
+name = "SYNC_ERR_CODE"
+bits = "13:12"
+class = "read-only"
+description = "The values 0-2 are available which means sync map, command conflict and size are error in Cache System."
+
+[[registers]]
+name = "L1_CACHE_SYNC_RST_CTRL"
+offset = 0x250
+description = "Cache Sync Reset control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffec, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_SYNC_RST"
+bits = "0"
+class = "plain"
+description = "Configures reset sync-logic inside L1-ICache0. Recommend that this should only be used to initialize sync-logic when some fatal error of sync-logic occurs."
+
+[[registers.fields]]
+name = "L1_ICACHE1_SYNC_RST"
+bits = "1"
+class = "plain"
+description = "Configures reset sync-logic inside L1-ICache1. Recommend that this should only be used to initialize sync-logic when some fatal error of sync-logic occurs."
+
+[[registers.fields]]
+name = "L1_DCACHE_SYNC_RST"
+bits = "4"
+class = "plain"
+description = "Configures reset sync-logic inside L1-DCache. Recommend that this should only be used to initialize sync-logic when some fatal error of sync-logic occurs."
+
+[[registers]]
+name = "L1_CACHE_PRELOAD_RST_CTRL"
+offset = 0x254
+description = "Cache Preload Reset control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffec, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_PLD_RST"
+bits = "0"
+class = "plain"
+description = "Configures reset preload-logic inside L1-ICache0. Recommend that this should only be used to initialize preload-logic when some fatal error of preload-logic occurs."
+
+[[registers.fields]]
+name = "L1_ICACHE1_PLD_RST"
+bits = "1"
+class = "plain"
+description = "Configures reset preload-logic inside L1-ICache1. Recommend that this should only be used to initialize preload-logic when some fatal error of preload-logic occurs."
+
+[[registers.fields]]
+name = "L1_DCACHE_PLD_RST"
+bits = "4"
+class = "plain"
+description = "Configures reset preload-logic inside L1-DCache. Recommend that this should only be used to initialize preload-logic when some fatal error of preload-logic occurs."
+
+[[registers]]
+name = "L1_CACHE_AUTOLOAD_BUF_CLR_CTRL"
+offset = 0x258
+description = "Cache Autoload buffer clear control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffec, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_ALD_BUF_CLR"
+bits = "0"
+class = "plain"
+description = "Configures clear autoload-buffer inside L1-ICache0. If this bit is active, autoload will not work in L1-ICache0. This bit should not be active when autoload works in L1-ICache0."
+
+[[registers.fields]]
+name = "L1_ICACHE1_ALD_BUF_CLR"
+bits = "1"
+class = "plain"
+description = "Configures clear autoload-buffer inside L1-ICache1. If this bit is active, autoload will not work in L1-ICache1. This bit should not be active when autoload works in L1-ICache1."
+
+[[registers.fields]]
+name = "L1_DCACHE_ALD_BUF_CLR"
+bits = "4"
+class = "plain"
+description = "Configures clear autoload-buffer inside L1-DCache. If this bit is active, autoload will not work in L1-DCache. This bit should not be active when autoload works in L1-DCache."
+
+[[registers]]
+name = "L1_UNALLOCATE_BUFFER_CLEAR"
+offset = 0x25c
+description = "Unallocate request buffer clear registers"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffec, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_UNALLOC_CLR"
+bits = "0"
+class = "plain"
+description = "The bit is used to clear the unallocate request buffer of l1 icache0 where the unallocate request is responsed but not completed."
+
+[[registers.fields]]
+name = "L1_ICACHE1_UNALLOC_CLR"
+bits = "1"
+class = "plain"
+description = "The bit is used to clear the unallocate request buffer of l1 icache1 where the unallocate request is responsed but not completed."
+
+[[registers.fields]]
+name = "L1_DCACHE_UNALLOC_CLR"
+bits = "4"
+class = "plain"
+description = "The bit is used to clear the unallocate request buffer of l1 dcache where the unallocate request is responsed but not completed."
+
+[[registers]]
+name = "L1_CACHE_OBJECT_CTRL"
+offset = 0x260
+description = "Cache Tag and Data memory Object control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffb2c, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_ICACHE0_TAG_OBJECT"
+bits = "0"
+class = "plain"
+description = "Configures set L1-ICache0 tag memory as object. This bit should be onehot with the others fields inside this register."
+
+[[registers.fields]]
+name = "L1_ICACHE1_TAG_OBJECT"
+bits = "1"
+class = "plain"
+description = "Configures set L1-ICache1 tag memory as object. This bit should be onehot with the others fields inside this register."
+
+[[registers.fields]]
+name = "L1_DCACHE_TAG_OBJECT"
+bits = "4"
+class = "plain"
+description = "Configures set L1-DCache tag memory as object. This bit should be onehot with the others fields inside this register."
+
+[[registers.fields]]
+name = "L1_ICACHE0_MEM_OBJECT"
+bits = "6"
+class = "plain"
+description = "Configures set L1-ICache0 data memory as object. This bit should be onehot with the others fields inside this register."
+
+[[registers.fields]]
+name = "L1_ICACHE1_MEM_OBJECT"
+bits = "7"
+class = "plain"
+description = "Configures set L1-ICache1 data memory as object. This bit should be onehot with the others fields inside this register."
+
+[[registers.fields]]
+name = "L1_DCACHE_MEM_OBJECT"
+bits = "10"
+class = "plain"
+description = "Configures set L1-DCache data memory as object. This bit should be onehot with the others fields inside this register."
+
+[[registers]]
+name = "L1_CACHE_WAY_OBJECT"
+offset = 0x264
+description = "Cache Tag and Data memory way register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_CACHE_WAY_OBJECT"
+bits = "2:0"
+class = "plain"
+description = "Configures way of the tag-object will be accessed. \\\\1: way1\\\\"
+
+[[registers]]
+name = "L1_CACHE_ADDR"
+offset = 0x268
+description = "Cache address register"
+reset = { value = 0x40000000 }
+
+[[registers.fields]]
+name = "L1_CACHE_ADDR"
+bits = "31:0"
+class = "plain"
+description = "Those bits stores the address which will decide where inside the specified tag memory object will be accessed."
+
+[[registers]]
+name = "L1_CACHE_DEBUG_BUS"
+offset = 0x26c
+description = "Cache Tag/data memory content register"
+reset = { value = 0x26c }
+
+[[registers.fields]]
+name = "L1_CACHE_DEBUG_BUS"
+bits = "31:0"
+class = "plain"
+description = "This is a constant place where we can write data to or read data from the tag/data memory on the specified cache."
+
+[[registers]]
+name = "LEVEL_SPLIT0"
+offset = 0x270
+description = "USED TO SPLIT L1 CACHE AND L2 CACHE"
+reset = { value = 0x270 }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers]]
+name = "L2_CACHE_CTRL"
+offset = 0x274
+description = "L2 Cache(L2-Cache) control register"
+reset = { value = 0x10 }
+reserved = { mask = 0xffffffef, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_SHUT_DMA"
+bits = "4"
+class = "debug-only"
+description = "The bit is used to disable DMA access L2-Cache, 0: enable, 1: disable"
+
+[[registers]]
+name = "L2_BYPASS_CACHE_CONF"
+offset = 0x278
+description = "Bypass Cache configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffdf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "BYPASS_L2_CACHE_EN"
+bits = "5"
+class = "debug-only"
+description = "Configures bypass L2-Cache. \\\\1: Enable\\\\"
+
+[[registers]]
+name = "L2_CACHE_CACHESIZE_CONF"
+offset = 0x27c
+description = "L2 Cache CacheSize mode configure register"
+reset = { value = 0x400 }
+reserved = { mask = 0xffffe000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_CACHESIZE_256"
+bits = "0"
+class = "debug-only"
+description = "The field is used to configure cachesize of L2-Cache as 256 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_CACHESIZE_512"
+bits = "1"
+class = "debug-only"
+description = "The field is used to configure cachesize of L2-Cache as 512 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_CACHESIZE_1K"
+bits = "2"
+class = "debug-only"
+description = "The field is used to configure cachesize of L2-Cache as 1k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_CACHESIZE_2K"
+bits = "3"
+class = "debug-only"
+description = "The field is used to configure cachesize of L2-Cache as 2k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_CACHESIZE_4K"
+bits = "4"
+class = "debug-only"
+description = "The field is used to configure cachesize of L2-Cache as 4k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_CACHESIZE_8K"
+bits = "5"
+class = "debug-only"
+description = "The field is used to configure cachesize of L2-Cache as 8k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_CACHESIZE_16K"
+bits = "6"
+class = "debug-only"
+description = "The field is used to configure cachesize of L2-Cache as 16k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_CACHESIZE_32K"
+bits = "7"
+class = "debug-only"
+description = "The field is used to configure cachesize of L2-Cache as 32k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_CACHESIZE_64K"
+bits = "8"
+class = "debug-only"
+description = "The field is used to configure cachesize of L2-Cache as 64k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_CACHESIZE_128K"
+bits = "9"
+class = "debug-only"
+description = "The field is used to configure cachesize of L2-Cache as 128k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_CACHESIZE_256K"
+bits = "10"
+class = "debug-only"
+description = "The field is used to configure cachesize of L2-Cache as 256k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_CACHESIZE_512K"
+bits = "11"
+class = "debug-only"
+description = "The field is used to configure cachesize of L2-Cache as 512k bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_CACHESIZE_1024K"
+bits = "12"
+class = "debug-only"
+description = "The field is used to configure cachesize of L2-Cache as 1024k bytes. This field and all other fields within this register is onehot."
+
+[[registers]]
+name = "L2_CACHE_BLOCKSIZE_CONF"
+offset = 0x280
+description = "L2 Cache BlockSize mode configure register"
+reset = { value = 0x8 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_BLOCKSIZE_8"
+bits = "0"
+class = "debug-only"
+description = "The field is used to configureblocksize of L2-Cache as 8 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_BLOCKSIZE_16"
+bits = "1"
+class = "debug-only"
+description = "The field is used to configureblocksize of L2-Cache as 16 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_BLOCKSIZE_32"
+bits = "2"
+class = "debug-only"
+description = "The field is used to configureblocksize of L2-Cache as 32 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_BLOCKSIZE_64"
+bits = "3"
+class = "debug-only"
+description = "The field is used to configureblocksize of L2-Cache as 64 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_BLOCKSIZE_128"
+bits = "4"
+class = "debug-only"
+description = "The field is used to configureblocksize of L2-Cache as 128 bytes. This field and all other fields within this register is onehot."
+
+[[registers.fields]]
+name = "L2_CACHE_BLOCKSIZE_256"
+bits = "5"
+class = "debug-only"
+description = "The field is used to configureblocksize of L2-Cache as 256 bytes. This field and all other fields within this register is onehot."
+
+[[registers]]
+name = "L2_CACHE_WRAP_AROUND_CTRL"
+offset = 0x284
+description = "Cache wrap around control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffdf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_WRAP"
+bits = "5"
+class = "debug-only"
+description = "Set this bit as 1 to enable L2-Cache wrap around mode."
+
+[[registers]]
+name = "L2_CACHE_MISS_ACCESS_CTRL"
+offset = 0x288
+description = "Cache wrap around control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffdf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_MISS_DISABLE_ACCESS"
+bits = "5"
+class = "debug-only"
+description = "Set this bit as 1 to disable early restart of L2-Cache"
+
+[[registers]]
+name = "L2_CACHE_FREEZE_CTRL"
+offset = 0x28c
+description = "Cache Freeze control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xff8fffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_FREEZE_EN"
+bits = "20"
+class = "debug-only"
+description = "Configures freeze operation on L2-Cache. It can be cleared by software."
+
+[[registers.fields]]
+name = "L2_CACHE_FREEZE_MODE"
+bits = "21"
+class = "debug-only"
+description = "Configures mode of freeze operation L2-Cache. 0: a miss-access will not stuck. 1: a miss-access will stuck."
+
+[[registers.fields]]
+name = "L2_CACHE_FREEZE_DONE"
+bits = "22"
+class = "debug-only"
+description = "The bit is used to indicate whether freeze operation on L2-Cache is finished or not. 0: not finished. 1: finished."
+
+[[registers]]
+name = "L2_CACHE_DATA_MEM_ACS_CONF"
+offset = 0x290
+description = "Cache data memory access configure register"
+reset = { value = 0x300000 }
+reserved = { mask = 0xffcfffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_DATA_MEM_RD_EN"
+bits = "20"
+class = "debug-only"
+description = "Configures config-bus read L2-Cache data memoryory. 0: disable, 1: enable."
+
+[[registers.fields]]
+name = "L2_CACHE_DATA_MEM_WR_EN"
+bits = "21"
+class = "debug-only"
+description = "Configures config-bus write L2-Cache data memoryory. 0: disable, 1: enable."
+
+[[registers]]
+name = "L2_CACHE_TAG_MEM_ACS_CONF"
+offset = 0x294
+description = "Cache tag memory access configure register"
+reset = { value = 0x300000 }
+reserved = { mask = 0xffcfffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_TAG_MEM_RD_EN"
+bits = "20"
+class = "debug-only"
+description = "Configures config-bus read L2-Cache tag memoryory. 0: disable, 1: enable."
+
+[[registers.fields]]
+name = "L2_CACHE_TAG_MEM_WR_EN"
+bits = "21"
+class = "debug-only"
+description = "Configures config-bus write L2-Cache tag memoryory. 0: disable, 1: enable."
+
+[[registers]]
+name = "L2_CACHE_PRELOCK_CONF"
+offset = 0x298
+description = "L2 Cache prelock configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_PRELOCK_SCT0_EN"
+bits = "0"
+class = "debug-only"
+description = "Configures the first section of prelock function on L2-Cache."
+
+[[registers.fields]]
+name = "L2_CACHE_PRELOCK_SCT1_EN"
+bits = "1"
+class = "debug-only"
+description = "Configures the second section of prelock function on L2-Cache."
+
+[[registers.fields]]
+name = "L2_CACHE_PRELOCK_RGID"
+bits = "5:2"
+class = "debug-only"
+description = "Configures the gid of l2 cache prelock."
+
+[[registers]]
+name = "L2_CACHE_PRELOCK_SCT0_ADDR"
+offset = 0x29c
+description = "L2 Cache prelock section0 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_CACHE_PRELOCK_SCT0_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of the first section of prelock on L2-Cache, which should be used together with L2_CACHE_PRELOCK_SCT0_SIZE_REG"
+
+[[registers]]
+name = "L2_CACHE_PRELOCK_SCT1_ADDR"
+offset = 0x2a0
+description = "L2 Cache prelock section1 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_CACHE_PRELOCK_SCT1_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of the second section of prelock on L2-Cache, which should be used together with L2_CACHE_PRELOCK_SCT1_SIZE_REG"
+
+[[registers]]
+name = "L2_CACHE_PRELOCK_SCT_SIZE"
+offset = 0x2a4
+description = "L2 Cache prelock section size configure register"
+reset = { value = 0xffffffff }
+
+[[registers.fields]]
+name = "L2_CACHE_PRELOCK_SCT0_SIZE"
+bits = "15:0"
+class = "debug-only"
+description = "Configures the size of the first section of prelock on L2-Cache, which should be used together with L2_CACHE_PRELOCK_SCT0_ADDR_REG"
+
+[[registers.fields]]
+name = "L2_CACHE_PRELOCK_SCT1_SIZE"
+bits = "31:16"
+class = "debug-only"
+description = "Configures the size of the second section of prelock on L2-Cache, which should be used together with L2_CACHE_PRELOCK_SCT1_ADDR_REG"
+
+[[registers]]
+name = "L2_CACHE_PRELOAD_CTRL"
+offset = 0x2a8
+description = "L2 Cache preload-operation control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_PRELOAD_ENA"
+bits = "0"
+class = "debug-only"
+description = "Configures preload operation on L2-Cache. It will be cleared by hardware automatically after preload operation is done."
+
+[[registers.fields]]
+name = "L2_CACHE_PRELOAD_DONE"
+bits = "1"
+class = "debug-only"
+description = "The bit is used to indicate whether preload operation is finished or not. 0: not finished. 1: finished."
+
+[[registers.fields]]
+name = "L2_CACHE_PRELOAD_ORDER"
+bits = "2"
+class = "debug-only"
+description = "Configures the direction of preload operation. 0: ascending, 1: descending."
+
+[[registers.fields]]
+name = "L2_CACHE_PRELOAD_RGID"
+bits = "6:3"
+class = "debug-only"
+description = "Configures the gid of l2 cache preload."
+
+[[registers.fields]]
+name = "L2_CACHE_PRELOAD_MODE"
+bits = "7"
+class = "debug-only"
+description = "Configures the mode of l2 cache preload, 0: load data from next level memory, 1: not load data from next level memory."
+
+[[registers]]
+name = "L2_CACHE_PRELOAD_ADDR"
+offset = 0x2ac
+description = "L2 Cache preload address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_CACHE_PRELOAD_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of preload on L2-Cache, which should be used together with L2_CACHE_PRELOAD_SIZE_REG"
+
+[[registers]]
+name = "L2_CACHE_PRELOAD_SIZE"
+offset = 0x2b0
+description = "L2 Cache preload size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_PRELOAD_SIZE"
+bits = "15:0"
+class = "debug-only"
+description = "Configures the size of the first section of prelock on L2-Cache, which should be used together with L2_CACHE_PRELOAD_ADDR_REG"
+
+[[registers]]
+name = "L2_CACHE_AUTOLOAD_CTRL"
+offset = 0x2b4
+description = "L2 Cache autoload-operation control register"
+reset = { value = 0x2 }
+reserved = { mask = 0xffff00e0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_ENA"
+bits = "0"
+class = "debug-only"
+description = "Configures and disable autoload operation on L2-Cache. 1: enable, 0: disable."
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_DONE"
+bits = "1"
+class = "debug-only"
+description = "The bit is used to indicate whether autoload operation on L2-Cache is finished or not. 0: not finished. 1: finished."
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_ORDER"
+bits = "2"
+class = "debug-only"
+description = "Configures the direction of autoload operation on L2-Cache. 0: ascending. 1: descending."
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_TRIGGER_MODE"
+bits = "4:3"
+class = "debug-only"
+description = "The field is used to configure trigger mode of autoload operation on L2-Cache. 0/3: miss-trigger, 1: hit-trigger, 2: miss-hit-trigger."
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_SCT0_ENA"
+bits = "8"
+class = "debug-only"
+description = "Configures the first section for autoload operation on L2-Cache."
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_SCT1_ENA"
+bits = "9"
+class = "debug-only"
+description = "Configures the second section for autoload operation on L2-Cache."
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_SCT2_ENA"
+bits = "10"
+class = "debug-only"
+description = "Configures the third section for autoload operation on L2-Cache."
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_SCT3_ENA"
+bits = "11"
+class = "debug-only"
+description = "Configures the fourth section for autoload operation on L2-Cache."
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_RGID"
+bits = "15:12"
+class = "debug-only"
+description = "Configures the gid of l2 cache autoload."
+
+[[registers]]
+name = "L2_CACHE_AUTOLOAD_SCT0_ADDR"
+offset = 0x2b8
+description = "L2 Cache autoload section 0 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_SCT0_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of the first section for autoload operation on L2-Cache. Note that it should be used together with L2_CACHE_AUTOLOAD_SCT0_SIZE and L2_CACHE_AUTOLOAD_SCT0_ENA."
+
+[[registers]]
+name = "L2_CACHE_AUTOLOAD_SCT0_SIZE"
+offset = 0x2bc
+description = "L2 Cache autoload section 0 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_SCT0_SIZE"
+bits = "27:0"
+class = "debug-only"
+description = "Configures the size of the first section for autoload operation on L2-Cache. Note that it should be used together with L2_CACHE_AUTOLOAD_SCT0_ADDR and L2_CACHE_AUTOLOAD_SCT0_ENA."
+
+[[registers]]
+name = "L2_CACHE_AUTOLOAD_SCT1_ADDR"
+offset = 0x2c0
+description = "L2 Cache autoload section 1 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_SCT1_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of the second section for autoload operation on L2-Cache. Note that it should be used together with L2_CACHE_AUTOLOAD_SCT1_SIZE and L2_CACHE_AUTOLOAD_SCT1_ENA."
+
+[[registers]]
+name = "L2_CACHE_AUTOLOAD_SCT1_SIZE"
+offset = 0x2c4
+description = "L2 Cache autoload section 1 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_SCT1_SIZE"
+bits = "27:0"
+class = "debug-only"
+description = "Configures the size of the second section for autoload operation on L2-Cache. Note that it should be used together with L2_CACHE_AUTOLOAD_SCT1_ADDR and L2_CACHE_AUTOLOAD_SCT1_ENA."
+
+[[registers]]
+name = "L2_CACHE_AUTOLOAD_SCT2_ADDR"
+offset = 0x2c8
+description = "L2 Cache autoload section 2 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_SCT2_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of the third section for autoload operation on L2-Cache. Note that it should be used together with L2_CACHE_AUTOLOAD_SCT2_SIZE and L2_CACHE_AUTOLOAD_SCT2_ENA."
+
+[[registers]]
+name = "L2_CACHE_AUTOLOAD_SCT2_SIZE"
+offset = 0x2cc
+description = "L2 Cache autoload section 2 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_SCT2_SIZE"
+bits = "27:0"
+class = "debug-only"
+description = "Configures the size of the third section for autoload operation on L2-Cache. Note that it should be used together with L2_CACHE_AUTOLOAD_SCT2_ADDR and L2_CACHE_AUTOLOAD_SCT2_ENA."
+
+[[registers]]
+name = "L2_CACHE_AUTOLOAD_SCT3_ADDR"
+offset = 0x2d0
+description = "L2 Cache autoload section 3 address configure register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_SCT3_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Configures the start address of the fourth section for autoload operation on L2-Cache. Note that it should be used together with L2_CACHE_AUTOLOAD_SCT3_SIZE and L2_CACHE_AUTOLOAD_SCT3_ENA."
+
+[[registers]]
+name = "L2_CACHE_AUTOLOAD_SCT3_SIZE"
+offset = 0x2d4
+description = "L2 Cache autoload section 3 size configure register"
+reset = { value = 0x0 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_AUTOLOAD_SCT3_SIZE"
+bits = "27:0"
+class = "debug-only"
+description = "Configures the size of the fourth section for autoload operation on L2-Cache. Note that it should be used together with L2_CACHE_AUTOLOAD_SCT3_ADDR and L2_CACHE_AUTOLOAD_SCT3_ENA."
+
+[[registers]]
+name = "L2_CACHE_ACS_CNT_INT_ENA"
+offset = 0x2d8
+description = "Cache Access Counter Interrupt enable register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffccff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_IBUS0_OVF_INT_ENA"
+bits = "8"
+class = "debug-only"
+description = "Configures interrupt of one of counters overflow that occurs in L2-Cache due to bus0 accesses L2-Cache."
+
+[[registers.fields]]
+name = "L2_IBUS1_OVF_INT_ENA"
+bits = "9"
+class = "debug-only"
+description = "Configures interrupt of one of counters overflow that occurs in L2-Cache due to bus1 accesses L2-Cache."
+
+[[registers.fields]]
+name = "L2_DBUS0_OVF_INT_ENA"
+bits = "12"
+class = "debug-only"
+description = "Configures interrupt of one of counters overflow that occurs in L2-Cache due to bus0 accesses L2-Cache."
+
+[[registers.fields]]
+name = "L2_DBUS1_OVF_INT_ENA"
+bits = "13"
+class = "debug-only"
+description = "Configures interrupt of one of counters overflow that occurs in L2-Cache due to bus1 accesses L2-Cache."
+
+[[registers]]
+name = "L2_CACHE_ACS_CNT_INT_CLR"
+offset = 0x2dc
+description = "Cache Access Counter Interrupt clear register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffccff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_IBUS0_OVF_INT_CLR"
+bits = "8"
+class = "debug-only"
+description = "The bit is used to clear counters overflow interrupt and counters in L2-Cache due to bus0 accesses L2-Cache."
+
+[[registers.fields]]
+name = "L2_IBUS1_OVF_INT_CLR"
+bits = "9"
+class = "debug-only"
+description = "The bit is used to clear counters overflow interrupt and counters in L2-Cache due to bus1 accesses L2-Cache."
+
+[[registers.fields]]
+name = "L2_DBUS0_OVF_INT_CLR"
+bits = "12"
+class = "debug-only"
+description = "The bit is used to clear counters overflow interrupt and counters in L2-Cache due to bus0 accesses L2-Cache."
+
+[[registers.fields]]
+name = "L2_DBUS1_OVF_INT_CLR"
+bits = "13"
+class = "debug-only"
+description = "The bit is used to clear counters overflow interrupt and counters in L2-Cache due to bus1 accesses L2-Cache."
+
+[[registers]]
+name = "L2_CACHE_ACS_CNT_INT_RAW"
+offset = 0x2e0
+description = "Cache Access Counter Interrupt raw register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffff00ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_IBUS0_OVF_INT_RAW"
+bits = "8"
+class = "debug-only"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus0 accesses L2-ICache0."
+
+[[registers.fields]]
+name = "L2_IBUS1_OVF_INT_RAW"
+bits = "9"
+class = "debug-only"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus1 accesses L2-ICache1."
+
+[[registers.fields]]
+name = "L2_IBUS2_OVF_INT_RAW"
+bits = "10"
+class = "debug-only"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus2 accesses L2-ICache2."
+
+[[registers.fields]]
+name = "L2_IBUS3_OVF_INT_RAW"
+bits = "11"
+class = "debug-only"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus3 accesses L2-ICache3."
+
+[[registers.fields]]
+name = "L2_DBUS0_OVF_INT_RAW"
+bits = "12"
+class = "debug-only"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus0 accesses L2-DCache."
+
+[[registers.fields]]
+name = "L2_DBUS1_OVF_INT_RAW"
+bits = "13"
+class = "debug-only"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus1 accesses L2-DCache."
+
+[[registers.fields]]
+name = "L2_DBUS2_OVF_INT_RAW"
+bits = "14"
+class = "debug-only"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus2 accesses L2-DCache."
+
+[[registers.fields]]
+name = "L2_DBUS3_OVF_INT_RAW"
+bits = "15"
+class = "debug-only"
+description = "The raw bit of the interrupt of one of counters overflow that occurs in L2-Cache due to bus3 accesses L2-DCache."
+
+[[registers]]
+name = "L2_CACHE_ACS_CNT_INT_ST"
+offset = 0x2e4
+description = "Cache Access Counter Interrupt status register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffccff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_IBUS0_OVF_INT_ST"
+bits = "8"
+class = "debug-only"
+description = "The bit indicates the interrupt status of one of counters overflow that occurs in L2-Cache due to bus0 accesses L2-Cache."
+
+[[registers.fields]]
+name = "L2_IBUS1_OVF_INT_ST"
+bits = "9"
+class = "debug-only"
+description = "The bit indicates the interrupt status of one of counters overflow that occurs in L2-Cache due to bus1 accesses L2-Cache."
+
+[[registers.fields]]
+name = "L2_DBUS0_OVF_INT_ST"
+bits = "12"
+class = "debug-only"
+description = "The bit indicates the interrupt status of one of counters overflow that occurs in L2-Cache due to bus0 accesses L2-Cache."
+
+[[registers.fields]]
+name = "L2_DBUS1_OVF_INT_ST"
+bits = "13"
+class = "debug-only"
+description = "The bit indicates the interrupt status of one of counters overflow that occurs in L2-Cache due to bus1 accesses L2-Cache."
+
+[[registers]]
+name = "L2_CACHE_ACS_FAIL_CTRL"
+offset = 0x2e8
+description = "Cache Access Fail Configuration register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_ACS_FAIL_CHECK_MODE"
+bits = "0"
+class = "debug-only"
+description = "Configures l2 cache access fail check mode. 0: the access fail is not propagated to the request, 1: the access fail is propagated to the request"
+
+[[registers]]
+name = "L2_CACHE_ACS_FAIL_INT_ENA"
+offset = 0x2ec
+description = "Cache Access Fail Interrupt enable register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffdf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_FAIL_INT_ENA"
+bits = "5"
+class = "debug-only"
+description = "Configures interrupt of access fail that occurs in L2-Cache due to l1 cache accesses L2-Cache."
+
+[[registers]]
+name = "L2_CACHE_ACS_FAIL_INT_CLR"
+offset = 0x2f0
+description = "L1-Cache Access Fail Interrupt clear register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffdf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_FAIL_INT_CLR"
+bits = "5"
+class = "debug-only"
+description = "The bit is used to clear interrupt of access fail that occurs in L2-Cache due to l1 cache accesses L2-Cache."
+
+[[registers]]
+name = "L2_CACHE_ACS_FAIL_INT_RAW"
+offset = 0x2f4
+description = "Cache Access Fail Interrupt raw register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffdf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_FAIL_INT_RAW"
+bits = "5"
+class = "debug-only"
+description = "The raw bit of the interrupt of access fail that occurs in L2-Cache."
+
+[[registers]]
+name = "L2_CACHE_ACS_FAIL_INT_ST"
+offset = 0x2f8
+description = "Cache Access Fail Interrupt status register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffdf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_FAIL_INT_ST"
+bits = "5"
+class = "debug-only"
+description = "The bit indicates the interrupt status of access fail that occurs in L2-Cache due to l1 cache accesses L2-Cache."
+
+[[registers]]
+name = "L2_CACHE_ACS_CNT_CTRL"
+offset = 0x2fc
+description = "Cache Access Counter enable and clear register"
+reset = { value = 0x0 }
+reserved = { mask = 0xccffccff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_IBUS0_CNT_ENA"
+bits = "8"
+class = "debug-only"
+description = "Configures ibus0 counter in L2-Cache."
+
+[[registers.fields]]
+name = "L2_IBUS1_CNT_ENA"
+bits = "9"
+class = "debug-only"
+description = "Configures ibus1 counter in L2-Cache."
+
+[[registers.fields]]
+name = "L2_DBUS0_CNT_ENA"
+bits = "12"
+class = "debug-only"
+description = "Configures dbus0 counter in L2-Cache."
+
+[[registers.fields]]
+name = "L2_DBUS1_CNT_ENA"
+bits = "13"
+class = "debug-only"
+description = "Configures dbus1 counter in L2-Cache."
+
+[[registers.fields]]
+name = "L2_IBUS0_CNT_CLR"
+bits = "24"
+class = "debug-only"
+description = "The bit is used to clear ibus0 counter in L2-Cache."
+
+[[registers.fields]]
+name = "L2_IBUS1_CNT_CLR"
+bits = "25"
+class = "debug-only"
+description = "The bit is used to clear ibus1 counter in L2-Cache."
+
+[[registers.fields]]
+name = "L2_DBUS0_CNT_CLR"
+bits = "28"
+class = "debug-only"
+description = "The bit is used to clear dbus0 counter in L2-Cache."
+
+[[registers.fields]]
+name = "L2_DBUS1_CNT_CLR"
+bits = "29"
+class = "debug-only"
+description = "The bit is used to clear dbus1 counter in L2-Cache."
+
+[[registers]]
+name = "L2_IBUS0_ACS_HIT_CNT"
+offset = 0x300
+description = "L2-Cache bus0 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS0_HIT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of hits when L1-ICache0 accesses L2-Cache due to bus0 accessing L1-ICache0."
+
+[[registers]]
+name = "L2_IBUS0_ACS_MISS_CNT"
+offset = 0x304
+description = "L2-Cache bus0 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS0_MISS_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of missing when L1-ICache0 accesses L2-Cache due to bus0 accessing L1-ICache0."
+
+[[registers]]
+name = "L2_IBUS0_ACS_CONFLICT_CNT"
+offset = 0x308
+description = "L2-Cache bus0 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS0_CONFLICT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of access-conflicts when L1-ICache0 accesses L2-Cache due to bus0 accessing L1-ICache0."
+
+[[registers]]
+name = "L2_IBUS0_ACS_NXTLVL_RD_CNT"
+offset = 0x30c
+description = "L2-Cache bus0 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS0_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of times that L2-Cache accesses external memory due to L1-ICache0 accessing L2-Cache due to bus0 accessing L1-ICache0."
+
+[[registers]]
+name = "L2_IBUS1_ACS_HIT_CNT"
+offset = 0x310
+description = "L2-Cache bus1 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS1_HIT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of hits when L1-ICache1 accesses L2-Cache due to bus1 accessing L1-ICache1."
+
+[[registers]]
+name = "L2_IBUS1_ACS_MISS_CNT"
+offset = 0x314
+description = "L2-Cache bus1 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS1_MISS_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of missing when L1-ICache1 accesses L2-Cache due to bus1 accessing L1-ICache1."
+
+[[registers]]
+name = "L2_IBUS1_ACS_CONFLICT_CNT"
+offset = 0x318
+description = "L2-Cache bus1 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS1_CONFLICT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of access-conflicts when L1-ICache1 accesses L2-Cache due to bus1 accessing L1-ICache1."
+
+[[registers]]
+name = "L2_IBUS1_ACS_NXTLVL_RD_CNT"
+offset = 0x31c
+description = "L2-Cache bus1 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS1_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of times that L2-Cache accesses external memory due to L1-ICache1 accessing L2-Cache due to bus1 accessing L1-ICache1."
+
+[[registers]]
+name = "L2_IBUS2_ACS_HIT_CNT"
+offset = 0x320
+description = "L2-Cache bus2 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS2_HIT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of hits when L1-ICache2 accesses L2-Cache due to bus2 accessing L1-ICache2."
+
+[[registers]]
+name = "L2_IBUS2_ACS_MISS_CNT"
+offset = 0x324
+description = "L2-Cache bus2 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS2_MISS_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of missing when L1-ICache2 accesses L2-Cache due to bus2 accessing L1-ICache2."
+
+[[registers]]
+name = "L2_IBUS2_ACS_CONFLICT_CNT"
+offset = 0x328
+description = "L2-Cache bus2 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS2_CONFLICT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of access-conflicts when L1-ICache2 accesses L2-Cache due to bus2 accessing L1-ICache2."
+
+[[registers]]
+name = "L2_IBUS2_ACS_NXTLVL_RD_CNT"
+offset = 0x32c
+description = "L2-Cache bus2 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS2_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of times that L2-Cache accesses external memory due to L1-ICache2 accessing L2-Cache due to bus2 accessing L1-ICache2."
+
+[[registers]]
+name = "L2_IBUS3_ACS_HIT_CNT"
+offset = 0x330
+description = "L2-Cache bus3 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS3_HIT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of hits when L1-ICache3 accesses L2-Cache due to bus3 accessing L1-ICache3."
+
+[[registers]]
+name = "L2_IBUS3_ACS_MISS_CNT"
+offset = 0x334
+description = "L2-Cache bus3 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS3_MISS_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of missing when L1-ICache3 accesses L2-Cache due to bus3 accessing L1-ICache3."
+
+[[registers]]
+name = "L2_IBUS3_ACS_CONFLICT_CNT"
+offset = 0x338
+description = "L2-Cache bus3 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS3_CONFLICT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of access-conflicts when L1-ICache3 accesses L2-Cache due to bus3 accessing L1-ICache3."
+
+[[registers]]
+name = "L2_IBUS3_ACS_NXTLVL_RD_CNT"
+offset = 0x33c
+description = "L2-Cache bus3 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_IBUS3_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of times that L2-Cache accesses external memory due to L1-ICache3 accessing L2-Cache due to bus3 accessing L1-ICache3."
+
+[[registers]]
+name = "L2_DBUS0_ACS_HIT_CNT"
+offset = 0x340
+description = "L2-Cache bus0 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS0_HIT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of hits when L1-DCache accesses L2-Cache due to bus0 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS0_ACS_MISS_CNT"
+offset = 0x344
+description = "L2-Cache bus0 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS0_MISS_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of missing when L1-DCache accesses L2-Cache due to bus0 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS0_ACS_CONFLICT_CNT"
+offset = 0x348
+description = "L2-Cache bus0 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS0_CONFLICT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of access-conflicts when L1-DCache accesses L2-Cache due to bus0 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS0_ACS_NXTLVL_RD_CNT"
+offset = 0x34c
+description = "L2-Cache bus0 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS0_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of times that L2-Cache accesses external memory due to L1-DCache accessing L2-Cache due to bus0 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS0_ACS_NXTLVL_WR_CNT"
+offset = 0x350
+description = "L2-Cache bus0 WB-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS0_NXTLVL_WR_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of write back when L1-DCache accesses L2-Cache due to bus0 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS1_ACS_HIT_CNT"
+offset = 0x354
+description = "L2-Cache bus1 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS1_HIT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of hits when L1-DCache accesses L2-Cache due to bus1 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS1_ACS_MISS_CNT"
+offset = 0x358
+description = "L2-Cache bus1 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS1_MISS_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of missing when L1-DCache accesses L2-Cache due to bus1 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS1_ACS_CONFLICT_CNT"
+offset = 0x35c
+description = "L2-Cache bus1 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS1_CONFLICT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of access-conflicts when L1-DCache accesses L2-Cache due to bus1 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS1_ACS_NXTLVL_RD_CNT"
+offset = 0x360
+description = "L2-Cache bus1 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS1_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of times that L2-Cache accesses external memory due to L1-DCache accessing L2-Cache due to bus1 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS1_ACS_NXTLVL_WR_CNT"
+offset = 0x364
+description = "L2-Cache bus1 WB-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS1_NXTLVL_WR_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of write back when L1-DCache accesses L2-Cache due to bus1 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS2_ACS_HIT_CNT"
+offset = 0x368
+description = "L2-Cache bus2 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS2_HIT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of hits when L1-DCache accesses L2-Cache due to bus2 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS2_ACS_MISS_CNT"
+offset = 0x36c
+description = "L2-Cache bus2 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS2_MISS_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of missing when L1-DCache accesses L2-Cache due to bus2 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS2_ACS_CONFLICT_CNT"
+offset = 0x370
+description = "L2-Cache bus2 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS2_CONFLICT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of access-conflicts when L1-DCache accesses L2-Cache due to bus2 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS2_ACS_NXTLVL_RD_CNT"
+offset = 0x374
+description = "L2-Cache bus2 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS2_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of times that L2-Cache accesses external memory due to L1-DCache accessing L2-Cache due to bus2 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS2_ACS_NXTLVL_WR_CNT"
+offset = 0x378
+description = "L2-Cache bus2 WB-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS2_NXTLVL_WR_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of write back when L1-DCache accesses L2-Cache due to bus2 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS3_ACS_HIT_CNT"
+offset = 0x37c
+description = "L2-Cache bus3 Hit-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS3_HIT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of hits when L1-DCache accesses L2-Cache due to bus3 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS3_ACS_MISS_CNT"
+offset = 0x380
+description = "L2-Cache bus3 Miss-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS3_MISS_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of missing when L1-DCache accesses L2-Cache due to bus3 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS3_ACS_CONFLICT_CNT"
+offset = 0x384
+description = "L2-Cache bus3 Conflict-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS3_CONFLICT_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of access-conflicts when L1-DCache accesses L2-Cache due to bus3 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS3_ACS_NXTLVL_RD_CNT"
+offset = 0x388
+description = "L2-Cache bus3 Next-Level-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS3_NXTLVL_RD_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of times that L2-Cache accesses external memory due to L1-DCache accessing L2-Cache due to bus3 accessing L1-DCache."
+
+[[registers]]
+name = "L2_DBUS3_ACS_NXTLVL_WR_CNT"
+offset = 0x38c
+description = "L2-Cache bus3 WB-Access Counter register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_DBUS3_NXTLVL_WR_CNT"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the number of write back when L1-DCache accesses L2-Cache due to bus3 accessing L1-DCache."
+
+[[registers]]
+name = "L2_CACHE_ACS_FAIL_ID_ATTR"
+offset = 0x390
+description = "L2-Cache Access Fail ID/attribution information register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_CACHE_FAIL_ID"
+bits = "15:0"
+class = "debug-only"
+description = "The register records the ID of fail-access when L1-Cache accesses L2-Cache."
+
+[[registers.fields]]
+name = "L2_CACHE_FAIL_ATTR"
+bits = "31:16"
+class = "debug-only"
+description = "The register records the attribution of fail-access when L1-Cache accesses L2-Cache due to cache accessing L1-Cache."
+
+[[registers]]
+name = "L2_CACHE_ACS_FAIL_ADDR"
+offset = 0x394
+description = "L2-Cache Access Fail Address information register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "L2_CACHE_FAIL_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "The register records the address of fail-access when L1-Cache accesses L2-Cache."
+
+[[registers]]
+name = "L2_CACHE_SYNC_PRELOAD_INT_ENA"
+offset = 0x398
+description = "L1-Cache Access Fail Interrupt enable register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffefdf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_PLD_DONE_INT_ENA"
+bits = "5"
+class = "debug-only"
+description = "Configures interrupt of L2-Cache preload-operation done."
+
+[[registers.fields]]
+name = "L2_CACHE_PLD_ERR_INT_ENA"
+bits = "12"
+class = "debug-only"
+description = "Configures interrupt of L2-Cache preload-operation error."
+
+[[registers]]
+name = "L2_CACHE_SYNC_PRELOAD_INT_CLR"
+offset = 0x39c
+description = "Sync Preload operation Interrupt clear register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffefdf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_PLD_DONE_INT_CLR"
+bits = "5"
+class = "debug-only"
+description = "The bit is used to clear interrupt that occurs only when L2-Cache preload-operation is done."
+
+[[registers.fields]]
+name = "L2_CACHE_PLD_ERR_INT_CLR"
+bits = "12"
+class = "debug-only"
+description = "The bit is used to clear interrupt of L2-Cache preload-operation error."
+
+[[registers]]
+name = "L2_CACHE_SYNC_PRELOAD_INT_RAW"
+offset = 0x3a0
+description = "Sync Preload operation Interrupt raw register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffefdf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_PLD_DONE_INT_RAW"
+bits = "5"
+class = "debug-only"
+description = "The raw bit of the interrupt that occurs only when L2-Cache preload-operation is done."
+
+[[registers.fields]]
+name = "L2_CACHE_PLD_ERR_INT_RAW"
+bits = "12"
+class = "debug-only"
+description = "The raw bit of the interrupt that occurs only when L2-Cache preload-operation error occurs."
+
+[[registers]]
+name = "L2_CACHE_SYNC_PRELOAD_INT_ST"
+offset = 0x3a4
+description = "L1-Cache Access Fail Interrupt status register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffefdf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_PLD_DONE_INT_ST"
+bits = "5"
+class = "debug-only"
+description = "The bit indicates the status of the interrupt that occurs only when L2-Cache preload-operation is done."
+
+[[registers.fields]]
+name = "L2_CACHE_PLD_ERR_INT_ST"
+bits = "12"
+class = "debug-only"
+description = "The bit indicates the status of the interrupt of L2-Cache preload-operation error."
+
+[[registers]]
+name = "L2_CACHE_SYNC_PRELOAD_EXCEPTION"
+offset = 0x3a8
+description = "Cache Sync/Preload Operation exception register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff3ff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_PLD_ERR_CODE"
+bits = "11:10"
+class = "debug-only"
+description = "The value 2 is Only available which means preload size is error in L2-Cache."
+
+[[registers]]
+name = "L2_CACHE_SYNC_RST_CTRL"
+offset = 0x3ac
+description = "Cache Sync Reset control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffdf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_SYNC_RST"
+bits = "5"
+class = "debug-only"
+description = "Configures reset sync-logic inside L2-Cache. Recommend that this should only be used to initialize sync-logic when some fatal error of sync-logic occurs."
+
+[[registers]]
+name = "L2_CACHE_PRELOAD_RST_CTRL"
+offset = 0x3b0
+description = "Cache Preload Reset control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffdf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_PLD_RST"
+bits = "5"
+class = "debug-only"
+description = "Configures reset preload-logic inside L2-Cache. Recommend that this should only be used to initialize preload-logic when some fatal error of preload-logic occurs."
+
+[[registers]]
+name = "L2_CACHE_AUTOLOAD_BUF_CLR_CTRL"
+offset = 0x3b4
+description = "Cache Autoload buffer clear control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffdf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_ALD_BUF_CLR"
+bits = "5"
+class = "debug-only"
+description = "Configures clear autoload-buffer inside L2-Cache. If this bit is active, autoload will not work in L2-Cache. This bit should not be active when autoload works in L2-Cache."
+
+[[registers]]
+name = "L2_UNALLOCATE_BUFFER_CLEAR"
+offset = 0x3b8
+description = "Unallocate request buffer clear registers"
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffdf, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_UNALLOC_CLR"
+bits = "5"
+class = "debug-only"
+description = "The bit is used to clear the unallocate request buffer of l2 icache where the unallocate request is responsed but not completed."
+
+[[registers]]
+name = "L2_CACHE_ACCESS_ATTR_CTRL"
+offset = 0x3bc
+description = "L2 cache access attribute control register"
+reset = { value = 0xf }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_ACCESS_FORCE_CC"
+bits = "0"
+class = "debug-only"
+description = "Configures force the request to l2 cache with cacheable attribute, otherwise, the attribute is propagated from L1 cache or CPU, it could be one of cacheable and non-cacheable."
+
+[[registers.fields]]
+name = "L2_CACHE_ACCESS_FORCE_WB"
+bits = "1"
+class = "debug-only"
+description = "Configures force the request to l2 cache with write-back attribute, otherwise, the attribute is propagated from L1 cache or CPU, it could be one of write-back and write-through."
+
+[[registers.fields]]
+name = "L2_CACHE_ACCESS_FORCE_WMA"
+bits = "2"
+class = "debug-only"
+description = "Configures force the request to l2 cache with write-miss-allocate attribute, otherwise, the attribute is propagated from L1 cache or CPU, it could be one of write-miss-allocate and write-miss-no-allocate."
+
+[[registers.fields]]
+name = "L2_CACHE_ACCESS_FORCE_RMA"
+bits = "3"
+class = "debug-only"
+description = "Configures force the request to l2 cache with read-miss-allocate attribute, otherwise, the attribute is propagated from L1 cache or CPU, it could be one of read-miss-allocate and read-miss-no-allocate."
+
+[[registers]]
+name = "L2_CACHE_OBJECT_CTRL"
+offset = 0x3c0
+description = "Cache Tag and Data memory Object control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff7df, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_TAG_OBJECT"
+bits = "5"
+class = "debug-only"
+description = "Configures set L2-Cache tag memory as object. This bit should be onehot with the others fields inside this register."
+
+[[registers.fields]]
+name = "L2_CACHE_MEM_OBJECT"
+bits = "11"
+class = "debug-only"
+description = "Configures set L2-Cache data memory as object. This bit should be onehot with the others fields inside this register."
+
+[[registers]]
+name = "L2_CACHE_WAY_OBJECT"
+offset = 0x3c4
+description = "Cache Tag and Data memory way register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L2_CACHE_WAY_OBJECT"
+bits = "2:0"
+class = "debug-only"
+description = "Configures way of the tag-object will be accessed. \\\\7: way7\\\\"
+
+[[registers]]
+name = "L2_CACHE_ADDR"
+offset = 0x3c8
+description = "Cache address register"
+reset = { value = 0x40000000 }
+
+[[registers.fields]]
+name = "L2_CACHE_ADDR"
+bits = "31:0"
+class = "debug-only"
+description = "Those bits stores the address which will decide where inside the specified tag memory object will be accessed."
+
+[[registers]]
+name = "L2_CACHE_DEBUG_BUS"
+offset = 0x3cc
+description = "Cache Tag/data memory content register"
+reset = { value = 0x3cc }
+
+[[registers.fields]]
+name = "L2_CACHE_DEBUG_BUS"
+bits = "31:0"
+class = "debug-only"
+description = "This is a constant place where we can write data to or read data from the tag/data memory on the specified cache."
+
+[[registers]]
+name = "LEVEL_SPLIT1"
+offset = 0x3d0
+description = "USED TO SPLIT L1 CACHE AND L2 CACHE"
+reset = { value = 0x3d0 }
+reserved = { mask = 0xffffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers]]
+name = "CLOCK_GATE"
+offset = 0x3d4
+description = "Clock gate control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "0"
+class = "plain"
+description = "Configures clock gate when access all registers in this module."
+
+[[registers]]
+name = "TRACE_ENA"
+offset = 0x3d8
+description = "Clock gate control register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "L1_CACHE_TRACE_ENA"
+bits = "0"
+class = "plain"
+description = "Configures L1-Cache trace for the performance counter and fail tracer"
+
+[[registers.fields]]
+name = "L2_CACHE_TRACE_ENA"
+bits = "1"
+class = "debug-only"
+description = "Configures L2-Cache trace for the performance counter and fail tracer"
+
+[[registers]]
+name = "REDUNDANCY_SIG0"
+offset = 0x3dc
+description = "Cache redundancy signal 0 register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "REDCY_SIG0"
+bits = "31:0"
+class = "debug-only"
+description = "Those bits are prepared for ECO."
+
+[[registers]]
+name = "REDUNDANCY_SIG1"
+offset = 0x3e0
+description = "Cache redundancy signal 1 register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "REDCY_SIG1"
+bits = "31:0"
+class = "debug-only"
+description = "Those bits are prepared for ECO."
+
+[[registers]]
+name = "REDUNDANCY_SIG2"
+offset = 0x3e4
+description = "Cache redundancy signal 2 register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "REDCY_SIG2"
+bits = "31:0"
+class = "debug-only"
+description = "Those bits are prepared for ECO."
+
+[[registers]]
+name = "REDUNDANCY_SIG3"
+offset = 0x3e8
+description = "Cache redundancy signal 3 register"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "REDCY_SIG3"
+bits = "31:0"
+class = "debug-only"
+description = "Those bits are prepared for ECO."
+
+[[registers]]
+name = "REDUNDANCY_SIG4"
+offset = 0x3ec
+description = "Cache redundancy signal 0 register"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "REDCY_SIG4"
+bits = "3:0"
+class = "debug-only"
+description = "Those bits are prepared for ECO."
+
+[[registers]]
+name = "DATE"
+offset = 0x3fc
+description = "Version control register"
+reset = { value = 0x2503310 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H"] }
+
+[[registers.fields]]
+name = "DATE"
+bits = "27:0"
+class = "plain"
+description = "version control register. Note that this default value stored is the latest date when the hardware logic was updated."
+
+[[commands]]
+register = "SYNC_CTRL"
+commands = ["INVALIDATE_ENA", "CLEAN_ENA", "WRITEBACK_ENA", "WRITEBACK_INVALIDATE_ENA"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H_L1574"]
