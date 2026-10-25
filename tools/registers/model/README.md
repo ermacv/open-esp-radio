@@ -176,12 +176,14 @@ Register-level constructs live in the type file:
 A whole-word fixed image is a transaction, so it stays in the PAC policy
 (`fixed-register-images`, `whole-word = true`).
 
-`dim` repeats a single word (`count` at least 2, `stride` at least the
-register's bytes, the name holds one `%s`). `[[groups]]` repeat a set of
-registers, which take their offsets from the group's start; the group name
-holds one `%s`, `stride` covers every register of the group, and a group
-holds no group. No two words of a type overlap: registers, `dim` elements
-and group elements alike.
+`dim` repeats a single word (`count` at least 2, `stride` a multiple of
+the register's bytes, the name holds one `%s`). `[[groups]]` repeat a set
+of registers, which take their offsets from the group's start; the group
+name holds one `%s`, `count` is at least 2, `stride` covers every register
+of the group, and a group holds no group. No two words of a type overlap:
+registers, `dim` elements and group elements alike, and no register or
+other group lies inside a group's span, from its first element's start to
+its last element's end. An analog byte's index is below 256.
 
 Review is by exception. `[review]` is the default record of every register
 and field, `[review.opaque]` of every one whose name ends in `_OPAQUE`
