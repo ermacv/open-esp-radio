@@ -17,11 +17,16 @@ bytemuck = { version = "1.25.2", default-features = false, features = ["derive",
 oer-mmio = { path = "../../../portable/mmio" }
 oer-espressif-efuse = { path = "../../espressif/efuse" }
 oer-espressif-watchdog = { path = "../../espressif/watchdog" }
+oer-espressif-boot = { path = "../../espressif/boot" }
 oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-values" }
 oer-memory = { path = "../../../portable/memory" }
 oer-espressif-ieee80211-pac = { path = "../../espressif/ieee80211-pac" }
 oer-esp32s31-pac-raw = { path = "../pac-raw", features = ["critical-section"] }
 
+
+[dev-dependencies]
+oer-time = { path = "../../../portable/time" }
+oer-time-virtual = { path = "../../../portable/time-virtual" }
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 # Anonymous host memory lets the actual generated fixed-address MMIO operations run in tests.

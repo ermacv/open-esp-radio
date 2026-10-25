@@ -300,6 +300,7 @@ pub use wifi::mac::{
     },
     txrx_init::MacDelaySlot,
 };
+pub mod boot;
 pub mod ownership;
 pub mod platform;
 
