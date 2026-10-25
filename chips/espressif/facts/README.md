@@ -11,8 +11,8 @@ tools load.
 | Layer | File | Holds |
 | --- | --- | --- |
 | ISA | `chips/espressif/platform/isa/<isa>.toml` | the ISA of the harts and its bare-metal Rust target |
-| family | `chips/espressif/platform/family.toml` | the boot flow, the interrupt-table layout and symbols, the placement contract, the staged boot's host contract, the reachability report's observed functions |
-| chip | `chips/<id>/platform/chip.toml` | the chip's properties, flash map, address map, harts, core start, ROM, reset cause; still the image registry (`[hil]`, `[packages]`, `[[probe]]`) |
+| family | `chips/espressif/platform/family.toml` | the boot flow, the CLIC's lines and levels, the interrupt-table layout and symbols, the placement contract, the staged boot's host contract (MMU page, image headers, probe page, handoff margin), the reachability report's observed functions |
+| chip | `chips/<id>/platform/chip.toml` | the chip's properties, flash map, address map with its retained memory, what the boot chain keeps (`[boot-chain]`), harts, core start, ROM and its symbol script, reset cause; still the image registry (`[hil]`, `[packages]`, `[[probe]]`) |
 | module | `chips/<id>/platform/modules/<module>.toml` | the module that carries the chip: its flash and PSRAM |
 | board | `chips/<id>/platform/boards/<board>.toml` | the board that carries the module |
 
@@ -42,9 +42,30 @@ theirs), down through its module and chip layer to the ISA and the family.
 - A family `[placement]` rule with `per-hart = true` stands once for each
   hart of the chip's `[interrupts] harts`, `{hart}` replaced by its number;
   `bytes-per-hart` gives a rule `bytes` of that many per hart.
+- A rule with `per-line = true` numbers `{n}` by every vector-entry line, 1
+  to `[interrupts] lines` less one.
 - `rust-target` is checked against `isa`; `[core-start]` is named by exactly
-  the chips with more than one core.
+  the chips with more than one core; SRAM lies below PSRAM, flash and PSRAM
+  in the shared `cache-window` of a chip that has one, and the boot chain's
+  loader and retained tail in SRAM and the retained memory.
 
-`tracked` holds the tracked layer files as the build compiled them in, for
-host tests and for tools that detect a tree newer than themselves; a test
-holds the list to the files in the tree.
+## Generated
+
+`generate` turns the facts into the sources a person writing them could get
+wrong, each a pure function of the facts; build scripts call it, and nothing
+it writes is in git:
+
+- `tracked_layout`: a chip's `LAYOUT` (`oer-espressif-staged-layout`), from
+  its facts and its stack policy's `default_cpu0_task_stack_bytes`
+  (`chips/<id>/platform/stack.toml`), which its layout crate's build writes
+  and every `--defsym` of the linker scripts comes from;
+- `Vectors`: the staged runtime's vector tables, every hart's line entries
+  (`RUNTIME_IRQ_ENTRIES`, `RUNTIME_VECTOR_TABLES` around the hand-written
+  entry and exit of `vectors.s`), every line's default handler (the linker
+  fragment `oer-staged-runtime-vectors.x`) and the interrupt table's
+  `LINES`, from the chip's harts and CLIC lines.
+
+`tracked` holds the tracked layer files and each chip's stack policy as the
+build compiled them in, for host tests, the generating build scripts and
+tools that detect a tree newer than themselves; a test holds the list to the
+files in the tree.

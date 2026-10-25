@@ -8,7 +8,7 @@ test protocol, radio role, executor or network-stack dependency.
 | `board` | Board-specific 16-MiB PSRAM at 250 MHz and 16-MiB Flash configuration; adoption of the live mapping |
 | `bootstrap` | Flash entry, PSRAM initialization, image validation/CRC, relocation, Flash tuning and non-returning handoff |
 | `runtime` | Stage-two entry, SRAM section initialization, mapping adoption, vector handoff, per-core interrupt stacks and the image's one panic entry |
-| `layout` | Address map, the stage-two placement and the stage-two header/checksum shared with the host packer and auditor |
+| `layout` | Address map (`LAYOUT`, generated from the chip facts), the stage-two placement and the stage-two header/checksum shared with the host packer and auditor |
 | `linker` (`chips/espressif/staged-layout/linker`, `chips/esp32s31/layout/linker`) | Semantic code, data, DMA and stack sections over the `layout` symbols |
 | `chips/esp32s31/platform/partitions` | Application partition layout |
 | `chips/esp32s31/platform/stack.toml` | Stack policy: each stack's root function, storage and reserve, the move limit and the frame-coverage review (`stack-coverage.toml`) |

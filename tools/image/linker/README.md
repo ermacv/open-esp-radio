@@ -35,7 +35,8 @@ admitted assumptions. After the second link the bound must differ by at most
 fails with figures and attempts nothing further. A policy that also sets
 `allocation_bytes` names the size twice and is an error. The image's
 placement range for the stack is then exactly the linked size.
-Images without the key keep the chip layout's size or `allocation_bytes`.
+Images without the key keep `allocation_bytes`, else the chip stack policy's
+`default_cpu0_task_stack_bytes`.
 
 `strict-placement.toml` retains first-pass bounds, selected sizes and their
 sources, together with the final ELF/input fingerprint. `interrupt-stack.txt`

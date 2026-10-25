@@ -307,6 +307,12 @@ mod tests {
         assert_eq!(assembly.matches(".balign 256").count(), 2);
         assert!(!assembly.contains('{') && !assembly.contains('}'));
         assert!(!c5.assembly().contains("_h1_"));
+        // The same facts give the same text.
+        let again = Vectors::of(&tracked("esp32s31")).expect("vectors");
+        assert_eq!(
+            (again.assembly(), again.linker_defaults(), again.rust().ok()),
+            (s31.assembly(), s31.linker_defaults(), s31.rust().ok())
+        );
     }
 
     #[test]

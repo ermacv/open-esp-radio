@@ -9,7 +9,7 @@ PSRAM.
 
 | Component | Responsibility |
 | --- | --- |
-| `layout` | The board's `LAYOUT`: SRAM below the second-stage loader at `0x4084e5a0`, the flash half of the shared cache window, PSRAM fixed at `0x43000000`, the panic record in LP RAM at `0x50000000`, one hart |
+| `layout` | The board's `LAYOUT`, generated from the chip facts: SRAM below the second-stage loader at `0x4084e5a0`, the flash half of the shared cache window, PSRAM fixed at `0x43000000`, the panic record in LP RAM at `0x50000000`, one hart |
 | `board` | Quad PSRAM at 80 MHz mapped at the fixed origin; stage two's adoption of the mapping (`stage-two`) |
 | `bootstrap` | The shared bootstrap steps; no Flash tuning |
 | `chips/esp32c5/layout/linker/rom` | The ECO2 ROM symbols (revision v1.0); the reviewed ROM function summaries are `chips/esp32c5/platform/rom-functions.toml` |

@@ -6,12 +6,14 @@ contracts; details live with their owners.
 ## Regions
 
 The [shared layout](../chips/espressif/staged-layout/README.md) defines the
-regions; the [S31 board map](../chips/esp32s31/layout/src/lib.rs) and
-[C5 board map](../chips/esp32c5/layout/src/lib.rs) supply their addresses
-and sizes. The host checks read the same map from the
-[chip facts](../chips/espressif/facts/README.md): the chip layer's SRAM and
-flash window, the module's PSRAM, and `runtime-psram` after the family's
-bootstrap probe page; a test holds both sources equal.
+regions; their addresses and sizes are the
+[chip facts](../chips/espressif/facts/README.md): the chip layer's SRAM,
+flash window and retained memory, the module's PSRAM, `runtime-psram` after
+the family's bootstrap probe page, and what the boot chain keeps. The
+[S31](../chips/esp32s31/layout/src/lib.rs) and
+[C5](../chips/esp32c5/layout/src/lib.rs) layout crates generate their
+`LAYOUT`, and through it the linker scripts' `--defsym` values, from those
+facts at build time; the host checks read the same facts.
 
 | Region | Current use and source |
 | --- | --- |
@@ -75,7 +77,9 @@ contracts: [Hardware memory](hardware-memory.md).
   [stacks rustdoc](../chips/espressif/staged-runtime/src/stacks.rs).
 - An image that declares `task-stack = "proven"` gets a CPU0 task stack of
   `align16(bound + minimum_free_bytes)`, sized by the image linker; other
-  images use the chip layout's 192 KiB or their policy's `allocation_bytes`.
+  images use their policy's `allocation_bytes`, else the chip's stack
+  policy's `default_cpu0_task_stack_bytes` (192 KiB), which the chip's
+  layout links and its profile holds the placement to.
   See the [image linker](../tools/image/linker/README.md).
 - The image linker sizes each used hart's IRQ stack to
   `align16(ceil(bound * (100 + margin) / 100)) + guard`. The contract margin

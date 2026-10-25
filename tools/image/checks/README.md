@@ -248,7 +248,7 @@ Each ELF contains:
   where a handler may lower the interrupt level. `runtime-stack.txt` ends with
   each task stack's allocation and where it came from: the bound (labelled
   likewise) plus the policy's reserve, the policy's `allocation_bytes`, or
-  the chip layout's default.
+  the chip stack policy's default (`default_cpu0_task_stack_bytes`).
 - `runtime-indirect-sites.txt`/`.json` and `bootstrap-indirect-sites.txt`/`.json`
   list, for each root of the reachability reports (each hart/priority and its
   exception, CPU0 and the task roots; the bootstrap root), every indirect site

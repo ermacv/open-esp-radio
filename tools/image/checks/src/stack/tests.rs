@@ -535,6 +535,7 @@ cores = 1
 [memory]
 sram = { origin = 0x1000, length = 0x2000 }
 flash-xip = { origin = 0x10000, length = 0x1000 }
+retained = { origin = 0x20000, length = 0x100 }
 task-stacks = "sram"
 "#,
     )

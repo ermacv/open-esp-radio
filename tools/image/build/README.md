@@ -148,8 +148,8 @@ bootloader, partition-table, application and OTA-data offsets and the
 partition-table CSV path (`chips/<chip>/platform/partitions/`). Both S31 and
 C5 use staged boot. The [C5 profile](../../../chips/esp32c5/platform/chip.toml)
 supplies its staged flash map, and
-[`oer-esp32c5-layout`](../../../chips/esp32c5/layout/src/lib.rs) supplies its
-board memory map. The flash map is host data: no target code reads it (the
+[`oer-esp32c5-layout`](../../../chips/esp32c5/layout/src/lib.rs) generates its
+board memory map from the chip facts. The flash map is host data: no target code reads it (the
 bootstrap finds its payload through the flash MMU). The staged pipeline
 refuses a flash map whose application or OTA-data offset is not the
 partition table's.

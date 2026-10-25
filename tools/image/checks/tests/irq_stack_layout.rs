@@ -81,6 +81,8 @@ fn link_with_task_stack(
         ("IRQ_STACK_HART1_BYTES", allocations[1]),
         ("CPU0_PSRAM_TASK_STACK_BYTES", task_stack),
         ("HART_COUNT", harts),
+        ("MMU_PAGE_BYTES", 0x10000),
+        ("HANDOFF_SRAM_MARGIN_BYTES", 0x2000),
         ("__runtime_cpu0_irq_stack_guard_bytes", 4096),
     ] {
         command.arg(format!("--defsym={name}={value}"));
