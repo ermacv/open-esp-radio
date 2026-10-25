@@ -2,10 +2,11 @@
 //! peripheral interrupt part its source, CPU line, level, hart, handler and
 //! handler class, declared once with [`interrupt_table!`].
 //!
-//! One line, one source, one direct call: each entry names the CPU line its
-//! source is routed to, and that line's vector calls the entry's handler and
-//! nothing else. The source comes from the bound part's type
-//! ([`InterruptSource`]), never from the entry's text. Every source starts
+//! One line, one part, one direct call: each entry names the CPU line its
+//! part's sources are routed to, and that line's vector calls the entry's
+//! handler and nothing else. The sources come from the bound part's type
+//! ([`InterruptSources`]: one source, or several a handler serves
+//! together), never from the entry's text. Every source starts
 //! silent ([`Router::install`]); [`Router::bind`] consumes the entry's token
 //! and the part, moves the part where only the handler reaches it, writes
 //! the line and the route, and returns the [`Bound`] proof a driver asks for
@@ -64,7 +65,7 @@ pub use router::{
 
 pub mod signal;
 
-pub use oer_mmio::InterruptSource;
+pub use oer_mmio::{InterruptSource, InterruptSources};
 
 /// What an entry's handler may do. The image gate checks each interrupt
 /// context's code by the classes of its entries; [`interrupt_table!`] checks
@@ -142,8 +143,8 @@ pub const fn line_control(level: u8, level_bits: u8) -> u8 {
 ///
 /// # Safety
 ///
-/// Only [`interrupt_table!`] implements it: the image's table lists the
-/// part's source with `LINE`, `LEVEL` and `HART`, the entry's handler
+/// Only [`interrupt_table!`] implements it: the image's table lists each
+/// of the part's sources with `LINE`, `LEVEL` and `HART`, the entry's handler
 /// reaches its part through `cell` alone, and the type has one value.
 #[allow(
     unsafe_code,
@@ -151,7 +152,7 @@ pub const fn line_control(level: u8, level_bits: u8) -> u8 {
 )]
 pub unsafe trait Entry {
     /// The interrupt part the entry's handler holds.
-    type Part: InterruptSource + Send + 'static;
+    type Part: InterruptSources + Send + 'static;
     const LINE: u8;
     const LEVEL: u8;
     const HART: u8;
@@ -185,7 +186,8 @@ pub struct Lines {
 ///
 /// A chip's platform wraps it with its [`Lines`]; each entry reads
 /// `field: Token = Part => handler, line LINE, level LEVEL, hart HART, CLASS;`
-/// with literal numbers. `Part` implements [`InterruptSource`], `handler`
+/// with literal numbers. `Part` implements [`InterruptSources`] (each
+/// [`InterruptSource`] does), `handler`
 /// is a `fn(&mut Part)`, and the macro defines the token type `Token`, while
 /// `Interrupts::take` hands out every token once. `CLASS` is a [`Class`]:
 /// `Hardware`, `Executor` or `Exempt(VIOLATION, "reason")`, where
@@ -196,8 +198,8 @@ pub struct Lines {
 ///
 /// The table fails to compile when a line lies outside
 /// `lines.first..lines.count`, a level outside `1..=lines.levels` or a hart
-/// outside `0..lines.harts`; when two entries share a line and hart or a
-/// source; when two `Executor` entries share a level and hart, a `Hardware`
+/// outside `0..lines.harts`; when two entries share a line and hart, or
+/// two entries, or one part, list a source twice; when two `Executor` entries share a level and hart, a `Hardware`
 /// or `Exempt(WakerCall, ..)` entry sits on the level of its hart's
 /// `Executor`, or an `Exempt(ExecutorLevel, ..)` entry does not. An entry's
 /// `#[cfg(...)]` attributes, before its doc comment, leave all of it out:
@@ -279,6 +281,42 @@ pub struct Lines {
 /// }
 /// ```
 ///
+/// A part of several sources ([`InterruptSources`]) binds them all to its
+/// entry's one line; no other entry, and no other position of its own list,
+/// names one of them:
+///
+/// ```compile_fail,E0080
+/// # oer_interrupt_table::__fake_parts!();
+/// # pub fn on_pair(_: &mut PairIrq) {}
+/// # pub fn on_seven(_: &mut SevenIrq) {}
+/// pub struct SevenIrq;
+/// impl oer_interrupt_table::InterruptSource for SevenIrq {
+///     const SOURCE: u16 = 7;
+/// }
+/// oer_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     // The pair's handler serves source 7 already.
+///     pair: PairToken = PairIrq => on_pair, line 16, level 3, hart 0, Hardware;
+///     seven: SevenToken = SevenIrq => on_seven, line 17, level 3, hart 0, Hardware;
+/// }
+/// ```
+///
+/// ```compile_fail,E0080
+/// # oer_interrupt_table::__fake_parts!();
+/// # pub fn on_twice(_: &mut TwiceIrq) {}
+/// pub struct TwiceIrq;
+/// impl oer_interrupt_table::InterruptSources for TwiceIrq {
+///     const SOURCES: &'static [u16] = &[4, 4];
+/// }
+/// oer_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     // One part lists source 4 twice.
+///     twice: TwiceToken = TwiceIrq => on_twice, line 16, level 3, hart 0, Hardware;
+/// }
+/// ```
+///
 /// ```compile_fail,E0080
 /// # oer_interrupt_table::__fake_parts!();
 /// # pub fn on_timer(_: &mut TimerIrq) {}
@@ -331,11 +369,13 @@ pub struct Lines {
 /// # pub fn on_timer(_: &mut TimerIrq) {}
 /// # pub fn on_radio(_: &mut RadioIrq) {}
 /// # pub fn on_absent(_: &mut AbsentIrq) {}
+/// # pub fn on_pair(_: &mut PairIrq) {}
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     radio: RadioToken = RadioIrq => on_radio, line 16, level 2, hart 0, Executor;
 ///     timer: TimerToken = TimerIrq => on_timer, line 16, level 2, hart 1, Hardware;
+///     pair: PairToken = PairIrq => on_pair, line 17, level 3, hart 1, Hardware;
 ///     absent: AbsentToken = AbsentIrq => on_absent, line 47, level 2, hart 0, Exempt(ExecutorLevel, "until its port");
 /// }
 /// ```
@@ -387,25 +427,42 @@ macro_rules! interrupt_table {
             };
         )*
 
-        const _: () = $crate::__private::check(
-            $lines,
-            &[
-                $($crate::__private::Declared {
-                    source: {
-                        #[cfg(all($($cfg),*))]
-                        let source = <$part as $crate::InterruptSource>::SOURCE;
-                        #[cfg(not(all($($cfg),*)))]
-                        let source = 0;
-                        source
-                    },
+        /// Every entry of the table, as its rules and its image layout
+        /// read it.
+        const __OER_DECLARED: &[$crate::__private::Declared] = &[
+            $($crate::__private::Declared {
+                sources: {
+                    #[cfg(all($($cfg),*))]
+                    let sources = <$part as $crate::InterruptSources>::SOURCES;
+                    #[cfg(not(all($($cfg),*)))]
+                    let sources: &[u16] = &[];
+                    sources
+                },
+                present: cfg!(all($($cfg),*)),
+                binding: $crate::Binding {
+                    source: 0,
                     line: $line,
                     level: $level,
-                    hart: $hart,
                     class: $crate::__class!($class $($violation)?),
-                    present: cfg!(all($($cfg),*)),
-                },)*
-            ],
-        );
+                    hart: $hart,
+                    handler: {
+                        #[cfg(all($($cfg),*))]
+                        let handler = ::core::option::Option::Some({
+                            unsafe extern "C" {
+                                #[link_name = concat!("__oer_interrupt_h", $hart, "_l", $line)]
+                                fn handler();
+                            }
+                            handler as unsafe extern "C" fn()
+                        });
+                        #[cfg(not(all($($cfg),*)))]
+                        let handler = ::core::option::Option::None;
+                        handler
+                    },
+                },
+            },)*
+        ];
+
+        const _: () = $crate::__private::check($lines, __OER_DECLARED);
 
         /// Every token of the image's interrupt table.
         #[allow(dead_code, reason = "an image without bindings takes no token")]
@@ -429,41 +486,59 @@ macro_rules! interrupt_table {
             }
         }
 
+        /// The bindings of the table: one per source of each entry the
+        /// build holds, one without a handler for each it leaves out.
+        static __OER_BINDINGS: [$crate::Binding; $crate::__private::count(__OER_DECLARED)] =
+            $crate::__private::bindings(__OER_DECLARED);
+
         /// The image's interrupt table. `#[used]` keeps the exported slice
         /// in the image: reads of an immutable static are folded into their
         /// uses, which would leave the tools no symbol to find it by.
         #[used]
         #[unsafe(export_name = "__OER_INTERRUPT_TABLE")]
-        pub static INTERRUPT_TABLE: &[$crate::Binding] = &[
-            $({
-                #[cfg(all($($cfg),*))]
-                let binding = $crate::Binding {
-                    source: <$part as $crate::InterruptSource>::SOURCE,
-                    line: $line,
-                    level: $level,
-                    class: $crate::__class!($class $($violation)?),
-                    hart: $hart,
-                    handler: ::core::option::Option::Some({
-                        unsafe extern "C" {
-                            #[link_name = concat!("__oer_interrupt_h", $hart, "_l", $line)]
-                            fn handler();
-                        }
-                        handler as unsafe extern "C" fn()
-                    }),
-                };
-                #[cfg(not(all($($cfg),*)))]
-                let binding = $crate::Binding {
-                    source: 0,
-                    line: $line,
-                    level: $level,
-                    class: $crate::__class!($class $($violation)?),
-                    hart: $hart,
-                    handler: ::core::option::Option::None,
-                };
-                binding
-            },)*
-        ];
+        pub static INTERRUPT_TABLE: &[$crate::Binding] = &__OER_BINDINGS;
     };
+}
+
+/// The sources of a part made of several members, for its
+/// [`InterruptSources::SOURCES`]: every member's sources, in member order,
+/// as a `&'static [u16]` built at compile time. A source two members list,
+/// or one member lists twice, fails to compile.
+///
+/// ```
+/// # oer_interrupt_table::__fake_parts!();
+/// /// One handler's timer and radio banks together.
+/// pub struct RadioAndTimer {
+///     pub timer: TimerIrq,
+///     pub radio: RadioIrq,
+/// }
+/// impl oer_interrupt_table::InterruptSources for RadioAndTimer {
+///     const SOURCES: &'static [u16] =
+///         oer_interrupt_table::interrupt_sources![TimerIrq, RadioIrq, PairIrq];
+/// }
+/// assert_eq!(<RadioAndTimer as oer_interrupt_table::InterruptSources>::SOURCES, [3, 5, 4, 7]);
+/// ```
+///
+/// ```compile_fail,E0080
+/// # oer_interrupt_table::__fake_parts!();
+/// pub struct Twice;
+/// impl oer_interrupt_table::InterruptSources for Twice {
+///     // The timer's source twice.
+///     const SOURCES: &'static [u16] = oer_interrupt_table::interrupt_sources![TimerIrq, TimerIrq];
+/// }
+/// # let _ = <Twice as oer_interrupt_table::InterruptSources>::SOURCES;
+/// ```
+#[macro_export]
+macro_rules! interrupt_sources {
+    ($($member:ty),+ $(,)?) => {{
+        const LISTS: &[&[u16]] = &[$(<$member as $crate::InterruptSources>::SOURCES),+];
+        const UNION: [u16; $crate::__private::total(LISTS)] = $crate::__private::union(LISTS);
+        const _: () = assert!(
+            !$crate::__private::repeats(&UNION),
+            "two members of a part, or one member, list a source twice"
+        );
+        &UNION
+    }};
 }
 
 /// The strong symbol a line's vector calls: it lends the entry's part to
@@ -517,20 +592,75 @@ macro_rules! __class {
 
 #[doc(hidden)]
 pub mod __private {
-    use crate::{Class, Lines};
+    use crate::{Binding, Class, Lines};
 
     pub use oer_memory::HandlerCell;
     pub use static_cell::StaticCell;
 
-    /// One entry as the table's rules see it.
+    /// One entry as the table's rules and its image layout see it.
     pub struct Declared {
-        pub source: u16,
-        pub line: u8,
-        pub level: u8,
-        pub hart: u8,
-        pub class: Class,
+        /// The bound part's sources; none when a `cfg` leaves it out.
+        pub sources: &'static [u16],
         /// A `cfg` keeps the entry in this build.
         pub present: bool,
+        /// The entry's line, level, class, hart and handler (`None` when a
+        /// `cfg` leaves it out); its source is each of `sources` in turn.
+        pub binding: Binding,
+    }
+
+    /// The bindings `entries` lay out: one per source of a present entry,
+    /// one for an entry a `cfg` leaves out.
+    pub const fn count(entries: &[Declared]) -> usize {
+        let mut count = 0usize;
+        let mut rest = entries;
+        while let [entry, tail @ ..] = rest {
+            rest = tail;
+            count = count.saturating_add(if entry.present {
+                entry.sources.len()
+            } else {
+                1
+            });
+        }
+        count
+    }
+
+    /// No binding: the filler of a slot `bindings` writes over.
+    const VACANT: Binding = Binding {
+        source: 0,
+        line: 0,
+        level: 0,
+        class: Class::Hardware,
+        hart: 0,
+        handler: None,
+    };
+
+    /// The bindings of `entries`, in their order, each source of an entry
+    /// in its part's order; [`count`] of them.
+    pub const fn bindings<const N: usize>(entries: &[Declared]) -> [Binding; N] {
+        let mut out = [VACANT; N];
+        let mut slots: &mut [Binding] = &mut out;
+        let mut rest = entries;
+        while let [entry, tail @ ..] = rest {
+            rest = tail;
+            let absent: &[u16] = &[0];
+            let mut sources = if entry.present { entry.sources } else { absent };
+            while let [source, more @ ..] = sources {
+                sources = more;
+                let [slot, others @ ..] = slots else {
+                    return out;
+                };
+                *slot = Binding {
+                    source: *source,
+                    line: entry.binding.line,
+                    level: entry.binding.level,
+                    class: entry.binding.class,
+                    hart: entry.binding.hart,
+                    handler: entry.binding.handler,
+                };
+                slots = others;
+            }
+        }
+        out
     }
 
     /// The rules of a table, at compile time: each present entry's line,
@@ -547,15 +677,15 @@ pub mod __private {
                 continue;
             }
             assert!(
-                entry.line >= lines.first && entry.line < lines.count,
+                entry.binding.line >= lines.first && entry.binding.line < lines.count,
                 "an entry's line is no line a peripheral source can be routed to"
             );
             assert!(
-                entry.level >= 1 && entry.level <= lines.levels,
+                entry.binding.level >= 1 && entry.binding.level <= lines.levels,
                 "an entry's level is no level a line can hold"
             );
             assert!(
-                entry.hart < lines.harts,
+                entry.binding.hart < lines.harts,
                 "an entry's hart is no hart of the image"
             );
             let mut executors = 0;
@@ -570,19 +700,23 @@ pub mod __private {
                 }
                 if !same {
                     assert!(
-                        !(other.line == entry.line && other.hart == entry.hart),
+                        !(other.binding.line == entry.binding.line
+                            && other.binding.hart == entry.binding.hart),
                         "two entries share a line and hart"
                     );
-                    assert!(other.source != entry.source, "two entries bind one source");
                 }
-                if other.level == entry.level
-                    && other.hart == entry.hart
-                    && matches!(other.class, Class::Executor)
+                assert!(
+                    !twice(entry.sources, other.sources, same),
+                    "two entries, or one part, list a source twice"
+                );
+                if other.binding.level == entry.binding.level
+                    && other.binding.hart == entry.binding.hart
+                    && matches!(other.binding.class, Class::Executor)
                 {
                     executors += 1;
                 }
             }
-            match entry.class {
+            match entry.binding.class {
                 Class::Executor => assert!(
                     executors == 1,
                     "two Executor entries share a level and hart"
@@ -597,6 +731,61 @@ pub mod __private {
                 ),
             }
         }
+    }
+
+    /// The sources `lists` hold together.
+    pub const fn total(lists: &[&[u16]]) -> usize {
+        let mut total = 0usize;
+        let mut rest = lists;
+        while let [list, tail @ ..] = rest {
+            rest = tail;
+            total = total.saturating_add(list.len());
+        }
+        total
+    }
+
+    /// The sources of `lists`, in order: [`total`] of them.
+    pub const fn union<const N: usize>(lists: &[&[u16]]) -> [u16; N] {
+        let mut out = [0; N];
+        let mut slots: &mut [u16] = &mut out;
+        let mut rest = lists;
+        while let [list, tail @ ..] = rest {
+            rest = tail;
+            let mut sources = *list;
+            while let [source, more @ ..] = sources {
+                sources = more;
+                let [slot, others @ ..] = slots else {
+                    return out;
+                };
+                *slot = *source;
+                slots = others;
+            }
+        }
+        out
+    }
+
+    /// Whether `sources` lists a source twice.
+    pub const fn repeats(sources: &[u16]) -> bool {
+        twice(sources, sources, true)
+    }
+
+    /// Whether a source of `first` is one of `second`'s, the same list's
+    /// other positions when `same`.
+    const fn twice(first: &[u16], second: &[u16], same: bool) -> bool {
+        let mut rest = first;
+        while let [source, tail @ ..] = rest {
+            rest = tail;
+            // Within one list only the later positions: each pair once,
+            // and never a source with itself.
+            let mut others = if same { tail } else { second };
+            while let [other, more @ ..] = others {
+                others = more;
+                if *other == *source {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// The bytes of `text`, which holds `N`.
@@ -630,7 +819,7 @@ pub mod __private {
     }
 }
 
-/// Three fake interrupt parts and the fake's [`Lines`] (`FAKE_LINES`: lines
+/// Four fake interrupt parts and the fake's [`Lines`] (`FAKE_LINES`: lines
 /// 16 to 47, eight levels, two harts), for this crate's tests and examples.
 #[doc(hidden)]
 #[macro_export]
@@ -649,6 +838,15 @@ macro_rules! __fake_parts {
         pub struct RadioIrq;
         impl $crate::InterruptSource for RadioIrq {
             const SOURCE: u16 = 5;
+        }
+        /// A part of two sources one handler serves, 4 and 7; it counts
+        /// the calls of its handler.
+        #[derive(Default)]
+        pub struct PairIrq {
+            pub handled: u32,
+        }
+        impl $crate::InterruptSources for PairIrq {
+            const SOURCES: &'static [u16] = &[4, 7];
         }
         /// A part every build leaves out, source 6.
         #[allow(dead_code, reason = "no build binds the absent part")]
@@ -765,12 +963,17 @@ macro_rules! __fake_table {
         }
         /// The handler of the radio's entry.
         pub fn on_radio(_: &mut RadioIrq) {}
+        /// The handler of the pair's entry: one more call on its part.
+        pub fn on_pair(part: &mut PairIrq) {
+            part.handled += 1;
+        }
 
         $crate::interrupt_table! {
             lines: FAKE_LINES,
             handler_attributes: [];
             timer: TimerToken = TimerIrq => on_timer, line 16, level 1, hart 0, Hardware;
             radio: RadioToken = RadioIrq => on_radio, line 17, level 2, hart 1, Executor;
+            pair: PairToken = PairIrq => on_pair, line 18, level 1, hart 0, Hardware;
             #[cfg(any())]
             /// Left out of every build; on its own it would break the line
             /// rule, which only the build's entries obey.
