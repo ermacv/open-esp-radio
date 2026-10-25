@@ -325,7 +325,7 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
 ///
 /// Names remain positional because current evidence proves the control flow,
 /// but not stable Link-Layer names for these undocumented sources. Raw status
-/// and diagnostic register images remain private to the PAC.
+/// and diagnostic register images remain private to the register owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BluetoothPrimaryFaultSources {
     bank_0_source_15_pending: bool,
@@ -417,7 +417,7 @@ impl BluetoothNrtInterruptAcknowledged {
 
 /// One complete primary source-124 sample, acknowledgement and fault capture.
 ///
-/// The PAC projects raw status into positional source facts before this value
+/// The register owner projects raw status into positional source facts before this value
 /// crosses the hardware boundary. Conditional diagnostic reads still happen at
 /// their reviewed temporal points, but their undocumented register images are
 /// not published as Controller API.
@@ -432,8 +432,8 @@ pub struct BluetoothPrimaryInterruptEpoch {
 
 impl BluetoothPrimaryInterruptEpoch {
     /// Construct one fault-free epoch from positional source presence for
-    /// host tests, without exposing interrupt-bank bit geometry above the
-    /// PAC.
+    /// host tests, without exposing interrupt-bank bit geometry above this
+    /// module.
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub const fn for_dynamic_host_test(

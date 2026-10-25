@@ -99,7 +99,7 @@ impl BluetoothPhyRegisterInitInputs {
     /// objects.
     ///
     /// The returned value contains the complete positional policy recovered for
-    /// ordinary production use. Callers supply only typed addresses; the PAC
+    /// ordinary production use. Callers supply only typed addresses; the HAL
     /// retains all register-facing profile choices. This value does not itself
     /// prove allocation, contents, lifetime, or exclusive ownership of either
     /// object.

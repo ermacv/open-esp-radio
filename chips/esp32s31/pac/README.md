@@ -25,14 +25,19 @@ transactions, including sourced whole-word images and snapshot
 acknowledgements. The `soc` pass retains the vendor's field prefixes;
 API-policy blocks use the field names declared in the reviewed model.
 
-The PAC exports the handwritten domain modules `bluetooth`, `wifi`, `phy`,
-`modem`, `boot`, `platform`, `watchdog` and `pll_power`. They assemble owned
-register parts and provide the register-local operations and straight-line
-transactions described below. IEEE 802.15.4 has no domain module: its
-partition (`Ieee802154Partition`) holds the generated parts, the MAC block,
-the modem ETM's channels zero and one and the baseband's receive-information
-read, from the public `ieee802154_mac`, `modem_etm` and `bt_v3_2_baseband`
-modules, and the HAL performs every IEEE 802.15.4 operation over their field
+The PAC exports the handwritten domain modules `wifi`, `phy`, `modem`,
+`boot`, `platform`, `watchdog` and `pll_power`. They assemble owned register
+parts and provide the register-local operations and straight-line
+transactions described below. IEEE 802.15.4 and Bluetooth LE have no domain
+module. The IEEE 802.15.4 partition (`Ieee802154Partition`) holds the
+generated parts, the MAC block, the modem ETM's channels zero and one and the
+baseband's receive-information read, from the public `ieee802154_mac`,
+`modem_etm` and `bt_v3_2_baseband` modules. The Bluetooth LE partitions hold
+the controller blocks with modem ETM channel two
+(`BluetoothControllerPartition`), the modem low-power timer with channels
+four to seven (`BluetoothModemLpTimerPartition`) and the interrupt bank with
+the scheduler's diagnostic pair (`BluetoothInterruptPeripherals`). The HAL
+performs every IEEE 802.15.4 and Bluetooth LE operation over their field
 accessors. The analog-host operations
 are in `phy/i2c.rs`. Sequencing with phases, polling, retries, interrupt
 routing and lifecycle policy belongs to the HAL; a PAC domain operation
@@ -42,15 +47,17 @@ keeps no in-flight state between calls.
 
 `RadioPartitions::from_handoff` consumes the platform's `RadioHandoff`, the
 proof that every radio singleton was handed over, and returns the radio
-registers once as opaque register partitions; register
-sets such as `WifiRadioRegisters` and `BluetoothTaskRegisters` are assembled
-from those partitions and carry the reviewed domain transactions. Protocol
+registers once as register partitions; register
+sets such as `WifiRadioRegisters` are assembled from those partitions and
+carry the reviewed domain transactions, and the Bluetooth partitions' public
+fields are the generated parts the HAL's owners hold. Protocol
 register sets contain only their protocol's partitions. The radio PHY,
 coexistence arbitration and shared baseband partitions, including the BTBB
 baseband that Bluetooth and IEEE 802.15.4 both initialize, form the separate
 `SharedRadioRegisters` owner; a transaction touching both protocol and shared
 registers takes it as an explicit argument, and the coexistence timer bank
-belongs to it. Per-protocol coexistence priority registers stay with that
+belongs to it. Its radio PHY partition and shared blocks are public fields,
+which the HAL's BTBB initialization writes over their field accessors. Per-protocol coexistence priority registers stay with that
 protocol's partition. The PAC holds no protocol route: the HAL owns the
 neutral radio root, decides which partitions each route consumes and where
 the shared owner lives, retains the others and supplies multi-register

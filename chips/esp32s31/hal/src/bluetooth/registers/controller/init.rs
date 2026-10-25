@@ -587,7 +587,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// Enabled clocks, the selected SRAM-prefix policy and inactive interrupt
     /// lifecycle are upper-layer ownership facts. PHY, BTBB, scheduler lists,
     /// Link Layer and HCI are later stages and are not established here. None
-    /// of those facts is represented by a forgeable PAC proof token.
+    /// of those facts is represented by a forgeable proof token.
     #[doc(hidden)]
     pub fn initialize_controller_hal(&mut self, config: BluetoothControllerHalInitConfig) {
         let mut transaction = MmioHalInit {

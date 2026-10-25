@@ -1,4 +1,4 @@
-//! Controller-time latch ownership over the PAC's single transactions.
+//! Controller-time latch ownership over the register owner's single transactions.
 //!
 //! Publication performs one fresh-read RMW. Every later step observes the
 //! request bit exactly once and returns immediately; only the step which sees
@@ -127,7 +127,7 @@ fn execute_latch_step(
 
 impl BluetoothControllerTimeLatchControl for BluetoothTaskRegisters {
     fn publish_latch_request(&mut self, _request: BluetoothControllerTimeLatchRequest) {
-        // The PAC publication includes its trailing device fence.
+        // The publication includes its trailing device fence.
         self.publish_controller_time_latch_request();
     }
 
@@ -140,7 +140,7 @@ impl BluetoothControllerTimeLatchControl for BluetoothTaskRegisters {
     fn order_after_clear_observation(&mut self) {}
 
     fn read_latched_time_0(&mut self) -> u32 {
-        // The PAC read includes the fence ordering it after the clear edge.
+        // The read includes the fence ordering it after the clear edge.
         self.read_controller_latched_time().bits()
     }
 }

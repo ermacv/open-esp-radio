@@ -285,7 +285,7 @@ fn scheduler_status_sample_selects_once_and_accepts_two_equal_reads() {
 #[test]
 fn scheduler_status_sample_is_one_attempt_that_rejects_any_changed_lane() {
     // A change in any lane rejects the pair, including one the BUSY bit does
-    // not occupy. The PAC never reads a third value; the HAL retries.
+    // not occupy. One sample never reads a third value; the caller retries.
     let mut recorder = DiagnosticRecorder {
         values: Vec::from([
             diagnostic(true, 0),

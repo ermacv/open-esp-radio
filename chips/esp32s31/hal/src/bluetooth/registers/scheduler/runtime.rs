@@ -265,7 +265,7 @@ pub enum BluetoothSchedulerFinishedListPop {
 /// Affine proof that one list occurred in a fenced finished-list transfer.
 ///
 /// This token is not an item-completion proof. It authorizes the owning
-/// scheduler layer to rescan exactly one retained list after the PAC's
+/// scheduler layer to rescan exactly one retained list after the
 /// `status -> report -> device fence` transaction. The private constructor and
 /// absence of `Clone`/`Copy` prevent a positional index from being substituted
 /// for that temporal event. A fresh later transfer may observe the same list
@@ -317,7 +317,7 @@ impl BluetoothSchedulerFinishedListObservation {
 
     /// Consume at most one lowest-numbered finished list.
     ///
-    /// The physical mask layout remains private to the PAC. Callers retain an
+    /// The physical mask layout remains private to this module. Callers retain an
     /// opaque observation between executor turns and receive only a semantic
     /// list index for item selection.
     pub const fn pop_lowest(self) -> BluetoothSchedulerFinishedListPop {

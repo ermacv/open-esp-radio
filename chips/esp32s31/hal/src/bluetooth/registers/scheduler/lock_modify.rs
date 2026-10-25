@@ -1,10 +1,10 @@
-//! Affine PAC transaction for scheduler insert-with-lock-modify.
+//! Affine transaction for scheduler insert-with-lock-modify.
 //!
 //! The task-side request register and interrupt-side scheduler-state register
 //! deliberately have different physical owners. Publication is one finite
 //! task-owned MMIO transaction. Wait observations remain split into two value
 //! tokens until the controller coordinator joins them at one decision point;
-//! neither PAC owner aliases the other register partition.
+//! neither owner aliases the other register partition.
 
 #![deny(unsafe_code)]
 
@@ -116,7 +116,7 @@ impl BluetoothSchedulerLockModifyObservation {
         }
     }
 
-    /// Construct semantic fields for host validation without reproducing PAC
+    /// Construct semantic fields for host validation without reproducing
     /// register geometry in a controller test.
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
@@ -163,7 +163,7 @@ pub struct BluetoothSchedulerLockModifyPublished {
 #[cfg(test)]
 impl BluetoothSchedulerLockModifyPublished {
     /// Construct a host-only publication proof for controller state-machine
-    /// validation. Production builds can obtain this value only from live PAC
+    /// validation. Production builds can obtain this value only from live
     /// publication.
     #[doc(hidden)]
     pub const fn for_host_test() -> Self {
@@ -225,7 +225,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// device-ordering fence.
     ///
     /// The controller layer admits this operation only after a fresh split
-    /// observation ended the pre-publication wait. The PAC method itself owns
+    /// observation ended the pre-publication wait. The method itself owns
     /// all three writes: two independent fresh-read updates of the operational
     /// word followed by the typed request publication.
     ///

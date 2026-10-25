@@ -142,25 +142,8 @@ impl<B: oer_mmio::Placement> BluetoothSchedulerInsertionExecutionControl
 
 /// One-hot command-one selection mask of one hardware list.
 const fn list_mask(index: BluetoothSchedulerHardwareListIndex) -> u16 {
-    match index.get() {
-        0 => 0x0001,
-        1 => 0x0002,
-        2 => 0x0004,
-        3 => 0x0008,
-        4 => 0x0010,
-        5 => 0x0020,
-        6 => 0x0040,
-        7 => 0x0080,
-        8 => 0x0100,
-        9 => 0x0200,
-        10 => 0x0400,
-        11 => 0x0800,
-        12 => 0x1000,
-        13 => 0x2000,
-        14 => 0x4000,
-        15 => 0x8000,
-        _ => panic!("typed scheduler list index exceeded its PAC domain"),
-    }
+    // The index is below sixteen by construction.
+    1u16.wrapping_shl(index.get() as u32)
 }
 
 impl<B: oer_mmio::Placement> BluetoothSchedulerInsertionExecutionObservationControl

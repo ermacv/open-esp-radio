@@ -303,7 +303,10 @@ the loan is made, with the first such buffer.
 ## Bluetooth controller memory
 
 `oer_esp32s31_hal::bluetooth::engine` retains the component codecs and
-CPU/controller ownership protocol. The BLE driver enables the HAL's
+CPU/controller ownership protocol. Its register side, `oer_esp32s31_hal::bluetooth::registers`,
+publishes heads, lists and tables over the generated field accessors; the
+generated BLE codec (`ble_word_index`, the pointer fields' images and the
+layout links' decoders) is the only compressed-address codec. The BLE driver enables the HAL's
 `bluetooth-engine` feature; Wi-Fi images retain their dependency graph.
 One engine retains the register token and the entire placed arena through
 HAL initialization, PHY activation, runtime workers, stop and reset. Private

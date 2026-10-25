@@ -1,10 +1,10 @@
 //! Evidence-bounded classification of the primary Bluetooth MAC IRQ suffix.
 //!
-//! The restricted PAC owns the exact masked-status sample and W1C prefix.
+//! The HAL owns the exact masked-status sample and W1C prefix.
 //! This module first rejects the four baseline groups consumed by the complete
 //! assertion prefix, then classifies the three dynamic source groups consumed
 //! by the source-124 scheduler suffix. Raw status and diagnostic images remain
-//! inside the PAC; this layer receives positional source facts only.
+//! inside the HAL; this layer receives positional source facts only.
 //!
 //! The reference handler can observe `SCHEDULER_STATE` twice: once while
 //! handling bank-one source 3 and again while constructing scheduler work.
@@ -89,7 +89,7 @@ impl PrimarySchedulerTrigger {
 
 /// Classified dynamic suffix of one complete primary interrupt observation.
 ///
-/// The acknowledged PAC epoch remains affine while only semantic scheduler
+/// The acknowledged HAL epoch remains affine while only semantic scheduler
 /// trigger facts are exposed.
 #[derive(Debug, Eq, PartialEq)]
 #[must_use = "a classified primary epoch must drive fault or scheduler handling"]
@@ -99,7 +99,7 @@ pub struct PrimaryInterruptClassification {
 }
 
 impl PrimaryInterruptClassification {
-    /// Classify one complete restricted-PAC epoch or preserve its fatal path.
+    /// Classify one complete HAL interrupt epoch or preserve its fatal path.
     ///
     /// Any baseline fault takes precedence even when dynamic scheduler sources
     /// were pending in the same snapshot. A live Controller must retain the

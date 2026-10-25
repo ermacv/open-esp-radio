@@ -8,7 +8,7 @@ use crate::layouts::{BleBufferHeader, DmaRef};
 /// One of the three positional hardware list selectors proven by the
 /// selector leaves in the ESP32-S31 controller archive.
 ///
-/// The PAC keeps these names positional. The controller-memory layer owns the
+/// These names stay positional. The controller-memory layer owns the
 /// separately proven scan/non-scan global-insertion routing, while selector
 /// three and the private DTM publication path remain semantically unassigned.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -105,7 +105,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     ///
     /// This operation intentionally accepts only positional selectors. The
     /// memory layer must choose an active semantic class or retain explicit
-    /// evidence for a private path; element layout and lifecycle are not PAC
+    /// evidence for a private path; element layout and lifecycle are not register
     /// policy.
     ///
     /// # Safety

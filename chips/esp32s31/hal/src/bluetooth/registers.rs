@@ -15,6 +15,13 @@
 //! chip's addresses ([`Chip`]), host tests host memory.
 
 #![deny(unsafe_code)]
+#![cfg_attr(
+    not(feature = "bluetooth-engine"),
+    allow(
+        dead_code,
+        reason = "the controller-memory engine is the only caller of some operations"
+    )
+)]
 
 use oer_esp32s31_pac::{
     BluetoothControllerPartition, BluetoothControllerPeripherals, BluetoothInterruptPeripherals,

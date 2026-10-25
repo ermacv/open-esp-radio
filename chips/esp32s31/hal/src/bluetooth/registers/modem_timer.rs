@@ -561,7 +561,7 @@ impl<P: BluetoothPlacements> BluetoothModemLpTimerRegisters<P> {
     /// seven. Its complete caller
     /// `r_sym_bt_cgaCegmpqnbaoszyOy3c` then clears `CONTROL_0` and `CONTROL_4`,
     /// samples `CONTROL_2`, and conditionally publishes `CONTROL_1` from a
-    /// fresh read. A device fence closes this restricted-PAC transaction.
+    /// fresh read. A device fence closes this register transaction.
     ///
     /// This partition supplies `BTDM_RUNTIME_CONTROL` and the Bluetooth
     /// channels four through seven of `MODEM_ETM`.
