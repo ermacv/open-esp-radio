@@ -1,21 +1,18 @@
-//! The MAC interrupt banks: the task-side setup of one interrupt epoch and
-//! the hard interrupt handlers' disjoint capabilities.
+//! The MAC and WDEVPWR interrupt banks, which the radio interrupt handler
+//! holds for the image's life.
 //!
 //! The event-status words are acknowledged only through the generated
 //! sample and acknowledgement, and through the generated clear-every-event
 //! images that mask their bank first (`mac_interrupt_clear`,
-//! `clear_all_mac_power_interrupts`). The setup token, which a task holds,
-//! and the two handler capabilities, which the interrupt handlers hold, are
-//! separate owners; neither shares a lock with the other.
+//! `clear_all_mac_power_interrupts`). Every enable word is written by the
+//! bank's owner alone: no task-side owner of either bank exists.
 
 use oer_esp32s31_pac::{
     modem_pwr, modem_pwr::WifiMacPowerInterrupt, wifi_mac, wifi_mac::WifiMacInterrupt,
 };
 use oer_mmio::{Bits, Placement};
 
-use crate::ieee80211::registers::{
-    Chip, MacInterruptMask, MacInterruptSetup, MacPlacement, WifiRadioRegisters,
-};
+use crate::ieee80211::registers::{Chip, MacInterruptMask, MacPlacement, WifiRadioRegisters};
 
 /// Semantic MAC work causes recovered from reviewed vendor transactions.
 ///
@@ -290,15 +287,33 @@ impl MacPowerInterruptObservation {
     }
 }
 
-/// Proof that the connected-STA hardware policy was applied before IRQ activation.
+/// Proof that the connected-STA hardware policy was applied.
 ///
-/// Construction is private to the exact two-register transaction below. The
-/// connected runtime consumes this value when it activates its interrupt
-/// epoch, so removing the transaction from that lifecycle becomes a compile
-/// error rather than an intermittent runtime regression.
+/// Construction is private to the CONTROL transaction below.
 #[must_use = "connected STA interrupt activation requires this preparation proof"]
 pub struct ConnectedStaWithoutPowerSavePrepared {
     _private: (),
+}
+
+impl<M: MacPlacement> WifiRadioRegisters<M> {
+    /// Disable vendor hardware beacon filtering before a connected STA epoch.
+    ///
+    /// SOURCE: complete `libpp[hal_mac.o]::hal_disable_sta_beacon_filter`
+    /// clears CONTROL bits 2:0, then the matching interrupt-enable bit 15.
+    /// The enable word belongs to the interrupt handler: every image it
+    /// publishes holds bit 15 clear ([`publish_mac_interrupt_mask`]), and it
+    /// stays masked between epochs, so the source is masked before and after
+    /// this edge.
+    pub fn prepare_connected_sta_without_power_save(
+        &mut self,
+    ) -> ConnectedStaWithoutPowerSavePrepared {
+        self.mac
+            .wifi_mac_sta_beacon_filter
+            .modify_sta_beacon_filter_control(|w| {
+                w.set_bits_0_2_opaque(Bits::constant::<0>());
+            });
+        ConnectedStaWithoutPowerSavePrepared { _private: () }
+    }
 }
 
 /// Classified field-level readback of the MAC interrupt enable register.
@@ -409,188 +424,52 @@ fn observe_mac_interrupt_enable<P: Placement>(
     }
 }
 
-trait MacInterruptActivationBackend {
-    fn mask_mac_events(&mut self);
-    fn mask_power_events(&mut self);
-    fn clear_mac_events(&mut self);
-    fn clear_power_events(&mut self);
-    fn publish_mac_events(&mut self, event_mask: MacInterruptMask);
-    fn publish_power_events(&mut self);
-    fn fence(&mut self);
-}
-
-fn activate_mac_interrupt_epoch(
-    backend: &mut impl MacInterruptActivationBackend,
-    event_mask: MacInterruptMask,
-) {
-    // A previous role may leave a level event latched after its CPU route has
-    // been detached. Keep both banks masked until every stale event is
-    // acknowledged. Publishing the runtime mask before CLEAR creates a real
-    // preemption window in which the regular level route can enter before
-    // setup returns.
-    backend.mask_mac_events();
-    backend.mask_power_events();
-    backend.clear_mac_events();
-    backend.clear_power_events();
-    backend.fence();
-    backend.publish_mac_events(event_mask);
-    backend.publish_power_events();
-    backend.fence();
-}
-
-/// One live interrupt bank whose complete enable image can be masked.
-trait InterruptBankMaskBackend {
-    fn mask_events(&mut self);
-    fn fence(&mut self);
-}
-
-fn mask_interrupt_bank(backend: &mut impl InterruptBankMaskBackend) {
-    // Masking is not an acknowledgement: a latched event stays in STATUS and
-    // becomes visible again when its source is unmasked.
-    backend.mask_events();
-    backend.fence();
-}
-
-impl<M: MacPlacement> MacInterruptActivationBackend for MacInterruptSetup<M> {
-    fn mask_mac_events(&mut self) {
-        publish_mac_interrupt_mask(&mut self.mac, MacInterruptMask::NONE);
-    }
-
-    fn mask_power_events(&mut self) {
-        mask_mac_power_interrupts(&mut self.power);
-    }
-
-    /// Acknowledge every latched MAC event: the generated image masks the
-    /// bank (already masked here) and stores the whole clear word.
-    ///
-    /// SOURCE: `BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT`.
-    fn clear_mac_events(&mut self) {
-        self.mac.mac_interrupt_clear();
-    }
-
-    /// Acknowledge every latched WDEVPWR cause, masked first as above.
-    ///
-    /// SOURCE: `BLOB_LIBPP_HAL_PWR_INTERRUPT`.
-    fn clear_power_events(&mut self) {
-        self.power.clear_all_mac_power_interrupts();
-    }
-
-    fn publish_mac_events(&mut self, event_mask: MacInterruptMask) {
-        publish_mac_interrupt_mask(&mut self.mac, event_mask);
-    }
-
-    /// Enable the station TBTT event for the whole route epoch.
-    ///
-    /// SOURCE: complete pinned `libpp[hal_tsf.o]::hal_enable_sta_tbtt`
-    /// enables the station TBTT event in the WDEVPWR enable word. One route
-    /// serves every Wi-Fi role in turn, so the mask stays enabled and the
-    /// station TBTT enable, which only a connected station sets, gates it.
-    fn publish_power_events(&mut self) {
-        self.power.modify_enable(|w| {
-            w.set_tbtt_0(true);
-        });
-    }
-
-    fn fence(&mut self) {
-        oer_mmio::fence();
-    }
-}
-
-impl<M: MacPlacement> MacInterruptSetup<M> {
-    /// Read the currently published MAC interrupt mask.
-    pub fn mac_interrupt_enable(&self) -> MacInterruptEnableState {
-        observe_mac_interrupt_enable(&self.mac)
-    }
-
-    /// Publish one reviewed MAC interrupt mask while no handler holds the
-    /// bank: the edge complete `hal_init` takes in its tail.
-    pub(crate) fn publish_mac_interrupt_mask(&mut self, event_mask: MacInterruptMask) {
-        publish_mac_interrupt_mask(&mut self.mac, event_mask);
-    }
-
-    /// Mask every MAC event and acknowledge every stale event: the generated
-    /// clear image, which stores the zero enable image and then the whole
-    /// clear word.
-    ///
-    /// SOURCE: `BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT`.
-    pub fn mask_and_clear_all_mac_interrupts(&mut self) {
-        self.mac.mac_interrupt_clear();
-        oer_mmio::fence();
-    }
-
-    /// Disable vendor hardware beacon filtering before a connected STA epoch.
-    ///
-    /// The operation requires both still-disjoint task owners and therefore
-    /// cannot race an active ISR. It is the complete vendor disable leaf:
-    /// CONTROL bits 2:0 are cleared before interrupt-enable bit 15.
-    pub fn prepare_connected_sta_without_power_save(
-        &mut self,
-        registers: &mut WifiRadioRegisters<M>,
-    ) -> ConnectedStaWithoutPowerSavePrepared {
-        // Complete libpp[hal_mac.o]::hal_disable_sta_beacon_filter. Preserve
-        // the two independent fresh-read RMW edges and their order: hardware
-        // filtering is disabled before its matching interrupt source is masked.
-        registers
-            .mac
-            .wifi_mac_sta_beacon_filter
-            .modify_sta_beacon_filter_control(|w| {
-                w.set_bits_0_2_opaque(Bits::constant::<0>());
-            });
-        self.mac.modify_enable(|w| {
-            w.set_sta_beacon_filter(false);
-        });
-        ConnectedStaWithoutPowerSavePrepared { _private: () }
-    }
-
-    /// Publish the runtime event mask and create the finite ISR capability.
-    ///
-    /// The CPU interrupt route must still be unbound while this transaction
-    /// executes. The returned value should be installed in its final static
-    /// storage before the platform route is enabled.
-    pub fn activate(
-        mut self,
-        event_mask: MacInterruptMask,
-    ) -> (MacInterruptRegisters<M>, MacPowerInterruptRegisters<M>) {
-        // Clear stale level events while masked, then publish the complete MAC
-        // mask as the last interrupt-producing edge before the caller exposes
-        // either ISR capability.
-        activate_mac_interrupt_epoch(&mut self, event_mask);
-        let Self { mac, power } = self;
-        (
-            MacInterruptRegisters { mac },
-            MacPowerInterruptRegisters { power },
-        )
-    }
-}
-
-/// Disjoint generated register capability intended for the hard power ISR.
+/// The WDEVPWR interrupt bank: its enable, status and clear words.
 ///
-/// This bank is split from the cold owner together with
-/// [`MacInterruptRegisters`]. Ordinary [`WifiRadioRegisters`] therefore
-/// cannot race its STATUS/CLEAR transaction from task context.
+/// The radio interrupt handler holds it, beside [`MacInterruptRegisters`],
+/// for the image's life; no other owner of these words exists.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct MacPowerInterruptRegisters<M: MacPlacement = Chip> {
     power: WifiMacPowerInterrupt<M::Power>,
 }
 
-impl<M: MacPlacement> InterruptBankMaskBackend for MacPowerInterruptRegisters<M> {
-    fn mask_events(&mut self) {
-        mask_mac_power_interrupts(&mut self.power);
-    }
-
-    fn fence(&mut self) {
-        oer_mmio::fence();
-    }
-}
-
 impl<M: MacPlacement> MacPowerInterruptRegisters<M> {
-    /// Mask every WDEVPWR cause of the live epoch without acknowledging one.
+    /// Take the bank. This performs no MMIO.
+    pub(crate) const fn new(power: WifiMacPowerInterrupt<M::Power>) -> Self {
+        Self { power }
+    }
+
+    /// Mask every WDEVPWR cause without acknowledging one.
     ///
     /// Publishes the all-zero ENABLE image, then orders the write. A
     /// latched cause stays in STATUS; the CPU line deasserts once the masked
     /// image reaches the bank.
     pub fn mask_all_power_interrupts(&mut self) {
-        mask_interrupt_bank(self);
+        mask_mac_power_interrupts(&mut self.power);
+        oer_mmio::fence();
+    }
+
+    /// Acknowledge every latched WDEVPWR cause: the generated image masks
+    /// the bank and stores the whole clear word, then the write is ordered.
+    ///
+    /// SOURCE: `BLOB_LIBPP_HAL_PWR_INTERRUPT`.
+    pub fn clear_all_power_interrupts(&mut self) {
+        self.power.clear_all_mac_power_interrupts();
+        oer_mmio::fence();
+    }
+
+    /// Enable the station TBTT event, then order the write.
+    ///
+    /// SOURCE: complete pinned `libpp[hal_tsf.o]::hal_enable_sta_tbtt`
+    /// enables the station TBTT event in the WDEVPWR enable word. One
+    /// interrupt epoch serves every Wi-Fi role in turn, so the mask stays
+    /// enabled and the station TBTT enable, which only a connected station
+    /// sets, gates it.
+    pub fn enable_station_tbtt_interrupt(&mut self) {
+        self.power.modify_enable(|w| {
+            w.set_tbtt_0(true);
+        });
+        oer_mmio::fence();
     }
 
     /// Sample the complete masked WDEVPWR event image.
@@ -610,35 +489,51 @@ impl<M: MacPlacement> MacPowerInterruptRegisters<M> {
     }
 }
 
-/// Disjoint generated register capability intended for the hard MAC ISR.
+/// The MAC interrupt bank: its enable, status and clear words.
 ///
-/// It is issued by [`MacInterruptSetup::activate`]; construction is
-/// crate-private so application code cannot manufacture another ISR owner or
-/// retain task-side interrupt enable/clear access during an active epoch.
+/// The radio interrupt handler holds it, beside
+/// [`MacPowerInterruptRegisters`], for the image's life; no other owner of
+/// these words exists.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct MacInterruptRegisters<M: MacPlacement = Chip> {
     pub(crate) mac: WifiMacInterrupt<M::Mac>,
 }
 
-impl<M: MacPlacement> InterruptBankMaskBackend for MacInterruptRegisters<M> {
-    fn mask_events(&mut self) {
-        publish_mac_interrupt_mask(&mut self.mac, MacInterruptMask::NONE);
-    }
-
-    fn fence(&mut self) {
-        oer_mmio::fence();
-    }
-}
-
 impl<M: MacPlacement> MacInterruptRegisters<M> {
-    /// Mask every MAC interrupt source of the live epoch without
-    /// acknowledging one.
+    /// Take the bank. This performs no MMIO.
+    pub(crate) const fn new(mac: WifiMacInterrupt<M::Mac>) -> Self {
+        Self { mac }
+    }
+
+    /// Mask every MAC interrupt source without acknowledging one.
     ///
     /// Publishes the all-zero ENABLE image, then orders the write. A
     /// latched event stays in STATUS. [`Self::unmask_rx_delivery_interrupts`]
     /// afterwards restores only the RX delivery group.
     pub fn mask_all_mac_interrupts(&mut self) {
-        mask_interrupt_bank(self);
+        publish_mac_interrupt_mask(&mut self.mac, MacInterruptMask::NONE);
+        oer_mmio::fence();
+    }
+
+    /// Acknowledge every latched MAC event: the generated image stores the
+    /// zero enable image and then the whole clear word, then the write is
+    /// ordered.
+    ///
+    /// SOURCE: `BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT`.
+    pub fn clear_all_mac_interrupts(&mut self) {
+        self.mac.mac_interrupt_clear();
+        oer_mmio::fence();
+    }
+
+    /// Publish one reviewed MAC interrupt mask, then order the write.
+    pub fn publish_mac_interrupt_mask(&mut self, event_mask: MacInterruptMask) {
+        publish_mac_interrupt_mask(&mut self.mac, event_mask);
+        oer_mmio::fence();
+    }
+
+    /// Read the currently published MAC interrupt mask.
+    pub fn mac_interrupt_enable(&self) -> MacInterruptEnableState {
+        observe_mac_interrupt_enable(&self.mac)
     }
 
     /// Sample the complete MAC interrupt status image.
@@ -687,24 +582,6 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
                 .set_rx_associated_auxiliary_24(enabled);
         });
         oer_mmio::fence();
-    }
-
-    /// Mask and acknowledge both interrupt banks, returning task-side setup.
-    ///
-    /// The caller must first disable both CPU interrupt routes and prove that
-    /// neither hard handler retains a reference to `self` or `power`. Owning
-    /// both values then closes the finite ISR epoch and makes a later
-    /// [`MacInterruptSetup::activate`] transaction possible without taking
-    /// either part a second time.
-    pub fn deactivate(self, power: MacPowerInterruptRegisters<M>) -> MacInterruptSetup<M> {
-        let Self { mut mac } = self;
-        let MacPowerInterruptRegisters { power: mut power } = power;
-        publish_mac_interrupt_mask(&mut mac, MacInterruptMask::NONE);
-        mask_mac_power_interrupts(&mut power);
-        mac.mac_interrupt_clear();
-        power.clear_all_mac_power_interrupts();
-        oer_mmio::fence();
-        MacInterruptSetup { mac, power }
     }
 }
 

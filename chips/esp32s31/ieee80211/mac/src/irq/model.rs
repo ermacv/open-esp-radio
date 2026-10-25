@@ -12,13 +12,15 @@
 //! (RX success and the two RX-associated auxiliary sources) and every other
 //! source of the runtime mask (TX completion, TX timeout, BSS-color collision and the
 //! still-unidentified sources). The WDEVPWR model enables only the station
-//! TBTT, as epoch activation does.
+//! TBTT, as epoch activation does. Clearing a bank, as the generated clear
+//! images do, masks it and drops every latched event.
 
 use oer_esp32s31_hal::types::{
-    MacInterruptEvents, MacInterruptObservation, MacPowerInterruptObservation,
+    MacInterruptEnableState, MacInterruptEvents, MacInterruptMask, MacInterruptObservation,
+    MacPowerInterruptObservation,
 };
 
-use super::{MacInterrupt, MacPowerInterrupt, sealed};
+use super::{BanksMasked, MacInterrupt, MacPowerInterrupt, sealed};
 
 /// Operations a log keeps; later ones are counted in
 /// [`OperationLog::overflowed`].
@@ -32,6 +34,8 @@ pub enum MacInterruptOperation {
     UnmaskRxDelivery,
     MaskAll,
     Acknowledge(MacInterruptObservation),
+    ClearAll,
+    Publish(MacInterruptMask),
 }
 
 /// One operation on the WDEVPWR interrupt bank.
@@ -40,6 +44,8 @@ pub enum PowerInterruptOperation {
     Status,
     MaskAll,
     Acknowledge(MacPowerInterruptObservation),
+    ClearAll,
+    EnableStationTbtt,
 }
 
 /// The bounded, allocation-free log of one bank's operations.
@@ -134,6 +140,14 @@ impl MacInterruptModel {
             other_sources_enabled: true,
             operations: OperationLog::new(),
         }
+    }
+
+    /// The bank with every source masked and nothing latched.
+    pub const fn masked() -> Self {
+        let mut model = Self::new();
+        model.rx_delivery_enabled = false;
+        model.other_sources_enabled = false;
+        model
     }
 
     /// The hardware latches `events`, whatever the enable state.
@@ -231,6 +245,32 @@ impl MacInterrupt for MacInterruptModel {
             self.latched.has_unhandled_event() && !snapshot.has_unhandled_event(),
         );
     }
+
+    fn clear_all(&mut self, _masked: &BanksMasked) {
+        self.operations.push(MacInterruptOperation::ClearAll);
+        self.rx_delivery_enabled = false;
+        self.other_sources_enabled = false;
+        self.latched = MacInterruptObservation::from_semantic_events(
+            MacInterruptEvents::empty(),
+            false,
+            false,
+        );
+    }
+
+    fn publish(&mut self, mask: MacInterruptMask) {
+        self.operations.push(MacInterruptOperation::Publish(mask));
+        let station = mask != MacInterruptMask::NONE;
+        self.rx_delivery_enabled = station;
+        self.other_sources_enabled = station;
+    }
+
+    fn enable_state(&self) -> MacInterruptEnableState {
+        match (self.rx_delivery_enabled, self.other_sources_enabled) {
+            (false, false) => MacInterruptEnableState::Disabled,
+            (true, true) => MacInterruptEnableState::Station,
+            _ => MacInterruptEnableState::Unknown,
+        }
+    }
 }
 
 /// The WDEVPWR interrupt bank of one active epoch.
@@ -252,6 +292,13 @@ impl PowerInterruptModel {
             sta_tbtt_enabled: true,
             operations: OperationLog::new(),
         }
+    }
+
+    /// The bank with every cause masked and nothing latched.
+    pub const fn masked() -> Self {
+        let mut model = Self::new();
+        model.sta_tbtt_enabled = false;
+        model
     }
 
     /// The hardware latches `causes`, whatever the enable state.
@@ -326,5 +373,19 @@ impl MacPowerInterrupt for PowerInterruptModel {
             latched.sta_tbtt() && !snapshot.sta_tbtt(),
             latched.has_unhandled_event() && !snapshot.has_unhandled_event(),
         );
+    }
+
+    fn clear_all(&mut self, _masked: &BanksMasked) {
+        self.operations.push(PowerInterruptOperation::ClearAll);
+        self.sta_tbtt_enabled = false;
+        self.latched = MacPowerInterruptObservation::from_semantic_events(
+            false, false, false, false, false, false,
+        );
+    }
+
+    fn enable_station_tbtt(&mut self) {
+        self.operations
+            .push(PowerInterruptOperation::EnableStationTbtt);
+        self.sta_tbtt_enabled = true;
     }
 }

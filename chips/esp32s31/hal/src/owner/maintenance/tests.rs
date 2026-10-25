@@ -66,32 +66,19 @@ fn release_rechecks_hardware_instead_of_reusing_admission_observation() {
     assert_eq!((hardware.mac_reads, hardware.walker_reads), (4, 3));
 }
 
-/// Stand-ins for the two owners: the confirmation only moves them.
+/// A stand-in for the owner: the confirmation only moves it.
 #[derive(Debug, Eq, PartialEq)]
 struct Registers(u8);
 
-#[derive(Debug, Eq, PartialEq)]
-struct Interrupts(u8);
-
-fn setup() -> Interrupts {
-    Interrupts(2)
-}
-
-fn registers() -> Registers {
-    Registers(1)
-}
-
 #[test]
-fn shutdown_confirmation_returns_the_same_frontier_only_after_a_stopped_check() {
-    let rejected =
-        super::confirm_stopped(registers(), setup(), |_| Err(Error::MacActive { state: 2 }))
-            .err()
-            .expect("active MAC must reject final-client shutdown");
+fn shutdown_confirmation_returns_the_same_owner_only_after_a_stopped_check() {
+    let rejected = super::confirm_stopped(Registers(1), |_| Err(Error::MacActive { state: 2 }))
+        .err()
+        .expect("active MAC must reject final-client shutdown");
     assert_eq!(rejected.error, Error::MacActive { state: 2 });
 
-    let (registers, setup) =
-        super::confirm_stopped(rejected.registers, rejected.interrupts, |_| Ok(()))
-            .ok()
-            .expect("stopped hardware must return the unchanged ownership frontier");
-    assert_eq!((registers, setup), (Registers(1), Interrupts(2)));
+    let registers = super::confirm_stopped(rejected.registers, |_| Ok(()))
+        .ok()
+        .expect("stopped hardware must return the unchanged owner");
+    assert_eq!(registers, Registers(1));
 }

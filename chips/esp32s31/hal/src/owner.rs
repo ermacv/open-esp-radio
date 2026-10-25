@@ -8,7 +8,9 @@ use crate::{
         channel, dma::rx_dma::WifiRxDmaEngine, mac as wifi_mac, station_wake::StationWakeState,
     },
     phy::i2c::PhyAdcRate,
-    types::{MacInterruptMask, MacInterruptSnapshot, MacPowerInterruptSnapshot},
+    types::{
+        MacInterruptEnableState, MacInterruptMask, MacInterruptSnapshot, MacPowerInterruptSnapshot,
+    },
 };
 
 use super::*;
@@ -607,25 +609,74 @@ impl RadioAccess {
 #[cfg(test)]
 mod access_tests;
 
-/// Task-side setup authority for one finite MAC interrupt epoch.
-pub struct MacInterruptSetup {
-    pub(crate) inner: PacMacInterruptSetup,
-}
-
-/// Proof that connected-STA interrupt policy was applied before activation.
+/// Proof that the connected-STA beacon-filter policy was applied.
 pub struct ConnectedStaInterruptPrepared {
     pub(crate) _private: (),
 }
 
-/// Disjoint HAL capability installed in the hard MAC interrupt handler.
+impl RadioAccess {
+    /// Disable vendor hardware beacon filtering before a connected STA
+    /// epoch: CONTROL bits 2:0. The matching interrupt-enable field stays
+    /// clear in every image the radio interrupt handler publishes.
+    pub fn prepare_connected_sta_without_power_save(&mut self) -> ConnectedStaInterruptPrepared {
+        let _ = self.registers.prepare_connected_sta_without_power_save();
+        ConnectedStaInterruptPrepared { _private: () }
+    }
+}
+
+/// The Wi-Fi MAC's interrupt banks, for one binding of the image's
+/// interrupt table: the radio interrupt handler holds both for the image's
+/// life, and every write of their enable, status and clear words is its.
+#[must_use = "the Wi-Fi interrupt banks belong to the radio interrupt handler"]
+pub struct WifiInterruptBanks {
+    /// The MAC bank (`MODEM_WIFI_MAC`).
+    pub mac: MacInterruptRegisters,
+    /// The WDEVPWR bank (`MODEM_WIFI_PWR`).
+    pub power: MacPowerInterruptRegisters,
+}
+
+impl WifiInterruptBanks {
+    /// Take both banks from the root's partition. This performs no MMIO.
+    pub(crate) fn new(partition: oer_esp32s31_pac::ownership::WifiInterruptPeripherals) -> Self {
+        let (mac, power) = crate::ieee80211::registers::interrupt_banks(partition);
+        Self {
+            mac: MacInterruptRegisters { inner: mac },
+            power: MacPowerInterruptRegisters { inner: power },
+        }
+    }
+}
+
+/// The MAC interrupt bank (`MODEM_WIFI_MAC`), which the radio interrupt
+/// handler holds.
 pub struct MacInterruptRegisters {
     pub(crate) inner: PacMacInterruptRegisters,
 }
 
+impl oer_mmio::InterruptSource for MacInterruptRegisters {
+    const SOURCE: u16 =
+        <oer_esp32s31_pac::wifi_mac::WifiMacInterrupt as oer_mmio::InterruptSource>::SOURCE;
+}
+
 impl MacInterruptRegisters {
-    /// Mask every MAC source of the live epoch; nothing is acknowledged.
+    /// Mask every MAC source; nothing is acknowledged.
     pub fn mask_all_mac_interrupts(&mut self) {
         self.inner.mask_all_mac_interrupts();
+    }
+
+    /// Acknowledge every latched MAC event through the generated image,
+    /// which masks the bank first.
+    pub fn clear_all_mac_interrupts(&mut self) {
+        self.inner.clear_all_mac_interrupts();
+    }
+
+    /// Publish one reviewed MAC interrupt mask.
+    pub fn publish_mac_interrupt_mask(&mut self, event_mask: MacInterruptMask) {
+        self.inner.publish_mac_interrupt_mask(event_mask);
+    }
+
+    /// Read the currently published MAC interrupt mask.
+    pub fn mac_interrupt_enable(&self) -> MacInterruptEnableState {
+        self.inner.mac_interrupt_enable()
     }
 
     pub fn mac_interrupt_status(&self) -> MacInterruptSnapshot {
@@ -643,23 +694,34 @@ impl MacInterruptRegisters {
     pub fn unmask_rx_delivery_interrupts(&mut self) {
         self.inner.unmask_rx_delivery_interrupts();
     }
-
-    pub fn deactivate(self, power: MacPowerInterruptRegisters) -> MacInterruptSetup {
-        MacInterruptSetup {
-            inner: self.inner.deactivate(power.inner),
-        }
-    }
 }
 
-/// Disjoint HAL capability installed in the hard power interrupt handler.
+/// The WDEVPWR interrupt bank (`MODEM_WIFI_PWR`), which the radio interrupt
+/// handler holds.
 pub struct MacPowerInterruptRegisters {
     pub(crate) inner: PacMacPowerInterruptRegisters,
 }
 
+impl oer_mmio::InterruptSource for MacPowerInterruptRegisters {
+    const SOURCE: u16 =
+        <oer_esp32s31_pac::modem_pwr::WifiMacPowerInterrupt as oer_mmio::InterruptSource>::SOURCE;
+}
+
 impl MacPowerInterruptRegisters {
-    /// Mask every WDEVPWR cause of the live epoch; nothing is acknowledged.
+    /// Mask every WDEVPWR cause; nothing is acknowledged.
     pub fn mask_all_power_interrupts(&mut self) {
         self.inner.mask_all_power_interrupts();
+    }
+
+    /// Acknowledge every latched WDEVPWR cause through the generated image,
+    /// which masks the bank first.
+    pub fn clear_all_power_interrupts(&mut self) {
+        self.inner.clear_all_power_interrupts();
+    }
+
+    /// Enable the station TBTT event.
+    pub fn enable_station_tbtt_interrupt(&mut self) {
+        self.inner.enable_station_tbtt_interrupt();
     }
 
     pub fn power_interrupt_status(&self) -> MacPowerInterruptSnapshot {
@@ -668,29 +730,6 @@ impl MacPowerInterruptRegisters {
 
     pub fn acknowledge_power_interrupts(&mut self, snapshot: MacPowerInterruptSnapshot) {
         self.inner.acknowledge_power_interrupts(snapshot);
-    }
-}
-
-impl MacInterruptSetup {
-    pub fn prepare_connected_sta_without_power_save(
-        &mut self,
-        radio: &mut RadioAccess,
-    ) -> ConnectedStaInterruptPrepared {
-        let _ = self
-            .inner
-            .prepare_connected_sta_without_power_save(&mut radio.registers);
-        ConnectedStaInterruptPrepared { _private: () }
-    }
-
-    pub fn activate(
-        self,
-        event_mask: MacInterruptMask,
-    ) -> (MacInterruptRegisters, MacPowerInterruptRegisters) {
-        let (mac, power) = self.inner.activate(event_mask);
-        (
-            MacInterruptRegisters { inner: mac },
-            MacPowerInterruptRegisters { inner: power },
-        )
     }
 }
 

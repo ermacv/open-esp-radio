@@ -19,9 +19,9 @@
 //!   application.
 //! - `Doorbell<SWI>` is a software interrupt at the radio interrupts' level
 //!   (P3, `FROM_CPU` line 3) that the radio executor rings to have a request
-//!   applied there; its handler starts with `DoorbellAcknowledger::acknowledge`. Making it
-//!   takes a `SameLevel`, which checks when the image compiles that it shares
-//!   the radio interrupt's level and core.
+//!   applied there; its handler starts with `DoorbellAcknowledger::acknowledge`. Its line
+//!   is a source of the radio handler's part: the ringing half takes the
+//!   router's `Bound` proof of that part (`Doorbell::new`).
 //! - The time driver (`init`, `bind`) gives each executor its own timer
 //!   queue and SYSTIMER comparator, whose alarm (`alarm_interrupt::<N>`) only
 //!   acknowledges and pends; one executor writes the SYSTIMER registers. No
@@ -61,7 +61,7 @@ mod time_driver;
 mod timer_queue;
 
 #[cfg(feature = "chip")]
-pub use doorbell::{Doorbell, DoorbellAcknowledger, LineAcknowledger};
+pub use doorbell::{Doorbell, DoorbellAcknowledger, DoorbellLine, LineAcknowledger};
 #[cfg(feature = "chip")]
 pub use executor::{
     Executor, InterruptExecutor, LevelOrder, SameLevel, interrupt_handler, ready_peers,

@@ -71,11 +71,12 @@ checks:
 - `mac` `irq::model::{MacInterruptModel, PowerInterruptModel}`, both
   interrupt banks: latched events, the enable state, the masked STATUS
   image, `line_asserted()` and an operation log; an
-  `ActiveEpoch::for_host_test` owns them like the PAC banks;
+  `InterruptEpoch::for_host_test` owns them like the HAL banks;
 - the driver's receive tests compose these into the whole W1 RX path: the
   interrupt line runs through a leaked `HandlerCell` and the same line
-  functions the image's handlers call, a host doorbell runs its handler
-  synchronously, and frames complete by descriptor word and LAST/NEXT. A
+  function the image's handler calls, over a host `WifiIrqPart` of both
+  bank models; a host doorbell runs the handler synchronously, and frames
+  complete by descriptor word and LAST/NEXT. A
   chained unit needs the DMA engine's write into each non-terminal buffer
   (`dma_write`, which borrows the live ring), so chained and oversized drops
   are tested over the service and the counting sink, not the runner;

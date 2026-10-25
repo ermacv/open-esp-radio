@@ -1,25 +1,43 @@
-//! By-value register ownership before, during and after an interrupt epoch.
+//! The MAC and WDEVPWR interrupt banks of the radio interrupt handler and
+//! the epochs it runs them through.
 //!
-//! CPU routing and pinned ISR registration belong to the execution binding.
-//! It must recover the active value from that registration before deactivation:
-//! neither an ISR borrow nor a consumer handle can extract these registers.
+//! The image's interrupt table binds both banks to the radio interrupt
+//! handler once; [`InterruptEpoch`] is what that handler holds. No task
+//! reaches a bank: a task asks the handler for each transition (through the
+//! driver's doorbell), and the CPU route stays as the binding wrote it.
+//!
+//! - **Closed**: both banks masked and every latched event cleared. An
+//!   epoch starts here, whatever the boot left in the banks; an interrupt
+//!   that reaches a closed epoch closes it again
+//!   ([`InterruptEpoch::close_stray`]).
+//! - **Active** ([`InterruptEpoch::activate`]): both banks masked, every
+//!   stale event cleared, then the runtime mask and the station TBTT
+//!   published.
+//! - **Masked** ([`InterruptEpoch::mask_all`]): every source masked, nothing
+//!   acknowledged: a latched event stays latched until the epoch closes or
+//!   activates again.
+//!
+//! Clearing every latched event takes the masking proof:
+//! [`InterruptEpoch::mask_all`] returns [`MaskedBanks`], whose
+//! [`MaskedBanks::clear_all`] closes the epoch.
 
 use core::marker::PhantomData;
 use oer_esp32s31_hal::{
-    owner::{MacInterruptRegisters, MacInterruptSetup, MacPowerInterruptRegisters},
-    types::MacInterruptMask,
+    owner::{MacInterruptRegisters, MacPowerInterruptRegisters},
+    types::{MacInterruptEnableState, MacInterruptMask},
 };
 
 use super::{
-    IrqDisposition, IrqSnapshot, MacInterrupt, MacPowerInterrupt, PowerIrqDisposition,
-    PowerIrqSnapshot, handle_mac_irq, handle_power_irq,
+    BanksMasked, IrqDisposition, IrqSnapshot, MacInterrupt, MacInterruptStatusSnapshot,
+    MacPowerInterrupt, MacPowerInterruptStatusSnapshot, PowerIrqDisposition, PowerIrqSnapshot,
+    handle_mac_irq, handle_power_irq,
 };
 
 mod sealed {
     pub trait Sealed {}
 }
 
-/// The policy is fixed before publication of a register owner to an ISR.
+/// The RX delivery policy, fixed when the handler's epoch is made.
 pub trait RxDelivery: sealed::Sealed {
     const MODERATES_RX: bool;
 }
@@ -35,92 +53,148 @@ impl RxDelivery for Moderated {
     const MODERATES_RX: bool = true;
 }
 
-/// The sole setup owner. Only this state can activate or lend setup registers.
-#[must_use = "the setup capability belongs to its installation"]
-pub struct InactiveEpoch {
-    setup: MacInterruptSetup,
+/// Where an epoch's banks are.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EpochState {
+    /// Both banks masked and cleared.
+    Closed,
+    /// The runtime mask published.
+    Active,
+    /// Every source masked; latched events kept.
+    Masked,
 }
 
-impl InactiveEpoch {
-    pub const fn new(setup: MacInterruptSetup) -> Self {
-        Self { setup }
-    }
-
-    pub fn setup(&mut self) -> &mut MacInterruptSetup {
-        &mut self.setup
-    }
-
-    pub fn into_setup(self) -> MacInterruptSetup {
-        self.setup
-    }
-
-    pub fn activate(self, mask: MacInterruptMask) -> ActiveEpoch<Unmoderated> {
-        self.activate_with_policy(mask)
-    }
-
-    pub fn activate_rx_moderated(self, mask: MacInterruptMask) -> ActiveEpoch<Moderated> {
-        self.activate_with_policy(mask)
-    }
-
-    fn activate_with_policy<M: RxDelivery>(self, mask: MacInterruptMask) -> ActiveEpoch<M> {
-        let (mac, power) = self.setup.activate(mask);
-        ActiveEpoch {
-            mac,
-            power,
-            delivery: PhantomData,
-        }
-    }
-}
-
-/// Register capabilities owned by one active installation, never global slots.
-/// A moderated instance alone has the operation which restores RX delivery.
+/// Both interrupt banks of the radio interrupt handler, in one epoch state.
 ///
-/// `I` and `P` are the two interrupt banks: the generated PAC capabilities in
-/// production, the host models of [`super::model`] in tests. Only the
-/// production banks can be quiesced back into an [`InactiveEpoch`].
-#[must_use = "detach the CPU route before recovering the active register owners"]
-pub struct ActiveEpoch<
+/// `I` and `P` are the two banks: the HAL's in production, the host models
+/// of [`super::model`] in tests. `M` is the RX delivery policy: a moderated
+/// epoch masks the RX delivery group before it acknowledges an RX event and
+/// alone can restore it ([`InterruptEpoch::unmask_rx_after_drain`]).
+pub struct InterruptEpoch<
     M: RxDelivery,
     I: MacInterrupt = MacInterruptRegisters,
     P: MacPowerInterrupt = MacPowerInterruptRegisters,
 > {
     mac: I,
     power: P,
+    state: EpochState,
     delivery: PhantomData<M>,
 }
 
-impl<M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt> ActiveEpoch<M, I, P> {
-    #[inline(always)]
-    pub fn service_mac(&mut self) -> (IrqDisposition, IrqSnapshot) {
-        // Both sealed policies are fieldless. Dispatch is monomorphic without
-        // a registry, callback or mutable moderation flag.
-        handle_mac_irq::<M, I>(&mut self.mac)
+impl<M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt> InterruptEpoch<M, I, P> {
+    /// The handler's banks, closed. No register is touched: the first
+    /// transition masks and clears them, and an interrupt that reaches the
+    /// closed epoch closes them.
+    pub const fn new(mac: I, power: P) -> Self {
+        Self {
+            mac,
+            power,
+            state: EpochState::Closed,
+            delivery: PhantomData,
+        }
     }
 
-    #[inline(always)]
-    pub fn service_power(&mut self) -> (PowerIrqDisposition, PowerIrqSnapshot) {
-        handle_power_irq(&mut self.power)
+    pub const fn state(&self) -> EpochState {
+        self.state
     }
 
-    /// Mask every source of both banks: MAC first, then WDEVPWR.
+    /// Mask both banks, clear every stale event, then publish `mask` and
+    /// the station TBTT: MAC first, then WDEVPWR, at each step.
     ///
-    /// Nothing is acknowledged; a latched event stays latched, so the epoch
-    /// can still be quiesced, which clears both banks. The caller excludes
-    /// both handlers for the transaction: the owner of the interrupt line
-    /// applies it from its own handler.
-    pub fn mask_all(&mut self) {
+    /// A previous epoch may leave a level event latched. Both banks stay
+    /// masked until every stale event is acknowledged: publishing the
+    /// runtime mask before the clear would raise the line on a stale event.
+    pub fn activate(&mut self, mask: MacInterruptMask) {
+        self.mask_all().clear_all();
+        self.mac.publish(mask);
+        self.power.enable_station_tbtt();
+        self.state = EpochState::Active;
+    }
+
+    /// Mask every source of both banks, MAC first, then WDEVPWR. Nothing is
+    /// acknowledged; a latched event stays latched. The returned proof
+    /// clears both banks; dropped, the epoch stays masked (a closed epoch
+    /// stays closed).
+    pub fn mask_all(&mut self) -> MaskedBanks<'_, M, I, P> {
         self.mac.mask_all();
         self.power.mask_all();
+        if self.state == EpochState::Active {
+            self.state = EpochState::Masked;
+        }
+        MaskedBanks { epoch: self }
+    }
+
+    /// Mask and clear both banks: the epoch closes.
+    pub fn close(&mut self) {
+        self.mask_all().clear_all();
+    }
+
+    /// Whether either bank shows an enabled event in the closed epoch, which
+    /// it then closes again: an interrupt left from before the epoch (an
+    /// enable a reset restored, or the boot left). Samples both banks and
+    /// acknowledges nothing, unless it closes them. An open epoch returns
+    /// `false` and touches nothing.
+    pub fn close_stray(&mut self) -> bool {
+        if self.state != EpochState::Closed {
+            return false;
+        }
+        let mac = !self.mac.status().observation().is_empty();
+        let power = !self.power.status().observation().is_empty();
+        if mac || power {
+            self.close();
+        }
+        mac || power
+    }
+
+    /// Sample, moderate and acknowledge the MAC bank; `None` in a closed
+    /// epoch, which samples nothing ([`Self::close_stray`] serves it).
+    #[inline(always)]
+    pub fn service_mac(&mut self) -> Option<(IrqDisposition, IrqSnapshot)> {
+        if self.state == EpochState::Closed {
+            return None;
+        }
+        // Both sealed policies are fieldless. Dispatch is monomorphic without
+        // a registry, callback or mutable moderation flag.
+        Some(handle_mac_irq::<M, I>(&mut self.mac))
+    }
+
+    /// Sample and acknowledge the WDEVPWR bank; `None` in a closed epoch.
+    #[inline(always)]
+    pub fn service_power(&mut self) -> Option<(PowerIrqDisposition, PowerIrqSnapshot)> {
+        if self.state == EpochState::Closed {
+            return None;
+        }
+        Some(handle_power_irq(&mut self.power))
+    }
+
+    /// The MAC bank's published enable image, classified.
+    pub fn mac_interrupt_enable(&self) -> MacInterruptEnableState {
+        self.mac.enable_state()
+    }
+}
+
+impl<I: MacInterrupt, P: MacPowerInterrupt> InterruptEpoch<Moderated, I, P> {
+    /// Restore RX delivery after the durable RX frontier has been drained:
+    /// only the RX delivery group, and only in an active epoch. Returns
+    /// whether it was restored; a masked or closed epoch keeps every source
+    /// masked.
+    pub fn unmask_rx_after_drain(&mut self) -> bool {
+        if self.state != EpochState::Active {
+            return false;
+        }
+        self.mac.unmask_rx_delivery();
+        true
     }
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt> ActiveEpoch<M, I, P> {
+impl<M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt> InterruptEpoch<M, I, P> {
     /// An active epoch over host banks, for tests without MMIO.
     pub fn for_host_test(mac: I, power: P) -> Self {
         Self {
             mac,
             power,
+            state: EpochState::Active,
             delivery: PhantomData,
         }
     }
@@ -136,21 +210,30 @@ impl<M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt> ActiveEpoch<M, I, P> 
     }
 }
 
-impl<M: RxDelivery> ActiveEpoch<M> {
-    /// Owning this value proves that no registered ISR retains a borrow.
-    /// The execution binding first detaches its CPU route and registration.
-    pub fn quiesce(self) -> InactiveEpoch {
-        InactiveEpoch::new(self.mac.deactivate(self.power))
-    }
+/// Both banks of an epoch, masked: the proof that clearing every latched
+/// event takes. It borrows the epoch, so no other transition runs between
+/// the mask and the clear.
+///
+/// Clearing without the mask does not compile:
+///
+/// ```compile_fail,E0599
+/// use oer_esp32s31_ieee80211_mac::irq::epoch::{InterruptEpoch, Moderated};
+/// fn clear(epoch: &mut InterruptEpoch<Moderated>) {
+///     epoch.clear_all();
+/// }
+/// ```
+#[must_use = "a masked epoch is cleared with `clear_all`, or stays masked"]
+pub struct MaskedBanks<'a, M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt> {
+    epoch: &'a mut InterruptEpoch<M, I, P>,
 }
 
-impl<I: MacInterrupt, P: MacPowerInterrupt> ActiveEpoch<Moderated, I, P> {
-    /// Restore delivery after the durable RX frontier has been drained.
-    /// The binding excludes ISR register access for this bounded transaction.
-    ///
-    /// Only the RX delivery group is enabled: after [`Self::mask_all`] every
-    /// other source stays masked.
-    pub fn unmask_rx_after_drain(&mut self) {
-        self.mac.unmask_rx_delivery();
+impl<M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt> MaskedBanks<'_, M, I, P> {
+    /// Acknowledge every latched event of both masked banks, MAC first,
+    /// then WDEVPWR: the epoch closes.
+    pub fn clear_all(self) {
+        let masked = BanksMasked::new();
+        self.epoch.mac.clear_all(&masked);
+        self.epoch.power.clear_all(&masked);
+        self.epoch.state = EpochState::Closed;
     }
 }

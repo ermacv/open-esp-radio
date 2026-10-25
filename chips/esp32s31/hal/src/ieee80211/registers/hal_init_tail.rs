@@ -3,8 +3,7 @@
 use oer_esp32s31_pac::wifi_mac::rx_csi_control::{Bits0_7Opaque, Bits8_15Opaque};
 
 use super::{
-    MacInterruptMask, MacInterruptSetup, MacPlacement, MacSlowClockCalibrationValue,
-    WifiRadioRegisters, WifiRxDmaRegisters, bits,
+    MacPlacement, MacSlowClockCalibrationValue, WifiRadioRegisters, WifiRxDmaRegisters, bits,
 };
 
 /// The RTC calibration field after the vendor OS-interface conversion.
@@ -39,15 +38,15 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// complete `libpp.a[hal_tsf.o]::hal_timer_update_by_rtc`.
     ///
     /// The typed calibration fits the complete vendor field before MMIO begins.
+    /// The tail's first edge, the vendor's publication of the station
+    /// interrupt mask, is not this owner's: the MAC's interrupt banks belong
+    /// to the radio interrupt handler, which publishes the mask when it
+    /// activates an epoch.
     pub fn initialize_mac_hal_tail(
         &mut self,
         rx_dma: &mut WifiRxDmaRegisters<M>,
-        interrupts: &mut MacInterruptSetup<M>,
-        event_mask: MacInterruptMask,
         slow_clock_calibration: MacRtcCalibration,
     ) {
-        interrupts.publish_mac_interrupt_mask(event_mask);
-
         // This is deliberately a repeated edge: mac_txrx_init already set the
         // same bit, and complete hal_init samples and sets it again here.
         self.mac

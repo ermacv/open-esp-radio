@@ -3,7 +3,7 @@
 use oer_esp32s31_pac::wifi_mac::{control::PowerSaveTxBlock, core_enable_control::Bits4_7Opaque};
 use oer_mmio::Bits;
 
-use super::{MacInterruptMask, MacInterruptSetup, MacPlacement, WifiRadioRegisters};
+use super::{MacPlacement, WifiRadioRegisters};
 
 impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Hold all common MAC gates while the cold configuration has no RX ring.
@@ -36,16 +36,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 .set_tx_block_stop_request_high(Bits::constant::<0>())
                 .set_bits_24_31_opaque(0);
         });
-    }
-
-    /// Publish the cold interrupt policy without opening the MAC core.
-    /// SOURCE: interrupt suffix of complete `hal_enable_mac`.
-    pub fn prepare_mac_interrupts(
-        &mut self,
-        interrupts: &mut MacInterruptSetup<M>,
-        event_mask: MacInterruptMask,
-    ) {
-        interrupts.publish_mac_interrupt_mask(event_mask);
     }
 
     /// Clock the prepared MAC core without releasing its runtime stop.

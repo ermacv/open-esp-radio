@@ -1,7 +1,7 @@
 #![no_std]
 use oer_esp32s31_hal::{
     ieee80211::mac::WifiMacColdHal,
-    types::{MacDelaySlot, MacInterruptMask, MacRtcCalibration},
+    types::{MacDelaySlot, MacRtcCalibration},
 };
 
 pub fn cold_inputs(hardware: &mut WifiMacColdHal<'_>, random: u32, calibration: u32) {
@@ -11,10 +11,7 @@ pub fn cold_inputs(hardware: &mut WifiMacColdHal<'_>, random: u32, calibration: 
     hardware.initialize_txrx_callbacks(MacDelaySlot::from_random(random));
 
     #[cfg(ui_reject)]
-    hardware.initialize_hal_tail(MacInterruptMask::STATION, calibration); // ui-error: E0308
+    hardware.initialize_hal_tail(calibration); // ui-error: E0308
     #[cfg(not(ui_reject))]
-    hardware.initialize_hal_tail(
-        MacInterruptMask::STATION,
-        MacRtcCalibration::from_osi_value(calibration),
-    );
+    hardware.initialize_hal_tail(MacRtcCalibration::from_osi_value(calibration));
 }

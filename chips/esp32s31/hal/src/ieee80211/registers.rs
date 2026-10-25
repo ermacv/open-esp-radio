@@ -9,9 +9,9 @@
 use oer_esp32s31_pac::{
     instances,
     modem_pwr::{
-        WifiMacAuxTsfControl, WifiMacCoexRuntime, WifiMacLocalTime, WifiMacPowerInterrupt,
-        WifiMacRegdmaControl, WifiMacRtcTimerUpdate, WifiMacStaTbttTarget, WifiMacTsfLoad,
-        WifiMacTsfStatus, WifiMacTsfTimer,
+        WifiMacAuxTsfControl, WifiMacCoexRuntime, WifiMacLocalTime, WifiMacRegdmaControl,
+        WifiMacRtcTimerUpdate, WifiMacStaTbttTarget, WifiMacTsfLoad, WifiMacTsfStatus,
+        WifiMacTsfTimer,
     },
     ownership::{
         MacLocalTimePeripherals, WifiInterruptPeripherals, WifiMacInterfacePeripherals,
@@ -27,8 +27,8 @@ use oer_esp32s31_pac::{
         WifiMacHeColorCollision, WifiMacHeInitPrefix, WifiMacHeInitSuffix, WifiMacHeMuEdcaTimer,
         WifiMacHeObssNarrowBandRu, WifiMacHeTbDiagnostics, WifiMacHeTbStatistics,
         WifiMacHeTriggerRxDiagnostics, WifiMacInterfaceAddress, WifiMacInternalTxBlockAck,
-        WifiMacInterrupt, WifiMacKeyTable, WifiMacLastRxBuffer, WifiMacRxBssidList,
-        WifiMacRxCsiControl, WifiMacRxCustomType, WifiMacRxDma, WifiMacRxEndState, WifiMacRxFilter,
+        WifiMacKeyTable, WifiMacLastRxBuffer, WifiMacRxBssidList, WifiMacRxCsiControl,
+        WifiMacRxCustomType, WifiMacRxDma, WifiMacRxEndState, WifiMacRxFilter,
         WifiMacRxHangStatistics, WifiMacRxPowerSave, WifiMacRxRuntimeResults, WifiMacRxStatistics,
         WifiMacStaBeaconFilter, WifiMacTxCommon, WifiMacTxCompletion, WifiMacTxPowerInit,
         WifiMacTxQueueControl, WifiMacTxQueueVector, WifiMacTxStatistics, WifiMacTxrxCallbacks,
@@ -168,12 +168,16 @@ macro_rules! mac_blocks {
                         dma: WifiMacRxDma::host(&mut self.rx_dma)
                             .expect("the part's host words"),
                     },
-                    interrupts: MacInterruptSetup {
-                        mac: WifiMacInterrupt::host(&mut self.interrupt)
+                    mac_interrupt: MacInterruptRegisters::new(
+                        oer_esp32s31_pac::wifi_mac::WifiMacInterrupt::host(&mut self.interrupt)
                             .expect("the part's host words"),
-                        power: WifiMacPowerInterrupt::host(&mut self.power_interrupt)
+                    ),
+                    power_interrupt: MacPowerInterruptRegisters::new(
+                        oer_esp32s31_pac::modem_pwr::WifiMacPowerInterrupt::host(
+                            &mut self.power_interrupt,
+                        )
                             .expect("the part's host words"),
-                    },
+                    ),
                 }
             }
         }
@@ -257,7 +261,8 @@ fn host_changes(
 pub(crate) struct HostOwners<'a> {
     pub(crate) registers: WifiRadioRegisters<HostMemory<'a>>,
     pub(crate) rx_dma: WifiRxDmaRegisters<HostMemory<'a>>,
-    pub(crate) interrupts: MacInterruptSetup<HostMemory<'a>>,
+    pub(crate) mac_interrupt: MacInterruptRegisters<HostMemory<'a>>,
+    pub(crate) power_interrupt: MacPowerInterruptRegisters<HostMemory<'a>>,
 }
 
 /// The read of the free-running Wi-Fi MAC local-time counter.
@@ -426,37 +431,21 @@ impl<M: MacPlacement> WifiRxDmaRegisters<M> {
     }
 }
 
-/// Task-side setup token for one MAC interrupt handoff epoch.
+/// The Wi-Fi MAC's two interrupt banks, as the root hands them out.
 ///
-/// This token exists after the cold owner has been consumed but before the
-/// interrupt is routed to a CPU. Activating it publishes the final mask,
-/// clears stale events and consumes all task-side enable/clear access.
-#[must_use = "dropping a radio partition permanently loses its register authority"]
-pub struct MacInterruptSetup<M: MacPlacement = Chip> {
-    pub(crate) mac: WifiMacInterrupt<M::Mac>,
-    pub(crate) power: WifiMacPowerInterrupt<M::Power>,
-}
-
-impl MacInterruptSetup {
-    /// Take the interrupt banks. This performs no MMIO.
-    pub fn new(partition: WifiInterruptPeripherals) -> Self {
-        let WifiInterruptPeripherals {
-            wifi_mac_interrupt,
-            wifi_mac_power_interrupt,
-        } = partition;
-        Self {
-            mac: wifi_mac_interrupt,
-            power: wifi_mac_power_interrupt,
-        }
-    }
-
-    /// Return the interrupt banks. This performs no MMIO.
-    pub fn into_partition(self) -> WifiInterruptPeripherals {
-        WifiInterruptPeripherals {
-            wifi_mac_interrupt: self.mac,
-            wifi_mac_power_interrupt: self.power,
-        }
-    }
+/// Each bank's enable, status and clear words belong to the one radio
+/// interrupt handler that the image's interrupt table binds them to.
+pub(crate) fn interrupt_banks(
+    partition: WifiInterruptPeripherals,
+) -> (MacInterruptRegisters, MacPowerInterruptRegisters) {
+    let WifiInterruptPeripherals {
+        wifi_mac_interrupt,
+        wifi_mac_power_interrupt,
+    } = partition;
+    (
+        MacInterruptRegisters::new(wifi_mac_interrupt),
+        MacPowerInterruptRegisters::new(wifi_mac_power_interrupt),
+    )
 }
 
 /// The four ordinary EDCA transmit queues: logical queue `q` lives in the

@@ -1,7 +1,7 @@
 //! The cooperative S31 register/RX owner used by the port driver on P2.
 use super::*;
 use crate::{
-    irq::{RadioDoorbell, WifiIrqLine, WifiIrqRoutes},
+    irq::{RadioDoorbell, WifiIrqActivation, WifiIrqLine},
     runtime::{
         WifiRetuneFailure, WifiRetunePending, WifiRuntimeContext, WifiRuntimeParts, WifiStopped,
     },
@@ -15,15 +15,9 @@ use crate::{
     },
     startup::WifiMacPlatform,
 };
-use oer_esp32s31_hal::{
-    ieee80211::dma::space::ChipDma,
-    owner::{MacInterruptSetup, RadioAccess},
-};
+use oer_esp32s31_hal::{ieee80211::dma::space::ChipDma, owner::RadioAccess};
 use oer_esp32s31_ieee80211_mac::{
-    irq::{
-        EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT, IrqWork,
-        epoch::{ActiveEpoch, Moderated},
-    },
+    irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT, IrqWork},
     local_time::MacTimeline,
     rx::pool::NetworkRxFrame,
 };
@@ -88,12 +82,15 @@ struct Active<W> {
 }
 
 /// The image supplies one hardware partition, actor cell, static RX arena,
-/// routes and doorbell. Every one stays with this task-side owner.
+/// the router's proof that the image binds the radio handler's part (`V`,
+/// a [`Bound`](oer_interrupt_table::Bound) of a
+/// [`WifiIrqPart`](crate::irq::WifiIrqPart)) and the doorbell.
+/// Every one stays with this task-side owner.
 pub struct RadioDevice<
     C: Composition,
     T: Timer,
     W,
-    R,
+    V: WifiIrqActivation,
     D,
     const N: usize,
     const RB: usize,
@@ -102,14 +99,14 @@ pub struct RadioDevice<
     X: SignalExecutor,
 > {
     active: Option<Active<W>>,
-    session: Result<ReceiveSession<N, RB, RS, Q, X>, Fault>,
-    setup: Option<MacInterruptSetup>,
+    session: Result<ReceiveSession<N, RB, RS, Q, X, V>, Fault>,
+    /// The receive session is paused and its interrupt epoch closed.
+    paused: bool,
     actor: Option<MembershipCell<Wifi>>,
     retune: Option<WifiRetunePending<W>>,
     failed_retune: Option<WifiRetuneFailure<W>>,
     received: Received<Q, RB>,
     timer: T,
-    routes: R,
     doorbell: D,
     domain: RegulatoryDomain,
     limits: PowerLimits,
@@ -128,7 +125,7 @@ pub struct RadioDevice<
 pub struct RadioParts<
     T,
     W,
-    R,
+    V: WifiIrqActivation,
     D,
     const N: usize,
     const RB: usize,
@@ -137,11 +134,12 @@ pub struct RadioParts<
     X: SignalExecutor,
 > {
     pub wifi: WifiStopped<W>,
-    pub rx: WifiRxParts<'static, N, RB, RS, Q, ChipDma, ActiveEpoch<Moderated>, X>,
-    pub interrupt_cell: &'static HandlerCell<WifiIrqLine<ActiveEpoch<Moderated>, X>>,
+    pub rx: WifiRxParts<'static, N, RB, RS, Q, ChipDma, X>,
+    pub interrupt_cell: &'static HandlerCell<WifiIrqLine<X>>,
+    /// The router's proof that the image binds the radio handler's part.
+    pub bound: V,
     pub actor: MembershipCell<Wifi>,
     pub timer: T,
-    pub routes: R,
     pub doorbell: D,
     pub domain: RegulatoryDomain,
     pub power_limits: PowerLimits,
@@ -150,29 +148,24 @@ impl<
     C: Composition,
     T: Timer,
     W,
-    R,
+    V: WifiIrqActivation,
     D,
     const N: usize,
     const RB: usize,
     const RS: usize,
     const Q: usize,
     X: SignalExecutor,
-> RadioDevice<C, T, W, R, D, N, RB, RS, Q, X>
+> RadioDevice<C, T, W, V, D, N, RB, RS, Q, X>
 {
-    pub fn new(parts: RadioParts<T, W, R, D, N, RB, RS, Q, X>) -> Self {
+    pub fn new(parts: RadioParts<T, W, V, D, N, RB, RS, Q, X>) -> Self {
         let WifiRuntimeParts {
             platform,
             mut registers,
-            interrupt_setup,
             context,
         } = parts.wifi.into_runtime_parts();
-        let session = ReceiveSession::new(
-            parts.rx,
-            interrupt_setup,
-            &mut registers,
-            parts.interrupt_cell,
-        )
-        .map_err(Fault::Receive);
+        let session =
+            ReceiveSession::new(parts.rx, parts.bound, &mut registers, parts.interrupt_cell)
+                .map_err(Fault::Receive);
         Self {
             active: Some(Active {
                 registers,
@@ -180,13 +173,12 @@ impl<
                 context,
             }),
             session,
-            setup: None,
+            paused: false,
             actor: Some(parts.actor),
             retune: None,
             failed_retune: None,
             received: Received(RefCell::new(heapless::Deque::new())),
             timer: parts.timer,
-            routes: parts.routes,
             doorbell: parts.doorbell,
             domain: parts.domain,
             limits: parts.power_limits,
@@ -209,14 +201,16 @@ impl<
         if self.failed_retune.is_some() || self.retune.is_some() {
             return None;
         }
-        let setup = self.setup.take()?;
+        if !self.paused {
+            return None;
+        }
         let Active {
             registers,
             platform,
             context,
         } = self.active.take()?;
         Some((
-            context.into_stopped(platform, registers, setup),
+            context.into_stopped(platform, registers),
             self.actor
                 .take()
                 .expect("stopped device retains actor cell"),
@@ -228,7 +222,7 @@ impl<
     C,
     T,
     W,
-    R,
+    V,
     D,
     const N: usize,
     const RB: usize,
@@ -236,12 +230,12 @@ impl<
     const Q: usize,
     const B: usize,
     X: SignalExecutor,
-> Device<B> for RadioDevice<C, T, W, R, D, N, RB, RS, Q, X>
+> Device<B> for RadioDevice<C, T, W, V, D, N, RB, RS, Q, X>
 where
     C: Composition,
     T: Timer + Clone + 'static,
     W: WifiMacPlatform + 'static,
-    R: WifiIrqRoutes + 'static,
+    V: WifiIrqActivation + 'static,
     D: RadioDoorbell + 'static,
 {
     type Profile = C::Profile;
@@ -303,7 +297,6 @@ where
                     let WifiRuntimeParts {
                         platform,
                         registers,
-                        interrupt_setup,
                         context,
                     } = wifi.into_runtime_parts();
                     let permit = self.domain.permit(channel).map_err(|_| Fault::Capacity)?;
@@ -313,7 +306,7 @@ where
                         platform,
                         context,
                     });
-                    self.setup = Some(interrupt_setup);
+                    self.paused = true;
                 }
                 Err(failure) => {
                     let cause = failure.cause;
@@ -325,17 +318,15 @@ where
         let active = self.active.as_mut().ok_or(Fault::Abandoned)?;
         let session = self.session.as_mut().map_err(|e| *e)?;
         if active.context.current_channel() != channel {
-            if self.setup.is_none() {
-                self.setup = Some(
-                    core::task::ready!(session.port_pause(
-                        cx,
-                        &mut active.registers,
-                        &mut self.routes,
-                        &self.doorbell,
-                        &self.timer
-                    ))
-                    .map_err(Fault::Receive)?,
-                );
+            if !self.paused {
+                core::task::ready!(session.port_pause(
+                    cx,
+                    &mut active.registers,
+                    &self.doorbell,
+                    &self.timer
+                ))
+                .map_err(Fault::Receive)?;
+                self.paused = true;
             }
             let permit = self.domain.permit(channel).map_err(|_| Fault::Capacity)?;
             let ceiling = permit.tx_ceiling(self.limits);
@@ -344,11 +335,7 @@ where
                 platform,
                 context,
             } = self.active.take().expect("paused radio retained");
-            let wifi = context.into_stopped(
-                platform,
-                registers,
-                self.setup.take().expect("pause returned interrupt setup"),
-            );
+            let wifi = context.into_stopped(platform, registers);
             self.retune = Some(wifi.start_retune(
                 self.actor.take().expect("actor cell retained"),
                 permit,
@@ -357,16 +344,16 @@ where
             cx.waker().wake_by_ref();
             return Poll::Pending;
         }
-        if let Some(setup) = self.setup.take() {
-            session.reattach(setup).map_err(Fault::Receive)?;
+        if core::mem::take(&mut self.paused) {
+            session.reattach();
         }
         session
-            .port_start(&mut active.registers, &self.timer, &mut self.routes)
+            .port_start(&mut active.registers, &self.timer, &self.doorbell)
             .map(|r| r.map_err(Fault::Receive))
     }
     fn poll_stop(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Fault>> {
         self.pausing = true;
-        if self.setup.is_some() {
+        if self.paused {
             return Poll::Ready(Ok(()));
         }
         let active = self.active.as_mut().ok_or(Fault::Abandoned)?;
@@ -374,15 +361,14 @@ where
         while let Some(frame) = self.received.0.borrow_mut().pop_front() {
             drop(frame);
         }
-        let setup = core::task::ready!(session.port_pause(
+        core::task::ready!(session.port_pause(
             cx,
             &mut active.registers,
-            &mut self.routes,
             &self.doorbell,
             &self.timer
         ))
         .map_err(Fault::Receive)?;
-        self.setup = Some(setup);
+        self.paused = true;
         self.rx_pending = false;
         self.cut = false;
         Poll::Ready(Ok(()))
@@ -430,7 +416,6 @@ where
             let progress = session
                 .port_service(
                     &mut active.registers,
-                    &mut self.routes,
                     &self.doorbell,
                     &self.timer,
                     &self.received,
@@ -486,7 +471,6 @@ where
         core::task::ready!(session.port_freeze(
             cx,
             &mut active.registers,
-            &mut self.routes,
             &self.doorbell,
             &self.timer
         ))
@@ -502,7 +486,6 @@ where
         let progress = session
             .port_service(
                 &mut active.registers,
-                &mut self.routes,
                 &self.doorbell,
                 &self.timer,
                 &self.received,
@@ -542,7 +525,7 @@ where
         let active = self.active.as_mut().ok_or(Fault::Abandoned)?;
         let session = self.session.as_mut().map_err(|e| *e)?;
         session
-            .port_resume_cut(&mut active.registers, &mut self.routes)
+            .port_resume_cut(&mut active.registers, &self.doorbell)
             .map_err(Fault::Receive)?;
         self.cut = false;
         self.continuation = None;
@@ -554,15 +537,16 @@ where
         if let Ok(session) = self.session.as_mut() {
             session.port_abandon(&self.doorbell);
         }
-        self.routes.silence();
         if let Some(active) = self.active.as_mut() {
             oer_esp32s31_ieee80211_mac::crypto::erase_lower_mac_keys(&mut active.registers);
         }
-        // Masking a route is not a walker/entered-ISR stop proof.
+        // Masking both banks is not a walker/entered-ISR stop proof.
         false
     }
     fn detach(&mut self) {
-        self.routes.silence();
+        if let Ok(session) = self.session.as_ref() {
+            session.port_mask_all(&self.doorbell);
+        }
         if let Some(active) = self.active.as_mut() {
             oer_esp32s31_ieee80211_mac::crypto::erase_lower_mac_keys(&mut active.registers);
         }

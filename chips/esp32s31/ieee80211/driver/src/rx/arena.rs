@@ -21,10 +21,7 @@ use oer_esp32s31_hal::{
     },
 };
 use oer_esp32s31_ieee80211_mac::{
-    irq::{
-        consumer::{IrqConsumer, IrqPublisher, IrqStorage, PowerIrqConsumer, PowerIrqStorage},
-        epoch::{ActiveEpoch, Moderated},
-    },
+    irq::consumer::{IrqConsumer, IrqPublisher, IrqStorage, PowerIrqConsumer, PowerIrqStorage},
     rx::pool::RxStagePool,
 };
 
@@ -46,8 +43,7 @@ pub struct WifiIrqSignals<X: SignalExecutor> {
 /// The static arena of one receive epoch.
 ///
 /// `COUNT` descriptors of `BUFFER` bytes (`STORAGE` with the recycle
-/// guard), `STAGE_SLOTS` staging leases of up to `BUFFER` bytes. `E` is the
-/// active interrupt epoch the line will own.
+/// guard), `STAGE_SLOTS` staging leases of up to `BUFFER` bytes.
 #[repr(C)]
 #[derive(bytemuck::Zeroable)]
 #[zeroable(bound = "")]
@@ -58,7 +54,6 @@ pub struct WifiRxArena<
     const STAGE_SLOTS: usize,
     X: SignalExecutor,
     S: DmaSpace = ChipDma,
-    E = ActiveEpoch<Moderated>,
 > {
     irq: MaybeUninit<IrqStorage<X>>,
     /// The one MAC fact publisher: the line posts hardware facts through it,
@@ -68,7 +63,7 @@ pub struct WifiRxArena<
     requests: WifiIrqRequests,
     counters: WifiRxCounters,
     control: MaybeUninit<ReceiveControl>,
-    line: MaybeUninit<WifiIrqLine<E, X>>,
+    line: MaybeUninit<WifiIrqLine<X>>,
     /// The staged-frame queue from the runner to the application.
     frames: MaybeUninit<RxFrameQueue<'static, STAGE_SLOTS, BUFFER>>,
     stage: RxStagePool<STAGE_SLOTS, BUFFER>,
@@ -85,9 +80,8 @@ pub type WifiRxStatic<
     const STAGE_SLOTS: usize,
     X,
     S = ChipDma,
-    E = ActiveEpoch<Moderated>,
 > = (
-    WifiRxArena<COUNT, BUFFER, STORAGE, STAGE_SLOTS, X, S, E>,
+    WifiRxArena<COUNT, BUFFER, STORAGE, STAGE_SLOTS, X, S>,
     RxDmaStorage<COUNT, BUFFER, STORAGE, S>,
 );
 
@@ -99,7 +93,6 @@ pub struct WifiRxParts<
     const STORAGE: usize,
     const STAGE_SLOTS: usize,
     S: DmaSpace,
-    E,
     X: SignalExecutor,
 > {
     pub(crate) rx: PlacedRxDma<COUNT, BUFFER, STORAGE, S>,
@@ -109,7 +102,7 @@ pub struct WifiRxParts<
     pub(crate) requests: &'a WifiIrqRequests,
     pub(crate) counters: &'a WifiRxCounters,
     pub(crate) control: ReceiveRunnerControl<'a>,
-    pub(crate) line: WifiIrqLineParts<'a, E, X>,
+    pub(crate) line: WifiIrqLineParts<'a, X>,
     pub(crate) returns: RxReturnNotifier<'a, X>,
 }
 
@@ -119,9 +112,8 @@ impl<
     const STORAGE: usize,
     const STAGE_SLOTS: usize,
     S: DmaSpace,
-    E,
     X: SignalExecutor,
-> WifiRxArena<COUNT, BUFFER, STORAGE, STAGE_SLOTS, X, S, E>
+> WifiRxArena<COUNT, BUFFER, STORAGE, STAGE_SLOTS, X, S>
 {
     /// Place the DMA storage, write the values whose zero bytes are not
     /// valid, and lend every part: the runner's parts, the application's
@@ -142,11 +134,11 @@ impl<
         reason = "the parts, the stop handle and the queue ends are the owners of one bind"
     )]
     pub fn bind(
-        placed: Placed<WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE_SLOTS, X, S, E>>,
+        placed: Placed<WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE_SLOTS, X, S>>,
         signals: WifiIrqSignals<X>,
     ) -> Result<
         (
-            WifiRxParts<'static, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, E, X>,
+            WifiRxParts<'static, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, X>,
             ReceiveStopHandle<'static>,
             RxFrameEnds<'static, STAGE_SLOTS, BUFFER, X>,
         ),
@@ -214,9 +206,8 @@ impl<
     const STORAGE: usize,
     const STAGE_SLOTS: usize,
     S: DmaSpace,
-    E,
     X: SignalExecutor,
-> WifiRxParts<'a, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, E, X>
+> WifiRxParts<'a, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, X>
 {
     pub const fn rx(&self) -> &'static RxDmaStorage<COUNT, BUFFER, STORAGE, S> {
         self.rx.storage()
