@@ -23,8 +23,9 @@ mod controls;
 mod error;
 mod source;
 
+pub(crate) use block_type::parse_bits;
 pub use block_type::{BlockType, Element};
-use block_type::{Context, ExpansionBudget, check_name, parse_bits};
+use block_type::{Context, ExpansionBudget, check_name};
 pub use controls::{ControlKind, ExpandedControl, ExpandedGateGroup, ResolvedField};
 pub use error::{Error, ErrorKind};
 pub use source::{

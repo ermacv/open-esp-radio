@@ -23,6 +23,7 @@ mod bits;
 pub mod chip_import;
 pub mod chip_model;
 pub mod chip_policy;
+pub mod chip_render;
 mod descriptions;
 pub use bits::BitStates;
 mod draft;

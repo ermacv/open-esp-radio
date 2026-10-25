@@ -107,7 +107,7 @@ pub(super) fn check_name(name: &str, indexed: bool) -> Result<(), ErrorKind> {
 }
 
 /// `"n"` or `"high:low"` as (low, width).
-pub(super) fn parse_bits(bits: &str) -> Result<(u32, u32), ErrorKind> {
+pub(crate) fn parse_bits(bits: &str) -> Result<(u32, u32), ErrorKind> {
     let invalid = |reason: &str| ErrorKind::FieldBits {
         bits: bits.to_owned(),
         reason: reason.to_owned(),

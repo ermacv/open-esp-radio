@@ -510,3 +510,17 @@ fn modem_power_and_coexistence_keep_pulse_resets_and_the_common_32k_mux() {
         );
     }
 }
+
+#[test]
+fn the_thin_renderer_renders_the_esp32s31_root_and_policy() {
+    let evidence = evidence();
+    let model =
+        ChipModel::load(&registers().join("chip.toml"), &evidence).expect("the chip root loads");
+    let policy = ChipPolicy::load(&registers().join("policy.toml"), &model, &evidence)
+        .unwrap_or_else(|error| panic!("the policy loads: {error}"));
+    let rendered = oer_registers_model::chip_render::render(&model, &policy)
+        .unwrap_or_else(|error| panic!("the thin PAC renders: {error}"));
+    if let Some(path) = std::env::var_os("OER_SCRATCH_RENDER") {
+        std::fs::write(path, &rendered).expect("scratch");
+    }
+}
