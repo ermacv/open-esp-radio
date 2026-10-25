@@ -3,7 +3,7 @@
 //! `MODEM_SYSCON` is owned by the custom affine radio route. This module owns
 //! the instruction-evidenced operation order over that closed PAC capability.
 
-use oer_esp32s31_pac::{RadioPhyRegisters, WifiBasebandAgcUpdate};
+use crate::phy::{RadioPhyRegisters, WifiBasebandAgcUpdate};
 
 /// Clear the shared Wi-Fi control state before the open cold transition.
 ///

@@ -141,6 +141,7 @@ fn only_the_irreducible_policy_items_render() {
     let rust = rendered();
     for item in [
         "pub fn store_vendor_word(&mut self)",
+        "pub fn initialize_vendor_words_word_0060_opaque(&mut self)",
         "pub fn mask_and_clear_events(&mut self)",
         "pub fn sample_radio_events(&self)",
         "pub fn acknowledge_radio_events(",
@@ -148,8 +149,10 @@ fn only_the_irreducible_policy_items_render() {
     ] {
         assert!(rust.contains(item), "{item}\n{rust}");
     }
-    // A plain fixed image and a zero write are HAL code over accessors.
+    // A plain fixed image, a plain sequence step and a zero write are HAL
+    // code over accessors.
     assert!(!rust.contains("set_slow_mode"), "{rust}");
+    assert!(!rust.contains("initialize_vendor_words_rad_slot"), "{rust}");
     assert!(!rust.contains("clear_command"), "{rust}");
 }
 
@@ -966,6 +969,23 @@ fn main() {
 }
 "#;
 
+/// A whole-word step of a fixed sequence stores its image whole, and a
+/// snapshot token reads back the bits it sampled.
+const SEQUENCE_AND_SAMPLE: &str = r#"
+fn main() {
+    let mut memory = [0_u32; 0x40];
+    memory[0x0c / 4] = 0b10;
+    {
+        let (mut task, mut irq) = radio::radio0_host(&mut memory).expect("memory holds the block");
+        task.initialize_vendor_words_word_0060_opaque();
+        let events = irq.sample_radio_events();
+        println!("sampled {:x}", events.bits());
+        irq.acknowledge_radio_events(events, None);
+    }
+    println!("vendor word {:08x}", memory[0x60 / 4]);
+}
+"#;
+
 #[test]
 fn a_pointer_takes_its_zero_image_and_triggers_share_one_write() {
     let output = run(
@@ -1001,4 +1021,13 @@ fn a_snapshot_clear_word_has_no_trigger_writer() {
     // `RAD_EVENT_CLR` holds three triggers but only its acknowledgement
     // writes it.
     assert!(!rust.contains("pub fn trigger_event_clr("), "{rust}");
+}
+
+#[test]
+fn a_whole_word_sequence_step_is_one_method_and_a_snapshot_reads_its_bits() {
+    let output = run(&rendered(), SEQUENCE_AND_SAMPLE);
+    assert_eq!(
+        output.lines().collect::<Vec<_>>(),
+        ["sampled 2", "vendor word 0badf00d"]
+    );
 }

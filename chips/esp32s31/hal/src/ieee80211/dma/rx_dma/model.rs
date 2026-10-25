@@ -33,7 +33,7 @@ use super::{
 use crate::ieee80211::dma::descriptor::{DESCRIPTOR_BYTES, rx_completed_word};
 
 /// The walker's cursor registers report the low 20 address bits.
-const CURSOR_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
+const CURSOR_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
 
 /// Operations the log can hold before [`RxWalkerModel::overflowed`] is set.
 pub const RX_WALKER_LOG_CAPACITY: usize = 512;
@@ -491,6 +491,7 @@ impl RxWalkerModel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ieee80211::dma::rx_dma::RxDescriptorAddresses;
     use crate::ieee80211::dma::{
         rx_ring::{RxArenaWords, RxDescriptorTable},
         rx_storage::RxDmaStorage,
@@ -583,7 +584,12 @@ mod tests {
             0,
             BASE + 2 * DESCRIPTOR_BYTES,
         );
-        RxDmaBinding::new(table, BASE, arena).unwrap()
+        RxDmaBinding::new(
+            table,
+            RxDescriptorAddresses::for_host_model(BASE, 5).unwrap(),
+            arena,
+        )
+        .unwrap()
     }
 
     fn exhausted_at(last: usize) -> RxWalkerModel {
@@ -670,7 +676,15 @@ mod tests {
             descriptor.inject_corrupt_words(armed, 0x2f01_0000, next);
         }
         let walker_table = RxWalkerTable::new(BASE, table.ring(), table.reserved());
-        (walker_table, RxDmaBinding::new(table, BASE, arena).unwrap())
+        (
+            walker_table,
+            RxDmaBinding::new(
+                table,
+                RxDescriptorAddresses::for_host_model(BASE, 5).unwrap(),
+                arena,
+            )
+            .unwrap(),
+        )
     }
 
     fn walking_at(next: usize) -> RxWalkerModel {

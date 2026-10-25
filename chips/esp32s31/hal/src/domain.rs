@@ -22,10 +22,11 @@
 //! air time.
 
 use oer_esp32s31_pac::{
-    BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, RadioPhyRegisters, WifiRadioRegisters,
+    BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, RadioPhyRegisters, SharedRadioRegisters,
 };
 
 use crate::bluetooth::registers::BluetoothTaskRegisters;
+use crate::ieee80211::registers::WifiRadioRegisters;
 use crate::root::SharedRadioParts;
 
 pub use crate::clock::{

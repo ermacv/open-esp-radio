@@ -28149,6 +28149,11 @@ pub mod bt_mac {
             self.0 == 0
         }
 
+        /// The sampled event bits: a value of the sample, which grants nothing.
+        pub const fn bits(&self) -> u32 {
+            self.0
+        }
+
         /// The `PENDING_BITS` field.
         #[inline]
         pub const fn pending_bits(&self) -> u32 {
@@ -28177,6 +28182,11 @@ pub mod bt_mac {
             self.0 == 0
         }
 
+        /// The sampled event bits: a value of the sample, which grants nothing.
+        pub const fn bits(&self) -> u32 {
+            self.0
+        }
+
         /// The `PENDING_BITS` field.
         #[inline]
         pub const fn pending_bits(&self) -> u32 {
@@ -28203,6 +28213,11 @@ pub mod bt_mac {
         /// Whether no event was sampled.
         pub const fn is_clear(&self) -> bool {
             self.0 == 0
+        }
+
+        /// The sampled event bits: a value of the sample, which grants nothing.
+        pub const fn bits(&self) -> u32 {
+            self.0
         }
 
         /// The `BITS_0_14_OPAQUE` field.
@@ -28325,6 +28340,11 @@ pub mod bt_mac {
         /// Whether no event was sampled.
         pub const fn is_clear(&self) -> bool {
             self.0 == 0
+        }
+
+        /// The sampled event bits: a value of the sample, which grants nothing.
+        pub const fn bits(&self) -> u32 {
+            self.0
         }
 
         /// The `BITS_0_2_OPAQUE` field.
@@ -104686,6 +104706,10 @@ pub mod modem_pwr {
     }
 
     /// The `WifiMacPowerInterrupt` part of `MODEM_PWR`.
+    ///
+    /// The WDEVPWR interrupt bank: cold setup masks it, then the power handler samples, acknowledges and masks its events.
+    ///
+    /// SOURCE: BLOB_LIBPP_HAL_PWR_INTERRUPT.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct WifiMacPowerInterrupt<P: oer_mmio::Placement = oer_mmio::Fixed<0x2010d000>>(
         oer_mmio::Block<P, WifiMacPowerInterruptWords>,
@@ -104722,6 +104746,10 @@ pub mod modem_pwr {
         }
     }
 
+    impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for WifiMacPowerInterrupt<P> {
+        const SOURCE: u16 = 122;
+    }
+
     /// One sample of the `MODEM_PWR.POWER_INTERRUPT_STATUS` events `MODEM_PWR.CLEAR` acknowledges, to acknowledge once.
     ///
     /// SOURCE: BLOB_LIBPP_HAL_PWR_INTERRUPT.
@@ -104736,6 +104764,11 @@ pub mod modem_pwr {
         /// Whether no event was sampled.
         pub const fn is_clear(&self) -> bool {
             self.0 == 0
+        }
+
+        /// The sampled event bits: a value of the sample, which grants nothing.
+        pub const fn bits(&self) -> u32 {
+            self.0
         }
 
         /// The `TBTT_3` field.
@@ -104934,10 +104967,21 @@ pub mod modem_pwr {
     }
 
     /// The `WifiMacLocalTime` part of `MODEM_PWR`.
-    #[must_use = "dropping a register owner permanently loses its register authority"]
+    ///
+    /// The read of the free-running MAC local-time counter: side-effect free and written by no part, so one `Copy` reader serves the radio PHY's SDM-stability deadline and the Wi-Fi MAC's receive timestamps.
+    ///
+    /// SOURCE: ROM_REV0_PHY_WAIT_I2C_SDM_STABLE, BLOB_LIBPP_MAC_LOCAL_TIME.
     pub struct WifiMacLocalTime<P: oer_mmio::Placement = oer_mmio::Fixed<0x2010d000>>(
-        oer_mmio::Block<P, WifiMacLocalTimeWords>,
+        oer_mmio::Reader<P, WifiMacLocalTimeWords, WifiMacLocalTimeWords>,
     );
+
+    impl<P: oer_mmio::Placement> Clone for WifiMacLocalTime<P> {
+        fn clone(&self) -> Self {
+            *self
+        }
+    }
+
+    impl<P: oer_mmio::Placement> Copy for WifiMacLocalTime<P> {}
 
     /// The words [`WifiMacLocalTime`] holds, as byte offsets from its instance's base.
     pub struct WifiMacLocalTimeWords;
@@ -104959,14 +105003,14 @@ pub mod modem_pwr {
         /// The owner of the part's device registers.
         #[inline]
         pub fn new(block: WifiMacLocalTimeClaim) -> Self {
-            Self(block)
+            Self(block.into_reader())
         }
     }
 
     impl<'a> WifiMacLocalTime<oer_mmio::Host<'a>> {
         /// The part over host memory, for tests of its accessors.
         pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
-            oer_mmio::Block::host(words).map(Self)
+            oer_mmio::Block::host(words).map(|block| Self(block.into_reader()))
         }
     }
 
@@ -188629,6 +188673,11 @@ pub mod usb_serial_jtag {
             self.0 == 0
         }
 
+        /// The sampled event bits: a value of the sample, which grants nothing.
+        pub const fn bits(&self) -> u32 {
+            self.0
+        }
+
         /// The `SERIAL_OUT_RECV_PKT_INT_ST` field.
         #[inline]
         pub const fn serial_out_recv_pkt_int_st(&self) -> bool {
@@ -223478,6 +223527,46 @@ pub mod wifi_mac {
             change(&mut value);
             self.0.write_indexed::<0x15c, 0x4, 6>(index, value.0);
         }
+
+        /// Write the vendor's whole-word image `0x0000ffff`, undeclared bits included: one step of `initialize_mac_last_rx_buffer_entries`, which the HAL orders (`WIFI_MAC.ENTRY_PARAMETER_B0`).
+        ///
+        /// SOURCE: BLOB_LIBPP_MAC_LAST_RXBUF_INIT.
+        #[inline]
+        pub fn initialize_mac_last_rx_buffer_entries_entry_parameter_b0(&mut self) {
+            self.0.write::<0x15c>(0x0000ffff);
+        }
+
+        /// Write the vendor's whole-word image `0x0000ffff`, undeclared bits included: one step of `initialize_mac_last_rx_buffer_entries`, which the HAL orders (`WIFI_MAC.ENTRY_PARAMETER_B1`).
+        ///
+        /// SOURCE: BLOB_LIBPP_MAC_LAST_RXBUF_INIT.
+        #[inline]
+        pub fn initialize_mac_last_rx_buffer_entries_entry_parameter_b1(&mut self) {
+            self.0.write::<0x160>(0x0000ffff);
+        }
+
+        /// Write the vendor's whole-word image `0x0000ffff`, undeclared bits included: one step of `initialize_mac_last_rx_buffer_entries`, which the HAL orders (`WIFI_MAC.ENTRY_PARAMETER_B2`).
+        ///
+        /// SOURCE: BLOB_LIBPP_MAC_LAST_RXBUF_INIT.
+        #[inline]
+        pub fn initialize_mac_last_rx_buffer_entries_entry_parameter_b2(&mut self) {
+            self.0.write::<0x164>(0x0000ffff);
+        }
+
+        /// Write the vendor's whole-word image `0xffffffff`, undeclared bits included: one step of `initialize_mac_last_rx_buffer_entries`, which the HAL orders (`WIFI_MAC.ENTRY_PARAMETER_B3`).
+        ///
+        /// SOURCE: BLOB_LIBPP_MAC_LAST_RXBUF_INIT.
+        #[inline]
+        pub fn initialize_mac_last_rx_buffer_entries_entry_parameter_b3(&mut self) {
+            self.0.write::<0x168>(0xffffffff);
+        }
+
+        /// Write the vendor's whole-word image `0xffffffff`, undeclared bits included: one step of `initialize_mac_last_rx_buffer_entries`, which the HAL orders (`WIFI_MAC.ENTRY_PARAMETER_B4`).
+        ///
+        /// SOURCE: BLOB_LIBPP_MAC_LAST_RXBUF_INIT.
+        #[inline]
+        pub fn initialize_mac_last_rx_buffer_entries_entry_parameter_b4(&mut self) {
+            self.0.write::<0x16c>(0xffffffff);
+        }
     }
 
     /// The `WifiMacRxBssidList` part of `WIFI_MAC`.
@@ -224760,6 +224849,11 @@ pub mod wifi_mac {
             self.0 == 0
         }
 
+        /// The sampled event bits: a value of the sample, which grants nothing.
+        pub const fn bits(&self) -> u32 {
+            self.0
+        }
+
         /// The `QUEUE_0` field.
         #[inline]
         pub const fn queue_0(&self) -> bool {
@@ -225930,6 +226024,10 @@ pub mod wifi_mac {
     }
 
     /// The `WifiMacInterrupt` part of `WIFI_MAC`.
+    ///
+    /// The MAC interrupt bank: cold setup publishes its mask, then the MAC handler samples, acknowledges and masks its events.
+    ///
+    /// SOURCE: BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct WifiMacInterrupt<P: oer_mmio::Placement = oer_mmio::Fixed<0x20104000>>(
         oer_mmio::Block<P, WifiMacInterruptWords>,
@@ -225966,6 +226064,10 @@ pub mod wifi_mac {
         }
     }
 
+    impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for WifiMacInterrupt<P> {
+        const SOURCE: u16 = 120;
+    }
+
     /// One sample of the `WIFI_MAC.STATUS` events `WIFI_MAC.CLEAR` acknowledges, to acknowledge once.
     ///
     /// SOURCE: BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT, BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT.
@@ -225980,6 +226082,11 @@ pub mod wifi_mac {
         /// Whether no event was sampled.
         pub const fn is_clear(&self) -> bool {
             self.0 == 0
+        }
+
+        /// The sampled event bits: a value of the sample, which grants nothing.
+        pub const fn bits(&self) -> u32 {
+            self.0
         }
 
         /// The `BITS_0_4_OPAQUE` field.

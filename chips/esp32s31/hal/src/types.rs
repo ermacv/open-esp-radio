@@ -6,13 +6,20 @@
 
 pub use crate::bluetooth::BluetoothMemoryListSelector;
 pub use oer_esp32s31_pac::{
-    CfrValue, CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource,
-    CoexTimerPtiValue, CoexTimerRegister, CoexistenceLowPowerClockObservation,
-    CoexistenceLowPowerClockSource, ExtraSoftApRxBlockAckEntrySnapshot, ForcedRxGain,
-    MAC_TX_POWER_RATE_COUNT, MacApReceivePolicySnapshot, MacAssociationId, MacCcmpKeyIdentity,
-    MacCoexPrioritySnapshot, MacDelaySlot, MacExtraSoftApRxBlockAckEntryIndex, MacHe20PeerConfig,
-    MacHe20PeerError, MacHeBeamformingReportProfile, MacHeBeamformingReportProfileError,
-    MacHeBssColor, MacHeDefaultPacketExtensionDuration, MacHeErSuAckRateProfile, MacHeFecCoding,
+    CfrValue, CoexTimerClientValue, CoexTimerClockDividerMinusOne,
+    CoexTimerClockSource, CoexTimerPtiValue, CoexTimerRegister,
+    CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource, ForcedRxGain,
+    PbusMemoryGroupBoundary, PhyAdcRate, PhyForcedPowerIndex, PhyFtmEnableVendorArgument,
+    PhyGainMemoryEntry, PhyMemoryError,
+};
+
+/// The Wi-Fi MAC value types of the HAL's register operations.
+pub use crate::ieee80211::registers::{
+    ExtraSoftApRxBlockAckEntrySnapshot, MAC_TX_POWER_RATE_COUNT, MacApReceivePolicySnapshot,
+    MacAssociationId, MacCcmpKeyIdentity, MacCoexPrioritySnapshot, MacDelaySlot,
+    MacExtraSoftApRxBlockAckEntryIndex, MacHe20PeerConfig, MacHe20PeerError,
+    MacHeBeamformingReportProfile, MacHeBeamformingReportProfileError, MacHeBssColor,
+    MacHeDefaultPacketExtensionDuration, MacHeErSuAckRateProfile, MacHeFecCoding,
     MacHeGuardIntervalAndLtf, MacHeMcs, MacHePacketPaddingDuration, MacHeRate,
     MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
     MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot, MacHeTxFormat, MacHeTxParameters,
@@ -31,9 +38,7 @@ pub use oer_esp32s31_pac::{
     MacStaPolicyMode, MacStaReceivePolicySnapshot, MacTxCompletionObservation, MacTxControlFrame,
     MacTxDetachOutcome, MacTxDetachReason, MacTxPowerPair, MacTxPowerTable, MacTxProtection,
     MacTxPtiCount, MacTxPtiProgram, MacTxQueueDetached, MacTxQueueIndex, MacTxStatisticsSnapshot,
-    PbusMemoryGroupBoundary, PhyAdcRate, PhyForcedPowerIndex, PhyFtmEnableVendorArgument,
-    PhyGainMemoryEntry, PhyMemoryError, RxBlockAckEntrySnapshot, StaTbttSchedule,
-    TxBlockAckPayload,
+    RxBlockAckEntrySnapshot, StaTbttSchedule, TxBlockAckPayload,
 };
 
 pub use crate::phy::restore::{
@@ -43,5 +48,5 @@ pub use crate::phy::restore::{
     TxIqToneControlRestoreError,
 };
 
+pub use crate::ieee80211::registers::WifiRxCsiControlMask;
 pub use crate::ieee80211::station_wake::StaTbttScheduleError;
-pub use oer_esp32s31_pac::WifiRxCsiControlMask;

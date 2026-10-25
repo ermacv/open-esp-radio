@@ -18,10 +18,10 @@ pub enum Error {
 }
 
 /// Original resources retained when admission has made no hardware changes.
-pub struct AdmissionFailure {
+pub struct AdmissionFailure<Registers = RadioAccess, Interrupts = MacInterruptSetup> {
     pub error: Error,
-    pub registers: RadioAccess,
-    pub interrupts: MacInterruptSetup,
+    pub registers: Registers,
+    pub interrupts: Interrupts,
 }
 
 impl RadioAccess {
@@ -38,11 +38,13 @@ impl RadioAccess {
     }
 }
 
-fn confirm_stopped(
-    mut registers: RadioAccess,
-    interrupts: MacInterruptSetup,
-    check: impl FnOnce(&mut RadioAccess) -> Result<(), Error>,
-) -> Result<(RadioAccess, MacInterruptSetup), AdmissionFailure> {
+/// Run `check` on the owner and return both owners unchanged, or with the
+/// refusal; it moves them and touches no register itself.
+fn confirm_stopped<Registers, Interrupts>(
+    mut registers: Registers,
+    interrupts: Interrupts,
+    check: impl FnOnce(&mut Registers) -> Result<(), Error>,
+) -> Result<(Registers, Interrupts), AdmissionFailure<Registers, Interrupts>> {
     if let Err(error) = check(&mut registers) {
         return Err(AdmissionFailure {
             error,

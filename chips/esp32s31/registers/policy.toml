@@ -608,11 +608,19 @@ description = "Wi-Fi interrupt banks transferred from cold setup to the hard int
 name = "WifiMacInterrupt"
 instance = "WIFI_MAC"
 registers = ["ENABLE", "RAW", "STATUS", "CLEAR"]
+irq-side = true
+interrupt = "MODEM_WIFI_MAC"
+description = "The MAC interrupt bank: cold setup publishes its mask, then the MAC handler samples, acknowledges and masks its events."
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT"]
 
 [[partitions.parts]]
 name = "WifiMacPowerInterrupt"
 instance = "MODEM_PWR"
 registers = ["ENABLE", "RAW", "POWER_INTERRUPT_STATUS", "CLEAR"]
+irq-side = true
+interrupt = "MODEM_WIFI_PWR"
+description = "The WDEVPWR interrupt bank: cold setup masks it, then the power handler samples, acknowledges and masks its events."
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT"]
 
 [[partitions]]
 name = "MacLocalTimePeripherals"
@@ -623,6 +631,10 @@ description = "The free-running Wi-Fi MAC local-time counter. Reading it has no 
 name = "WifiMacLocalTime"
 instance = "MODEM_PWR"
 registers = ["COUNTER"]
+read-only = true
+copy = true
+description = "The read of the free-running MAC local-time counter: side-effect free and written by no part, so one `Copy` reader serves the radio PHY's SDM-stability deadline and the Wi-Fi MAC's receive timestamps."
+sources = ["ROM_REV0_PHY_WAIT_I2C_SDM_STABLE", "BLOB_LIBPP_MAC_LOCAL_TIME"]
 
 [[partitions]]
 name = "RadioPhyPeripherals"

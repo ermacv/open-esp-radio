@@ -2,7 +2,8 @@
 //! of the part the policy gives them to:
 //!
 //! - a fixed image marked `whole-word` (the vendor's store of a whole word,
-//!   undeclared and read-only bits included);
+//!   undeclared and read-only bits included), and each such step of a fixed
+//!   sequence, one method per image; the HAL orders the steps;
 //! - a fixed image acknowledging write-one-to-clear events with its proof:
 //!   the enable word it masks first (`masks`) or the event the caller
 //!   consumed (`consumed-event`);
@@ -194,6 +195,41 @@ pub(super) fn render(
         .filter(|modify| modify.domain.is_none() && modify.value.is_none() && mine(&modify.name))
     {
         render_pointer_or(body, plan, owner, model, modify)?;
+    }
+    for sequence in file
+        .fixed_register_sequences
+        .iter()
+        .filter(|sequence| mine(&sequence.name))
+    {
+        for step in sequence.steps.iter().filter(|step| step.whole_word) {
+            let entity = sequence.name.as_str();
+            let target = element(entity, plan, owner, model, &step.register)?;
+            if target
+                .template
+                .fields
+                .iter()
+                .any(|field| field.pointer.is_some() && field.mask() & step.value != 0)
+            {
+                return Err(Error::new(entity, "a fixed image sets an address field"));
+            }
+            let write =
+                target.write(entity, owner, &format!("0x{:08x}", step.value), step.value)?;
+            let element = step.register.rsplit('.').next().unwrap_or_default();
+            doc(
+                body,
+                &format!(
+                    "Write the vendor's whole-word image `0x{:08x}`, undeclared bits included: one step of `{}`, which the HAL orders",
+                    step.value, sequence.name
+                ),
+                &step.register,
+                &sequence.sources,
+            );
+            let _ = writeln!(
+                body,
+                "#[inline]\npub fn {}(&mut self) {{\n{write};\n}}\n",
+                names::ident(&format!("{}_{}", sequence.name, names::snake(element)))
+            );
+        }
     }
     for snapshot in file
         .interrupt_snapshots
@@ -409,7 +445,9 @@ fn render_snapshot(
          /// The bits the snapshot keeps: the events the clear word acknowledges.\n\
          pub const EVENTS: u32 = 0x{events:08x};\n\n\
          /// Whether no event was sampled.\n\
-         pub const fn is_clear(&self) -> bool {{\nself.0 == 0\n}}\n",
+         pub const fn is_clear(&self) -> bool {{\nself.0 == 0\n}}\n\n\
+         /// The sampled event bits: a value of the sample, which grants nothing.\n\
+         pub const fn bits(&self) -> u32 {{\nself.0\n}}\n",
         snapshot.status,
         snapshot.clear,
         snapshot.sources.join(", ")

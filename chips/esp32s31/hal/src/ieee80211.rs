@@ -12,6 +12,9 @@ pub mod dma;
 
 pub mod mac;
 
+/// The Wi-Fi MAC register owners and their operations over the generated parts.
+pub mod registers;
+
 pub mod station_wake;
 
 /// Role-neutral hardware cold-start before DMA and interrupt publication.

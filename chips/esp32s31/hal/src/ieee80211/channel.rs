@@ -2,7 +2,7 @@
 
 use crate::{owner::SharedPhyAccess, phy::restore::PhyRouteState};
 
-use oer_esp32s31_pac::{RadioPhyRegisters, WifiRadioRegisters};
+use crate::{ieee80211::registers::WifiRadioRegisters, phy::RadioPhyRegisters};
 
 /// Temporary channel-programming borrow: the Wi-Fi client's MAC with the
 /// shared PHY and route restore state borrowed from the radio domain.
@@ -57,7 +57,7 @@ impl<'radio, P> RadioChannelHal<'radio, P> {
 }
 
 impl<P> crate::sealed::SharedPhyAccess for RadioChannelHal<'_, P> {
-    fn pac(&self) -> &oer_esp32s31_pac::RadioPhyRegisters {
+    fn pac(&self) -> &RadioPhyRegisters {
         self.registers.radio_phy()
     }
 

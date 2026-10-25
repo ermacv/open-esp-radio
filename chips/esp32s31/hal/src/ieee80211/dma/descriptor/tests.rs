@@ -97,7 +97,8 @@ fn a_cursor_names_a_ring_descriptor_by_its_low_address_bits() {
     // A ring base above the 20 cursor bits: only the low bits are held.
     let base = 0x2f0c_0000_u32 + 0x1230;
     let low = |index: u32| {
-        (base + index * DESCRIPTOR_BYTES) & oer_esp32s31_pac::WifiDescriptorAddressLow::MAX
+        (base + index * DESCRIPTOR_BYTES)
+            & crate::ieee80211::registers::WifiDescriptorAddressLow::MAX
     };
     assert_eq!(cursor_ring_index(low(0), base, 4), Some(0));
     assert_eq!(cursor_ring_index(low(3), base, 4), Some(3));
