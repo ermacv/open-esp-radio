@@ -1,6 +1,7 @@
 //! The block's ownership over the fake block: one holder at a time, a held
 //! block drops and counts instead of waiting, the driver takes only a free
-//! block, and the fatal path takes only a free block, for good.
+//! block, the fatal path takes only a free block, for good, and a fatal path
+//! that stopped the world takes the block over from any holder, once.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::vec::Vec;
@@ -275,4 +276,75 @@ fn fatal_notes_of_two_harts_and_the_driver_never_hold_the_block_together() {
         );
         assert_eq!(owners.most(), 1, "one owner at a time");
     }
+}
+
+#[test]
+fn a_takeover_takes_the_block_from_any_holder_once_and_for_good() {
+    for holder in ["free", "early", "driver", "fatal"] {
+        let early = Ownership::new();
+        let block = Shared::default();
+        match holder {
+            "early" => {
+                // The record the fatal path interrupted never resumes.
+                assert!(early.write(
+                    || Task(block.clone()),
+                    |_| assert!(early.take_over(), "{holder}")
+                ));
+            }
+            "driver" => assert_eq!(early.retire(), Ok(())),
+            "fatal" => assert!(early.write_fatal(|| Task(block.clone()), &Note::runtime_fail("a"))),
+            _ => {}
+        }
+        if holder != "early" {
+            assert!(early.take_over(), "{holder}");
+        }
+        assert!(!early.take_over(), "{holder}: a second takeover is refused");
+        assert!(!early.write(|| Task(block.clone()), |writer| writer.text(b"late")));
+        assert!(!early.write_fatal(|| Task(block.clone()), &Note::runtime_fail("b")));
+        assert_eq!(early.retire(), Err(RetireError::Taken), "{holder}");
+    }
+}
+
+/// A block whose FIFO has room only after the host read the driver's last
+/// packet, a few polls in.
+struct Busy {
+    polls: core::cell::Cell<u32>,
+    pushed: usize,
+}
+
+impl EndpointRegisters for Busy {
+    fn has_room(&self) -> bool {
+        self.polls.set(self.polls.get() + 1);
+        self.polls.get() > 3
+    }
+
+    fn push(&mut self, _: u8) {
+        self.pushed += 1;
+    }
+
+    fn send(&mut self) {}
+
+    fn has_data(&self) -> bool {
+        false
+    }
+
+    fn pop(&mut self) -> u8 {
+        0
+    }
+
+    fn enable_events(&mut self) {}
+}
+
+#[test]
+fn a_note_over_a_taken_over_block_waits_for_room() {
+    let early = Ownership::new();
+    assert_eq!(early.retire(), Ok(()));
+    assert!(early.take_over());
+    let mut endpoint = Busy {
+        polls: core::cell::Cell::new(0),
+        pushed: 0,
+    };
+    early.write_taken_over(&mut endpoint, &Note::runtime_fail("layout"));
+    assert!(endpoint.pushed > 0, "the note went out");
+    assert_eq!(early.take_lost(), 0, "nothing was dropped");
 }

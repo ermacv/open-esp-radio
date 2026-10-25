@@ -134,6 +134,7 @@ starters = [
     "*CpuControl*::start_app_core*",
     "*CpuControl*::unpark_core*",
     "*::start_core1*",
+    "*Cores*::start_hart1*",
 ]
 
 # The Rust probe images of the vendor comparison (firmware/probes),

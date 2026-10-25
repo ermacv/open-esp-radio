@@ -8,7 +8,9 @@
 //! for, until the esp-hal adapter retires it ([`retire_early_writer`]) and
 //! takes the block for the driver; then every early record goes through the
 //! driver ([`oer_espressif_usb_serial_jtag::Endpoint`]), which holds the
-//! block for good. The fatal note ([`fatal_note`]) takes only a free block.
+//! block for good. The fatal note ([`fatal_note`]) takes only a free block;
+//! a fatal path that stopped the world takes the block over from whoever
+//! holds it ([`TakenConsole`]).
 //!
 //! The driver's endpoint and pads stay on the hart that took them: neither
 //! is `Send`, so no other hart's task or handler reaches them
@@ -31,6 +33,8 @@ use oer_espressif_usb_serial_jtag::ownership::Ownership;
 pub use oer_espressif_usb_serial_jtag::ownership::RetireError;
 use oer_espressif_usb_serial_jtag::{EndpointRegisters, Events, InterruptRegisters};
 use oer_mmio::Placement;
+
+use crate::cores::{StopTheWorld, TakeOver, sealed};
 
 #[cfg(test)]
 mod tests;
@@ -177,6 +181,54 @@ pub fn retire_early_writer() -> Result<EarlyWriterRetired, RetireError> {
     OWNERSHIP.retire().map(|()| EarlyWriterRetired(()))
 }
 
+/// The console's block, taken over by a fatal path that stopped the world:
+/// the driver, an early record or an earlier fatal note held it, and none
+/// of them runs again. It stays in the fatal path, on its hart (not
+/// `Send`).
+pub struct TakenConsole(UsbEndpoint);
+
+impl TakenConsole {
+    /// Writes `note` as one `OER-DIAG:01` line, waiting for room within the
+    /// early writer's budget: nothing else runs to yield to.
+    pub fn note(&mut self, note: &Note<'_>) {
+        OWNERSHIP.write_taken_over(&mut self.0, note);
+    }
+}
+
+impl sealed::Sealed for TakenConsole {}
+
+impl TakeOver for TakenConsole {
+    /// Takes the block for good and brings it to a known state: both
+    /// console interrupts disabled, and whatever the holder left in the IN
+    /// FIFO handed to the host, so the next note starts a packet; with
+    /// nothing left, the host gets a zero-length packet.
+    fn take_over(_stop: &mut StopTheWorld<'_>) -> Option<Self> {
+        if !OWNERSHIP.take_over() {
+            return None;
+        }
+        let mut endpoint = take_over_capture();
+        endpoint.0.disable_events();
+        endpoint.0.send();
+        Some(Self(endpoint))
+    }
+}
+
+/// The endpoint registers of the owner a takeover builds.
+#[allow(
+    unsafe_code,
+    reason = "the takeover's capture of the block it took over"
+)]
+fn take_over_capture() -> UsbEndpoint {
+    // SAFETY: the caller holds a `StopTheWorld`: this hart's interrupts are
+    // masked, the other hart is confirmed stopped, and the fatal path never
+    // returns to the code it interrupted, so the block's previous owner (the
+    // driver's parts, an early record or a fatal note) never accesses the
+    // block again. `OWNERSHIP`'s swap to the taken-over state, which refuses
+    // a second takeover, makes this the only owner built from now on.
+    let handoff = unsafe { UsbSerialJtagHandoff::assume_exclusive() };
+    parts(UsbSerialJtagRegisters::from_handoff(handoff)).0
+}
+
 /// Where a fatal note went.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[must_use = "a held note is kept for the next boot by the caller"]
@@ -185,8 +237,9 @@ pub enum FatalNote {
     /// the fatal path's for good.
     Written,
     /// The console's driver, an early record or an earlier fatal note
-    /// holds the block: nothing touched it, and the caller keeps the note
-    /// for the next boot.
+    /// holds the block: nothing touched it. The caller takes the block over
+    /// once it stopped the world ([`TakenConsole`]), or keeps the note for
+    /// the next boot.
     Held,
 }
 

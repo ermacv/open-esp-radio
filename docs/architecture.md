@@ -132,14 +132,22 @@ moves; ownership, orchestration and wiring are rebuilt.
   the bug it prevents.
 - DMA-reachable storage is permanent and is released only after a proof that
   DMA stopped; otherwise it is quarantined until reset.
+- A fatal path takes over a block another owner holds only with a
+  `StopTheWorld`: its hart masked, the other hart confirmed stopped (the
+  hardware's stall status, or held in reset), from a fatal context that never
+  returns. One compare-and-swap elects the fatal hart, so two failing harts
+  never stall each other; a stop that is not confirmed in its bound takes
+  over nothing, and the path keeps its record and resets.
 
 ## Hardware
 
 - **Two roots, one shrinking.** esp-hal (the owner's fork, fixes only) still
   owns parts of the SoC before the radio handoff: boot, clocks, PSRAM,
-  flash, console, the panic's software reset. Stage two's traps are the
+  flash, console. Stage two's traps are the
   staged runtime's: its vector tables, entries and checked exit, the direct
-  call of each line's handler and the image's `critical-section`. The
+  call of each line's handler, the image's `critical-section` and the fatal
+  paths, which mask their hart for good and reset the chip through the chip
+  HAL's `cores` (core control on our typed blocks). The
   interrupt table's router writes the routes and CPU lines through the
   chip HAL's interrupt controller on the typed interrupt matrix and CLIC,
   every source's route word included (the IEEE 802.15.4 MAC's too). The executor's time, software interrupt lines and

@@ -24,9 +24,10 @@
 //!
 //! The runtime owns the traps ([`stacks`]: the vector tables, every entry
 //! and the checked exit; the common entry and exit are `vectors.s`), the
-//! image's `critical-section` (`critical`) and
-//! the panic record ([`panic`]); the interrupt table's router writes the
-//! routes and the CLIC lines through the chip's controller.
+//! image's `critical-section` (`critical`), the panic record ([`panic`]) and
+//! the fatal paths (`fatal`: the end of a hart and the chip's reset, which
+//! lend the chip HAL's fatal-path proof); the interrupt table's router writes
+//! the routes and the CLIC lines through the chip's controller.
 #[allow(unsafe_code, reason = "the CLIC threshold and mstatus.MIE")]
 mod critical;
 #[cfg(target_arch = "riscv32")]
@@ -36,6 +37,13 @@ mod critical;
 )]
 mod default_handlers;
 pub mod diagnostics;
+#[cfg(any(feature = "esp32s31", feature = "esp32c5"))]
+pub mod fatal;
+#[cfg(all(
+    target_arch = "riscv32",
+    any(feature = "esp32s31", feature = "esp32c5")
+))]
+pub use fatal::{fatal_halt, reset};
 #[cfg(target_arch = "riscv32")]
 #[allow(unsafe_code, reason = "the stage-two reset entry is assembly")]
 mod entry;

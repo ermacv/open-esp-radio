@@ -362,15 +362,28 @@ fn early(note: &Note<'_>) {
     usb::early(note);
 }
 
-/// Reports a failed boot check and halts this hart. The note goes to the
-/// host only while no one holds the USB block; while the console's driver
-/// holds it, the note is kept for the next boot instead, so the fatal path
-/// never makes a second owner of the block. It takes no lock and masks only
-/// this hart's interrupts.
+/// Reports a failed boot check and halts this hart, its interrupts masked
+/// for good. The note goes to the host while no one holds the USB block;
+/// while the console's driver or an early record holds it, the path stops
+/// the other hart and takes the block over. When the stop fails, the note
+/// is kept for the next boot instead, so the fatal path never makes a
+/// second owner of the block. It takes no lock.
 fn fail(failure: fatal::Failure) -> ! {
-    use oer_esp32s31_hal::usb_serial_jtag::{FatalNote, fatal_note};
-    if fatal_note(&Note::runtime_fail(failure.name())) == FatalNote::Held {
-        fatal::record_failure(failure);
-    }
-    oer_espressif_staged_runtime::halt()
+    use oer_esp32s31_hal::{
+        cores,
+        usb_serial_jtag::{FatalNote, TakenConsole, fatal_note},
+    };
+    oer_espressif_staged_runtime::fatal_halt(|path| {
+        let note = Note::runtime_fail(failure.name());
+        if fatal_note(&note) == FatalNote::Written {
+            return;
+        }
+        let taken = cores::stop_the_world(path)
+            .ok()
+            .and_then(|mut stop| stop.take_over::<TakenConsole>());
+        match taken {
+            Some(mut console) => console.note(&note),
+            None => fatal::record_failure(failure),
+        }
+    })
 }

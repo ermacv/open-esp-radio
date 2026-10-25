@@ -26,6 +26,12 @@ esp_rom_spiflash_config_clk = 0x40000188;
 esp_rom_spiflash_config_readmode = 0x4000018c;
 esp_rom_spiflash_attach = 0x400001f0;
 
+/* The fatal paths' reset (the HAL's `cores` module): the ROM's entry veneer
+ * of `software_reset`.
+ * SOURCE(esp32c5): ESP-IDF 4d59230d `components/esp_rom/esp32c5/ld/esp32c5.rom.ld`
+ * (line 52). */
+software_reset = 0x40000094;
+
 /* ROM data symbols the PHY library references. The ESP32-C5 ROM has no
  * rom_phyFuns. */
 _rom_eco_version = 0x40000014;

@@ -36,6 +36,8 @@ mod coex_participation;
 
 pub mod coex;
 
+pub mod cores;
+
 pub mod domain;
 pub mod power;
 pub mod root;

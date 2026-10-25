@@ -12,6 +12,10 @@ disallowed-methods = [
     { path = "esp_hal::system::CpuControl::start_app_core", reason = "a core starts only from a root the stack policy declares and the image gate proves", allow-invalid = true },
     { path = "esp_hal::system::CpuControl::start_app_core_with_stack_guard_offset", reason = "a core starts only from a root the stack policy declares and the image gate proves", allow-invalid = true },
     { path = "esp_hal::system::CpuControl::unpark_core", reason = "a core starts only from a root the stack policy declares and the image gate proves", allow-invalid = true },
+    { path = "oer_esp32s31_hal::cores::Cores::start_hart1", reason = "a core starts only from a root the stack policy declares and the image gate proves", allow-invalid = true },
+    # The chip resets from a fatal path through the chip HAL's cores module
+    # (the staged runtime's `reset`), which restores what the boot ROM needs.
+    { path = "esp_hal::system::software_reset", reason = "the chip resets through the staged runtime's fatal reset and the chip HAL's cores module" },
     # esp-hal's `regs()` reaches a block without its singleton; these blocks
     # pass to the radio HAL at the handoff (oer-espressif-esp-hal-radio).
     { path = "esp_hal::peripherals::IEEE802154::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, Hardware)" },

@@ -13,7 +13,8 @@ path, line and column.
 `system::InjectPanic` is served by the panic-reset image and the system
 watchdog image: the image acknowledges with `PanicInjected` and panics in
 thread context, the entry records the panic and resets the chip through
-`esp_hal::system::software_reset`, and the next boot reports a software
+the staged runtime's fatal reset (the chip HAL's `cores::software_reset`),
+and the next boot reports a software
 reset and the record. The panic-reset image's panic entry has no HIL hook;
 the watchdog image's hook also records the panic as the post-mortem fault
 (`BootEvidence::post_mortem`) and, on the ESP32-S31, the fatal machine

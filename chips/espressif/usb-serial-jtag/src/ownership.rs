@@ -21,11 +21,18 @@
 //!   is refused and its caller keeps it elsewhere. So every owner of the
 //!   block lives alone, and the driver's parts hold it for as long as they
 //!   live.
+//! - `any → TakenOver` for a fatal path that stopped every other context
+//!   ([`Ownership::take_over`]), for good: the holder's owner, an early
+//!   record or the driver, never runs again, so the owner the fatal path
+//!   builds lives alone too. A second takeover is refused, as the first
+//!   one's owner may still live.
 //!
 //! The early writer writes while the FIFO has room, drops the rest and
 //! counts it ([`oer_diagnostics::FifoWriter`]); before an executor exists
 //! there is nothing to yield to, so it waits for room within
-//! [`EARLY_PATIENCE`] per record. A fatal note never waits.
+//! [`EARLY_PATIENCE`] per record. A fatal note never waits; a note over a
+//! block taken over waits within [`EARLY_PATIENCE`], as nothing else runs
+//! to yield to.
 
 use core::sync::atomic::{AtomicU8, Ordering};
 
@@ -51,6 +58,9 @@ const EARLY: u8 = 1;
 const DRIVER: u8 = 2;
 /// The fatal path holds the block, for good.
 const FATAL: u8 = 3;
+/// A fatal path that stopped every other context took the block over, for
+/// good.
+const TAKEN_OVER: u8 = 4;
 
 /// The driver could not take the block.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -120,8 +130,11 @@ impl Ownership {
                     &self.lost,
                     EARLY_PATIENCE,
                 ));
-                // The writer and its owner were dropped above.
-                self.state.store(FREE, Ordering::Release);
+                // The writer and its owner were dropped above. A takeover
+                // during the record keeps the block.
+                let _ =
+                    self.state
+                        .compare_exchange(EARLY, FREE, Ordering::Release, Ordering::Relaxed);
                 true
             }
             Err(EARLY) => {
@@ -150,6 +163,21 @@ impl Ownership {
         }
         FifoWriter::new(Fifo(Some(capture())), &self.lost, Patience::NONE).note(note);
         true
+    }
+
+    /// Takes the block from whoever holds it, for good, for a fatal path
+    /// that stopped every other context: the holder's owner never runs
+    /// again. Returns `false` when a takeover took it before, whose owner
+    /// may still live; then the caller builds no owner.
+    pub fn take_over(&self) -> bool {
+        self.state.swap(TAKEN_OVER, Ordering::AcqRel) != TAKEN_OVER
+    }
+
+    /// Writes `note` over `registers`, the owner a takeover built, waiting
+    /// for room within [`EARLY_PATIENCE`]: nothing else runs to yield to.
+    /// What does not fit is dropped and counted.
+    pub fn write_taken_over<R: EndpointRegisters>(&self, registers: R, note: &Note<'_>) {
+        FifoWriter::new(Fifo(Some(registers)), &self.lost, EARLY_PATIENCE).note(note);
     }
 
     /// Gives the block to the console's driver for good, if it is free:

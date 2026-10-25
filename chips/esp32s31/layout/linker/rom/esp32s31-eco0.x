@@ -15,6 +15,14 @@ esp_rom_spiflash_config_clk = 0x2f800198;
 esp_rom_spiflash_config_readmode = 0x2f80019c;
 esp_rom_spiflash_attach = 0x2f800200;
 
+/* The fatal paths' reset (the HAL's `cores` module): the pinned rev0 ROM's
+ * entry veneers, which Blobray's function records of the pinned ROM ELF
+ * resolve to `software_reset` and `ets_set_appcpu_boot_addr`.
+ * SOURCE(esp32s31): ESP-IDF 4d59230d `components/esp_rom/esp32s31/ld/esp32s31.rom.ld`
+ * (lines 52 and 57). */
+software_reset = 0x2f800094;
+ets_set_appcpu_boot_addr = 0x2f8000a8;
+
 /* ROM data symbols referenced by libphy.a.  Keeping these in the link-time
  * symbol map prevents --unresolved-symbols=ignore-all from relaxing data
  * references into address-zero loads/stores in the trace oracle. */
