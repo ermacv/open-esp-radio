@@ -22,7 +22,7 @@ analysis read this model; neither owns a second copy.
 | `model/strictness.toml` | The strictness overlay over the vendor SVD: each peripheral's pinned ESP-IDF header, from which the generator derives the API, corrected offsets, access, reserved bits, write triggers, command registers, write-one-to-clear, FIFO ports, command data ports and the interrupt sources the SVD lacks, each citing its ESP-IDF header line |
 | `import.toml` | The vendor blocks `cargo registers import` writes into block types: each type's ESP-IDF header and its instances' SVD peripherals and `reg_base.h` bases |
 | `chip.toml`, `types/`, `layouts/` | The chip as block types and their root (`chip_model::ChipModel` loads them with every catalog in `evidence/`): the vendor blocks `cargo registers import` wrote with the curated refinements merged into them, the curated blocks no vendor header describes (the Wi-Fi MAC, baseband and front end, the Bluetooth blocks, IEEE 802.15.4, coexistence, the modem power block, the CLIC and others, each with a partial extent and its sources), the analog-I2C blocks, every interrupt source bound to an instance or explicitly unbound with a reason, the `dma-window` RAM region and the placement of the memory layouts. These files, not the import, are the source of truth; the import is not run over them again. Generation does not read them yet |
-| `policy.toml` | The schema-6 ownership policy over `chip.toml` (`chip_policy::ChipPolicy` loads it): the owners as partitions of parts of instances, every other MMIO word unclaimed with its reason, the value domains and the transactions by `INSTANCE.REGISTER.FIELD`. Generation does not read it yet |
+| `policy.toml` | The schema-6 ownership policy over `chip.toml` (`chip_policy::ChipPolicy` loads it): the owners as partitions of parts of instances, every other MMIO word unclaimed with its reason, operation-specific domains, references to the complete field domains in block types, and the transactions by `INSTANCE.REGISTER.FIELD`. Generation does not read it yet |
 | `evidence/imported.toml`, `evidence/memory.toml` | The evidence of every pinned file and cited line the import named, and of the RAM regions of the root |
 | `published/soc.report.toml` | Generated report of every vendor field the API names after its header and every register the conservative pass narrowed, with its reasons |
 | `published/radio.svd` | Generated portable CMSIS-SVD representation |
@@ -40,6 +40,24 @@ Its other two checked outputs are
 [`pac/src/generated.rs`](../pac/src/generated.rs).
 Handwritten runtime ownership and safe hardware access remain in the
 [closed PAC](../pac/README.md), not in publication tooling.
+
+## Intrinsic pointer and value-domain facts
+
+Block fields in `types/` own their sourced `pointer` facts, complete numeric
+`value-range` domains and enum `values`. Pointer targets name layouts in
+`layouts/`, and placement names the root's single `dma-window` RAM region;
+no encoding repeats that region's address or size. BLE compressed pointers
+state width 20 and shift 2; full and member pointers state width 32 and shift
+0; Wi-Fi RX observations and TX queue heads state `low-bits`, with the RX
+high field named explicitly. IEEE 802.15.4 frame pointers target raw buffer
+storage rather than an invented descriptor layout.
+
+The schema-6 policy's `field-domains` references preserve policy names without
+copying value lists or bounds. Its pointer operations reference hardware
+fields without redeclaring targets, encodings or placement. Narrow domains,
+array indices and split/transformed operation inputs remain policy. Bluetooth
+interrupt status and NRT snapshot views share the type's sourced W1C clear
+banks through `interrupt-pairs`.
 
 ## Publication and investigation are separate
 

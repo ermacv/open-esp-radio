@@ -10,6 +10,9 @@ mod soc_tests;
 #[cfg(test)]
 mod test_memory;
 
+#[cfg(test)]
+mod ieee802154_typed_register_tests;
+
 pub(crate) use modem::coex;
 
 pub(crate) use phy::{baseband, cfr};
@@ -31,6 +34,12 @@ mod generated;
 /// as typed register blocks with the chip's interrupt sources
 /// (`soc::Interrupt`); the PAC root claims them at once.
 pub use generated::soc;
+
+/// The generated parts of IEEE 802.15.4's partition ([`Ieee802154Partition`]):
+/// the MAC block with its task and interrupt sides, the modem ETM's
+/// IEEE 802.15.4 channels and the baseband's receive-information read. The
+/// HAL drives them through their field accessors.
+pub use generated::{bt_v3_2_baseband, ieee802154_mac, modem_etm};
 
 /// What the pinned ESP-IDF headers take away from the vendor SVD's API.
 ///
@@ -177,9 +186,6 @@ pub use modem::coex_external::{ExternalCoexPriority, ExternalCoexRole, ExternalC
 
 pub use frequency::PhyFrequencyI2cNumberAddresses;
 
-#[doc(hidden)]
-pub use ieee802154::mac::{Ieee802154PolledRegisterLease, Ieee802154RegisterLease};
-
 pub use oer_espressif_ieee80211_pac::MacInterface;
 
 pub use generated::{
@@ -190,27 +196,6 @@ pub use generated::{
     MacPti, MacRxBlockAckEntryIndex, MacRxBlockAckStartingSequence, MacRxBlockAckTid,
     MacRxBlockAckWindow, MacTxPtiCount, MacTxQueueIndex, ModemLowPowerClockDivider,
     PhyForcedPowerIndex, PhyFtmEnableVendorArgument,
-};
-
-pub use ieee802154::mac::{
-    Ieee802154AckTimeoutUnits, Ieee802154CcaMode, Ieee802154DebugCounter, Ieee802154DmaErrorCodes,
-    Ieee802154EdCcaSnapshot, Ieee802154EdCommand, Ieee802154EdDurationUnits,
-    Ieee802154EdSampleMode, Ieee802154EdSampleRate, Ieee802154EtmChannel, Ieee802154EtmRoute,
-    Ieee802154Event, Ieee802154EventEnableState, Ieee802154EventMask, Ieee802154EventObservation,
-    Ieee802154EventObservationError, Ieee802154FoundationSnapshot, Ieee802154FrequencyCode,
-    Ieee802154MacCommand, Ieee802154MacConfigurationReadback, Ieee802154MacControl,
-    Ieee802154MacPolicySnapshot, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
-    Ieee802154ObservedEventState, Ieee802154OperationEventEnableObservation,
-    Ieee802154OperationRxAbortEnableObservation, Ieee802154PanIdentity, Ieee802154PowerSequence,
-    Ieee802154Pti, Ieee802154RxAbortEnableSet, Ieee802154RxAbortEnableState,
-    Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode,
-    Ieee802154RxStatus, Ieee802154SecurityPayloadOffset, Ieee802154StateSnapshot,
-    Ieee802154Timer0ThresholdWord, Ieee802154Timer0ValueWord, Ieee802154Timer1ThresholdWord,
-    Ieee802154Timer1ValueWord, Ieee802154TimerLease, Ieee802154TransmitSecurityControl,
-    Ieee802154TxAbortEnableSet, Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation,
-    Ieee802154TxPowerCode, Ieee802154TxSecurityError, Ieee802154TxSecurityErrorObservation,
-    Ieee802154TxStateCode, Ieee802154TxStatus, Ieee802154ValidationEdDurationState,
-    Ieee802154ValidationEventEnableState,
 };
 
 pub use modem::{
@@ -312,8 +297,7 @@ pub use ownership::BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER;
 
 pub use ownership::{
     BluetoothControllerPartition, BluetoothInterruptRegisters, BluetoothInterruptSetup,
-    BluetoothTaskRegisters, CoexistencePartition, Ieee802154InterruptRegisters,
-    Ieee802154InterruptSetup, Ieee802154Partition, Ieee802154TaskRegisters, MacInterruptEvents,
+    BluetoothTaskRegisters, CoexistencePartition, Ieee802154Partition, MacInterruptEvents,
     MacInterruptObservation, MacInterruptSnapshot, MacLocalTime, MacPowerInterruptObservation,
     MacPowerInterruptSnapshot, RadioHandoff, RadioPartitions, RadioPhyRegisters,
     SharedRadioPartition, SharedRadioParts, SharedRadioRegisters, WifiMacPartition,
@@ -322,7 +306,6 @@ pub use ownership::{
 
 pub(crate) use ownership::device_fence;
 pub(crate) mod bluetooth;
-pub(crate) mod ieee802154;
 pub(crate) mod modem;
 /// Owner acquisition and register transactions of isolated probe images.
 #[cfg(oer_probe)]

@@ -86,7 +86,7 @@ defers every decision to a task cannot meet these deadlines.
 | `bt_bb_get_tx_pwr_table` | dBm-to-power-index table | HAL `ESP32S31_TX_POWER_LEVELS`, recovered from the provider |
 | `esp_coex_ieee802154_*` | PTI scenes, external-coexistence stages, coexistence break notice | PTI levels: HAL scene priorities read from the arbiter table, published by the driver engine. The external-coexistence stages are a bare `ret` on the pinned ESP32-S31 libcoexist; `esp_coex_ieee802154_force_rx_enable`, which external-coexistence builds call at MAC init and deinit, writes `FORCE_RX_ENB` and `COEX_ARB_DELAY` ([lifecycle](ieee802154-lifecycle.md)) and is absent with the external coexistence it serves. The break notice has no effect on the pinned ESP32-S31 libcoexist (`esp_coex_ieee802154_coex_break_notify` tail-calls `hal_ieee802154_coex_break_notify`, a bare `ret`; reviewed fact `BLOB_LIBCOEX_IEEE802154_HANDOFF`), so the engine sends none; the provenance check follows that body |
 | `ieee802154_txon_delay_set` (called by `ieee802154_mac_init`) | MAC TX/RX timing delays | `TXON_DELAY`, `RXON_DELAY`, `TXRX_SWITCH_DELAY` and `TXOFF_DELAY` in the HAL MAC foundation; the shared auxiliary TX-on delay keeps the BTBB initialization value |
-| `bt_bb_get_cur_rx_info` | receive diagnostic | the PAC's `Ieee802154BasebandRxInfo` capability reads its RSSI byte; the rest of the word stays unmodelled |
+| `bt_bb_get_cur_rx_info` | receive diagnostic | the HAL task owner reads the RSSI byte through the PAC's generated `BtV3_2BasebandRxInfo` read; the rest of the word stays unmodelled |
 | `modem_clock_module_*` | module clock, reset and MAC reset | arbiter modem clock planner; MAC reset in the HAL IEEE 802.15.4 lifecycle |
 | `sleep_retention_*`, `esp_phy_modem_init` | register retention across light sleep | none; the vendor module graph and the gates that hold it are in the [lifecycle reference](ieee802154-lifecycle.md#sleep-retention-and-rf-gating) |
 
@@ -94,14 +94,14 @@ defers every decision to a task cannot meet these deadlines.
 
 `Implemented` means production source owns the complete unit, `partial` that a
 subset exists, and `absent` that no production owner exists. The owner column
-is the layer that holds the unit under the PAC/HAL rule: the PAC performs
-single register transactions, the HAL owns multi-step hardware sequences and
-route state, the driver owns the IEEE 802.15.4 MAC state machine, and portable
+is the layer that holds the unit under the PAC/HAL rule: the PAC provides the
+generated register parts and their field accessors, the HAL performs the
+register transactions and owns multi-step hardware sequences and route state, the driver owns the IEEE 802.15.4 MAC state machine, and portable
 frame semantics belong to the protocol crate.
 
 | ESP-IDF unit | Owner | Coverage |
 | --- | --- | --- |
-| `ieee802154_common_ll.h`: command, event, abort, address, policy, ED, timer, security, pending, status, enhanced-ACK and diagnostic-counter accessors | PAC `ieee802154` | implemented: one typed transaction per accessor on the task register lease, alongside the composite configuration transactions built from the same steps. The diagnostic counters read the sixteen-bit field of `ieee802154_reg.h`; the public struct reads the complete word of the single-counter registers |
+| `ieee802154_common_ll.h`: command, event, abort, address, policy, ED, timer, security, pending, status, enhanced-ACK and diagnostic-counter accessors | HAL `ieee802154::mac` | implemented: one owner operation per accessor over the generated field accessors, alongside the composite configuration transactions built from the same steps. The diagnostic counters read the sixteen-bit field of `ieee802154_reg.h`; the public struct reads the complete word of the single-counter registers |
 | `ieee802154_ll.h` (S31): `IEEE802154_RSSI_COMPENSATION_VALUE` 0, receive sensitivity -104 | driver engine | implemented: RSSI compensation 0; `RECEIVE_SENSITIVITY_DBM` -104, which the engine's `capabilities` publishes in the port's `Ieee802154Capabilities`; this repository has no OpenThread adapter that reports it |
 | `ieee802154_mac_init` / `deinit`, `ieee802154_enable` / `disable` | HAL IEEE 802.15.4 lifecycle, PHY `ieee802154_client`, HAL `ll`, driver engine | partial: arbiter power and module clocks, PHY client and BTBB, MAC reset and masked foundation with the `ieee802154_txon_delay_set` delays; the engine's `mac_init` reinitializes the PIB, applies `ll::mac_init_registers` and clears the receive ring; the operational owners return through a foundation readback. `deinit` writes no MAC register. Interrupt allocation: `esp_intr_alloc(132, 0)` comes last in `mac_init` and `esp_intr_free` first in `mac_deinit`, before BTBB, the PHY client and the modem clock are released; flags 0 select the lowest free level of 1 to 3 (`ESP_INTR_FLAG_LOWMED`, `intr_alloc.c` `get_available_int`), a level-triggered, non-IRAM vector on the calling core. This repository has no radio system that binds source 132 through the esp-hal route adapter at `Priority1` on the calling core after the runtime is installed and quiesces it first on stop; the host comparison pinned the vendor order and a hardware route probe pinned the level retrigger |
 | `ieee802154_pib_*`, `ieee802154_pib_update` | HAL `pib` | implemented: mutable PIB with pending mark, per-channel power resolved through the external level provider, pending mode and `rx_when_idle`; the engine publishes it before each operation |

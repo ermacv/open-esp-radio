@@ -20,10 +20,7 @@ use crate::power::PlatformClockBackend;
 
 use core::fmt;
 
-use oer_esp32s31_pac::{
-    Ieee802154FoundationSnapshot, Ieee802154InterruptSetup, Ieee802154Pti, Ieee802154TaskRegisters,
-    RadioPhyRegisters,
-};
+use oer_esp32s31_pac::RadioPhyRegisters;
 
 use crate::{
     domain::{
@@ -32,14 +29,17 @@ use crate::{
         RadioDomain,
     },
     ieee802154::{
-        backend::Ieee802154PacHal,
+        backend::Ieee802154MacHal,
         lifecycle::{
             Ieee802154FoundationCheckpoint, Ieee802154FoundationFailure as EngineFoundationFailure,
             Ieee802154Lifecycle, Ieee802154LifecycleBackend, Ieee802154ReadbackError,
             Ieee802154ResetCheckpoint, Ieee802154ResetFailure as EngineResetFailure,
             Ieee802154ResetPort, Ieee802154ResetReadback, state as lifecycle_state,
         },
-        mac::{Ieee802154InterruptSetupOwner, Ieee802154TaskOwner},
+        mac::{
+            self, Ieee802154FoundationSnapshot, Ieee802154InterruptSetupOwner, Ieee802154Pti,
+            Ieee802154TaskOwner,
+        },
         policy::{
             Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154MacControl, Ieee802154MacPolicy,
             Ieee802154MacPolicyBackend, Ieee802154MacPolicyCheckpoint,
@@ -53,13 +53,13 @@ use crate::{
 /// The IEEE 802.15.4 partition split into its task and inactive interrupt
 /// halves.
 struct Ieee802154Mac {
-    task: Ieee802154TaskRegisters,
-    interrupts: Ieee802154InterruptSetup,
+    task: Ieee802154TaskOwner,
+    interrupts: Ieee802154InterruptSetupOwner,
 }
 
 impl Ieee802154Mac {
-    fn mac_hal(&mut self) -> Ieee802154PacHal<'_> {
-        Ieee802154PacHal::from_owned(&mut self.task, &mut self.interrupts)
+    fn mac_hal(&mut self) -> Ieee802154MacHal<'_> {
+        Ieee802154MacHal::from_owned(&mut self.task, &self.interrupts)
     }
 }
 
@@ -138,7 +138,7 @@ pub struct Ieee802154Cold {
 impl Ieee802154Cold {
     /// Take the partition of a concurrent split. This performs no MMIO.
     pub fn from_partition(partition: Ieee802154RadioPartition) -> Self {
-        let (task, interrupts) = Ieee802154TaskRegisters::new(partition.into_mac());
+        let (task, interrupts) = mac::split(partition.into_mac());
         Self {
             mac: Ieee802154Mac { task, interrupts },
         }
@@ -147,7 +147,7 @@ impl Ieee802154Cold {
     /// Return the partition. This performs no MMIO.
     pub fn into_partition(self) -> Ieee802154RadioPartition {
         let Ieee802154Mac { task, interrupts } = self.mac;
-        Ieee802154RadioPartition::from_mac(task.into_partition(interrupts))
+        Ieee802154RadioPartition::from_mac(mac::reunite(task, interrupts))
     }
 
     /// Enter common radio power as the IEEE 802.15.4 client.
@@ -320,9 +320,7 @@ pub struct Ieee802154FoundationConfigured {
 
 impl Ieee802154MacPolicyWrites for Ieee802154FoundationConfigured {
     fn set_channel(&mut self, channel: crate::ieee802154::Ieee802154Channel) {
-        self.inner.backend_mut().mac_hal().set_frequency_code(
-            oer_esp32s31_pac::Ieee802154FrequencyCode::new(channel.frequency_code()),
-        );
+        self.inner.backend_mut().mac_hal().set_channel(channel);
     }
 
     fn set_cca_mode(&mut self, mode: Ieee802154CcaMode) {
@@ -600,10 +598,7 @@ impl Ieee802154FoundationConfigured {
     /// its own PIB; both owners return through [`Self::from_operational`].
     pub fn into_operational(self) -> Ieee802154Operational {
         let Ieee802154Mac { task, interrupts } = self.inner.into_backend();
-        Ieee802154Operational {
-            task: Ieee802154TaskOwner::new(task),
-            interrupts: Ieee802154InterruptSetupOwner::new(interrupts),
-        }
+        Ieee802154Operational { task, interrupts }
     }
 
     /// Reunite the quiescent operational owners and prove the foundation
@@ -622,12 +617,9 @@ impl Ieee802154FoundationConfigured {
         operational: Ieee802154Operational,
     ) -> Result<Self, Ieee802154FoundationTransitionFailure> {
         let Ieee802154Operational { task, interrupts } = operational;
-        Ieee802154Lifecycle::resume(Ieee802154Mac {
-            task: task.into_registers(),
-            interrupts: interrupts.into_pac(),
-        })
-        .map(|inner| Self { inner })
-        .map_err(|inner| Ieee802154FoundationTransitionFailure { inner })
+        Ieee802154Lifecycle::resume(Ieee802154Mac { task, interrupts })
+            .map(|inner| Self { inner })
+            .map_err(|inner| Ieee802154FoundationTransitionFailure { inner })
     }
 
     /// Retreat to the clocked owner before releasing the module clocks.

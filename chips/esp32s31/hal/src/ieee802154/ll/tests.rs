@@ -1,90 +1,118 @@
-//! The conversions between the engine's values and the ESP32-S31 PAC types
-//! lose nothing: every named event, abort reason and context survives the
-//! round trip, and an unclassified PAC sample stays unclassified.
+//! The low-level interface over host memory: each accessor reaches the
+//! register its public LL counterpart names, and reads back what it wrote.
+
+use oer_espressif_ieee802154_engine::types::{
+    Ieee802154Event, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
+};
 
 use super::*;
-use std::format;
+use crate::ieee802154::mac::host::{HostMemory, changed};
+use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
 
 #[test]
-fn every_event_and_event_set_reaches_the_pac_unchanged() {
-    for (engine, pac) in EVENTS {
-        assert_eq!(event_into_pac(engine), pac);
-        let observed = event_observation_from_pac(PacEventObservation::from_named(
-            event_mask_into_pac(engine.mask()),
-        ));
-        assert_eq!(observed.classification(), Ok(engine.mask()), "{engine:?}");
+fn each_command_names_its_one_image() {
+    let commands = [
+        (Ieee802154LlCommand::TxStart, Opcode::TxStart),
+        (Ieee802154LlCommand::RxStart, Opcode::RxStart),
+        (Ieee802154LlCommand::CcaTxStart, Opcode::CcaTxStart),
+        (Ieee802154LlCommand::EdStart, Opcode::EdStart),
+        (Ieee802154LlCommand::Stop, Opcode::Stop),
+    ];
+    for (command, image) in commands {
+        assert_eq!(opcode(command), image);
     }
-    let all = event_mask_into_pac(Ieee802154EventMask::NAMED);
-    assert_eq!(
-        event_observation_from_pac(PacEventObservation::from_named(all)).classification(),
-        Ok(Ieee802154EventMask::NAMED)
-    );
-}
-
-/// Each PAC reason maps to the engine reason of the same name.
-#[test]
-fn abort_reasons_map_by_name() {
-    use PacRxAbortReason as R;
-    for reason in [
-        R::RxStop,
-        R::SfdTimeout,
-        R::CrcError,
-        R::InvalidLength,
-        R::FilterFail,
-        R::NoRss,
-        R::CoexistenceBreak,
-        R::UnexpectedAck,
-        R::RxRestart,
-        R::TxAckTimeout,
-        R::TxAckStop,
-        R::TxAckCoexistenceBreak,
-        R::EnhancedAckSecurityError,
-        R::EdAbort,
-        R::EdStop,
-        R::EdCoexistenceReject,
-    ] {
-        let converted = rx_abort_reason_from_pac(PacRxAbortReasonObservation::Named(reason));
-        assert_eq!(format!("{converted:?}"), format!("Named({reason:?})"));
-    }
-    use PacTxAbortReason as T;
-    for reason in [
-        T::RxAckStop,
-        T::RxAckSfdTimeout,
-        T::RxAckCrcError,
-        T::RxAckInvalidLength,
-        T::RxAckFilterFail,
-        T::RxAckNoRss,
-        T::RxAckCoexistenceBreak,
-        T::RxAckTypeNotAck,
-        T::RxAckRestart,
-        T::RxAckTimeout,
-        T::TxStop,
-        T::TxCoexistenceBreak,
-        T::TxSecurityError,
-        T::CcaFailed,
-        T::CcaBusy,
-    ] {
-        let converted = tx_abort_reason_from_pac(PacTxAbortReasonObservation::Named(reason));
-        assert_eq!(format!("{converted:?}"), format!("Named({reason:?})"));
-    }
-    assert_eq!(
-        rx_abort_reason_from_pac(PacRxAbortReasonObservation::Unclassified),
-        Ieee802154RxAbortReasonObservation::Unclassified
-    );
-    assert_eq!(
-        tx_abort_reason_from_pac(PacTxAbortReasonObservation::Unclassified),
-        Ieee802154TxAbortReasonObservation::Unclassified
-    );
+    assert_eq!(timer_start(Ieee802154Timer::Timer0), Opcode::Timer0Start);
+    assert_eq!(timer_stop(Ieee802154Timer::Timer0), Opcode::Timer0Stop);
+    assert_eq!(timer_start(Ieee802154Timer::Timer1), Opcode::Timer1Start);
+    assert_eq!(timer_stop(Ieee802154Timer::Timer1), Opcode::Timer1Stop);
 }
 
 #[test]
-fn multipan_state_round_trips() {
-    for bits in 0..16u8 {
-        let bit = |n: u8| bits & (1 << n) != 0;
-        let state = Ieee802154MultipanEnableState::new(bit(0), bit(1), bit(2), bit(3));
-        assert_eq!(
-            multipan_state_from_pac(multipan_state_into_pac(state)),
-            state
-        );
+fn a_timer_threshold_is_written_whole() {
+    let before = HostMemory::filled(0);
+    let mut memory = HostMemory::filled(0);
+    {
+        let (mut task, _setup) = memory.owners();
+        task.set_timer1_threshold(0x8765_4321);
     }
+    assert_eq!(changed(&before.mac, &memory.mac), [0x8765_4321]);
+}
+
+#[test]
+fn the_pib_accessors_read_back_what_they_write() {
+    let mut memory = HostMemory::filled(0);
+    let (mut task, setup) = memory.owners();
+    let interrupts = setup.activate(&mut task);
+    let mut owners = Ieee802154MacOwners::new(task, interrupts);
+
+    owners.set_tx_auto_ack(true);
+    owners.set_rx_auto_ack(true);
+    owners.set_tx_enhanced_ack(true);
+    owners.set_pending_mode(true);
+    assert!(owners.tx_auto_ack() && owners.rx_auto_ack());
+    assert!(owners.tx_enhanced_ack() && owners.pending_mode());
+    owners.set_rx_auto_ack(false);
+    assert!(owners.tx_auto_ack() && !owners.rx_auto_ack());
+
+    let channel = Ieee802154Channel::new(26).expect("standard channel");
+    owners.set_channel(channel);
+    assert_eq!(owners.frequency_code(), channel.frequency_code());
+    owners.set_ack_timeout(0x1234);
+    assert_eq!(owners.ack_timeout(), 0x1234);
+
+    let context = Ieee802154MultipanIndex::CONTEXT1;
+    owners.set_multipan_panid(context, 0xface);
+    assert_eq!(owners.multipan_panid(context), 0xface);
+    assert_eq!(
+        owners.multipan_enable(),
+        Ieee802154MultipanEnableState::new(false, true, false, false)
+    );
+    owners.set_multipan_enable(Ieee802154MultipanEnableState::ALL);
+    assert_eq!(owners.multipan_enable(), Ieee802154MultipanEnableState::ALL);
+
+    let (mut task, interrupts) = owners.into_parts();
+    let _setup = interrupts.deactivate(&mut task);
+}
+
+#[test]
+fn disabling_coexistence_writes_the_disabled_priority_to_both_fields() {
+    let mut memory = HostMemory::filled(u32::MAX);
+    let (mut task, setup) = memory.owners();
+    let interrupts = setup.activate(&mut task);
+    let mut owners = Ieee802154MacOwners::new(task, interrupts);
+    owners.disable_coex();
+    let pti = owners.task.mac_part().read_coex_pti();
+    assert_eq!(pti.txrx_pti().get(), u32::from(COEX_DISABLED_PTI));
+    assert_eq!(pti.ack_pti().get(), u32::from(COEX_DISABLED_PTI));
+    assert!(
+        pti.close_rf_sel(),
+        "the register's other fields keep their value"
+    );
+
+    let shared = CoexPti::new(9).expect("four-bit priority");
+    owners.set_txrx_pti(shared);
+    assert_eq!(owners.task.mac_part().read_coex_pti().txrx_pti().get(), 9);
+
+    let (mut task, interrupts) = owners.into_parts();
+    let _setup = interrupts.deactivate(&mut task);
+}
+
+#[test]
+fn an_event_enable_reaches_only_its_event() {
+    let mut memory = HostMemory::filled(0);
+    let (mut task, setup) = memory.owners();
+    let interrupts = setup.activate(&mut task);
+    let mut owners = Ieee802154MacOwners::new(task, interrupts);
+    owners.disable_event(Ieee802154Event::TxDone);
+    owners.enable_event(Ieee802154Event::Timer0Overflow);
+    let events = owners.task.mac_part().read_event_enable();
+    assert!(!events.tx_done() && events.rx_done());
+    assert!(events.timer0_overflow() && !events.clock_count_match());
+
+    owners.enable_all_events();
+    let events = owners.task.mac_part().read_event_enable();
+    assert!(events.tx_done() && events.events_7() && events.events_13());
+
+    let (mut task, interrupts) = owners.into_parts();
+    let _setup = interrupts.deactivate(&mut task);
 }

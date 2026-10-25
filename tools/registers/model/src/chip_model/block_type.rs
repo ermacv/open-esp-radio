@@ -336,6 +336,14 @@ fn check_register(
         }
         taken.push((field_mask, field.name.as_str()));
         check_values(field, field_width).map_err(fail)?;
+        for value in &field.values {
+            if !value.sources.is_empty() {
+                context.sources(&field_entity, &value.sources)?;
+            }
+        }
+        if let Some(range) = &field.value_range {
+            context.sources(&field_entity, &range.sources)?;
+        }
     }
 
     if let Some(reserved) = &register.reserved {
@@ -461,6 +469,21 @@ fn check_values(field: &Field, width: u32) -> Result<(), ErrorKind> {
                 "value {} ({:#x}) is wider than the field",
                 value.name, value.value
             ));
+        }
+    }
+    if let Some(range) = &field.value_range {
+        if range.min > range.max || !fits(range.max, width) {
+            return invalid("value-range is reversed or wider than the field".to_owned());
+        }
+        if field
+            .values
+            .iter()
+            .any(|value| value.value < range.min || value.value > range.max)
+            || field
+                .write_range
+                .is_some_and(|write| write.min < range.min || write.max > range.max)
+        {
+            return invalid("named values and write-range must lie inside value-range".to_owned());
         }
     }
     let constrained = field.write_range.is_some() || field.write_values_only;

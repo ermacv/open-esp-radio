@@ -22,8 +22,8 @@
 //! air time.
 
 use oer_esp32s31_pac::{
-    BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, BluetoothTaskRegisters, Ieee802154TaskRegisters,
-    RadioPhyRegisters, SharedRadioRegisters, WifiRadioRegisters,
+    BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, BluetoothTaskRegisters, RadioPhyRegisters,
+    SharedRadioRegisters, WifiRadioRegisters,
 };
 
 pub use crate::clock::{
@@ -48,6 +48,7 @@ pub use crate::power::{
 };
 use crate::{
     clock::CommonRadioPower,
+    ieee802154::mac::Ieee802154TaskOwner,
     owner::{PhyRegistrationEpoch, SharedPhyHal, route},
     phy::restore::PhyRouteState,
 };
@@ -82,15 +83,15 @@ impl sealed::RadioClientOwner for BluetoothTaskRegisters {}
 impl RadioClientOwner for BluetoothTaskRegisters {
     type Client = BluetoothClient;
 }
-impl sealed::RadioClientOwner for Ieee802154TaskRegisters {}
-impl RadioClientOwner for Ieee802154TaskRegisters {
+impl sealed::RadioClientOwner for Ieee802154TaskOwner {}
+impl RadioClientOwner for Ieee802154TaskOwner {
     type Client = Ieee802154Client;
 }
 
 /// Protocol register owner that may use the shared BTBB baseband.
 pub trait BtbbClientOwner: RadioClientOwner {}
 impl BtbbClientOwner for BluetoothTaskRegisters {}
-impl BtbbClientOwner for Ieee802154TaskRegisters {}
+impl BtbbClientOwner for Ieee802154TaskOwner {}
 
 /// Why a client cannot take, leave or use the shared BTBB baseband.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

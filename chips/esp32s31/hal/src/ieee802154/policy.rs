@@ -12,15 +12,14 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-use oer_esp32s31_pac::{
-    Ieee802154AckTimeoutUnits as PacAckTimeoutUnits, Ieee802154CcaMode as PacCcaMode,
-    Ieee802154FoundationSnapshot, Ieee802154MacControl as PacMacControl,
-    Ieee802154MacPolicySnapshot as PacMacPolicySnapshot,
-    Ieee802154MultipanEnableState as PacMultipanEnableState,
-    Ieee802154MultipanIndex as PacMultipanIndex, Ieee802154PanIdentity as PacPanIdentity,
+use oer_espressif_ieee802154_engine::types::{
+    Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
 };
 
-use crate::ieee802154::lifecycle::{COEX_DISABLED_PTI, Ieee802154Channel, Ieee802154ReadbackError};
+use crate::ieee802154::{
+    lifecycle::{COEX_DISABLED_PTI, Ieee802154Channel, Ieee802154ReadbackError},
+    mac::Ieee802154FoundationSnapshot,
+};
 
 /// Hardware quantum used by the source-confirmed vendor ACK-timeout conversion.
 pub const IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS: u32 = 16;
@@ -91,33 +90,9 @@ impl Ieee802154AckTimeout {
     pub const fn effective_microseconds(self) -> u32 {
         self.units as u32 * IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS
     }
-
-    pub(crate) const fn into_pac(self) -> PacAckTimeoutUnits {
-        PacAckTimeoutUnits::new(self.units)
-    }
 }
 
 pub use oer_espressif_ieee802154_engine::types::Ieee802154CcaMode;
-
-/// The PAC mode of a chip-neutral CCA mode.
-pub(crate) const fn cca_mode_into_pac(mode: Ieee802154CcaMode) -> PacCcaMode {
-    match mode {
-        Ieee802154CcaMode::Carrier => PacCcaMode::Carrier,
-        Ieee802154CcaMode::EnergyDetection => PacCcaMode::EnergyDetection,
-        Ieee802154CcaMode::CarrierOrEnergyDetection => PacCcaMode::CarrierOrEnergyDetection,
-        Ieee802154CcaMode::CarrierAndEnergyDetection => PacCcaMode::CarrierAndEnergyDetection,
-    }
-}
-
-/// The chip-neutral CCA mode of a PAC mode.
-const fn cca_mode_from_pac(value: PacCcaMode) -> Ieee802154CcaMode {
-    match value {
-        PacCcaMode::Carrier => Ieee802154CcaMode::Carrier,
-        PacCcaMode::EnergyDetection => Ieee802154CcaMode::EnergyDetection,
-        PacCcaMode::CarrierOrEnergyDetection => Ieee802154CcaMode::CarrierOrEnergyDetection,
-        PacCcaMode::CarrierAndEnergyDetection => Ieee802154CcaMode::CarrierAndEnergyDetection,
-    }
-}
 
 /// Source-confirmed automatic-ACK and address-filter control policy.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -181,28 +156,6 @@ impl Ieee802154MacControl {
     pub const fn enhanced_pending(self) -> bool {
         self.enhanced_pending
     }
-
-    pub(crate) const fn into_pac(self) -> PacMacControl {
-        PacMacControl::new(
-            self.tx_auto_ack,
-            self.rx_auto_ack,
-            self.enhanced_ack_tx,
-            self.coordinator,
-            self.promiscuous,
-            self.enhanced_pending,
-        )
-    }
-
-    const fn from_pac(value: PacMacControl) -> Self {
-        Self::new(
-            value.tx_auto_ack(),
-            value.rx_auto_ack(),
-            value.enhanced_ack_tx(),
-            value.coordinator(),
-            value.promiscuous(),
-            value.enhanced_pending(),
-        )
-    }
 }
 
 /// Address-filter identity for the primary PAN context.
@@ -237,18 +190,6 @@ impl Ieee802154PanIdentity {
     /// Return the primary extended address in public byte order.
     pub const fn extended_address(self) -> [u8; 8] {
         self.extended_address
-    }
-
-    pub(crate) const fn into_pac(self) -> PacPanIdentity {
-        PacPanIdentity::new(self.pan_id, self.short_address, self.extended_address)
-    }
-
-    const fn from_pac(value: PacPanIdentity) -> Self {
-        Self::new(
-            value.pan_id(),
-            value.short_address(),
-            value.extended_address(),
-        )
     }
 }
 
@@ -392,20 +333,29 @@ pub(crate) struct Ieee802154MacPolicySnapshot {
     cca_threshold_code: i8,
     ack_timeout: Ieee802154AckTimeout,
     control: Ieee802154MacControl,
-    multipan_enable_state: PacMultipanEnableState,
+    multipan_enable_state: Ieee802154MultipanEnableState,
     identity: Ieee802154PanIdentity,
 }
 
 impl Ieee802154MacPolicySnapshot {
-    pub(crate) const fn from_pac(snapshot: PacMacPolicySnapshot) -> Self {
+    /// One readback, as the registers report it.
+    pub(crate) const fn new(
+        frequency_code: u8,
+        cca_mode: Ieee802154CcaMode,
+        cca_threshold_code: i8,
+        ack_timeout: Ieee802154AckTimeout,
+        control: Ieee802154MacControl,
+        multipan_enable_state: Ieee802154MultipanEnableState,
+        identity: Ieee802154PanIdentity,
+    ) -> Self {
         Self {
-            frequency_code: snapshot.frequency_code().value(),
-            cca_mode: cca_mode_from_pac(snapshot.cca_mode()),
-            cca_threshold_code: snapshot.cca_threshold_code(),
-            ack_timeout: Ieee802154AckTimeout::from_units(snapshot.ack_timeout().value()),
-            control: Ieee802154MacControl::from_pac(snapshot.control()),
-            multipan_enable_state: snapshot.multipan_enable_state(),
-            identity: Ieee802154PanIdentity::from_pac(snapshot.identity()),
+            frequency_code,
+            cca_mode,
+            cca_threshold_code,
+            ack_timeout,
+            control,
+            multipan_enable_state,
+            identity,
         }
     }
 
@@ -419,7 +369,7 @@ impl Ieee802154MacPolicySnapshot {
             control: policy.control,
             // Context zero must be enabled; unrelated enabled contexts are
             // deliberately retained and accepted by policy verification.
-            multipan_enable_state: PacMultipanEnableState::new(true, false, true, false),
+            multipan_enable_state: Ieee802154MultipanEnableState::new(true, false, true, false),
             identity: policy.identity,
         }
     }
@@ -447,7 +397,7 @@ impl Ieee802154MacPolicySnapshot {
         self.control
     }
 
-    pub(crate) const fn multipan_enable_state(self) -> PacMultipanEnableState {
+    pub(crate) const fn multipan_enable_state(self) -> Ieee802154MultipanEnableState {
         self.multipan_enable_state
     }
 
@@ -643,7 +593,7 @@ fn verify_mac_policy_snapshot(
         Ieee802154MacPolicyCheckpoint::PrimaryPanEnabled,
         snapshot
             .multipan_enable_state
-            .contains(PacMultipanIndex::CONTEXT0),
+            .contains(Ieee802154MultipanIndex::CONTEXT0),
     )?;
     verify(
         Ieee802154MacPolicyCheckpoint::PanId,

@@ -137,6 +137,77 @@ held = ["BUSY"]
 sources = ["IDF_TIMG_REG_H"]
 ```
 
+Hardware pointer and complete value-domain facts belong to the field in its
+block type. Ownership policy names these facts; it carries no second encoding
+or value list. A domain narrower than an entire field's representable range
+remains in policy/HAL.
+
+```toml
+[[registers.fields]]
+name = "HEAD"
+bits = "19:0"
+class = "plain"
+pointer = { points-to = "DMA_DESCRIPTOR", placement = "dma-window", encoding = { width = 20, shift = 2 }, sources = ["DMA_HEADER"] }
+
+[[registers.fields]]
+name = "PRIORITY"
+bits = "23:20"
+class = "plain"
+value-range = { min = 0, max = 15, sources = ["DMA_HEADER"] }
+
+[[registers.fields]]
+name = "ENABLED"
+bits = "24"
+class = "plain"
+values = [
+    { name = "DISABLED", value = 0, sources = ["DMA_HEADER"] },
+    { name = "ENABLED", value = 1, sources = ["DMA_HEADER"] },
+]
+write-values-only = true
+```
+
+A `pointer` targets a root-included word or array layout (`points-to`) or,
+without `points-to`, raw byte storage in its `placement` RAM region. The
+region's address and size live only in root `[[ram-regions]]`. A layout target
+is placed in that region alone. Optional `member-offset` lies inside it.
+`encoding.width` equals the field width; `shift` omits aligned low address
+bits. Their sum is at most 32. Target alignment and member offset preserve
+all omitted low bits. The region fits one fixed high-address prefix, obtained
+from its base, and a 32-bit address space. Thus a BLE word index uses width
+20 and shift 2 without repeating an SRAM prefix. A full pointer uses width
+32 and shift 0. A raw buffer pointer has shift zero and no member offset.
+
+`low-bits = true` identifies an unshifted partial address (width below 32).
+Its optional `high-field = "REGISTER.FIELD"` names a field in the same type
+supplying the remaining high bits, as with the Wi-Fi RX descriptor window.
+The high field is readable and, for a writable pointer, plain. The Wi-Fi TX
+queue head instead obtains its prefix from the placement region. Pointer
+fields are plain, write-only or read-only and have no numeric domain or write
+constraint; a read-only pointer describes an observation, not publication.
+
+`value-range` is an inclusive hardware domain for reads and writes, including
+read-only fields. Its bounds fit the field and it has its own sources. Named
+encodings use the existing `values`; each value may cite its own sources,
+otherwise the field's resolved review supplies them. `write-values-only`
+restricts writes to those encodings. Existing `write-range` constraints and
+named values must lie inside a declared `value-range`.
+
+Type-local `[[interrupt-pairs]]` state `status`, `clear` and `sources`.
+Both register keys exist, have matching widths, repetition and field lanes;
+status reads without side effects and clear holds only W1C or write-trigger
+fields. A status has one clear; several status views may share a clear word.
+For example:
+
+```toml
+[[interrupt-pairs]]
+status = "IRQ_STATUS_0"
+clear = "IRQ_CLEAR_0"
+sources = ["BT_IRQ_SOURCE"]
+```
+
+Loading validates these facts even for a type with no instance or no policy
+operation, reporting the type file and field/pair that breaks the rule.
+
 Every field has one `class` from a closed set. The class alone fixes what a
 read and a write do; there is no separate access key.
 
@@ -645,9 +716,16 @@ A part with any flag, `observes` or `triggers` has a `description` and
 `sources`. Partitions have unique names and members, a description and at
 least one part; a part selects at least one word.
 
-Domains (`flag-domains`, `enum-domains`, `bounded-domains`,
-`opaque-domains`, `bitwise-composed-domains`) keep their schema-5 shape;
-an opaque or bitwise-composed domain names its `register` and is used on
+Policy domains (`flag-domains`, `enum-domains`, `bounded-domains`,
+`opaque-domains`, `bitwise-composed-domains`) retain operation-specific inputs.
+A `[[field-domains]]` entry names `name` (the policy's UpperCamelCase name)
+and `field` (`INSTANCE.REGISTER.FIELD`, including templates), with an optional
+policy `description`: it refers to the type's `value-range` or `values`
+without copying them. Enum references may state `left-shift` for masked
+register input images (for example, the TSENS clock-enable bit at position
+30); the shift stays below 32 and loses no enum bit. Bounded references are
+unshifted. All transaction validation uses the referenced domain.
+An opaque or bitwise-composed domain names its `register` and is used on
 it alone. Transactions name `INSTANCE.REGISTER` and
 `INSTANCE.REGISTER.FIELD` of the root, a template key for every element
 (`MODEM_ETM.CH%s_EVENT.ID`), and take no `peripheral` or `exposure`. The
@@ -673,8 +751,8 @@ What a transaction may reach follows the field class and the word:
 The shapes and inputs:
 
 - a `full-register-write` names its word's one 32-bit field and takes a
-  `domain`, a `points-to` layout (a word or array layout placed in
-  `dma-window` alone) or `placement = "dma-window"`; a
+  `domain` or `pointer = true` referring to that field's type-level pointer
+  fact; a
   `full-register-read` names one element's one 32-bit field and an opaque
   domain or a bounded one of every `u32`; a signed `field-read` reads an
   8-, 16- or 32-bit field;
@@ -698,20 +776,19 @@ The shapes and inputs:
   with their own sources. The bits grant no setter and no
   read-modify-write; no other kind takes them.
 
-A **pointer field** (`pointer-fields`: `plain` or `write-only`, as wide
-as its encoding: 32 bits plain, 20 `ble-compressed`, below 32
-`low-bits`; no named values or write constraint; `points-to` a layout in
-`dma-window` alone, `member-offset` inside it and, compressed, a multiple
-of four) is set only from the image of a typed DMA reference: by its
-declaration, by a `field-or-modifies` or `field-replace-modifies` of that
-one field from input bit zero with neither `domain` nor `value`, by a
-`zero-based-field-write` of its image, or to zero (a write from zero, a
-replace with `value = 0`). An **address field** (the field of a
-full-register write with `points-to` or `placement`) is set only by that
-write or to zero by a write from zero. No other transaction sets a bit of
-either: no fixed image, masked modify, bit modify, indexed bit set,
-sampled bit or integer full write. Template and element spellings of a
-field are the same field.
+A policy `pointer-fields` entry contains only `name`, `field` and `sources`:
+a typed pointer-image operation referencing the field's hardware fact. It
+names a plain or write-only pointer. Neither this entry nor a full-register
+write may redeclare `points-to`, `placement`, `encoding` or `member-offset`.
+
+Every hardware pointer field is protected, including those with no pointer
+operation in policy. It is set only from a typed reference image, by a
+`field-or-modifies` or `field-replace-modifies` of one field from input bit
+zero with neither `domain` nor `value`, a `zero-based-field-write` of its
+image, or to zero. A field exposed by a full-register pointer write is set
+only by that write or to zero by a write from zero. No fixed image, masked
+modify, indexed bit set, sampled bit or integer full write may forge either
+kind of address. Template and element spellings denote the same lanes.
 
 A field's `write-range` or `write-values-only` bounds every transaction:
 every lane of a fixed image or step, and the zero a write from zero

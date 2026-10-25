@@ -22,6 +22,8 @@ pub struct PolicyFile {
     #[serde(default)]
     pub enum_domains: Vec<EnumDomain>,
     #[serde(default)]
+    pub field_domains: Vec<FieldDomain>,
+    #[serde(default)]
     pub bounded_domains: Vec<BoundedDomain>,
     #[serde(default)]
     pub opaque_domains: Vec<OpaqueDomain>,
@@ -290,47 +292,39 @@ pub struct PartitionImageRead {
     pub sources: Vec<String>,
 }
 
-/// A write of the whole word from zero with one field's typed value:
-/// exactly one of `domain`, `points-to` and `placement`.
+/// A policy name for a complete value domain declared by a hardware field.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct FieldDomain {
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub field: String,
+    /// Position of enum images in a masked register input.
+    #[serde(default)]
+    pub left_shift: u8,
+}
+
+/// A write of the whole word from zero, using a domain or its field's pointer fact.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct FullRegisterWrite {
     pub name: String,
-    /// `INSTANCE.REGISTER.FIELD`.
     pub field: String,
     #[serde(default)]
     pub domain: Option<String>,
-    /// A memory layout of the root: the value is a DMA reference to it.
     #[serde(default)]
-    pub points_to: Option<String>,
-    /// A RAM region of the root: the value is a buffer address in it.
-    #[serde(default)]
-    pub placement: Option<String>,
+    pub pointer: bool,
     pub sources: Vec<String>,
 }
 
-/// A field set only from the image of a typed DMA reference.
+/// A typed pointer-image operation over the field's hardware pointer fact.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct PointerField {
     pub name: String,
-    /// `INSTANCE.REGISTER.FIELD`.
     pub field: String,
-    pub points_to: String,
-    #[serde(default)]
-    pub member_offset: u32,
-    #[serde(default)]
-    pub encoding: Option<PointerEncoding>,
     pub sources: Vec<String>,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "kebab-case")]
-pub enum PointerEncoding {
-    /// Nonzero 20-bit word index under the 0x2f SRAM prefix.
-    BleCompressed,
-    /// The address's low bits, as wide as the field.
-    LowBits,
 }
 
 /// A write from zero of `fields` of one register.

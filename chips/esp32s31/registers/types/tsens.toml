@@ -155,6 +155,8 @@ name = "POWER_UP"
 bits = "22"
 class = "plain"
 description = "Temperature sensor power up. Temperature-sensor power control set by complete ROM phy_set_tsens_power_."
+values = [{ name = "DISABLED", value = 0x0, description = "Bit twenty-two cleared by complete ROM phy_set_tsens_power_ for argument zero.", sources = ["ROM_REV0_PHY_TSENS"] }, { name = "ENABLED", value = 0x1, description = "Bit twenty-two set by complete ROM phy_set_tsens_power_.", sources = ["ROM_REV0_PHY_TSENS", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "POWER_UP_FORCE"

@@ -1,13 +1,13 @@
 #![no_std]
-use oer_esp32s31_pac::Ieee802154RegisterLease;
 use oer_esp32s31_hal::layouts::DmaWindowAddress;
+use oer_esp32s31_pac::ieee802154_mac::Ieee802154MacTask;
 
-pub fn publish(lease: &mut Ieee802154RegisterLease<'_>, address: DmaWindowAddress, raw: u32) {
-    lease.publish_transmit_dma_address(address);
-    lease.publish_receive_dma_address(address);
+pub fn publish(mac: &mut Ieee802154MacTask, address: DmaWindowAddress, raw: u32) {
+    mac.write_tx_dma_address(address);
+    mac.write_rx_dma_address(address);
     #[cfg(ui_reject)]
-    lease.publish_transmit_dma_address(raw); // ui-error: E0308
+    mac.write_tx_dma_address(raw); // ui-error: E0308
     #[cfg(ui_reject)]
-    lease.publish_receive_dma_address(raw); // ui-error: E0308
+    mac.write_rx_dma_address(raw); // ui-error: E0308
     let _ = raw;
 }

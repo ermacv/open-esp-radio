@@ -1,6 +1,6 @@
 use std::vec::Vec;
 
-use oer_esp32s31_pac::{Ieee802154FoundationSnapshot, Ieee802154Pti};
+use crate::ieee802154::mac::{Ieee802154FoundationSnapshot, Ieee802154Pti};
 
 use super::{
     COEX_DISABLED_PTI, Ieee802154FoundationCheckpoint, Ieee802154Lifecycle,

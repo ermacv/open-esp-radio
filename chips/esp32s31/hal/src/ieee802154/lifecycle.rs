@@ -13,7 +13,7 @@
 
 use core::marker::PhantomData;
 
-use oer_esp32s31_pac::{Ieee802154FoundationSnapshot, Ieee802154Pti};
+use crate::ieee802154::mac::{Ieee802154FoundationSnapshot, Ieee802154Pti};
 
 /// PTI value used by the public vendor LL when coexistence is disabled.
 pub(crate) const COEX_DISABLED_PTI: u8 = 3;
@@ -275,10 +275,8 @@ where
         self.backend.mask_all_rx_aborts();
         self.backend.mask_all_tx_aborts();
         self.backend.select_average_ed_sampling();
-        let disabled_pti = Ieee802154Pti::new(COEX_DISABLED_PTI)
-            .expect("reviewed coexistence-disabled PTI fits five bits");
-        self.backend.set_txrx_pti(disabled_pti);
-        self.backend.set_ack_pti(disabled_pti);
+        self.backend.set_txrx_pti(Ieee802154Pti::COEX_DISABLED);
+        self.backend.set_ack_pti(Ieee802154Pti::COEX_DISABLED);
         self.backend.apply_txon_delay();
         self.backend.order_device_accesses();
 

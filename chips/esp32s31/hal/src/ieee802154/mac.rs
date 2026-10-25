@@ -1,147 +1,274 @@
 //! Driver-facing owners of the dedicated IEEE 802.15.4 MAC registers.
 //!
+//! The PAC hands the IEEE 802.15.4 partition over as its generated parts
+//! ([`Ieee802154Partition`]): the MAC block, the modem ETM's channels zero
+//! and one and the shared baseband's receive-information read. This module
+//! splits the MAC into its generated task and interrupt sides and gives each
+//! owner the register operations of the pinned public LL
+//! (`ieee802154_common_ll.h`), written over the parts' field accessors:
+//!
+//! - `EVENT_STATUS` is written only by acknowledging a sample of it, so an
+//!   event raised after the sample stays latched;
+//! - the ETM channel-enable set and clear words are written only by their
+//!   channels' trigger strobes;
+//! - the frame-buffer address registers take only a `DmaWindowAddress`;
+//! - the interrupt side holds `EVENT_STATUS` and reads the RX/TX status and
+//!   ED result words; the task side holds every other register.
+//!
 //! The task owner and the active interrupt owner together drive the MAC
 //! through the [`ll`](crate::ieee802154::ll) backend. The interrupt owners
-//! expose the reviewed activation and teardown transitions. None of these types can be
-//! constructed outside the HAL: `Ieee802154FoundationConfigured::into_operational`
-//! hands them out and `Ieee802154FoundationConfigured::from_operational`
-//! takes both back, so they never exist apart from their partition. Commands and policy use
-//! the HAL's semantic vocabulary; only the interrupt event vocabulary, which
-//! has no HAL counterpart, is re-exported here.
+//! expose the activation and teardown transitions. None of these types can
+//! be constructed outside the HAL:
+//! `Ieee802154FoundationConfigured::into_operational` hands them out and
+//! `Ieee802154FoundationConfigured::from_operational` takes both back, so
+//! they never exist apart from their partition.
+//!
+//! Each owner is generic over where its blocks lie; production uses the
+//! chip's addresses, host tests host memory.
+
+#![forbid(unsafe_code)]
 
 use oer_esp32s31_pac::{
-    Ieee802154InterruptRegisters as PacInterruptRegisters,
-    Ieee802154InterruptSetup as PacInterruptSetup, Ieee802154RegisterLease as PacRegisterLease,
-    Ieee802154TaskRegisters as PacTaskRegisters,
+    Ieee802154Partition, bt_v3_2_baseband,
+    bt_v3_2_baseband::BtV3_2BasebandRxInfo,
+    ieee802154_mac,
+    ieee802154_mac::{Ieee802154Mac, Ieee802154MacIrq, Ieee802154MacTask},
+    modem_etm,
+    modem_etm::ModemEtmIeee802154,
 };
-
-pub use oer_esp32s31_pac::{
-    Ieee802154Event, Ieee802154EventMask, Ieee802154EventObservation,
-    Ieee802154EventObservationError, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
-    Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation,
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154InterruptActivationPlan, Ieee802154InterruptTransitionPort,
+    execute_interrupt_activation, execute_interrupt_deactivation,
 };
+use oer_mmio::{Fixed, Placement};
 
-use crate::ieee802154::{
-    lifecycle::Ieee802154Channel,
-    policy::{
-        Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154MacControl, Ieee802154MacPolicyWrites,
-        Ieee802154PanIdentity,
-    },
-};
+mod etm;
+mod interrupt;
+mod task;
 
-/// Exclusive task-side owner of the IEEE 802.15.4 MAC registers.
+pub use task::Ieee802154PowerSequence;
+pub(crate) use task::{Ieee802154FoundationSnapshot, Ieee802154Pti};
+
+/// Where the chip places the IEEE 802.15.4 MAC block.
+pub type MacPlacement = Fixed<{ ieee802154_mac::BASE }>;
+
+/// Where the chip places the modem ETM block.
+pub type EtmPlacement = Fixed<{ modem_etm::BASE }>;
+
+/// Where the chip places the shared BTBB baseband block.
+pub type RxInfoPlacement = Fixed<{ bt_v3_2_baseband::BASE }>;
+
+/// Exclusive task-side owner of the IEEE 802.15.4 MAC registers: every MAC
+/// register but `EVENT_STATUS`, the ETM channels zero and one and the
+/// baseband's receive-information read.
 ///
 /// Every operation is expressed in the HAL's semantic vocabulary; drivers
-/// never name a register-level value type.
+/// never name a register-level value.
 #[must_use = "the IEEE 802.15.4 task owner must be returned to its foundation owner"]
-pub struct Ieee802154TaskOwner {
-    registers: PacTaskRegisters,
+pub struct Ieee802154TaskOwner<
+    P: Placement = MacPlacement,
+    E: Placement = EtmPlacement,
+    B: Placement = RxInfoPlacement,
+> {
+    mac: Ieee802154MacTask<P>,
+    etm: ModemEtmIeee802154<E>,
+    rx_info: BtV3_2BasebandRxInfo<B>,
 }
 
-impl Ieee802154TaskOwner {
-    pub(crate) const fn new(registers: PacTaskRegisters) -> Self {
-        Self { registers }
-    }
-
-    pub(crate) fn into_registers(self) -> PacTaskRegisters {
-        self.registers
-    }
-
-    /// Borrow the PAC task lease for one low-level accessor.
-    pub(crate) fn lease(&mut self) -> PacRegisterLease<'_> {
-        self.registers.ieee802154_register_lease()
-    }
-}
-
-impl Ieee802154MacPolicyWrites for Ieee802154TaskOwner {
-    fn set_channel(&mut self, channel: Ieee802154Channel) {
-        self.registers
-            .ieee802154_register_lease()
-            .set_frequency_code(oer_esp32s31_pac::Ieee802154FrequencyCode::new(
-                channel.frequency_code(),
-            ));
-    }
-
-    fn set_cca_mode(&mut self, mode: Ieee802154CcaMode) {
-        self.registers
-            .ieee802154_register_lease()
-            .set_cca_mode(crate::ieee802154::policy::cca_mode_into_pac(mode));
-    }
-
-    fn set_cca_threshold_code(&mut self, threshold: i8) {
-        self.registers
-            .ieee802154_register_lease()
-            .set_cca_threshold_code(threshold);
-    }
-
-    fn set_mac_control(&mut self, control: Ieee802154MacControl) {
-        self.registers
-            .ieee802154_register_lease()
-            .set_mac_control(control.into_pac());
-    }
-
-    fn set_ack_timeout(&mut self, timeout: Ieee802154AckTimeout) {
-        self.registers
-            .ieee802154_register_lease()
-            .set_ack_timeout(timeout.into_pac());
-    }
-
-    fn set_primary_pan_identity(&mut self, identity: Ieee802154PanIdentity) {
-        self.registers
-            .ieee802154_register_lease()
-            .set_primary_pan_identity(identity.into_pac());
-    }
-
-    fn order_device_accesses(&mut self) {
-        self.registers.order_device_accesses();
-    }
-}
-
-/// Inactive IEEE 802.15.4 interrupt ownership.
+/// Inactive IEEE 802.15.4 interrupt ownership: the MAC's interrupt side
+/// while no handler holds it.
 #[must_use = "the inactive IEEE 802.15.4 interrupt owner must be returned to its foundation owner"]
-pub struct Ieee802154InterruptSetupOwner {
-    registers: PacInterruptSetup,
-}
-
-impl Ieee802154InterruptSetupOwner {
-    pub(crate) const fn new(registers: PacInterruptSetup) -> Self {
-        Self { registers }
-    }
-
-    pub(crate) fn into_pac(self) -> PacInterruptSetup {
-        self.registers
-    }
-
-    /// Install the reviewed event/abort baseline, acknowledge one stale
-    /// snapshot and return the active interrupt owner. The platform CPU route
-    /// must be enabled only afterwards.
-    pub fn activate(self, task: &mut Ieee802154TaskOwner) -> Ieee802154InterruptOwner {
-        Ieee802154InterruptOwner {
-            registers: self.registers.activate(&mut task.registers),
-        }
-    }
+pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
+    mac: Ieee802154MacIrq<P>,
 }
 
 /// Active IEEE 802.15.4 hard-IRQ owner.
+///
+/// Task command, DMA, policy and event-enable operations are absent from
+/// this type. It must be deactivated after the platform CPU route is
+/// disabled and returned with the task owner before the partition can be.
 #[must_use = "the active IEEE 802.15.4 interrupt owner must be deactivated"]
-pub struct Ieee802154InterruptOwner {
-    registers: PacInterruptRegisters,
+pub struct Ieee802154InterruptOwner<P: Placement = MacPlacement> {
+    mac: Ieee802154MacIrq<P>,
 }
 
-impl Ieee802154InterruptOwner {
-    pub(crate) const fn registers(&self) -> &PacInterruptRegisters {
-        &self.registers
+/// Split the partition into the task owner and the inactive interrupt
+/// owner. This performs no MMIO.
+pub(crate) fn split(
+    partition: Ieee802154Partition,
+) -> (Ieee802154TaskOwner, Ieee802154InterruptSetupOwner) {
+    let Ieee802154Partition { mac, etm, rx_info } = partition;
+    let (task, interrupt) = mac.split();
+    (
+        Ieee802154TaskOwner {
+            mac: task,
+            etm,
+            rx_info,
+        },
+        Ieee802154InterruptSetupOwner { mac: interrupt },
+    )
+}
+
+/// Rejoin the task owner and the inactive interrupt owner into the
+/// partition. This performs no MMIO.
+pub(crate) fn reunite(
+    task: Ieee802154TaskOwner,
+    interrupts: Ieee802154InterruptSetupOwner,
+) -> Ieee802154Partition {
+    let Ieee802154TaskOwner { mac, etm, rx_info } = task;
+    Ieee802154Partition {
+        mac: Ieee802154Mac::join(mac, interrupts.mac),
+        etm,
+        rx_info,
+    }
+}
+
+impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
+    /// The owner of host-memory parts, for the tests of its operations.
+    #[cfg(test)]
+    pub(crate) const fn from_parts(
+        mac: Ieee802154MacTask<P>,
+        etm: ModemEtmIeee802154<E>,
+        rx_info: BtV3_2BasebandRxInfo<B>,
+    ) -> Self {
+        Self { mac, etm, rx_info }
     }
 
-    pub(crate) fn registers_mut(&mut self) -> &mut PacInterruptRegisters {
-        &mut self.registers
+    /// The MAC's task side, for the tests of its operations.
+    #[cfg(test)]
+    pub(crate) const fn mac_part(&self) -> &Ieee802154MacTask<P> {
+        &self.mac
     }
 
-    /// Close one hard-IRQ epoch after the CPU route was disabled and return
-    /// inactive setup ownership.
-    pub fn deactivate(self, task: &mut Ieee802154TaskOwner) -> Ieee802154InterruptSetupOwner {
-        Ieee802154InterruptSetupOwner {
-            registers: self.registers.deactivate(&mut task.registers),
+    /// The ETM channels, for the tests of their operations.
+    #[cfg(test)]
+    pub(crate) const fn etm_part(&self) -> &ModemEtmIeee802154<E> {
+        &self.etm
+    }
+
+    /// Order descriptor memory and MMIO at a hardware ownership boundary.
+    pub(crate) fn order_device_accesses(&mut self) {
+        oer_mmio::fence();
+    }
+}
+
+impl<P: Placement> Ieee802154InterruptSetupOwner<P> {
+    /// The owner of a host-memory interrupt side, for the tests of its
+    /// operations.
+    #[cfg(test)]
+    pub(crate) const fn from_part(mac: Ieee802154MacIrq<P>) -> Self {
+        Self { mac }
+    }
+
+    /// Install the runtime event and abort baseline, acknowledge one stale
+    /// sample and return the active interrupt owner. The platform CPU route
+    /// must be enabled only afterwards.
+    ///
+    /// `EVENT_ENABLE` stays zero while both abort fields take their runtime
+    /// baseline and the stale sample is acknowledged; the runtime events are
+    /// published last and fenced before the owner is returned.
+    pub fn activate<E: Placement, B: Placement>(
+        self,
+        task: &mut Ieee802154TaskOwner<P, E, B>,
+    ) -> Ieee802154InterruptOwner<P> {
+        let mut port = TransitionPort {
+            task,
+            interrupt: self.mac,
+        };
+        execute_interrupt_activation(
+            &mut port,
+            Ieee802154InterruptActivationPlan::SOURCE_CONFIRMED_BASELINE,
+        );
+        Ieee802154InterruptOwner {
+            mac: port.interrupt,
         }
     }
 }
+
+impl<P: Placement> Ieee802154InterruptOwner<P> {
+    /// Close one hard-IRQ epoch after the CPU route was disabled and return
+    /// inactive setup ownership.
+    ///
+    /// The operation and both MAC timers stop, the event, transmit-abort and
+    /// receive-abort enables are cleared, one final sample is acknowledged,
+    /// and both phases are fenced before the setup owner is returned.
+    pub fn deactivate<E: Placement, B: Placement>(
+        self,
+        task: &mut Ieee802154TaskOwner<P, E, B>,
+    ) -> Ieee802154InterruptSetupOwner<P> {
+        let mut port = TransitionPort {
+            task,
+            interrupt: self.mac,
+        };
+        execute_interrupt_deactivation(&mut port);
+        Ieee802154InterruptSetupOwner {
+            mac: port.interrupt,
+        }
+    }
+}
+
+/// The task owner and the interrupt side for one activation or teardown.
+struct TransitionPort<'task, P: Placement, E: Placement, B: Placement> {
+    task: &'task mut Ieee802154TaskOwner<P, E, B>,
+    interrupt: Ieee802154MacIrq<P>,
+}
+
+impl<P: Placement, E: Placement, B: Placement> Ieee802154InterruptTransitionPort
+    for TransitionPort<'_, P, E, B>
+{
+    type EventSnapshot = ieee802154_mac::event_status::Snapshot;
+
+    fn stop_operation(&mut self) {
+        self.task.issue(ieee802154_mac::command::Opcode::Stop);
+    }
+
+    fn stop_timer0(&mut self) {
+        self.task.issue(ieee802154_mac::command::Opcode::Timer0Stop);
+    }
+
+    fn stop_timer1(&mut self) {
+        self.task.issue(ieee802154_mac::command::Opcode::Timer1Stop);
+    }
+
+    fn mask_all_events(&mut self) {
+        self.task.mask_all_events();
+    }
+
+    fn enable_runtime_events(&mut self) {
+        self.task.enable_runtime_events();
+    }
+
+    fn mask_all_tx_aborts(&mut self) {
+        self.task.mask_all_tx_aborts();
+    }
+
+    fn enable_runtime_tx_aborts(&mut self) {
+        self.task.enable_only_runtime_tx_aborts();
+    }
+
+    fn mask_all_rx_aborts(&mut self) {
+        self.task.mask_all_rx_aborts();
+    }
+
+    fn enable_runtime_rx_aborts(&mut self) {
+        self.task.enable_only_runtime_rx_aborts();
+    }
+
+    fn order_device_accesses(&mut self) {
+        oer_mmio::fence();
+    }
+
+    fn sample_events(&mut self) -> Self::EventSnapshot {
+        self.interrupt.sample_event_status()
+    }
+
+    fn acknowledge_events(&mut self, snapshot: Self::EventSnapshot) {
+        self.interrupt.acknowledge_event_status(snapshot);
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod host;
+
+#[cfg(test)]
+mod tests;

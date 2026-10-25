@@ -6336,7 +6336,7 @@ name = "MINIMUM_MPDU_START_SPACING"
 bits = "29:27"
 class = "plain"
 description = "Three-bit MMSS value printed by dbg_read_rx_misc."
-write-range = { min = 0x0, max = 0x7 }
+value-range = { min = 0x0, max = 0x7, sources = ["BLOB_LIBPP_HAL_HE_SET_MMSS_AND_AID"] }
 
 [[registers.fields]]
 name = "INTERFACE_IS_SOFT_AP"
@@ -6386,7 +6386,7 @@ class = "plain"
 name = "BSS_COLOR"
 bits = "26:21"
 class = "plain"
-write-range = { min = 0x0, max = 0x3f }
+value-range = { min = 0x0, max = 0x3f, sources = ["BLOB_LIBPP_HAL_HE_BSSID_LIFECYCLE"] }
 
 [[registers.fields]]
 name = "BSS_COLOR_ENABLE"
@@ -6449,6 +6449,7 @@ description = "When libpp[hal_mac_ctl.o]::hal_he_get_bss_color selects interface
 name = "BSS_COLOR"
 bits = "26:21"
 class = "read-only"
+value-range = { min = 0x0, max = 0x3f, sources = ["BLOB_LIBPP_HAL_HE_BSSID_LIFECYCLE"] }
 
 [[registers.fields]]
 name = "BSS_COLOR_ENABLE"
@@ -6673,7 +6674,7 @@ description = "Complete first-descriptor address. The ROM and blob leaves publis
 name = "ADDRESS"
 bits = "31:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xffffffff }
+pointer = { points-to = "WIFI_RX_DMA_DESCRIPTOR", placement = "dma-window", encoding = { width = 0x20, shift = 0x0 }, sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX"] }
 
 [[registers]]
 name = "RX_NEXT_DESCRIPTOR"
@@ -6684,6 +6685,7 @@ description = "Complete hardware current/next descriptor word. The low 20 bits a
 name = "ADDRESS_LOW"
 bits = "19:0"
 class = "read-only"
+pointer = { points-to = "WIFI_RX_DMA_DESCRIPTOR", placement = "dma-window", encoding = { width = 0x14, shift = 0x0, low-bits = true, high-field = "RX_DESCRIPTOR_HIGH_WINDOW.ADDRESS_HIGH" }, sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX"] }
 
 [[registers.fields]]
 name = "BITS_20_31_OPAQUE"
@@ -6700,6 +6702,7 @@ description = "Low 20 bits of the last descriptor accepted by the RX walker."
 name = "ADDRESS_LOW"
 bits = "19:0"
 class = "read-only"
+pointer = { points-to = "WIFI_RX_DMA_DESCRIPTOR", placement = "dma-window", encoding = { width = 0x14, shift = 0x0, low-bits = true, high-field = "RX_DESCRIPTOR_HIGH_WINDOW.ADDRESS_HIGH" }, sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX"] }
 
 [[registers.fields]]
 name = "BITS_20_31_OPAQUE"
@@ -7327,7 +7330,7 @@ name = "TID"
 bits = "15:12"
 class = "plain"
 description = "Traffic identifier passed to complete hal_agreement_add_rx_ba without the extra staging path's index transform. The field is four bits wide, while complete ht_recv_action_ba_addba_request rejects values with bit three set and therefore admits TIDs zero through seven."
-write-range = { min = 0x0, max = 0xf }
+value-range = { min = 0x0, max = 0xf, sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"] }
 
 [[registers.fields]]
 name = "BITS_16_29_OPAQUE"
@@ -7411,7 +7414,7 @@ description = "Twelve-bit starting sequence written by complete add/reset/restor
 name = "SEQUENCE"
 bits = "11:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xfff }
+value-range = { min = 0x0, max = 0xfff, sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"] }
 
 [[registers]]
 name = "RX_BLOCK_ACK_ENTRY%s_BITMAP_LOW_STATUS"
@@ -8080,7 +8083,7 @@ description = "Canonical multifunction PHY/MAC word. Complete phy_mac_tx_chan_of
 name = "PRIMARY_20_CHANNEL_OFFSET"
 bits = "3:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xf }
+value-range = { min = 0x0, max = 0xf, sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }
 
 [[registers.fields]]
 name = "MINIMUM_POWER_LOW"
@@ -10136,7 +10139,7 @@ name = "DEFAULT_PE_DURATION"
 bits = "2:0"
 class = "plain"
 description = "Three-bit Default Packet Extension duration copied from HE Operation Parameters byte zero."
-write-range = { min = 0x0, max = 0x7 }
+value-range = { min = 0x0, max = 0x7, sources = ["BLOB_LIBPP_HAL_HE_SET_DEFAULT_PE"] }
 
 [[registers.fields]]
 name = "MPDU_LENGTH_OFFSET"
@@ -10294,31 +10297,31 @@ description = "Five five-bit NOMINAL_PKT_PADDING values decoded by complete dbg_
 name = "BPSK_DURATION"
 bits = "4:0"
 class = "plain"
-write-range = { min = 0x0, max = 0x1f }
+value-range = { min = 0x0, max = 0x1f, sources = ["PROMOTED_HE20_PEER"] }
 
 [[registers.fields]]
 name = "QPSK_DURATION"
 bits = "9:5"
 class = "plain"
-write-range = { min = 0x0, max = 0x1f }
+value-range = { min = 0x0, max = 0x1f, sources = ["PROMOTED_HE20_PEER"] }
 
 [[registers.fields]]
 name = "QAM16_DURATION"
 bits = "14:10"
 class = "plain"
-write-range = { min = 0x0, max = 0x1f }
+value-range = { min = 0x0, max = 0x1f, sources = ["PROMOTED_HE20_PEER"] }
 
 [[registers.fields]]
 name = "QAM64_DURATION"
 bits = "19:15"
 class = "plain"
-write-range = { min = 0x0, max = 0x1f }
+value-range = { min = 0x0, max = 0x1f, sources = ["PROMOTED_HE20_PEER"] }
 
 [[registers.fields]]
 name = "QAM256_DURATION"
 bits = "24:20"
 class = "plain"
-write-range = { min = 0x0, max = 0x1f }
+value-range = { min = 0x0, max = 0x1f, sources = ["PROMOTED_HE20_PEER"] }
 
 [[registers.fields]]
 name = "BITS_25_31_OPAQUE"
@@ -10917,7 +10920,7 @@ name = "DESCRIPTOR_ADDRESS_LOW"
 bits = "19:0"
 class = "plain"
 description = "Low twenty bits of the owned TX descriptor address; the DMA window supplies the high address bits."
-write-range = { min = 0x0, max = 0xfffff }
+pointer = { points-to = "WIFI_TX_DMA_DESCRIPTOR", placement = "dma-window", encoding = { width = 0x14, shift = 0x0, low-bits = true }, sources = ["PROMOTED_LMAC_TX", "BLOB_LIBPP_HAL_MAC_TX"] }
 
 [[registers.fields]]
 name = "BITS_20_21_OPAQUE"
@@ -11719,7 +11722,7 @@ description = "Bits cleared by every reviewed zero-based extra-SoftAP control pu
 name = "TID"
 bits = "15:12"
 class = "plain"
-write-range = { min = 0x0, max = 0xf }
+value-range = { min = 0x0, max = 0xf, sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"] }
 
 [[registers.fields]]
 name = "BITS_16_29_OPAQUE"
@@ -11793,7 +11796,7 @@ description = "Shared extra-SoftAP staging word carrying the twelve-bit starting
 name = "SEQUENCE"
 bits = "11:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xfff }
+value-range = { min = 0x0, max = 0xfff, sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"] }
 
 [[registers]]
 name = "EXTRA_SOFTAP_RX_BLOCK_ACK_BITMAP_LOW"
@@ -13194,7 +13197,7 @@ name = "COUNT"
 bits = "31:20"
 class = "plain"
 description = "Descriptor metadata byte 0x22 passed to hal_set_tx_pti; not the A-MPDU MPDU/descriptor count."
-write-range = { min = 0x0, max = 0xfff }
+value-range = { min = 0x0, max = 0xfff, sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME", "BLOB_LIBPP_HAL_MAC_TX"] }
 
 [[registers]]
 name = "HE_CONTROL%s"

@@ -290,6 +290,8 @@ name = "LP_TSENS_CLK_EN"
 bits = "30"
 class = "plain"
 description = "Temperature-sensor peripheral clock enable."
+values = [{ name = "DISABLED", value = 0x0, description = "Last temperature owner disables the peripheral clock before releasing SAR-I2C.", sources = ["IDF_S31_TSENS_POWER_LIFECYCLE"] }, { name = "ENABLED", value = 0x1, description = "Bit thirty set by complete phy_tsens_read_init.", sources = ["BLOB_LIBPHY_PHY_TSENS_READ_INIT"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "LP_TSENS_RST_EN"

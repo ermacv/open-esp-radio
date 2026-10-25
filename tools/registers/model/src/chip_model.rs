@@ -21,6 +21,7 @@ use crate::{
 mod block_type;
 mod controls;
 mod error;
+mod facts;
 mod source;
 
 pub(crate) use block_type::parse_bits;
@@ -30,10 +31,11 @@ pub use controls::{ControlKind, ExpandedControl, ExpandedGateGroup, ResolvedFiel
 pub use error::{Error, ErrorKind};
 pub use source::{
     AnalogInstance, AnalogSpace, ClockSource, Command, Control, Dim, Extent, Field, FieldClass,
-    GateGroup, Group, Instance, Interrupt, InterruptOutput, InterruptSources, LayoutPlacement, Mux,
-    OpaqueReview, ROOT_SCHEMA, RamRegion, ReadSafe, Register, Reserved, Reset, ReviewOverride,
-    RootFile, SharedControl, Sourced, Space, TYPE_SCHEMA, TypeFile, TypeHeader, TypeReview,
-    UnboundInterrupt, Value, View, WriteRange,
+    GateGroup, Group, Instance, Interrupt, InterruptOutput, InterruptPair, InterruptSources,
+    LayoutPlacement, Mux, OpaqueReview, Pointer, PointerEncoding, ROOT_SCHEMA, RamRegion, ReadSafe,
+    Register, Reserved, Reset, ReviewOverride, RootFile, SharedControl, Sourced, Space,
+    TYPE_SCHEMA, TypeFile, TypeHeader, TypeReview, UnboundInterrupt, Value, ValueRange, View,
+    WriteRange,
 };
 
 /// Where an expanded register is.
@@ -137,6 +139,7 @@ impl ChipModel {
         place_layouts(context, &root, &regions, &mut layouts)?;
         crate::layouts::validate_layout_set(&layouts)
             .map_err(|error| context.error("", ErrorKind::Layouts(Box::new(error))))?;
+        facts::check(context, &types, &layouts, &root.ram_regions)?;
         let mut budget = ExpansionBudget::default();
         let registers = expand(context, &root, &types, &mut budget)?;
         let controls = controls::expand(context, &root, &registers, &mut budget)?;

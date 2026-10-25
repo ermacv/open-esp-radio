@@ -161,7 +161,7 @@ name = "CLK_LP_TIMER_DIV_NUM"
 bits = "15:4"
 class = "plain"
 description = "Twelve-bit low-power timer divider image."
-write-range = { min = 0x0, max = 0xfff }
+value-range = { min = 0x0, max = 0xfff, sources = ["S31_MODEM_LPCON_STRUCT"] }
 
 [[registers]]
 name = "COEX_LP_CLK_CONF"
@@ -198,7 +198,7 @@ name = "CLK_COEX_LP_DIV_NUM"
 bits = "15:4"
 class = "plain"
 description = "Twelve-bit coexistence low-power clock divider image."
-write-range = { min = 0x0, max = 0xfff }
+value-range = { min = 0x0, max = 0xfff, sources = ["BLOB_LIBCOEX_TIMER_CLOCK"] }
 
 [[registers.fields]]
 name = "BITS_16_31_OPAQUE"
@@ -242,7 +242,7 @@ name = "CLK_WIFIPWR_LP_DIV_NUM"
 bits = "15:4"
 class = "plain"
 description = "Twelve-bit Wi-Fi power-domain low-power divider image."
-write-range = { min = 0x0, max = 0xfff }
+value-range = { min = 0x0, max = 0xfff, sources = ["S31_MODEM_LPCON_STRUCT"] }
 
 [[registers]]
 name = "MODEM_SRC_CLK_CONF"
