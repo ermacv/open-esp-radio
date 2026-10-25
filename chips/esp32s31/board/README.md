@@ -20,7 +20,11 @@ location's file path, line, column, the start of the message when it is a
 static string, hart and, on an interrupt stack, the interrupted PC), so the
 panic path stays a short leaf in every stack bound. An image with
 `panic-hook` names its hook with `panic_hook!`, which the entry calls after
-the record to record more of its own state the same way; it returns. An
+the record, in the fatal path with the hart masked and the other hart
+stopped (`cores::StopTheWorld`, or the `StopError` why not), to record more
+of its own state the same way; it returns. Under that stop a record may read
+hart 0's routes and CLIC lines as the hardware holds them
+(`interrupt_controller::fatal_view`). An
 image's own reset-retained records are `retained_static!` cells, one holder
 at a time without waiting, with their claim in the SRAM critical BSS. Every
 image then resets, and its next boot reads and clears the record with
