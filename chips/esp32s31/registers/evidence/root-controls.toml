@@ -845,3 +845,11 @@ description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:
 id = "ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG_LL_H_L339"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/esp_hal_usb/esp32s31/include/hal/usb_serial_jtag_ll.h:339, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
 
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_UART_LL_H_L275"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf-clocks:components/esp_hal_uart/esp32s31/include/hal/uart_ll.h:275, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). UART0 core reset field; its propagation relative to APB reset is unspecified."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L1118"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_struct.h:1118, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). UART0 core reset field; its propagation relative to APB reset is unspecified."
+
