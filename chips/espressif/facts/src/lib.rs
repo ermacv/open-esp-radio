@@ -519,7 +519,7 @@ pub(crate) mod tests {
             (
                 "esp32s31",
                 "ESP32-S31-Function-CoreBoard-1",
-                "ESP32-S31-WROOM",
+                "ESP32-S31-WROOM-3-N16R16",
             ),
             ("esp32c5", "ESP32-C5 devkit", "ESP32-C5-WROOM-1-N16R8"),
         ] {
