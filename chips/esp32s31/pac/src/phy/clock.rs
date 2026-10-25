@@ -17,7 +17,9 @@ impl RadioPhyRegisters {
     /// one preserving update of `WIFI_BB_CFG` that clears bit one alone
     /// before its one-microsecond settle.
     pub fn clear_phy_rf_baseband_control(&mut self) {
-        crate::generated::clear_phy_rf_baseband_control(&self.peripherals.modem_syscon_radio);
+        self.peripherals
+            .modem_syscon_radio
+            .clear_phy_rf_baseband_control();
     }
 
     /// Release the baseband analog-I2C power tie, the only immediate-clock
@@ -27,7 +29,9 @@ impl RadioPhyRegisters {
     /// bit 28 of `IMM_HP_CK_POWER_0` in one preserving update and keeps the
     /// crystal ties in bits 31:30.
     pub fn clear_phy_rf_immediate_clock_power(&mut self) {
-        crate::generated::clear_phy_rf_immediate_clock_power(&self.peripherals.pmu_radio);
+        self.peripherals
+            .pmu_radio
+            .clear_phy_rf_immediate_clock_power();
     }
 
     /// Enable or disable the recovered PHY calibration clock.
@@ -36,9 +40,13 @@ impl RadioPhyRegisters {
     /// before executing the baseband calibration sequence.
     pub fn set_phy_calibration_clock(&mut self, enabled: bool) {
         if enabled {
-            crate::generated::enable_phy_calibration_clock(&self.peripherals.phy_clock_oracle);
+            self.peripherals
+                .phy_clock_oracle
+                .enable_phy_calibration_clock();
         } else {
-            crate::generated::disable_phy_calibration_clock(&self.peripherals.phy_clock_oracle);
+            self.peripherals
+                .phy_clock_oracle
+                .disable_phy_calibration_clock();
         }
     }
 
@@ -48,15 +56,17 @@ impl RadioPhyRegisters {
     /// operations in the complete ROM body. Its fourth PMU operation belongs
     /// to the official platform PAC and is sequenced by the HAL.
     pub fn open_frontend_baseband_internal_clocks(&mut self) {
-        crate::svd::fixed_register_image::open_frontend_clock_gates(
-            &self.peripherals.phy_clock_oracle,
-        );
+        self.peripherals
+            .phy_clock_oracle
+            .open_frontend_clock_gates();
 
-        crate::generated::open_frontend_baseband_control(&self.peripherals.phy_clock_oracle);
+        self.peripherals
+            .phy_clock_oracle
+            .open_frontend_baseband_control();
 
-        crate::svd::fixed_register_write::open_baseband_clock_gates(
-            &self.peripherals.phy_clock_oracle,
-        );
+        self.peripherals
+            .phy_clock_oracle
+            .open_baseband_clock_gates();
     }
 
     /// Close the recovered front-end and baseband clock gates.
@@ -65,14 +75,16 @@ impl RadioPhyRegisters {
     /// three-operation blob leaf. It intentionally leaves PMU power policy to
     /// the surrounding lifecycle owner, matching the source.
     pub fn close_frontend_baseband_clocks(&mut self) {
-        crate::svd::fixed_register_image::close_frontend_clock_gates(
-            &self.peripherals.phy_clock_oracle,
-        );
+        self.peripherals
+            .phy_clock_oracle
+            .close_frontend_clock_gates();
 
-        crate::generated::close_frontend_baseband_control(&self.peripherals.phy_clock_oracle);
+        self.peripherals
+            .phy_clock_oracle
+            .close_frontend_baseband_control();
 
-        crate::svd::fixed_register_write::close_baseband_clock_gates(
-            &self.peripherals.phy_clock_oracle,
-        );
+        self.peripherals
+            .phy_clock_oracle
+            .close_baseband_clock_gates();
     }
 }

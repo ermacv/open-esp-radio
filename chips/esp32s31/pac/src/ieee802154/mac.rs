@@ -507,7 +507,7 @@ impl Ieee802154FoundationSnapshot {
 #[doc(hidden)]
 pub struct Ieee802154RegisterLease<'registers> {
     registers: &'registers mut crate::ieee802154::ownership::TaskRegisters,
-    etm: &'registers crate::modem::etm::Ieee802154EtmChannels,
+    etm: &'registers mut crate::modem::etm::Ieee802154EtmChannels,
     rx_info: &'registers crate::ieee802154::baseband::Ieee802154BasebandRxInfo,
 }
 
@@ -1213,7 +1213,7 @@ impl Ieee802154TaskRegisters {
     pub fn ieee802154_register_lease(&mut self) -> Ieee802154RegisterLease<'_> {
         Ieee802154RegisterLease {
             registers: &mut self.peripherals.ieee802154_mac,
-            etm: &self.peripherals.etm,
+            etm: &mut self.peripherals.etm,
             rx_info: &self.peripherals.rx_info,
         }
     }

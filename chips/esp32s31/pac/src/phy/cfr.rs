@@ -37,28 +37,27 @@ const fn iccfr_gate_state(enabled: bool) -> IccfrGateState {
 impl RadioPhyRegisters {
     /// Publish both fields of complete pinned `phy_config_hccfr` in order.
     pub fn configure_hccfr(&mut self, enabled: bool, value: CfrValue) {
-        let bb = &self.peripherals.phy_baseband_config_oracle;
-        crate::generated::configure_hccfr_enable_state(bb, cfr_enable_state(enabled));
-        crate::generated::configure_hccfr_value(bb, value);
+        let bb = &mut self.peripherals.phy_baseband_config_oracle;
+        bb.configure_hccfr_enable_state(cfr_enable_state(enabled));
+        bb.configure_hccfr_value(value);
     }
 
     /// Apply either complete branch of pinned `phy_iccfr_en`.
     pub fn configure_iccfr_gate(&mut self, enabled: bool) {
-        crate::generated::configure_iccfr_gate_state(
-            &self.peripherals.phy_baseband_config_oracle,
-            iccfr_gate_state(enabled),
-        );
+        self.peripherals
+            .phy_baseband_config_oracle
+            .configure_iccfr_gate_state(iccfr_gate_state(enabled));
     }
 
     /// Publish all five fields and the tail gate of pinned `phy_force_iccfr`.
     pub fn configure_forced_iccfr(&mut self, mode: bool, enabled: bool, value: CfrValue) {
-        let bb = &self.peripherals.phy_baseband_config_oracle;
+        let bb = &mut self.peripherals.phy_baseband_config_oracle;
         let mode = cfr_force_mode(mode);
-        crate::generated::configure_forced_iccfr_mode_high(bb, mode);
-        crate::generated::configure_forced_iccfr_enable_state(bb, cfr_enable_state(enabled));
-        crate::generated::trigger_forced_iccfr(bb);
-        crate::generated::configure_forced_iccfr_mode_low(bb, mode);
-        crate::generated::configure_forced_iccfr_value(bb, value);
+        bb.configure_forced_iccfr_mode_high(mode);
+        bb.configure_forced_iccfr_enable_state(cfr_enable_state(enabled));
+        bb.trigger_forced_iccfr();
+        bb.configure_forced_iccfr_mode_low(mode);
+        bb.configure_forced_iccfr_value(value);
         self.configure_iccfr_gate(enabled);
     }
 }

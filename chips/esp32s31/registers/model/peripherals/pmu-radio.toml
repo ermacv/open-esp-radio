@@ -66,6 +66,30 @@ description = "Active-state baseband analog-I2C power control."
 bitOffset = 22
 bitWidth = 1
 
+[[peripherals.registers.register.fields]]
+name = "HP_ACTIVE_XPD_CPLL_I2C"
+description = "Active-state CPLL analog-I2C power control. The bootstrap powers it before it programs the CPLL; the radio does not write it."
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "HP_ACTIVE_XPD_MPLL_I2C"
+description = "Active-state MPLL analog-I2C power control. The bootstrap powers it before it programs the MPLL that clocks the PSRAM; the radio does not write it."
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "HP_ACTIVE_XPD_CPLL"
+description = "Active-state CPLL power. The bootstrap powers it for the CPU clock; the radio does not write it."
+bitOffset = 27
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "HP_ACTIVE_XPD_MPLL"
+description = "Active-state MPLL power. The bootstrap powers it for the PSRAM clock; the radio does not write it."
+bitOffset = 30
+bitWidth = 1
+
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "IMM_HP_CK_POWER_0"
@@ -235,6 +259,38 @@ completeness = "complete"
 entity = "PMU_RADIO.HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_BB_I2C"
 naming = "vendor"
 sources = ["S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ROM_REV0_PHY_OPEN_FE_BB_CLK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PMU_RADIO.HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_CPLL_I2C"
+naming = "vendor"
+sources = ["S31_PMU_HEADERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PMU_RADIO.HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_MPLL_I2C"
+naming = "vendor"
+sources = ["S31_PMU_HEADERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PMU_RADIO.HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_CPLL"
+naming = "vendor"
+sources = ["S31_PMU_HEADERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PMU_RADIO.HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_MPLL"
+naming = "vendor"
+sources = ["S31_PMU_HEADERS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

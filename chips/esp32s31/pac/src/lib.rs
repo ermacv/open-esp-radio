@@ -10,11 +10,6 @@ mod soc_tests;
 #[cfg(test)]
 mod test_memory;
 
-// Outside the production PHY module, which forbids all unsafe code.
-#[cfg(all(test, target_os = "linux"))]
-#[path = "phy/baseband/txrx_reset_tests.rs"]
-mod frontend_reset_tests;
-
 pub(crate) use modem::coex;
 
 pub(crate) use phy::{baseband, cfr};
@@ -69,6 +64,13 @@ pub mod phy;
 pub(crate) const fn field_byte<const WIDTH: u32>(bits: oer_mmio::Bits<WIDTH>) -> u8 {
     const { assert!(WIDTH <= 8, "the field fits a byte") };
     bits.get().to_le_bytes()[0]
+}
+
+/// A field of at most sixteen bits read back, as a halfword.
+pub(crate) const fn field_halfword<const WIDTH: u32>(bits: oer_mmio::Bits<WIDTH>) -> u16 {
+    const { assert!(WIDTH <= 16, "the field fits a halfword") };
+    let [low, high, _, _] = bits.get().to_le_bytes();
+    u16::from_le_bytes([low, high])
 }
 
 pub(crate) use phy::table_memory;
@@ -303,6 +305,7 @@ pub use wifi::mac::{
 pub mod boot;
 pub mod ownership;
 pub mod platform;
+pub mod pll_power;
 
 pub use modem::clock_device::ModemClockDevice;
 pub use ownership::BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER;

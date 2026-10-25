@@ -16,9 +16,8 @@ impl RadioPhyRegisters {
     /// `frequency_mhz - 1`; the generated transaction preserves every other
     /// bit of `TICK_CONF`.
     pub fn configure_fixed_xtal_40mhz_tick(&mut self) {
-        crate::generated::configure_modem_power_tick_for_xtal_40mhz(
-            &self.peripherals.modem_lpcon_phy_tick,
-            ModemPowerTickTarget::Xtal40Mhz,
-        );
+        self.peripherals
+            .modem_lpcon_phy_tick
+            .configure_modem_power_tick_for_xtal_40mhz(ModemPowerTickTarget::Xtal40Mhz);
     }
 }

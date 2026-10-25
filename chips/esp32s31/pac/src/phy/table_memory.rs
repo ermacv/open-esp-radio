@@ -147,66 +147,54 @@ impl RadioPhyRegisters {
         let value =
             PbusMemoryGroupBoundaryInput::compose(boundary.first_entry, boundary.last_entry);
         match boundary.group {
-            0 => crate::generated::configure_even_pbus_memory_group_boundary(
-                &self.peripherals.phy_memory,
-                0,
-                value,
-            ),
-            1 => crate::generated::configure_odd_pbus_memory_group_boundary(
-                &self.peripherals.phy_memory,
-                0,
-                value,
-            ),
-            2 => crate::generated::configure_even_pbus_memory_group_boundary(
-                &self.peripherals.phy_memory,
-                1,
-                value,
-            ),
-            3 => crate::generated::configure_odd_pbus_memory_group_boundary(
-                &self.peripherals.phy_memory,
-                1,
-                value,
-            ),
-            4 => crate::generated::configure_even_pbus_memory_group_boundary(
-                &self.peripherals.phy_memory,
-                2,
-                value,
-            ),
-            5 => crate::generated::configure_odd_pbus_memory_group_boundary(
-                &self.peripherals.phy_memory,
-                2,
-                value,
-            ),
-            6 => crate::generated::configure_even_pbus_memory_group_boundary(
-                &self.peripherals.phy_memory,
-                3,
-                value,
-            ),
-            7 => crate::generated::configure_odd_pbus_memory_group_boundary(
-                &self.peripherals.phy_memory,
-                3,
-                value,
-            ),
-            8 => crate::generated::configure_even_pbus_memory_group_boundary(
-                &self.peripherals.phy_memory,
-                4,
-                value,
-            ),
-            9 => crate::generated::configure_odd_pbus_memory_group_boundary(
-                &self.peripherals.phy_memory,
-                4,
-                value,
-            ),
-            10 => crate::generated::configure_even_pbus_memory_group_boundary(
-                &self.peripherals.phy_memory,
-                5,
-                value,
-            ),
-            11 => crate::generated::configure_odd_pbus_memory_group_boundary(
-                &self.peripherals.phy_memory,
-                5,
-                value,
-            ),
+            0 => self
+                .peripherals
+                .phy_memory
+                .configure_even_pbus_memory_group_boundary(oer_mmio::Index::constant::<0>(), value),
+            1 => self
+                .peripherals
+                .phy_memory
+                .configure_odd_pbus_memory_group_boundary(oer_mmio::Index::constant::<0>(), value),
+            2 => self
+                .peripherals
+                .phy_memory
+                .configure_even_pbus_memory_group_boundary(oer_mmio::Index::constant::<1>(), value),
+            3 => self
+                .peripherals
+                .phy_memory
+                .configure_odd_pbus_memory_group_boundary(oer_mmio::Index::constant::<1>(), value),
+            4 => self
+                .peripherals
+                .phy_memory
+                .configure_even_pbus_memory_group_boundary(oer_mmio::Index::constant::<2>(), value),
+            5 => self
+                .peripherals
+                .phy_memory
+                .configure_odd_pbus_memory_group_boundary(oer_mmio::Index::constant::<2>(), value),
+            6 => self
+                .peripherals
+                .phy_memory
+                .configure_even_pbus_memory_group_boundary(oer_mmio::Index::constant::<3>(), value),
+            7 => self
+                .peripherals
+                .phy_memory
+                .configure_odd_pbus_memory_group_boundary(oer_mmio::Index::constant::<3>(), value),
+            8 => self
+                .peripherals
+                .phy_memory
+                .configure_even_pbus_memory_group_boundary(oer_mmio::Index::constant::<4>(), value),
+            9 => self
+                .peripherals
+                .phy_memory
+                .configure_odd_pbus_memory_group_boundary(oer_mmio::Index::constant::<4>(), value),
+            10 => self
+                .peripherals
+                .phy_memory
+                .configure_even_pbus_memory_group_boundary(oer_mmio::Index::constant::<5>(), value),
+            11 => self
+                .peripherals
+                .phy_memory
+                .configure_odd_pbus_memory_group_boundary(oer_mmio::Index::constant::<5>(), value),
             _ => return Err(PhyMemoryError::PbusGroupOutOfRange),
         }
         Ok(())
@@ -226,76 +214,76 @@ impl RadioPhyRegisters {
             self.configure_pbus_memory_group_boundary(boundary)?;
         }
 
-        crate::generated::phy_memory_data_0(
-            &self.peripherals.phy_memory,
-            crate::generated::PhyMemoryData0::new(data),
-        );
-        crate::generated::publish_pbus_memory_command(&self.peripherals.phy_memory, command);
+        self.peripherals
+            .phy_memory
+            .phy_memory_data_0(crate::generated::PhyMemoryData0::new(data));
+        self.peripherals
+            .phy_memory
+            .publish_pbus_memory_command(command);
         Ok(())
     }
 
     /// Sample the shared CFR/gain-memory base index exactly once.
     pub fn read_table_memory_base_index(&self) -> u8 {
-        crate::svd::field_read::observe_table_memory_base_index(&self.peripherals.phy_clock_oracle)
+        self.peripherals
+            .phy_clock_oracle
+            .read_table_memory_index_source()
+            .base_index()
     }
 
     /// Configure the shared CFR/gain-memory base index through one fresh RMW.
     pub fn configure_table_memory_base_index(&mut self, index: u8) {
-        crate::generated::configure_table_memory_base_index(
-            &self.peripherals.phy_clock_oracle,
-            PhyMemoryIndex::new(u32::from(index))
-                .expect("u8 always fits the reviewed PHY memory-index domain"),
-        );
+        self.peripherals
+            .phy_clock_oracle
+            .configure_table_memory_base_index(
+                PhyMemoryIndex::new(u32::from(index))
+                    .expect("u8 always fits the reviewed PHY memory-index domain"),
+            );
     }
 
     /// Publish one TX-CFR entry and its complete set/clear commit pulse.
     pub fn program_tx_cfr_entry(&mut self, data: u32, index: u8) {
-        crate::generated::phy_memory_data_0(
-            &self.peripherals.phy_memory,
-            crate::generated::PhyMemoryData0::new(data),
-        );
-        let memory = &self.peripherals.phy_memory;
-        crate::generated::configure_tx_cfr_memory_index(
-            memory,
+        self.peripherals
+            .phy_memory
+            .phy_memory_data_0(crate::generated::PhyMemoryData0::new(data));
+        let memory = &mut self.peripherals.phy_memory;
+        memory.configure_tx_cfr_memory_index(
             PhyMemoryIndex::new(u32::from(index))
                 .expect("u8 always fits the reviewed PHY memory-index domain"),
         );
-        crate::generated::set_tx_cfr_commit(memory);
-        crate::generated::clear_tx_cfr_commit(memory);
+        memory.set_tx_cfr_commit();
+        memory.clear_tx_cfr_commit();
     }
 
     /// Publish one three-word gain-memory entry in complete ROM order.
     pub fn program_gain_memory_entry(&mut self, entry: PhyGainMemoryEntry) {
-        let memory = &self.peripherals.phy_memory;
+        let memory = &mut self.peripherals.phy_memory;
         match entry.words {
             PhyGainMemoryWords::GeneratedReceive {
                 data_0,
                 data_1,
                 data_2,
             } => {
-                crate::generated::publish_generated_receive_gain_data_0(memory, data_0);
-                crate::generated::publish_generated_receive_gain_data_1(memory, data_1);
-                crate::generated::publish_generated_receive_gain_data_2(memory, data_2);
+                memory.publish_generated_receive_gain_data_0(data_0);
+                memory.publish_generated_receive_gain_data_1(data_1);
+                memory.publish_generated_receive_gain_data_2(data_2);
             }
             PhyGainMemoryWords::ReceiveTable { data_1, data_2 } => {
-                crate::svd::fixed_register_image::publish_receive_table_gain_data_0(memory);
-                crate::generated::publish_receive_table_gain_data_1(memory, data_1);
-                crate::generated::publish_receive_table_gain_data_2(memory, data_2);
+                memory.publish_receive_table_gain_data_0();
+                memory.publish_receive_table_gain_data_1(data_1);
+                memory.publish_receive_table_gain_data_2(data_2);
             }
             PhyGainMemoryWords::Transmit {
                 data_0,
                 data_1,
                 data_2,
             } => {
-                crate::generated::publish_transmit_gain_data_0(memory, data_0);
-                crate::generated::publish_transmit_gain_data_1(memory, data_1);
-                crate::generated::publish_transmit_gain_data_2(memory, data_2);
+                memory.publish_transmit_gain_data_0(data_0);
+                memory.publish_transmit_gain_data_1(data_1);
+                memory.publish_transmit_gain_data_2(data_2);
             }
         }
 
-        crate::generated::publish_gain_memory_command(
-            memory,
-            PhyGainMemoryCommandInput::compose(entry.index),
-        );
+        memory.publish_gain_memory_command(PhyGainMemoryCommandInput::compose(entry.index));
     }
 }

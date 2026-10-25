@@ -591,12 +591,14 @@ impl RadioPhyRegisters {
 
     /// Install the complete reviewed PHY-I²C host map with one fresh RMW.
     fn configure_phy_i2c_host_map(&mut self) {
-        crate::generated::configure_phy_i2c_host_map(&self.peripherals.i2c_ana_mst);
+        self.peripherals.i2c_ana_mst.configure_phy_i2c_host_map();
     }
 
     /// Select the parallel host map used by the retained-wake stage two.
     pub fn select_phy_i2c_parallel_host_map(&mut self) {
-        crate::generated::configure_phy_i2c_parallel_host_map(&self.peripherals.i2c_ana_mst);
+        self.peripherals
+            .i2c_ana_mst
+            .configure_phy_i2c_parallel_host_map();
     }
 
     /// Restore the normal radio host map with one fresh RMW.
@@ -661,32 +663,24 @@ impl RadioPhyRegisters {
     /// Publish the finite reset command for one analog-I²C host.
     pub fn pulse_phy_i2c_master_reset(&mut self, host: Host) {
         match host {
-            Host::Host0 => crate::svd::fixed_register_image::pulse_phy_i2c_host0_reset(
-                &self.peripherals.i2c_ana_mst,
-            ),
-            Host::Host1 => crate::svd::fixed_register_image::pulse_phy_i2c_host1_reset(
-                &self.peripherals.i2c_ana_mst,
-            ),
+            Host::Host0 => self.peripherals.i2c_ana_mst.pulse_phy_i2c_host0_reset(),
+            Host::Host1 => self.peripherals.i2c_ana_mst.pulse_phy_i2c_host1_reset(),
         }
     }
 
     /// Sample the reviewed completion predicate for one host.
     pub fn phy_i2c_master_is_busy(&self, host: Host) -> bool {
         match host {
-            Host::Host0 => {
-                crate::svd::field_read::observe_phy_i2c_host0_busy(&self.peripherals.i2c_ana_mst)
-            }
-            Host::Host1 => {
-                crate::svd::field_read::observe_phy_i2c_host1_busy(&self.peripherals.i2c_ana_mst)
-            }
+            Host::Host0 => self.peripherals.i2c_ana_mst.read_i2c0_ctrl().busy(),
+            Host::Host1 => self.peripherals.i2c_ana_mst.read_i2c1_ctrl().busy(),
         }
     }
 
     /// Publish the complete complemented read mask used by the vendor leaf.
     fn publish_phy_i2c_read_mask(&mut self, block: Route) {
-        crate::svd::zero_based_field_write::publish_phy_i2c_read_mask(
-            &self.peripherals.i2c_ana_mst,
-            block.complemented_read_select(),
+        self.peripherals.i2c_ana_mst.publish_phy_i2c_read_mask(
+            oer_mmio::Bits::new(block.complemented_read_select())
+                .expect("a complemented read select fits the low 24 bits"),
             0xff,
         );
     }
@@ -701,54 +695,42 @@ impl RadioPhyRegisters {
         write: bool,
     ) {
         match host {
-            Host::Host0 => crate::svd::zero_based_field_write::publish_phy_i2c_host0_command(
-                &self.peripherals.i2c_ana_mst,
-                block,
-                register,
-                value,
-                write,
-                true,
-            ),
-            Host::Host1 => crate::svd::zero_based_field_write::publish_phy_i2c_host1_command(
-                &self.peripherals.i2c_ana_mst,
-                block,
-                register,
-                value,
-                write,
-                true,
-            ),
+            Host::Host0 => self
+                .peripherals
+                .i2c_ana_mst
+                .publish_phy_i2c_host0_command(block, register, value, write, true),
+            Host::Host1 => self
+                .peripherals
+                .i2c_ana_mst
+                .publish_phy_i2c_host1_command(block, register, value, write, true),
         }
     }
 
     /// Sample the completed data byte from one host.
     fn sample_phy_i2c_result(&self, host: Host) -> u8 {
         match host {
-            Host::Host0 => {
-                crate::svd::field_read::observe_phy_i2c_host0_data(&self.peripherals.i2c_ana_mst)
-            }
-            Host::Host1 => {
-                crate::svd::field_read::observe_phy_i2c_host1_data(&self.peripherals.i2c_ana_mst)
-            }
+            Host::Host0 => self.peripherals.i2c_ana_mst.read_i2c0_ctrl().data(),
+            Host::Host1 => self.peripherals.i2c_ana_mst.read_i2c1_ctrl().data(),
         }
     }
 
     /// Apply all six timing RMWs in the complete vendor order.
     pub fn configure_phy_i2c_clock_selection(&mut self) {
-        let registers = &self.peripherals.i2c_ana_mst;
+        let registers = &mut self.peripherals.i2c_ana_mst;
 
-        crate::generated::configure_phy_i2c_host0_sda_guard(registers);
-        crate::generated::configure_phy_i2c_host0_scl_duration(registers);
-        crate::generated::configure_phy_i2c_host1_sda_guard(registers);
-        crate::generated::configure_phy_i2c_host1_scl_duration(registers);
-        crate::generated::configure_phy_i2c_hardware_sda_guard(registers);
-        crate::generated::configure_phy_i2c_hardware_scl_duration(registers);
+        registers.configure_phy_i2c_host0_sda_guard();
+        registers.configure_phy_i2c_host0_scl_duration();
+        registers.configure_phy_i2c_host1_sda_guard();
+        registers.configure_phy_i2c_host1_scl_duration();
+        registers.configure_phy_i2c_hardware_sda_guard();
+        registers.configure_phy_i2c_hardware_scl_duration();
     }
 
     /// Select register mode two, then enable it with a separate fresh RMW.
     pub fn configure_phy_i2c_master_registers(&mut self) {
-        let registers = &self.peripherals.i2c_ana_mst;
-        crate::generated::select_phy_i2c_register_mode(registers);
-        crate::generated::enable_phy_i2c_register_access(registers);
+        let registers = &mut self.peripherals.i2c_ana_mst;
+        registers.select_phy_i2c_register_mode();
+        registers.enable_phy_i2c_register_access();
     }
 
     /// Select one of the two complete-ROM BBPLL calibration encodings.
@@ -758,7 +740,9 @@ impl RadioPhyRegisters {
         } else {
             PhyI2cBbpllCalibrationState::Disabled
         };
-        crate::generated::set_phy_i2c_bbpll_calibration(&self.peripherals.i2c_ana_mst, state);
+        self.peripherals
+            .i2c_ana_mst
+            .set_phy_i2c_bbpll_calibration(state);
     }
 
     /// Program the complete reviewed 45-entry PHY-I²C command memory.
@@ -781,10 +765,12 @@ impl RadioPhyRegisters {
             } else {
                 fixed_value
             };
-            crate::svd::zero_based_field_write::phy_i2c_command_memory(
-                &self.peripherals.phy_i2c_command_ram,
-                index,
-                address.block(),
+            self.peripherals.phy_i2c_command_ram.phy_i2c_command_memory(
+                oer_mmio::Index::new(index).expect("the template has one entry per command slot"),
+                crate::generated::phy_i2c_command_ram::command_memory::Block::from_bits(u32::from(
+                    address.block(),
+                ))
+                .expect("every template block is a declared command-memory block"),
                 address.index(),
                 value,
             );

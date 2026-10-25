@@ -2,7 +2,11 @@
 
 #![forbid(unsafe_code)]
 
-use crate::RadioPhyRegisters;
+use oer_mmio::Placement;
+
+use crate::{
+    RadioPhyRegisters, generated::phy_frequency_channel_oracle::PhyFrequencyChannelOracle,
+};
 
 /// Corrected capacitor word, retaining the ROM's signed spill into the mode.
 pub const fn frequency_cap_correction_word(raw: u32, adjusted: u16) -> u32 {
@@ -97,22 +101,90 @@ fn nrx_frequency_quotient(shift: u32, frequency: u32) -> u32 {
     quotient % 0x0100_0000
 }
 
+/// `phy_freq_i2c_num_addr`'s writes: the two prefix addresses in one
+/// fresh-read RMW of `I2C_NUMBER_CONTROL`, then the three address words in
+/// ascending order, each written whole.
+fn publish_i2c_number_addresses<P: Placement>(
+    frequency: &mut PhyFrequencyChannelOracle<P>,
+    addresses: &PhyFrequencyI2cNumberAddresses,
+) {
+    let address = |index: usize| -> oer_mmio::Bits<5> {
+        oer_mmio::Bits::new(u32::from(addresses.values[index]))
+            .expect("validated PHY-I2C address fits five bits")
+    };
+    let zero = oer_mmio::Bits::<5>::constant::<0>();
+    // The two prefix addresses in one fresh-read RMW.
+    frequency.modify_i2c_number_control(|w| {
+        w.set_bits_8_12_opaque(address(0))
+            .set_bits_13_17_opaque(address(1));
+    });
+    frequency.frequency_i2c_number_word(
+        oer_mmio::Index::constant::<0>(),
+        address(2),
+        address(3),
+        address(4),
+        address(5),
+        address(6),
+        address(7),
+        oer_mmio::Bits::constant::<0>(),
+    );
+    frequency.frequency_i2c_number_word(
+        oer_mmio::Index::constant::<1>(),
+        address(8),
+        address(9),
+        address(10),
+        zero,
+        zero,
+        zero,
+        oer_mmio::Bits::constant::<0>(),
+    );
+    frequency.frequency_i2c_number_word(
+        oer_mmio::Index::constant::<2>(),
+        zero,
+        zero,
+        zero,
+        zero,
+        zero,
+        zero,
+        oer_mmio::Bits::constant::<0>(),
+    );
+}
+
+/// Complete rev0 ROM `phy_nrx_freq_set`: two reads of `NRX_FREQUENCY_CONTROL`,
+/// then one store of the quotient with the high fields of the second read.
+fn publish_nrx_frequency<P: Placement>(
+    frequency_registers: &mut PhyFrequencyChannelOracle<P>,
+    frequency: u32,
+) {
+    // The ROM intentionally samples this word twice. The first sample
+    // supplies the complete eight-bit shift selector; the second supplies
+    // both high fields preserved by the final publication.
+    let first = frequency_registers.read_nrx_frequency_control();
+    let shift = first.bits_24_28_opaque().get() + first.bits_29_31_opaque().get() * 0x20;
+    let previous = frequency_registers.read_nrx_frequency_control();
+    frequency_registers.publish_nrx_frequency_fields(
+        oer_mmio::Bits::new(nrx_frequency_quotient(shift, frequency))
+            .expect("the quotient is reduced below 2^24"),
+        previous.bits_24_28_opaque(),
+        previous.bits_29_31_opaque(),
+    );
+}
+
 impl RadioPhyRegisters {
     /// Select the recovered two-bit baseband mode.
     pub fn set_frequency_baseband_mode(&mut self, mode: u8) {
         let mode = crate::generated::PhyFrequencyBasebandMode::new(u32::from(mode))
             .expect("baseband mode must fit its generated two-bit domain");
-        crate::generated::configure_phy_frequency_baseband_mode(
-            &self.peripherals.phy_frequency_channel_oracle,
-            mode,
-        );
+        self.peripherals
+            .phy_frequency_channel_oracle
+            .configure_phy_frequency_baseband_mode(mode);
     }
 
     /// Pulse the frequency-module reset/release bit through two fresh RMWs.
     pub fn reset_frequency_module(&mut self) {
-        let frequency = &self.peripherals.phy_frequency_channel_oracle;
-        crate::generated::assert_phy_frequency_module_reset(frequency);
-        crate::generated::release_phy_frequency_module_reset(frequency);
+        let frequency = &mut self.peripherals.phy_frequency_channel_oracle;
+        frequency.assert_phy_frequency_module_reset();
+        frequency.release_phy_frequency_module_reset();
     }
 
     /// Retain the two ordered observations after software frequency ownership settles.
@@ -121,8 +193,7 @@ impl RadioPhyRegisters {
         let _ = self
             .peripherals
             .phy_frequency_channel_oracle
-            .i2c_number_control()
-            .read();
+            .read_i2c_number_control();
     }
 
     /// Select whether hardware owns frequency updates.
@@ -132,30 +203,29 @@ impl RadioPhyRegisters {
         } else {
             crate::generated::PhyHardwareFrequencyControlState::Software
         };
-        crate::generated::configure_phy_hardware_frequency_control(
-            &self.peripherals.phy_frequency_channel_oracle,
-            state,
-        );
+        self.peripherals
+            .phy_frequency_channel_oracle
+            .configure_phy_hardware_frequency_control(state);
     }
 
     /// Apply complete rev0 ROM `phy_freq_reg_init(2, 4)`.
     pub fn initialize_frequency_registers(&mut self, parameter_override: bool) {
-        let frequency = &self.peripherals.phy_frequency_channel_oracle;
-        crate::generated::initialize_phy_frequency_control(frequency);
-        crate::generated::enable_phy_frequency_module(frequency);
+        let frequency = &mut self.peripherals.phy_frequency_channel_oracle;
+        frequency.initialize_phy_frequency_control();
+        frequency.enable_phy_frequency_module();
         let mode = if parameter_override {
             crate::generated::PhyFrequencyRegisterMode::ParameterOverride
         } else {
             crate::generated::PhyFrequencyRegisterMode::Default
         };
-        crate::generated::configure_phy_frequency_register_mode(frequency, mode);
+        frequency.configure_phy_frequency_register_mode(mode);
         // Retain the complete vendor initialization image as one operation.
         // Its unknown-reset lanes have no independent field capabilities;
         // callers cannot supply a different word.
-        crate::svd::fixed_register_image::frequency_parameter_0(frequency);
+        frequency.frequency_parameter_0();
         // The second whole-word image has the same closed contract.
         // Individual fields do not grant access to its initialization padding.
-        crate::svd::fixed_register_image::frequency_parameter_1_initialization(frequency);
+        frequency.frequency_parameter_1_initialization();
     }
 
     /// Apply complete rev0 ROM `phy_freq_i2c_mem_write`.
@@ -164,37 +234,39 @@ impl RadioPhyRegisters {
             value <= 0x00ff_ffff,
             "frequency-memory data must fit 24 bits"
         );
-        let frequency = &self.peripherals.phy_frequency_channel_oracle;
+        let frequency = &mut self.peripherals.phy_frequency_channel_oracle;
         let address = crate::generated::PhyFrequencyMemoryAddress::new(u32::from(address))
             .expect("frequency-memory address must fit its generated eleven-bit domain");
-        crate::generated::configure_phy_frequency_memory_address(frequency, address);
-        crate::svd::zero_based_field_write::frequency_memory_data(frequency, value, mode);
-        crate::generated::raise_phy_frequency_memory_write_pulse(frequency);
-        crate::generated::lower_phy_frequency_memory_write_pulse(frequency);
+        frequency.configure_phy_frequency_memory_address(address);
+        frequency.frequency_memory_data(
+            oer_mmio::Bits::new(value).expect("frequency-memory data fits 24 bits"),
+            mode,
+        );
+        frequency.raise_phy_frequency_memory_write_pulse();
+        frequency.lower_phy_frequency_memory_write_pulse();
     }
 
     /// Apply complete rev0 ROM `phy_read_rf_freq_mem`.
     pub fn read_frequency_memory(&mut self, address: u16, mode: u8) -> u32 {
-        let frequency = &self.peripherals.phy_frequency_channel_oracle;
+        let frequency = &mut self.peripherals.phy_frequency_channel_oracle;
         let address = crate::generated::PhyFrequencyMemoryAddress::new(u32::from(address))
             .expect("frequency-memory address must fit its generated eleven-bit domain");
         let mode = crate::generated::PhyFrequencyMemoryReadMode::new(u32::from(mode))
             .expect("frequency-memory read mode must fit its generated two-bit domain");
-        crate::generated::configure_phy_frequency_memory_address(frequency, address);
-        crate::generated::configure_phy_frequency_memory_read_mode(frequency, mode);
-        crate::generated::raise_phy_frequency_memory_read_pulse(frequency);
-        crate::generated::lower_phy_frequency_memory_read_pulse(frequency);
-        crate::svd::field_read::observe_phy_frequency_memory_result(frequency)
+        frequency.configure_phy_frequency_memory_address(address);
+        frequency.configure_phy_frequency_memory_read_mode(mode);
+        frequency.raise_phy_frequency_memory_read_pulse();
+        frequency.lower_phy_frequency_memory_read_pulse();
+        frequency.read_frequency_memory_read_result().value()
     }
 
     /// Restore the low frequency-control channel index without pulsing a switch.
     pub fn set_frequency_channel_index(&mut self, frequency_index: u8) {
         let index = crate::generated::PhyFrequencyChannelIndex::new(u32::from(frequency_index))
             .expect("one byte fits the complete generated channel-index domain");
-        crate::generated::configure_phy_frequency_channel_index(
-            &self.peripherals.phy_frequency_channel_oracle,
-            index,
-        );
+        self.peripherals
+            .phy_frequency_channel_oracle
+            .configure_phy_frequency_channel_index(index);
     }
 
     /// Publish the complete semantic `phy_freq_i2c_num_addr` sequence.
@@ -202,91 +274,50 @@ impl RadioPhyRegisters {
         &mut self,
         addresses: PhyFrequencyI2cNumberAddresses,
     ) {
-        let frequency = &self.peripherals.phy_frequency_channel_oracle;
-        let address_0 =
-            crate::generated::PhyFrequencyI2cNumberAddress::new(u32::from(addresses.values[0]))
-                .expect("validated PHY-I2C address fits its generated domain");
-        let address_1 =
-            crate::generated::PhyFrequencyI2cNumberAddress::new(u32::from(addresses.values[1]))
-                .expect("validated PHY-I2C address fits its generated domain");
-        crate::generated::configure_phy_frequency_i2c_number_prefix(
-            frequency, address_0, address_1,
-        );
-        crate::svd::zero_based_field_write::frequency_i2c_number_word(
-            frequency,
-            0,
-            addresses.values[2],
-            addresses.values[3],
-            addresses.values[4],
-            addresses.values[5],
-            addresses.values[6],
-            addresses.values[7],
-            0,
-        );
-        crate::svd::zero_based_field_write::frequency_i2c_number_word(
-            frequency,
-            1,
-            addresses.values[8],
-            addresses.values[9],
-            addresses.values[10],
-            0,
-            0,
-            0,
-            0,
-        );
-        crate::svd::zero_based_field_write::frequency_i2c_number_word(
-            frequency, 2, 0, 0, 0, 0, 0, 0, 0,
+        publish_i2c_number_addresses(
+            &mut self.peripherals.phy_frequency_channel_oracle,
+            &addresses,
         );
     }
 
     /// Publish the two pre-delay edges of `phy_freq_chan_en_sw`.
     pub fn start_frequency_channel_switch(&mut self, frequency_index: u8) {
         self.set_frequency_channel_index(frequency_index);
-        crate::generated::raise_phy_frequency_channel_switch_pulse(
-            &self.peripherals.phy_frequency_channel_oracle,
-        );
+        self.peripherals
+            .phy_frequency_channel_oracle
+            .raise_phy_frequency_channel_switch_pulse();
     }
 
     /// Complete the caller-delayed clear of `phy_freq_chan_en_sw`.
     pub fn clear_frequency_channel_switch(&mut self) {
-        crate::generated::lower_phy_frequency_channel_switch_pulse(
-            &self.peripherals.phy_frequency_channel_oracle,
-        );
+        self.peripherals
+            .phy_frequency_channel_oracle
+            .lower_phy_frequency_channel_switch_pulse();
     }
 
     /// Sample the generated frequency-ready field exactly once.
     pub fn frequency_ready(&mut self) -> bool {
-        crate::svd::field_read::observe_phy_frequency_ready(
-            &self.peripherals.phy_frequency_channel_oracle,
-        )
+        self.peripherals
+            .phy_frequency_channel_oracle
+            .read_frequency_parameter_1_status()
+            .frequency_ready()
     }
 
     /// Apply complete rev0 ROM `phy_nrx_freq_set`.
     pub fn configure_nrx_frequency(&mut self, frequency: u32) {
-        let frequency_registers = &self.peripherals.phy_frequency_channel_oracle;
-        // The ROM intentionally samples this word twice. The first sample
-        // supplies the complete eight-bit shift selector; the second supplies
-        // both high fields preserved by the final publication.
-        let (shift_low, shift_high) =
-            crate::svd::field_snapshot_read::capture_phy_nrx_frequency_shift(frequency_registers);
-        let shift = u32::from(shift_low) + u32::from(shift_high) * 0x20;
-        let (previous_shift_low, previous_shift_high) =
-            crate::svd::field_snapshot_read::capture_phy_nrx_frequency_shift(frequency_registers);
-        crate::svd::zero_based_field_write::publish_nrx_frequency_fields(
-            frequency_registers,
-            nrx_frequency_quotient(shift, frequency),
-            previous_shift_low,
-            previous_shift_high,
+        publish_nrx_frequency(
+            &mut self.peripherals.phy_frequency_channel_oracle,
+            frequency,
         );
     }
 
     /// Apply the two NRX writes inside complete rev0 ROM `phy_bb_reg_init`.
     pub fn initialize_nrx_baseband(&mut self) {
-        let frequency = &self.peripherals.phy_frequency_channel_oracle;
+        let frequency = &mut self.peripherals.phy_frequency_channel_oracle;
         // The complete ROM body replaces the generated twenty-four-bit
         // multifunction field with this bounded initialization image.
-        crate::generated::initialize_phy_nrx_frequency_quotient(frequency);
-        crate::generated::initialize_phy_nrx_frequency_shift(frequency);
+        frequency.initialize_phy_nrx_frequency_quotient();
+        frequency.initialize_phy_nrx_frequency_shift();
     }
 
     /// Publish the channel-offset prefix of complete `phy_bb_bss_cbw40`.
@@ -294,29 +325,28 @@ impl RadioPhyRegisters {
         let value = bss_tx_offset(cbw);
         let value = crate::generated::PhyChannelOffsetNibble::new(u32::from(value))
             .expect("reviewed BSS-CBW offset fits its generated nibble domain");
-        crate::generated::configure_phy_bss_channel_offset(
-            &self.peripherals.phy_frequency_channel_oracle,
-            value,
-        );
+        self.peripherals
+            .phy_frequency_channel_oracle
+            .configure_phy_bss_channel_offset(value);
     }
 
     /// Publish the three FBW suffix edges of complete `phy_bb_bss_cbw40`.
     pub fn configure_bss_cbw_suffix(&mut self, cbw: u8) {
-        let frequency = &self.peripherals.phy_frequency_channel_oracle;
+        let frequency = &mut self.peripherals.phy_frequency_channel_oracle;
         let selection = if cbw == 0 {
             crate::generated::PhyFbwSelectionState::Unselected
         } else {
             crate::generated::PhyFbwSelectionState::Selected
         };
-        crate::generated::clear_phy_fbw_control(frequency);
-        crate::generated::configure_phy_fbw_select_mid(frequency, selection);
-        crate::generated::configure_phy_fbw_select_high(frequency, selection);
+        frequency.clear_phy_fbw_control();
+        frequency.configure_phy_fbw_select_mid(selection);
+        frequency.configure_phy_fbw_select_high(selection);
     }
 
     /// Apply the four fresh-read replacements of complete `phy_bb_cbw_chan_cfg`.
     pub fn configure_channel_cbw(&mut self, cbw: u32) {
         let fields = channel_cbw_fields(cbw);
-        let frequency = &self.peripherals.phy_frequency_channel_oracle;
+        let frequency = &mut self.peripherals.phy_frequency_channel_oracle;
         // Channel offset owns only the low nibble. Preserve the adjacent
         // minimum-power setting, as both ROM channel setters do.
         let tx_offset = crate::generated::PhyChannelOffsetNibble::new(u32::from(fields.tx_offset))
@@ -330,26 +360,25 @@ impl RadioPhyRegisters {
         let control_1_low =
             crate::generated::PhyChannelCbwTwoBitImage::new(u32::from(fields.control_1_low))
                 .expect("reviewed CBW control fits its generated two-bit domain");
-        crate::generated::configure_phy_channel_cbw_offset(frequency, tx_offset);
-        crate::generated::configure_phy_channel_cbw_control_0(frequency, control_0);
-        crate::generated::configure_phy_channel_cbw_control_1_high(frequency, control_1_high);
-        crate::generated::configure_phy_channel_cbw_control_1_low(frequency, control_1_low);
+        frequency.configure_phy_channel_cbw_offset(tx_offset);
+        frequency.configure_phy_channel_cbw_control_0(control_0);
+        frequency.configure_phy_channel_cbw_control_1_high(control_1_high);
+        frequency.configure_phy_channel_cbw_control_1_low(control_1_low);
     }
 
     /// Apply the three fresh-read updates of complete `phy_bt_filter_reg`.
     pub fn configure_bt_filter(&mut self) {
-        let frequency = &self.peripherals.phy_frequency_channel_oracle;
-        crate::generated::enable_phy_bt_filter(frequency);
-        crate::generated::clear_phy_bt_filter_low(frequency);
-        crate::generated::clear_phy_bt_filter_mode(frequency);
+        let frequency = &mut self.peripherals.phy_frequency_channel_oracle;
+        frequency.enable_phy_bt_filter();
+        frequency.clear_phy_bt_filter_low();
+        frequency.clear_phy_bt_filter_mode();
     }
 
     /// Publish the TX-cap readback into command-memory entry one.
     pub fn publish_frequency_tx_cap(&mut self, value: u8) {
-        crate::svd::zero_based_field_write::phy_i2c_command_memory(
-            &self.peripherals.phy_i2c_command_ram,
-            1,
-            0x6b,
+        self.peripherals.phy_i2c_command_ram.phy_i2c_command_memory(
+            oer_mmio::Index::constant::<1>(),
+            crate::generated::phy_i2c_command_ram::command_memory::Block::Txrf,
             2,
             value,
         );

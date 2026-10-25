@@ -10676,6 +10676,30 @@
               <bitOffset>22</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
+            <field>
+              <name>HP_ACTIVE_XPD_CPLL_I2C</name>
+              <description>Active-state CPLL analog-I2C power control. The bootstrap powers it before it programs the CPLL; the radio does not write it.</description>
+              <bitOffset>23</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>HP_ACTIVE_XPD_MPLL_I2C</name>
+              <description>Active-state MPLL analog-I2C power control. The bootstrap powers it before it programs the MPLL that clocks the PSRAM; the radio does not write it.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>HP_ACTIVE_XPD_CPLL</name>
+              <description>Active-state CPLL power. The bootstrap powers it for the CPU clock; the radio does not write it.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>HP_ACTIVE_XPD_MPLL</name>
+              <description>Active-state MPLL power. The bootstrap powers it for the PSRAM clock; the radio does not write it.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
           </fields>
         </register>
         <register>
@@ -11651,10 +11675,10 @@
       <registers>
         <register>
           <name>ROOT_CLK_CONF</name>
-          <description>Low-power root clock configuration. Only the RTC slow-clock source selector is published.</description>
+          <description>Low-power root clock configuration. Only the RTC slow-clock source selector is published. The access states the radio's: the radio reads the slow-clock source, and esp-hal's clock tree alone writes the word.</description>
           <addressOffset>0x0</addressOffset>
           <size>0x20</size>
-          <access>read-write</access>
+          <access>read-only</access>
           <resetValue>0x00000000</resetValue>
           <fields>
             <field>

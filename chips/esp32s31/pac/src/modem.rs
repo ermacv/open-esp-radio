@@ -14,3 +14,6 @@ pub(crate) mod platform;
 pub(crate) mod shared_clock;
 
 pub(crate) mod syscon;
+
+#[cfg(test)]
+mod typed_register_tests;

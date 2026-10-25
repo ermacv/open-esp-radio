@@ -1,54 +1,65 @@
-//! Host-only execution of the generated frontend reset against anonymous memory.
+//! The frontend TX/RX reset edges over host memory.
+
+use crate::generated::phy_fedata_recovered::{self as fedata, PhyFedataRecovered};
+use std::{vec, vec::Vec};
+
+/// The reset word as each edge leaves it, from a block whose every word is
+/// `initial`.
+fn edges(initial: u32) -> (fedata::word_0040_opaque::R, fedata::word_0040_opaque::R) {
+    let mut memory: Vec<u32> = vec![initial; fedata::SIZE / 4];
+    let mut block = PhyFedataRecovered::host(&mut memory).expect("memory holds the block");
+    block.clear_phy_frontend_txrx_reset_state();
+    let cleared = block.read_word_0040_opaque();
+    block.assert_phy_frontend_txrx_reset_state();
+    (cleared, block.read_word_0040_opaque())
+}
 
 #[test]
-#[allow(
-    unsafe_code,
-    clippy::disallowed_methods,
-    reason = "run the actual generated fixed-address transactions against private anonymous host memory"
-)]
-fn frontend_reset_preserves_poisoned_lanes_across_both_rom_edges() {
-    struct Mapping(*mut libc::c_void);
-    impl Drop for Mapping {
-        fn drop(&mut self) {
-            // SAFETY: this guard uniquely owns the successful page mapping.
-            unsafe { libc::munmap(self.0, 0x1000) };
+fn the_frontend_reset_lowers_then_raises_both_reset_bits() {
+    for initial in [0xffff_ffff, 0x01ff_f000, 0x0600_0000, 0] {
+        let (cleared, asserted) = edges(initial);
+        assert!(!cleared.tx_rx_reset_bit_25() && !cleared.tx_rx_reset_bit_26());
+        assert!(asserted.tx_rx_reset_bit_25() && asserted.tx_rx_reset_bit_26());
+    }
+}
+
+#[test]
+fn each_frontend_reset_edge_keeps_every_other_bit_of_the_word() {
+    for initial in [0xffff_ffff_u32, 0x01ff_f000, 0x9155_aa55] {
+        let mut memory: Vec<u32> = vec![initial; fedata::SIZE / 4];
+        let mut block = PhyFedataRecovered::host(&mut memory).expect("memory holds the block");
+        block.clear_phy_frontend_txrx_reset_state();
+        drop(block);
+        let changed: Vec<u32> = memory.iter().map(|word| word ^ initial).collect();
+        // Only the reset bits that were set change, and only in one word.
+        let differing: Vec<&u32> = changed.iter().filter(|bits| **bits != 0).collect();
+        assert!(differing.len() <= 1);
+        for bits in differing {
+            assert_eq!(bits & !initial, 0, "the clear edge only lowers bits");
+            assert_eq!(bits.count_ones(), 2, "it lowers the two reset bits alone");
         }
     }
+}
 
-    // SAFETY: anonymous private memory, with no descriptor. NOREPLACE fails
-    // rather than replacing an existing host mapping at this hardware address.
-    let page = unsafe {
-        libc::mmap(
-            0x2010_0000 as *mut libc::c_void,
-            0x1000,
-            libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_ANONYMOUS | libc::MAP_PRIVATE | libc::MAP_FIXED_NOREPLACE,
-            -1,
-            0,
-        )
-    };
-    assert_ne!(page, libc::MAP_FAILED, "cannot map the private test page");
-    let _mapping = Mapping(page);
-    // SAFETY: this test owns the mapped page and the only peripheral instance;
-    // no hardware is accessed and this instance never escapes into a HAL.
-    let registers = unsafe { crate::svd::PhyFedataRecovered::steal() };
-    let word = 0x2010_0440 as *mut u32;
-    for (initial, cleared, asserted) in [
-        (0xffff_ffff, 0xf9ff_ffff, 0xffff_ffff),
-        (0x01ff_f000, 0x01ff_f000, 0x07ff_f000),
-        (0x0600_0000, 0x0000_0000, 0x0600_0000),
-    ] {
-        // SAFETY: aligned word inside the private, live read/write mapping.
-        unsafe { core::ptr::write_volatile(word, initial) };
-        crate::generated::clear_phy_frontend_txrx_reset_state(&registers);
-        assert_eq!(registers.word_0040_opaque().read().bits(), cleared);
-        crate::generated::assert_phy_frontend_txrx_reset_state(&registers);
-        assert_eq!(registers.word_0040_opaque().read().bits(), asserted);
-    }
-    // A hardware update between edges must survive the second fresh read.
-    crate::generated::clear_phy_frontend_txrx_reset_state(&registers);
-    // SAFETY: the same private mapped word, exclusively owned by this test.
-    unsafe { core::ptr::write_volatile(word, 0x9155_aa55) };
-    crate::generated::assert_phy_frontend_txrx_reset_state(&registers);
-    assert_eq!(registers.word_0040_opaque().read().bits(), 0x9755_aa55);
+#[test]
+fn the_raise_edge_reads_the_word_afresh() {
+    // A hardware update between the edges survives the second edge: the
+    // raise reads the word again instead of reusing the cleared image.
+    let mut memory: Vec<u32> = vec![0; fedata::SIZE / 4];
+    PhyFedataRecovered::host(&mut memory)
+        .expect("memory holds the block")
+        .clear_phy_frontend_txrx_reset_state();
+    memory.fill(0x9155_aa55);
+    let mut block = PhyFedataRecovered::host(&mut memory).expect("memory holds the block");
+    block.assert_phy_frontend_txrx_reset_state();
+    let raised = block.read_word_0040_opaque();
+    assert!(raised.tx_rx_reset_bit_25() && raised.tx_rx_reset_bit_26());
+    drop(block);
+    let changed: Vec<u32> = memory
+        .iter()
+        .map(|word| word ^ 0x9155_aa55)
+        .filter(|bits| *bits != 0)
+        .collect();
+    assert_eq!(changed.len(), 1, "one word changed");
+    assert_eq!(changed[0] & 0x9155_aa55, 0, "every updated bit is kept");
 }

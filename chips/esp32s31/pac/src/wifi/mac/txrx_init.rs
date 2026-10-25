@@ -140,8 +140,9 @@ impl WifiRadioRegisters {
         shared
             .shared_radio
             .shared_radio_init_control
-            .control()
-            .modify(|_, w| w.bits_0_11_opaque().set(0x0f0));
+            .modify_control(|w| {
+                w.set_bits_0_11_opaque(oer_mmio::Bits::constant::<0x0f0>());
+            });
         init.field_control()
             .modify(|_, w| w.bits_4_7_opaque().set(4));
         init.gate_control()

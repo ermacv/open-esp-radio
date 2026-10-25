@@ -9,7 +9,7 @@
 use crate::{
     SharedRadioRegisters,
     generated::{
-        self, ExternalCoexFlag, ExternalCoexGrantDelay, ExternalCoexNibble, ExternalCoexSync,
+        ExternalCoexFlag, ExternalCoexGrantDelay, ExternalCoexNibble, ExternalCoexSync,
         ExternalCoexWorkMode,
     },
 };
@@ -70,25 +70,18 @@ impl SharedRadioRegisters {
         role: ExternalCoexRole,
         wires: ExternalCoexWires,
     ) {
-        let block = &self.coexistence.coex_external;
-        generated::set_coex_external_sync(block, sync(0));
-        generated::set_coex_external_work_mode(
-            block,
+        let block = &mut self.coexistence.coex_external;
+        block.set_coex_external_sync(sync(0));
+        block.set_coex_external_work_mode(
             ExternalCoexWorkMode::new(role as u32).expect("a role fits the work mode"),
         );
         match role {
-            ExternalCoexRole::Leader => generated::set_coex_external_sync(block, sync(0x14)),
+            ExternalCoexRole::Leader => block.set_coex_external_sync(sync(0x14)),
             ExternalCoexRole::Follower => {
                 let one_wire = wires == ExternalCoexWires::One;
-                generated::set_coex_external_advanced_grant_2(block, nibble(1));
-                generated::set_coex_external_advanced_grant_1(
-                    block,
-                    nibble(if one_wire { 1 } else { 8 }),
-                );
-                generated::set_coex_external_advanced_grant_0(
-                    block,
-                    nibble(if one_wire { 1 } else { 0xc }),
-                );
+                block.set_coex_external_advanced_grant_2(nibble(1));
+                block.set_coex_external_advanced_grant_1(nibble(if one_wire { 1 } else { 8 }));
+                block.set_coex_external_advanced_grant_0(nibble(if one_wire { 1 } else { 0xc }));
             }
         }
     }
@@ -101,9 +94,9 @@ impl SharedRadioRegisters {
         delay: ExternalCoexGrantDelay,
         validate_high: bool,
     ) {
-        let block = &self.coexistence.coex_external;
-        generated::set_coex_external_grant_delay(block, delay);
-        generated::set_coex_external_validate_high(block, flag(validate_high));
+        let block = &mut self.coexistence.coex_external;
+        block.set_coex_external_grant_delay(delay);
+        block.set_coex_external_validate_high(flag(validate_high));
     }
 
     /// `hal_set_extern_pti`: the three priorities in the basic modes, or the
@@ -114,24 +107,21 @@ impl SharedRadioRegisters {
         wires: ExternalCoexWires,
         priorities: [ExternalCoexPriority; 3],
     ) {
-        let block = &self.coexistence.coex_external;
+        let block = &mut self.coexistence.coex_external;
         match role {
             ExternalCoexRole::Follower => {
                 let full = !matches!(wires, ExternalCoexWires::One | ExternalCoexWires::Four);
-                generated::set_coex_external_advanced_priority(
-                    block,
-                    nibble(if full { 0xf } else { 0 }),
-                );
-                generated::set_coex_external_priority_2(block, nibble(0));
-                generated::set_coex_external_priority_1(block, nibble(0xf));
-                generated::set_coex_external_priority_0(block, nibble(0));
+                block.set_coex_external_advanced_priority(nibble(if full { 0xf } else { 0 }));
+                block.set_coex_external_priority_2(nibble(0));
+                block.set_coex_external_priority_1(nibble(0xf));
+                block.set_coex_external_priority_0(nibble(0));
             }
             ExternalCoexRole::Leader => {
                 let [first, second, third] = priorities;
-                generated::set_coex_external_advanced_priority(block, nibble(0));
-                generated::set_coex_external_priority_2(block, first.0);
-                generated::set_coex_external_priority_1(block, second.0);
-                generated::set_coex_external_priority_0(block, third.0);
+                block.set_coex_external_advanced_priority(nibble(0));
+                block.set_coex_external_priority_2(first.0);
+                block.set_coex_external_priority_1(second.0);
+                block.set_coex_external_priority_0(third.0);
             }
         }
     }
@@ -139,31 +129,66 @@ impl SharedRadioRegisters {
     /// `hal_clr_extern_pti`: the follower first saturates its advanced grant
     /// fields; every mode then clears the four priority fields.
     pub fn clear_external_coex_priorities(&mut self, role: ExternalCoexRole) {
-        let block = &self.coexistence.coex_external;
+        let block = &mut self.coexistence.coex_external;
         if role == ExternalCoexRole::Follower {
-            generated::set_coex_external_advanced_grant_2(block, nibble(0xf));
-            generated::set_coex_external_advanced_grant_1(block, nibble(0xf));
-            generated::set_coex_external_advanced_grant_0(block, nibble(0xf));
+            block.set_coex_external_advanced_grant_2(nibble(0xf));
+            block.set_coex_external_advanced_grant_1(nibble(0xf));
+            block.set_coex_external_advanced_grant_0(nibble(0xf));
         }
-        generated::set_coex_external_advanced_priority(block, nibble(0));
-        generated::set_coex_external_priority_2(block, nibble(0));
-        generated::set_coex_external_priority_1(block, nibble(0));
-        generated::set_coex_external_priority_0(block, nibble(0));
+        block.set_coex_external_advanced_priority(nibble(0));
+        block.set_coex_external_priority_2(nibble(0));
+        block.set_coex_external_priority_1(nibble(0));
+        block.set_coex_external_priority_0(nibble(0));
     }
 
     /// `hal_enable_extern_coex` (`true`) or `hal_disable_extern_coex`
     /// (`false`): both enable masks, the second enable bit, then the control
     /// enable.
     pub fn set_external_coex_enabled(&mut self, enabled: bool) {
-        let block = &self.coexistence.coex_external;
+        let block = &mut self.coexistence.coex_external;
         let mask = nibble(if enabled { 0xf } else { 0 });
-        generated::set_coex_external_enable_mask_0(block, mask);
-        generated::set_coex_external_enable_mask_1(block, mask);
-        generated::set_coex_external_enable_1(block, flag(enabled));
-        generated::set_coex_external_enable(block, flag(enabled));
+        block.set_coex_external_enable_mask_0(mask);
+        block.set_coex_external_enable_mask_1(mask);
+        block.set_coex_external_enable_1(flag(enabled));
+        block.set_coex_external_enable(flag(enabled));
     }
 }
 
 fn sync(value: u32) -> ExternalCoexSync {
     ExternalCoexSync::new(value).expect("the synchronization fits ten bits")
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::generated::{
+        ExternalCoexGrantDelay,
+        coex_external::{self as coex, CoexExternal},
+    };
+    use std::vec;
+
+    /// The grant delay replaces bits 8:1 and keeps every other bit of the
+    /// word it reads.
+    ///
+    /// SOURCE: BLOB_LIBCOEX_EXTERNAL, `hal_external_coexist.o::hal_set_extern_coex_delay`
+    /// replaces bits 8:1; `ic_set_extern_coex_params` supplies `delay << 4`.
+    #[test]
+    fn grant_delay_replaces_the_complete_vendor_byte_and_preserves_other_fields() {
+        for (initial, delay, expected) in [
+            (0xffff_ffff_u32, 0, 0xffff_fe01_u32),
+            (0xffff_fffe, 5, 0xffff_fea0),
+            (0x5a5a_5a5a, 15, 0x5a5a_5be0),
+            (0xa5a5_a5a5, 0, 0xa5a5_a401),
+            (0, 5, 0xa0),
+        ] {
+            let mut memory = vec![initial; coex::SIZE / 4];
+            let mut block = CoexExternal::host(&mut memory).expect("memory holds the block");
+            block.set_coex_external_grant_delay(
+                ExternalCoexGrantDelay::new(delay).expect("a four-bit delay"),
+            );
+            drop(block);
+            let words: vec::Vec<u32> = memory.into_iter().filter(|word| *word != initial).collect();
+            assert!(words.len() <= 1, "one word changes at most");
+            assert_eq!(words.first().copied().unwrap_or(initial), expected);
+        }
+    }
 }

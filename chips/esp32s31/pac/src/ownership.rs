@@ -36,7 +36,7 @@ pub(crate) struct Ieee802154TaskPeripheralOwners {
 /// The HAL decides which protocol route currently holds it.
 #[must_use = "the shared PHY owner must remain inside its active radio route"]
 pub struct RadioPhyRegisters {
-    pub(crate) peripherals: svd::peripheral_ownership::RadioPhyPeripherals,
+    pub(crate) peripherals: generated::peripheral_ownership::RadioPhyPeripherals,
     /// The PHY's copy of the MAC local-time read, for its SDM deadline.
     pub(crate) mac_local_time: MacLocalTime,
 }
@@ -88,8 +88,26 @@ impl MacLocalTime {
 #[must_use = "the shared radio owner must remain inside its radio domain"]
 pub struct SharedRadioRegisters {
     pub(crate) radio_phy: RadioPhyRegisters,
-    pub(crate) coexistence: svd::peripheral_ownership::CoexistencePeripherals,
-    pub(crate) shared_radio: svd::peripheral_ownership::SharedRadioPeripherals,
+    pub(crate) coexistence: generated::peripheral_ownership::CoexistencePeripherals,
+    pub(crate) shared_radio: SharedRadioBlocks,
+}
+
+/// The shared radio partition's blocks, with the shared baseband less the
+/// receive-information read IEEE 802.15.4 holds
+/// ([`crate::ieee802154::baseband`]).
+pub(crate) struct SharedRadioBlocks {
+    pub(crate) bt_v3_2_baseband: generated::bt_v3_2_baseband::BtV3_2BasebandRest,
+    pub(crate) shared_radio_init_control:
+        generated::shared_radio_init_control::SharedRadioInitControl,
+    #[expect(
+        dead_code,
+        reason = "the partition holds the shared reset word; no reviewed operation reaches it"
+    )]
+    pub(crate) shared_baseband_reset_idle_status:
+        generated::shared_baseband_reset_idle_status::SharedBasebandResetIdleStatus,
+    pub(crate) shared_baseband_tx_timing:
+        generated::shared_baseband_tx_timing::SharedBasebandTxTiming,
+    pub(crate) zbbb_radio_control: generated::zbbb_radio_control::ZbbbRadioControl,
 }
 
 /// Partitions consumed by the shared radio owner.
@@ -183,7 +201,7 @@ pub struct WifiRxDmaRegisters {
 
 /// Opaque coexistence register partition.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
-pub struct CoexistencePartition(svd::peripheral_ownership::CoexistencePeripherals);
+pub struct CoexistencePartition(generated::peripheral_ownership::CoexistencePeripherals);
 
 /// Opaque Bluetooth controller register partition.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
@@ -194,7 +212,7 @@ pub struct BluetoothControllerPartition {
 
 /// Opaque shared-baseband register partition.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
-pub struct SharedRadioPartition(svd::peripheral_ownership::SharedRadioPeripherals);
+pub struct SharedRadioPartition(SharedRadioBlocks);
 
 /// Opaque IEEE 802.15.4 MAC register partition.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
@@ -214,7 +232,9 @@ impl RadioHandoff {
     /// # Safety
     /// Call at most once. The caller consumed the platform's analog-I2C,
     /// modem clock, Wi-Fi, Bluetooth and IEEE 802.15.4 singletons, and no
-    /// other code may access their radio register partitions thereafter.
+    /// other code may access their radio register partitions thereafter;
+    /// the bootstrap's [`crate::pll_power::BootstrapPllPower`], which
+    /// claims the PMU's radio view for its own epoch, is dropped.
     #[allow(
         unsafe_code,
         reason = "the platform proves exclusive radio MMIO ownership"
@@ -301,19 +321,19 @@ impl RadioPartitions {
     pub(crate) fn from_peripherals(peripherals: svd::Peripherals, claims: Claims) -> Self {
         let generated::peripheral_ownership::PeripheralPartitions {
             wifi_mac_interface,
+            radio_phy,
+            coexistence,
             bluetooth,
             bluetooth_modem_lp_timer,
             bluetooth_interrupts,
+            shared_radio,
+            modem_etm,
             ieee802154,
         } = generated::peripheral_ownership::partition(claims);
         let svd::peripheral_ownership::PeripheralPartitions {
             wifi_mac,
             wifi_rx_dma,
             wifi_interrupts,
-            radio_phy,
-            coexistence,
-            shared_radio,
-            modem_etm,
             mac_local_time,
             // Inventory-only word views have no safe runtime owner.
             unexposed: _,
@@ -321,7 +341,22 @@ impl RadioPartitions {
         let mac_local_time = MacLocalTime::mint(mac_local_time);
         let (ieee802154_etm, bluetooth_phy_etm, bluetooth_etm) =
             crate::modem::etm::split(modem_etm);
-        let (shared_radio, ieee802154_rx_info) = crate::ieee802154::baseband::split(shared_radio);
+        let generated::peripheral_ownership::SharedRadioPeripherals {
+            bt_v3_2_baseband,
+            shared_radio_init_control,
+            shared_baseband_reset_idle_status,
+            shared_baseband_tx_timing,
+            zbbb_radio_control,
+        } = shared_radio;
+        let (bt_v3_2_baseband, ieee802154_rx_info) =
+            crate::ieee802154::baseband::split(bt_v3_2_baseband);
+        let shared_radio = SharedRadioBlocks {
+            bt_v3_2_baseband,
+            shared_radio_init_control,
+            shared_baseband_reset_idle_status,
+            shared_baseband_tx_timing,
+            zbbb_radio_control,
+        };
         Self {
             wifi_mac: WifiMacPartition {
                 peripherals: wifi_mac,

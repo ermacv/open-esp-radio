@@ -2,8 +2,11 @@
 
 use core::num::NonZeroU32;
 
+use oer_mmio::Placement;
+
 use crate::{
-    RadioPhyRegisters, generated::ModemSysconClockGateState,
+    RadioPhyRegisters,
+    generated::{ModemSysconClockGateState, hp_sys_clkrst_radio::HpSysClkrstRadio},
     modem::syscon::ModemSysconPowerBaseline,
 };
 
@@ -29,6 +32,30 @@ pub struct PlatformPllSourceBaseline {
 }
 
 impl PlatformPllSourceBaseline {
+    /// The five fields from one read of `MODEM_CONF`.
+    fn capture<P: Placement>(registers: &HpSysClkrstRadio<P>) -> Self {
+        let modem_conf = registers.read_modem_conf();
+        Self {
+            modem_apb_clock_enabled: modem_conf.modem_apb_clk_en(),
+            modem_source_clock_enabled: modem_conf.modem_clk_en(),
+            modem_pll_selected: modem_conf.modem_clk_source_sel(),
+            modem_pll_clock_enabled: modem_conf.modem_pll_clk_en(),
+            modem_xtal_clock_enabled: modem_conf.modem_xtal_clk_en(),
+        }
+    }
+
+    /// One fresh-read RMW of the five captured fields; every other bit of
+    /// `MODEM_CONF`, the modem reset included, keeps the value read.
+    fn restore<P: Placement>(self, registers: &mut HpSysClkrstRadio<P>) {
+        registers.modify_modem_conf(|w| {
+            w.set_modem_apb_clk_en(self.modem_apb_clock_enabled)
+                .set_modem_clk_en(self.modem_source_clock_enabled)
+                .set_modem_clk_source_sel(self.modem_pll_selected)
+                .set_modem_pll_clk_en(self.modem_pll_clock_enabled)
+                .set_modem_xtal_clk_en(self.modem_xtal_clock_enabled);
+        });
+    }
+
     const BIT_COUNT: u32 = 5;
 
     fn bits(self) -> u32 {
@@ -119,9 +146,10 @@ impl RadioPhyRegisters {
     #[doc(hidden)]
     pub fn capture_wifi_power_baseline(&self) -> WifiPowerBaseline {
         WifiPowerBaseline::new(
-            crate::svd::field_read::observe_modem_register_bus_clock(
-                &self.peripherals.hp_sys_clkrst_radio,
-            ),
+            self.peripherals
+                .hp_sys_clkrst_radio
+                .read_modem_ctrl0()
+                .modem_clk_en(),
             self.platform_pll_source_baseline(),
             self.modem_syscon_power_baseline(),
         )
@@ -146,17 +174,19 @@ impl RadioPhyRegisters {
             return Err(WifiPowerRestoreReadback::ModemSourceClocks);
         }
 
-        crate::generated::restore_modem_register_bus_clock(
-            &self.peripherals.hp_sys_clkrst_radio,
-            if baseline.modem_register_bus_clock_enabled() {
+        self.peripherals
+            .hp_sys_clkrst_radio
+            .restore_modem_register_bus_clock(if baseline.modem_register_bus_clock_enabled() {
                 ModemSysconClockGateState::Enabled
             } else {
                 ModemSysconClockGateState::Disabled
-            },
-        );
-        if crate::svd::field_read::observe_modem_register_bus_clock(
-            &self.peripherals.hp_sys_clkrst_radio,
-        ) != baseline.modem_register_bus_clock_enabled()
+            });
+        if self
+            .peripherals
+            .hp_sys_clkrst_radio
+            .read_modem_ctrl0()
+            .modem_clk_en()
+            != baseline.modem_register_bus_clock_enabled()
         {
             return Err(WifiPowerRestoreReadback::ModemRegisterBusClock);
         }
@@ -165,37 +195,46 @@ impl RadioPhyRegisters {
 
     #[doc(hidden)]
     pub fn select_hp_active_modem_icg(&mut self) {
-        crate::svd::fixed_register_image::select_hp_active_modem_icg(&self.peripherals.pmu_radio);
+        self.peripherals.pmu_radio.select_hp_active_modem_icg();
     }
 
     #[doc(hidden)]
     pub fn apply_modem_icg_selection(&mut self) {
-        crate::svd::fixed_register_image::apply_modem_icg_selection(&self.peripherals.pmu_radio);
+        self.peripherals.pmu_radio.apply_modem_icg_selection();
     }
 
     #[doc(hidden)]
     pub fn apply_sleep_icg_selection(&mut self) {
-        crate::svd::fixed_register_image::apply_sleep_icg_selection(&self.peripherals.pmu_radio);
+        self.peripherals.pmu_radio.apply_sleep_icg_selection();
     }
 
     #[doc(hidden)]
     pub fn enable_modem_register_bus_clock(&mut self) {
-        crate::generated::enable_modem_register_bus_clock(&self.peripherals.hp_sys_clkrst_radio);
+        self.peripherals
+            .hp_sys_clkrst_radio
+            .enable_modem_register_bus_clock();
     }
 
     #[doc(hidden)]
     pub fn configure_modem_source_clocks(&mut self) {
-        crate::generated::configure_modem_source_clocks(&self.peripherals.hp_sys_clkrst_radio);
+        self.peripherals
+            .hp_sys_clkrst_radio
+            .configure_modem_source_clocks();
     }
 
     #[doc(hidden)]
     pub fn platform_clock_power_observation(&self) -> PlatformClockPowerObservation {
-        let hp_active_icg_code =
-            crate::svd::field_read::observe_hp_active_modem_icg_code(&self.peripherals.pmu_radio);
-        let modem_register_bus_clock_enabled =
-            crate::svd::field_read::observe_modem_register_bus_clock(
-                &self.peripherals.hp_sys_clkrst_radio,
-            );
+        let hp_active_icg_code = self
+            .peripherals
+            .pmu_radio
+            .read_hp_active_icg_modem()
+            .hp_active_dig_icg_modem_code_variant();
+        let modem_register_bus_clock_enabled = self
+            .peripherals
+            .hp_sys_clkrst_radio
+            .read_modem_ctrl0()
+            .modem_clk_en();
+        let modem_conf = self.peripherals.hp_sys_clkrst_radio.read_modem_conf();
         let (
             modem_apb_clock_enabled,
             modem_reset_asserted,
@@ -203,12 +242,17 @@ impl RadioPhyRegisters {
             modem_pll_selected,
             modem_pll_clock_enabled,
             modem_xtal_clock_enabled,
-        ) = crate::svd::field_snapshot_read::observe_modem_source_clocks(
-            &self.peripherals.hp_sys_clkrst_radio,
+        ) = (
+            modem_conf.modem_apb_clk_en(),
+            modem_conf.modem_rst_en(),
+            modem_conf.modem_clk_en(),
+            modem_conf.modem_clk_source_sel(),
+            modem_conf.modem_pll_clk_en(),
+            modem_conf.modem_xtal_clk_en(),
         );
         PlatformClockPowerObservation {
             hp_active_icg_selected: hp_active_icg_code
-                == u8::from(crate::svd::pmu_radio::hp_active_icg_modem::ActiveModemIcgCode::Active),
+                == Some(crate::generated::pmu_radio::hp_active_icg_modem::HpActiveDigIcgModemCode::Active),
             modem_register_bus_clock_enabled,
             modem_source_clocks_configured: modem_apb_clock_enabled
                 && !modem_reset_asserted
@@ -222,87 +266,70 @@ impl RadioPhyRegisters {
     /// Capture the upstream PLL-source fields a route may change.
     #[doc(hidden)]
     pub fn platform_pll_source_baseline(&self) -> PlatformPllSourceBaseline {
-        let (
-            modem_apb_clock_enabled,
-            _modem_reset_asserted,
-            modem_source_clock_enabled,
-            modem_pll_selected,
-            modem_pll_clock_enabled,
-            modem_xtal_clock_enabled,
-        ) = crate::svd::field_snapshot_read::observe_modem_source_clocks(
-            &self.peripherals.hp_sys_clkrst_radio,
-        );
-        PlatformPllSourceBaseline {
-            modem_apb_clock_enabled,
-            modem_source_clock_enabled,
-            modem_pll_selected,
-            modem_pll_clock_enabled,
-            modem_xtal_clock_enabled,
-        }
+        PlatformPllSourceBaseline::capture(&self.peripherals.hp_sys_clkrst_radio)
     }
 
     /// Restore one captured upstream PLL-source baseline.
     #[doc(hidden)]
     pub fn restore_platform_pll_source_baseline(&mut self, baseline: PlatformPllSourceBaseline) {
-        crate::generated::restore_modem_source_clocks(
-            &self.peripherals.hp_sys_clkrst_radio,
-            baseline.modem_apb_clock_enabled,
-            baseline.modem_source_clock_enabled,
-            baseline.modem_pll_selected,
-            baseline.modem_pll_clock_enabled,
-            baseline.modem_xtal_clock_enabled,
-        );
+        baseline.restore(&mut self.peripherals.hp_sys_clkrst_radio);
     }
 
     #[doc(hidden)]
     pub fn set_rf_circuit_power(&mut self, enabled: bool) {
         if enabled {
-            crate::generated::power_on_rf_circuits(&self.peripherals.pmu_radio);
+            self.peripherals.pmu_radio.power_on_rf_circuits();
         } else {
-            crate::generated::power_off_rf_circuits(&self.peripherals.pmu_radio);
+            self.peripherals.pmu_radio.power_off_rf_circuits();
         }
     }
 
     #[doc(hidden)]
     pub fn set_bb_i2c_power_tie(&mut self, enabled: bool) {
         if enabled {
-            crate::generated::enable_baseband_i2c_power_tie(&self.peripherals.pmu_radio);
+            self.peripherals.pmu_radio.enable_baseband_i2c_power_tie();
         } else {
-            crate::generated::disable_baseband_i2c_power_tie(&self.peripherals.pmu_radio);
+            self.peripherals.pmu_radio.disable_baseband_i2c_power_tie();
         }
     }
 
     #[doc(hidden)]
     pub fn analog_i2c_is_powered(&self) -> bool {
-        crate::svd::field_read::observe_analog_i2c_power(&self.peripherals.pmu_radio)
+        self.peripherals
+            .pmu_radio
+            .read_ana_peri_pwr_ctrl()
+            .xpd_perif_i2c()
     }
 
     #[doc(hidden)]
     pub fn set_analog_i2c_power(&mut self, enabled: bool) {
         if enabled {
-            crate::generated::power_on_analog_i2c(&self.peripherals.pmu_radio);
+            self.peripherals.pmu_radio.power_on_analog_i2c();
         } else {
-            crate::generated::power_off_analog_i2c(&self.peripherals.pmu_radio);
+            self.peripherals.pmu_radio.power_off_analog_i2c();
         }
     }
 
     #[doc(hidden)]
     pub fn analog_i2c_reset_is_released(&self) -> bool {
-        crate::svd::field_read::observe_analog_i2c_reset_release(&self.peripherals.pmu_radio)
+        self.peripherals
+            .pmu_radio
+            .read_ana_peri_pwr_ctrl()
+            .rstb_perif_i2c()
     }
 
     #[doc(hidden)]
     pub fn set_analog_i2c_reset_released(&mut self, released: bool) {
         if released {
-            crate::generated::release_analog_i2c_reset(&self.peripherals.pmu_radio);
+            self.peripherals.pmu_radio.release_analog_i2c_reset();
         } else {
-            crate::generated::assert_analog_i2c_reset(&self.peripherals.pmu_radio);
+            self.peripherals.pmu_radio.assert_analog_i2c_reset();
         }
     }
 
     #[doc(hidden)]
     pub fn enable_frontend_baseband_power(&mut self) {
-        crate::generated::enable_frontend_baseband_power(&self.peripherals.pmu_radio);
+        self.peripherals.pmu_radio.enable_frontend_baseband_power();
     }
 }
 

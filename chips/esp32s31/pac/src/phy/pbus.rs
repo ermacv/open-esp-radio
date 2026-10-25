@@ -27,28 +27,26 @@ impl RadioPhyRegisters {
             (false, true) => PbusForceTxRxState::DisabledInitial,
             (false, false) => PbusForceTxRxState::DisabledFinal,
         };
-        crate::generated::set_pbus_force_txrx_state(&self.peripherals.phy_pbus, state);
+        self.peripherals.phy_pbus.set_pbus_force_txrx_state(state);
     }
 
     /// Enable or disable the PBus work-mode selector.
     pub fn set_pbus_work_mode(&mut self, enabled: bool) {
-        crate::generated::set_pbus_work_mode(
-            &self.peripherals.phy_pbus,
-            pbus_enable_state(enabled),
-        );
+        self.peripherals
+            .phy_pbus
+            .set_pbus_work_mode(pbus_enable_state(enabled));
     }
 
     /// Enable or disable the PBus debug-mode selector.
     pub fn set_pbus_debug_mode(&mut self, enabled: bool) {
-        crate::generated::set_pbus_debug_mode(
-            &self.peripherals.phy_pbus,
-            pbus_enable_state(enabled),
-        );
+        self.peripherals
+            .phy_pbus
+            .set_pbus_debug_mode(pbus_enable_state(enabled));
     }
 
     /// Sample the PBus busy bit exactly once.
     pub fn pbus_is_busy(&mut self) -> bool {
-        crate::svd::field_read::observe_pbus_busy(&self.peripherals.phy_pbus)
+        self.peripherals.phy_pbus.read_status_clock_force().busy()
     }
 
     /// Publish one instruction-exact ROM force-test command in a fresh RMW edge.
@@ -58,62 +56,88 @@ impl RadioPhyRegisters {
     /// RX-DCO passes signed halfword images, and the complete encoder retains
     /// their low eleven bits while composing the physical command word.
     pub fn publish_pbus_force_test(&mut self, selector: u8, path: u8, test_value: u16) {
-        crate::generated::publish_pbus_force_test(
-            &self.peripherals.phy_pbus,
-            PbusForceTestInput::compose(selector, path, test_value),
-        );
+        self.peripherals
+            .phy_pbus
+            .publish_pbus_force_test(PbusForceTestInput::compose(selector, path, test_value));
     }
 
     /// Clear the force-test transaction bit after one completed observation.
     pub fn clear_pbus_transaction(&mut self) {
-        crate::generated::clear_pbus_transaction(&self.peripherals.phy_pbus);
+        self.peripherals.phy_pbus.clear_pbus_transaction();
     }
 
     /// Read the packed nine-bit result selected by the recovered ROM tables.
     pub fn read_pbus_result(&mut self, selector: u8, path: u8) -> Option<u16> {
         let path_one = path == 1;
-        Some(match selector {
-            0 if path_one => crate::svd::field_read::observe_pbus_selector0_path1_result(
-                &self.peripherals.phy_pbus,
-            ),
-            0 => crate::svd::field_read::observe_pbus_selector0_other_path_result(
-                &self.peripherals.phy_pbus,
-            ),
-            1 if path_one => crate::svd::field_read::observe_pbus_selector1_path1_result(
-                &self.peripherals.phy_pbus,
-            ),
-            1 => crate::svd::field_read::observe_pbus_selector1_other_path_result(
-                &self.peripherals.phy_pbus,
-            ),
-            2 if path_one => crate::svd::field_read::observe_pbus_selector2_path1_result(
-                &self.peripherals.phy_pbus,
-            ),
-            2 => crate::svd::field_read::observe_pbus_selector2_other_path_result(
-                &self.peripherals.phy_pbus,
-            ),
-            3 if path_one => crate::svd::field_read::observe_pbus_selector3_path1_result(
-                &self.peripherals.phy_pbus,
-            ),
-            3 => crate::svd::field_read::observe_pbus_selector3_other_path_result(
-                &self.peripherals.phy_pbus,
-            ),
-            4 if path_one => crate::svd::field_read::observe_pbus_selector4_path1_result(
-                &self.peripherals.phy_pbus,
-            ),
-            4 => crate::svd::field_read::observe_pbus_selector4_other_path_result(
-                &self.peripherals.phy_pbus,
-            ),
-            5 => crate::svd::field_read::observe_pbus_selector5_result(&self.peripherals.phy_pbus),
-            _ => crate::svd::field_read::observe_pbus_fallback_result(&self.peripherals.phy_pbus),
-        })
+        Some(crate::field_halfword(match selector {
+            0 if path_one => self
+                .peripherals
+                .phy_pbus
+                .read_read_result_3()
+                .bits_18_26_opaque(),
+            0 => self
+                .peripherals
+                .phy_pbus
+                .read_read_result_3()
+                .bits_9_17_opaque(),
+            1 if path_one => self
+                .peripherals
+                .phy_pbus
+                .read_read_result_0()
+                .bits_9_17_opaque(),
+            1 => self
+                .peripherals
+                .phy_pbus
+                .read_read_result_0()
+                .result_window_0_rx_dco(),
+            2 if path_one => self
+                .peripherals
+                .phy_pbus
+                .read_read_result_1()
+                .bits_0_8_opaque(),
+            2 => self
+                .peripherals
+                .phy_pbus
+                .read_read_result_2()
+                .bits_18_26_opaque(),
+            3 if path_one => self
+                .peripherals
+                .phy_pbus
+                .read_read_result_2()
+                .bits_9_17_opaque(),
+            3 => self
+                .peripherals
+                .phy_pbus
+                .read_read_result_2()
+                .bits_0_8_opaque(),
+            4 if path_one => self
+                .peripherals
+                .phy_pbus
+                .read_read_result_3()
+                .bits_0_8_opaque(),
+            4 => self
+                .peripherals
+                .phy_pbus
+                .read_read_result_4()
+                .bits_18_26_opaque(),
+            5 => self
+                .peripherals
+                .phy_pbus
+                .read_read_result_4()
+                .bits_9_17_opaque(),
+            _ => self
+                .peripherals
+                .phy_pbus
+                .read_read_result_4()
+                .bits_0_8_opaque(),
+        }))
     }
 
     /// Enable or disable both recovered RX clock bits as one pair.
     pub fn set_pbus_rx_clock_pair(&mut self, enabled: bool) {
-        crate::generated::set_pbus_rx_clock_pair(
-            &self.peripherals.phy_pbus,
-            pbus_enable_state(enabled),
-        );
+        self.peripherals
+            .phy_pbus
+            .set_pbus_rx_clock_pair(pbus_enable_state(enabled));
     }
 
     /// Enable or disable both recovered TX clock bits as one pair.
@@ -123,6 +147,6 @@ impl RadioPhyRegisters {
         } else {
             PbusTxClockPairState::Disabled
         };
-        crate::generated::set_pbus_tx_clock_pair(&self.peripherals.phy_pbus, state);
+        self.peripherals.phy_pbus.set_pbus_tx_clock_pair(state);
     }
 }

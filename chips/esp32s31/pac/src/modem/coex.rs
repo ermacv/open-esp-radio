@@ -39,8 +39,15 @@ impl CoexTimerRegister {
         }
     }
 
-    const fn index(self) -> usize {
-        self as usize
+    const fn index(self) -> oer_mmio::Index<6> {
+        match self {
+            Self::Timer0 => oer_mmio::Index::constant::<0>(),
+            Self::Timer1 => oer_mmio::Index::constant::<1>(),
+            Self::Timer2 => oer_mmio::Index::constant::<2>(),
+            Self::Timer3 => oer_mmio::Index::constant::<3>(),
+            Self::Timer4 => oer_mmio::Index::constant::<4>(),
+            Self::Timer5 => oer_mmio::Index::constant::<5>(),
+        }
     }
 }
 
@@ -48,14 +55,14 @@ impl CoexTimerRegister {
 ///
 /// Every method is the exact generated transaction of one vendor timer leaf.
 pub struct CoexTimerBankRegisters<'registers> {
-    timers: &'registers crate::svd::CoexHwTimer,
+    timers: &'registers mut crate::generated::coex_hw_timer::CoexHwTimer,
 }
 
 impl SharedRadioRegisters {
     /// Borrow the coexistence timer bank.
     pub fn coex_timers_mut(&mut self) -> CoexTimerBankRegisters<'_> {
         CoexTimerBankRegisters {
-            timers: &self.coexistence.coex_hw_timer,
+            timers: &mut self.coexistence.coex_hw_timer,
         }
     }
 
@@ -66,7 +73,7 @@ impl SharedRadioRegisters {
         (
             &mut self.radio_phy,
             CoexTimerBankRegisters {
-                timers: &self.coexistence.coex_hw_timer,
+                timers: &mut self.coexistence.coex_hw_timer,
             },
         )
     }
@@ -127,29 +134,29 @@ impl CoexTimerBankRegisters<'_> {
     /// Enable one timer in the exact disable-clear/enable-set order.
     pub fn enable(&mut self, timer: CoexTimerRegister) {
         let index = timer.index();
-        let timers = self.timers;
-        crate::generated::clear_coex_timer_disable(timers, index);
-        crate::generated::set_coex_timer_enable(timers, index);
+        let timers = &mut *self.timers;
+        timers.clear_coex_timer_disable(index);
+        timers.set_coex_timer_enable(index);
     }
 
     /// Disable one timer in the exact enable-clear/disable-set order.
     pub fn disable(&mut self, timer: CoexTimerRegister) {
         let index = timer.index();
-        let timers = self.timers;
-        crate::generated::clear_coex_timer_enable(timers, index);
-        crate::generated::set_coex_timer_disable(timers, index);
+        let timers = &mut *self.timers;
+        timers.clear_coex_timer_enable(index);
+        timers.set_coex_timer_disable(index);
     }
 
     /// Force one timer by clearing only its low 24-bit tick image.
     pub fn force(&mut self, timer: CoexTimerRegister) {
         let index = timer.index();
-        crate::generated::force_coex_timer(self.timers, index);
+        self.timers.force_coex_timer(index);
     }
 
     /// Remove the force condition using the vendor's exact value of 1000.
     pub fn unforce(&mut self, timer: CoexTimerRegister) {
         let index = timer.index();
-        crate::generated::unforce_coex_timer(self.timers, index);
+        self.timers.unforce_coex_timer(index);
     }
 
     /// Program the first two fresh-read RMW edges of `coex_hw_timer_set`.
@@ -164,9 +171,9 @@ impl CoexTimerBankRegisters<'_> {
         parameter_2: CoexTimerPtiValue,
     ) {
         let index = timer.index();
-        let timers = self.timers;
-        crate::generated::configure_coex_timer_client(timers, index, parameter_1);
-        crate::generated::configure_coex_timer_pti(timers, index, parameter_2);
+        let timers = &mut *self.timers;
+        timers.configure_coex_timer_client(index, parameter_1);
+        timers.configure_coex_timer_pti(index, parameter_2);
     }
 
     /// Publish the converted primary target in the third fresh-read RMW edge
@@ -175,11 +182,8 @@ impl CoexTimerBankRegisters<'_> {
         let index = timer.index();
         let primary_tick_input = CoexTimerTickInput::new(primary_tick_image)
             .expect("every u32 belongs to the reviewed COEX timer input domain");
-        crate::generated::configure_coex_timer_primary_target(
-            self.timers,
-            index,
-            primary_tick_input,
-        );
+        self.timers
+            .configure_coex_timer_primary_target(index, primary_tick_input);
     }
 
     /// Publish the converted secondary target in the final fresh-read RMW
@@ -188,10 +192,7 @@ impl CoexTimerBankRegisters<'_> {
         let index = timer.index();
         let secondary_tick_input = CoexTimerTickInput::new(secondary_tick_image)
             .expect("every u32 belongs to the reviewed COEX timer input domain");
-        crate::generated::configure_coex_timer_secondary_target(
-            self.timers,
-            index,
-            secondary_tick_input,
-        );
+        self.timers
+            .configure_coex_timer_secondary_target(index, secondary_tick_input);
     }
 }
