@@ -1804,6 +1804,82 @@ fn snapshot_samples_only_readable_status_fields() -> TestResult {
     Ok(())
 }
 
+const INT_CLR_W1C: &str = "name = \"INT_CLR\"\noffset = 0x0c\n\n[[registers.fields]]\nname = \"T0\"\nbits = \"0\"\nclass = \"write-one-to-clear\"\n\n[[registers.fields]]\nname = \"T1\"\nbits = \"1\"\nclass = \"write-one-to-clear\"";
+
+/// The fixture with `INT_CLR` as the vendor's `INT_CLR`: write-trigger
+/// strobes, `t1` the bits of its second field.
+fn write_trigger_clear(t1: &str) -> TestResult<Fixture> {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timer.toml",
+        INT_CLR_W1C,
+        &format!("name = \"INT_CLR\"\noffset = 0x0c\n\n[[registers.fields]]\nname = \"T0\"\nbits = \"0\"\nclass = \"write-trigger\"\n\n[[registers.fields]]\nname = \"T1\"\nbits = \"{t1}\"\nclass = \"write-trigger\""),
+    )?;
+    Ok(fixture)
+}
+
+#[test]
+fn snapshot_acknowledges_through_write_trigger_strobes() -> TestResult {
+    let policy = write_trigger_clear("1")?.load()?;
+    assert_eq!(
+        policy.owner("timer0_interrupt").map(Holder::Part),
+        Some(part(0, 1))
+    );
+    assert_eq!(
+        policy.owner("acknowledge_timer0_masked").map(Holder::Part),
+        Some(part(0, 1))
+    );
+    Ok(())
+}
+
+#[test]
+fn write_trigger_clear_field_acknowledges_only_sampled_bits() -> TestResult {
+    let error = write_trigger_clear("2:1")?.rejection()?;
+    assert_eq!(error.entity, "timer0_interrupt");
+    assert!(matches!(error.kind, ErrorKind::Snapshot(_)), "{error}");
+    Ok(())
+}
+
+#[test]
+fn write_trigger_clear_word_is_written_only_by_acknowledgements() -> TestResult {
+    let fixture = write_trigger_clear("1")?;
+    fixture.append(
+        "\n[[zero-register-writes]]\nname = \"zero_clear\"\nregister = \"TIMER0.INT_CLR\"\nsources = [\"SRC_DRIVER\"]\n",
+    )?;
+    let error = fixture.rejection()?;
+    assert_eq!(error.entity, "zero_clear");
+    assert!(
+        matches!(error.kind, ErrorKind::WriteOneToClear(_)),
+        "{error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn write_one_to_clear_word_is_its_own_status() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "policy.toml",
+        "status = \"TIMER0.INT_RAW\"",
+        "status = \"TIMER0.INT_CLR\"",
+    )?;
+    assert_eq!(
+        fixture.load()?.owner("timer0_interrupt").map(Holder::Part),
+        Some(part(0, 1))
+    );
+    // A word of other fields is no status of its own.
+    let fixture = write_trigger_clear("1")?;
+    fixture.edit(
+        "policy.toml",
+        "status = \"TIMER0.INT_RAW\"",
+        "status = \"TIMER0.INT_CLR\"",
+    )?;
+    let error = fixture.rejection()?;
+    assert_eq!(error.entity, "timer0_interrupt");
+    assert!(matches!(error.kind, ErrorKind::Snapshot(_)), "{error}");
+    Ok(())
+}
+
 #[test]
 fn every_fixed_write_needs_a_writable_word() -> TestResult {
     for (value, whole_word) in [(0u32, false), (0, true), (0xdeadbeef, true)] {

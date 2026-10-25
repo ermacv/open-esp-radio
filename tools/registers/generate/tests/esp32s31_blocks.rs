@@ -2,7 +2,8 @@
 //! {chip.toml,types/,layouts/}`) load through the block-type loader with
 //! every evidence catalog beside them: the vendor blocks the import spec
 //! names, the curated blocks no vendor header describes, the analog-I2C
-//! space and the placed memory layouts.
+//! space and the placed memory layouts. The ownership policy
+//! (`policy.toml`) loads over that root.
 
 use std::path::{Path, PathBuf};
 
@@ -10,21 +11,24 @@ use oer_registers_model::{
     RegisterEvidenceSet,
     chip_import::ImportSpec,
     chip_model::{ChipModel, Location},
+    chip_policy::{ChipPolicy, Claim, Holder},
 };
 
 fn registers() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/esp32s31/registers")
 }
 
-fn model() -> ChipModel {
-    let registers = registers();
-    let mut catalogs = std::fs::read_dir(registers.join("evidence"))
+fn evidence() -> RegisterEvidenceSet {
+    let mut catalogs = std::fs::read_dir(registers().join("evidence"))
         .expect("the evidence directory reads")
         .map(|entry| entry.expect("an evidence entry reads").path())
         .collect::<Vec<_>>();
     catalogs.sort();
-    let evidence = RegisterEvidenceSet::load_all(&catalogs).expect("the evidence catalogs load");
-    ChipModel::load(&registers.join("chip.toml"), &evidence).expect("the chip root loads")
+    RegisterEvidenceSet::load_all(&catalogs).expect("the evidence catalogs load")
+}
+
+fn model() -> ChipModel {
+    ChipModel::load(&registers().join("chip.toml"), &evidence()).expect("the chip root loads")
 }
 
 #[test]
@@ -226,4 +230,76 @@ fn unestablished_facts_stay_unestablished() {
         assert_eq!(field.class, FieldClass::WriteOnly);
         assert_eq!(field.review.sources, ["ROM_REV0_PHY_I2C"]);
     }
+}
+
+#[test]
+fn the_esp32s31_policy_loads_over_the_root() {
+    use oer_registers_contracts::FactAccuracy;
+    use oer_registers_model::chip_model::FieldClass;
+
+    let evidence = evidence();
+    let model =
+        ChipModel::load(&registers().join("chip.toml"), &evidence).expect("the chip root loads");
+    let policy = ChipPolicy::load(&registers().join("policy.toml"), &model, &evidence)
+        .unwrap_or_else(|error| panic!("the policy loads: {error}"));
+    let owner = |transaction: &str| {
+        let id = policy
+            .owner(transaction)
+            .unwrap_or_else(|| panic!("{transaction} has an owner"));
+        let partition = &policy.partitions()[id.partition];
+        let part = policy.part(id).expect("the owner is a part");
+        (partition.name.as_str(), part.name.as_str())
+    };
+    // A status-to-clear snapshot belongs to the part holding its words.
+    assert_eq!(
+        owner("mac_power_interrupt"),
+        ("WifiInterruptPeripherals", "WifiMacPowerInterrupt")
+    );
+    // The interrupt handler's side holds the event word.
+    let Some(Claim::Whole(Holder::Part(irq))) = policy.claim("IEEE802154.EVENT_STATUS") else {
+        panic!("a part holds the IEEE 802.15.4 event word");
+    };
+    assert!(policy.part(*irq).expect("the holder is a part").irq_side);
+    // A former header subfield modify sets bits of the header's fields.
+    assert_eq!(
+        owner("prepare_modem_syscon_clock_map"),
+        ("RadioPhyPeripherals", "ModemSysconRadio")
+    );
+    // The split trigger word: each channel's owner holds its own bits.
+    let Some(Claim::Fields(fields)) = policy.claim("MODEM_ETM.CHANNEL_ENABLE_SET") else {
+        panic!("the channel-enable set word is split by field");
+    };
+    let holder = |field: &str| match fields[field] {
+        Holder::Part(id) => policy.part(id).expect("a part").name.as_str(),
+        Holder::Unclaimed(_) => panic!("{field} is held"),
+    };
+    assert_eq!(holder("CH0"), "ModemEtmIeee802154");
+    assert_eq!(holder("CH2"), "ModemEtmBluetoothPhy");
+    assert_eq!(holder("CH7"), "ModemEtmBluetooth");
+    // The counter latch every context reads stays shared: software only
+    // reads its valid flag, which the update strobe restarts.
+    let Some(Claim::Whole(Holder::Part(counter))) = policy.claim("SYSTIMER.UNIT0_OP") else {
+        panic!("a part holds the counter latch");
+    };
+    assert!(policy.part(*counter).expect("a part").shared);
+    assert_eq!(
+        model
+            .field("SYSTIMER.UNIT0_OP.TIMER_UNIT0_VALUE_VALID")
+            .expect("the flag exists")
+            .class,
+        FieldClass::ReadOnly
+    );
+    // The ROM writes the read mask's high byte; that it is stored is not
+    // established.
+    let high = model
+        .field("I2C_ANA_MST.ANA_CONF1.ANA_STATUS1")
+        .expect("the high byte exists");
+    assert_eq!(high.class, FieldClass::Plain);
+    assert!(high.review.sources.iter().any(|s| s == "ROM_REV0_PHY_I2C"));
+    assert_eq!(high.review.accuracy, Some(FactAccuracy::Unknown));
+    // A vendor block without a driver is unclaimed, not a catch-all part.
+    assert!(matches!(
+        policy.claim("UART0.FIFO"),
+        Some(Claim::Whole(Holder::Unclaimed(_)))
+    ));
 }

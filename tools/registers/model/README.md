@@ -721,13 +721,17 @@ fails.
 
 A `write-one-to-clear` field is written only by its snapshot's
 acknowledgement. A snapshot's status word reads without a side effect, its
-clear word is one element of `write-one-to-clear` fields that acknowledge
-whole readable status fields; the part holding the clear word takes the
-snapshot and holds or observes the status word. No other transaction writes a
-clear word except a fixed image naming one proof, `masks` (an enable word
-of `plain` fields of the same part, holding a field for every bit the
-image acknowledges, cleared first) or `consumed-event`. A sequence step
-never writes a clear word.
+clear word is one element of `write-one-to-clear` or `write-trigger`
+fields (the vendor's `INT_CLR` strobes) that acknowledge whole readable
+status fields; a `write-trigger` clear field lies wholly inside the sampled
+bits or wholly outside them. A word of `write-one-to-clear` fields alone may
+be its own status (`status` equal to `clear`). The part holding the clear
+word takes the snapshot and holds or observes the status word. No other
+transaction writes a clear word or a `write-one-to-clear` field except a
+fixed image naming one proof, `masks` (an enable word of `plain` fields of
+the same part, holding a field for every bit the image acknowledges,
+cleared first) or `consumed-event`. A sequence step never writes a clear
+word.
 
 Every transaction except a partition image reaches the words of one part:
 a template reference needs every element held by that part, and a write to

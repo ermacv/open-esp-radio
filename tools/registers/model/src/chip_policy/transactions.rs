@@ -637,7 +637,17 @@ impl<'a> Checker<'a, '_> {
             let clear = self.element(entity, &snapshot.clear)?;
             let status_word = self.word(entity, Target::Word(status))?;
             let clear_word = self.word(entity, Target::Word(clear))?;
-            if !status_word.reads_freely() || status_word.has(FieldClass::WriteOneToClear) {
+            // One word of write-one-to-clear fields is its own status: the
+            // sample reads it and the acknowledgement writes back ones.
+            let own_status = status == clear;
+            if !status_word.reads_freely()
+                || (status_word.has(FieldClass::WriteOneToClear) && !own_status)
+                || (own_status
+                    && status_word
+                        .fields()
+                        .iter()
+                        .any(|field| field.class != FieldClass::WriteOneToClear))
+            {
                 return Err(self.error(
                     entity,
                     ErrorKind::Snapshot(
@@ -676,6 +686,21 @@ impl<'a> Checker<'a, '_> {
                         )),
                     ));
                 }
+            }
+            // A write-trigger clear field acknowledges sampled bits only:
+            // it lies wholly inside the sample or outside it.
+            if let Some(field) = clear_word.fields().iter().find(|field| {
+                field.class == FieldClass::WriteTrigger
+                    && field_mask(field) & mask != 0
+                    && field_mask(field) & !mask != 0
+            }) {
+                return Err(self.error(
+                    entity,
+                    ErrorKind::Snapshot(format!(
+                        "clear field {} acknowledges bits no status field samples",
+                        field.identity
+                    )),
+                ));
             }
             self.write_word(entity, Target::Word(clear), WordWrite::Acknowledge { mask })?;
             // The part holding the clear word acknowledges; it reads the
@@ -828,15 +853,18 @@ impl<'a> Checker<'a, '_> {
         if matches!(write, WordWrite::Acknowledge { .. })
             && (!word.storable()
                 || word.fields().is_empty()
-                || word
-                    .fields()
-                    .iter()
-                    .any(|field| field.class != FieldClass::WriteOneToClear))
+                || word.fields().iter().any(|field| {
+                    !matches!(
+                        field.class,
+                        FieldClass::WriteOneToClear | FieldClass::WriteTrigger
+                    )
+                }))
         {
             return Err(self.error(
                 entity,
                 ErrorKind::Snapshot(
-                    "its clear word holds only write-one-to-clear fields".to_owned(),
+                    "its clear word holds only write-one-to-clear or write-trigger fields"
+                        .to_owned(),
                 ),
             ));
         }
@@ -844,7 +872,7 @@ impl<'a> Checker<'a, '_> {
             return Err(self.error(
                 entity,
                 ErrorKind::WriteOneToClear(
-                    "a word of write-one-to-clear fields is written only by an acknowledgement"
+                    "a snapshot's clear word or a word of write-one-to-clear fields is written only by an acknowledgement"
                         .to_owned(),
                 ),
             ));

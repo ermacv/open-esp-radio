@@ -245,7 +245,9 @@ pub struct InterruptSnapshot {
     pub name: String,
     /// `INSTANCE.REGISTER`: one element.
     pub status: String,
-    /// `INSTANCE.REGISTER`: one element of write-one-to-clear fields.
+    /// `INSTANCE.REGISTER`: one element of write-one-to-clear or
+    /// write-trigger fields; `status` itself when it holds only
+    /// write-one-to-clear fields.
     pub clear: String,
     pub sources: Vec<String>,
 }

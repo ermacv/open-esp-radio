@@ -149,7 +149,10 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
 
 [review.entity."ANA_CONF1.ANA_STATUS1"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "ROM_REV0_PHY_I2C"]
+provenance = "observed"
+accuracy = "unknown"
+completeness = "partial"
 
 [review.entity."ANA_CONF2"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
@@ -428,8 +431,8 @@ write-range = { min = 0x0, max = 0xffffff }
 [[registers.fields]]
 name = "ANA_STATUS1"
 bits = "31:24"
-class = "read-only"
-description = "High byte of the complete complemented PHY-I2C read-mask publication."
+class = "plain"
+description = "High byte of the complete complemented PHY-I2C read-mask publication. The ESP-IDF header classes it read-only; the complete ROM phy_chip_i2c_readReg_org writes it as part of the read mask, so it is written as the ROM writes it. Whether the hardware stores the byte is not established."
 
 [[registers]]
 name = "ANA_CONF2"

@@ -157,7 +157,9 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PAC
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
 
 [review.entity."UNIT0_OP.TIMER_UNIT0_VALUE_VALID"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER", "ESP_IDF_4D59230D_S31_SYSTIMER_LL"]
+provenance = "observed"
+completeness = "partial"
 
 [review.entity."UNIT0_OP.TIMER_UNIT0_UPDATE"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
@@ -269,8 +271,8 @@ reserved = { mask = 0x9fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 [[registers.fields]]
 name = "TIMER_UNIT0_VALUE_VALID"
 bits = "29"
-class = "write-one-to-clear"
-description = "Represents UNIT0 value is synchronized and valid. Set when the latched value is synchronized and valid (R/SS/WTC: a written one clears it, so the strobe writes zero here)."
+class = "read-only"
+description = "Represents UNIT0 value is synchronized and valid. Set when the latched value is synchronized and valid. The ESP-IDF header classes it R/SS/WTC; the ESP-IDF driver only reads it and starts the next latch with TIMER_UNIT0_UPDATE, so software never writes it."
 
 [[registers.fields]]
 name = "TIMER_UNIT0_UPDATE"
