@@ -9,9 +9,7 @@
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::power::{PlatformClock, PlatformClockProvider as _};
 use oer_esp32s31_hal::usb_serial_jtag;
-use oer_espressif_esp_hal_radio::{
-    RadioSingletons, diagnostics::RadioRoot, take_pll_power, take_radio,
-};
+use oer_espressif_esp_hal_radio::{RadioSingletons, diagnostics::RadioRoot, take_radio};
 use oer_espressif_staged_runtime::diagnostics::{self, Console};
 use oer_espressif_staged_runtime::panic;
 
@@ -49,7 +47,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let (_hardware, clocks) = take_radio(
         singletons,
         &psram,
-        take_pll_power(peripherals.PMU).release(),
+        todo!("integration PR: bootstrap root provides PllPowerReleased"),
     );
     let _ = diagnostics.event(&RadioRoot::Handoff);
     let mut passed = true;

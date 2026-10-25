@@ -37,7 +37,7 @@ use oer_esp32s31_radio_client::{
     wifi::Wifi,
 };
 use oer_esp32s31_radio_system::{BluetoothActor, BluetoothAttachment, Esp32s31Radio, RadioSystem};
-use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_pll_power, take_radio};
+use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
 use oer_radio_regulatory::{Country, PowerLimits, RegulatoryDomain};
 use oer_time::{Clock, Duration, Timer};
 
@@ -177,7 +177,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         ieee802154: p.IEEE802154,
         lp_tsens: p.LP_TSENS,
     };
-    let (hardware, clocks) = take_radio(singletons, &psram, take_pll_power(p.PMU).release());
+    let (hardware, clocks) = take_radio(singletons, &psram, todo!("integration PR: bootstrap root provides PllPowerReleased"));
     let (domain, parts) =
         hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
     let (end, _) = oer_esp32s31_radio_client::claim().expect("one shared actor");

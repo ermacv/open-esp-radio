@@ -18,7 +18,7 @@ use oer_esp32s31_phy::{
 };
 use oer_esp32s31_radio_client::{LpClock, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
-use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_pll_power, take_radio};
+use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
 use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder};
 use oer_memory::{AffineSpscQueue, AffineSpscReceiver};
 use static_cell::StaticCell;
@@ -120,7 +120,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let (hardware, clocks) = take_radio(
         singletons,
         &psram,
-        take_pll_power(peripherals.PMU).release(),
+        todo!("integration PR: bootstrap root provides PllPowerReleased"),
     );
     let (domain, partitions) =
         hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());

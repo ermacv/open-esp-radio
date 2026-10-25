@@ -12,9 +12,9 @@
 //! never-released MPLL reference, so the radio's own MPLL requests never
 //! cross zero (`chips/esp32s31/registers/shared-words.toml`).
 //!
-//! [`take_pll_power`] consumes esp-hal's `PMU` singleton for the owner of
-//! the PMU's radio view; [`take_radio`] takes the proof of that owner's
-//! release, so the two owners of the view never exist at once.
+//! [`take_radio`] takes the proof of the release of the bootstrap's owner of
+//! the PMU's radio view (`PllPowerReleased`), so the two owners of the view
+//! never exist at once; the bootstrap root provides it.
 //!
 //! Blocks where the radio owns only single words (PMU, HP_SYS_CLKRST,
 //! LP_AON_CLK_RST, LP_PERICLKRST, the interrupt matrix) stay esp-hal's; each
@@ -48,7 +48,7 @@ use oer_esp32s31_hal::power::{
 mod esp_hal_handoff;
 
 #[cfg(feature = "esp32s31")]
-pub use esp_hal_handoff::{EspHal, EspHalClocks, RadioSingletons, take_pll_power, take_radio};
+pub use esp_hal_handoff::{EspHal, EspHalClocks, RadioSingletons, take_radio};
 
 /// The radio's platform clock provider over the backend `B`.
 pub struct PlatformClocks<B> {
