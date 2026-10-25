@@ -84,7 +84,14 @@ pub(super) fn expand(
         let (field, address) = fields
             .get(identity)
             .ok_or_else(|| context.error(entity, ErrorKind::UnknownField(identity.to_owned())))?;
-        if field.class != FieldClass::Plain || (kind != ControlKind::Mux && field.width != 1) {
+        let valid_class = match kind {
+            ControlKind::Reset => matches!(
+                field.class,
+                FieldClass::Plain | FieldClass::WriteOnly | FieldClass::WriteTrigger
+            ),
+            ControlKind::Clock | ControlKind::Mux => field.class == FieldClass::Plain,
+        };
+        if !valid_class || (kind != ControlKind::Mux && field.width != 1) {
             return Err(context.error(
                 entity,
                 ErrorKind::ControlField {

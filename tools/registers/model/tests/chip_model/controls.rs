@@ -270,6 +270,61 @@ rejects_control!(
     "field = \"CR.CONTROL_1.STATUS\"",
     ErrorKind::ControlField { kind: "reset", .. }
 );
+#[test]
+fn resets_accept_write_only_and_write_trigger_pulses() -> TestResult {
+    for (class, expected) in [
+        ("write-only", FieldClass::WriteOnly),
+        ("write-trigger", FieldClass::WriteTrigger),
+    ] {
+        let fixture = fixture()?;
+        fixture.edit(
+            "types/clock.toml",
+            "name = \"RESET\"\nbits = \"1\"\nclass = \"plain\"",
+            &format!("name = \"RESET\"\nbits = \"1\"\nclass = \"{class}\""),
+        )?;
+        let model = fixture.load()?;
+        let resets = model
+            .controls()
+            .iter()
+            .filter(|link| link.kind == ControlKind::Reset)
+            .collect::<Vec<_>>();
+        assert_eq!(resets.len(), 2);
+        assert!(resets.iter().all(|link| link.field.class == expected));
+        assert!(model.shared_controls().iter().any(|control| {
+            control.field == "CR.CONTROL_1.RESET" && control.instances == ["TIMG0", "TIMG1"]
+        }));
+    }
+    Ok(())
+}
+
+#[test]
+fn clocks_and_muxes_reject_write_only_and_write_trigger_fields() -> TestResult {
+    for class in ["write-only", "write-trigger"] {
+        for (field, bits, kind) in [("GATE", "0", "clock gate"), ("SELECT", "3:2", "mux")] {
+            let fixture = fixture()?;
+            fixture.edit(
+                "types/clock.toml",
+                &format!("name = \"{field}\"\nbits = \"{bits}\"\nclass = \"plain\""),
+                &format!("name = \"{field}\"\nbits = \"{bits}\"\nclass = \"{class}\""),
+            )?;
+            let error = fixture.rejection()?;
+            assert!(
+                matches!(error.kind, ErrorKind::ControlField { kind: actual, .. } if actual == kind),
+                "{error}"
+            );
+        }
+    }
+    Ok(())
+}
+
+rejects_control!(
+    reset_rejects_write_one_to_clear,
+    "root.toml",
+    "field = \"CR.CONTROL_1.RESET\"",
+    "field = \"CR.CONTROL_1.ACK\"",
+    ErrorKind::ControlField { kind: "reset", .. }
+);
+
 rejects_control!(
     gate_width,
     "root.toml",

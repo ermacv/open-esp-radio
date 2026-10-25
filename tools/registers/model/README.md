@@ -306,9 +306,10 @@ sources }`; `muxes` adds `inputs = { encoding = "CLOCK_SOURCE" }`.
 `field` is an absolute expanded `INSTANCE.REGISTER.FIELD` identity,
 including concrete `dim` and group indices. The referenced instance must
 be a different MMIO instance of the root; links to the instance's own block
-are rejected. Gates and resets require one `plain` bit; a mux requires a
-`plain` field. A field has one control kind across all instance links and
-gate groups: clock gate, reset or mux. Roles are nonempty segments of ASCII
+are rejected. Gates require one `plain` bit; resets require one bit of
+class `plain`, `write-only` or `write-trigger` (a reset pulse); a mux
+requires a `plain` field. A field has one control kind across all instance
+links and gate groups: clock gate, reset or mux. Roles are nonempty segments of ASCII
 lowercase letters and digits separated by single hyphens, unique within each
 list; leading, trailing and consecutive hyphens are rejected. Several roles
 of one instance still count as one user. Input keys are canonical unsigned
