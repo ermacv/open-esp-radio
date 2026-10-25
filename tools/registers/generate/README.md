@@ -581,8 +581,8 @@ state: `R/W` a plain field, `WT` a write trigger, `HRO` a hardware-modified
 read-only field, a hardware-modified field (`SC`, `SS`, ...) a read-only
 register, all fields `WTC` a write-one-to-clear register. `trm:` and
 `esp-hal:` sources, `read-side-effect` and enumerated values are counted as
-unchecked; a register the SVD and the header place at different offsets is
-printed as a note. The checkout must be at the overlay's `esp-idf` pin.
+unchecked.
+The checkout must be at the overlay's `esp-idf` pin.
 
 `cargo registers overlay import --chip <chip> --idf <checkout>
 [--peripheral <name>]...` rebuilds the entries from the headers and writes

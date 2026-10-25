@@ -96,9 +96,6 @@ pub fn check(root: &Path, chip: &str, idf: &Path) -> Result<()> {
     for line in &verdict.unchecked {
         println!("  unchecked: {line}");
     }
-    for line in &verdict.notes {
-        println!("  note: {line}");
-    }
     if verdict.failures.is_empty() {
         return Ok(());
     }

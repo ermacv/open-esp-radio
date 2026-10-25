@@ -128,11 +128,9 @@ fn overlay_text() -> String {
     let ctrl_union = line(STRUCT_H, "timer_ctrl_reg_t");
     let raw_union = line(STRUCT_H, "timer_int_raw_reg_t");
     let extra = line(INTERRUPTS_H, "ETS_EXTRA");
-    let max = line(INTERRUPTS_H, "ETS_MAX");
     format!(
         "schema = 1\nesp-idf = \"{PIN}\"\n\n\
 [[interrupts]]\nname = \"EXTRA\"\nsource = 1\nsources = [\"esp-idf:{INTERRUPTS}:{extra}\"]\n\n\
-[[interrupts]]\nname = \"MAX\"\nsource = 2\nsources = [\"esp-idf:{INTERRUPTS}:{max}\"]\n\n\
 [[registers]]\nperipheral = \"TIMER\"\nregister = \"CTRL\"\nreserved = 0xfffffff0\n\
 sources = [\"esp-idf:{REG}:{ctrl}\", \"esp-idf:{STRUCT}:{ctrl_union}\"]\n\n\
 [[fields]]\nperipheral = \"TIMER\"\nregister = \"CTRL\"\nfield = \"START\"\nkind = \"write-trigger\"\n\
@@ -159,7 +157,7 @@ fn an_overlay_that_matches_its_headers_passes() {
     let overlay = StrictnessOverlay::parse(&overlay_text()).unwrap();
     let verdict = check_overlay(&overlay, SVD, &Tree::new(REG_H, STRUCT_H)).unwrap();
     assert!(verdict.failures.is_empty(), "{:?}", verdict.failures);
-    assert_eq!(verdict.checked, 7);
+    assert_eq!(verdict.checked, 6);
 }
 
 #[test]

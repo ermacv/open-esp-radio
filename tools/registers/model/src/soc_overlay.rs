@@ -1044,8 +1044,12 @@ pub fn import_overlay(
         }
     }
     let mut out = String::new();
-    let prefix_end = existing_text
-        .find("\n[[")
+    // Everything before the first entry the headers derive: the pins, the
+    // `[[headers]]` and `[[no-api]]` tables.
+    let prefix_end = ["\n[[registers]]", "\n[[fields]]", "\n[[interrupts]]"]
+        .iter()
+        .filter_map(|table| existing_text.find(table))
+        .min()
         .map_or(existing_text.len(), |i| i + 1);
     out.push_str(existing_text.get(..prefix_end).unwrap_or(""));
     // Interrupt sources the SVD lacks.
