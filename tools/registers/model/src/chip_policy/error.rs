@@ -89,6 +89,10 @@ pub enum ErrorKind {
     WriteOneToClear(String),
     #[error("snapshot: {0}")]
     Snapshot(String),
+    #[error("DMA address: {0}")]
+    Pointer(String),
+    #[error("write constraint: {0}")]
+    WriteConstraint(String),
     #[error("transaction: {0}")]
     Transaction(String),
 }

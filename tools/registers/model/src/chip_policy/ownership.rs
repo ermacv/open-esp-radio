@@ -15,10 +15,11 @@ enum State {
     Fields(BTreeMap<usize, Holder>),
 }
 
-/// The words each part holds whole.
+/// The words each part holds whole and the words it observes.
 pub(super) struct PartWords {
     pub(super) id: PartId,
     pub(super) whole: Vec<usize>,
+    pub(super) observed: BTreeSet<usize>,
 }
 
 /// Every MMIO word's holder, after every part and unclaimed entry.
@@ -44,6 +45,22 @@ impl Coverage {
             Some(Some(State::Fields(fields))) => Some(fields),
             _ => None,
         }
+    }
+
+    /// Whether `part` reads `word`: it holds the word whole or observes it.
+    pub(super) fn reads(&self, part: PartId, word: usize) -> bool {
+        self.whole(word) == Ok(part)
+            || self
+                .parts
+                .iter()
+                .any(|words| words.id == part && words.observed.contains(&word))
+    }
+
+    /// The parts of partition `partition`.
+    pub(super) fn partition(&self, partition: usize) -> impl Iterator<Item = &PartWords> {
+        self.parts
+            .iter()
+            .filter(move |words| words.id.partition == partition)
     }
 
     pub(super) fn claims(&self, index: &Index<'_>) -> BTreeMap<String, Claim> {
@@ -240,7 +257,11 @@ pub(super) fn check(
                 &selection,
                 Holder::Part(id),
             )?;
-            coverage.parts.push(PartWords { id, whole });
+            coverage.parts.push(PartWords {
+                id,
+                whole,
+                observed: BTreeSet::new(),
+            });
         }
     }
     for (position, unclaimed) in file.unclaimed.iter().enumerate() {
@@ -315,7 +336,10 @@ pub(super) fn check(
             Some(State::Whole(_)) => {}
         }
     }
-    check_parts(context, index, file, &coverage)?;
+    let observed = check_parts(context, index, file, &coverage)?;
+    for (words, observed) in coverage.parts.iter_mut().zip(observed) {
+        words.observed = observed;
+    }
     Ok(coverage)
 }
 
@@ -436,20 +460,26 @@ fn select(
 }
 
 /// Rules that need every word's holder: what a part observes and what a
-/// shared or read-only part may hold.
+/// shared or read-only part may hold. The words each part observes, in
+/// part order.
 fn check_parts(
     context: Context<'_>,
     index: &Index<'_>,
     file: &PolicyFile,
     coverage: &Coverage,
-) -> Result<(), Error> {
+) -> Result<Vec<BTreeSet<usize>>, Error> {
+    let mut observed_words = Vec::new();
     for words in &coverage.parts {
-        let Some(partition) = file.partitions.get(words.id.partition) else {
+        let mut reads = BTreeSet::new();
+        let Some(part) = file
+            .partitions
+            .get(words.id.partition)
+            .and_then(|partition| Some((partition, partition.parts.get(words.id.part)?)))
+        else {
+            observed_words.push(reads);
             continue;
         };
-        let Some(part) = partition.parts.get(words.id.part) else {
-            continue;
-        };
+        let (partition, part) = part;
         let entity = format!("{}.{}", partition.name, part.name);
         let mut observed_targets = BTreeSet::new();
         for observed in &part.observes {
@@ -478,7 +508,9 @@ fn check_parts(
                             ErrorKind::Observes(format!("{identity} is the part's own word")),
                         ));
                     }
-                    Ok(_) => {}
+                    Ok(_) => {
+                        reads.insert(word);
+                    }
                     Err(_) => {
                         return Err(context.error(
                             &entity,
@@ -526,6 +558,7 @@ fn check_parts(
                 }
             }
         }
+        observed_words.push(reads);
     }
-    Ok(())
+    Ok(observed_words)
 }

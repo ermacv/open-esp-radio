@@ -17,7 +17,10 @@ use std::{
 
 use crate::{
     RegisterEvidenceSet,
-    chip_model::{ChipModel, ExpandedField, ExpandedRegister, FieldClass, Location, Register},
+    chip_model::{
+        ChipModel, ExpandedField, ExpandedRegister, Field, FieldClass, Location, Register, Value,
+        WriteRange,
+    },
 };
 
 mod error;
@@ -228,16 +231,54 @@ impl Word<'_> {
             && self.fields().iter().any(|field| field.class.readable())
     }
 
-    /// The word may be read, modified and written back.
+    /// The word may be read, modified and written back: the read changes
+    /// nothing, and writing back what was read neither replays a bit the
+    /// hardware sets or clears nor writes a port, a command or a field
+    /// with no readable value.
     fn modifiable(&self) -> bool {
         self.reads_freely()
             && !self.command
             && self.template.data_port.is_none()
-            && !self.has(FieldClass::WriteOnly)
-            && !self.has(FieldClass::WriteOneToClear)
+            && !self.fields().iter().any(|field| {
+                matches!(
+                    field.class,
+                    FieldClass::WriteOnly
+                        | FieldClass::WriteOneToClear
+                        | FieldClass::SelfClearing
+                        | FieldClass::SetOnly
+                        | FieldClass::HardwareWritten
+                )
+            })
     }
 
-    /// The word may be written whole by a transaction.
+    /// Why a transaction may not write the word whole from zero, if it may
+    /// not: a FIFO port or a command register, a word of a field the
+    /// hardware also changes or a one written sets (a data port's field
+    /// excepted), or one with no field a write gives a value. A
+    /// write-one-to-clear field has its own rule.
+    fn unstorable(&self) -> Option<&'static str> {
+        if !self.storable() {
+            return Some("a FIFO port or command register is not written by a transaction");
+        }
+        let port = self.template.data_port.is_some();
+        if self.fields().iter().any(|field| match field.class {
+            FieldClass::SelfClearing | FieldClass::SetOnly => true,
+            FieldClass::HardwareWritten => !port,
+            _ => false,
+        }) {
+            return Some(
+                "a word of a self-clearing, set-only or hardware-written field is not written from zero; a data port's field is written only whole",
+            );
+        }
+        if !self.fields().iter().any(|field| {
+            stored(field.class) || (port && field.class == FieldClass::HardwareWritten)
+        }) {
+            return Some("the word has no field a write gives a value");
+        }
+        None
+    }
+
+    /// Neither a FIFO port nor a command register.
     fn storable(&self) -> bool {
         self.template.fifo.is_none() && !self.command
     }
@@ -248,13 +289,93 @@ impl Word<'_> {
             .iter()
             .fold(0, |mask, field| mask | field_mask(field))
     }
+
+    /// The word's one field covering all 32 bits, if it has one.
+    fn whole_field(&self) -> Option<&ExpandedField> {
+        match self.fields() {
+            [field] if field.low == 0 && field.width == 32 => Some(field),
+            _ => None,
+        }
+    }
+
+    /// The type file's declaration of `field`.
+    fn source(&self, field: &ExpandedField) -> Option<&Field> {
+        self.template
+            .fields
+            .iter()
+            .find(|candidate| candidate.name == field.name)
+    }
+
+    /// The values a write may give `field`, when they are fewer than every
+    /// value of its width.
+    fn constraint(&self, field: &ExpandedField) -> Option<Constraint<'_>> {
+        let source = self.source(field)?;
+        let ones = field_ones(field.width);
+        let range = source
+            .write_range
+            .filter(|range| range.min != 0 || range.max != ones);
+        let values = source
+            .write_values_only
+            .then_some(source.values.as_slice())
+            .filter(|values| {
+                field.width >= 32
+                    || u64::try_from(values.len()).unwrap_or(u64::MAX) <= u64::from(ones)
+            });
+        (range.is_some() || values.is_some()).then_some(Constraint { range, values })
+    }
+}
+
+/// A field a write from zero may give a value.
+fn stored(class: FieldClass) -> bool {
+    matches!(
+        class,
+        FieldClass::Plain | FieldClass::WriteOnly | FieldClass::WriteTrigger
+    )
+}
+
+/// The values a write may give one field: a write range or the field's
+/// named values only.
+#[derive(Clone, Copy)]
+struct Constraint<'m> {
+    range: Option<WriteRange>,
+    values: Option<&'m [Value]>,
+}
+
+impl Constraint<'_> {
+    fn admits(&self, value: u32) -> bool {
+        self.range
+            .is_none_or(|range| range.min <= value && value <= range.max)
+            && self
+                .values
+                .is_none_or(|values| values.iter().any(|named| named.value == value))
+    }
+
+    /// Every value of `min..=max` is admitted, without enumerating it.
+    fn admits_range(&self, min: u32, max: u32) -> bool {
+        self.range
+            .is_none_or(|range| range.min <= min && max <= range.max)
+            && self.values.is_none_or(|values| {
+                let inside = values
+                    .iter()
+                    .filter(|named| min <= named.value && named.value <= max)
+                    .count();
+                u64::try_from(inside).unwrap_or(u64::MAX)
+                    == u64::from(max)
+                        .saturating_sub(u64::from(min))
+                        .saturating_add(1)
+            })
+    }
+}
+
+/// The ones of a `width`-bit value.
+fn field_ones(width: u32) -> u32 {
+    u32::MAX
+        .checked_shr(32u32.saturating_sub(width))
+        .unwrap_or(0)
 }
 
 fn field_mask(field: &ExpandedField) -> u32 {
-    let ones = u32::MAX
-        .checked_shr(32u32.saturating_sub(field.width))
-        .unwrap_or(0);
-    ones.checked_shl(field.low).unwrap_or(0)
+    field_ones(field.width).checked_shl(field.low).unwrap_or(0)
 }
 
 /// What a register reference of a transaction or a part names.

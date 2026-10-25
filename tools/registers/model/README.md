@@ -653,33 +653,86 @@ kinds are `interrupt-snapshots` (`status`, `clear`), `field-reads`,
 `fixed-register-images`, `fixed-register-sequences` (each step one
 element), `masked-register-modifies`, `field-or-modifies`,
 `field-clear-modifies`, `field-replace-modifies` and
-`indexed-bit-set-modifies` (a bounded domain of indices below the field's
-width). Names are unique `lower_snake_case` across all transactions; the
-fields of one transaction lie in one register.
+`indexed-bit-set-modifies`. Names are unique `lower_snake_case` across
+all transactions; the fields of one transaction lie in one register.
 
-What a transaction may reach follows the field class:
+What a transaction may reach follows the field class and the word:
 
-| Transaction | Fields it may write or read | Its register |
+| Transaction | Fields it may write or read | Its word |
 | --- | --- | --- |
 | read | not `write-only`, `write-trigger` or `read-clears` | reads without a side effect: no FIFO, read side effect or `read-clears` field |
-| write from zero (full, zero-based, sampled bit, pointer, zero register) | `plain`, `write-only`, `write-trigger`, `hardware-written` (a pointer: not `write-trigger`; a sampled bit: one readable bit) | no FIFO or command register |
-| read-modify-write | `plain`, `hardware-written` | reads without a side effect; no command register, data port, `write-only` or `write-one-to-clear` field |
+| write from zero (full, zero-based, sampled bit, pointer, zero register) | `plain`, `write-only`, `write-trigger`; a data port's `hardware-written` field by a full-register write (a pointer: `plain` or `write-only`; a sampled bit: one `plain` bit) | no FIFO or command register, no `self-clearing`, `set-only` or `write-one-to-clear` field, no `hardware-written` field outside a data port; a data port only by a full-register write; at least one field a write gives a value |
+| read-modify-write | `plain` | reads without a side effect; no command register, data port, `write-only`, `write-one-to-clear`, `self-clearing`, `set-only` or `hardware-written` field |
 | fixed image or sequence step | sets bits of `plain`, `write-only`, `write-trigger`, `set-only`, `self-clearing`, `hardware-written`; with `whole-word` also undeclared bits and `read-only` fields | no FIFO or command register |
+
+The shapes and inputs:
+
+- a `full-register-write` names its word's one 32-bit field and takes a
+  `domain`, a `points-to` layout (a word or array layout placed in
+  `dma-window` alone) or `placement = "dma-window"`; a
+  `full-register-read` names one element's one 32-bit field and an opaque
+  domain or a bounded one of every `u32`; a signed `field-read` reads an
+  8-, 16- or 32-bit field;
+- a `masked-register-modify`'s preserve, input and set masks are disjoint
+  and cover all 32 bits; its domain's values fit the input mask, except an
+  opaque domain's, a raw word the mask selects from;
+- `field-or-modifies` and `field-clear-modifies` take a bounded domain
+  from zero, an enum domain or a fixed `value`; `field-replace-modifies`
+  also a bitwise-composed domain, and an `input-transform` (on a domain,
+  with a nonzero `retain-mask`, adding or subtracting) truncates to its
+  retain mask. The bits the input may set (a fixed value, a bounded
+  domain's bits up to its maximum, an enum's values, a composed output
+  mask, a transform's retain mask) lie in the input bits the projections
+  take;
+- `indexed-bit-set-modifies` take a bounded domain from zero or an enum
+  domain whose every index lies below the field's width.
+
+A **pointer field** (`pointer-fields`: `plain` or `write-only`, as wide
+as its encoding: 32 bits plain, 20 `ble-compressed`, below 32
+`low-bits`; no named values or write constraint; `points-to` a layout in
+`dma-window` alone, `member-offset` inside it and, compressed, a multiple
+of four) is set only from the image of a typed DMA reference: by its
+declaration, by a `field-or-modifies` or `field-replace-modifies` of that
+one field from input bit zero with neither `domain` nor `value`, by a
+`zero-based-field-write` of its image, or to zero (a write from zero, a
+replace with `value = 0`). An **address field** (the field of a
+full-register write with `points-to` or `placement`) is set only by that
+write or to zero by a write from zero. No other transaction sets a bit of
+either: no fixed image, masked modify, bit modify, indexed bit set,
+sampled bit or integer full write. Template and element spellings of a
+field are the same field.
+
+A field's `write-range` or `write-values-only` bounds every transaction:
+every lane of a fixed image or step, and the zero a write from zero
+leaves in its other fields, is a value its field takes; a
+`full-register-write` takes a bounded domain inside the range or an enum
+of taken values, and a `field-replace-modify` a fixed value or, from input
+bit zero of its one projection and untransformed, such a domain; a
+`zero-based-field-write` takes a field with named values only,
+not a narrower range. Every other transaction on a constrained field
+fails.
 
 A `write-one-to-clear` field is written only by its snapshot's
 acknowledgement. A snapshot's status word reads without a side effect, its
 clear word is one element of `write-one-to-clear` fields that acknowledge
-whole status fields; no other transaction writes a clear word except a
-fixed image naming one proof, `masks` (an enable word of `plain` or
-`hardware-written` fields of the same part, cleared first) or
-`consumed-event`. A sequence step never writes a clear word.
+whole status fields; the part holding the clear word takes the snapshot
+and holds or observes the status word. No other transaction writes a
+clear word except a fixed image naming one proof, `masks` (an enable word
+of `plain` fields of the same part, holding a field for every bit the
+image acknowledges, cleared first) or `consumed-event`. A sequence step
+never writes a clear word.
 
-Every transaction reaches the words of one part: a template reference
-needs every element held by that part, and a write to a split trigger word
-reaches the part holding the fields its value sets. A transaction on an
-unclaimed word or field, or on words of two parts, fails. Every check runs
-on load and fails with a typed `chip_policy::Error` that names the file
-and the entity.
+Every transaction except a partition image reaches the words of one part:
+a template reference needs every element held by that part, and a write to
+a split trigger word reaches the part holding the fields its value sets,
+with no bit outside them, `whole-word` or not. A partition image reads
+every readable word the partition's parts hold, each without a side
+effect, and belongs to the partition, not a part. A transaction on an
+unclaimed word or field, or on words of two parts, fails. Clock, reset and
+mux links and shared controls of the root grant no ownership: the part
+holding a control field's word writes it, whichever instances use it.
+Every check runs on load and fails with a typed `chip_policy::Error` that
+names the file and the entity.
 
 ## Analog-I2C space
 

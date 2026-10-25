@@ -351,6 +351,7 @@ placement = ["dma-window"]
 const ROOT: &str = r#"
 schema = 4
 chip = "testchip"
+interrupt-sources = { count = 0, sources = ["SRC_HEADER"] }
 types = ["types/timer.toml", "types/etm.toml", "types/counter.toml", "types/pll.toml"]
 layouts = ["layouts/rx-descriptor.toml"]
 
@@ -507,8 +508,15 @@ values = [{ name = "Start", value = 1, description = "Start.", sources = ["SRC_H
 [[bounded-domains]]
 name = "Divider"
 description = "A clock divider."
-min = 1
+min = 0
 max = 0xffff
+sources = ["SRC_HEADER"]
+
+[[bounded-domains]]
+name = "VendorArgument"
+description = "A vendor routine's argument, truncated as the routine does."
+min = 0
+max = 0xffffffff
 sources = ["SRC_HEADER"]
 
 [[bounded-domains]]
@@ -556,8 +564,8 @@ domain = "ValueImage"
 sources = ["SRC_DRIVER"]
 
 [[partition-image-reads]]
-name = "timer_image"
-partition = "TimerPeripherals"
+name = "radio_image"
+partition = "RadioPeripherals"
 sources = ["SRC_DRIVER"]
 
 [[pointer-fields]]
@@ -626,7 +634,7 @@ sources = ["SRC_DRIVER"]
 name = "set_timer0_divider"
 register = "TIMER0.CONFIG"
 domain = "ConfigImage"
-preserve-mask = 0x80000000
+preserve-mask = 0xffff0000
 input-mask = 0x0000ffff
 set-mask = 0
 sources = ["SRC_DRIVER"]
@@ -652,6 +660,12 @@ sources = ["SRC_DRIVER"]
 name = "replace_timer0_divider"
 fields = [{ field = "TIMER0.CONFIG.DIV", source-bit-offset = 0 }]
 domain = "Divider"
+sources = ["SRC_DRIVER"]
+
+[[field-replace-modifies]]
+name = "replace_timer0_divider_from_argument"
+fields = [{ field = "TIMER0.CONFIG.DIV", source-bit-offset = 0 }]
+domain = "VendorArgument"
 input-transform = { wrapping-subtract = 1, retain-mask = 0xffff }
 sources = ["SRC_DRIVER"]
 
@@ -709,6 +723,33 @@ impl Fixture {
             return Err(format!("{path} has no {from:?}").into());
         }
         fs::write(full, text.replacen(from, to, 1))?;
+        Ok(self)
+    }
+
+    /// Append `text` to the policy.
+    fn append(&self, text: &str) -> TestResult<&Self> {
+        let path = self.dir.path().join("policy.toml");
+        let mut policy = fs::read_to_string(&path)?;
+        policy.push_str(text);
+        fs::write(path, policy)?;
+        Ok(self)
+    }
+
+    /// Remove the transaction `name` of `kind` from the policy.
+    fn remove(&self, kind: &str, name: &str) -> TestResult<&Self> {
+        let path = self.dir.path().join("policy.toml");
+        let mut policy = fs::read_to_string(&path)?;
+        let marker = format!("[[{kind}]]\nname = \"{name}\"\n");
+        let start = policy
+            .find(&marker)
+            .ok_or_else(|| format!("the policy has no {kind} {name}"))?;
+        let rest = start + marker.len();
+        let end = policy
+            .get(rest..)
+            .and_then(|tail| tail.find("\n[["))
+            .map_or(policy.len(), |offset| rest + offset + 1);
+        policy.replace_range(start..end, "");
+        fs::write(path, policy)?;
         Ok(self)
     }
 
@@ -807,7 +848,7 @@ fn every_transaction_has_one_part() -> TestResult {
     assert_eq!(owner("enable_channel0"), Some(part(0, 2)));
     assert_eq!(owner("route_channel2"), Some(part(1, 0)));
     assert_eq!(owner("observe_timer1_value"), Some(part(1, 1)));
-    assert_eq!(owner("timer_image"), None);
+    assert_eq!(owner("radio_image"), None);
     let parts = policy
         .partitions()
         .iter()
@@ -1200,7 +1241,7 @@ rejects!(
 rejects!(
     partition_image_of_unknown_partition,
     [(
-        "partition = \"TimerPeripherals\"",
+        "partition = \"RadioPeripherals\"",
         "partition = \"ClockPeripherals\""
     )],
     ErrorKind::Transaction(_)
@@ -1211,7 +1252,7 @@ rejects!(
         "points-to = \"RX_DESCRIPTOR\"",
         "points-to = \"TX_DESCRIPTOR\""
     )],
-    ErrorKind::Transaction(_)
+    ErrorKind::Pointer(_)
 );
 rejects!(
     full_write_takes_one_value,
@@ -1247,7 +1288,7 @@ rejects!(
 );
 rejects!(
     masks_are_disjoint,
-    [("preserve-mask = 0x80000000", "preserve-mask = 0x80000001")],
+    [("preserve-mask = 0xffff0000", "preserve-mask = 0xffff0001")],
     ErrorKind::Transaction(_)
 );
 
@@ -1371,8 +1412,8 @@ rejects!(
 rejects!(
     transaction_on_unclaimed_word,
     [(
-        "field = \"TIMER1.VALUE.VALUE\"\ndomain = \"ValueImage\"",
-        "field = \"TIMER1.CONFIG.EN\"\ndomain = \"Divider\""
+        "field = \"TIMER0.VALUE.VALUE\"",
+        "field = \"TIMER1.CONFIG.EN\""
     )],
     ErrorKind::ReachesUnclaimed(_)
 );
@@ -1386,16 +1427,10 @@ rejects!(
 );
 rejects!(
     transaction_on_split_template,
-    [
-        (
-            "register = \"TIMER0.ALARM_%s\"",
-            "register = \"ETM.CH%s_EVENT\""
-        ),
-        (
-            "field = \"TIMER0.ALARM_%s.ALARM\"",
-            "field = \"ETM.CH%s_EVENT.ID\""
-        )
-    ],
+    [(
+        "fields = [\"TIMER0.WO.KEY\"]",
+        "fields = [\"ETM.CH%s_EVENT.ID\"]"
+    )],
     ErrorKind::SeveralOwners(_)
 );
 rejects!(
@@ -1440,10 +1475,20 @@ rejects!(
 );
 rejects!(
     write_by_read_only_part,
-    [(
-        "register = \"TIMER0.CONFIG\"\nsources",
-        "register = \"TIMER1.VALUE\"\nsources"
-    )],
+    [
+        (
+            "registers = [\"VALUE\"]\nread-only = true",
+            "registers = [\"VALUE\", \"INT_ENA\"]\nread-only = true"
+        ),
+        (
+            "registers = [\"CONFIG\", \"INT_ENA\", \"INT_RAW\"",
+            "registers = [\"CONFIG\", \"INT_RAW\""
+        ),
+        (
+            "register = \"TIMER0.CONFIG\"\nsources",
+            "register = \"TIMER1.INT_ENA\"\nsources"
+        ),
+    ],
     ErrorKind::ReadOnly(_)
 );
 rejects!(
@@ -1460,3 +1505,444 @@ rejects!(
     ],
     ErrorKind::SeveralOwners(_)
 );
+
+// Regressions of the cross-model review: every guarantee the schema-5
+// generator checks holds in this format.
+
+/// The rule a loaded fixture breaks after `fixture`'s edits.
+fn kind_of(fixture: &Fixture) -> TestResult<ErrorKind> {
+    Ok(fixture.rejection()?.kind)
+}
+
+#[test]
+fn snapshot_reads_an_observed_status_word() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture
+        .edit(
+            "policy.toml",
+            "\"CONFIG\", \"VALUE\", \"LOAD\"",
+            "\"CONFIG\", \"INT_RAW\", \"VALUE\", \"LOAD\"",
+        )?
+        .edit(
+            "policy.toml",
+            "registers = [\"INT_ENA\", \"INT_RAW\", \"INT_CLR\"]",
+            "registers = [\"INT_ENA\", \"INT_CLR\"]",
+        )?
+        .edit(
+            "policy.toml",
+            "observes = [\"VALUE\"]",
+            "observes = [\"VALUE\", \"INT_RAW\"]",
+        )?;
+    let policy = fixture.load()?;
+    assert_eq!(
+        policy.owner("timer0_interrupt").map(Holder::Part),
+        Some(part(0, 1))
+    );
+    Ok(())
+}
+
+#[test]
+fn pointer_image_replaces_a_pointer_field() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "policy.toml",
+        "[[field-or-modifies]]\nname = \"point_timer0_descriptor\"",
+        "[[field-replace-modifies]]\nname = \"point_timer0_descriptor\"",
+    )?;
+    fixture.load()?;
+    Ok(())
+}
+
+#[test]
+fn zero_replaces_a_pointer_field_with_null() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.append(
+        "\n[[field-replace-modifies]]\nname = \"null_timer0_descriptor\"\nfields = [{ field = \"TIMER0.ADDR.ADDR\", source-bit-offset = 0 }]\nvalue = 0\nsources = [\"SRC_DRIVER\"]\n",
+    )?;
+    fixture.load()?;
+    Ok(())
+}
+
+#[test]
+fn enum_indexes_a_bit() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit("policy.toml", "domain = \"BitIndex\"", "domain = \"Event\"")?;
+    fixture.load()?;
+    Ok(())
+}
+
+#[test]
+fn enum_index_lies_below_the_field_width() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture
+        .edit("policy.toml", "domain = \"BitIndex\"", "domain = \"Event\"")?
+        .edit(
+            "policy.toml",
+            "value = 1, description = \"Start.\"",
+            "value = 16, description = \"Start.\"",
+        )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Domain(_)));
+    Ok(())
+}
+
+const FORGE_IMAGE: &str = "\n[[fixed-register-images]]\nname = \"forge_pointer\"\nregister = \"TIMER0.ADDR\"\nvalue = 0xdeadbeef\nsources = [\"SRC_DRIVER\"]\n";
+const FORGE_WRITE: &str = "\n[[full-register-writes]]\nname = \"forge_pointer\"\nfield = \"TIMER0.ADDR.ADDR\"\ndomain = \"Divider\"\nsources = [\"SRC_DRIVER\"]\n";
+
+#[test]
+fn integer_writers_cannot_forge_a_pointer() -> TestResult {
+    for text in [FORGE_IMAGE, FORGE_WRITE] {
+        let fixture = Fixture::new()?;
+        fixture.append(text)?;
+        assert!(
+            matches!(kind_of(&fixture)?, ErrorKind::Pointer(_)),
+            "{text}"
+        );
+    }
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "policy.toml",
+        "name = \"point_timer0_descriptor\"\nfields = [{ field = \"TIMER0.ADDR.ADDR\", source-bit-offset = 0 }]",
+        "name = \"point_timer0_descriptor\"\nfields = [{ field = \"TIMER0.ADDR.ADDR\", source-bit-offset = 0 }]\ndomain = \"Divider\"",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Pointer(_)));
+    Ok(())
+}
+
+#[test]
+fn pointer_encoding_fills_its_field() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "policy.toml",
+        "points-to = \"RX_DESCRIPTOR\"",
+        "points-to = \"RX_DESCRIPTOR\"\nencoding = \"ble-compressed\"",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Pointer(_)));
+    Ok(())
+}
+
+#[test]
+fn pointer_targets_a_layout_in_the_dma_window() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "root.toml",
+        "[[layout-placements]]\nlayout = \"RX_DESCRIPTOR\"\nregions = [\"dma-window\"]",
+        "",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Pointer(_)));
+    Ok(())
+}
+
+#[test]
+fn compressed_pointer_names_a_word() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture
+        .edit(
+            "types/timer.toml",
+            "name = \"ADDR\"\nbits = \"31:0\"",
+            "name = \"ADDR\"\nbits = \"19:0\"",
+        )?
+        .edit(
+            "policy.toml",
+            "points-to = \"RX_DESCRIPTOR\"",
+            "points-to = \"RX_DESCRIPTOR\"\nencoding = \"ble-compressed\"\nmember-offset = 4",
+        )?;
+    fixture.load()?;
+    fixture.edit("policy.toml", "member-offset = 4", "member-offset = 1")?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Pointer(_)));
+    Ok(())
+}
+
+#[test]
+fn buffer_address_lies_in_the_dma_window() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "policy.toml",
+        "domain = \"AlarmImage\"",
+        "placement = \"dma-window\"",
+    )?;
+    fixture.load()?;
+    fixture
+        .edit("root.toml", "name = \"dma-window\"", "name = \"scratch\"")?
+        .edit(
+            "types/../layouts/rx-descriptor.toml",
+            "placement = [\"dma-window\"]\n",
+            "",
+        )?
+        .edit(
+            "root.toml",
+            "[[layout-placements]]\nlayout = \"RX_DESCRIPTOR\"\nregions = [\"dma-window\"]",
+            "",
+        )?
+        .remove("pointer-fields", "timer0_descriptor")?
+        .remove("field-or-modifies", "point_timer0_descriptor")?
+        .edit(
+            "policy.toml",
+            "placement = \"dma-window\"",
+            "placement = \"scratch\"",
+        )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Pointer(_)));
+    Ok(())
+}
+
+#[test]
+fn masked_modify_partitions_the_word() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "policy.toml",
+        "preserve-mask = 0xffff0000",
+        "preserve-mask = 0",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Transaction(_)));
+    Ok(())
+}
+
+#[test]
+fn masked_modify_takes_every_bit_of_its_domain() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "policy.toml",
+        "preserve-mask = 0xffff0000\ninput-mask = 0x0000ffff",
+        "preserve-mask = 0xfffffffe\ninput-mask = 1",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Transaction(_)));
+    Ok(())
+}
+
+#[test]
+fn masking_proof_masks_every_acknowledged_event() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timer.toml",
+        "name = \"T1\"\nbits = \"1\"\nclass = \"plain\"",
+        "name = \"T1\"\nbits = \"2\"\nclass = \"plain\"",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::WriteOneToClear(_)));
+    Ok(())
+}
+
+#[test]
+fn partition_image_reads_without_side_effects() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "policy.toml",
+        "partition = \"RadioPeripherals\"",
+        "partition = \"TimerPeripherals\"",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Register(_)));
+    Ok(())
+}
+
+#[test]
+fn sampled_bit_reads_without_side_effects() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture
+        .edit(
+            "types/timer.toml",
+            "name = \"LOAD\"\noffset = 0x14",
+            "name = \"LOAD\"\noffset = 0x14\nread-side-effect = { sources = [\"SRC_HEADER\"] }",
+        )?
+        .edit("types/timer.toml", "class = \"write-trigger\"", "class = \"plain\"")?
+        .append(
+            "\n[[sampled-bit-zero-writes]]\nname = \"sample_load\"\nfield = \"TIMER0.LOAD.LOAD\"\nsources = [\"SRC_DRIVER\"]\n",
+        )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Register(_)));
+    Ok(())
+}
+
+#[test]
+fn full_write_names_a_whole_word_field() -> TestResult {
+    for field in ["TIMER0.CONFIG.DIV", "ETM.CHANNEL_ENABLE_SET.CH0"] {
+        let fixture = Fixture::new()?;
+        fixture.append(&format!(
+            "\n[[full-register-writes]]\nname = \"partial_write\"\nfield = \"{field}\"\ndomain = \"Divider\"\nsources = [\"SRC_DRIVER\"]\n"
+        ))?;
+        assert!(
+            matches!(kind_of(&fixture)?, ErrorKind::Transaction(_)),
+            "{field}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn zero_write_needs_a_written_field() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.append(
+        "\n[[zero-register-writes]]\nname = \"zero_counter\"\nregister = \"TIMER0.VALUE\"\nsources = [\"SRC_DRIVER\"]\n",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Register(_)));
+    Ok(())
+}
+
+#[test]
+fn zero_write_leaves_write_one_to_clear_words_alone() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture
+        .remove("interrupt-snapshots", "timer0_interrupt")?
+        .remove("fixed-register-images", "acknowledge_timer0_masked")?
+        .remove("fixed-register-images", "acknowledge_timer0_consumed")?
+        .append(
+            "\n[[zero-register-writes]]\nname = \"zero_clear\"\nregister = \"TIMER0.INT_CLR\"\nsources = [\"SRC_DRIVER\"]\n",
+        )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::WriteOneToClear(_)));
+    Ok(())
+}
+
+#[test]
+fn whole_word_image_keeps_to_its_trigger_fields() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.append(
+        "\n[[fixed-register-images]]\nname = \"escape_split_word\"\nregister = \"ETM.CHANNEL_ENABLE_SET\"\nvalue = 0x80000001\nwhole-word = true\nsources = [\"SRC_DRIVER\"]\n",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::ReachesUnclaimed(_)));
+    Ok(())
+}
+
+#[test]
+fn fixed_input_fits_its_projection() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "policy.toml",
+        "name = \"enable_timer0\"\nfields = [{ field = \"TIMER0.CONFIG.EN\", source-bit-offset = 0 }]\nvalue = 1",
+        "name = \"enable_timer0\"\nfields = [{ field = \"TIMER0.CONFIG.EN\", source-bit-offset = 0 }]\nvalue = 2",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Transaction(_)));
+    Ok(())
+}
+
+#[test]
+fn domain_fits_its_projection() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit("policy.toml", "max = 0xffff", "max = 0x1ffff")?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Transaction(_)));
+    Ok(())
+}
+
+#[test]
+fn transform_retains_bits_its_projection_takes() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "policy.toml",
+        "retain-mask = 0xffff",
+        "retain-mask = 0x1ffff",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Transaction(_)));
+    Ok(())
+}
+
+#[test]
+fn bit_modify_takes_a_closed_domain() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.append(
+        "\n[[field-or-modifies]]\nname = \"or_alarm\"\nfields = [{ field = \"TIMER0.ALARM_%s.ALARM\", source-bit-offset = 0 }]\ndomain = \"AlarmImage\"\nsources = [\"SRC_DRIVER\"]\n",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Domain(_)));
+    Ok(())
+}
+
+#[test]
+fn hardware_written_field_is_stored_only_as_a_data_port() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timer.toml",
+        "name = \"ALARM\"\nbits = \"31:0\"\nclass = \"plain\"",
+        "name = \"ALARM\"\nbits = \"31:0\"\nclass = \"hardware-written\"",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::FieldClass(_)));
+    fixture.edit(
+        "types/timer.toml",
+        "name = \"ALARM_%s\"\noffset = 0x20",
+        "name = \"ALARM_%s\"\noffset = 0x20\ndata-port = { sources = [\"SRC_HEADER\"] }",
+    )?;
+    fixture.load()?;
+    Ok(())
+}
+
+#[test]
+fn modify_replays_no_hardware_written_field() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture
+        .edit(
+            "types/timer.toml",
+            "name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"",
+            "name = \"DIV\"\nbits = \"15:0\"\nclass = \"hardware-written\"",
+        )?
+        .remove("zero-register-writes", "clear_timer0_config")?;
+    let error = fixture.rejection()?;
+    assert_eq!(error.entity, "set_timer0_divider");
+    assert!(matches!(error.kind, ErrorKind::Register(_)), "{error}");
+    Ok(())
+}
+
+#[test]
+fn modify_replays_no_self_clearing_field() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture
+        .edit(
+            "types/timer.toml",
+            "name = \"EN\"\nbits = \"31\"\nclass = \"plain\"",
+            "name = \"EN\"\nbits = \"31\"\nclass = \"self-clearing\"",
+        )?
+        .remove("zero-register-writes", "clear_timer0_config")?
+        .remove("field-or-modifies", "enable_timer0")?
+        .remove("field-clear-modifies", "disable_timer0")?;
+    let error = fixture.rejection()?;
+    assert_eq!(error.entity, "set_timer0_divider");
+    assert!(matches!(error.kind, ErrorKind::Register(_)), "{error}");
+    Ok(())
+}
+
+#[test]
+fn write_constraints_bound_transactions() -> TestResult {
+    // An opaque value exceeds a write range.
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timer.toml",
+        "name = \"ALARM\"\nbits = \"31:0\"\nclass = \"plain\"",
+        "name = \"ALARM\"\nbits = \"31:0\"\nclass = \"plain\"\nwrite-range = { min = 1, max = 255 }",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::WriteConstraint(_)));
+    // A write from zero gives zero to a field that takes none.
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timer.toml",
+        "name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"",
+        "name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"\nwrite-range = { min = 1, max = 255 }",
+    )?;
+    let error = fixture.rejection()?;
+    assert!(
+        matches!(error.kind, ErrorKind::WriteConstraint(_)),
+        "{error}"
+    );
+    // A bounded domain inside the range is a value the field takes.
+    let fixture = Fixture::new()?;
+    fixture
+        .edit(
+            "types/timer.toml",
+            "name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"",
+            "name = \"DIV\"\nbits = \"15:0\"\nclass = \"plain\"\nwrite-range = { min = 0, max = 15 }",
+        )?
+        .remove("masked-register-modifies", "set_timer0_divider")?
+        .remove("field-replace-modifies", "replace_timer0_divider_from_argument")?
+        .remove("indexed-bit-set-modifies", "set_timer0_divider_bit")?
+        .edit(
+            "policy.toml",
+            "value = 0x40000001\nwhole-word = true",
+            "value = 0x40000000\nwhole-word = true",
+        )?
+        .edit("policy.toml", "domain = \"Divider\"", "domain = \"BitIndex\"")?;
+    fixture.load()?;
+    Ok(())
+}
+
+#[test]
+fn full_read_returns_every_word_value() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "policy.toml",
+        "domain = \"ValueImage\"",
+        "domain = \"Event\"",
+    )?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Domain(_)));
+    Ok(())
+}
