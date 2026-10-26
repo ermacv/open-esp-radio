@@ -12,6 +12,8 @@ use core::{
 use oer_esp32s31_pac as pac;
 use oer_mmio::{Bits, Index};
 
+mod ble;
+
 include!(concat!(env!("OUT_DIR"), "/geometry.rs"));
 const CPU_LINE: Index<{ pac::clic::ctrl::COUNT }> = Index::constant::<LINE>();
 const SOFTWARE_SOURCE: Index<{ pac::interrupt_core::route::COUNT }> =
@@ -163,6 +165,7 @@ struct Session<'a> {
     core_control: pac::ownership::CoreControlPeripherals,
     uart0_clock: pac::ownership::Uart0ClockPeripherals,
     reset_cause: pac::ownership::ResetCausePeripherals,
+    ble: ble::Ble,
 }
 struct Probe {
     id: u32,
@@ -171,6 +174,34 @@ struct Probe {
 // The sole registration point. Reset is selected explicitly; it cannot run
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
+    Probe {
+        id: 20,
+        run: ble::inherited,
+    },
+    Probe {
+        id: 21,
+        run: ble::nrt_controls,
+    },
+    Probe {
+        id: 22,
+        run: ble::nrt_arrivals,
+    },
+    Probe {
+        id: 23,
+        run: ble::lp_causes,
+    },
+    Probe {
+        id: 24,
+        run: ble::lp_stop,
+    },
+    Probe {
+        id: 25,
+        run: ble::lp_wrap,
+    },
+    Probe {
+        id: 26,
+        run: ble::lp_modes,
+    },
     Probe {
         id: 2,
         run: geometry,
@@ -212,6 +243,14 @@ extern "C" fn facts_main() -> ! {
         core_control: p.core_control,
         uart0_clock: p.uart0_clock,
         reset_cause: p.reset_cause,
+        ble: ble::Ble {
+            bank: p.bluetooth_interrupts.bluetooth_interrupt_bank,
+            core: p.bluetooth.bluetooth_controller_core,
+            timer: p.bluetooth_modem_lp_timer.btdm_runtime_control,
+            clocks: p.radio_phy.modem_syscon_radio,
+            lp_clock: p.radio_phy.modem_lpcon_shared_clock,
+            gates: p.chip_clocks.modem_lpcon_chip_clocks,
+        },
     };
     let source = ptr::addr_of!(source_owner).cast_mut();
     SOURCE.store(source, Ordering::Release);
