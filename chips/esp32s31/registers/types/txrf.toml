@@ -20,6 +20,11 @@ provenance = "reviewed"
 accuracy = "positional"
 completeness = "unknown"
 
+[review.entity."BYTE_0A_OPAQUE.PHY_SET_RATE_CLASS"]
+sources = ["BLOB_LIBPHY_PHY_SET_RATE_CLASS"]
+provenance = "observed"
+completeness = "partial"
+
 [[registers]]
 name = "TX_CAPACITOR_LOW"
 offset = 0x2
@@ -182,14 +187,27 @@ name = "BITS_0_7_OPAQUE"
 bits = "7:0"
 class = "unknown"
 
+# SOURCE: BLOB_LIBPHY_PHY_SET_RATE_CLASS; opaque-blobray-phy.md, TXRF.
 [[registers]]
 name = "BYTE_0A_OPAQUE"
 offset = 0xa
 width = 8
 
 [[registers.fields]]
-name = "BITS_0_7_OPAQUE"
-bits = "7:0"
+name = "BITS_0_2_OPAQUE"
+bits = "2:0"
+class = "unknown"
+
+[[registers.fields]]
+name = "PHY_SET_RATE_CLASS"
+bits = "5:3"
+class = "plain"
+description = "Code written by vendor phy_set_rate: argument below 8 selects 0, otherwise 1. TX analog rate-class role is inferred; modulation, units and codes 2..7 are unresolved."
+values = [{ name = "ARGUMENT_BELOW_8", value = 0 }, { name = "ARGUMENT_AT_LEAST_8", value = 1 }]
+
+[[registers.fields]]
+name = "BITS_6_7_OPAQUE"
+bits = "7:6"
 class = "unknown"
 
 [[registers]]
