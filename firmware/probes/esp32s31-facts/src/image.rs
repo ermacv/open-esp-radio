@@ -13,6 +13,8 @@ use oer_esp32s31_pac as pac;
 use oer_mmio::{Bits, Index};
 #[path = "opaque.rs"]
 mod opaque;
+#[path = "opaque_wave2.rs"]
+mod opaque_wave2;
 
 mod ble;
 mod ble_wave2;
@@ -188,6 +190,10 @@ struct Probe {
 // The sole registration point. Reset is selected explicitly; it cannot run
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
+    Probe {
+        id: 14,
+        run: opaque_wave2::i2c,
+    },
     Probe {
         id: 10,
         run: opaque::pll,
@@ -449,6 +455,8 @@ extern "C" fn facts_main() -> ! {
             mac_interrupt: p.wifi_interrupts.wifi_mac_interrupt,
             tsens: p.radio_phy.lp_tsens,
             periclkrst: p.radio_phy.lp_periclkrst,
+            analog_master: p.analog_bus.i2c_ana_mst,
+            pll160: p.chip_clocks.hp_sys_clkrst_pll160,
         },
     };
     let source = ptr::addr_of!(source_owner).cast_mut();

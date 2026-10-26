@@ -12,6 +12,8 @@ pub(super) struct Hardware {
     pub mac_interrupt: pac::wifi_mac::WifiMacInterrupt,
     pub tsens: pac::tsens::LpTsens,
     pub periclkrst: pac::lp_peri_clkrst::LpPericlkrst,
+    pub analog_master: pac::i2c_ana_mst::I2cAnaMst,
+    pub pll160: pac::hp_sys_clkrst::HpSysClkrstPll160,
 }
 
 /// Named observation bound from BB-L; independent of modem clock progress.
@@ -22,7 +24,7 @@ fn wait_cycles(cycles: u32) {
 
 /// Refuse timing attribution unless the CPU is directly on the 40 MHz XTAL.
 /// SOURCE: HP clock model, pinned IDF clk_tree_defs.h (40 MHz XTAL).
-fn xtal_cpu(s: &Session<'_>) -> bool {
+pub(super) fn xtal_cpu(s: &Session<'_>) -> bool {
     let c = &s.boot_clock;
     let root = c.read_soc_clk_sel().reg_soc_clk_sel().get();
     let div = c.read_cpu_freq_ctrl0();

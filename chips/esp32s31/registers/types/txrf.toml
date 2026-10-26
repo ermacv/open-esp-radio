@@ -20,6 +20,9 @@ provenance = "reviewed"
 accuracy = "positional"
 completeness = "unknown"
 
+[review.entity."BYTE_08_OPAQUE"]
+sources = ["BLOB_LIBPHY_PHY_I2C", "HW15_S31_I2C_20261027"]
+
 [[registers]]
 name = "TX_CAPACITOR_LOW"
 offset = 0x2
@@ -166,6 +169,7 @@ class = "unknown"
 name = "BYTE_08_OPAQUE"
 offset = 0x8
 width = 8
+description = "Observed 0x00 in s31-b run hw15-20261027-opaque-07 after the documented probe-specific modem/I2C power-reset, six-map OR and timing/register-mode prefix, without analog byte writes or PHY calibration. Serial, combined parallel and final serial reads replace distinct nonzero command DATA seeds with this value. This is a conditional observation, not a reset value, general read-safe epoch or physical bit meaning."
 
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"
