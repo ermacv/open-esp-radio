@@ -45,21 +45,21 @@ sources = ["BLOB_LIBBTDM_SCHEDULER_LIFECYCLE"]
 sources = ["BLOB_LIBBTDM_SCHEDULER_LIFECYCLE"]
 
 [review.entity."IRQ_CONTROL_0"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT", "HW9_S31_BTLC_START_20261027"]
 completeness = "partial"
 
 [review.entity."IRQ_CONTROL_0.COMMAND"]
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"]
 
 [review.entity."IRQ_CONTROL_1"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT", "HW9_S31_MAC_RELEASE_20261027"]
 completeness = "partial"
 
 [review.entity."IRQ_CONTROL_1.COMMAND"]
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"]
 
 [review.entity."IRQ_CONTROL_2"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT", "HW9_S31_MAC_RELEASE_20261027"]
 completeness = "partial"
 
 [review.entity."IRQ_CONTROL_2.COMMAND"]
@@ -226,7 +226,7 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
 
 [review.entity."IRQ_ENABLE_1.SOURCE_1"]
-sources = ["BLOB_LIBBTDM_BASELINE_IRQ_CURRENT", "HW2_S31_BLE_INHERITED_20261026"]
+sources = ["BLOB_LIBBTDM_BASELINE_IRQ_CURRENT", "HW2_S31_BLE_INHERITED_20261026", "HW9_S31_MAC_CAUSES_20261027"]
 
 [review.entity."IRQ_ENABLE_1.BIT_0_OPAQUE"]
 sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
@@ -244,7 +244,7 @@ sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
 sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
 
 [review.entity."IRQ_CLEAR_1"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "HW9_S31_MAC_MASK_ACK_20261027"]
 
 [review.entity."IRQ_CLEAR_1.BITS_0_2_OPAQUE"]
 sources = ["S31_MMIO_MANUAL_20101064"]
@@ -271,7 +271,7 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 sources = ["S31_MMIO_MANUAL_20101064"]
 
 [review.entity."IRQ_STATUS_1"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "HW9_S31_MAC_MASK_ACK_20261027"]
 completeness = "partial"
 
 [review.entity."IRQ_STATUS_1.BITS_0_2_OPAQUE"]
@@ -392,7 +392,7 @@ sources = ["BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBREDR_HAL_LINK_AC
 sources = ["BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS"]
 
 [review.entity."BTLC_TIMER_CONTROL"]
-sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS", "HW9_S31_BTLC_LATCH_SEED_20261026", "HW9_S31_BTLC_START_20261027"]
 completeness = "partial"
 
 [review.entity."BTLC_TIMER_CONTROL.CLOCK_SHIFT"]
@@ -406,11 +406,20 @@ sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "S31_MMIO_DECLARED_20101090"]
 completeness = "complete"
 
 [review.entity."BTLC_TIMER_CONTROL.LATCH_REQUEST"]
-sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES", "HW9_S31_BTLC_LATCH_SEED_20261026"]
 
-[review.entity."BTLC_TIMER_CONTROL.BITS_27_30_OPAQUE"]
-sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "S31_MMIO_DECLARED_20101090"]
-completeness = "complete"
+[review.entity."BTLC_TIMER_CONTROL.COMPARE_0_ENABLE"]
+sources = ["BLOB_LIBBREDR_BTLC_COMPARE_ENABLE"]
+
+[review.entity."BTLC_TIMER_CONTROL.COMPARE_1_ENABLE"]
+sources = ["BLOB_LIBBREDR_BTLC_COMPARE_ENABLE"]
+
+[review.entity."BTLC_TIMER_CONTROL.COMPARE_2_ENABLE"]
+sources = ["BLOB_LIBBREDR_BTLC_COMPARE_ENABLE"]
+
+[review.entity."BTLC_TIMER_CONTROL.COMPARE_3_ENABLE"]
+sources = ["BLOB_LIBBREDR_BTLC_COMPARE_ENABLE"]
+
 
 [review.entity."BTLC_TIMER_CONTROL.TIMER_ARM"]
 sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS"]
@@ -440,7 +449,7 @@ completeness = "partial"
 sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS"]
 
 [review.entity."BTLC_TIMER_CAPTURE_0"]
-sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "PUBLIC_ESP32S31_BT_TIME_ROLES", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS", "HW9_S31_BTLC_LATCH_SEED_20261026", "HW9_S31_MAC_CAUSES_20261027"]
 
 [review.entity."BTLC_TIMER_CAPTURE_0.VALUE"]
 sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "PUBLIC_ESP32S31_BT_TIME_ROLES"]
@@ -977,7 +986,7 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT"]
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT"]
 
 [review.entity."IRQ_STATUS_SNAPSHOT_1"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT", "HW9_S31_MAC_MASK_ACK_20261027"]
 
 [review.entity."IRQ_STATUS_SNAPSHOT_1.PENDING_BITS"]
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT"]
@@ -1703,7 +1712,7 @@ description = "Complete lifecycle-request image."
 [[registers]]
 name = "IRQ_CONTROL_0"
 offset = 0xc
-description = "BTDM interrupt setup and the complete reset leaf write the finite complete image 1. Inner action remains unknown."
+description = "BTDM interrupt setup and the complete reset leaf write the finite complete image 1. Inner action remains unknown. In the bounded digital setup, complete image 1 began autonomous BTLC capture progression after completed but stationary captures. No minimal-clock or universal output-gate meaning follows. SOURCE: HW9_S31_BTLC_START_20261027."
 
 [[registers.fields]]
 name = "COMMAND"
@@ -1715,7 +1724,7 @@ description = "Observed complete command image 1; internal action unknown. No NR
 [[registers]]
 name = "IRQ_CONTROL_1"
 offset = 0x10
-description = "BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown."
+description = "BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown. With a positively pending seeded controller-time wrap and ENA1[1]=1, this command did not lower primary status2 or source 124; the pair also retained them. No all-pending-output-low proof follows. SOURCE: HW9_S31_MAC_RELEASE_20261027."
 
 [[registers.fields]]
 name = "COMMAND"
@@ -1727,7 +1736,7 @@ description = "Observed complete command image 1; internal action unknown. No NR
 [[registers]]
 name = "IRQ_CONTROL_2"
 offset = 0x14
-description = "BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown."
+description = "BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown. With a positively pending seeded controller-time wrap and ENA1[1]=1, this command did not lower primary status2 or source 124; the pair also retained them. No all-pending-output-low proof follows. SOURCE: HW9_S31_MAC_RELEASE_20261027."
 
 [[registers.fields]]
 name = "COMMAND"
@@ -1944,13 +1953,13 @@ class = "read-only"
 [[registers]]
 name = "IRQ_ENABLE_1"
 offset = 0x60
-description = "Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. The HAL baseline is 0x00001300 and does not arm source 1 until B1 identifies its event and handling. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper)."
+description = "Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. The HAL baseline is0x00001300 and does not newly arm source 1; a seeded first-word BTLC wrap is now a measured primary producer, while normal handling and arming policy remain separate obligations. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper)."
 
 [[registers.fields]]
 name = "SOURCE_1"
 bits = "1"
 class = "plain"
-description = "The current vendor pin arms this bit in baseline 0x00001302; its cause identity and NRT relationship are unknown. The HAL does not arm it until B1 identifies the event and its handling. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026."
+description = "The current vendor pin arms this bit in baseline 0x00001302. A verified seeded 32-bit crossing of the first BTLC capture word produced this primary bit and source 124; NRT snapshot/133 remained zero in that experiment. SOURCE: HW9_S31_MAC_CAUSES_20261027. The HAL baseline 0x1300 does not newly arm it and preserves an inherited enable; that enabled pending cause survived the measured release sequence. SOURCE: HW9_S31_MAC_RELEASE_20261027. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established. On the s31-b ROM USB-loader path this enable was zero before the probe baseline and stayed zero through baseline preparation/release; this is not a production-startup or POR claim. SOURCE: HW2_S31_BLE_INHERITED_20261026."
 
 [[registers.fields]]
 name = "SOURCE_3"
@@ -2025,7 +2034,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "IRQ_CLEAR_1"
 offset = 0x64
-description = "Second controller interrupt-clear bank. Primary and NRT handlers copy their respective second-bank status images here as complete words."
+description = "Second controller interrupt-clear bank. Primary and NRT handlers copy their respective second-bank status images here as complete words. A saved positive primary CC0 image 0x10 cleared only that cause after CC1 arrived, leaving0x20 and124 high. Retained positive samples cleared the three tested primary causes while masked. No simultaneous set/clear priority or counted recurrence is established. SOURCE: HW9_S31_MAC_MASK_ACK_20261027."
 
 [[registers.fields]]
 name = "BITS_0_2_OPAQUE"
@@ -2070,7 +2079,7 @@ class = "write-one-to-clear"
 [[registers]]
 name = "IRQ_STATUS_1"
 offset = 0x68
-description = "Second masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement."
+description = "Second masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement. Local compare0/1 produced bits 4/5, and a seeded first-BTLC-word wrap produced bit1, each on124. Each tested cause is hidden on a masked read and retained for unmask redelivery; a retained positive sample clears it while masked. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027."
 
 [[registers.fields]]
 name = "BITS_0_2_OPAQUE"
@@ -2249,7 +2258,7 @@ class = "write-only"
 [[registers]]
 name = "BTLC_TIMER_CONTROL"
 offset = 0x90
-description = "BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31."
+description = "BT link-controller timer control. Bits 2:0 are the clock shift: r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by them. Initialization also programs bit 24; callers set bit 26 and wait for hardware to clear it before reading the capture words; the timer-programming path sets bit 31. In one PAC-only digital-clock/reset setup with CLOCK_SHIFT=2 and CONFIG_24=1, programming 0x10000/0/0 followed by TIMER_ARM allowed two latch requests to complete and capture that seed. The first capture word did not advance over 4096 cycles; latch completion alone does not establish a running timebase or interrupt producer. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. The current vendor HAL changes CLOCK_SHIFT while preserving the high byte. A sourced PAC-only digital setup with CONFIG_24=0 and CLOCK_SHIFT=3 produced advancing completed captures after CONTROL0=1. SOURCE: HW9_S31_BTLC_START_20261027."
 
 [[registers.fields]]
 name = "CLOCK_SHIFT"
@@ -2274,11 +2283,28 @@ bits = "26"
 class = "plain"
 
 [[registers.fields]]
-name = "BITS_27_30_OPAQUE"
-bits = "30:27"
+name = "COMPARE_0_ENABLE"
+bits = "30"
 class = "plain"
-description = "HAL initialization clears these unassigned positions together with the complete high-byte reset."
-write-range = { min = 0x0, max = 0xf }
+description = "Compare slot 0 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE."
+
+[[registers.fields]]
+name = "COMPARE_1_ENABLE"
+bits = "29"
+class = "plain"
+description = "Compare slot 1 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE."
+
+[[registers.fields]]
+name = "COMPARE_2_ENABLE"
+bits = "28"
+class = "plain"
+description = "Compare slot 2 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE."
+
+[[registers.fields]]
+name = "COMPARE_3_ENABLE"
+bits = "27"
+class = "plain"
+description = "Compare slot 3 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE."
 
 [[registers.fields]]
 name = "TIMER_ARM"
@@ -2324,7 +2350,7 @@ class = "plain"
 [[registers]]
 name = "BTLC_TIMER_CAPTURE_0"
 offset = 0xac
-description = "First word of the timer capture r_obd_capture_btlc_timer reads after BTLC_TIMER_CONTROL.LATCH_REQUEST clears."
+description = "First word of the timer capture r_obd_capture_btlc_timer reads after BTLC_TIMER_CONTROL.LATCH_REQUEST clears. A bounded PAC-only seed experiment captured the programmed 0x10000, with completed latch requests, but retained that value across 4096 cycles under the tested setup. This is seed/capture correspondence, not proof of autonomous progression or an interrupt cause. SOURCE: HW9_S31_BTLC_LATCH_SEED_20261026. After CONTROL0=1, subsequent completed captures advanced; a verified near-max seed crossed the first-word 32-bit boundary and produced primary bank1 bit 1/source 124 with that enable set. Neither the physical unit nor every overflow/output relationship is established. SOURCE: HW9_S31_BTLC_START_20261027; HW9_S31_MAC_CAUSES_20261027."
 
 [[registers.fields]]
 name = "VALUE"
@@ -3294,7 +3320,7 @@ class = "read-only"
 [[registers]]
 name = "IRQ_STATUS_SNAPSHOT_1"
 offset = 0x348
-description = "Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2)."
+description = "Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2). For the three positively generated local primary causes (compare0/1 and seeded first-word wrap), this view stayed zero even while primary status and124 were asserted. It is not an enable-independent RAW alias of those primary causes. Other NRT producers and the133 output equation remain unknown. SOURCE: HW9_S31_MAC_CAUSES_20261027; HW9_S31_MAC_MASK_ACK_20261027."
 
 [[registers.fields]]
 name = "PENDING_BITS"

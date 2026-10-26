@@ -175,6 +175,43 @@ hardware claim even if the debugger command itself exits successfully.
 
 ## Local radio interrupt retention
 
+Selections 90–101 extend the BLE facts through advancing BTLC captures and
+positive digital causes. No scheduler RUN, RF operation or DMA publication is
+involved. The clock/reset setup is sourced and grouped; it does not establish
+a minimal clock set. With CONFIG_24=0 and CLOCK_SHIFT=3, CONTROL0=1 starts
+observed capture progression. Successful seed/capture correspondence alone
+is insufficient; subsequent leaves require a nonzero capture delta.
+
+| Selection | Bounded experiment |
+| --- | --- |
+| 90 | Completed/stationary seed capture, sourced mode change, CONTROL0=1, then separate LP start; paired captures at each boundary |
+| 91 | CC0/CC1 crossings and seeded first-word wrap; primary/NRT banks and matrix124/133 |
+| 92 | Each positive cause across mask/unmask, retained-snapshot masked clear and arrival while masked |
+| 93 | Already-pending overflow across CONTROL1, CONTROL2, their pair and CONTROL0 reopen |
+| 94 | Each baseline/dynamic mask and the production release suffix with overflow positively pending and ENA1[1] retained |
+| 95 | CC0 snapshot followed by CC1 arrival and sampled ack; separated same-bit target/ack phases |
+| 96 | Two positive LP lanes across +0x34 all-ones, then masked-zero observations after that destructive clear |
+| 97 | Sleep16 target crossings, +0x1c, independent mode58 controls0/4 and matrix127/129 |
+| 98 | Sourced sleep0/17 command pairs, ETM companions and +0x68 target; no invented read of +0x30 or +0x68 |
+| 99 / 100 | #685 LP stop order, controller reset, no-MMIO reunion boundary, digital clock release/restoration with isolated software / one real rollover and primary overflow |
+| 101 | Positive masked-zero checks for both LP lanes before +0x34 clears anything |
+
+Each BTLC latch/cause poll is bounded by 200,000 cycles. Each LP wrap wait
+is bounded by 40,000,000 cycles and requests one real wrap; ordinary windows
+use 4096 cycles. Primary records hold the two raw status images and matrix
+bank3, then NRT images and matrix bank4. Following records encode selected
+enables explicitly; they are not raw enable words. Task enable17 is sampled
+separately. LP records hold counter/status/matrix3, bytes24/2c/matrix4,
+bytes1c/20/task17, and mode58/target64/target6c. No gated peripheral read
+qualifies output-low; the matrix remains the clock-off observation.
+
+The measured CC0/CC1/wrap causes raise124 while their NRT snapshots stay
+zero, so those snapshots are not a RAW alias for these primary causes.
+CONTROL1/2 and the release masks do not silence already-pending inherited
+source1. Sleep16 has a positive flag but no qualified IRQ route: its delivery
+bank was disabled. Unknown sleep conditions, bank0 producers and a positive
+133 producer remain unqualified. SOURCE: `HW9_S31_*` in the register model.
+
 | Selection | Bounded experiment |
 | --- | --- |
 | 80 | LP compare arrival after a zero read and before zero acknowledgement; clear-before-arrival control; retained nonzero sample across a rearmed target crossing |

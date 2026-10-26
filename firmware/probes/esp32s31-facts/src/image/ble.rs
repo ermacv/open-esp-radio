@@ -33,6 +33,8 @@ pub(super) struct Ble {
     pub pmu: pac::pmu::PmuRadio,
     pub watchdog: pac::rtc_wdt::LpWdt,
     pub positional: pac::bt_mac::BleHwPositionalWord1ff0,
+    pub etm: pac::modem_etm::ModemEtmBluetooth,
+    pub task_irq: pac::bt_mac::BtmacBlePhyInit,
 }
 const COUNTER_MAX: u32 = pac::modem_pwr::word_0048_opaque::COUNTER_LOW_MAX;
 const HALF: u32 = (COUNTER_MAX / 2) + 1;
@@ -326,7 +328,7 @@ fn lp_state(s: &Session<'_>, tag: u32) {
         b.timer.read_word_006c_opaque().bits_0_31_opaque(),
     );
 }
-fn init_lp(s: &mut Session<'_>) {
+pub(super) fn init_lp(s: &mut Session<'_>) {
     contain(s);
     let b = &mut s.ble;
     clocks(b);

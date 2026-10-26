@@ -2,6 +2,10 @@
 schema = 1
 
 [[sources]]
+id = "HW9_S31_BTLC_LATCH_SEED_20261026"
+description = "SOURCE: s31-b rev0 run hw9-20261027-btlc-02, lease #823, executed 2026-10-26 UTC; /home/ermacv/dev/oer-notes/research/hw-ble-irq-wave2.md; target/hw-hw9/hw9-20261027-btlc-02/btlc-prerequisite.json, tags 0x9000-0x9030. The PAC-only image opened production digital Bluetooth clock dependencies, released BT MAC/APB/BLE-timer resets, applied the positional/latch prefix, programmed VALUE_0/1/2=0x10000/0/0 and control CLOCK_SHIFT=2, CONFIG_24=1, TIMER_ARM=1. Two LATCH_REQUEST operations completed; each bounded poll/capture sequence recorded 47 cycles, TIMER_ARM read zero, and captures read 0x10000/0/0. The first capture word remained 0x10000 after a 4096-cycle window. This proves seed/capture correspondence and latch completion in this grouped setup, not an advancing timebase, minimal clock prerequisites, a physical tick rate or any MAC interrupt producer/output relation. Dependent interrupt experiments were not run. No access class or reset value is inferred."
+
+[[sources]]
 id = "HW2_S31_BLE_INHERITED_20261026"
 description = "SOURCE: s31-b rev0 run hw2-20261026-ble-07, lease #786; /home/ermacv/dev/oer-notes/research/hw-ble-nrt-lp.md; target/hw-hw2/hw2-20261026-ble-07/inherited.json. ROM USB download and MEM_END entered the one-take PAC-only image. Before BLE-domain reset or baseline, IRQ_ENABLE_1.SOURCE_1 read zero, also after clock/ICG setup. Applying and removing baseline 0x1300 changed sources 8/9/12 but left source 1 zero; source-15 bank-zero readback validated bank writes. This is not an untouched POR or production-startup snapshot and does not identify source 1's producer or acknowledgement."
 
