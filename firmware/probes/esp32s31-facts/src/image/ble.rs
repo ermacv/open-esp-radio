@@ -3,6 +3,21 @@ use super::{Session, contain, emit};
 use oer_esp32s31_pac as pac;
 use oer_mmio::Bits;
 
+mod reset;
+
+pub(super) fn timer_reset_on(s: &mut Session<'_>) {
+    reset::run(s, false, false);
+}
+pub(super) fn timer_reset_off(s: &mut Session<'_>) {
+    reset::run(s, false, true);
+}
+pub(super) fn controller_reset_on(s: &mut Session<'_>) {
+    reset::run(s, true, false);
+}
+pub(super) fn controller_reset_off(s: &mut Session<'_>) {
+    reset::run(s, true, true);
+}
+
 pub(super) struct Ble {
     pub bank: pac::bt_mac::BluetoothInterruptBank,
     pub core: pac::bt_mac::BluetoothControllerCore,

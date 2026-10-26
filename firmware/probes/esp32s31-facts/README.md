@@ -110,6 +110,20 @@ and arming policy are unaffected.
 | 29 | Software-pending delivery across mode writes, disable/re-enable, zero, all-ones disable, bit-1 command and `+0x04` |
 | 30 | One natural wrap plus software pending; independent suppression, retained-pending redelivery and acknowledgement of the two causes |
 | 31 | Minimal sourced MAC/latch prefix and the BTLC candidate, without any DMA or RF publication |
+| 32 / 33 | BLE-timer reset with LP clocks on / off; software-pending diagnostic, then one natural rollover with compare disabled |
+| 34 / 35 | Production controller-domain reset order with LP clocks on / off; same two positive causes and separate suppression/stop/clear observations |
+
+Reset leaves observe delivery before any post-reset enable/publication. The
+software-only phase retains bit 18 enabled as a diagnostic; the rollover phase
+disables compare before reset, matching shutdown admission. LP-off deselects
+all four LP sources, clears the BLE-timer gate and the MODEM_PWR LP-timer gate,
+and keeps the register bus and Wi-Fi-power gate live. Clock restoration sends
+neither START nor a pending/enable command. Each state has three records:
+`tag` = counter/status/matrix bank 3; `tag+1` = bytes 0x24/0x2c/BLE-reset;
+`tag+2` = BLE gate/LP gate/XTAL selector. Tags 0x3220–0x3250 and
+0x3340–0x3370 precede all post-reset control writes; 0x3380 onward separates
+all-ones suppression, counter stop, pending clear and positive rearm controls.
+There is one bounded natural wrap per command and no direct read of +0x10.
 
 These commands are explicit selections, excluded from selection 0. An inactive
 BTLC candidate does not establish an output equation or a set/clear race result:
