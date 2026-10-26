@@ -509,9 +509,7 @@ pub(super) fn lp_modes(s: &mut Session<'_>) {
         w.set_control_0(true).set_control_4(true);
     });
     lp_state(s, 0x2603);
-    s.ble.timer.modify_word_0058_opaque(|w| {
-        w.set_control_1(true);
-    });
+    s.ble.timer.trigger_word_0058_opaque_control_1();
     lp_state(s, 0x2604);
     s.ble.timer.modify_word_0058_opaque(|w| {
         w.set_control_0(false).set_control_4(false);
@@ -564,9 +562,7 @@ pub(super) fn software_pending(s: &mut Session<'_>) {
         w.set_control_0(true).set_control_4(true);
     });
     lp_state(s, 0x2902);
-    s.ble.timer.modify_word_0058_opaque(|w| {
-        w.set_control_1(true);
-    });
+    s.ble.timer.trigger_word_0058_opaque_control_1();
     lp_state(s, 0x2903);
     s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
     lp_state(s, 0x2904);

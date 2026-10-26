@@ -213,6 +213,14 @@ const PROBES: &[Probe] = &[
         run: opaque::temperature,
     },
     Probe {
+        id: 113,
+        run: lp_lanes::sleep17,
+    },
+    Probe {
+        id: 114,
+        run: lp_lanes::compare_mode,
+    },
+    Probe {
         id: 110,
         run: lp_lanes::sleep16,
     },

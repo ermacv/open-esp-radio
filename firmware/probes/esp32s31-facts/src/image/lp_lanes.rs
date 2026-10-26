@@ -33,10 +33,7 @@ fn state(s: &Session<'_>, tag: u32) {
     emit(
         tag + 2,
         u32::from(t.read_word_002c_opaque().low_byte()),
-        u32::from(m.control_0())
-            + 2 * u32::from(m.control_1())
-            + 4 * u32::from(m.control_2())
-            + 16 * u32::from(m.control_4()),
+        u32::from(m.control_0()) + 4 * u32::from(m.control_2()) + 16 * u32::from(m.control_4()),
         s.interrupt_matrix
             .interrupt_core0_status
             .read_int_status_reg_4()
@@ -54,30 +51,32 @@ fn state(s: &Session<'_>, tag: u32) {
 fn hp_raw(p: &pac::pmu::PmuRadio) -> u32 {
     use pac::pmu::int_raw as f;
     let r = p.read_int_raw();
-    u32::from(r.lp_cpu_exc_int_raw()) * f::LP_CPU_EXC_INT_RAW_MASK
-        | u32::from(r.sdio_idle_int_raw()) * f::SDIO_IDLE_INT_RAW_MASK
-        | u32::from(r.sw_int_raw()) * f::SW_INT_RAW_MASK
-        | u32::from(r.soc_sleep_reject_int_raw()) * f::SOC_SLEEP_REJECT_INT_RAW_MASK
-        | u32::from(r.soc_wakeup_int_raw()) * f::SOC_WAKEUP_INT_RAW_MASK
+    (u32::from(r.lp_cpu_exc_int_raw()) * f::LP_CPU_EXC_INT_RAW_MASK)
+        | (u32::from(r.sdio_idle_int_raw()) * f::SDIO_IDLE_INT_RAW_MASK)
+        | (u32::from(r.sw_int_raw()) * f::SW_INT_RAW_MASK)
+        | (u32::from(r.soc_sleep_reject_int_raw()) * f::SOC_SLEEP_REJECT_INT_RAW_MASK)
+        | (u32::from(r.soc_wakeup_int_raw()) * f::SOC_WAKEUP_INT_RAW_MASK)
 }
 fn lp_raw(p: &pac::pmu::PmuRadio) -> u32 {
     use pac::pmu::lp_int_raw as f;
     let r = p.read_lp_int_raw();
-    u32::from(r.lp_cpu_wakeup_int_raw()) * f::LP_CPU_WAKEUP_INT_RAW_MASK
-        | u32::from(r.modem_switch_active_end_int_raw()) * f::MODEM_SWITCH_ACTIVE_END_INT_RAW_MASK
-        | u32::from(r.sleep_switch_active_end_int_raw()) * f::SLEEP_SWITCH_ACTIVE_END_INT_RAW_MASK
-        | u32::from(r.sleep_switch_modem_end_int_raw()) * f::SLEEP_SWITCH_MODEM_END_INT_RAW_MASK
-        | u32::from(r.modem_switch_sleep_end_int_raw()) * f::MODEM_SWITCH_SLEEP_END_INT_RAW_MASK
-        | u32::from(r.active_switch_sleep_end_int_raw()) * f::ACTIVE_SWITCH_SLEEP_END_INT_RAW_MASK
-        | u32::from(r.modem_switch_active_start_int_raw())
-            * f::MODEM_SWITCH_ACTIVE_START_INT_RAW_MASK
-        | u32::from(r.sleep_switch_active_start_int_raw())
-            * f::SLEEP_SWITCH_ACTIVE_START_INT_RAW_MASK
-        | u32::from(r.sleep_switch_modem_start_int_raw()) * f::SLEEP_SWITCH_MODEM_START_INT_RAW_MASK
-        | u32::from(r.modem_switch_sleep_start_int_raw()) * f::MODEM_SWITCH_SLEEP_START_INT_RAW_MASK
-        | u32::from(r.active_switch_sleep_start_int_raw())
-            * f::ACTIVE_SWITCH_SLEEP_START_INT_RAW_MASK
-        | u32::from(r.hp_sw_trigger_int_raw()) * f::HP_SW_TRIGGER_INT_RAW_MASK
+    (u32::from(r.lp_cpu_wakeup_int_raw()) * f::LP_CPU_WAKEUP_INT_RAW_MASK)
+        | (u32::from(r.modem_switch_active_end_int_raw()) * f::MODEM_SWITCH_ACTIVE_END_INT_RAW_MASK)
+        | (u32::from(r.sleep_switch_active_end_int_raw()) * f::SLEEP_SWITCH_ACTIVE_END_INT_RAW_MASK)
+        | (u32::from(r.sleep_switch_modem_end_int_raw()) * f::SLEEP_SWITCH_MODEM_END_INT_RAW_MASK)
+        | (u32::from(r.modem_switch_sleep_end_int_raw()) * f::MODEM_SWITCH_SLEEP_END_INT_RAW_MASK)
+        | (u32::from(r.active_switch_sleep_end_int_raw()) * f::ACTIVE_SWITCH_SLEEP_END_INT_RAW_MASK)
+        | (u32::from(r.modem_switch_active_start_int_raw())
+            * f::MODEM_SWITCH_ACTIVE_START_INT_RAW_MASK)
+        | (u32::from(r.sleep_switch_active_start_int_raw())
+            * f::SLEEP_SWITCH_ACTIVE_START_INT_RAW_MASK)
+        | (u32::from(r.sleep_switch_modem_start_int_raw())
+            * f::SLEEP_SWITCH_MODEM_START_INT_RAW_MASK)
+        | (u32::from(r.modem_switch_sleep_start_int_raw())
+            * f::MODEM_SWITCH_SLEEP_START_INT_RAW_MASK)
+        | (u32::from(r.active_switch_sleep_start_int_raw())
+            * f::ACTIVE_SWITCH_SLEEP_START_INT_RAW_MASK)
+        | (u32::from(r.hp_sw_trigger_int_raw()) * f::HP_SW_TRIGGER_INT_RAW_MASK)
 }
 fn pmu_context(s: &Session<'_>, tag: u32) {
     let p = &s.ble.pmu;
@@ -285,9 +284,7 @@ pub(super) fn sleep_other(s: &mut Session<'_>) {
     init(s);
     mode(s, 0);
     if s.ble.timer.read_word_0058_opaque().control_2() {
-        s.ble.timer.modify_word_0058_opaque(|w| {
-            w.set_control_1(true);
-        });
+        s.ble.timer.trigger_word_0058_opaque_control_1();
     }
     pmu_context(s, 0xeff0);
     for companion16 in [false, true] {
@@ -327,5 +324,108 @@ pub(super) fn sleep_other(s: &mut Session<'_>) {
     s.ble.etm.trigger_channel_enable_clear_ch6();
     s.ble.etm.trigger_channel_enable_clear_ch7();
     pmu_context(s, 0xeff2);
+    quiet(s);
+}
+
+fn target17(s: &mut Session<'_>, tag: u32) -> u32 {
+    let origin = counter(s);
+    let target = origin.wrapping_add(512) & LOW_MAX;
+    s.ble.timer.write_word_0068_opaque(|w| {
+        w.set_bits_0_23_opaque(Bits::truncate(target));
+    });
+    emit(tag, origin, target, 0);
+    origin
+}
+
+pub(super) fn sleep17(s: &mut Session<'_>) {
+    ble_wave2::prerequisite(s);
+    init(s);
+    mode(s, 0);
+    pmu_context(s, 0xaff0);
+    s.ble.etm.trigger_channel_enable_set_ch7();
+    s.ble.etm.trigger_channel_enable_set_ch6();
+    s.ble.etm.trigger_channel_enable_set_bit_11_opaque();
+    // Sleep0 alone sees a fresh +68 crossing with sleep17 disabled.
+    let origin = target17(s, 0xa0f0);
+    sleep0(s, true);
+    if !crossed(s, origin, 1024, 0xa0f1) {
+        quiet(s);
+        return;
+    }
+    state(s, 0xa000);
+    sleep0(s, false);
+    state(s, 0xa010);
+    s.ble.timer.clear_bluetooth_modem_lp_timer_state_0020();
+    // Independent sleep17 stimulation, with sleep0 and sleep16 disabled.
+    let origin = target17(s, 0xa1f0);
+    s.ble.timer.enable_bluetooth_lp_sleep_17();
+    if !crossed(s, origin, 1024, 0xa1f1) {
+        quiet(s);
+        return;
+    }
+    state(s, 0xa100);
+    s.ble.timer.disable_bluetooth_lp_sleep_17();
+    state(s, 0xa110);
+    s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0034();
+    window();
+    state(s, 0xa120);
+    // Clearing a disabled flag is independent of stopping its producer.
+    s.ble.timer.clear_bluetooth_modem_lp_timer_state_0020();
+    state(s, 0xa130);
+    s.ble.timer.enable_bluetooth_lp_sleep_17();
+    window();
+    state(s, 0xa140);
+    // A target crossed while the producer is disabled, followed by a late
+    // enable, distinguishes retained pending from an edge-only comparator.
+    s.ble.timer.disable_bluetooth_lp_sleep_17();
+    s.ble.timer.clear_bluetooth_modem_lp_timer_state_0020();
+    let origin = target17(s, 0xa2f0);
+    if !crossed(s, origin, 1024, 0xa2f1) {
+        quiet(s);
+        return;
+    }
+    state(s, 0xa200);
+    s.ble.timer.enable_bluetooth_lp_sleep_17();
+    window();
+    state(s, 0xa210);
+    let origin = target17(s, 0xa3f0);
+    if !crossed(s, origin, 1024, 0xa3f1) {
+        quiet(s);
+        return;
+    }
+    state(s, 0xa300);
+    pmu_context(s, 0xaff2);
+    s.ble.etm.trigger_channel_enable_clear_ch6();
+    s.ble.etm.trigger_channel_enable_clear_ch7();
+    quiet(s);
+}
+
+pub(super) fn compare_mode(s: &mut Session<'_>) {
+    init(s);
+    for image in 0..4 {
+        let tag = 0x9000 + image * 0x100;
+        mode(s, image);
+        s.ble.timer.clear_bluetooth_modem_lp_timer_state_0024();
+        let origin = counter(s);
+        let target = origin.wrapping_add(512) & LOW_MAX;
+        s.ble.timer.modify_word_006c_opaque(|w| {
+            w.set_bits_0_31_opaque(target);
+        });
+        emit(tag + 0xf0, origin, target, image);
+        if !crossed(s, origin, 1024, tag + 0xf1) {
+            quiet(s);
+            return;
+        }
+        state(s, tag);
+        // SOURCE: current ISR/sleep paths reread mode58 and set control1
+        // when control2 is observed. Keep pending-byte acknowledgement separate.
+        s.ble.timer.trigger_word_0058_opaque_control_1();
+        state(s, tag + 0x10);
+        window();
+        state(s, tag + 0x20);
+        s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0034();
+        state(s, tag + 0x30);
+    }
+    pmu_context(s, 0x9ff0);
     quiet(s);
 }

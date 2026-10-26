@@ -37,10 +37,7 @@ fn state(s: &Session<'_>, tag: u32) {
     let m = t.read_word_0058_opaque();
     emit(
         tag + 3,
-        u32::from(m.control_0())
-            + 2 * u32::from(m.control_1())
-            + 4 * u32::from(m.control_2())
-            + 16 * u32::from(m.control_4()),
+        u32::from(m.control_0()) + 4 * u32::from(m.control_2()) + 16 * u32::from(m.control_4()),
         t.read_word_0064_opaque().bits_0_23_opaque().get(),
         t.read_word_006c_opaque().bits_0_31_opaque(),
     );
@@ -167,9 +164,7 @@ pub(in crate::image) fn sleep16(s: &mut Session<'_>) {
         state(s, 0x9720 + mode * 0x30);
     }
     if s.ble.timer.read_word_0058_opaque().control_2() {
-        s.ble.timer.modify_word_0058_opaque(|w| {
-            w.set_control_1(true);
-        });
+        s.ble.timer.trigger_word_0058_opaque_control_1();
         state(s, 0x97d0);
     }
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_001c();

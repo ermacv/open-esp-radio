@@ -127715,7 +127715,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0010_OPAQUE` register.
     ///
-    /// Observed complete command images 2 during initialization and 0x00040000 after runtime compare or software-pending publication; internal action unknown. After an all-ones disable, image 2 redelivered an already-pending natural rollover as status 2/source 127, while image 0x40000 redelivered the retained software cause as status 0x40000. This is not an exhaustive output equation or a production-clock guarantee. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7); HW2_S31_LP_GATES_20261026. Both tested delivery lanes survived BLE-timer and full production controller resets; restoring LP clocks recovered delivery without rearming. This is behavioral enable retention, not command-register readback. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. Across the separately tested hart0 HP system reset and next ROM-loader entry, fresh software pending remained silent until another bit18 enable command. In the both-pending and quiet follow-up, after restoring source clocks, CONTROL_25 and START, a natural wrap without a new bit1 enable left pending/status/output zero; enabling bit1 followed by a fresh natural wrap produced pending1/status2/source127 high. Both delivery lanes therefore required a new enable in the tested post-HP-reset setup. SOURCE: HW13_S31_BLE_LP_HP_RESTORE_20261026. This is behavioral delivery evidence, not enable-register readback. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026.
+    /// Observed complete command images 2 during initialization and 0x00040000 after runtime compare or software-pending publication; internal action unknown. After an all-ones disable, image 2 redelivered an already-pending natural rollover as status 2/source 127, while image 0x40000 redelivered the retained software cause as status 0x40000. This is not an exhaustive output equation or a production-clock guarantee. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7); HW2_S31_LP_GATES_20261026. Both tested delivery lanes survived BLE-timer and full production controller resets; restoring LP clocks recovered delivery without rearming. This is behavioral enable retention, not command-register readback. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026. Across the separately tested hart0 HP system reset and next ROM-loader entry, fresh software pending remained silent until another bit18 enable command. In the both-pending and quiet follow-up, after restoring source clocks, CONTROL_25 and START, a natural wrap without a new bit1 enable left pending/status/output zero; enabling bit1 followed by a fresh natural wrap produced pending1/status2/source127 high. Both delivery lanes therefore required a new enable in the tested post-HP-reset setup. SOURCE: HW13_S31_BLE_LP_HP_RESTORE_20261026. This is behavioral delivery evidence, not enable-register readback. SOURCE: HW13_S31_BLE_LP_HP_RESET_20261026. Image2 then image0x40000 independently add the tested delivery enables; the second does not replace the first. SOURCE: HW16_S31_LP_DELIVERY_20261026.
     pub mod word_0010_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00040002;
@@ -127821,7 +127821,7 @@ pub mod modem_pwr {
 
     /// The `WORD_001C_OPAQUE` register.
     ///
-    /// One complete runtime function reads the complete word and writes the finite zero image. Inner state encoding remains unknown. In a sourced sleep16 setup, a positively witnessed+0x64 target crossing set the low byte to1 under each tested mode58 control0/4 combination. +0x44 image 0x10000 retained the byte; whole-word zero cleared it. No127/129 route is established with the delivery bank disabled. SOURCE: HW9_S31_LP_SLEEP16_20261027.
+    /// One complete runtime function reads the complete word and writes the finite zero image. Inner state encoding remains unknown. In a sourced sleep16 setup, a positively witnessed+0x64 target crossing set the low byte to1 under each tested mode58 control0/4 combination. +0x44 image 0x10000 retained the byte; whole-word zero cleared it. No127/129 route is established with the delivery bank disabled. SOURCE: HW9_S31_LP_SLEEP16_20261027. With known delivery bits1/18 enabled, the positive sleep16 flag still leaves status/output127 low. Whole-word all-ones+34 clears it. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026.
     pub mod word_001c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -127871,7 +127871,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0020_OPAQUE` register.
     ///
-    /// Complete state word read by runtime functions and cleared by two complete paths.
+    /// Complete state word read by runtime functions and cleared by two complete paths. Future+68 crossing with sleep17 enabled and sleep0/16 disabled sets this byte to1. +44 bit17 retains it; whole-word all-ones+34 clears it. A crossing while sleep17 is disabled leaves no visible flag for late enable; a fresh enabled future target is positive. This qualifies a local comparator flag, not a completed PMU sleep/wake transition. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026.
     pub mod word_0020_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -128098,7 +128098,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0034_OPAQUE` register.
     ///
-    /// Complete initialization writes the finite image 0xFFFFFFFF. With both measured LP causes positively pending and enabled, this complete all-ones image cleared their bytes(+0x24/+0x2c), status and source 127; a fresh software-only case also cleared. Per-bit semantics, untested sources and readback remain unknown. SOURCE: HW9_S31_LP_CLEAR34_20261027.
+    /// Complete initialization writes the finite image 0xFFFFFFFF. With both measured LP causes positively pending and enabled, this complete all-ones image cleared their bytes(+0x24/+0x2c), status and source 127; a fresh software-only case also cleared. Per-bit semantics, untested sources and readback remain unknown. SOURCE: HW9_S31_LP_CLEAR34_20261027. The same all-ones image also clears positively witnessed bytes1c/20. Bit18 delivery remains enabled afterward, demonstrated by fresh software pending without another enable. The tested sleep17 and sleep16 flags do not reassert merely because the counter is past their targets during4096 cycles. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026; HW16_S31_LP_DELIVERY_20261026.
     pub mod word_0034_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -128207,7 +128207,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0040_OPAQUE` register.
     ///
-    /// Complete runtime functions write finite images with independently observed bits 0, 16 and 17.
+    /// Complete runtime functions write finite images with independently observed bits 0, 16 and 17. Bit16/17 commands enable the tested +64/+68 future-target flag producers. Re-enabling bit16 preserves a positive byte1c. None of the tested sleep command images clears the known compare/rollover causes. No source127 enable meaning follows. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026; HW16_S31_LP_DELIVERY_20261026.
     pub mod word_0040_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00030001;
@@ -128253,7 +128253,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0044_OPAQUE` register.
     ///
-    /// Complete runtime functions write finite images with independently observed bits 0, 16 and 17.
+    /// Complete runtime functions write finite images with independently observed bits 0, 16 and 17. Bit16/17 commands preserve the corresponding positive byte1c/20. Bit17 suppresses flag production at the tested future+68 crossing; late re-enable does not recover that crossing. None of the tested sleep command images masks the already-positive compare/rollover delivery lanes. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026; HW16_S31_LP_DELIVERY_20261026.
     pub mod word_0044_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00030001;
@@ -128376,7 +128376,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0058_OPAQUE` register.
     ///
-    /// Runtime mode word: first-timer setup RMW-sets bits 0 and 4; the ISR samples bit 2 and freshly rereads the word before setting bit 1. Other bits are preserved; internal action unknown for each control. No source-mask meaning is established. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
+    /// Runtime mode word: first-timer setup RMW-sets bits 0 and 4; the ISR samples bit 2 and freshly rereads the word before setting bit 1. Other controls retain their sourced positional names; the tested trigger/latch relation is qualified below. No source-mask meaning is established. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8). Near+6c compare produces byte24/status0x40000/127 under every control0/4 combination. Control2 sets in the tested control0=1 cases and is cleared by the control1 trigger without acknowledging byte24 or lowering source127. No general IRQ-mask meaning follows. SOURCE: HW16_S31_LP_MODE58_20261026.
     pub mod word_0058_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -128385,6 +128385,10 @@ pub mod modem_pwr {
 
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x58;
+
+        /// The bits of the write-trigger fields: zero in every write but a
+        /// field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x00000002;
 
         /// Width of `CONTROL_0` in bits.
         pub const CONTROL_0_WIDTH: u32 = 1;
@@ -128439,13 +128443,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Set from a fresh read on the conditional ISR path; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
-            #[inline]
-            pub const fn control_1(self) -> bool {
-                (self.0 & 0x00000002) != 0
-            }
-
-            /// Sampled on the conditional ISR path; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
+            /// Sampled on the conditional ISR path. In the near-compare test this latch sets with CONTROL_0=1, independently of CONTROL_4, and clears on CONTROL_1 without clearing byte24 or source127. A universal equation is unknown. SOURCE: HW16_S31_LP_MODE58_20261026; BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
             #[inline]
             pub const fn control_2(self) -> bool {
                 (self.0 & 0x00000004) != 0
@@ -128480,13 +128478,7 @@ pub mod modem_pwr {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// Set from a fresh read on the conditional ISR path; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
-            #[inline]
-            pub const fn control_1(&self) -> bool {
-                (self.0 & 0x00000002) != 0
-            }
-
-            /// Sampled on the conditional ISR path; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
+            /// Sampled on the conditional ISR path. In the near-compare test this latch sets with CONTROL_0=1, independently of CONTROL_4, and clears on CONTROL_1 without clearing byte24 or source127. A universal equation is unknown. SOURCE: HW16_S31_LP_MODE58_20261026; BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
             #[inline]
             pub const fn control_2(&self) -> bool {
                 (self.0 & 0x00000004) != 0
@@ -128514,13 +128506,6 @@ pub mod modem_pwr {
             #[inline]
             pub fn set_control_0(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xfffffffe) | u32::from(value);
-                self
-            }
-
-            /// Set `CONTROL_1`.
-            #[inline]
-            pub fn set_control_1(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
                 self
             }
 
@@ -128599,7 +128584,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0068_OPAQUE` register.
     ///
-    /// Complete publication replaces bits 0..23 with a runtime-derived value and clears bits 24..31.
+    /// Complete publication replaces bits 0..23 with a runtime-derived value and clears bits 24..31. With sleep17 enabled, a verified future-target crossing sets byte20 even with sleep0/16 disabled. No readback, counter unit or PMU wake-route equation is established. SOURCE: HW16_S31_LP_SLEEP_LANES_20261026.
     pub mod word_0068_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00ffffff;
@@ -135093,11 +135078,19 @@ pub mod modem_pwr {
             word_0058_opaque::R(self.0.read::<0x58>())
         }
 
+        /// Write to the write-trigger field `CONTROL_1` of `WORD_0058_OPAQUE`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_word_0058_opaque_control_1(&mut self) {
+            self.0
+                .write::<0x58>(self.0.read::<0x58>() & 0xfffffffd | 0x00000002);
+        }
+
         /// Read `WORD_0058_OPAQUE`, change fields and write it back; every other bit keeps
         /// the value read, every write-trigger field is zero.
         #[inline]
         pub fn modify_word_0058_opaque(&mut self, change: impl FnOnce(&mut word_0058_opaque::W)) {
-            let mut value = word_0058_opaque::W(self.0.read::<0x58>());
+            let mut value = word_0058_opaque::W(self.0.read::<0x58>() & 0xfffffffd);
             change(&mut value);
             self.0.write::<0x58>(value.0);
         }

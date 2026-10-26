@@ -3606,12 +3606,6 @@ value = 1
 sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE"]
 
 [[field-or-modifies]]
-name = "publish_bluetooth_modem_lp_timer_control_1"
-fields = [{ field = "MODEM_PWR.WORD_0058_OPAQUE.CONTROL_1", source-bit-offset = 0 }]
-value = 1
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ", "BLOB_LIBBTDM_RUNTIME_CONTROL"]
-
-[[field-or-modifies]]
 name = "or_bluetooth_memory_list_1_pointer_b"
 fields = [{ field = "BT_MAC.GLOBAL_RXLINK_1_NEXT.COMPRESSED_SRAM_POINTER", source-bit-offset = 0 }]
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
