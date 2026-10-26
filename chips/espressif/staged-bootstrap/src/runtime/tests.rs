@@ -155,3 +155,37 @@ fn a_short_or_unaligned_psram_region_is_rejected_without_writing() {
     );
     assert!(bytes.iter().all(|byte| *byte == 0x5a));
 }
+#[test]
+fn boot_failure_records_retain_the_typed_density_in_bytes() {
+    use oer_espressif_boot::{BootFailure, psram::PsramFailure};
+
+    assert_eq!(
+        std::format!(
+            "{}",
+            super::BootFailureRecord(BootFailure::Psram(PsramFailure::DensityMismatch {
+                found: 8 * 1024 * 1024
+            }))
+        ),
+        "OER_BOOT bootstrap=FAIL reason=psram-density-mismatch found=8388608\r\n"
+    );
+    assert_eq!(
+        std::format!(
+            "{}",
+            super::BootFailureRecord(BootFailure::Psram(PsramFailure::UnsupportedDensity(2)))
+        ),
+        "OER_BOOT bootstrap=FAIL reason=psram-density-unknown code=2\r\n"
+    );
+}
+
+#[test]
+fn boot_failure_records_preserve_the_named_wait() {
+    use oer_espressif_boot::{BootFailure, WaitFailure};
+
+    assert_eq!(
+        std::format!(
+            "{}",
+            super::BootFailureRecord(BootFailure::Wait(WaitFailure::TimedOut("spi-command")))
+        ),
+        "OER_BOOT bootstrap=FAIL reason=boot-wait-timeout wait=spi-command\r\n"
+    );
+}

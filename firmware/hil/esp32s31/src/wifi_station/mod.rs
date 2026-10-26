@@ -86,7 +86,9 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let Some(root) = oer_esp32s31_hal::root::Root::take() else {
         crate::fail(crate::fatal::Failure::RootTaken);
     };
-    let runtime = root.into_runtime();
+    let runtime = root
+        .into_runtime()
+        .unwrap_or_else(|_| crate::fail(crate::fatal::Failure::RootInitialization));
     let (_psram, mut adopted) = match handoff.adopt(
         crate::INTERRUPT_TABLE,
         runtime.interrupts.controller,

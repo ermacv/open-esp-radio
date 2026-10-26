@@ -270,9 +270,11 @@ const FIRST_WORD: Index<16> = Index::constant::<0>();
 /// esp-hal 1f646c5 `esp-hal/src/psram/oct_hex.rs:332`. The chip select:
 /// `components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:859-861`
 /// and esp-hal `oct_hex.rs:362-366` (chip select 1 the PSRAM's). The ROM's
-/// four-byte address flag (`CACHE_FCTRL.CACHE_USR_ADDR_4BYTE`) only sets
-/// the cache's address length, which this port does not serve: it is not
-/// written.
+/// four-byte address flag (`CACHE_FCTRL.CACHE_USR_ADDR_4BYTE`) also controls
+/// user commands on this port: it must accompany a 32-bit address.
+/// SOURCE: HW5_PSRAM_USER_ADDRESS_20261026, runs hw5-20261026-density-04/05;
+/// /home/ermacv/dev/oer-notes/research/hw-psram-density.md;
+/// `esp_rom_spi_cmd_config` @0x2f811516-0x2f811524 sets the flag for 32 bits.
 impl<P: Placement, Q: Placement, R: Placement> PsramCommandRegisters for PsramRegisters<P, Q, R> {
     fn set_octal_ddr_mode(&mut self, _: Access<'_>) {
         let spi = &mut self.memspi3;
@@ -320,6 +322,9 @@ impl<P: Placement, Q: Placement, R: Placement> PsramCommandRegisters for PsramRe
         if command.address_bits > 0 {
             spi.modify_addr(|w| {
                 w.set_usr_addr_value(command.address);
+            });
+            spi.modify_cache_fctrl(|w| {
+                w.set_cache_usr_addr_4byte(command.address_bits == 32);
             });
         }
         spi.modify_mosi_dlen(|w| {

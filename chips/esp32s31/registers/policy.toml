@@ -1121,7 +1121,7 @@ registers = ["CTRL1", "CACHE_FCTRL", "CACHE_SCTRL", "SRAM_CMD", "SRAM_DRD_CMD", 
 [[partitions.parts]]
 name = "Memspi3Psram"
 instance = "MEMSPI3"
-registers = ["CMD", "ADDR", "CTRL", "CLOCK", "USER", "USER1", "USER2", "MOSI_DLEN", "MISO_DLEN", "MISC", "W%s", "DDR"]
+registers = ["CMD", "ADDR", "CTRL", "CLOCK", "USER", "USER1", "USER2", "MOSI_DLEN", "MISO_DLEN", "MISC", "CACHE_FCTRL", "W%s", "DDR"]
 
 [[partitions.parts]]
 name = "IomuxMspiPsramPins"
@@ -7529,7 +7529,7 @@ reason = "No owner yet: the bootstrap reaches only its boot part's words."
 
 [[unclaimed]]
 instance = "MEMSPI3"
-registers = ["CTRL1", "CTRL2", "RD_STATUS", "TX_CRC", "CACHE_FCTRL", "FLASH_WAITI_CTRL", "FLASH_SUS_CTRL", "FLASH_SUS_CMD", "SUS_STATUS", "FLASH_WAITI_CTRL1", "INT_ENA", "INT_CLR", "INT_RAW", "INT_ST", "TIMING_CALI", "CLOCK_GATE", "DATE"]
+registers = ["CTRL1", "CTRL2", "RD_STATUS", "TX_CRC", "FLASH_WAITI_CTRL", "FLASH_SUS_CTRL", "FLASH_SUS_CMD", "SUS_STATUS", "FLASH_WAITI_CTRL1", "INT_ENA", "INT_CLR", "INT_RAW", "INT_ST", "TIMING_CALI", "CLOCK_GATE", "DATE"]
 reason = "No owner yet: the bootstrap reaches only its boot part's words."
 
 [[unclaimed]]

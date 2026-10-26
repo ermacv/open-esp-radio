@@ -190,7 +190,9 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let Some(root) = oer_esp32s31_hal::root::Root::take() else {
         fail(fatal::Failure::RootTaken);
     };
-    let runtime = root.into_runtime();
+    let runtime = root
+        .into_runtime()
+        .unwrap_or_else(|_| fail(fatal::Failure::RootInitialization));
     // Before anything records a checkpoint over the previous boot's record.
     #[cfg(feature = "system-watchdog")]
     system::postmortem::begin();

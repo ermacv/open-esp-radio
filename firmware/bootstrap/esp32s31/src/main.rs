@@ -55,9 +55,11 @@ extern "C" fn bootstrap_main() -> ! {
     let root = hal::root::Root::take();
     staged::start();
     let root = root.unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=root-taken\r\n"));
-    let mut hardware = root
-        .into_bootstrap()
-        .unwrap_or_else(|_| fail("OER_BOOT bootstrap=FAIL reason=monotonic\r\n"));
+    let mut hardware = root.into_bootstrap().unwrap_or_else(|error| {
+        print("OER_BOOT bootstrap=FAIL reason=");
+        print(error.name());
+        fail("\r\n")
+    });
     let deadline = boot::BootDeadline::start(&hardware.monotonic, boot::BOOT_BUDGET);
     hardware
         .soc
@@ -157,15 +159,7 @@ extern "C" fn bootstrap_main() -> ! {
 }
 
 fn checked<T>(result: Result<T, BootFailure>) -> T {
-    result.unwrap_or_else(|error| {
-        print("OER_BOOT bootstrap=FAIL reason=");
-        print(error.reason());
-        if let Some(wait) = error.wait() {
-            print(" wait=");
-            print(wait);
-        }
-        fail("\r\n")
-    })
+    result.unwrap_or_else(|error| staged::fail_boot(error))
 }
 
 const fn flash_tuning_reference() -> [u32; FLASH_TUNING_REFERENCE_WORDS] {

@@ -4,6 +4,11 @@ Register logic over the thin PAC (docs/architecture.md, "Layers"): the
 reset root, sequences, polls, routing, clocks, power, resets and DMA
 engines.
 
+The reset root's `into_bootstrap` and `into_runtime` return `Result` with
+`root::InitError`: a refused console installation, a stuck bootstrap
+monotonic latch, or a refused stage-two core-control installation is a
+named boot failure. Image callers handle it without a panic or fallback.
+
 ## Platform clocks
 
 `power::ChipClocks` is the one owner of the platform clock words the radio

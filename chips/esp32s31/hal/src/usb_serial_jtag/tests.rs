@@ -86,3 +86,29 @@ fn the_interrupt_registers_and_the_installed_parts_can_move_between_contexts() {
     handler_static::<super::ConsoleInterrupt>();
     handler_static::<super::ConsoleRegisters>();
 }
+
+#[test]
+fn a_duplicate_console_is_a_typed_root_failure_and_retains_the_first_owner() {
+    let (mut first, mut first_pads) = (memory(0), memory(0));
+    let (mut second, mut second_pads) = (memory(0), memory(0));
+    let ownership = super::Ownership::new();
+    super::install_in(
+        &ownership,
+        ConsoleRegisters::host(&mut first, &mut first_pads).unwrap(),
+    )
+    .unwrap();
+    let error = super::install_in(
+        &ownership,
+        ConsoleRegisters::host(&mut second, &mut second_pads).unwrap(),
+    )
+    .unwrap_err();
+    let error = crate::root::InitError::from(error);
+    assert_eq!(error, crate::root::InitError::ConsoleInstalled);
+    assert_eq!(error.name(), "console-installed");
+    let (mut endpoint, _, _) = parts(ownership.retire().unwrap());
+    endpoint.push(0x42);
+    drop(endpoint);
+    drop(ownership);
+    assert_eq!(first[0], 0x42, "the original owner remains installed");
+    assert_eq!(second[0], 0, "the refused owner is never used");
+}
