@@ -636,6 +636,51 @@ fn a_complete_graph_without_a_record_gives_the_observed_frame() {
 }
 
 #[test]
+fn a_resolved_external_tail_closes_an_unframed_trampoline() {
+    let image = executable(&[
+        Symbol {
+            name: "wrapper",
+            words: vec![0x0000_0317, 0x0083_0067], // auipc t1, 0; jalr zero, 8(t1)
+            frame: None,
+        },
+        leaf(None),
+    ]);
+    let analysis = analyze(&image, &[], &[]).unwrap();
+    let facts = &analysis.functions[&TEXT];
+    assert_eq!(
+        (facts.frame, facts.source),
+        (Some(0), Some(FrameSource::Observed))
+    );
+    let bound = analysis.bound(TEXT, &mut ledger(), &mut || Ok(())).unwrap();
+    assert_eq!(bound.bytes, Some(32));
+    assert_eq!(bound.path, [(TEXT, 0), (TEXT + 8, 32)]);
+    assert!(bound.assumptions.is_empty());
+}
+
+#[test]
+fn an_external_tail_does_not_hide_unknown_targets_stack_writes_or_decode_gaps() {
+    for words in [
+        vec![0x0005_0067],                           // jalr zero, 0(a0): unknown target
+        vec![0x0005_0113, 0x0000_0317, 0x0083_0067], // mv sp, a0; known tail
+        vec![0xffff_ffff, 0x0000_0317, 0x0083_0067], // undecodable; known tail
+    ] {
+        let image = executable(&[
+            Symbol {
+                name: "wrapper",
+                words,
+                frame: None,
+            },
+            leaf(None),
+        ]);
+        let analysis = analyze(&image, &[], &[]).unwrap();
+        assert_eq!(analysis.functions[&TEXT].frame, None);
+        let bound = analysis.bound(TEXT, &mut ledger(), &mut || Ok(())).unwrap();
+        assert_eq!(bound.bytes, None);
+        assert!(bound.reasons().contains_key(&Reason::Unframed));
+    }
+}
+
+#[test]
 fn frame_records_decode_with_uleb128_sizes() {
     let image = executable(&[leaf(Some(32))]);
     assert_eq!(stack_sizes(&image).unwrap(), BTreeMap::from([(TEXT, 32)]));

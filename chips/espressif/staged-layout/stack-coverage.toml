@@ -14,10 +14,10 @@ source = "chips/espressif/staged-runtime/src/entry.rs"
 reason = "Assembly boot entry and FPU enable run before normal tasks; no compiler frame is claimed."
 
 [[reviewed]]
-symbols = ["strlen"]
+symbols = ["strlen", "memcpy", "compiler_builtins::mem::memcpy", "memset"]
 category = "compiler-runtime"
 source = "rustc 1.97.1 library/compiler-builtins/compiler-builtins/src/mem/mod.rs and src/macros.rs"
-reason = "Pinned compiler memory builtin wrapper lacks emitted frame metadata in the final image. Review does not assign zero usage; runtime stack headroom remains independent."
+reason = "Pinned compiler memory builtins and their assembly wrappers lack emitted frame metadata in the final image. This review supplies no frame size or call-chain bound: the stack analysis must prove their frames and every callee from machine code."
 
 [[reviewed]]
 symbols = ["_start", "_bootstrap_trap", "_bootstrap_enable_fpu"]

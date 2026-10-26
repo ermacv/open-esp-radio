@@ -714,7 +714,31 @@ fn function_facts(
         },
         known: &jumps,
     };
-    let observation = observe(&function, &jumps, &tables, work, control)?;
+    let mut observation = observe(&function, &jumps, &tables, work, control)?;
+    if let Some(site) = observation.resolved_external_exit(&function) {
+        let mut targets = Vec::new();
+        for &(_, target, _) in observation.resolved.iter().filter(|(at, ..)| *at == site) {
+            work.push(&mut targets, u64::from(target), control)?;
+        }
+        work.push(
+            &mut jumps,
+            KnownJump {
+                site: u64::from(site),
+                targets,
+            },
+            control,
+        )?;
+        // Recheck the complete graph, including all stack writes. A resolved
+        // tail target alone supplies neither a frame nor a callee bound.
+        let tables = DispatchTables {
+            recognized: RecognizedTables {
+                entries: &ImageTables { image: elf },
+                section: function.section as u32,
+            },
+            known: &jumps,
+        };
+        observation = observe(&function, &jumps, &tables, work, control)?;
+    }
     let mut transfers = swept.transfers;
     for transfer in &mut transfers {
         if let Some(load) = &mut transfer.load {

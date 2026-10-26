@@ -123,7 +123,10 @@ extends to the next one of its section. Its frame is the compiler's `.stack_size
 record, cross-checked with the deepest entry-relative `sp` the value analysis
 observes under the psABI's preserved `sp` (a deeper observation is an error);
 without a record, the observed depth counts only when the function's
-control-flow graph is complete. Its transfers are every direct call and
+control-flow graph is complete. A sole open indirect exit whose value analysis
+proves every target external is fed back through `KnownJump` for one complete
+graph analysis; neither its frame nor its callees receive an assumed bound.
+Its transfers are every direct call and
 out-of-function jump of a linear sweep over its whole extent, which also
 reaches code behind jump tables the graph does not expand, plus the indirect
 transfers whose target the value analysis resolves; an indirect jump whose
