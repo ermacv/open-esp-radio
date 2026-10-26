@@ -15,7 +15,7 @@ use oer_interrupt_table::signal::host::Host;
 use super::{NoteError, write_note};
 use crate::{
     Endpoint, Interrupt,
-    fake::{Irq, Shared, Task},
+    fake::{Irq, Shared, Task, silent},
 };
 
 fn poll<F: Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
@@ -77,7 +77,7 @@ fn a_refused_line_reports_the_writer_error() {
 fn a_note_over_the_endpoint_waits_for_the_host_and_arrives_whole() {
     let block = Shared::default();
     let interrupt: &'static Interrupt<Host, Irq> = Box::leak(Box::new(Interrupt::new()));
-    let mut endpoint = Endpoint::new(Task(block.clone()), interrupt.signal());
+    let mut endpoint = Endpoint::new(Task(block.clone()), interrupt.signal(), &silent());
     let note = Note::w3_pass();
     let mut write = pin!(write_note(&mut endpoint, &note));
     loop {

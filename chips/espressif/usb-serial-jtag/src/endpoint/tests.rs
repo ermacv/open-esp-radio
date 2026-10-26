@@ -15,7 +15,7 @@ use oer_interrupt_table::signal::host::{Host, foreign_signal};
 use super::{Endpoint, Error};
 use crate::{
     Events, Interrupt, PACKET,
-    fake::{Irq, Shared, Task},
+    fake::{Irq, Shared, Task, silent},
 };
 
 /// The block, the endpoint over it and its interrupt.
@@ -29,7 +29,7 @@ impl Console {
     fn new() -> Self {
         let block = Shared::default();
         let interrupt: &'static Interrupt<Host, Irq> = Box::leak(Box::new(Interrupt::new()));
-        let endpoint = Endpoint::new(Task(block.clone()), interrupt.signal());
+        let endpoint = Endpoint::new(Task(block.clone()), interrupt.signal(), &silent());
         Self {
             block,
             endpoint,
@@ -49,9 +49,14 @@ fn poll<F: Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
 }
 
 #[test]
-fn the_endpoint_enables_the_console_interrupts() {
-    let console = Console::new();
-    assert!(console.block.lock().enabled);
+fn the_endpoint_enables_the_console_interrupts_with_silent_authority() {
+    let block = Shared::default();
+    assert!(!block.lock().enabled);
+    let interrupt: &'static Interrupt<Host, Irq> = Box::leak(Box::new(Interrupt::new()));
+    let authority = silent();
+    assert!(!block.lock().enabled, "the proof alone enables no events");
+    let _endpoint = Endpoint::new(Task(block.clone()), interrupt.signal(), &authority);
+    assert!(block.lock().enabled);
 }
 
 #[test]
@@ -211,7 +216,7 @@ fn an_abandoned_read_loses_no_byte_and_no_event() {
 #[test]
 fn an_endpoint_outside_its_executor_refuses_to_wait() {
     let block = Shared::default();
-    let mut endpoint = Endpoint::new(Task(block.clone()), foreign_signal());
+    let mut endpoint = Endpoint::new(Task(block.clone()), foreign_signal(), &silent());
     assert_eq!(
         poll(pin!(endpoint.write(b"x"))),
         Poll::Ready(Err(Error::ForeignContext))

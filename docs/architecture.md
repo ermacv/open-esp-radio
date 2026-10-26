@@ -93,6 +93,10 @@ moves; ownership, orchestration and wiring are rebuilt.
   table fails to compile when two entries share a line, or two entries or
   one part list a source twice, and a binding when its entry lies outside
   the chip's interrupt controller.
+- USB Serial/JTAG event enablement and endpoint construction require the
+  sealed `EventAuthority` of the endpoint registers' associated interrupt
+  part: its `Bound` or `Silent` proof. Missing authority and another part's
+  proof fail to compile, including direct calls to the register trait.
 - Each interrupt table entry declares its class: `Hardware` (capture,
   acknowledge, latch, raise a signal; never on its core's executor level),
   `Executor` (one per level and core; strict up to its task polls) or

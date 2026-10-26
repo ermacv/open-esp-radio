@@ -55,8 +55,8 @@ pub(crate) fn open<C: Controller>(
     let Ok((endpoint, interrupt, pads)) = retire_early_writer() else {
         crate::fail("console-retire")
     };
-    if router.bind(token, interrupt).is_err() {
+    let Ok(bound) = router.bind(token, interrupt) else {
         crate::fail("console-route");
-    }
-    (Endpoint::new(endpoint, INTERRUPT.signal()), pads)
+    };
+    (Endpoint::new(endpoint, INTERRUPT.signal(), &bound), pads)
 }

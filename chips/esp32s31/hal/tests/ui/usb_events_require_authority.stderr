@@ -1,0 +1,31 @@
+error[E0061]: this function takes 3 arguments but 2 arguments were supplied
+  --> tests/ui/usb_events_require_authority.rs:13:21
+   |
+13 |     let _endpoint = Endpoint::new(registers, signal); // ui-error: E0061
+   |                     ^^^^^^^^^^^^^------------------- argument #3 of type `&_` is missing
+   |
+note: associated function defined here
+  --> $WORKSPACE/chips/espressif/usb-serial-jtag/src/endpoint.rs
+   |
+   |     pub fn new(
+   |            ^^^
+help: provide the argument
+   |
+13 |     let _endpoint = Endpoint::new(registers, signal, /* authority */); // ui-error: E0061
+   |                                                    +++++++++++++++++
+
+error[E0061]: this method takes 1 argument but 0 arguments were supplied
+  --> tests/ui/usb_events_require_authority.rs:23:15
+   |
+23 |     registers.enable_events(); // ui-error: E0061
+   |               ^^^^^^^^^^^^^-- argument #1 of type `&_` is missing
+   |
+note: method defined here
+  --> $WORKSPACE/chips/espressif/usb-serial-jtag/src/lib.rs
+   |
+   |     fn enable_events(
+   |        ^^^^^^^^^^^^^
+help: provide the argument
+   |
+23 |     registers.enable_events(/* authority */); // ui-error: E0061
+   |                             +++++++++++++++

@@ -60,6 +60,8 @@ impl Block {
 pub(crate) struct Task(pub(crate) Shared);
 
 impl EndpointRegisters for Task {
+    type Interrupt = Irq;
+
     fn has_room(&self) -> bool {
         let block = self.0.lock();
         !block.in_flight && block.fifo.len() < PACKET
@@ -90,12 +92,29 @@ impl EndpointRegisters for Task {
             .expect("pop with data available")
     }
 
-    fn enable_events(&mut self) {
+    fn enable_events(
+        &mut self,
+        _authority: &impl oer_interrupt_table::EventAuthority<Self::Interrupt>,
+    ) {
         self.0.lock().enabled = true;
     }
 }
 
 pub(crate) struct Irq(pub(crate) Shared);
+
+impl oer_interrupt_table::InterruptSource for Irq {
+    // Synthetic source in the host controller, independent of chip identities.
+    const SOURCE: u16 = 0;
+}
+
+oer_interrupt_table::__fake_controller!();
+
+/// A real router-issued proof over the fake's unrouted source.
+pub(crate) fn silent() -> oer_interrupt_table::Silent<Irq> {
+    oer_interrupt_table::Router::install(FakeController::new(0), &[])
+        .and_then(|router| router.silent())
+        .expect("the empty table leaves the fake USB source silent")
+}
 
 impl InterruptRegisters for Irq {
     fn take_events(&mut self) -> Events {

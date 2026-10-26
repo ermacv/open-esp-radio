@@ -17,7 +17,8 @@
 //!
 //! The interrupt's part moves once, into the handler's storage, which needs
 //! it `Send`; the image's interrupt table routes that handler to the
-//! driver's hart.
+//! driver's hart. Enabling events takes that part's `Bound` or `Silent`
+//! proof, including when the task registers are used directly.
 
 use core::marker::PhantomData;
 
@@ -128,6 +129,8 @@ fn parts<P: Placement>(
 }
 
 impl<P: Placement> EndpointRegisters for Endpoint<P> {
+    type Interrupt = UsbInterrupt<P>;
+
     fn has_room(&self) -> bool {
         self.0.read_ep1_conf().serial_in_ep_data_free()
     }
@@ -148,7 +151,10 @@ impl<P: Placement> EndpointRegisters for Endpoint<P> {
         self.0.pop_ep1()
     }
 
-    fn enable_events(&mut self) {
+    fn enable_events(
+        &mut self,
+        _authority: &impl oer_interrupt_table::EventAuthority<Self::Interrupt>,
+    ) {
         self.0.modify_int_ena(|enables| {
             enables
                 .set_serial_in_empty_int_ena(true)
@@ -158,6 +164,8 @@ impl<P: Placement> EndpointRegisters for Endpoint<P> {
 }
 
 impl<P: Placement> EndpointRegisters for UsbEndpoint<P> {
+    type Interrupt = UsbInterrupt<P>;
+
     fn has_room(&self) -> bool {
         self.0.has_room()
     }
@@ -178,8 +186,11 @@ impl<P: Placement> EndpointRegisters for UsbEndpoint<P> {
         self.0.pop()
     }
 
-    fn enable_events(&mut self) {
-        self.0.enable_events();
+    fn enable_events(
+        &mut self,
+        authority: &impl oer_interrupt_table::EventAuthority<Self::Interrupt>,
+    ) {
+        self.0.enable_events(authority);
     }
 }
 
