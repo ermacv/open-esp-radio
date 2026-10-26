@@ -560,7 +560,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_CONTROL_STATUS.SAR_READY"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR", "BLOB_LIBPHY_PHY_TXDC_PWDET", "HW17_S31_SAR_HOLD_20261027", "HW17_S31_SAR_EDGE_20261027", "HW17_S31_SAR_PREPARATION_20261027"]
+sources = ["ROM_REV0_PHY_POWER_DETECTOR", "BLOB_LIBPHY_PHY_TXDC_PWDET", "HW17_S31_SAR_HOLD_20261027", "HW17_S31_SAR_EDGE_20261027", "HW17_S31_SAR_PREPARATION_20261027", "HW17_S31_SAR_REVIEW_20261027"]
 
 [review.entity."POWER_DETECTOR_SAR_CONTROL_STATUS.BITS_24_30_OPAQUE"]
 sources = ["S31_MMIO_USE_2010080C", "S31_MMIO_DECLARED_2010080C"]
@@ -599,7 +599,7 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT.SAR_SAMPLE"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR", "ROM_REV0_PHY_SAR_LANE_CONSUMERS", "HW17_S31_SAR_HOLD_20261027", "HW17_S31_SAR_EDGE_20261027", "HW17_S31_SAR_PREPARATION_20261027"]
+sources = ["ROM_REV0_PHY_POWER_DETECTOR", "ROM_REV0_PHY_SAR_LANE_CONSUMERS", "HW17_S31_SAR_HOLD_20261027", "HW17_S31_SAR_EDGE_20261027", "HW17_S31_SAR_PREPARATION_20261027", "HW17_S31_SAR_REVIEW_20261027"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -2058,7 +2058,7 @@ write-range = { min = 0x0, max = 0x3 }
 name = "SAR_READY"
 bits = "16:14"
 class = "read-only"
-description = "All-three-ready predicate is 7. Observed partial codes 0,1,2,3,4,5,6 occurred nonmonotonically before 7 over approximately 20 us; individual bit meanings are unresolved. One-board, one-run isolated manual-trigger trials with explicitly different preparation observed a non-7 conversion phase and retention of 7 through ready+100 us, including tone-arm clear; a pre-trigger 7 alone does not identify a fresh sample."
+description = "All-three-ready predicate is 7. Observed partial codes 0,1,2,3,4,5,6 occurred nonmonotonically before 7 over approximately 20 us; individual bit meanings are unresolved. Separate one-board short isolated manual-trigger captures, including the corrected finite prefix with documented remaining differences, observed a non-7 conversion phase and retention of 7 through ready+100 us, including tone-arm clear; a pre-trigger 7 alone does not identify a fresh sample."
 
 [[registers.fields]]
 name = "BITS_24_30_OPAQUE"
@@ -2112,7 +2112,7 @@ class = "read-only"
 name = "SAR_SAMPLE"
 bits = "29:17"
 class = "read-only"
-description = "Upper lane consumed by the tone/SAR2 wrapper. Four HOLD conversions on one board in one run retained nonzero data across reads through ready+100 us, including tone-arm clear; the lane can change before all-three-ready during conversion. Preparation differs from production as specified by HW17_S31_SAR_PREPARATION_20261027; this is an observation, not a production contract. Other modes and longer retention are untested."
+description = "Upper lane consumed by the tone/SAR2 wrapper. The corrected-prefix capture (one board, one run, four HOLD conversions among ten total) retained nonzero data across reads through ready+100 us, including tone-arm clear; the lane can change before all-three-ready during conversion. Preparation differs from production as specified by HW17_S31_SAR_PREPARATION_20261027; this is an observation, not a production contract. Other modes and longer retention are untested."
 
 [[registers]]
 name = "POWER_DETECTOR_SAR_RESULT_1"

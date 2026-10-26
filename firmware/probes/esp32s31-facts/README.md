@@ -624,9 +624,23 @@ even with an ordinary completion marker:
 
 ### Evidence identity
 
-The repeat capture is built from a committed PR revision by `cargo fw probe`.
-The run directory retains the loaded ELF, exact source files, full revision
-and raw outputs; the external report names that measured revision and the
-final PR revision. Changes after that measurement, if any, are explicitly
-listed there and in the applicable model SOURCE; the old captures from the
-incomplete preparation are not relabelled as production-equivalent evidence.
+Run `hw17-20261027-sar-review-04` (s31-a, lease #898) loaded the ELF built
+by `cargo fw probe` from commit
+`17e5ad48e577d8fd80071f7adb0305147e94174c`. The run directory under
+`target/hw-hw17/` retains that ELF, all three probe Rust sources, the revision
+and raw outputs. Subsequent PR changes annotate this README, the model's
+evidence/field descriptions and generated PAC metadata; they change no probe
+or HAL operation. Thus the retained measured ELF belongs to that named
+revision, not an unspecified later PR binary. SOURCE
+`HW17_S31_SAR_REVIEW_20261027` records the same distinction.
+
+The corrected-prefix run contains ten conversions (two preflight, four HOLD,
+four EDGE), on one board in one short run. HOLD retained data/ready through
+the observed 100 µs window. Partial ready codes were nonmonotone. Preflight
+reference samples 1969/1963 were unequal, so the gate admitted EDGE, but EDGE
+final reference outputs differed by only 1–2 codes, comparable with nearby
+conversion variation. This does not establish a robust reference-specific
+stimulus or causally attribute the final result difference. The stronger
+reference separation in the older incomplete-preparation capture is not
+transferred to the corrected prefix or production. No statistical series or
+full calibration is added to resolve that limitation.
