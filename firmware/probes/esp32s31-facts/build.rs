@@ -1,3 +1,9 @@
+fn fact<'a>(value: &'a toml::Value, path: &[&str]) -> Result<&'a toml::Value, &'static str> {
+    path.iter().try_fold(value, |value, key| {
+        value.get(*key).ok_or("missing chip fact")
+    })
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dir = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").ok_or("manifest")?);
     let root = dir.join("../../..");
@@ -5,25 +11,68 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let clic = root.join("chips/esp32s31/registers/types/clic.toml");
     let profile: toml::Value = toml::from_str(&std::fs::read_to_string(&profile)?)?;
     let clic: toml::Value = toml::from_str(&std::fs::read_to_string(&clic)?)?;
+    let family: toml::Value = toml::from_str(&std::fs::read_to_string(
+        root.join("chips/espressif/platform/family.toml"),
+    )?)?;
     let number = |v: &toml::Value| v.as_integer().ok_or("integer fact");
-    let base = number(&profile["memory"]["internal-sram"]["origin"])?;
-    let end = number(&profile["boot-chain"]["second-stage-loader-start"])?;
-    let lp = number(&profile["memory"]["retained"]["origin"])?;
-    let lines = clic["registers"].as_array().ok_or("CLIC words")?.iter()
-        .find(|v| v["name"].as_str() == Some("CTRL%s")).ok_or("CTRL")?;
-    let count = number(&lines["dim"]["count"])? as usize;
+    let base = number(fact(&profile, &["memory", "internal-sram", "origin"])?)?;
+    let end = number(fact(
+        &profile,
+        &["boot-chain", "second-stage-loader-start"],
+    )?)?;
+    let lp = number(fact(&profile, &["memory", "retained", "origin"])?)?;
+    let lines = fact(&clic, &["registers"])?
+        .as_array()
+        .ok_or("CLIC words")?
+        .iter()
+        .find(|v| v.get("name").and_then(toml::Value::as_str) == Some("CTRL%s"))
+        .ok_or("CTRL")?;
+    let count = number(fact(&lines, &["dim", "count"])?)? as usize;
     let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").ok_or("OUT_DIR")?);
+    let bits = number(fact(&family, &["interrupts", "control-bits"])?)? as u32;
+    let levels = number(fact(&family, &["interrupts", "level-bits"])?)?;
+    let first = number(fact(&family, &["interrupts", "first-source-line"])?)?;
+    if !(2..=8).contains(&bits)
+        || levels != i64::from(bits)
+        || count == 0
+        || first <= 0
+        || first as usize >= count
+        || end <= base
+    {
+        return Err("incompatible facts geometry".into());
+    }
+    let controls: Vec<u8> = (0..3)
+        .map(|n| (((n + 1) << (8 - bits)) - 1) as u8)
+        .collect();
+    std::fs::write(
+        out.join("geometry.rs"),
+        format!(
+            "const LINE: usize = {first};\nconst LEVEL_BITS: u32 = {levels};\nconst CONTROLS: [u8; 3] = {controls:?};\n"
+        ),
+    )?;
     let mut asm = String::from(".macro RUNTIME_IRQ_ENTRIES\n");
-    for line in 1..count { asm.push_str(&format!("IRQ_ENTRY 0, {line}\n")); }
+    for line in 1..count {
+        asm.push_str(&format!("IRQ_ENTRY 0, {line}\n"));
+    }
     asm.push_str(".endm\n.macro RUNTIME_VECTOR_TABLES\n");
-    asm.push_str(&format!(".balign {}\n.word 0\n", (count * 4).next_power_of_two()));
-    for line in 1..count { asm.push_str(&format!(".word _runtime_irq_h0_l{line}\n")); }
+    asm.push_str(&format!(
+        ".balign {}\n.word 0\n",
+        (count * 4).next_power_of_two()
+    ));
+    for line in 1..count {
+        asm.push_str(&format!(".word _runtime_irq_h0_l{line}\n"));
+    }
     asm.push_str(".endm\n.text\n");
     for line in 1..count {
-        asm.push_str(&format!(".global __oer_interrupt_h0_l{line}\n__oer_interrupt_h0_l{line}:\nli a0, {line}\ntail facts_irq\n"));
+        asm.push_str(&format!(
+            ".global __oer_interrupt_h0_l{line}\n.set __oer_interrupt_h0_l{line}, facts_irq\n"
+        ));
     }
     std::fs::write(out.join("vectors.s"), asm)?;
-    std::fs::write(out.join("facts.x"), format!(r#"ENTRY(_start)
+    std::fs::write(
+        out.join("facts.x"),
+        format!(
+            r#"ENTRY(_start)
 MEMORY {{ SRAM (rwx) : ORIGIN = {base:#x}, LENGTH = {length:#x}
 LP (rw) : ORIGIN = {lp:#x}, LENGTH = 0x100 }}
 SECTIONS {{
@@ -36,11 +85,20 @@ SECTIONS {{
 .noinit (NOLOAD) : ALIGN(4) {{ KEEP(*(.noinit.facts)) }} > LP
 /DISCARD/ : {{ *(.eh_frame .eh_frame.*) }}
 }}
-"#, length=end-base, align=(count*4).next_power_of_two()))?;
+"#,
+            length = end - base,
+            align = (count * 4).next_power_of_two()
+        ),
+    )?;
     if std::env::var("CARGO_CFG_TARGET_ARCH")? == "riscv32" {
         println!("cargo:rustc-link-arg=-T{}", out.join("facts.x").display());
     }
-    for file in ["chips/esp32s31/platform/chip.toml", "chips/esp32s31/registers/types/clic.toml", "chips/espressif/staged-runtime/src/vectors.s"] {
+    for file in [
+        "chips/esp32s31/platform/chip.toml",
+        "chips/espressif/platform/family.toml",
+        "chips/esp32s31/registers/types/clic.toml",
+        "chips/espressif/staged-runtime/src/vectors.s",
+    ] {
         println!("cargo:rerun-if-changed={}", root.join(file).display());
     }
     Ok(())
