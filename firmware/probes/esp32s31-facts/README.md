@@ -6,18 +6,34 @@ before a nonzero boot address is written. There is no HAL dependency and no
 production probe API. `src/image.rs::PROBES` is the single registration point.
 
 Build with `cargo fw probe oer-firmware-probes-esp32s31-facts`. Load the ELF
-into SRAM through JTAG under a `cargo stand lease --board s31-a --air none`.
+into SRAM with the ROM loader under a `cargo stand lease --board s31-a --air none`.
 The entry owns its stack, clears BSS and preserves its LP `.noinit` record.
-The loader must select only HP0 (`ESP_ONLYCPU=1`), suppress OpenOCD's automatic
+The observed ROM-download state rejects direct JTAG execution from SRAM with
+PMP instruction access fault. Use the standard ROM MEM_END handoff after the
+stand's download-mode reset, for example within the held lease:
+
+```console
+espflash flash --ram --ignore-app-descriptor --no-stub \
+  --before no-reset --after no-reset --chip esp32s31 \
+  --port <leased-port> <probe-elf>
+```
+ `--ram` loads the ELF; it does not write flash.
+Image compilation still belongs exclusively to `cargo fw probe`.
+The JTAG session must select only HP0 (`ESP_ONLYCPU=1`), suppress OpenOCD's automatic
 watchdog MMIO writes, and must not issue a debugger reset between the software
 reset experiment and its next-boot observation. Peripheral accesses belong to
 the probe's typed PAC owners; the debugger loads code and reads result memory.
 
-Set `FACTS_REQUEST` in SRAM after ELF loading, before resuming `_start`:
+The initial marker is `0xfac70000` (ready). Publish `FACTS_REQUEST` in SRAM
+while halted, then resume the same context. The session keeps its one PAC claim
+across commands; do not reload the ELF or re-enter `_start` to select a leaf.
+A valid retained reason automatically selects the next-boot observer on a new
+ROM-loader entry after software reset, without another reset. Selections:
 
 | Selection | Experiment |
 | --- | --- |
-| 0 or `u32::MAX` | Read-before-write CLIC geometry/configuration, held-hart boot address, edge pending, threshold, then five latency samples |
+| 0 | Read-before-write CLIC geometry/configuration, held-hart boot address, edge pending, threshold, then five latency samples |
+| `u32::MAX` | Idle in WFI awaiting a debugger command |
 | 1 | One software edge-pending publication |
 | 2 | CLIC implemented fields and all line fields before configuration |
 | 3 | MNLBITS/NVBITS/NMBITS before configuration |
@@ -31,9 +47,11 @@ Set `FACTS_REQUEST` in SRAM after ELF loading, before resuming `_start`:
 then four-word records `(tag, a, b, c)`. Marker `0xfac70001` means completed;
 `0xfac70007` precedes system reset; `0xbad00001..5` denotes an interrupt storm,
 exception, panic, unknown selection or result-buffer exhaustion. Completion
-means the leaf finished, not that its hardware claim passed. SRAM output after system reset is not assumed retained.
-The tag identifies the leaf and sample; the research report records actual
-values and the stand run ID. The handler stops after eight unexpected entries;
+means the leaf finished, not that its hardware claim passed. SRAM output after
+system reset is not assumed retained.
+The reset leaf publishes twelve LP words, including the pre-trigger UART/hold
+observations and the reason tag. The tag identifies the leaf and sample; the
+research report records actual values and the stand run ID. The handler stops after eight unexpected entries;
 ordinary observation windows are 4096 cycles. Completion idles in WFI until
 the bounded debugger capture halts the target.
 

@@ -11,6 +11,9 @@ use oer_esp32s31_pac as pac;
 use oer_mmio::{Bits, Index};
 
 include!(concat!(env!("OUT_DIR"), "/geometry.rs"));
+const CPU_LINE: Index<{ pac::clic::ctrl::COUNT }> = Index::constant::<LINE>();
+const SOFTWARE_SOURCE: Index<{ pac::interrupt_core::route::COUNT }> =
+    Index::constant::<{ pac::Interrupt::CPU_INTR_FROM_CPU_2 as usize }>();
 
 // SAFETY: the image owns entry/traps and the generated vectors; the included
 // production assembly uses its unchanged ABI and the linker-owned stacks.
@@ -59,8 +62,8 @@ unsafe extern "C" {
 // SAFETY: unique exported result buffer; only this image writes it.
 #[unsafe(no_mangle)]
 static FACTS_OUTPUT: [AtomicU32; 514] = [const { AtomicU32::new(0) }; 514];
-/// The debugger sets this after loading BSS and before entering _start.
-/// It lives in .data so entry BSS clearing does not erase the selection.
+/// The debugger publishes a command while the hart is halted, then resumes
+/// the same context. u32::MAX is idle; _start is entered only by the loader.
 // SAFETY: unique exported selector; debugger writes only while hart 0 is halted.
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".data.facts_request")]
@@ -69,7 +72,7 @@ static FACTS_REQUEST: AtomicU32 = AtomicU32::new(u32::MAX);
 // SAFETY: LP RAM is excluded from startup initialization. Only the masked
 // thread writes this record, through volatile operations, before one reset.
 #[unsafe(link_section = ".noinit.facts")]
-static mut RETAINED: [u32; 8] = [0; 8];
+static mut RETAINED: [u32; 12] = [0; 12];
 static IRQ_COUNT: AtomicU32 = AtomicU32::new(0);
 static IRQ_CYCLE: AtomicU32 = AtomicU32::new(0);
 static SOURCE: AtomicPtr<pac::hp_system::FromCpu2> = AtomicPtr::new(ptr::null_mut());
@@ -141,7 +144,7 @@ struct Probe {
     run: fn(&mut Session<'_>),
 }
 // The sole registration point. Reset is selected explicitly; it cannot run
-// accidentally as part of the non-reset batch (request 0 / u32::MAX).
+// accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
     Probe {
         id: 2,
@@ -183,23 +186,45 @@ extern "C" fn facts_main() -> ! {
     };
     let source = ptr::addr_of!(source_owner).cast_mut();
     SOURCE.store(source, Ordering::Release);
-    // Read-before-write: geometry/config leafs execute before any CLIC setup.
-    let request = FACTS_REQUEST.load(Ordering::Acquire);
-    let mut ran = false;
-    for probe in PROBES {
-        if request == probe.id || ((request == 0 || request == u32::MAX) && probe.id < 7) {
-            ran = true;
-            (probe.run)(&mut s);
+    // One take for the entire loader session. Commands reuse these owners;
+    // the debugger never re-enters _start merely to select another leaf.
+    let prior = retained_record();
+    let mut request = if prior[0] == 0xfac70007 && prior[1] == 0x687731 {
+        8
+    } else {
+        u32::MAX
+    };
+    loop {
+        FACTS_OUTPUT[1].store(0, Ordering::Relaxed);
+        if request == u32::MAX {
+            FACTS_OUTPUT[0].store(0xfac70000, Ordering::Release);
+        } else {
+            let mut ran = false;
+            for probe in PROBES {
+                if request == probe.id || (request == 0 && probe.id < 7) {
+                    ran = true;
+                    (probe.run)(&mut s);
+                }
+            }
+            if !ran {
+                emit(0xed, request, 0, 0);
+                FACTS_OUTPUT[0].store(0xbad00004, Ordering::Release);
+                halt();
+            }
+            oer_riscv::disable_interrupts();
+            FACTS_OUTPUT[0].store(0xfac70001, Ordering::Release);
+        }
+        FACTS_REQUEST.store(u32::MAX, Ordering::Release);
+        loop {
+            // WFI is idle, not a measurement loop. A debugger resumes the
+            // halted context after publishing the next command in SRAM.
+            oer_riscv::wait_for_interrupt();
+            request = FACTS_REQUEST.load(Ordering::Acquire);
+            if request != u32::MAX {
+                break;
+            }
         }
     }
-    if !ran {
-        emit(0xed, request, 0, 0);
-        FACTS_OUTPUT[0].store(0xbad00004, Ordering::Release);
-        halt();
-    }
-    SOURCE.store(ptr::null_mut(), Ordering::Release);
-    FACTS_OUTPUT[0].store(0xfac70001, Ordering::Release);
-    halt()
 }
 
 fn geometry(s: &mut Session<'_>) {
@@ -250,7 +275,7 @@ fn contain(s: &mut Session<'_>) {
 fn boot_address(s: &mut Session<'_>) {
     contain(s);
     let c = &mut s.core_control;
-    for value in [0, 0x2f001234, 0xfedcba98, 0] {
+    for value in [0, 0x2f001234, 0x01234567, 0xfedcba98, 0] {
         c.lp_sys_core_control.modify_boot_addr_hp_core1(|w| {
             w.set_boot_addr_hp_core1(value);
         });
@@ -323,7 +348,7 @@ fn setup(s: &mut Session<'_>) {
     IRQ_COUNT.store(0, Ordering::Relaxed);
 }
 fn line(s: &mut Session<'_>, control: u8, edge: bool) {
-    let Ok(i) = Index::new(LINE) else { return };
+    let i = CPU_LINE;
     s.interrupt_matrix.clic.modify_ctrl(i, |w| {
         w.set_ie(false);
     });
@@ -348,7 +373,7 @@ fn wait_window() {
 fn edge(s: &mut Session<'_>) {
     setup(s);
     line(s, CONTROLS[1], true);
-    let Ok(i) = Index::new(LINE) else { return };
+    let i = CPU_LINE;
     s.interrupt_matrix.clic.modify_ctrl(i, |w| {
         w.set_ip(true);
     });
@@ -365,11 +390,9 @@ fn edge(s: &mut Session<'_>) {
     wait_window();
 }
 fn route_source(s: &mut Session<'_>) {
-    let Ok(i) = Index::new(pac::Interrupt::CPU_INTR_FROM_CPU_2 as usize) else {
-        return;
-    };
+    let i = SOFTWARE_SOURCE;
     s.interrupt_matrix.interrupt_core0.modify_route(i, |w| {
-        w.set_map(Bits::truncate(LINE as u32));
+        w.set_map(Bits::constant::<{ LINE as u32 }>());
     });
 }
 fn raise(s: &Session<'_>) {
@@ -382,14 +405,17 @@ fn threshold(s: &mut Session<'_>) {
         setup(s);
         route_source(s);
         line(s, control, false);
-        oer_riscv::restore_interrupt_threshold(CONTROLS[1]);
+        oer_riscv::restore_interrupt_threshold(u8::MAX);
         raise(s);
         oer_riscv::enable_interrupts();
+        // Pending source and MIE are already live: only this CSR write lowers
+        // admission. The public restore has three NOPs and no CSR readback.
+        oer_riscv::restore_interrupt_threshold(CONTROLS[1]);
         wait_window();
         oer_riscv::disable_interrupts();
         let masked = IRQ_COUNT.load(Ordering::Relaxed);
-        oer_riscv::restore_interrupt_threshold(0);
         oer_riscv::enable_interrupts();
+        oer_riscv::restore_interrupt_threshold(0);
         wait_window();
         oer_riscv::disable_interrupts();
         emit(
@@ -432,6 +458,7 @@ fn reset(s: &mut Session<'_>) {
     uart.modify_uart0_ctrl0(|w| {
         w.set_reg_uart0_sclk_div_num(3);
     });
+    let perturbed = uart.read_uart0_ctrl0().reg_uart0_sclk_div_num();
     uart.modify_uart0_ctrl0(|w| {
         w.set_reg_uart0_clk_src_sel(Bits::constant::<0>())
             .set_reg_uart0_sclk_div_num(0)
@@ -458,7 +485,7 @@ fn reset(s: &mut Session<'_>) {
     oer_riscv::fence();
     FACTS_OUTPUT[0].store(0xfac70007, Ordering::Release);
     let held = c.hp_sys_clkrst_core.read_hpcore1_ctrl0();
-    // SAFETY: interrupts are masked; this image exclusively owns these eight
+    // SAFETY: interrupts are masked; this image exclusively owns these twelve
     // LP words, excluded from BSS and the loader's file-backed segments.
     unsafe {
         ptr::write_volatile(
@@ -475,6 +502,10 @@ fn reset(s: &mut Session<'_>) {
                     .boot_addr_hp_core1(),
                 u32::from(held.reg_core1_global_rst_en())
                     + 2 * u32::from(held.reg_core1_cpu_clk_en()),
+                u32::from(perturbed),
+                u32::from(u.reg_uart0_sclk_div_numerator()),
+                u32::from(u.reg_uart0_sclk_div_denominator()),
+                1,
             ],
         );
     }
@@ -482,13 +513,17 @@ fn reset(s: &mut Session<'_>) {
     c.lp_sys_core_control.trigger_sys_ctrl_sys_sw_rst();
     halt()
 }
+fn retained_record() -> [u32; 12] {
+    // SAFETY: reads retained u32 words (all bit patterns valid) on the masked
+    // thread; the LP window is excluded from ELF loading and BSS clearing.
+    unsafe { ptr::read_volatile(ptr::addr_of!(RETAINED)) }
+}
 fn after_reset(s: &mut Session<'_>) {
-    // SAFETY: reads eight retained words as u32 (all bit patterns valid), before
-    // any write; the LP window is excluded from both ELF loading and BSS clearing.
-    let record = unsafe { ptr::read_volatile(ptr::addr_of!(RETAINED)) };
+    let record = retained_record();
     emit(0x80, record[0], record[1], record[2]);
     emit(0x83, record[3], record[4], record[5]);
-    emit(0x84, record[6], record[7], 0);
+    emit(0x84, record[6], record[7], record[11]);
+    emit(0x85, record[8], record[9], record[10]);
     config(s);
     let r = &s.reset_cause.lp_aon_reset_cause;
     emit(

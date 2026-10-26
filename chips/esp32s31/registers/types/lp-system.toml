@@ -5,7 +5,7 @@ schema = 3
 [type]
 name = "LP_SYSTEM_REG"
 description = "Low-power system control and the HP core 1 boot handoff word."
-sources = ["ESP_IDF_4D59230D_S31_LP_SYSTEM_REG", "ROM_REV0_CORE_BOOT_ADDRESS"]
+sources = ["ESP_IDF_4D59230D_S31_LP_SYSTEM_REG", "ROM_REV0_CORE_BOOT_ADDRESS", "HW1_S31_BOOT_ADDRESS_20261026", "HW1_S31_RESET_20261026"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_S31_LP_SYSTEM_REG"]
@@ -29,6 +29,7 @@ class = "plain"
 name = "LP_SYSTEM_REG_SYS_SW_RST"
 bits = "1"
 class = "write-trigger"
+description = "Requests the HP system reset. SOURCE: HW1_S31_RESET_20261026: both HP reset causes read 3 on the next loader entry; the probe LP reason record survived. Pending LP wakeup preservation was not established."
 
 [[registers.fields]]
 name = "LP_SYSTEM_REG_FORCE_DOWNLOAD_BOOT"
@@ -73,7 +74,7 @@ class = "plain"
 [[registers]]
 name = "LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1"
 offset = 0x164
-description = "The boot ROM's HP core 1 entry address; zero leaves the core waiting."
+description = "The boot ROM's HP core 1 entry address; zero leaves the core waiting. SOURCE: HW1_S31_BOOT_ADDRESS_20261026 verifies full-word storage including low bits and zero readback while hart1 remains held; the ROM waiting protocol was not exercised."
 reset = { value = 0 }
 
 [[registers.fields]]

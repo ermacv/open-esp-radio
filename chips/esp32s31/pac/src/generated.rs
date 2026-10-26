@@ -50888,11 +50888,11 @@ pub mod cache {
 /// The `CLIC` block type.
 ///
 /// The core-local interrupt controller (CLIC) of the hart that accesses it.
-/// Words 0x0-0x1000: The core-local interrupt controller of the hart that accesses it, as 32-bit words: each line's word holds its pending, enable, attribute and control bytes. Invariant: every vectored line is level-triggered, so a write of the word that changes its enable or control writes back the pending bit read without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). INT_CONFIG holds the number of level bits of each line's control byte.
+/// Words 0x0-0x1000: The core-local interrupt controller of the hart that accesses it, as 32-bit words: each line's word holds its pending, enable, attribute and control bytes. Production-router invariant: its bound vectored lines are level-triggered, so a write of the word that changes its enable or control writes back the pending bit read without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). INT_CONFIG holds the number of level bits of each line's control byte. SOURCE: HW1_S31_CLIC_20261026 confirms one software-pending positive-edge vector on external line 16; this does not make concurrent whole-word edge updates safe.
 pub mod clic {
     /// The `INT_CONFIG` register.
     ///
-    /// The controller's configuration: how many bits of a line's control byte are its level. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 20-38: MNLBITS resets to zero; HAL must write its selected level bits.
+    /// The controller's configuration: how many bits of a line's control byte are its level. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 20-38: the header gives MNLBITS reset zero. SOURCE: HW1_S31_CLIC_20261026 observes MNLBITS=1 after the ROM download/MEM_END path, before probe CLIC writes. That is not a reset-isolated value; HAL must establish its selected level bits regardless of inherited configuration.
     pub mod int_config {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x0000007f;
@@ -50980,7 +50980,7 @@ pub mod clic {
 
     /// The `INT_INFO` register.
     ///
-    /// Implemented CLIC geometry and version. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 40-59.
+    /// Implemented CLIC geometry and version. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 40-59; HW1_S31_CLIC_20261026 reads NUM_INT=48, CTLBITS=3, VERSION=0 on s31-a rev0.
     pub mod int_info {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x01ffffff;
@@ -51088,7 +51088,7 @@ pub mod clic {
 
     /// The `CTRL%s` register.
     ///
-    /// Line %s: pending, enable, attribute and level control. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 70-116: CTL resets to 0x1f, ATTR_MODE to 0b11, other described fields to zero; unassigned bits have no claimed reset.
+    /// Line %s: pending, enable, attribute and level control. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 70-116: CTL resets to 0x1f, ATTR_MODE to 0b11, other described fields to zero; unassigned bits have no claimed reset. SOURCE: HW1_S31_CLIC_20261026 reads zero for the described fields in some core-local slots and ROM-modified external line state; this header image is not a universal post-ROM boot state.
     pub mod ctrl {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffc70101;
@@ -51188,7 +51188,7 @@ pub mod clic {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The line's pending bit; for a level-triggered line it follows the source.
+            /// The line's pending bit; for a level-triggered line it follows the source. SOURCE: HW1_S31_CLIC_20261026: a software-set positive-edge IP on line 16 vectored once and read clear after entry in the isolated experiment.
             #[inline]
             pub const fn ip(self) -> bool {
                 (self.0 & 0x00000001) != 0
@@ -51218,7 +51218,7 @@ pub mod clic {
                 AttrTrig::from_field(self.0 >> 17)
             }
 
-            /// Machine privilege mode, fixed at 0b11. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 79-84.
+            /// Header machine privilege code 0b11; external inputs read 3 and some core-local slots read 0 (SOURCE: HW1_S31_CLIC_20261026). Ignored writes were not tested. Header access class SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 79-84.
             #[inline]
             pub const fn attr_mode(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 22)
@@ -51235,7 +51235,7 @@ pub mod clic {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The line's pending bit; for a level-triggered line it follows the source.
+            /// The line's pending bit; for a level-triggered line it follows the source. SOURCE: HW1_S31_CLIC_20261026: a software-set positive-edge IP on line 16 vectored once and read clear after entry in the isolated experiment.
             #[inline]
             pub const fn ip(&self) -> bool {
                 (self.0 & 0x00000001) != 0
@@ -51265,7 +51265,7 @@ pub mod clic {
                 AttrTrig::from_field(self.0 >> 17)
             }
 
-            /// Machine privilege mode, fixed at 0b11. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 79-84.
+            /// Header machine privilege code 0b11; external inputs read 3 and some core-local slots read 0 (SOURCE: HW1_S31_CLIC_20261026). Ignored writes were not tested. Header access class SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 79-84.
             #[inline]
             pub const fn attr_mode(&self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 22)
@@ -122520,7 +122520,7 @@ pub mod lp_system_reg {
 
     /// The `LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1` register.
     ///
-    /// The boot ROM's HP core 1 entry address; zero leaves the core waiting.
+    /// The boot ROM's HP core 1 entry address; zero leaves the core waiting. SOURCE: HW1_S31_BOOT_ADDRESS_20261026 verifies full-word storage including low bits and zero readback while hart1 remains held; the ROM waiting protocol was not exercised.
     pub mod boot_addr_hp_core1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
