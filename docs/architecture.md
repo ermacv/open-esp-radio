@@ -67,7 +67,7 @@ moves; ownership, orchestration and wiring are rebuilt.
 | Context | Runs | Rule |
 | --- | --- | --- |
 | P3, core 0 | radio interrupt handlers; the radio doorbell on `FROM_CPU` line 3, a source of its radio's interrupt part; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
-| P2 | one radio executor on `FROM_CPU` line 2: Wi-Fi driver, BLE lower link layer, the radio-system actor | every step bounded; long waits are timer waits |
+| P2 | one radio executor on `FROM_CPU` line 2: Wi-Fi driver, BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
 | P1 / thread | role bodies, network stack, application | — |
 
 - An interrupt handler never shares a lock with a task and reaches tasks
@@ -78,6 +78,15 @@ moves; ownership, orchestration and wiring are rebuilt.
   PHY short settles count `mcycle` through `oer-riscv`, at the stable CPU
   frequency the clock owner adopts from its register state during runtime
   handover. They require neither a ROM delay nor ROM clock calibration.
+- PHY's shared transport and RX-gain drivers check CPU admission between
+  complete hardware atoms. The contracts are a 50 µs atom and a 1 ms poll
+  without a ready peer; admission stops at 900 µs to reserve the next atom
+  and return path. These are cooperative contracts, not measured cutoffs:
+  no check interrupts an overlong atom. Direct TXDC/PWDET paths do not query
+  admission, and parent futures can chain immediately ready children.
+  Neither the complete PHY poll nor the executor round has a universal
+  1 ms cutoff. CPU admission does not admit an RF maintenance window
+  ([PHY execution](../chips/esp32s31/phy/README.md#runtime-sequence-and-timing)).
 - A lower-priority task wakes a higher-priority one only through
   `oer_sync::PriorityWaker` ([notifications](execution-wakes.md)).
 - Each interrupt table entry binds one interrupt part, whose type names its
@@ -252,12 +261,23 @@ and sleep. Clients reach it through per-client cells; PHY membership is a
 typestate (`Untracked`, `Tracked`, `Suspended`). It owns the HAL's
 `RadioDomain` by value.
 
-- **PHY.** Calibration and tracking are cut into bounded P2 steps: a ready P2
-  peer waits for at most one hardware atom, no longer than 50 µs; with no
-  ready peer, polling continues for at most 1 ms. A periodic tracking tick
-  starts only if it overlaps no granted hard window and no announced retune,
-  and is deferred by at most one period. A retune is one transaction; a
-  failure after the first RF write poisons the PHY domain. Calibration
+- **PHY.** Constructing the actor does not calibrate. After the executor
+  starts, the first client join calls `prepare` → `register_concurrent_phy`
+  → `run_phy_register` in the P2 actor, including cold calibration or the
+  admitted cache path. Initial client tracking settles pending work before
+  operational use. While a tracked member exists, the actor drains requests,
+  then waits on its doorbell versus the PHY tracking deadline. A timer win
+  calls `track_concurrent_phy`, which evaluates demand and runs due work.
+  The default period is 1 s, with eligibility at `previous + period + 1 µs`.
+  SYSTIMER Alarm0 at P3 acknowledges and pends P2; the P2 executor dispatches
+  timers and polls the actor. There is no dedicated PHY timer handler.
+  The exclusive mutable domain borrow serializes tracking with the actor's
+  retunes. `admit_maintenance` checks pending tracking state; it has no hard
+  RF-window calendar. The actor enforces no one-period maximum deferral or
+  shift counter, and queued requests can postpone a tick. Grant-protect
+  requests bracket RF-sensitive work without proving an exclusive RF grant.
+  A retune is one transaction; a failure after the first RF write poisons the
+  PHY domain. Calibration
   matches the vendor when each field stays within the vendor's spread for
   that field, measured in the same run on the same board; the comparison
   runs when the calibration sources change. A change to how a calibration

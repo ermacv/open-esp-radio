@@ -3,8 +3,8 @@
 This crate owns S31 RF algorithms, calibration state and finite hardware
 transitions. It consumes typed HAL operations; it does not link the vendor PHY
 library. Protocol runtimes own their MAC, descriptors, interrupt routes and
-connection state. The radio system decides when those resources can be
-withheld from normal traffic to admit a PHY operation.
+connection state. The radio system owns the shared radio domain and serializes
+PHY lifecycle, retune and tracking calls through its exclusive mutable borrow.
 
 The [capability matrix](FEATURES.md) distinguishes implemented primitives from
 composed services. The [tracking contract](src/tracking/README.md) is the
@@ -70,7 +70,7 @@ reset or retained-sleep wakeup replay.
 | [Tracking graphs](src/tracking.rs) and [executor](src/executor.rs) | Execute selected children and validate their completions | No independent RF arbitration |
 | [Target port](src/target_port.rs) and [HAL PHY](../hal/src/phy.rs) | Typed MMIO, analog buses, hardware completion and bounded waits | Hardware access is borrowed from the admitted owner |
 | [Analog register bus](../../espressif/analog/README.md) | Field, configuration and parallel transitions of the vendor analog-I2C leaves | The transitions touch no bus; the target port and HAL drive them |
-| The owner of the shared radio (none in this tree yet; the radio system) | The radio domain, the platform resources and the vendor periodic tracking timer | Tracking runs on the borrowed domain and the grant-protect brackets; it pauses no protocol |
+| [Radio system](../radio/system/README.md) | The radio domain, platform resources, first-join registration and deadline-driven periodic tracking | The P2 actor runs tracking on the borrowed domain with grant-protect brackets; it pauses no protocol |
 | [HAL stopped-MAC check](../hal/src/owner/maintenance.rs) | The stopped Wi-Fi MAC check at the final-client boundary | A CPU mutex does not stop MAC or DMA |
 | [Hardware coex control](../../espressif/coex/README.md) | Recovered timer requests, PTI, clock conversion and withdrawal accounting | Programmed timer identity is not an RF grant |
 
@@ -87,13 +87,14 @@ flowchart TD
     G --> C[Hardware coex timer bank]
 ```
 
-PHY supplies the algorithms, demand and the concurrent domain; the radio
-system owns the radio domain and runs the vendor periodic tracking (none exists in
-this tree yet); coex supplies the hardware arbitration mechanism. Tracking follows the vendor
-admission: the exclusive borrow of the radio domain is the PHY lock, and the tracking graph brackets
-its RF-sensitive regions with the grant-protect request instead of pausing
-the protocols. A coex timer reply, client bit or PTI is never an ownership
-proof for the shared PHY.
+PHY supplies the algorithms, demand and the concurrent domain. The radio
+system owns that domain and runs registration and tracking in its P2 actor;
+coex supplies the hardware arbitration mechanism. The exclusive mutable domain
+borrow is the PHY lock. Tracking brackets RF-sensitive regions with a
+grant-protect request instead of pausing protocols. `admit_maintenance` checks
+pending tracking state, without a hard-window calendar or grant acknowledgement.
+A coex timer reply, client bit or PTI is never an ownership proof for the shared
+PHY, and the request bracket does not prove exclusive RF access.
 
 The Wi-Fi airtime scheduler selects packet service within a MAC epoch. It does
 not own the shared RF resource and cannot independently admit PHY maintenance.
@@ -168,9 +169,8 @@ serialized by one mechanism:
   its ordinary outcome.
 - `track_concurrent_phy` is one tick of the vendor `phy_track_pll`: it
   evaluates the clients' tracking period and runs due tracking at once. The
-  vendor periodic timer that calls it belongs to the radio system that owns
-  the radio domain, as it belongs to ESP-IDF's `esp_phy` component; nothing in
-  this tree runs it yet.
+  radio-system actor calls it when its deadline timer wins against its
+  request doorbell, while tracked membership exists.
 
 ### First and last PHY client
 
@@ -256,11 +256,30 @@ Deferral retains the outstanding due instant. The execution path re-observes
 the active clients, and only matching child completion commits branch results.
 The source interval is not a measured maximum thermally safe deferral.
 
-The vendor periodic tracking is the only runtime maintenance path: the
-shared radio's owner runs one `track_concurrent_phy` tick every tracking period
-on the radio domain, and due work starts at once (no owner in this tree
-runs it yet). There is no
-protocol-selected maintenance of individual operations. Joint
+Constructing the [radio-system actor](../radio/system/src/lib.rs) does not
+calibrate. Its first client `join` calls [backend `prepare`](../radio/system/src/esp32s31.rs)
+→ `register_concurrent_phy` → `PhyDomain::register` →
+[`run_phy_register`](src/executor/run.rs) after the P2 executor starts.
+Registration runs the cold graph or its admitted cache path. A later join
+after RF close restores the retained registration through `wake_concurrent_rf`. Initial client `track`
+settles pending maintenance before operational use.
+
+Periodic tracking runs in that same actor: after draining client requests,
+it waits on the request doorbell versus `tracking_deadline` while a tracked
+member exists. A timer win calls `track_concurrent_phy`, evaluates demand and
+runs due work. The [client scheduler](src/state/client.rs) defaults to
+1,000,000 µs; the strict due predicate selects `previous + period + 1 µs`.
+Requests can postpone the tick; no one-period maximum deferral or shift counter
+is enforced. The actor serializes
+its own retunes but checks no granted hard-window calendar. `EmbassyClock`
+uses the executor's SYSTIMER timer service: Alarm0 at P3 acknowledges and pends
+P2, which dispatches timers and polls tasks. There is no dedicated PHY timer
+handler. Wi-Fi images declare an actor task; B0 polls the attached actor inside
+its P2 driver task, and the PHY diagnostic image drives concurrent PHY calls
+directly from P2.
+
+The parameter-tracking graph selects individual operations internally; no
+protocol selects them as independent maintenance transactions. Joint
 Wi-Fi/Bluetooth/154 maintenance and active-traffic publication of individual
 compensation classes are not qualified execution modes.
 
@@ -272,15 +291,20 @@ poll, while an incomplete DC/IQ observation waits on the caller's timer.
 Required 1–20 us hardware settles count machine cycles through `oer-riscv`,
 using the stable frequency adopted by the HAL clock owner at runtime handover.
 PBus/I2C leaves retain their bounded direct observation policy.
-TXDC/PWDET retains its direct transaction on the borrowed radio domain;
-runtime SAR readiness uses its timer-backed 40 µs deadline. Interrupts remain
-enabled and the physical owner remains held until terminal restoration.
-Longer registration,
-tracking and lifecycle operations wait on the caller's `oer_time::Timer`
-through `executor::wait::delay` and its `executor::wait::Kind`.
+TXDC/PWDET retains its direct transaction on the borrowed radio domain,
+without CPU-admission queries between its operations. Runtime SAR readiness
+uses [timer-backed retries](src/tx/sar.rs) under our 40 µs engineering deadline;
+the ROM reference supplies no readiness deadline. A ready observation at the
+deadline is accepted, and one after it fails even if hardware became ready earlier.
+Interrupts remain enabled and the physical owner remains held until terminal
+restoration. Longer registration, tracking and lifecycle operations wait on
+the caller's `oer_time::Timer` through `executor::wait::delay` and its
+`executor::wait::Kind`.
 
-PBus, analog-I2C and TX-DC/PWDET readiness complete inside named 20 µs
-settles on the caller's clock. W2 measurements on s31-a exercised thermal
+Direct PBus, analog-I2C and TX-DC/PWDET status observations use a named
+20 µs elapsed-time budget on the caller's clock, including a final observation
+after the limit is seen. This is a readiness policy, not a minimum delay or a
+20 µs bound on a whole transaction. W2 measurements on s31-a exercised thermal
 calibration, RFPLL tracking and retained RF wake; the longest direct edge
 was 2,976 cycles at 160 MHz (18.6 µs). Timeout remains a typed failure.
 The retained-wake frequency-ready edge already belongs to an asynchronous
@@ -288,20 +312,21 @@ transaction and retries through the timer in 10 µs steps.
 
 The final temperature child of parameter tracking uses the private
 [`executor::step`](src/executor/step.rs) transport driver. Its read, masked
-read/modify/write and sensor-code atoms each return `Pending` before another
-atom can run, including when the timer is immediately ready. The first bus
-completion sample retains its 1 µs minimum; not-ready retries use the caller's
-timer. T7's named answer boundary is 100 µs from completed command publication:
-20 µs hardware boundary, 66 µs observed resume lateness and 14 µs margin.
-A ready result at the deadline is accepted; a later result is not consumed.
+read/modify/write and sensor-code atoms share the driver's cooperative batching.
+The first bus completion sample follows a 1 µs timer backoff; not-ready retries
+use the caller's timer. This retry cadence is separate from a vendor minimum
+settle. T7's named answer window is our 100 µs budget from completed command
+publication. The bus is sampled before judging the deadline: a completed
+answer is accepted even after a late resume; only a still-busy bus times out.
 The existing temperature graph owns conversion, range writes and dated commit.
 Cancellation leaves the admitted PHY poisoned until reset.
-`Runnable` wakes its waker and returns `Pending` without creating a timer.
-Only a future `WaitAt` constructs and polls the timer; an already reached
-`WaitAt` still yields once. The gap between RMW commands has no command in
+At `Runnable`, the driver continues while CPU admission allows; otherwise it
+self-wakes and returns `Pending` without a timer. A future `WaitAt` constructs
+and polls the timer; an already reached `WaitAt` still yields once before
+another hardware step. The gap between RMW commands has no command in
 flight; its first busy-at-start attempt establishes that phase's bound.
 
-Wi-Fi temperature-band tracking (T3) uses the same P1 driver and counted I2C
+Wi-Fi temperature-band tracking (T3) uses the same P2 driver and counted I2C
 cursor as cold RFPLL. The two masked writes retain their order, sampled bytes
 and exclusive analog owner across `Pending`; only completion of both writes
 allows the retained band to commit. These counted commands keep their original
@@ -322,7 +347,28 @@ On a late failure it samples both host busy bits without
 consuming the rejected result. The diagnostic reports this trace after
 maintenance returns; an unobserved ready edge has only a time interval.
 
-The execution limits have different scopes:
+CPU admission is checked only in the [shared transport](src/executor/step.rs)
+and [RX-gain](src/executor/rx.rs) drivers, between complete atoms. The
+[executor's `should_yield`](../../espressif/executor/src/executor.rs) accounts
+for ready tasks, the executor's pending software interrupt, the radio doorbell,
+unserviced typed signals and the current task poll's elapsed time. The drivers also stop admitting atoms
+when their local batch reaches 900 µs. Per-command RFPLL tracing yields at each
+checkpoint. The 50 µs atom and 1 ms poll limits are cooperative contracts:
+there is no timer that interrupts an overlong atom or enforces them throughout
+every parent future. Direct TXDC/PWDET and the cold registration parent have
+no admission checks of their own; immediately ready children can chain in one
+poll. The executor round can include several task polls.
+
+The timing mechanisms have different scopes:
+
+| Mechanism | Meaning | Enforcement / limitation |
+| --- | --- | --- |
+| Vendor minimum settle | Wait at least the required time after a hardware action | Named 1–20 µs settles use `mcycle`; longer settles use the caller's timer. Preemption can lengthen them. |
+| Readiness deadline | Our bound for observing completion or giving up on busy hardware | Direct observations use 20 µs; T7 accepts a completed answer after its 100 µs busy window; SAR requires readiness observed within 40 µs. These are not vendor maximum delays. |
+| CPU admission | Decide whether another complete atom may run | Stop at a ready peer or 900 µs admission threshold, reserving 100 µs toward the 1 ms contract. No universal atom/poll elapsed-time cutoff. |
+| RF admission | Decide whether the shared RF transaction may start | Pending tracking state and the exclusive domain borrow; grant-protect brackets request hardware arbitration. No hard-window calendar, grant proof or one-period deferral bound. |
+
+Finite execution limits are separate from those timing mechanisms:
 
 | Mechanism | Established bound | Limitation |
 | --- | --- | --- |

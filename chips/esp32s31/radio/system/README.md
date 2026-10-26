@@ -17,9 +17,11 @@ contain no Bluetooth state.
   which only `close_rf` consumes. A recoverable close leaves RF open in the
   same epoch.
 - Between requests: the periodic tracking tick, when due, while a member is
-  tracked. A tick starts only if it overlaps no granted hard window and no
-  announced retune or resume; it is deferred by at most one tracking period,
-  and every shift is counted.
+  tracked. The actor drains inbox requests, then waits on the request doorbell
+  versus the backend's tracking deadline. A timer win runs the tick. Requests
+  can postpone it; there is no hard-window calendar, one-period deferral bound
+  or shift counter. The actor serializes its own retunes with tracking through
+  the exclusive mutable domain borrow.
 - A failure that touched shared state poisons the domain; every later answer
   hands back what was lent. The client contract's `Failure` table defines the
   classification.
@@ -27,6 +29,23 @@ contain no Bluetooth state.
 The hardware steps are a backend (`PhyDomain`, `ClientBackend<K, S>`); host
 tests drive the actor over a model backend. The backend owns coexistence and
 orders it with the client's power as the hardware requires.
+
+The firmware runs the actor on the P2 radio executor. Constructing it does
+not calibrate: the first `join` prepares the unregistered domain through
+`register_concurrent_phy`, including cold calibration or an admitted cache
+path. A later join after RF close wakes the retained registration. Initial
+client tracking settles pending work before operational use. The default
+tracking period is 1 s, with the first due microsecond at
+`previous + period + 1`. SYSTIMER Alarm0 at P3 acknowledges and pends P2;
+the executor dispatches timers and polls the actor. B0 polls its attached
+actor from the P2 driver task rather than a separate actor task.
+
+PHY's cooperative CPU admission is separate from RF admission. Shared
+transport and RX-gain drivers check admission between atoms; direct
+TXDC/PWDET paths do not. The 50 µs atom / 1 ms poll contracts are not universal
+elapsed-time cutoffs. `admit_maintenance` checks pending tracking state and
+the tracking graph programs grant-protect requests without waiting for an
+exclusive RF grant. See [PHY execution](../../phy/README.md#runtime-sequence-and-timing).
 
 `Esp32s31Radio` (chip only, `src/esp32s31.rs`) is the ESP32-S31 backend over
 the radio domain; its module documentation lists each request's steps. Its
