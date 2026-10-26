@@ -1011,12 +1011,13 @@ completeness = "unknown"
 sources = ["BLOB_LIBRFTEST_SET_DUMP_MODE", "S31_MMIO_DECLARED_201008CC"]
 completeness = "complete"
 
-[review.entity."ESTIMATOR_ACTIVITY_STATUS"]
+[review.entity."WORD_08D0_OPAQUE"]
 sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "BLOB_LIBPHY_PHY_CHECK_RX_SAT"]
-completeness = "partial"
+accuracy = "positional"
 
-[review.entity."ESTIMATOR_ACTIVITY_STATUS.BITS_20_21_OPAQUE"]
+[review.entity."WORD_08D0_OPAQUE.BITS_20_21_OPAQUE"]
 sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "BLOB_LIBPHY_PHY_CHECK_RX_SAT", "S31_MMIO_DECLARED_201008D0"]
+accuracy = "positional"
 completeness = "unknown"
 
 [review.entity."DAC_SCALE_CONTROL"]
@@ -2680,7 +2681,7 @@ class = "plain"
 description = "Four bits cleared by complete set_dump_mode for every mode."
 
 [[registers]]
-name = "ESTIMATOR_ACTIVITY_STATUS"
+name = "WORD_08D0_OPAQUE"
 offset = 0x8d0
 description = "Complete phy_iq_est_enable counts nonzero bits 21:20 while waiting; complete phy_check_rx_sat samples the same field exactly 100 times."
 
@@ -2688,7 +2689,7 @@ description = "Complete phy_iq_est_enable counts nonzero bits 21:20 while waitin
 name = "BITS_20_21_OPAQUE"
 bits = "21:20"
 class = "read-only"
-description = "Nonzero is treated as IQ-estimator activity and as an RX-saturation sample."
+description = "Sampled only while estimator READY is clear, for a diagnostic count; phy_check_rx_sat samples the same pair 100 times. RX saturation is a strong inference, generic activity a weak inference; these are not established estimator-busy or completion bits. Individual bit meanings remain unassigned."
 
 [[registers]]
 name = "DAC_SCALE_CONTROL"

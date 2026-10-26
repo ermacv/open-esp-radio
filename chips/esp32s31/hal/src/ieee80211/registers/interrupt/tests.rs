@@ -149,7 +149,9 @@ fn preparing_a_connected_station_clears_the_beacon_filter_control_alone() {
             .mac
             .wifi_mac_sta_beacon_filter
             .read_sta_beacon_filter_control();
-        assert_eq!(control.bits_0_2_opaque().get(), 0);
+        assert!(!control.beacon_filter_enable());
+        assert!(!control.broadcast_wakeup_enable());
+        assert!(!control.unicast_wakeup_enable());
         assert_ne!(control.bits_3_31_opaque().get(), 0, "kept");
     }
     // The interrupt enable word is the handler's: it is not written here.

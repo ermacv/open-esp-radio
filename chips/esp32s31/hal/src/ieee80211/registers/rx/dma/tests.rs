@@ -19,7 +19,7 @@ fn the_buffer_prefix_publishes_its_geometry_and_the_window_prefix_only() {
             0x000f_ffff
         );
         assert_eq!(dma.read_word_0c6c_opaque().bits_0_19_opaque().get(), 4);
-        assert_eq!(dma.read_word_007c_opaque().bits_0_7_opaque(), 0);
+        assert_eq!(dma.read_word_007c_opaque().rx_control_buffer_offset(), 0);
         assert_eq!(
             dma.read_word_007c_opaque().bit_28_opaque(),
             FILL & (1 << 28) != 0,

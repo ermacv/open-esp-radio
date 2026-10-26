@@ -900,18 +900,14 @@ pub(crate) fn restore_modem_register_bus_clock<P: Placement>(
     });
 }
 
-// SOURCE: S31_ESP_PACS_SVD.
+// SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE.
 pub(crate) fn configure_modem_source_clocks<P: Placement>(
     registers: &mut oer_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio<P>,
 ) {
-    registers.modify_modem_conf(|w| {
-        w.set_modem_apb_clk_en(true);
-        w.set_modem_rst_en(false);
-        w.set_modem_clk_en(true);
-        w.set_modem_clk_source_sel(true);
-        w.set_modem_pll_clk_en(true);
-        w.set_modem_xtal_clk_en(true);
-    });
+    super::clock_device::configure_pll_source_gate(
+        &mut super::clock_device::PllSourceGate(registers),
+        true,
+    );
 }
 
 // SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP, S31_PMU_HEADERS.

@@ -794,7 +794,7 @@ registers = ["NRX_FREQUENCY_CONTROL", "CHANNEL_CBW_CONTROL_0", "CHANNEL_CBW_CONT
 [[partitions.parts]]
 name = "PhyIqEstimatorOracle"
 instance = "FE"
-registers = ["ESTIMATOR_CONFIG", "ESTIMATOR_CONTROL", "SIGNAL_POWER_SUM_I", "SIGNAL_POWER_DIFFERENCE_I", "SIGNAL_POWER_DIFFERENCE_Q", "SIGNAL_POWER_SUM_Q", "DC_I_ACCUMULATOR", "DC_Q_ACCUMULATOR", "POWER_ACCUMULATOR", "ESTIMATOR_READY_STATUS", "ESTIMATOR_ACTIVITY_STATUS"]
+registers = ["ESTIMATOR_CONFIG", "ESTIMATOR_CONTROL", "SIGNAL_POWER_SUM_I", "SIGNAL_POWER_DIFFERENCE_I", "SIGNAL_POWER_DIFFERENCE_Q", "SIGNAL_POWER_SUM_Q", "DC_I_ACCUMULATOR", "DC_Q_ACCUMULATOR", "POWER_ACCUMULATOR", "ESTIMATOR_READY_STATUS", "WORD_08D0_OPAQUE"]
 
 [[partitions.parts]]
 name = "ModemLpconSharedClock"
@@ -934,7 +934,7 @@ registers = ["ENTRY%s"]
 [[partitions.parts]]
 name = "BtmacBlePhyInit"
 instance = "BT_MAC"
-registers = ["WORD_0474_OPAQUE", "INTERRUPT_ENABLE", "INTERRUPT_CLEAR", "WORD_0538_OPAQUE", "LC_TX_ON_DELAY_CONFIG", "WORD_0654_OPAQUE", "WORD_0800_OPAQUE", "WORD_0858_OPAQUE", "WORD_085C_OPAQUE", "DEVICE_TABLE_CONTROL", "DEVICE_TABLE_FIRST_ENTRY", "PHY_ENVIRONMENT_MEMBER_POINTER", "WORD_08A4_OPAQUE", "WORD_08A8_OPAQUE", "CONNECTION_ABORT_CONTROL", "WORD_0940_OPAQUE", "WORD_094C_OPAQUE", "WORD_0950_OPAQUE", "WORD_0954_OPAQUE", "WORD_0958_OPAQUE", "WORD_095C_OPAQUE"]
+registers = ["WORD_0474_OPAQUE", "INTERRUPT_ENABLE", "INTERRUPT_CLEAR", "CRC_CONFIG", "LC_TX_ON_DELAY_CONFIG", "WORD_0654_OPAQUE", "WORD_0800_OPAQUE", "WORD_0858_OPAQUE", "PACKET_ERROR_MASK", "DEVICE_TABLE_CONTROL", "DEVICE_TABLE_FIRST_ENTRY", "PHY_ENVIRONMENT_MEMBER_POINTER", "ABORTED_OPCODE_SELECTORS_0", "ABORTED_OPCODE_SELECTORS_1", "CONNECTION_ABORT_CONTROL", "WORD_0940_OPAQUE", "WORD_094C_OPAQUE", "WORD_0950_OPAQUE", "WORD_0954_OPAQUE", "WORD_0958_OPAQUE", "WORD_095C_OPAQUE"]
 
 [[partitions.parts]]
 name = "BtV32Cte"
@@ -2629,7 +2629,7 @@ sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 
 [[zero-based-field-writes]]
 name = "publish_nrx_frequency_fields"
-fields = ["WIFI_BB.NRX_FREQUENCY_CONTROL.BITS_0_23_OPAQUE", "WIFI_BB.NRX_FREQUENCY_CONTROL.BITS_24_28_OPAQUE", "WIFI_BB.NRX_FREQUENCY_CONTROL.BITS_29_31_OPAQUE"]
+fields = ["WIFI_BB.NRX_FREQUENCY_CONTROL.BITS_0_23_OPAQUE", "WIFI_BB.NRX_FREQUENCY_CONTROL.FREQUENCY_NUMERATOR_SHIFT", "WIFI_BB.NRX_FREQUENCY_CONTROL.BITS_29_31_OPAQUE"]
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 
 [[zero-based-field-writes]]
@@ -2820,18 +2820,32 @@ value = 0
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
 [[fixed-register-images]]
+name = "prepare_open_modem_pll_source_gate"
+register = "HP_SYS_CLKRST.MODEM_CONF"
+value = 0x00000015
+whole-word = true
+sources = ["ESP_IDF_4D59230D_S31_MODEM_PLL_GATE"]
+
+[[fixed-register-images]]
+name = "prepare_close_modem_pll_source_gate"
+register = "HP_SYS_CLKRST.MODEM_CONF"
+value = 0x0000002d
+whole-word = true
+sources = ["ESP_IDF_4D59230D_S31_MODEM_PLL_GATE"]
+
+[[fixed-register-images]]
 name = "open_modem_pll_source_gate"
 register = "HP_SYS_CLKRST.MODEM_CONF"
-value = 0x0000003d
+value = 0x0000001d
 whole-word = true
-sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK"]
+sources = ["ESP_IDF_4D59230D_S31_MODEM_PLL_GATE"]
 
 [[fixed-register-images]]
 name = "close_modem_pll_source_gate"
 register = "HP_SYS_CLKRST.MODEM_CONF"
 value = 0x00000025
 whole-word = true
-sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK"]
+sources = ["ESP_IDF_4D59230D_S31_MODEM_PLL_GATE"]
 
 [[fixed-register-images]]
 name = "clear_all_mac_power_interrupts"
@@ -2989,19 +3003,19 @@ sources = ["BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"]
 
 [[fixed-register-images]]
 name = "publish_ble_phy_init_value_0138"
-register = "BT_MAC.WORD_0538_OPAQUE"
+register = "BT_MAC.CRC_CONFIG"
 value = 0x0000065b
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
 [[fixed-register-images]]
 name = "publish_ble_phy_init_bytes_04a4"
-register = "BT_MAC.WORD_08A4_OPAQUE"
+register = "BT_MAC.ABORTED_OPCODE_SELECTORS_0"
 value = 0x02020202
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
 [[fixed-register-images]]
 name = "publish_ble_phy_init_bytes_04a8"
-register = "BT_MAC.WORD_08A8_OPAQUE"
+register = "BT_MAC.ABORTED_OPCODE_SELECTORS_1"
 value = 0x02020202
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
@@ -3014,7 +3028,7 @@ sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
 [[fixed-register-images]]
 name = "publish_ble_phy_init_value_045c"
-register = "BT_MAC.WORD_085C_OPAQUE"
+register = "BT_MAC.PACKET_ERROR_MASK"
 value = 8
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
@@ -7282,7 +7296,7 @@ sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
 name = "initialize_phy_nrx_frequency_shift"
-fields = [{ field = "WIFI_BB.NRX_FREQUENCY_CONTROL.BITS_24_28_OPAQUE", source-bit-offset = 0 }]
+fields = [{ field = "WIFI_BB.NRX_FREQUENCY_CONTROL.FREQUENCY_NUMERATOR_SHIFT", source-bit-offset = 0 }]
 value = 0x00000017
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_ESP_PACS_SVD"]
 

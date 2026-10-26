@@ -246,34 +246,15 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
             .hp_sys_clkrst_radio
             .read_modem_ctrl0()
             .reg_modem_clk_en();
-        let modem_conf = self.peripherals.hp_sys_clkrst_radio.read_modem_conf();
-        let (
-            modem_apb_clock_enabled,
-            modem_reset_asserted,
-            modem_source_clock_enabled,
-            modem_pll_selected,
-            modem_pll_clock_enabled,
-            modem_xtal_clock_enabled,
-        ) = (
-            modem_conf.modem_apb_clk_en(),
-            modem_conf.modem_rst_en(),
-            modem_conf.modem_clk_en(),
-            modem_conf.modem_clk_source_sel(),
-            modem_conf.modem_pll_clk_en(),
-            modem_conf.modem_xtal_clk_en(),
-        );
         PlatformClockPowerObservation {
             hp_active_icg_selected: hp_active_icg_code
                 == Some(
                     oer_esp32s31_pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode::Active,
                 ),
             modem_register_bus_clock_enabled,
-            modem_source_clocks_configured: modem_apb_clock_enabled
-                && !modem_reset_asserted
-                && modem_source_clock_enabled
-                && modem_pll_selected
-                && modem_pll_clock_enabled
-                && modem_xtal_clock_enabled,
+            modem_source_clocks_configured: modem_source_clocks_configured(
+                &self.peripherals.hp_sys_clkrst_radio,
+            ),
         }
     }
 
@@ -340,5 +321,44 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     #[doc(hidden)]
     pub fn enable_frontend_baseband_power(&mut self) {
         super::ops::enable_frontend_baseband_power(&mut self.peripherals.pmu_radio);
+    }
+}
+
+// SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE: open selects PLL with XTAL off.
+fn modem_source_clocks_configured<P: Placement>(registers: &HpSysClkrstRadio<P>) -> bool {
+    let conf = registers.read_modem_conf();
+    conf.modem_apb_clk_en()
+        && !conf.modem_rst_en()
+        && conf.modem_clk_en()
+        && conf.modem_clk_source_sel()
+        && conf.modem_pll_clk_en()
+        && !conf.modem_xtal_clk_en()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oer_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadioWords;
+    use oer_mmio::Registers;
+
+    #[test]
+    fn source_readback_accepts_the_pinned_open_state_only() {
+        let words = HpSysClkrstRadioWords::WORDS.iter().copied().max().unwrap() / 4 + 1;
+        let mut memory = std::vec![u32::MAX; words];
+        let mut registers = HpSysClkrstRadio::host(&mut memory).unwrap();
+        assert!(!modem_source_clocks_configured(&registers));
+        registers.prepare_open_modem_pll_source_gate();
+        assert!(!modem_source_clocks_configured(&registers));
+        registers.open_modem_pll_source_gate();
+        assert!(modem_source_clocks_configured(&registers));
+        // The former open state left XTAL enabled as well as PLL.
+        registers.modify_modem_conf(|w| {
+            w.set_modem_xtal_clk_en(true);
+        });
+        assert!(!modem_source_clocks_configured(&registers));
+        registers.prepare_close_modem_pll_source_gate();
+        assert!(!modem_source_clocks_configured(&registers));
+        registers.close_modem_pll_source_gate();
+        assert!(!modem_source_clocks_configured(&registers));
     }
 }

@@ -9,10 +9,12 @@ use crate::{owner::SharedPhyAccess, phy_blocks_mut};
 
 pub mod ops;
 
-/// One observation of the estimator completion signals.
+/// Estimator readiness and the separately sampled opaque indication pair.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ReadinessSnapshot {
     pub ready: bool,
+    /// Nonzero FE +0x8d0[21:20], sampled only while READY is clear.
+    /// RX saturation is inferred; this is not an estimator-busy predicate.
     pub activity: bool,
 }
 
@@ -75,11 +77,11 @@ pub fn set_measurement_enabled(registers: &mut impl SharedPhyAccess, enabled: bo
     );
 }
 
-/// Sample the ready word and shared activity word exactly once each.
+/// Sample READY once and the opaque indication pair only while READY is clear.
 ///
 /// Complete rev0 ROM `phy_iq_est_enable` tests the PAC ready field and, while
-/// it is clear, tests the PAC activity field. Rust retains repeat policy
-/// outside this finite observation leaf.
+/// it is clear, tests the opaque pair for diagnostic counting. Rust retains
+/// repeat policy outside this finite observation leaf.
 #[cfg(target_arch = "riscv32")]
 pub fn sample_readiness(registers: &mut impl SharedPhyAccess) -> ReadinessSnapshot {
     let (ready, activity) =

@@ -1246,8 +1246,10 @@ sources = ["S31_MMIO_USE_20101528"]
 [review.entity."WORD_0528_OPAQUE.BITS_0_31_OPAQUE"]
 sources = ["S31_MMIO_USE_20101528", "S31_MMIO_DECLARED_20101528"]
 
-[review.entity."WORD_0538_OPAQUE.BITS_0_31_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_20101538"]
+[review.entity."CRC_CONFIG.VALUE"]
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+completeness = "partial"
 
 [review.entity."WORD_0548_OPAQUE"]
 sources = ["S31_MMIO_USE_20101548"]
@@ -1313,8 +1315,10 @@ sources = ["S31_MMIO_DECLARED_20101800"]
 accuracy = "unknown"
 completeness = "unknown"
 
-[review.entity."WORD_0800_OPAQUE.BIT_21_OPAQUE"]
-sources = ["S31_MMIO_USE_20101800", "S31_MMIO_DECLARED_20101800"]
+[review.entity."WORD_0800_OPAQUE.CTE_ENABLE"]
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+completeness = "partial"
 
 [review.entity."SLOT%s_LOW"]
 sources = ["BLOB_LIBBLE_CONTROLLER_ADDRESS_SLOTS"]
@@ -1334,9 +1338,10 @@ sources = ["S31_MMIO_DECLARED_20101858"]
 accuracy = "unknown"
 completeness = "unknown"
 
-[review.entity."WORD_085C_OPAQUE.BITS_0_31_OPAQUE"]
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_DECLARED_2010185C"]
-completeness = "complete"
+[review.entity."PACKET_ERROR_MASK.VALUE"]
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+completeness = "partial"
 
 [review.entity."DEVICE_TABLE_CONTROL"]
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBLE_DEVICE_TABLE", "HIL_VENDOR_ACCEPT_LIST_2026_09_29"]
@@ -1386,29 +1391,45 @@ completeness = "partial"
 [review.entity."PHY_ENVIRONMENT_MEMBER_POINTER.ADDRESS"]
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 
-[review.entity."WORD_08A4_OPAQUE.BITS_0_7_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_201018A4"]
+[review.entity."ABORTED_OPCODE_SELECTORS_0.OPCODE_0"]
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+completeness = "partial"
 
-[review.entity."WORD_08A4_OPAQUE.BITS_8_15_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_201018A4"]
+[review.entity."ABORTED_OPCODE_SELECTORS_0.OPCODE_1"]
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+completeness = "partial"
 
-[review.entity."WORD_08A4_OPAQUE.BITS_16_23_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_201018A4"]
+[review.entity."ABORTED_OPCODE_SELECTORS_0.OPCODE_2"]
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+completeness = "partial"
 
-[review.entity."WORD_08A4_OPAQUE.BITS_24_31_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_201018A4"]
+[review.entity."ABORTED_OPCODE_SELECTORS_0.OPCODE_3"]
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+completeness = "partial"
 
-[review.entity."WORD_08A8_OPAQUE.BITS_0_7_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_201018A8"]
+[review.entity."ABORTED_OPCODE_SELECTORS_1.OPCODE_4"]
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+completeness = "partial"
 
-[review.entity."WORD_08A8_OPAQUE.BITS_8_15_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_201018A8"]
+[review.entity."ABORTED_OPCODE_SELECTORS_1.OPCODE_5"]
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+completeness = "partial"
 
-[review.entity."WORD_08A8_OPAQUE.BITS_16_23_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_201018A8"]
+[review.entity."ABORTED_OPCODE_SELECTORS_1.OPCODE_6"]
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+completeness = "partial"
 
-[review.entity."WORD_08A8_OPAQUE.BITS_24_31_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_201018A8"]
+[review.entity."ABORTED_OPCODE_SELECTORS_1.OPCODE_7"]
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+completeness = "partial"
 
 [review.entity."CONNECTION_ABORT_CONTROL"]
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBLE_CONNECTION_ABORT_CONTROL"]
@@ -1633,6 +1654,26 @@ sources = ["S31_MMIO_USE_20101FFC"]
 
 [review.entity."WORD_0FFC_OPAQUE.BITS_0_31_OPAQUE"]
 sources = ["S31_MMIO_USE_20101FFC", "S31_MMIO_DECLARED_20101FFC"]
+
+[review.entity."CRC_CONFIG"]
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+completeness = "partial"
+
+[review.entity."PACKET_ERROR_MASK"]
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+completeness = "partial"
+
+[review.entity."ABORTED_OPCODE_SELECTORS_0"]
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+completeness = "partial"
+
+[review.entity."ABORTED_OPCODE_SELECTORS_1"]
+sources = ["VENDOR_BLE_NAMED_IDENTITIES"]
+provenance = "derived"
+completeness = "partial"
 
 [[registers]]
 name = "SCHEDULER_CONTROL"
@@ -3835,14 +3876,15 @@ class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers]]
-name = "WORD_0538_OPAQUE"
+name = "CRC_CONFIG"
 offset = 0x538
-description = "BLE PHY register initialization writes the finite complete image 0x0000065B."
+description = "CRC configuration word; the reviewed initialization image is 0x65b. The polynomial interpretation and effective hardware width remain unqualified."
 
 [[registers.fields]]
-name = "BITS_0_31_OPAQUE"
+name = "VALUE"
 bits = "31:0"
 class = "plain"
+description = "CRC configuration word; the reviewed initialization image is 0x65b. The polynomial interpretation and effective hardware width remain unqualified."
 
 [[registers]]
 name = "WORD_0548_OPAQUE"
@@ -3945,10 +3987,10 @@ bits = "31"
 class = "plain"
 
 [[registers.fields]]
-name = "BIT_21_OPAQUE"
+name = "CTE_ENABLE"
 bits = "21"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "CTE-enable bit controlled by the vendor ble_radio_cte_enable accessor. Physical effects require CTE traffic."
 
 [[registers]]
 name = "SLOT%s_LOW"
@@ -3987,14 +4029,15 @@ bits = "31:16"
 class = "plain"
 
 [[registers]]
-name = "WORD_085C_OPAQUE"
+name = "PACKET_ERROR_MASK"
 offset = 0x85c
-description = "BLE PHY register initialization writes the finite complete image 8."
+description = "Packet-error mask modified by the named set/clear-mask accessors; individual error mapping and polarity remain unqualified."
 
 [[registers.fields]]
-name = "BITS_0_31_OPAQUE"
+name = "VALUE"
 bits = "31:0"
 class = "plain"
+description = "Packet-error mask modified by the named set/clear-mask accessors; individual error mapping and polarity remain unqualified."
 
 [[registers]]
 name = "DEVICE_TABLE_CONTROL"
@@ -4077,54 +4120,62 @@ description = "CPU address published for the BLE PHY environment member at +0x2c
 pointer = { points-to = "BLE_PHY_ENVIRONMENT", placement = "dma-window", encoding = { width = 0x20, shift = 0x0 }, sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"], member-offset = 0x2c }
 
 [[registers]]
-name = "WORD_08A4_OPAQUE"
+name = "ABORTED_OPCODE_SELECTORS_0"
 offset = 0x8a4
-description = "BLE PHY register initialization writes four byte images equal to 2."
+description = "First four byte-wide aborted-opcode selectors; default bytes are two. Hardware abort matching effects remain unqualified."
 
 [[registers.fields]]
-name = "BITS_0_7_OPAQUE"
+name = "OPCODE_0"
 bits = "7:0"
 class = "plain"
+description = "Aborted-opcode byte selector; the exact hardware matching behavior is unqualified."
 
 [[registers.fields]]
-name = "BITS_8_15_OPAQUE"
+name = "OPCODE_1"
 bits = "15:8"
 class = "plain"
+description = "Aborted-opcode byte selector; the exact hardware matching behavior is unqualified."
 
 [[registers.fields]]
-name = "BITS_16_23_OPAQUE"
+name = "OPCODE_2"
 bits = "23:16"
 class = "plain"
+description = "Aborted-opcode byte selector; the exact hardware matching behavior is unqualified."
 
 [[registers.fields]]
-name = "BITS_24_31_OPAQUE"
+name = "OPCODE_3"
 bits = "31:24"
 class = "plain"
+description = "Aborted-opcode byte selector; the exact hardware matching behavior is unqualified."
 
 [[registers]]
-name = "WORD_08A8_OPAQUE"
+name = "ABORTED_OPCODE_SELECTORS_1"
 offset = 0x8a8
-description = "BLE PHY register initialization writes four byte images equal to 2."
+description = "Next four byte-wide aborted-opcode selectors; default bytes are two. Hardware abort matching effects remain unqualified."
 
 [[registers.fields]]
-name = "BITS_0_7_OPAQUE"
+name = "OPCODE_4"
 bits = "7:0"
 class = "plain"
+description = "Aborted-opcode byte selector; the exact hardware matching behavior is unqualified."
 
 [[registers.fields]]
-name = "BITS_8_15_OPAQUE"
+name = "OPCODE_5"
 bits = "15:8"
 class = "plain"
+description = "Aborted-opcode byte selector; the exact hardware matching behavior is unqualified."
 
 [[registers.fields]]
-name = "BITS_16_23_OPAQUE"
+name = "OPCODE_6"
 bits = "23:16"
 class = "plain"
+description = "Aborted-opcode byte selector; the exact hardware matching behavior is unqualified."
 
 [[registers.fields]]
-name = "BITS_24_31_OPAQUE"
+name = "OPCODE_7"
 bits = "31:24"
 class = "plain"
+description = "Aborted-opcode byte selector; the exact hardware matching behavior is unqualified."
 
 [[registers]]
 name = "CONNECTION_ABORT_CONTROL"
