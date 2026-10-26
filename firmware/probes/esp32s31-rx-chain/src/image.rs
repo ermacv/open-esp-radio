@@ -41,12 +41,12 @@ use static_cell::StaticCell;
 
 use oer_esp32s31_hal::ieee80211::dma::rx_ring::RX_BUFFER_SENTINEL;
 
-const COUNT: usize = 96;
-const BUFFER: usize = 256;
+const COUNT: usize = 32;
+const BUFFER: usize = 128;
 const NODES: usize = COUNT + 1;
-const RECORDS: usize = 2048;
-const FRAME_LIMIT: usize = 32;
-const CAPTURE_MS: u64 = 4500;
+const RECORDS: usize = 512;
+const FRAME_LIMIT: usize = 3;
+const CAPTURE_MS: u32 = 700;
 const CHANNEL: u8 = 13;
 const _: () = assert!(BUFFER >= 4 && BUFFER.is_multiple_of(4));
 type Storage = RxDmaStorage<COUNT, BUFFER, BUFFER>;
@@ -103,6 +103,7 @@ struct Boot {
     _pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
     cell: oer_esp32s31_radio_client::MembershipCell<oer_esp32s31_radio_client::wifi::Wifi>,
     wifi: oer_esp32s31_hal::root::WifiPartition,
+    mac_irq: oer_esp32s31_hal::owner::MacInterruptRegisters,
     rng: Rng,
     station: [u8; 6],
     ap: [u8; 6],
@@ -161,7 +162,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
     oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1);
     // No Wi-Fi interrupt consumer is installed: this experiment polls only.
-    // Keep both owned interrupt banks masked for the entire publication.
+    // The MAC bank stays with the polling task; no CPU route is installed.
     let mut wifi_irqs = runtime.wifi_interrupts;
     wifi_irqs.mac.mask_all_mac_interrupts();
     wifi_irqs.power.mask_all_power_interrupts();
@@ -187,6 +188,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         _pads: pads,
         cell: cells.wifi,
         wifi: partitions.wifi,
+        mac_irq: wifi_irqs.mac,
         rng: Rng::new(runtime.entropy, EmbassyClock),
         station,
         ap,
@@ -365,12 +367,13 @@ async fn capture(boot: Boot) {
         _pads,
         cell,
         wifi,
+        mac_irq,
         rng,
         station,
         ap,
     } = boot;
     usb::text(&mut console, b"RXCHAIN boot\n").await;
-    let result = run(&mut console, cell, wifi, rng, station, ap).await;
+    let result = run(&mut console, cell, wifi, mac_irq, rng, station, ap).await;
     if let Err(reason) = result {
         usb::text(&mut console, reason.as_bytes()).await;
         usb::text(&mut console, b"\nOER-RESULT: fail rx-chain\n").await;
@@ -382,6 +385,7 @@ async fn run(
     console: &mut usb::Console,
     cell: oer_esp32s31_radio_client::MembershipCell<oer_esp32s31_radio_client::wifi::Wifi>,
     wifi: oer_esp32s31_hal::root::WifiPartition,
+    mut mac_irq: oer_esp32s31_hal::owner::MacInterruptRegisters,
     rng: Rng,
     station: [u8; 6],
     ap: [u8; 6],
@@ -427,15 +431,18 @@ async fn run(
             node(storage, index).ok_or("node")?.buffer_address();
     }
     trace.scan(storage, &mut access, true)?;
+    // Establish an empty, masked bank before the only receive window.
+    mac_irq.clear_all_mac_interrupts();
+    let initial_status = mac_irq.mac_interrupt_status().observation();
     access.wifi_mac_hal().configure_open_promiscuous_receive();
     usb::text(
         console,
-        b"RXCHAIN begin v=1 channel=13 buffer=256 count=96 frames=32 cap_ms=4500\n",
+        b"RXCHAIN begin v=2 channel=13 buffer=128 count=32 frames=3 cap_ms=700\n",
     )
     .await;
     let deadline = EmbassyClock
         .now()
-        .checked_add(Duration::from_millis(CAPTURE_MS as u32))
+        .checked_add(Duration::from_millis(CAPTURE_MS))
         .ok_or("deadline")?;
     access.wifi_mac_hal().start_mac_runtime(&ring);
     let mut terminals = 0;
@@ -470,13 +477,53 @@ async fn run(
             .await;
     }
     let halted = ring.try_stop(access.rx_dma()).map_err(|_| "walker-stop")?;
-    trace.scan(storage, &mut access, true)?;
+    if let Err(reason) = trace.scan(storage, &mut access, true) {
+        observation = Err(reason);
+    }
+    // No take/recycle is performed. These phases test pending STATUS after
+    // producer stop and descriptor observation, not a production drain or IRQ
+    // delivery. The public HAL deliberately hides RAW and individual auxiliaries.
+    let masked_status = mac_irq.mac_interrupt_status().observation();
+    mac_irq.unmask_rx_delivery_interrupts();
+    let first_unmask = mac_irq.mac_interrupt_status().observation();
+    mac_irq.mask_rx_delivery_interrupts();
+    let remasked = mac_irq.mac_interrupt_status().observation();
+    mac_irq.unmask_rx_delivery_interrupts();
+    let pending = mac_irq.mac_interrupt_status();
+    let second_unmask = pending.observation();
+    mac_irq.acknowledge_mac_interrupts(pending);
+    let acknowledged = mac_irq.mac_interrupt_status().observation();
+    mac_irq.mask_all_mac_interrupts();
     let snapshot = access.receive_dma_snapshot();
     let mut line = heapless::String::<768>::new();
     writeln!(&mut line, "RXCHAIN end terminals={} records={} scans={} max_scan={} max_gap={} base={:08x} last={:x} next={:x}",
         terminals, trace.used, trace.scans, trace.max_scan_cycles, trace.max_gap_cycles,
         snapshot.descriptor_base, snapshot.last_descriptor_low, snapshot.next_descriptor_low).map_err(|_| "format")?;
     usb::text(console, line.as_bytes()).await;
+    for (phase, status) in [
+        ("initial", initial_status),
+        ("masked", masked_status),
+        ("unmask", first_unmask),
+        ("remask", remasked),
+        ("unmask-again", second_unmask),
+        ("ack", acknowledged),
+    ] {
+        line.clear();
+        let work = status.work_events();
+        writeln!(
+            &mut line,
+            "Q phase={} tx={} rx={} timeout={} color={} aux={} unhandled={}",
+            phase,
+            u8::from(work.tx_complete()),
+            u8::from(work.rx_success()),
+            u8::from(work.tx_timeout()),
+            u8::from(work.bss_color_collision()),
+            u8::from(status.has_auxiliary_event()),
+            u8::from(status.has_unhandled_event()),
+        )
+        .map_err(|_| "format")?;
+        usb::text(console, line.as_bytes()).await;
+    }
     for row in trace.rows.iter().take(trace.used) {
         line.clear();
         line.push_str("E").map_err(|_| "format")?;
