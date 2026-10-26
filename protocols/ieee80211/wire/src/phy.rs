@@ -423,13 +423,25 @@ impl HeRate {
             ($numerator:expr, $denominator:expr) => {
                 match self.gi_ltf {
                     HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns => {
-                        const { ($numerator * 1_000_000 / ($denominator * 13_600)) as u32 }
+                        const {
+                            let kbps = $numerator * 1_000_000 / ($denominator * 13_600);
+                            assert!(kbps <= u32::MAX as u64);
+                            kbps as u32
+                        }
                     }
                     HeGiLtf::Ltf2xGi1600Ns => {
-                        const { ($numerator * 1_000_000 / ($denominator * 14_400)) as u32 }
+                        const {
+                            let kbps = $numerator * 1_000_000 / ($denominator * 14_400);
+                            assert!(kbps <= u32::MAX as u64);
+                            kbps as u32
+                        }
                     }
                     HeGiLtf::Ltf4xGi3200Ns => {
-                        const { ($numerator * 1_000_000 / ($denominator * 16_000)) as u32 }
+                        const {
+                            let kbps = $numerator * 1_000_000 / ($denominator * 16_000);
+                            assert!(kbps <= u32::MAX as u64);
+                            kbps as u32
+                        }
                     }
                 }
             };

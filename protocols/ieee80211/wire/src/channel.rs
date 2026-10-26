@@ -158,7 +158,7 @@ macro_rules! channel_table {
             }
         }
 
-        const CHANNELS: [ChannelEntry; channel_table!(@count $($slot),+)] = [$(const {
+        static CHANNELS: [ChannelEntry; channel_table!(@count $($slot),+)] = [$(const {
             let band = Band::$band;
             let number = $number;
             let width = ChannelWidth::$width;
