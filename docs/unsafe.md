@@ -44,6 +44,10 @@ Memory operations move into `oer-memory`, architectural instructions into
 may grow only by the relocated operations while the branch total falls and
 no calling crate's count grows. Runtime panic counts never increase.
 
+Only `oer-memory` defines `unsafe impl Sync` or `Send`; the layer test
+`unsafe_sync_and_send_impls_stay_in_oer_memory` maintains the shrinking
+file-to-count list of existing exceptions and rejects new or stale entries.
+
 An extern declaration without a memory-safety precondition is declared
 `safe fn` or `safe static`. A `safe static` requires the bytes at its address
 to be a valid, immutable value of its declared type. A linker symbol used
