@@ -7,10 +7,16 @@ publishes the P3 owners. Its command and independent clock mailboxes retain
 transactions across cancellation.
 
 Reset retires the timer task and the Controller (the handler's gate gives
-back the released bank and disables the timer's compare), leaves the actor,
+back the released bank and explicitly quiets the LP timer), leaves the actor,
 resets the Controller and returns its arena and the gate before a new
 installation can send Command Complete. The empty vendor command `0xfc00` performs the
 same ordinary uninstall and sends its completion after graph return.
+Each successful uninstall sends an HCI vendor event (`0xff`, subevent `1`)
+before Command Complete: its three parameter bytes are the subevent and the
+sampled LP `+0x24`/`+0x2c` bytes, including zeros. P2 queues that observation
+before answering uninstall; P1 sends it without inserting text into H4. The
+physical B0 procedure logs both bytes and returns every observation in
+`lp_timer_pending` in its run report.
 
 The actor, branded lifecycle and large futures occupy static PSRAM storage;
 the arena and P3 state occupy their typed DMA/critical storage. One

@@ -28,6 +28,7 @@ enum ShutdownRetention<M: ControllerMemory> {
     NotStopped {
         engine: Engine<M>,
         output: bluetooth::InterruptOutputReleasedOwner,
+        stopped: bluetooth::ModemLpTimerStopped,
     },
     Reset {
         registers: bluetooth::BluetoothShutdownFailure,
@@ -37,6 +38,13 @@ enum ShutdownRetention<M: ControllerMemory> {
 }
 
 impl<M: ControllerMemory> EngineShutdownFailure<M> {
+    /// Pending sampled before LP quieting, including a refused Controller reset.
+    pub const fn pending_observation(&self) -> bluetooth::BluetoothModemLpTimerPendingObservation {
+        match &self._retained {
+            ShutdownRetention::NotStopped { stopped, .. } => stopped.pending_observation(),
+            ShutdownRetention::Reset { registers, .. } => registers.pending_observation(),
+        }
+    }
     pub const fn error(&self) -> EngineShutdownError {
         self.error
     }
@@ -58,13 +66,18 @@ pub struct EngineResetTimerPending<M: ControllerMemory> {
 }
 
 impl<M: ControllerMemory> EngineResetTimerPending<M> {
+    /// Pending observed before LP quieting, preserved through reset.
+    pub const fn pending_observation(&self) -> bluetooth::BluetoothModemLpTimerPendingObservation {
+        self.controller.pending_observation()
+    }
     /// Reunite the timer and return the clocked client with the arena.
     pub fn reunite(self, timer: bluetooth::ModemLpTimerStoppedOwner) -> EngineShutDown<M> {
-        let (clocked, reset) = self.controller.reunite(timer);
+        let (clocked, reset, pending) = self.controller.reunite(timer);
         EngineShutDown {
             clocked,
             arena: self.memory.reclaim(&reset),
             reset,
+            pending,
         }
     }
 }
@@ -74,6 +87,8 @@ pub struct EngineShutDown<M: ControllerMemory> {
     pub clocked: bluetooth::ClockedOwner,
     pub arena: crate::dma_static::Placed<M::Storage>,
     pub reset: bluetooth::BluetoothControllerReset,
+    /// Pending sampled before LP quieting; returning the arena does not discard it.
+    pub pending: bluetooth::BluetoothModemLpTimerPendingObservation,
 }
 
 impl<M: ControllerMemory> Engine<M> {
@@ -344,7 +359,7 @@ impl<M: ControllerMemory> Engine<M> {
         output: bluetooth::InterruptOutputReleasedOwner,
         stopped: bluetooth::ModemLpTimerStopped,
     ) -> Result<EngineResetTimerPending<M>, EngineShutdownFailure<M>> {
-        self.shut_down_with(output, |registers, output| {
+        self.shut_down_with(output, stopped, |registers, output, stopped| {
             registers.shut_down(radio, output, stopped)
         })
     }
@@ -353,9 +368,11 @@ impl<M: ControllerMemory> Engine<M> {
     fn shut_down_with(
         self,
         output: bluetooth::InterruptOutputReleasedOwner,
+        stopped: bluetooth::ModemLpTimerStopped,
         reset_registers: impl FnOnce(
             bluetooth::TaskOwner,
             bluetooth::InterruptOutputReleasedOwner,
+            bluetooth::ModemLpTimerStopped,
         ) -> Result<
             bluetooth::BluetoothControllerResetTimerPending,
             bluetooth::BluetoothShutdownFailure,
@@ -367,6 +384,7 @@ impl<M: ControllerMemory> Engine<M> {
                 _retained: ShutdownRetention::NotStopped {
                     engine: self,
                     output,
+                    stopped,
                 },
             });
         }
@@ -380,7 +398,7 @@ impl<M: ControllerMemory> Engine<M> {
             initialized: _,
             phy_initialized: _,
         } = self;
-        match reset_registers(registers, output) {
+        match reset_registers(registers, output, stopped) {
             Ok(controller) => Ok(EngineResetTimerPending { controller, memory }),
             Err(registers) => Err(EngineShutdownFailure {
                 error: EngineShutdownError::Reset(registers.error()),

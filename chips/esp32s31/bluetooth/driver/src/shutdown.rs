@@ -82,6 +82,17 @@ enum Retained<X: SignalExecutor, M: ControllerMemory> {
 }
 
 impl<X: SignalExecutor, M: ControllerMemory> ControllerShutdownFailure<X, M> {
+    /// Observation is present once LP stop succeeded, even if a later step refused.
+    pub const fn pending_observation(
+        &self,
+    ) -> Option<oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation> {
+        match &self._retained {
+            Retained::Retired(retired) => Some(retired.pending_observation()),
+            Retained::Reset { failure } => Some(failure.pending_observation()),
+            Retained::ResetTimerPending(pending) => Some(pending.pending_observation()),
+            Retained::Task { .. } | Retained::Output { .. } => None,
+        }
+    }
     pub const fn error(&self) -> ControllerShutdownError {
         self.error
     }
@@ -166,19 +177,12 @@ pub async fn retire<X: SignalExecutor, M: ControllerMemory, R: RadioDoorbell>(
         Ok(task) => task,
         Err((error, task)) => return failed(ControllerShutdownError::Task(error), task),
     };
-    match gate.stop_timer().await {
-        Ok(stopped) => {
-            // Stop admits only rollover-only AwaitingPlan. The task already
-            // drained; discard its late snapshot/epoch shift so no old work
-            // remains in the single-slot queue for the next epoch. Dispatch
-            // requests refuse in the handler, before reaching this branch.
-            let _retired_rollover = timer_port.take_work();
-            Ok(ControllerRetired {
-                task,
-                output,
-                stopped,
-            })
-        }
+    match crate::interrupt::gate::stop_timer_for_retirement(gate, timer_port).await {
+        Ok(stopped) => Ok(ControllerRetired {
+            task,
+            output,
+            stopped,
+        }),
         Err(error) => Err(ControllerShutdownFailure {
             error: ControllerShutdownError::Gate(error),
             _retained: Retained::Output { task, output },
@@ -187,6 +191,12 @@ pub async fn retire<X: SignalExecutor, M: ControllerMemory, R: RadioDoorbell>(
 }
 
 impl<M: ControllerMemory> ControllerRetired<M> {
+    /// Pending sampled before LP quieting; retained across the actor leave.
+    pub const fn pending_observation(
+        &self,
+    ) -> oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation {
+        self.stopped.pending_observation()
+    }
     /// Identity checked before a retirement can satisfy an actor leave.
     pub fn installation(&self) -> u32 {
         self.task.installation()
@@ -244,6 +254,12 @@ impl<M: ControllerMemory> ControllerRetired<M> {
 }
 
 impl<M: ControllerMemory> ControllerResetTimerPending<M> {
+    /// Pending observed before LP quieting, preserved through reset.
+    pub const fn pending_observation(
+        &self,
+    ) -> oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation {
+        self.engine.pending_observation()
+    }
     /// Take the timer from its handler, which gives it up only after the
     /// reset, and return the clocked client with the complete arena.
     ///

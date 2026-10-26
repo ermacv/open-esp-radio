@@ -27,6 +27,7 @@ const AIR_INTERVAL: Duration = Duration::from_millis(500);
 struct H4<S> {
     serial: S,
     log: fs::File,
+    shutdown_pending: Vec<[u8; 2]>,
 }
 impl<S: Read + Write> H4<S> {
     fn command(&mut self, opcode: u16, parameters: &[u8]) -> Result<Vec<u8>> {
@@ -64,10 +65,28 @@ impl<S: Read + Write> H4<S> {
             } // ROM text before H4.
             event.push(byte[0]);
             if event.len() >= 3 && event.len() == usize::from(event[2]) + 3 {
-                return completion(&event, opcode);
+                if let Some(completed) = self.receive_event(&event, opcode)? {
+                    return Ok(completed);
+                }
+                event.clear();
             }
         }
     }
+    fn receive_event(&mut self, event: &[u8], opcode: u16) -> Result<Option<Vec<u8>>> {
+        if let Some(pending) =
+            oer_firmware_apps_b0::shutdown_observation::ShutdownObservation::from_h4(event)
+        {
+            writeln!(
+                self.log,
+                "LP shutdown pending: +0x24={} +0x2c={}",
+                pending[0], pending[1]
+            )?;
+            self.shutdown_pending.push(pending);
+            return Ok(None);
+        }
+        completion(event, opcode).map(Some)
+    }
+
     fn end(&mut self) -> Result<u16> {
         let returned = self.command(END, &[])?;
         let bytes: [u8; 2] = returned
@@ -304,6 +323,7 @@ pub fn run(
             let mut hci = H4 {
                 serial,
                 log: fs::File::create(output.join(format!("boot-{boot}-h4.log")))?,
+                shutdown_pending: Vec::new(),
             };
             std::thread::sleep(Duration::from_millis(250));
             hci.command(RESET, &[])?;
@@ -331,7 +351,7 @@ pub fn run(
             hci.command(RAND, &[])?;
             hci.command(STOP, &[])?;
             report["boots"].as_array_mut().ok_or("boot report array")?.push(json!({"boot":boot,
-                "peer_idle":peer_idle,"dut_idle":dut_idle,"to_peer":to_peer,"from_peer":from_peer,"ordinary_stop":true}));
+                "peer_idle":peer_idle,"dut_idle":dut_idle,"to_peer":to_peer,"from_peer":from_peer,"ordinary_stop":true,"lp_timer_pending":hci.shutdown_pending.iter().map(|[software, rollover]| json!({"state_0024":software,"state_002c":rollover})).collect::<Vec<_>>()}));
             fs::write(
                 output.join("manifest.json"),
                 serde_json::to_vec_pretty(&report)?,
@@ -385,6 +405,33 @@ mod tests {
             assert!(completion(&bad, RESET).is_err());
         }
         assert!(completion(&good[..6], RESET).is_err());
+    }
+
+    #[test]
+    fn shutdown_pending_is_retained_before_the_command_completion() {
+        let directory = tempfile::tempdir().expect("own H4 log");
+        let log_path = directory.path().join("h4.log");
+        let mut hci = H4 {
+            serial: std::io::Cursor::new(Vec::<u8>::new()),
+            log: fs::File::create(&log_path).unwrap(),
+            shutdown_pending: Vec::new(),
+        };
+        assert!(
+            hci.receive_event(&[4, 0xff, 3, 1, 7, 3], STOP)
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(hci.shutdown_pending, [[7, 3]]);
+        assert_eq!(
+            hci.receive_event(&[4, 0x0e, 4, 1, 0, 0xfc, 0], STOP)
+                .unwrap(),
+            Some(Vec::new())
+        );
+        assert!(
+            fs::read_to_string(log_path)
+                .unwrap()
+                .contains("+0x24=7 +0x2c=3")
+        );
     }
 
     #[test]

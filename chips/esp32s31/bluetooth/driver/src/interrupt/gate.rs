@@ -11,12 +11,13 @@
 //! register owner only while its gate holds it:
 //!
 //! 1. lower the doorbell line, apply the task's unarmed timer plan while
-//!    retaining its register owner, then serve the task's gate request
+//!    retaining its register owner, step the timer, then serve the gate request
 //!    ([`BluetoothInterruptGate`]);
 //! 2. serve one request of the scheduler channel;
 //! 3. sample and acknowledge the bank's primary status, then its NRT
 //!    snapshots, publishing the primary capture to the scheduler worker;
-//! 4. step the timer.
+//!
+//! A dispatch observed by the timer step refuses a stop request in the same entry.
 //!
 //! A clear status writes nothing. The task opens the gates with the epoch's
 //! owners (the bank still unprepared, the timer initialized but not
@@ -54,7 +55,9 @@ use oer_interrupt_table::{
     Bound,
     signal::{IrqSignal, SignalExecutor},
 };
-use oer_memory::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, CompactSpscCursor};
+use oer_memory::{
+    AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, CompactSpscCursor, OnceValue,
+};
 
 use super::{PrimaryInterruptCapture, RadioDoorbell};
 use crate::modem_lp_timer_queue::ModemLpTimerStableInterruptStep;
@@ -265,6 +268,9 @@ pub struct BluetoothInterruptSignals<X: SignalExecutor + 'static> {
     /// Raised when the handler had to retain an owner it could not hand
     /// on.
     pub fault: &'static AtomicBool,
+    /// First stopped-timer fault payload, retained through the existing fault path.
+    pub stopped_timer_fault:
+        &'static OnceValue<bluetooth::BluetoothModemLpTimerStoppedInterruptFault>,
 }
 
 impl<H: GateHardware> BluetoothInterruptStorage<H> {
@@ -383,6 +389,9 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
     pub fn service<C: oer_time::Clock>(&mut self, clock: &C) {
         self.line.acknowledge();
         self.apply_timer_plan();
+        // A same-entry dispatch must become retained software work before
+        // StopTimer can clear pending. Refusal then uses the AwaitingPlan rule.
+        self.step_timer();
         self.serve_gate_request();
         if let Bank::Open {
             registers,
@@ -400,7 +409,13 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
                 .publish_from_interrupt(capture);
             let _ = H::capture_nrt(registers);
         }
-        self.step_timer();
+    }
+
+    /// The first stopped-timer fault, including its pending bytes or raw status.
+    pub fn stopped_timer_fault(
+        &self,
+    ) -> Option<bluetooth::BluetoothModemLpTimerStoppedInterruptFault> {
+        self.signals.stopped_timer_fault.get()
     }
 
     /// Whether the bank's gate is open.
@@ -544,7 +559,8 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
             }
             Timer::Stopped(mut timer) => match H::step_stopped_timer(&mut timer) {
                 Ok(_) => self.timer = Timer::Stopped(timer),
-                Err(_) => {
+                Err(observation) => {
+                    let _first = self.signals.stopped_timer_fault.set(observation);
                     // Keep invalid stopped state through the existing fault path.
                     self.retained.stopped = Some(timer);
                     self.fault();
@@ -929,4 +945,20 @@ impl<X: SignalExecutor + 'static, R: RadioDoorbell> BluetoothInterruptGate<ChipG
     ) -> Result<bluetooth::ModemLpTimerStoppedOwner, GateError> {
         self.take_stopped_timer().await
     }
+}
+
+/// Complete the retirement's timer handoff. Stop refuses any dispatch;
+/// only a late rollover snapshot/time projection can remain for removal.
+#[cfg(any(target_arch = "riscv32", test))]
+pub(crate) async fn stop_timer_for_retirement<
+    H: GateHardware,
+    X: SignalExecutor,
+    R: RadioDoorbell,
+>(
+    gate: &mut BluetoothInterruptGate<H, X, R>,
+    timer_port: &ModemLpTimerPort<H, R>,
+) -> Result<H::StopProof, GateError> {
+    let stopped = gate.stop_timer().await?;
+    let _retired_rollover = timer_port.take_work();
+    Ok(stopped)
 }

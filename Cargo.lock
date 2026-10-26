@@ -3537,6 +3537,7 @@ dependencies = [
  "oer-chip-profile",
  "oer-diagnostics",
  "oer-espressif-facts",
+ "oer-firmware-apps-b0",
  "oer-firmware-apps-w3",
  "oer-hil-lab",
  "oer-hil-link",

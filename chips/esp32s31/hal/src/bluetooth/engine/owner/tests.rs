@@ -124,7 +124,11 @@ fn reset_waits_for_both_quiet_interrupt_halves_and_the_channel_serves_the_next_e
     assert!(engine.retire_scheduler_interrupts(half).is_ok());
     assert!(engine.retirement_ready());
     let returned = engine
-        .shut_down_with(output, reset)
+        .shut_down_with(
+            output,
+            bluetooth::ModemLpTimerStopped::for_host_test(),
+            reset,
+        )
         .map(|pending| pending.reunite(timer))
         .expect("quiet reset");
     let (mut next, _) = Engine::<Memory>::for_host_test::<HostDma<0x2f00_1000>>(
@@ -190,12 +194,14 @@ fn abandoning_an_exchange_quarantines_every_graph_publication() {
 fn reset(
     task: bluetooth::TaskOwner,
     output: bluetooth::InterruptOutputReleasedOwner,
+    stopped: bluetooth::ModemLpTimerStopped,
 ) -> Result<bluetooth::BluetoothControllerResetTimerPending, bluetooth::BluetoothShutdownFailure> {
     assert!(!task.time_latch.in_flight());
     assert!(task.modem_lp_timer.is_none());
     Ok(bluetooth::shutdown::reset_for_host_test(
         task,
         output.registers,
+        stopped,
     ))
 }
 
@@ -349,7 +355,11 @@ fn epoch_cycle<
         panic!()
     };
     let returned = engine
-        .shut_down_with(output, reset)
+        .shut_down_with(
+            output,
+            bluetooth::ModemLpTimerStopped::for_host_test(),
+            reset,
+        )
         .map(|pending| pending.reunite(timer))
         .unwrap();
     let backing = returned.arena.into_inner();
@@ -374,10 +384,14 @@ fn epoch_cycle<
 
 #[test]
 fn unconfirmed_stop_quarantines_the_exact_engine_without_resetting() {
-    let (engine, output, timer) = model();
+    let (engine, output, _timer) = model();
     let root = engine.memory.root_address_for_test();
     let error = engine
-        .shut_down_with(output, |_, _| panic!("reset before stop"))
+        .shut_down_with(
+            output,
+            bluetooth::ModemLpTimerStopped::for_host_test(),
+            |_, _, _| panic!("reset before stop"),
+        )
         .err()
         .unwrap();
     assert_eq!(error.error(), EngineShutdownError::NotStopped);
@@ -389,17 +403,22 @@ fn unconfirmed_stop_quarantines_the_exact_engine_without_resetting() {
 
 #[test]
 fn reset_failure_is_absorbing_and_keeps_the_whole_arena() {
-    let (mut engine, output, timer) = model();
+    let (mut engine, output, _timer) = model();
     engine.stopped_for_host_test();
     let root = engine.memory.root_address_for_test();
     let error = engine
-        .shut_down_with(output, |task, output| {
-            Err(bluetooth::shutdown::failure_for_host_test(
-                task,
-                output.registers,
-                bluetooth::BluetoothShutdownError::ControllerReset,
-            ))
-        })
+        .shut_down_with(
+            output,
+            bluetooth::ModemLpTimerStopped::for_host_test(),
+            |task, output, stopped| {
+                Err(bluetooth::shutdown::failure_for_host_test(
+                    task,
+                    output.registers,
+                    bluetooth::BluetoothShutdownError::ControllerReset,
+                    stopped,
+                ))
+            },
+        )
         .err()
         .unwrap();
     assert_eq!(
@@ -415,7 +434,7 @@ fn reset_failure_is_absorbing_and_keeps_the_whole_arena() {
 
 #[test]
 fn uncertain_hardware_reachability_blocks_all_graph_access_even_after_late_stop() {
-    let (mut engine, output, timer) = model();
+    let (mut engine, output, _timer) = model();
     engine.faulted = true;
     engine.stopped_for_host_test();
     assert!(engine.is_quarantined());
@@ -424,7 +443,11 @@ fn uncertain_hardware_reachability_blocks_all_graph_access_even_after_late_stop(
     assert!(!engine.retirement_ready());
     assert_eq!(
         engine
-            .shut_down_with(output, |_, _| panic!("quarantine cannot reset"))
+            .shut_down_with(
+                output,
+                bluetooth::ModemLpTimerStopped::for_host_test(),
+                |_, _, _| panic!("quarantine cannot reset")
+            )
             .err()
             .unwrap()
             .error(),
@@ -466,7 +489,11 @@ fn reset_returns_storage_outside_its_scoped_pool_and_epoch_brands() {
             };
             engine.stopped_for_host_test();
             let returned = engine
-                .shut_down_with(output, reset)
+                .shut_down_with(
+                    output,
+                    bluetooth::ModemLpTimerStopped::for_host_test(),
+                    reset,
+                )
                 .map(|pending| pending.reunite(timer))
                 .unwrap();
             (returned.clocked, returned.arena)
@@ -482,4 +509,65 @@ fn reset_returns_storage_outside_its_scoped_pool_and_epoch_brands() {
             assert!(engine.dtm().unwrap().acquire().is_some());
         })
     });
+}
+
+#[test]
+fn shutdown_pending_reaches_the_reset_owner_and_the_reunited_caller() {
+    let mut memory = bluetooth::registers::host::HostMemory::filled(0);
+    memory.timer[0x24 / 4] = 7;
+    memory.timer[0x2c / 4] = 3;
+    let expected = memory.owners().2.stop_for_shutdown();
+    assert_eq!((expected.state_0024(), expected.state_002c()), (7, 3));
+    let stopped = bluetooth::ModemLpTimerStopped { pending: expected };
+    let (mut engine, output, timer) = model();
+    engine.stopped_for_host_test();
+    let reset = engine
+        .shut_down_with(output, stopped, |task, output, stopped| {
+            Ok(bluetooth::shutdown::reset_for_host_test(
+                task,
+                output.registers,
+                stopped,
+            ))
+        })
+        .unwrap();
+    assert_eq!(reset.pending_observation(), expected);
+    assert_eq!(reset.reunite(timer).pending, expected);
+}
+
+#[test]
+fn refused_shutdown_retains_the_sampled_pending_observation() {
+    let mut memory = bluetooth::registers::host::HostMemory::filled(0);
+    memory.timer[0x24 / 4] = 7;
+    memory.timer[0x2c / 4] = 3;
+    let expected = memory.owners().2.stop_for_shutdown();
+    for stopped_engine in [false, true] {
+        let (mut engine, output, _timer) = model();
+        if stopped_engine {
+            engine.stopped_for_host_test();
+        }
+        let failure = engine
+            .shut_down_with(
+                output,
+                bluetooth::ModemLpTimerStopped { pending: expected },
+                |task, output, stopped| {
+                    Err(bluetooth::shutdown::failure_for_host_test(
+                        task,
+                        output.registers,
+                        bluetooth::BluetoothShutdownError::ControllerReset,
+                        stopped,
+                    ))
+                },
+            )
+            .err()
+            .unwrap();
+        assert_eq!(failure.pending_observation(), expected);
+        assert_eq!(
+            failure.error(),
+            if stopped_engine {
+                EngineShutdownError::Reset(bluetooth::BluetoothShutdownError::ControllerReset)
+            } else {
+                EngineShutdownError::NotStopped
+            }
+        );
+    }
 }

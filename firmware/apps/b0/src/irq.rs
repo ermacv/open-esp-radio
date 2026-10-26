@@ -55,6 +55,7 @@ pub type SchedulerBell =
 oer_espressif_staged_runtime::placed_static! {
     static STORAGE: StaticCell<BluetoothInterruptStorage<ChipGate>> = StaticCell::new(), in critical_data "b0";
     pub static FAULT: AtomicBool = AtomicBool::new(false), in critical_data "b0";
+    pub static TIMER_FAULT: oer_memory::OnceValue<oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerStoppedInterruptFault> = oer_memory::OnceValue::new(), in critical_data "b0";
     pub static SCHEDULER_SIGNAL: IrqSignal<X> = IrqSignal::new::<FromHandler<crate::BtToken>, crate::RadioToken>(), in critical_data "b0";
     pub static REPLY: IrqSignal<X> = IrqSignal::new::<FromHandler<crate::BtToken>, crate::RadioToken>(), in critical_data "b0";
     pub static TIMER_SIGNAL: IrqSignal<X> = IrqSignal::new::<FromHandler<crate::BtToken>, crate::RadioToken>(), in critical_data "b0";
@@ -104,6 +105,7 @@ pub fn bind<C: Controller>(
             reply: &REPLY,
             cells: &CELLS,
             fault: &FAULT,
+            stopped_timer_fault: &TIMER_FAULT,
         },
     );
     let bound = router.bind(token, part).map_err(|_| BindError::Route)?;

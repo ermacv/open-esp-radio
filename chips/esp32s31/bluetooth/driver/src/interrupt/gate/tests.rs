@@ -245,6 +245,7 @@ impl Harness {
                 reply: host::deferred_signal(),
                 cells,
                 fault,
+                stopped_timer_fault: Box::leak(Box::new(OnceValue::new())),
             },
         );
         let (gate, port) = ends.with_ring(Ring(rings.clone()));
@@ -347,8 +348,7 @@ fn opening_prepares_the_output_then_starts_the_timer_in_the_handler() {
     let mut harness = Harness::new();
     harness.open();
     assert_eq!(harness.rings.load(Ordering::Relaxed), 1);
-    // The doorbell first, then the gate's request, then this entry's
-    // sample of every source.
+    // No timer owner is held before Open; output preparation then starts it.
     assert_eq!(
         harness.ops(),
         [
@@ -358,7 +358,6 @@ fn opening_prepares_the_output_then_starts_the_timer_in_the_handler() {
             Op::ChannelRequest,
             Op::Primary,
             Op::Nrt,
-            Op::TimerStep,
         ]
     );
     assert!(harness.part.is_open());
@@ -432,7 +431,7 @@ fn the_timer_hands_its_software_work_to_the_task_and_comes_back() {
     harness.enter();
     let ops = harness.ops();
     assert!(ops.contains(&Op::ApplyPlan));
-    assert_eq!(ops.last(), Some(&Op::TimerStep));
+    assert_eq!(&ops[..3], &[Op::Acknowledge, Op::ApplyPlan, Op::TimerStep]);
     assert!(!harness.fault.load(Ordering::Acquire));
 }
 
@@ -499,7 +498,10 @@ fn the_timer_leaves_only_stopped_and_on_request() {
     assert!(harness.ops().contains(&Op::StopTimer));
     // Stopped, the handler still quiets the timer's status.
     harness.enter();
-    assert_eq!(harness.ops().last(), Some(&Op::StoppedTimerStep));
+    assert_eq!(
+        &harness.ops()[..2],
+        &[Op::Acknowledge, Op::StoppedTimerStep]
+    );
     assert!(matches!(
         harness.exchange(Request::TakeTimer),
         Ok(Reply::Timer(_))
@@ -521,6 +523,14 @@ fn stopped_timer_work_is_retained_as_a_fault() {
     harness.enter();
     assert!(harness.fault.load(Ordering::Acquire));
     assert!(harness.port.take_work().is_none());
+    assert_eq!(
+        harness.part.stopped_timer_fault(),
+        Some(
+            bluetooth::BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending(
+                Default::default()
+            )
+        )
+    );
     assert!(matches!(
         harness.exchange(Request::TakeTimer),
         Ok(Reply::Refused(GateError::TimerNotStopped))
@@ -567,6 +577,7 @@ fn a_foreign_executor_cannot_await_a_reply() {
             reply: host::foreign_signal(),
             cells,
             fault: Box::leak(Box::new(AtomicBool::new(false))),
+            stopped_timer_fault: Box::leak(Box::new(OnceValue::new())),
         },
     );
     let (mut gate, _port) = ends.with_ring(Ring(Arc::new(AtomicUsize::new(0))));
@@ -691,8 +702,74 @@ fn stopped_unknown_status_uses_the_existing_fault_path() {
     harness.enter();
     assert!(harness.fault.load(Ordering::Acquire));
     assert!(harness.part.retained.stopped.is_some());
+    assert_eq!(
+        harness.part.stopped_timer_fault(),
+        Some(bluetooth::BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus(u32::MAX))
+    );
+    harness.enter();
+    assert_eq!(
+        harness.part.stopped_timer_fault(),
+        Some(bluetooth::BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus(u32::MAX))
+    );
     assert!(matches!(
         harness.exchange(Request::TakeTimer),
         Ok(Reply::Refused(GateError::TimerNotStopped))
     ));
+}
+
+#[test]
+fn retirement_discards_a_same_entry_rollover_snapshot_only_after_stop() {
+    let mut harness = Harness::new();
+    harness.open();
+    harness
+        .clock
+        .advance(oer_time::Duration::from_micros(10))
+        .unwrap();
+    harness.script(|m| m.timer.push_back(Step::Rollover));
+    let mut cx = Context::from_waker(Waker::noop());
+    {
+        let mut retiring = pin!(stop_timer_for_retirement(&mut harness.gate, &harness.port));
+        assert!(retiring.as_mut().poll(&mut cx).is_pending());
+        harness.part.service(&harness.clock);
+        assert!(matches!(harness.part.timer, super::Timer::Stopped(_)));
+        assert_eq!(
+            harness.port.pending.len(),
+            1,
+            "late snapshot is still queued before retire resumes"
+        );
+        assert!(matches!(
+            retiring.as_mut().poll(&mut cx),
+            Poll::Ready(Ok(Compare))
+        ));
+    }
+    assert!(
+        harness.port.take_work().is_none(),
+        "retire drained the late rollover projection"
+    );
+    assert!(!harness.fault.load(Ordering::Acquire));
+}
+
+#[test]
+fn retirement_refuses_a_same_entry_dispatch_without_draining_its_work() {
+    let mut harness = Harness::new();
+    harness.open();
+    harness.ops();
+    harness.script(|m| m.timer.push_back(Step::Pending));
+    let mut cx = Context::from_waker(Waker::noop());
+    {
+        let mut retiring = pin!(stop_timer_for_retirement(&mut harness.gate, &harness.port));
+        assert!(retiring.as_mut().poll(&mut cx).is_pending());
+        harness.part.service(&harness.clock);
+        assert!(matches!(
+            retiring.as_mut().poll(&mut cx),
+            Poll::Ready(Err(GateError::TimerDispatchPending))
+        ));
+    }
+    assert!(matches!(harness.part.timer, super::Timer::AwaitingPlan(_)));
+    assert!(
+        harness.port.take_work().is_some(),
+        "dispatch remains available to its worker"
+    );
+    assert!(!harness.ops().contains(&Op::StopTimer));
+    assert!(!harness.fault.load(Ordering::Acquire));
 }

@@ -14,8 +14,27 @@ pub type Front = rp::SlotFrontend<'static, slot::Id, Backend<slot::Id>>;
 type Ready = RequestSlot<Option<rp::Joined<slot::Id>>, Result<Front, Fault>>;
 static READY_BELL: Doorbell = Doorbell::new();
 static READY: Ready = Ready::new(&READY_BELL, 1);
-pub struct FrontendChannel(pub Poster<Option<rp::Joined<slot::Id>>, Result<Front, Fault>>);
-pub fn frontend() -> FrontendChannel {
+pub type StopReports =
+    oer_memory::AffineSpscReceiver<'static, [u8; 2], 1, oer_memory::CompactSpscCursor>;
+pub type StopReporter =
+    oer_memory::AffineSpscSender<'static, [u8; 2], 1, oer_memory::CompactSpscCursor>;
+static STOP_REPORTS: StaticCell<
+    oer_memory::AffineSpscQueue<[u8; 2], 1, oer_memory::CompactSpscCursor>,
+> = StaticCell::new();
+
+pub fn stop_reports() -> Option<(StopReporter, StopReports)> {
+    Some(
+        STOP_REPORTS
+            .try_init(oer_memory::AffineSpscQueue::new())?
+            .split(),
+    )
+}
+
+pub struct FrontendChannel(
+    pub Poster<Option<rp::Joined<slot::Id>>, Result<Front, Fault>>,
+    pub StopReports,
+);
+pub fn frontend(reports: StopReports) -> FrontendChannel {
     let state = CLOCK_STORE.init(rpc::ClockState::new(
         CLOCKS.claim().expect("one P1 clock caller"),
         &irq::FAULT,
@@ -24,7 +43,7 @@ pub fn frontend() -> FrontendChannel {
         .install(state)
         .ok()
         .expect("one P1 clock bookkeeping owner");
-    FrontendChannel(READY.claim().expect("one HCI frontend"))
+    FrontendChannel(READY.claim().expect("one HCI frontend"), reports)
 }
 
 static COMMAND_BELL: Doorbell = Doorbell::new();

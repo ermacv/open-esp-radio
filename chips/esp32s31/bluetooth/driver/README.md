@@ -80,10 +80,11 @@ start: the controller bank's primary (124) and NRT (133) sources, the modem
 low-power timer (127) and the shared radio doorbell (`FROM_CPU` line 3), all
 on one line at level three on core 0. Its handler,
 `BluetoothInterrupts::service`, lowers the doorbell, applies the task's unarmed
-timer plan and takes one gate request, serves one request of the scheduler
-channel, samples and acknowledges the primary status and the NRT snapshots,
-then steps the timer; a clear status writes nothing. The part holds a gate
-for the bank and one for the timer, and touches a register owner only while
+timer plan, steps the timer, then takes one gate request, serves one request of
+the scheduler channel and samples and acknowledges the primary status and the
+NRT snapshots. A same-entry dispatch therefore refuses stop with
+`TimerDispatchPending` while retaining its work; a clear status writes nothing.
+The part holds a gate for the bank and one for the timer, and touches a register owner only while
 its gate holds it.
 
 `interrupt::BluetoothInterruptGate` is the task's end. The part holds the
@@ -109,14 +110,19 @@ The LP stop transaction writes the sourced all-ones disable image at `+0x14`
 and the vendor deinit command at `+0x04`, then fences and samples both
 pending bytes into the returned type. Whole-word zeros at `+0x24` and `+0x2c`
 and another fence complete the measured quiet state. Pending observations
-remain in the stop proof; Controller reset does not clear LP pending or stop
-its counter with LP clocks on. No exhaustive all-source or concurrent-arrival
+pass from the stop proof through `ControllerRetired::pending_observation`,
+`ControllerResetTimerPending::pending_observation` and
+`EngineResetTimerPending::pending_observation` to the reunited result and
+`ControllerLifecycle::into_reset`; Controller reset does not clear LP pending
+or stop its counter with LP clocks on. No exhaustive all-source or concurrent-arrival
 claim is made. SOURCE: `HW6_S31_LP_QUIET_20261026` and
 `HW6_S31_LP_RESET_RETENTION_20261026`, run `hw6-20261026-reset-02`
-(`oer-notes/research/hw-ble-lp-reset.md`). The stopped owner acknowledges rollover-only pending without dispatch
-or rearming. Software pending (`+0x24`) or an unknown nonzero status uses the
-gate's existing fault path. `AwaitingPlan` can stop only if neither its
-original work nor retained arrivals request dispatch; retiring rollover-only
+(`oer-notes/research/hw-ble-lp-reset.md`). The stopped owner acknowledges
+rollover-only pending without dispatch or rearming. Software pending (`+0x24`) or an unknown nonzero status uses the
+gate's existing fault path; its first typed pending/status fault remains
+available through `BluetoothInterrupts::stopped_timer_fault` and the
+composition's `stopped_timer_fault` observation cell. `AwaitingPlan` can stop
+only if neither its original work nor retained arrivals request dispatch; retiring rollover-only
 work discards only the ending epoch's time projection. Retirement consumes
 its late queued snapshot before another epoch can open.
 

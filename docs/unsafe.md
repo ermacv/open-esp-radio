@@ -633,8 +633,13 @@ proof (SOURCE: HW6_S31_LP_QUIET_20261026 and
 HW6_S31_LP_RESET_RETENTION_20261026, hw6-20261026-reset-02). A stopped typestate
 acknowledges rollover without dispatch or rearming.
 Outstanding dispatch refuses stop, while rollover-only planning can retire
-its ending epoch projection. Invalid stopped state uses the gate's existing
-fault path.
+its ending epoch projection. The handler steps the timer before taking a
+stop request, so a dispatch in that entry is retained and refuses stop.
+Pending observations cross retirement, Controller reset and reunion into the
+returned result. B0 sends both bytes through its H4 shutdown event; the physical
+B0 procedure logs them and includes them in its run report. Invalid stopped
+state uses the gate's existing fault flag and retains the first typed fault
+observation with its pending bytes or raw status.
 
 ## Active-owner lifetime
 

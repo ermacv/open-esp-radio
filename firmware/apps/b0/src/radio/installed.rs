@@ -1,5 +1,7 @@
 use super::*;
-pub(super) type Installed<'a, 'p: 'a, 'e: 'a> = impl core::future::Future<Output = ()> + 'a;
+pub(super) type Installed<'a, 'p: 'a, 'e: 'a> = impl core::future::Future<
+        Output = oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
+    > + 'a;
 #[define_opaque(Installed)]
 pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
     boot: &'a mut Boot,
@@ -163,7 +165,7 @@ pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
             Ok(owners) => owners,
             Err(mut attachment) => fail(&mut attachment, &mut boot.reply).await,
         };
-        let (arena, gate) = match controller.into_reset() {
+        let (arena, gate, pending) = match controller.into_reset() {
             Ok(owners) => owners,
             Err(mut controller) => fail(&mut controller, &mut boot.reply).await,
         };
@@ -173,5 +175,6 @@ pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
         boot.coex = Some(coex);
         boot.arena = Some(arena);
         boot.gate = Some(gate);
+        pending
     }
 }

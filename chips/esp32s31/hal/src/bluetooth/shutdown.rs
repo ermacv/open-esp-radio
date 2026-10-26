@@ -65,9 +65,14 @@ pub struct BluetoothShutdownFailure {
     error: BluetoothShutdownError,
     _task: TaskOwner,
     _output: BluetoothInterruptSetup,
+    stopped: ModemLpTimerStopped,
 }
 
 impl BluetoothShutdownFailure {
+    /// Pending sampled before LP quieting, retained even if Controller reset failed.
+    pub const fn pending_observation(&self) -> super::BluetoothModemLpTimerPendingObservation {
+        self.stopped.pending_observation()
+    }
     pub const fn error(&self) -> BluetoothShutdownError {
         self.error
     }
@@ -144,15 +149,24 @@ impl<B: PlatformClockBackend, T> Control for Hardware<'_, B, T> {
 pub struct BluetoothControllerResetTimerPending {
     task: BluetoothTaskRegisters,
     output: BluetoothInterruptSetup,
+    stopped: ModemLpTimerStopped,
 }
 
 impl BluetoothControllerResetTimerPending {
+    /// Pending sampled before LP quieting, carried through Controller reset.
+    pub const fn pending_observation(&self) -> super::BluetoothModemLpTimerPendingObservation {
+        self.stopped.pending_observation()
+    }
     /// Reunite the timer its handler gave up after the reset and return to
     /// the clocked owner with the proof of the reset. Performs no MMIO.
     pub fn reunite(
         self,
         timer: ModemLpTimerStoppedOwner,
-    ) -> (ClockedOwner, BluetoothControllerReset) {
+    ) -> (
+        ClockedOwner,
+        BluetoothControllerReset,
+        super::BluetoothModemLpTimerPendingObservation,
+    ) {
         (
             ClockedOwner {
                 partition: Partition {
@@ -162,12 +176,13 @@ impl BluetoothControllerResetTimerPending {
                 },
             },
             BluetoothControllerReset { _private: () },
+            self.stopped.pending_observation(),
         )
     }
 }
 
-/// Reset the Controller, whose timer's handler disabled its compare, and
-/// await the timer.
+/// Reset the Controller after its handler explicitly quieted the LP timer;
+/// retain the sampled pending observation while awaiting its register owner.
 ///
 /// All memory stays retained until the reunion. Failure has no hardware
 /// escape.
@@ -175,7 +190,7 @@ pub(super) fn shut_down<B: PlatformClockBackend, T>(
     mut task: TaskOwner,
     radio: &mut RadioDomain<B, T>,
     output: BluetoothInterruptSetup,
-    _compare: ModemLpTimerStopped,
+    stopped: ModemLpTimerStopped,
 ) -> Result<BluetoothControllerResetTimerPending, BluetoothShutdownFailure> {
     if let Err(error) = prepare(&mut Hardware {
         task: &mut task,
@@ -185,6 +200,7 @@ pub(super) fn shut_down<B: PlatformClockBackend, T>(
             error,
             _task: task,
             _output: output,
+            stopped,
         });
     }
     let TaskOwner {
@@ -197,6 +213,7 @@ pub(super) fn shut_down<B: PlatformClockBackend, T>(
     Ok(BluetoothControllerResetTimerPending {
         task: registers,
         output,
+        stopped,
     })
 }
 
@@ -208,11 +225,13 @@ pub(super) fn failure_for_host_test(
     task: TaskOwner,
     output: BluetoothInterruptSetup,
     error: BluetoothShutdownError,
+    stopped: ModemLpTimerStopped,
 ) -> BluetoothShutdownFailure {
     BluetoothShutdownFailure {
         error,
         _task: task,
         _output: output,
+        stopped,
     }
 }
 
@@ -220,9 +239,11 @@ pub(super) fn failure_for_host_test(
 pub(super) fn reset_for_host_test(
     task: TaskOwner,
     output: BluetoothInterruptSetup,
+    stopped: ModemLpTimerStopped,
 ) -> BluetoothControllerResetTimerPending {
     BluetoothControllerResetTimerPending {
         task: task.registers,
         output,
+        stopped,
     }
 }
