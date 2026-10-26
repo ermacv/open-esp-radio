@@ -136,7 +136,7 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S3
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
 
 [review.entity."MODEM_RST_CONF.RST_BLE_TIMER"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_ESP_PACS_SVD", "HW6_S31_LP_RESET_RETENTION_20261026"]
 
 [review.entity."CLK_CONF1"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H", "S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
@@ -720,7 +720,7 @@ write-values-only = true
 name = "RST_BLE_TIMER"
 bits = "30"
 class = "plain"
-description = "Bluetooth low-power timer reset."
+description = "Vendor-named Bluetooth low-power timer reset. In the tested initialized MODEM_PWR LP runtime, assert/release alone or within the production controller-domain reset did not clear the two pending bytes, suppress their enabled source-127 delivery or stop the counter with LP clocks on. Clock-off read images are unqualified; restoring LP clocks recovered pending delivery and counter progression without START or enable commands. This field is not a MODEM_PWR LP all-off operation. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026."
 values = [{ name = "RELEASED", value = 0x0, description = "The selected MODEM_SYSCON reset is released.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }, { name = "ASSERTED", value = 0x1, description = "The selected MODEM_SYSCON reset is asserted.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }]
 write-values-only = true
 

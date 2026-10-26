@@ -175,6 +175,22 @@ struct Probe {
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
     Probe {
+        id: 32,
+        run: ble::timer_reset_on,
+    },
+    Probe {
+        id: 33,
+        run: ble::timer_reset_off,
+    },
+    Probe {
+        id: 34,
+        run: ble::controller_reset_on,
+    },
+    Probe {
+        id: 35,
+        run: ble::controller_reset_off,
+    },
+    Probe {
         id: 20,
         run: ble::inherited,
     },
