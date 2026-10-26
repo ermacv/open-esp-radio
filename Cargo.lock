@@ -2587,7 +2587,6 @@ name = "oer-firmware-probes-esp32s31-rx-chain"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "embassy-futures",
  "embedded-io-async",
  "heapless",
  "oer-diagnostics",
@@ -2595,7 +2594,6 @@ dependencies = [
  "oer-esp32s31-board",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-driver",
- "oer-esp32s31-ieee80211-mac",
  "oer-esp32s31-layout",
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",

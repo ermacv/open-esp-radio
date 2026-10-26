@@ -5,7 +5,7 @@ use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::{
     ieee80211::{
-        dma::{descriptor::RxDescriptor, rx_dma::RxDma, rx_storage::RxDmaStorage},
+        dma::{descriptor::RxDescriptor, rx_storage::RxDmaStorage},
         init::{
             MAC_COLD_HANDSHAKE_DEADLINE, MacDelayEntropy, MacSlowClockCalibration,
             MacSlowClockCalibrationSource,
@@ -39,6 +39,8 @@ use oer_radio_regulatory::{Country, RegulatoryDomain};
 use oer_time::{Clock, Duration, Timer};
 use static_cell::StaticCell;
 
+use oer_esp32s31_hal::ieee80211::dma::rx_ring::RX_BUFFER_SENTINEL;
+
 const COUNT: usize = 96;
 const BUFFER: usize = 256;
 const NODES: usize = COUNT + 1;
@@ -60,7 +62,7 @@ type Actor = RadioSystem<
     EmbassyClock,
 >;
 static ACTOR: StaticCell<Actor> = StaticCell::new();
-oer_esp32s31_hal::dma_static! { static RX: Storage = Storage::new(), in "rx_chain_probe"; }
+oer_esp32s31_hal::dma_static! { static RX: Storage = zeroed in ".dma.bss.rx_chain_probe"; }
 #[derive(bytemuck::Zeroable)]
 struct Trace {
     previous: [[u32; 5]; NODES],
@@ -75,7 +77,11 @@ struct Trace {
 }
 static TRACE: ZeroedStatic<Trace> = ZeroedStatic::new();
 
-oer_espressif_staged_runtime::interrupt_table! {
+// SAFETY: the production runtime script maps .hot.text.* to executable SRAM;
+// each generated wrapper retains the interrupt-table ABI and owned part.
+oer_interrupt_table::interrupt_table! {
+    lines: oer_espressif_staged_runtime::interrupts::LINES,
+    handler_attributes: [#[unsafe(link_section = ".hot.text.rx_chain_vectors")]];
     contexts { app: 1; radio_exec: 2; radio_irq: 3; }
     wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, context app, hart 0, Hardware;
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_exec, hart 0, Executor;
@@ -456,14 +462,11 @@ async fn run(
             )
             .await;
     }
-    let halted = ring
-        .try_stop(access.rx_dma())
-        .map_err(|_| "walker-stop")?
-        .into_halted();
+    let halted = ring.try_stop(access.rx_dma()).map_err(|_| "walker-stop")?;
     trace.scan(storage, &mut access, true)?;
     let snapshot = access.receive_dma_snapshot();
     let mut line = heapless::String::<768>::new();
-    write!(&mut line, "RXCHAIN end terminals={} records={} scans={} max_scan={} max_gap={} base={:08x} last={:x} next={:x}\n",
+    writeln!(&mut line, "RXCHAIN end terminals={} records={} scans={} max_scan={} max_gap={} base={:08x} last={:x} next={:x}",
         terminals, trace.used, trace.scans, trace.max_scan_cycles, trace.max_gap_cycles,
         snapshot.descriptor_base, snapshot.last_descriptor_low, snapshot.next_descriptor_low).map_err(|_| "format")?;
     usb::text(console, line.as_bytes()).await;
@@ -479,7 +482,7 @@ async fn run(
     for index in 0..NODES {
         let descriptor = node(storage, index).ok_or("node")?;
         let expected = *trace.expected.get(index).ok_or("expected")?;
-        if read_word(storage, descriptor, expected, 0)? == 0xdead_beef {
+        if read_word(storage, descriptor, expected, 0)? == RX_BUFFER_SENTINEL {
             continue;
         }
         line.clear();

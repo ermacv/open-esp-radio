@@ -6,7 +6,6 @@ use oer_esp32s31_hal::usb_serial_jtag::{
     ConsoleEndpoint, ConsoleInterrupt, RetireError, UsbPads, retire_early_writer,
 };
 use oer_espressif_executor::Executor;
-use oer_espressif_staged_runtime::panic::PanicRecord;
 use oer_espressif_usb_serial_jtag::{Endpoint, Interrupt};
 use oer_interrupt_table::{Controller, Router};
 
@@ -23,20 +22,6 @@ oer_espressif_staged_runtime::placed_static! {
 /// console's task, calling no waker.
 pub(crate) fn interrupt(part: &mut ConsoleInterrupt) {
     INTERRUPT.service(part);
-}
-
-/// Writes the previous boot's panic before the console opens.
-pub(crate) fn early_previous_panic(record: &PanicRecord) {
-    let _ = oer_espressif_staged_runtime::diagnostics::emit_previous_panic(
-        |bytes| {
-            if oer_esp32s31_hal::usb_serial_jtag::early_text(bytes) {
-                Ok(())
-            } else {
-                Err(())
-            }
-        },
-        record,
-    );
 }
 
 /// Writes `bytes` as they are on the open console.

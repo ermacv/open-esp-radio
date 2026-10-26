@@ -39,3 +39,12 @@ contain received air data and belong in local evidence, never git.
 The final state is dumped without rearm, then the production release closes RF.
 Sampling gaps and scan bounds are reported. No absence or universal ordering
 claim follows from an event that the sampling loop did not see.
+
+The current s31-b launch is blocked before probe entry by the standard
+bootstrap's `psram-density-mismatch` (run `hw4-20261026-rx-chain-01`, lease
+781). No RX data has been collected. The stand refuses power reset for this
+board; run `hw4-20261026-rx-chain-02`, lease 783, performed no power switch.
+The actual density and cold-boot behavior remain unknown. See the external
+research report `/home/ermacv/dev/oer-notes/research/hw-rx-chain-descriptors.md`.
+The staged product-style stack check also reports an unresolved P2 stack path;
+this probe remains diagnostic and unqualified.
