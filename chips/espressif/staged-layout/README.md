@@ -24,6 +24,26 @@ runtime PSRAM window through its header failure path.
 | `zeroed` | The input sections the runtime linker script places in regions the boot zeroes |
 | `build` (feature `build`) | `configure_runtime` and `configure_bootstrap`, which link a binary with the shared scripts under [`linker`](linker) and the chip's ROM script, define every layout value as a `--defsym` symbol and keep the link's relocations (`--emit-relocs`) for the stack analysis |
 
+The bootstrap links all code and ordinary constants into internal SRAM,
+including out-of-line callees and tables emitted by other crates. A section
+attribute on an entry is not transitive across calls. Explicit payload and
+tuning-reference input sections alone stay in flash. Every staged image build
+audits the final bootstrap's executable and ordinary constant sections before
+encoding it; this check also rejects a cached reused ELF during a diagnostic
+run. The report is `bootstrap-placement.txt`. Every allocated flash section
+must have an exact allowlisted metadata/payload name and non-writable,
+non-executable flags; an ordinary or orphan constant is rejected regardless
+of its name. The [image checks](../../../tools/image/checks/README.md) own
+that allowlist.
+
+The S31 loader requires exactly two mapped ESP image records in its shared
+D/I window (SOURCE in the chip's `[boot-chain] mapped-segments`). The script
+separates the real payload and tuning-reference spans across an MMU-page
+boundary; neither contains executable bootstrap code. The staged encoder
+checks the resulting image records after adjacent ELF sections merge and
+emits `bootstrap-loader.txt`. This is a loader-format contract, not a
+requirement for one code mapping and one data mapping.
+
 Both staged links omit `.debug_aranges`: the pinned LLVM's fat-LTO emitter
 can encode backward spans when CUs share an input section. Address lookup
 uses the CU ranges and line tables retained in the ELF. The shared

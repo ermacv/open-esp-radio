@@ -6,14 +6,9 @@ SECTIONS {
       KEEP(*(.flash.appdesc.*));
   } > RODATA
 
-  .rodata_merge : ALIGN(4) {
-    . = ALIGN(ALIGNOF(.rodata));
-  } > RODATA
-
-  .rodata : ALIGN(4)
+  .flash.rodata : ALIGN(4)
   {
     . = ALIGN(4);
-    _rodata_start = ABSOLUTE(.);
 
     /* The code-location benchmark emits one canonical instruction stream.
        It executes in place here and is copied byte-for-byte to IRAM and
@@ -30,6 +25,16 @@ SECTIONS {
     KEEP(*(.psram.runtime.payload));
     __psram_runtime_payload_flash_end = ABSOLUTE(.);
 
+  } > RODATA
+
+  /* SOURCE: ESP-IDF e9da155a72624fce88b8ef2cf3cde9aee2e6067f,
+     bootloader_support/src/bootloader_utility.c:802-851. The S31 loader
+     requires two mapped ESP segments in the shared D/I window, without
+     requiring executable flash. Keep the real tuning source disjoint from
+     the stage-two payload; the packer merges adjacent ELF sections.
+     The encoded-image audit checks the loader contract in chip facts. */
+  .flash.tuning.reference ALIGN(MMU_PAGE_BYTES) + IMAGE_SEGMENT_HEADER_BYTES :
+  {
     /* Flash::tune_120mhz consumes cold XIP pages. Runtime copying happens
        first, so keep a disjoint page-aligned reference span for the sweep.
        A chip whose bootstrap does not tune Flash keeps it empty. */
@@ -38,17 +43,6 @@ SECTIONS {
     KEEP(*(.flash.tuning.reference));
     __flash_tuning_reference_end = ABSOLUTE(.);
 
-    *(.rodata .rodata.*)
-    *(.srodata .srodata.*)
-
-    _rodata_end = ABSOLUTE(.);
-  } > RODATA
-
-  .rodata.wifi : ALIGN(4)
-  {
-    . = ALIGN(4);
-    *(.rodata_wlog_*.*)
-    . = ALIGN(4);
   } > RODATA
 }
 

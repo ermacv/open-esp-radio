@@ -7,6 +7,9 @@ SECTIONS {
     _trap_section_origin = ABSOLUTE(.);
     KEEP(*(.trap .trap.*));
     *(.rwtext .rwtext.* .rwtext.literal .rwtext.literal.*);
+    /* Cache suspension and flash tuning call across crate boundaries.
+       A caller's section attribute does not place its out-of-line callees. */
+    *(.text .text.* .literal .literal.*);
     . = ALIGN(4);
     _rwtext_end = ABSOLUTE(.);
   } > SRAM
@@ -27,6 +30,13 @@ SECTIONS {
     _data_end = ABSOLUTE(.);
   } > SRAM
   _dram_data_start = _data_start;
+
+  /* Constants, vtables and compiler-generated tables may be read while
+     instruction fetch is suspended, including from a failure path. */
+  .rodata : ALIGN(4) {
+    *(.rodata .rodata.* .srodata .srodata.* .rodata_wlog_*.*);
+    . = ALIGN(4);
+  } > SRAM
 
   .data.wifi : ALIGN(4) {
     *(.data_wlog_*.*);
@@ -66,13 +76,6 @@ SECTIONS {
 
 INCLUDE "bootstrap/flash-sections.x"
 SECTIONS {
-  .text ALIGN(MMU_PAGE_BYTES) + IMAGE_SEGMENT_HEADER_BYTES : {
-    __flash_text_start = ABSOLUTE(.);
-    *(.text .text.* .literal .literal.*);
-    . = ALIGN(4);
-    __flash_text_end = ABSOLUTE(.);
-  } > ROTEXT
-
   .eh_frame : ALIGN(4) { KEEP(*(.eh_frame .eh_frame.*)); } > RODATA
   .eh_frame_hdr : ALIGN(4) { *(.eh_frame_hdr); } > RODATA
   .metadata : { *(.esp.metadata .esp.metadata.*); } > RODATA

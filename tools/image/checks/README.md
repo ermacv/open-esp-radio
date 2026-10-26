@@ -3,7 +3,29 @@
 `oer-image-checks` owns the image pipeline's frame, interrupt, stack, placement and
 post-link input checks. The chip profile and stack policy supply their
 contracts; `cargo fw build`, including analysis builds, requires the
-`frames` and `interrupts` checks to pass.
+`frames`, `interrupts` and `panics` checks to pass.
+
+Every staged build also audits the final bootstrap ELF before encoding it.
+All executable sections and ordinary constants must lie wholly in the chip's
+internal SRAM. Every allocated flash section must be non-writable,
+non-executable and exactly one of `.flash.appdesc`, `.flash.rodata`,
+`.flash.tuning.reference`, `.eh_frame`, `.eh_frame_hdr` or `.metadata`. An unrecognized name or an
+allowlisted name with another suffix fails; ELF flags identify ordinary
+constants without relying on their section names. Explicit flash payload
+and tuning-reference sections remain in flash. This cache-off placement prerequisite also gates diagnostic
+`run` and `probe` builds and reused ELF files; `bootstrap-placement.txt`
+records its result. The shared bootstrap linker script places out-of-line
+callees and their constants in SRAM without relying on caller attributes
+or cross-crate inlining.
+
+The S31 loader's shared D/I address window requires two mapped ESP image
+records, not an executable IROM section. Payload and tuning reference occupy
+separate read-only flash spans; `.flash.tuning.reference` has the same strict
+flags as every other allowlisted section. After encoding, the staged builder
+checks the actual mapped record count against `[boot-chain] mapped-segments`
+and records `bootstrap-loader.txt`. ELF section counts cannot establish this
+contract because the packer merges adjacent sections. The source is pinned
+with the chip's loader contract.
 
 The `frames` check bounds every compiler frame record in both the runtime
 and bootstrap ELF by the stack policy's `max_move_bytes` (currently 4096).

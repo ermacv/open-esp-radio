@@ -86,6 +86,12 @@ psram = { executable = true, cached = true, dma = false, retained = false, writa
 
 # What the pinned second-stage bootloader keeps for itself.
 [boot-chain]
+# SOURCE: ESP-IDF e9da155a72624fce88b8ef2cf3cde9aee2e6067f,
+# components/bootloader_support/src/bootloader_utility.c:802-851,
+# unpack_load_app under SOC_MMU_DI_VADDR_SHARED, asserts rom_index == 2.
+# This is the bundled espflash 4.5.0 S31 loader (resources/README.md).
+# DROM/IROM share a window: both records may contain read-only data.
+mapped-segments = 2
 # The end of ESP-IDF's application memory map, `SRAM_START..SRAM_SEG_END`:
 # the application's SRAM ends here. The internal SRAM above it holds the
 # ROM's boot stacks and data (rom-rev0.toml).

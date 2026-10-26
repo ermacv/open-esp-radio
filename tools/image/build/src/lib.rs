@@ -113,7 +113,14 @@ pub fn build(spec: &ImageSpec) -> Result<crate::bundle::ImageBundle> {
         instrumentation::Instrumentation::declared(&spec.root, &spec.application.package)?;
     let task_stack_proven = task_stack::declared_proven(&spec.root, &spec.application.package)?;
     let panics = panic_budget::declared(&spec.root, &spec.application.package)?;
-    staged::build(spec, &profile, &instrumentation, task_stack_proven, &panics)
+    staged::build(
+        spec,
+        &profile,
+        &instrumentation,
+        task_stack_proven,
+        &panics,
+        staged::cargo,
+    )
 }
 
 /// A runtime check that produces no image for the link-time gates.

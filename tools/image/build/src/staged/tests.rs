@@ -216,3 +216,250 @@ fn the_application_and_the_bootloader_are_encoded_in_the_flash_maps_modes() {
         assert_eq!(application.partition_table, rom.partition_table);
     }
 }
+
+/// A compiler result for the real staged orchestrator, with no subprocess or
+/// global compiler override. The mandatory audit must reject its flash code
+/// before consulting any optional gate, encoding, or publishing the bundle.
+#[test]
+fn build_refuses_a_cached_bootstrap_even_with_no_or_reported_gates() {
+    use crate::sizes::{Provenance, Summary};
+    use std::collections::BTreeMap;
+
+    for checks in [
+        None,
+        Some(crate::Gates {
+            enforced: crate::Enforced::Reported,
+            ..crate::Gates::all(oer_image_checks::interrupts::Required::Diagnostic)
+        }),
+    ] {
+        let repository = repository();
+        let root = repository.path();
+        let profile = oer_chip_profile::Profile::load(root, "esp32s31").unwrap();
+        let spec = ImageSpec {
+            purpose: crate::bundle::Purpose::Analysis,
+            root: root.into(),
+            chip: profile.facts.id.clone(),
+            application: crate::Application {
+                package: "fixture".into(),
+                binary: "fixture".into(),
+                features: vec![],
+                default_features: true,
+            },
+            stack_policy: profile.stack_policy(),
+            layout_seed: None,
+            runtime_environment: vec![],
+            output: root.join("bundle"),
+            checks,
+        };
+        let mut cached = elf();
+        // The existing RV32 fixture's ET_EXEC header and `.text` address.
+        cached[16..18].copy_from_slice(&2_u16.to_le_bytes());
+        let address = profile.facts.memory.as_ref().unwrap().flash_xip.origin;
+        cached[24..28].copy_from_slice(&address.to_le_bytes());
+        let section_headers = u32::from_le_bytes(cached[32..36].try_into().unwrap()) as usize;
+        let text_address = section_headers + 40 + 12;
+        cached[text_address..text_address + 4].copy_from_slice(&address.to_le_bytes());
+        let error = build(
+            &spec,
+            &profile,
+            &Instrumentation::default(),
+            false,
+            &oer_image_checks::panics::Contract::default(),
+            |input, _bundle| {
+                let bootstrap_elf = input.output.join(files::BOOTSTRAP_ELF);
+                std::fs::write(&bootstrap_elf, &cached)?;
+                Ok(Compiled {
+                    bootstrap_elf,
+                    runtime_elf: input.output.join(files::RUNTIME_ELF),
+                    values: crate::large_values::Report::new(input.policy.max_move_bytes),
+                    sizes: Summary {
+                        schema: crate::sizes::SCHEMA,
+                        type_min_bytes: 0,
+                        provenance: Provenance {
+                            commit: String::new(),
+                            dirty: false,
+                            rustc: String::new(),
+                            chip: spec.chip.clone(),
+                            package: "fixture".into(),
+                            binary: "fixture".into(),
+                            target: profile.facts.rust_target.clone(),
+                            profile: crate::FIRMWARE_PROFILE.into(),
+                            profile_settings: String::new(),
+                            features: vec![],
+                            default_features: true,
+                            purpose: spec.purpose,
+                            layout_seed: None,
+                            configuration_sha256: BTreeMap::new(),
+                            stack_policy: String::new(),
+                            stack_policy_sources: BTreeMap::new(),
+                            flags: BTreeMap::new(),
+                        },
+                        elfs: BTreeMap::new(),
+                        image_files: BTreeMap::new(),
+                        embedded_payloads: vec![],
+                    },
+                })
+            },
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            error.contains("bootstrap cache-off placement failed"),
+            "{error}"
+        );
+        assert!(error.contains(".text"), "{error}");
+        assert!(
+            !spec.output.exists(),
+            "an invalid bundle must not be published"
+        );
+        let staging = crate::bundle::staging_directory(&spec.output).unwrap();
+        assert!(
+            !staging.join(files::APPLICATION).exists(),
+            "audit precedes encoding"
+        );
+        assert!(!staging.join(crate::bundle::MANIFEST).exists());
+    }
+}
+
+/// Link real read-only payload/reference inputs through the shared script,
+/// or an old contiguous-data layout. The real espflash encoder then decides
+/// how many mapped ESP records the loader sees; ELF section count is not it.
+fn loader_fixture(directory: &Path, profile: &oer_chip_profile::Profile, split: bool) -> Vec<u8> {
+    use object::write::{Object, Symbol, SymbolSection};
+    use object::{
+        Architecture, BinaryFormat, Endianness, SectionKind, SymbolFlags, SymbolKind, SymbolScope,
+    };
+    let mut object = Object::new(BinaryFormat::Elf, Architecture::Riscv32, Endianness::Little);
+    let code = object.add_section(vec![], b".text.entry".to_vec(), SectionKind::Text);
+    object.append_section_data(code, &0x00008067_u32.to_le_bytes(), 4);
+    object.add_symbol(Symbol {
+        name: b"_start".to_vec(),
+        value: 0,
+        size: 4,
+        kind: SymbolKind::Text,
+        scope: SymbolScope::Linkage,
+        weak: false,
+        section: SymbolSection::Section(code),
+        flags: SymbolFlags::None,
+    });
+    let mut descriptor = vec![0; 256];
+    descriptor[..4].copy_from_slice(&0xabcd5432_u32.to_le_bytes());
+    descriptor[180] = 16;
+    let staged = profile.facts.staged.as_ref().unwrap();
+    for (name, bytes) in [
+        (".flash.appdesc", descriptor),
+        (".psram.runtime.payload", vec![0x31; 64]),
+        (
+            ".flash.tuning.reference",
+            vec![0x53; staged.flash_tuning_reference_bytes as usize],
+        ),
+    ] {
+        let section =
+            object.add_section(vec![], name.as_bytes().to_vec(), SectionKind::ReadOnlyData);
+        object.append_section_data(section, &bytes, 4);
+    }
+    let input = directory.join("loader.o");
+    std::fs::write(&input, object.write().unwrap()).unwrap();
+    let memory = profile.facts.memory.as_ref().unwrap();
+    let chain = profile.facts.boot_chain.as_ref().unwrap();
+    let script = directory.join("loader.x");
+    let body = if split {
+        "INCLUDE bootstrap/sections.x"
+    } else {
+        "SECTIONS { .rwtext : { *(.text*) } > SRAM
+ .flash.appdesc : { *(.flash.appdesc) } > RODATA
+ .flash.rodata : { *(.psram.runtime.payload) *(.flash.tuning.reference) } > RODATA }"
+    };
+    std::fs::write(&script, format!(
+        "OUTPUT_ARCH(riscv)\nENTRY(_start)\nMEMORY {{ SRAM (rwx) : ORIGIN = {}, LENGTH = {}\n RODATA (r) : ORIGIN = {}, LENGTH = {}\n PSRAM (rw) : ORIGIN = {}, LENGTH = {}\n RETAINED (rw) : ORIGIN = {}, LENGTH = {} }}\n{body}\n",
+        memory.sram.origin, memory.sram.length,
+        memory.flash_xip.origin + staged.image_segment_header_bytes, memory.flash_xip.length - staged.image_segment_header_bytes,
+        memory.psram.unwrap().origin, memory.psram.unwrap().length,
+        memory.retained.unwrap().origin, memory.retained.unwrap().length,
+    )).unwrap();
+    let output = directory.join("loader.elf");
+    let scripts =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/espressif/staged-layout/linker");
+    let result = std::process::Command::new(oer_os_toolchain::lld().unwrap())
+        .arg("-L")
+        .arg(scripts)
+        .arg("-T")
+        .arg(script)
+        .arg(format!("--defsym=MMU_PAGE_BYTES={}", staged.mmu_page_bytes))
+        .arg(format!(
+            "--defsym=IMAGE_SEGMENT_HEADER_BYTES={}",
+            staged.image_segment_header_bytes
+        ))
+        .arg(format!(
+            "--defsym=FLASH_TUNING_REFERENCE_BYTES={}",
+            staged.flash_tuning_reference_bytes
+        ))
+        .arg(format!(
+            "--defsym=RETAINED_ORIGIN={}",
+            memory.retained.unwrap().origin
+        ))
+        .arg(format!(
+            "--defsym=SECOND_STAGE_LOADER_START={}",
+            chain.second_stage_loader_start
+        ))
+        .arg(input)
+        .arg("-o")
+        .arg(&output)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    oer_image_checks::placement::bootstrap(memory.sram, memory.flash_xip, &output).unwrap();
+    std::fs::read(output).unwrap()
+}
+
+#[test]
+fn the_shared_script_encodes_two_read_only_mappings_and_the_loader_rejects_one() {
+    let repository = repository();
+    let root = repository.path();
+    let profile = oer_chip_profile::Profile::load(root, "esp32s31").unwrap();
+    for split in [false, true] {
+        let directory = tempfile::tempdir().unwrap();
+        let bytes = loader_fixture(directory.path(), &profile, split);
+        let bundle = ImageBundle::new(
+            directory.path(),
+            &profile,
+            profile.facts.flash.clone().unwrap(),
+        );
+        let result = encode_application(root, &profile, &bytes, &bundle);
+        if split {
+            let (_, report) = result.unwrap();
+            assert!(report.unwrap().contains("mapped-segments=2 expected=2"));
+        } else {
+            let error = result.unwrap_err().to_string();
+            assert!(
+                error.contains("requires 2 mapped ESP segments, found 1"),
+                "{error}"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_loader_count_gate_rejects_one_and_three_mappings_without_executable_code() {
+    let profile = oer_chip_profile::Profile::tracked("esp32s31").unwrap();
+    let flash = profile.facts.memory.as_ref().unwrap().flash_xip;
+    assert!(audit_loader_mappings(&profile, &[]).is_err());
+    assert!(audit_loader_mappings(&profile, &[0; 24]).is_err());
+    for count in [1_u8, 2, 3] {
+        let mut image = vec![0; 24];
+        image[0] = 0xe9;
+        image[1] = count;
+        for index in 0..count {
+            image.extend((flash.origin + u32::from(index) * 16).to_le_bytes());
+            image.extend(4_u32.to_le_bytes());
+            image.extend([0; 4]);
+        }
+        assert_eq!(audit_loader_mappings(&profile, &image).is_ok(), count == 2);
+        image.pop();
+        assert!(audit_loader_mappings(&profile, &image).is_err());
+    }
+}

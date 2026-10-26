@@ -206,6 +206,11 @@ moves; ownership, orchestration and wiring are rebuilt.
   access. The bootstrap owns reset, its linker sections and application
   descriptor, and runs the bounded `oer-espressif-boot` sequences over the
   HAL's register traits.
+  All bootstrap code and ordinary constants stay in internal SRAM: cache
+  suspension and flash tuning may reach out-of-line callees across crates.
+  Every staged image build audits the complete linked bootstrap for this
+  placement before encoding or flashing, including diagnostic runs. Only
+  explicitly tagged image payloads and tuning references remain in flash.
   The PSRAM controller/MMU owner is consumed by its HAL bring-up method,
   which lends the mapped region once as a static mutable byte slice. Staging
   validates, copies and checks the image through that slice and retains its

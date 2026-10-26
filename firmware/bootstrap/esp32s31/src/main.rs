@@ -45,9 +45,7 @@ static FLASH_TUNING_SCRATCH: ConstStaticCell<[u32; flash::TUNING_SCRATCH_WORDS]>
     ConstStaticCell::new([0; flash::TUNING_SCRATCH_WORDS]);
 
 // SAFETY: the reset entry calls this symbol after stack/BSS initialization.
-// Its code must remain in SRAM while the flash timing changes.
 #[unsafe(no_mangle)]
-#[unsafe(link_section = ".rwtext.bootstrap_main")]
 extern "C" fn bootstrap_main() -> ! {
     // The root claims the chip once and installs the console's parts for the
     // early writer, so it comes before any output; the boot-hart check of

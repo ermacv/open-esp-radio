@@ -12,7 +12,7 @@ tools load.
 | --- | --- | --- |
 | ISA | `chips/espressif/platform/isa/<isa>.toml` | the ISA of the harts and its bare-metal Rust target |
 | family | `chips/espressif/platform/family.toml` | the boot flow, the CLIC's lines and levels, the interrupt-table layout and symbols, the placement contract, the staged boot's host contract (MMU page, image headers, probe page, handoff margin), the reachability report's observed functions |
-| chip | `chips/<id>/platform/chip.toml` | the chip's properties, flash map, address map (internal SRAM, flash window, retained memory) with each region's attributes, what the boot chain keeps (`[boot-chain]`), harts, core start, reset cause; still the image registry (`[hil]`, `[packages]`, `[[probe]]`) |
+| chip | `chips/<id>/platform/chip.toml` | the chip's properties, flash map, address map (internal SRAM, flash window, retained memory) with each region's attributes, what the boot chain keeps and requires (`[boot-chain]`), harts, core start, reset cause; still the image registry (`[hil]`, `[packages]`, `[[probe]]`) |
 | ROM | `chips/<id>/platform/rom-<revision>.toml` | the mask ROM of one chip revision: its pinned ELF, symbol script, sourced entry points (`[[rom.functions]]`), function summaries, forbidden code and what it uses of the internal SRAM (`[rom] sram`) |
 | module | `chips/<id>/platform/modules/<module>.toml` | the module that carries the chip: its flash and PSRAM |
 | board | `chips/<id>/platform/boards/<board>.toml` | the board that carries the module |
@@ -96,3 +96,10 @@ it writes is in git:
 build compiled them in, for host tests, the generating build scripts and
 tools that detect a tree newer than themselves; a test holds the list to the
 files in the tree.
+
+A chip's `[boot-chain] mapped-segments`, when specified, is the nonzero
+number of mapped ESP application image records its pinned loader requires.
+It counts encoded records in the flash window, not ELF sections or MMU pages.
+The staged builder checks it after encoding, alongside the independent SRAM
+code/constant placement audit. Its SOURCE identifies the bundled loader
+revision; the shared D/I S31 loader does not require executable flash code.
