@@ -339,7 +339,7 @@ fn a_cold_psram_is_powered_clocked_configured_and_mapped_in_order() {
     let model = model(&clock, 0x5);
     let ready = bring_up_on(&model).expect("comes up");
     assert_eq!(
-        ready.mapped,
+        ready.mapped(),
         MappedRange {
             virtual_start: 0x5000_0000,
             len: 16 * MIB,

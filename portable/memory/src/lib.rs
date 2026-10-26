@@ -79,7 +79,7 @@ pub use rx_external_handoff::{
 pub use rx_handoff::{RxHandoffPool, RxNetworkLease, RxRadioLease};
 pub use static_place::{PlacedFuture, StaticPlace};
 pub use static_ref::StaticRef;
-pub use volatile::read_volatile;
+pub use volatile::{read_volatile, write_volatile};
 pub use volatile_cell::VolatileCell;
 
 /// Authority to prepare registers for one retained, software-owned TX chain.

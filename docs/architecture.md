@@ -176,6 +176,10 @@ moves; ownership, orchestration and wiring are rebuilt.
   access. The bootstrap owns reset, its linker sections and application
   descriptor, and runs the bounded `oer-espressif-boot` sequences over the
   HAL's register traits.
+  The PSRAM controller/MMU owner is consumed by its HAL bring-up method,
+  which lends the mapped region once as a static mutable byte slice. Staging
+  validates, copies and checks the image through that slice and retains its
+  payload loan until the cache publication and stage-two jump.
   Stage two adopts the initialized platform without repeating cold boot.
   Its own traps, vectors, checked exits and the image's `critical-section`
   run on the typed interrupt controller. Each table entry moves its part

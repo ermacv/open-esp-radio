@@ -197,10 +197,25 @@ pub struct PsramOwners<'a, K, A, P, S> {
 }
 
 /// The PSRAM as the boot leaves it: powered, configured and mapped.
+/// The result is observable but cannot be manufactured by a caller.
+///
+/// ```compile_fail,E0451
+/// use oer_espressif_boot::{mmu::MappedRange, psram::PsramReady};
+/// let ready = PsramReady {
+///     mapped: MappedRange { virtual_start: 0x5000_0000, len: 4096 },
+/// };
+/// ```
 #[derive(Debug, Eq, PartialEq)]
 #[must_use = "the PSRAM is used through its mapped window"]
 pub struct PsramReady {
-    pub mapped: MappedRange,
+    mapped: MappedRange,
+}
+
+impl PsramReady {
+    /// Observe the completed mapping; only successful bring-up creates it.
+    pub const fn mapped(&self) -> MappedRange {
+        self.mapped
+    }
 }
 
 /// The mode register pairs.

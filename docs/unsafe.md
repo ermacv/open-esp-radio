@@ -39,6 +39,11 @@ prerequisites hold. A forwarding call inside an `unsafe fn` names the
 `#[allow(unsafe_code, ...)]` attribute: Clippy 1.97 does not accept a comment
 above an attribute that spans several lines.
 
+Memory operations move into `oer-memory`, architectural instructions into
+`oer-riscv`, and PSRAM slice creation into its HAL owner. Their unsafe counts
+may grow only by the relocated operations while the branch total falls and
+no calling crate's count grows. Runtime panic counts never increase.
+
 An extern declaration without a memory-safety precondition is declared
 `safe fn` or `safe static`. A `safe static` requires the bytes at its address
 to be a valid, immutable value of its declared type. A linker symbol used
@@ -377,7 +382,8 @@ to one holder at a time without waiting, and its claim lives in a section
 every boot zeroes, so a reset never leaves the record claimed. The cell is
 defined only by `__retained_static!`, whose two statics are its own; the
 staged runtime's `retained_static!` names the sections. `read_volatile`
-reads a value behind a shared borrow with a volatile load. `StaticRef<T>`
+reads a value behind a shared borrow with a volatile load; `write_volatile`
+stores a `Copy` value through an exclusive borrow. `StaticRef<T>`
 publishes a `&'static T` through an atomic pointer that interrupt handlers
 and the panic path read without a lock. `link_fn!` binds a function at link
 time: the calling crate declares the symbol and its own macro has the image
@@ -474,6 +480,15 @@ needs:
 - Each board implements `AdoptsBootstrapMapping` for its PSRAM.
 - The bootstrap places the packed stage two and the flash tuning reference in
   its own read-only flash sections.
+- The HAL's `PsramRegisters::into_region` runs cold bring-up and consumes
+  the reset root's unique PSRAM controller/MMU partition before creating
+  one `&'static mut [u8]`. Only that method creates the slice; a caller-supplied
+  `PsramReady` cannot authorize it. `PsramReady` exposes its completed mapping
+  through a read-only accessor. The safe `stage` uses slice offsets, checked
+  ranges and volatile borrowed probe/CRC accesses, returning typed errors.
+  Its `Staged` result retains the exclusive payload loan through publication
+  and handoff. The bootstrap checks the physical PSRAM base before the probe
+  and its flash source immediately after the probe, before header/CRC reads.
 - A probe image is entered by the Blobray verifier through the exported
   symbols the vendor code calls (`_start`, `ets_delay_us`, the probe
   entries), with that code's C signatures, and keeps its fixtures in statics

@@ -12,6 +12,8 @@ description = "The chip-neutral steps of the Espressif staged-boot bootstrap: st
 esp32s31 = ["dep:oer-esp32s31-hal"]
 
 [dependencies]
+bytemuck = { version = "1.25.2", default-features = false }
+oer-memory = { path = "../../../portable/memory" }
 oer-espressif-boot = { path = "../boot" }
 oer-riscv = { path = "../../../portable/riscv" }
 oer-espressif-staged-layout.workspace = true

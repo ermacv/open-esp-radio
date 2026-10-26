@@ -1,4 +1,4 @@
-//! A volatile read of a value behind a shared borrow.
+//! Volatile access through valid Rust borrows.
 
 /// Read `value` with a volatile load, which the compiler neither folds into
 /// an earlier read nor removes: for memory that a DMA engine may write
@@ -13,11 +13,29 @@ pub fn read_volatile<T: Copy>(value: &T) -> T {
     }
 }
 
+/// Store `value` through an exclusive borrow with a volatile write.
+/// The compiler keeps the store even when no ordinary read observes it.
+pub fn write_volatile<T: Copy>(destination: &mut T, value: T) {
+    #[allow(unsafe_code, reason = "a volatile store through an exclusive borrow")]
+    // SAFETY: the exclusive borrow is valid and aligned for T, and Copy
+    // has no destructor that replacing the previous value could skip.
+    unsafe {
+        core::ptr::write_volatile(destination, value);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
     fn a_volatile_read_reads_the_value() {
         let bytes = [1_u8, 2, 3];
         assert_eq!(super::read_volatile(&bytes[1]), 2);
+    }
+
+    #[test]
+    fn a_volatile_write_replaces_only_the_borrowed_value() {
+        let mut words = [1_u32, 2, 3];
+        super::write_volatile(&mut words[1], 0x31a5_c33c);
+        assert_eq!(words, [1, 0x31a5_c33c, 3]);
     }
 }
