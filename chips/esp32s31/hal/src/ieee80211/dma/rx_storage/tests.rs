@@ -40,36 +40,35 @@ fn rx_buffer_keeps_detach_and_recycle_error_conditions() {
         buffer.detach_with(16).err(),
         Some(RxRingError::BufferOwnershipConflict),
     );
-    // SAFETY: no hardware accesses this test allocation; every operation
-    // must reject the live affine owner before touching its bytes.
-    unsafe {
-        assert_eq!(
-            buffer.prepare_for_recycle(),
-            Err(RxRingError::BufferOwnershipConflict)
-        );
-        assert_eq!(
-            buffer.prepare_observed_for_recycle(),
-            Err(RxRingError::BufferOwnershipConflict)
-        );
-        assert_eq!(
-            buffer.prepare_for_stopped_ring(),
-            Err(RxRingError::BufferOwnershipConflict)
-        );
-    }
+    // This test retains the allocation with no DMA actor. Each grant ends
+    // before the next state transition, exactly as a ring callback does.
+    let grant = || {
+        // SAFETY: this allocation has no DMA actor, and the operations below
+        // reject a detached owner before touching its bytes.
+        unsafe { RecycleGrant::completed_read(0, buffer) }
+    };
+    assert_eq!(
+        buffer.prepare_for_recycle(grant()),
+        Err(RxRingError::BufferOwnershipConflict)
+    );
+    assert_eq!(
+        buffer.prepare_observed_for_recycle(grant()),
+        Err(RxRingError::BufferOwnershipConflict)
+    );
+    assert_eq!(
+        buffer.prepare_for_stopped_ring(grant()),
+        Err(RxRingError::BufferOwnershipConflict)
+    );
     drop(detached);
     assert_eq!(buffer.state(), ExternalRxReturnState::Returned);
-    // SAFETY: the lease has returned, and the test is the only buffer owner.
-    unsafe {
-        assert_eq!(
-            buffer.prepare_for_recycle(),
-            Err(RxRingError::BufferOwnershipConflict)
-        );
-        assert_eq!(buffer.prepare_observed_for_recycle(), Ok(()));
-    }
+    assert_eq!(
+        buffer.prepare_for_recycle(grant()),
+        Err(RxRingError::BufferOwnershipConflict)
+    );
+    assert_eq!(buffer.prepare_observed_for_recycle(grant()), Ok(()));
     assert_eq!(buffer.state(), ExternalRxReturnState::Attached);
     drop(buffer.detach_with(16).unwrap());
-    // SAFETY: no DMA actor or detached owner remains.
-    assert_eq!(unsafe { buffer.prepare_for_stopped_ring() }, Ok(()));
+    assert_eq!(buffer.prepare_for_stopped_ring(grant()), Ok(()));
     assert_eq!(buffer.state(), ExternalRxReturnState::Attached);
 }
 
@@ -2931,4 +2930,69 @@ fn cold_ring_memory_and_core_proofs_precede_the_only_base_publication() {
     assert_eq!(mmio.publications, 1);
     assert!(mmio.walker);
     assert!(live.try_stop(&mut mmio).is_ok());
+}
+
+#[test]
+fn stopped_ring_grants_restore_returned_buffers_before_a_new_recycle_epoch() {
+    let mut ring = Walked::<4>::start();
+    // Land once in R, then in descriptor zero, and return its detached bytes.
+    assert!(ring.land(4, true));
+    ring.storage
+        .observe_reserved(&mut ring.live, &mut ring.walker)
+        .unwrap();
+    assert!(ring.land(4, true));
+    let cursor = ring.live.freeze_cursor(&mut ring.walker).unwrap();
+    let unit = ring
+        .storage
+        .take_completed_unit(&mut ring.live, cursor)
+        .unwrap()
+        .unwrap();
+    drop(unit.detach_single(&mut ring.walker).unwrap());
+    assert_eq!(ring.storage.released_buffer_count(), 1);
+    assert!(ring.storage.buffers()[0].leading_guard_overwritten());
+
+    let halted = ring
+        .live
+        .try_stop(&mut ring.walker)
+        .map_err(|(_, error)| error)
+        .unwrap();
+    let stopped = ring
+        .storage
+        .prepare_halted(halted, &mut ring.walker)
+        .map_err(|(_, error)| error)
+        .unwrap();
+    assert_eq!(ring.storage.released_buffer_count(), 0);
+    assert!(ring.storage.buffers().iter().all(|buffer| {
+        buffer.state() == ExternalRxReturnState::Attached && !buffer.leading_guard_overwritten()
+    }));
+    assert!(!ring.storage.reserved_buffer.leading_guard_overwritten());
+    assert!(stopped.topology_snapshot().valid);
+    let mut live = stopped
+        .try_start(&mut ring.walker)
+        .map_err(|(_, error)| error)
+        .unwrap();
+    // Stop/rebuild resumes the retained NEXT, so the next completion is slot 1.
+    let table = ring.storage.walker_table().unwrap();
+    assert!(matches!(
+        ring.walker.land(table, 4, true),
+        crate::ieee80211::dma::rx_dma::model::RxWalkerLanding::Landed(_)
+    ));
+    // A later terminal releases the preceding descriptor's link for recycle.
+    assert!(matches!(
+        ring.walker.land(table, 4, true),
+        crate::ieee80211::dma::rx_dma::model::RxWalkerLanding::Landed(_)
+    ));
+    let cursor = live.freeze_cursor(&mut ring.walker).unwrap();
+    let unit = ring
+        .storage
+        .take_completed_unit(&mut live, cursor)
+        .unwrap()
+        .unwrap();
+    assert_eq!(unit.head_index(), 1);
+    assert_eq!(unit.segment(0).unwrap().len(), 4);
+    assert!(unit.recycle(&mut ring.walker).unwrap().is_some());
+    live.complete_pending_reload(&mut ring.walker, frozen_settle())
+        .unwrap();
+    assert!(live.observed_mask().is_empty());
+    assert!(live.try_stop(&mut ring.walker).is_ok());
 }

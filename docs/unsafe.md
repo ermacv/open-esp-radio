@@ -320,6 +320,19 @@ inside the retained allocation; subsequent register publications take those
 typed addresses. The shared engine and the combined engine/MAC owner contain
 no unsafe code and perform no address arithmetic.
 
+Wi-Fi RX buffer reads and guard preparation take an affine
+`RecycleGrant<'ring>`. The ring supplies each recycle or stopped-preparation
+callback with an index and a higher-ranked lifetime, so the grant cannot
+survive descriptor publication. The reserved descriptor uses the same grant
+at index `COUNT`. Buffer accessors are private to storage, whose immutable
+descriptor binding selects the corresponding allocation. Retained completed
+owners and the frozen-frontier preview use one narrow unsafe read-grant
+constructor; each mint retains the owner's ring loan for every byte view.
+The two byte-cell accesses, detached-buffer handoff, volatile guard observation
+and two sharing implementations form the memory boundary. Grants contain no
+runtime state beyond the descriptor index. Completion observations precede
+grants, and buffer guards are restored before descriptor publication.
+
 The Wi-Fi DMA storage, `esp32s31-hal`'s `ieee80211::dma` module, has one
 unsafe site that exists only under `test-support`: the host model of the DMA
 engine's memory port, `RxDmaStorage<…, HostDma>::{dma_write, dma_read}` in

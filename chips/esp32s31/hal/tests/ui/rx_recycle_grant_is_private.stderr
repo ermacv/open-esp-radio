@@ -1,0 +1,10 @@
+error[E0624]: associated function `new` is private
+ --> tests/ui/rx_recycle_grant_is_private.rs:6:27
+  |
+6 |     let _ = RecycleGrant::new(0); // ui-error: E0624
+  |                           ^^^ private associated function
+  |
+ ::: src/ieee80211/dma/rx_ring.rs
+  |
+  |     fn new(index: usize) -> Self {
+  |     ---------------------------- private associated function defined here

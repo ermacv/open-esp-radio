@@ -1,0 +1,11 @@
+error[E0382]: use of moved value: `grant`
+ --> tests/ui/rx_recycle_grant_is_affine.rs:8:10
+  |
+4 | pub fn consume(grant: RecycleGrant<'_>) {
+  |                ----- move occurs because `grant` has type `RecycleGrant<'_>`, which does not implement the `Copy` trait
+5 |     let _index = grant.index();
+6 |     drop(grant);
+  |          ----- value moved here
+7 |     #[cfg(all())]
+8 |     drop(grant); // ui-error: E0382
+  |          ^^^^^ value used here after move

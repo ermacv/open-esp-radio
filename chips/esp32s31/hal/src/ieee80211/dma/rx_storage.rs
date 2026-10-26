@@ -19,7 +19,7 @@ use crate::ieee80211::dma::{
     descriptor::RxDescriptor,
     rx_dma::{RxDescriptorAddresses, RxDma},
     rx_ring::{
-        RX_BUFFER_SENTINEL, RxArenaWords, RxCompletedDescriptor, RxCompletedUnit,
+        RX_BUFFER_SENTINEL, RecycleGrant, RxArenaWords, RxCompletedDescriptor, RxCompletedUnit,
         RxCompletedUnitFrontier, RxDescriptorTable, RxDmaArenaState, RxDmaBufferAddresses,
         RxFrozenCursor, RxLiveAppend, RxReservedBuffer, RxRingError, RxRingHalted, RxRingLive,
         RxRingPrepared, RxRingStopped, RxSegment, prepare_recycled_buffer,
@@ -56,29 +56,26 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
         self.0.get_mut()
     }
 
-    /// # Safety
-    ///
-    /// The caller must own the matching completed descriptor. The returned
-    /// view must not survive descriptor recycle.
-    #[allow(unsafe_code, reason = "completed descriptor proves CPU ownership")]
-    pub(crate) unsafe fn completed(&self) -> &[u8; BUFFER_SIZE] {
-        // SAFETY: the type guarantees a prefix of exactly this size.
+    /// Borrow bytes while the retained completion excludes descriptor recycle.
+    #[allow(unsafe_code, reason = "completed grant proves CPU read ownership")]
+    fn completed<'ring>(&'ring self, _grant: RecycleGrant<'ring>) -> &'ring [u8; BUFFER_SIZE] {
+        // SAFETY: the private caller selects this grant's bound buffer. Its
+        // ring loan excludes DMA writes and recycle for the returned lifetime;
+        // the type guarantees a prefix of exactly this size.
         unsafe { &*self.0.get().cast::<[u8; BUFFER_SIZE]>() }
     }
 
-    /// # Safety
-    ///
-    /// The caller must own the matching completed descriptor and invoke this
-    /// only from the ring's rearm closure.
-    #[allow(unsafe_code, reason = "ring rearm owns the DMA buffer transition")]
-    pub(crate) unsafe fn prepare_for_recycle(&self) -> Result<(), RxRingError> {
+    #[allow(unsafe_code, reason = "ring grant owns the DMA buffer transition")]
+    fn prepare_for_recycle(&self, _grant: RecycleGrant<'_>) -> Result<(), RxRingError> {
         match self.1.state() {
             ExternalRxReturnState::Attached => {}
             ExternalRxReturnState::Detached | ExternalRxReturnState::Returned => {
                 return Err(RxRingError::BufferOwnershipConflict);
             }
         }
-        // SAFETY: ring ownership makes this the only CPU or DMA writer.
+        // SAFETY: the private caller selects this grant's bound buffer. The
+        // callback-scoped grant excludes DMA and other CPU access until the
+        // guard writes end; the state check excludes a detached upper owner.
         unsafe { prepare_recycled_buffer(&mut *self.0.get(), BUFFER_SIZE) }
     }
 
@@ -92,16 +89,11 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
     /// durable `Returned` state. Normalize that state in the same transaction;
     /// otherwise the descriptor becomes DMA-visible while a later detach sees
     /// the stale release and rejects a real completion as `BufferOwnershipConflict`.
-    #[allow(
-        unsafe_code,
-        reason = "the observed live-ring prefix excludes DMA and detached upper ownership"
-    )]
-    unsafe fn prepare_observed_for_recycle(&self) -> Result<(), RxRingError> {
+    fn prepare_observed_for_recycle(&self, grant: RecycleGrant<'_>) -> Result<(), RxRingError> {
         self.1
             .reattach()
             .map_err(|_| RxRingError::BufferOwnershipConflict)?;
-        // SAFETY: the state check/transition excludes every external owner.
-        unsafe { self.prepare_for_recycle() }
+        self.prepare_for_recycle(grant)
     }
 
     fn detach_with(&'static self, length: usize) -> Result<ExternalRxBuffer, RxRingError> {
@@ -128,17 +120,11 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
         self.1.state()
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "stopped DMA owner may normalize a returned detached buffer"
-    )]
-    unsafe fn prepare_for_stopped_ring(&self) -> Result<(), RxRingError> {
+    fn prepare_for_stopped_ring(&self, grant: RecycleGrant<'_>) -> Result<(), RxRingError> {
         self.1
             .reattach()
             .map_err(|_| RxRingError::BufferOwnershipConflict)?;
-        // SAFETY: stopped-ring ownership excludes DMA, and DETACHED was
-        // rejected before touching the allocation.
-        unsafe { self.prepare_for_recycle() }
+        self.prepare_for_recycle(grant)
     }
 
     /// Whether DMA has overwritten the leading recycle guard.
@@ -180,16 +166,8 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxReservedBuffer
         self.0.leading_guard_overwritten()
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "the live ring rearms the reserved buffer only after the walker finished it"
-    )]
-    fn restore_guards(&self) -> Result<(), RxRingError> {
-        // SAFETY: the reserved buffer is never detached or leased, so the
-        // ring is its only CPU owner, and the ring calls this only after the
-        // walker finished writing it (`RX_DONE` on R, or a later ring
-        // descriptor completed).
-        unsafe { self.0.prepare_for_recycle() }
+    fn restore_guards(&self, grant: RecycleGrant<'_>) -> Result<(), RxRingError> {
+        self.0.prepare_for_recycle(grant)
     }
 }
 
@@ -234,7 +212,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
         // SAFETY: the unforgeable descriptor token retains the live ring's
         // mutable borrow, and `validate_live_ring` matched this buffer arena
         // to that ring before transferring completion ownership.
-        let buffer = unsafe { self.buffer.completed() };
+        let grant = unsafe { RecycleGrant::completed_read(self.index(), self) };
+        let buffer = self.buffer.completed(grant);
         RxSegment {
             descriptor_address: self.descriptor.descriptor_address(),
             descriptor_word0: self.descriptor.word0(),
@@ -322,21 +301,13 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         self.descriptor_count
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "the affine unit retains exclusive buffer rearm authority"
-    )]
     pub fn append<M: RxDma>(self, mmio: &mut M) -> Result<RxLiveAppend<COUNT>, RxRingError> {
         self.ring
-            .recycle_proven_unit_owned(mmio, self.descriptor_count, |index| {
-                // SAFETY: the token's ring loan retains the observed complete
-                // unit and its frozen link-release proof until this publication.
-                unsafe {
-                    self.storage
-                        .buffer_for_descriptor(index)
-                        .ok_or(RxRingError::Count)?
-                        .prepare_for_recycle()
-                }
+            .recycle_proven_unit_owned(mmio, self.descriptor_count, |grant| {
+                self.storage
+                    .buffer_for_descriptor(grant.index())
+                    .ok_or(RxRingError::Count)?
+                    .prepare_for_recycle(grant)
             })
     }
 }
@@ -397,13 +368,10 @@ impl<
         // SAFETY: `RxCompletedUnit` proves that the terminal descriptor made
         // every preceding segment CPU-owned. This token retains the mutable
         // ring borrow, preventing recycle while the returned slice lives.
-        unsafe { buffer.completed().get(..length) }
+        let grant = unsafe { RecycleGrant::completed_read(index, self) };
+        buffer.completed(grant).get(..length)
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "consuming completed unit owns the rearm transition"
-    )]
     pub fn recycle<M: RxDma>(
         mut self,
         mmio: &mut M,
@@ -413,15 +381,11 @@ impl<
             .ring
             .as_deref_mut()
             .expect("completed unit retains ring loan")
-            .recycle_completed_unit_owned(mmio, descriptor_count, |index| {
-                // SAFETY: this consuming token owns every segment until this
-                // rearm closure returns it to the live walker.
-                unsafe {
-                    self.storage
-                        .buffer_for_descriptor(index)
-                        .ok_or(RxRingError::Count)?
-                        .prepare_for_recycle()
-                }
+            .recycle_completed_unit_owned(mmio, descriptor_count, |grant| {
+                self.storage
+                    .buffer_for_descriptor(grant.index())
+                    .ok_or(RxRingError::Count)?
+                    .prepare_for_recycle(grant)
             });
         if matches!(result, Ok(Some(_))) {
             self.requires_recycle = false;
@@ -849,10 +813,6 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         self.buffers.get(buffer_id)
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "stopped ring exclusively owns initial buffer rearm"
-    )]
     fn prepare_ring_bound<'storage, M: RxDma>(
         &'storage self,
         mmio: &mut M,
@@ -882,16 +842,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             buffer_addresses,
             reserved_buffer,
             buffer_size,
-            |index| {
-                // SAFETY: stopped-ring preparation owns every descriptor and
-                // the storage's own address table binds `index` to this
-                // arena.
-                unsafe { self.prepare_stopped_buffer(index) }
-            },
-            || {
-                // SAFETY: stopped-ring preparation owns R and its buffer.
-                unsafe { self.reserved_buffer.prepare_for_stopped_ring() }
-            },
+            |grant| self.prepare_stopped_buffer(grant),
+            |grant| self.reserved_buffer.prepare_for_stopped_ring(grant),
             &self.arena,
         );
         if prepared.is_err() {
@@ -905,7 +857,6 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     }
 
     /// Rebuild a halted ring only when it belongs to this storage arena.
-    #[allow(unsafe_code, reason = "halted ring exclusively owns buffer rearm")]
     pub fn prepare_halted<'storage, M: RxDma>(
         &'storage self,
         ring: RxRingHalted<'storage, COUNT>,
@@ -933,33 +884,16 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         ring.prepare_owned(
             mmio,
             buffer_size,
-            |index| {
-                // SAFETY: the halted owner proves that DMA is stopped, and it
-                // belongs to this arena, whose layout binds the descriptor to
-                // this exact buffer.
-                unsafe { self.prepare_stopped_buffer(index) }
-            },
-            || {
-                // SAFETY: the halted owner proves that DMA is stopped; R's
-                // buffer belongs to this arena.
-                unsafe { self.reserved_buffer.prepare_for_stopped_ring() }
-            },
+            |grant| self.prepare_stopped_buffer(grant),
+            |grant| self.reserved_buffer.prepare_for_stopped_ring(grant),
         )
     }
 
-    /// # Safety
-    /// Called only by a stopped/halted ring's exclusive preparation closure.
-    #[allow(
-        unsafe_code,
-        reason = "stopped ring preparation owns this physical buffer"
-    )]
-    unsafe fn prepare_stopped_buffer(&self, index: usize) -> Result<(), RxRingError> {
+    fn prepare_stopped_buffer(&self, grant: RecycleGrant<'_>) -> Result<(), RxRingError> {
         let buffer = self
-            .buffer_for_descriptor(index)
+            .buffer_for_descriptor(grant.index())
             .ok_or(RxRingError::Count)?;
-        // SAFETY: the enclosing ring preparation closure proves DMA stopped.
-        unsafe { buffer.prepare_for_stopped_ring()? };
-        Ok(())
+        buffer.prepare_for_stopped_ring(grant)
     }
 
     /// Transfer one completed descriptor together with its buffer read
@@ -1010,46 +944,30 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         }))
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "live ring proves its completed half is CPU-owned"
-    )]
     pub fn recycle_completed_half<M: RxDma>(
         &self,
         ring: &mut RxRingLive<'_, COUNT>,
         mmio: &mut M,
     ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError> {
         self.validate_live_ring(ring)?;
-        let result = ring.recycle_completed_half_owned(mmio, |index| {
-            // SAFETY: the ring invokes the closure only after observing the
-            // complete half and immediately before descriptor publication.
-            unsafe {
-                self.buffer_for_descriptor(index)
-                    .ok_or(RxRingError::Count)?
-                    .prepare_observed_for_recycle()
-            }
+        let result = ring.recycle_completed_half_owned(mmio, |grant| {
+            self.buffer_for_descriptor(grant.index())
+                .ok_or(RxRingError::Count)?
+                .prepare_observed_for_recycle(grant)
         });
         self.observe_append(result)
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "live ring proves its completed prefix is CPU-owned"
-    )]
     pub fn recycle_completed_prefix<const MAX_BATCH: usize, M: RxDma>(
         &self,
         ring: &mut RxRingLive<'_, COUNT>,
         mmio: &mut M,
     ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError> {
         self.validate_live_ring(ring)?;
-        let result = ring.recycle_completed_prefix_owned::<MAX_BATCH, _, _>(mmio, |index| {
-            // SAFETY: the ring invokes the closure only for its observed
-            // prefix immediately before returning those buffers to DMA.
-            unsafe {
-                self.buffer_for_descriptor(index)
-                    .ok_or(RxRingError::Count)?
-                    .prepare_observed_for_recycle()
-            }
+        let result = ring.recycle_completed_prefix_owned::<MAX_BATCH, _, _>(mmio, |grant| {
+            self.buffer_for_descriptor(grant.index())
+                .ok_or(RxRingError::Count)?
+                .prepare_observed_for_recycle(grant)
         });
         self.observe_append(result)
     }
@@ -1061,10 +979,6 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     /// have already returned. Ring-owned staged discards are deliberately not
     /// included: after the released prefix advances, the caller must bind each
     /// such unit to a fresh frozen-LAST proof before republishing it.
-    #[allow(
-        unsafe_code,
-        reason = "released buffer state authorizes the ring rearm transition"
-    )]
     pub fn recycle_released_prefix<const MAX_BATCH: usize, M: RxDma>(
         &self,
         ring: &mut RxRingLive<'_, COUNT>,
@@ -1093,14 +1007,10 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         if released == 0 {
             return Ok(None);
         }
-        let result = ring.recycle_released_terminal_prefix_owned(mmio, released, |index| {
-            // SAFETY: the prefix scan proved RELEASED and the ring revalidates
-            // the complete descriptor image before invoking this callback.
-            unsafe {
-                self.buffer_for_descriptor(index)
-                    .ok_or(RxRingError::Count)?
-                    .prepare_observed_for_recycle()
-            }
+        let result = ring.recycle_released_terminal_prefix_owned(mmio, released, |grant| {
+            self.buffer_for_descriptor(grant.index())
+                .ok_or(RxRingError::Count)?
+                .prepare_observed_for_recycle(grant)
         });
         self.observe_append(result)
     }
@@ -1231,7 +1141,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         // SAFETY: the frozen cursor and terminal unit frontier establish that
         // DMA has released this descriptor. Only values are copied, and the
         // immutable view ends before this function returns.
-        output.copy_from_slice(unsafe { &buffer.completed()[offset..end] });
+        let grant = unsafe { RecycleGrant::completed_read(index, ring) };
+        output.copy_from_slice(&buffer.completed(grant)[offset..end]);
         Ok(true)
     }
 

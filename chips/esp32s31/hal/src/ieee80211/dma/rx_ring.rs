@@ -614,6 +614,47 @@ pub enum RxReloadObservation {
     Settled,
 }
 
+/// Temporary CPU authority for one descriptor's bound buffer.
+///
+/// Recycle and stopped-ring preparation callbacks receive this affine grant
+/// only after the ring established CPU ownership. Their higher-ranked lifetime
+/// prevents retaining it past the callback and descriptor publication. Index
+/// `COUNT` denotes the reserved descriptor during preparation and rearm.
+/// The grant adds no state to the ring and carries only the existing index.
+#[must_use]
+pub struct RecycleGrant<'ring> {
+    index: usize,
+    _ring: core::marker::PhantomData<&'ring mut ()>,
+}
+
+impl<'ring> RecycleGrant<'ring> {
+    fn new(index: usize) -> Self {
+        Self {
+            index,
+            _ring: core::marker::PhantomData,
+        }
+    }
+
+    pub const fn index(&self) -> usize {
+        self.index
+    }
+
+    /// Extend an already retained completion's CPU read authority.
+    ///
+    /// # Safety
+    /// `owner` must retain this descriptor's completion and its matching ring
+    /// loan for the full returned lifetime. A preview may instead retain a
+    /// shared ring loan after observing a complete frozen-cursor frontier.
+    /// No detached upper owner may access the buffer during that lifetime.
+    #[allow(
+        unsafe_code,
+        reason = "completed owners retain an observed descriptor's ring loan"
+    )]
+    pub(crate) unsafe fn completed_read<T: ?Sized>(index: usize, _owner: &'ring T) -> Self {
+        Self::new(index)
+    }
+}
+
 /// The reserved descriptor's buffer, as the live ring needs it.
 ///
 /// The storage arena implements it over R's buffer, which is never one of
@@ -623,7 +664,7 @@ pub(crate) trait RxReservedBuffer {
     fn guard_overwritten(&self) -> bool;
     /// Restore both recycle guards. Called only after the walker finished
     /// writing the buffer.
-    fn restore_guards(&self) -> Result<(), RxRingError>;
+    fn restore_guards(&self, grant: RecycleGrant<'_>) -> Result<(), RxRingError>;
 }
 
 /// Validated descriptor memory and private DMA binding, before BASE.
@@ -780,8 +821,8 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
     ) -> Result<RxRingStopped<'a, COUNT>, (Self, RxRingError)>
     where
         M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
-        R: FnOnce() -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
+        R: for<'grant> FnOnce(RecycleGrant<'grant>) -> Result<(), RxRingError>,
     {
         if u32::from(self.buffer_size) != buffer_size {
             return Err((self, RxRingError::Size));
@@ -881,8 +922,8 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
     ) -> Result<RxRingPrepared<'a, COUNT>, RxRingError>
     where
         M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
-        R: FnOnce() -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
+        R: for<'grant> FnOnce(RecycleGrant<'grant>) -> Result<(), RxRingError>,
     {
         validate_live_ring_geometry::<COUNT>()?;
         let buffer_size_u16 = u16::try_from(buffer_size).map_err(|_| RxRingError::Size)?;
@@ -922,9 +963,9 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         };
 
         for index in 0..COUNT {
-            prepare_buffer(index)?;
+            prepare_buffer(RecycleGrant::new(index))?;
         }
-        prepare_reserved_buffer()?;
+        prepare_reserved_buffer(RecycleGrant::new(COUNT))?;
         build_cold_ring_inner(descriptors, descriptor_table, buffer_addresses, buffer_size)?;
         relink_rotated_ring(
             descriptors,
@@ -1200,7 +1241,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         word0: WifiRxDmaDescriptorControl,
         buffer: &B,
     ) -> Result<(), RxRingError> {
-        buffer.restore_guards()?;
+        buffer.restore_guards(RecycleGrant::new(COUNT))?;
         if word0.rx_done() {
             self.table
                 .reserved()
@@ -1852,7 +1893,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
     where
         M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
     {
         self.recycle_completed_group(
             mmio,
@@ -1892,7 +1933,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
     where
         M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
     {
         if MAX_BATCH == 0 || MAX_BATCH > COUNT {
             return Err(RxRingError::Count);
@@ -1935,7 +1976,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
     where
         M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
     {
         if descriptor_count == 0 || descriptor_count > COUNT {
             return Err(RxRingError::Count);
@@ -1963,7 +2004,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
     where
         M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
     {
         if descriptor_count == 0 || descriptor_count > COUNT {
             return Err(RxRingError::Count);
@@ -1993,7 +2034,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     ) -> Result<RxLiveAppend<COUNT>, RxRingError>
     where
         M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
     {
         // Only RxDmaRecycleUnit calls this: its mutable ring loan retains
         // the observed group and the frozen LAST generation until append.
@@ -2019,7 +2060,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
     where
         M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
     {
         if mmio.try_with_reload_settled(|_settled| ()).is_none() {
             return Ok(None);
@@ -2124,7 +2165,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         };
         for step in 0..group_size {
             let index = self.recycle_start.advance(step);
-            if let Err(error) = prepare_buffer(index.get()) {
+            if let Err(error) = prepare_buffer(RecycleGrant::new(index.get())) {
                 // The completed-unit token has already been consumed and an
                 // earlier callback may have changed buffer-side guards. That
                 // partial transaction cannot be reconstructed from the next
