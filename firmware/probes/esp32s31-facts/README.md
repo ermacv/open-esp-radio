@@ -88,6 +88,40 @@ read-only PAC field has no setter. Likewise, a zero LP wakeup flag before and
 after reset cannot prove preservation of a pending event. These limitations
 must remain explicit in a report even when the other leaves complete.
 
+## Generic interrupt facts
+
+| Selection | Bounded experiment |
+| --- | --- |
+| 40 | FROM_CPU2 low/high, MAP0 parking/unparking, IE masking, repeated level delivery, inherited PASS_LEVEL and four single-source remap settings |
+| 41 | Post-ROM USB ENA0..15/RAW/ST, IN_EMPTY clear while enabled/disabled, retained pending, redelivery and all-enable masking |
+| 42 / 43 | SYSTIMER target0 / target1 one-shot, WORK_EN and INT_ENA masking, clear, repeat admission, past target and a phased masked-clear/reprogram |
+| 44 | TIMG0 T0 XTAL/divider-40 one-shot, counter capture, alarm self-clear, mask/clear/rearm/past target, stop and watchdog non-interference readback |
+
+These explicit selections contain hart1 and use no radio or DMA. Each stimulus
+or latch poll ends after 2,000,000 cycles. A missing positive cause is emitted
+as an observation failure, not interpreted as interrupt suppression. The ROM
+RTC watchdog is fed before each leaf and remains armed. T0 never resets its
+group or writes watchdog configuration; its shared clock/enable changes keep
+the other lanes and it clears T0 alone.
+
+The generic IRQ handler receives the CLIC owner only during a bounded
+admission window, disables the selected CPU line on its first entry, and
+leaves the peripheral pending. Reopening that CPU line tests repeat delivery.
+The thread never touches the lent owner while interrupts are enabled.
+
+State records contain packed typed RAW/ST/ENA observations; their following
+matrix record contains banks 0/1 and CLIC IP/IE/core-local IP0. A companion
+record at `matrix_tag + 0x10000` contains bank2, FROM_CPU2 level and its
+PASS_LEVEL readback. Probe-local packing is output encoding, not MMIO masks.
+USB records also capture FIFO availability. An IN_EMPTY stimulus can require
+a bounded host IN reader to consume the probe's byte; no host OUT packet is
+part of the leaf. The disabled USB CLR consumes an enabled ST snapshot retained
+across masking. Final RAW W1C is a distinct operation from that CLR.
+
+The ROM loader observation is not a power-on-reset value. A completed phased
+past-target example is not a guarantee for all set/clear collision orderings,
+and a watchdog readback match does not qualify every active-watchdog case.
+
 ## BLE interrupt facts
 
 BLE commands use disjoint PAC owners from the same root claim. They contain
