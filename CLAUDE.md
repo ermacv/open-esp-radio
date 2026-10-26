@@ -37,6 +37,8 @@ system these rules serve.
   moved sites, when the touched crates' total decreases and no calling crate's
   count increases; each site retains its narrow
   contract and `// SAFETY:` proof. Compile-time checks and test assertions are allowed.
+  Context-local mutable payloads use `oer-memory::ContextCell` with a private
+  `ContextProof`; nested access is refused without consuming the payload.
   Remove existing runtime panics from image crates, including probes and
   HIL; image panic budgets only shrink to 0. `const` panics evaluated at
   compile time are allowed. Air, peer, host and API input return a handled

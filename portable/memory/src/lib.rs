@@ -22,6 +22,8 @@
 //! [`HandlerCell`] in such a static hands one value to an interrupt handler;
 //! [`ClaimCell`] lends one value to one holder at a time, without waiting,
 //! until one keeps it for good.
+//! [`ContextCell`] lends executor-owned state with a private [`ContextProof`],
+//! refusing a nested borrow without waiting.
 //! [`RequestSlot`] carries one request at a time from a client to a server
 //! and its answer back, without a lock. [`retained`] holds records in memory
 //! that survives a reset, one holder at a time.
@@ -37,6 +39,7 @@ use core::marker::PhantomData;
 
 mod affine_spsc;
 mod claim_cell;
+mod context_cell;
 mod dma_address;
 mod dma_bytes;
 mod handler_cell;
@@ -67,6 +70,7 @@ pub use affine_spsc::{
     LocalSpscSender, SpscCursor, UniqueQueueIndex,
 };
 pub use claim_cell::{Claim, ClaimCell, Held, KEYS};
+pub use context_cell::{ContextCell, ContextProof};
 pub use dma_address::{DmaLayout, DmaRef, DmaWindow, DmaWindowAddress};
 pub use dma_bytes::DmaBytes;
 pub use handler_cell::{HandlerCell, Installed};
