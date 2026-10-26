@@ -121,7 +121,7 @@ and keeps the register bus and Wi-Fi-power gate live. Clock restoration sends
 neither START nor a pending/enable command. Each state has three records:
 `tag` = counter/status/matrix bank 3; `tag+1` = bytes 0x24/0x2c/BLE-reset;
 `tag+2` = BLE gate/LP gate/XTAL selector. Tags 0x3220–0x3250 and
-0x3340–0x3370 precede all post-reset control writes; 0x3380 onward separates
+0x3340–0x3370 precede all post-reset pending/enable controls; 0x3380 onward separates
 all-ones suppression, counter stop, pending clear and positive rearm controls.
 There is one bounded natural wrap per command and no direct read of +0x10.
 

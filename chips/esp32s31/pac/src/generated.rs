@@ -127144,7 +127144,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0010_OPAQUE` register.
     ///
-    /// Observed complete command images 2 during initialization and 0x00040000 after runtime compare or software-pending publication; internal action unknown. After an all-ones disable, image 2 redelivered an already-pending natural rollover as status 2/source 127, while image 0x40000 redelivered the retained software cause as status 0x40000. This is not an exhaustive output equation or a production-clock guarantee. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7); HW2_S31_LP_GATES_20261026.
+    /// Observed complete command images 2 during initialization and 0x00040000 after runtime compare or software-pending publication; internal action unknown. After an all-ones disable, image 2 redelivered an already-pending natural rollover as status 2/source 127, while image 0x40000 redelivered the retained software cause as status 0x40000. This is not an exhaustive output equation or a production-clock guarantee. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7); HW2_S31_LP_GATES_20261026. Both tested delivery lanes survived BLE-timer and full production controller resets; restoring LP clocks recovered delivery without rearming. This is behavioral enable retention, not command-register readback. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
     pub mod word_0010_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00040002;
@@ -127190,7 +127190,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0014_OPAQUE` register.
     ///
-    /// Complete runtime functions write finite images 0xFFFFFFFF and 0x00040000. In the tested two-cause state, all-ones lowered status/output while retaining both pending bytes for independent redelivery; bit 18 alone suppressed only the compare/software lane. Other causes remain unqualified. SOURCE: HW2_S31_LP_GATES_20261026.
+    /// Complete runtime functions write finite images 0xFFFFFFFF and 0x00040000. In the tested two-cause state, all-ones lowered status/output while retaining both pending bytes for independent redelivery; bit 18 alone suppressed only the compare/software lane. Other causes remain unqualified. SOURCE: HW2_S31_LP_GATES_20261026. After the tested reset sequences and clock restoration, all-ones again suppressed the positive software and rollover lanes while retaining pending bytes. SOURCE: HW6_S31_LP_QUIET_20261026.
     pub mod word_0014_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -127350,7 +127350,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0024_OPAQUE` register.
     ///
-    /// The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026.
+    /// The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings remain unknown. With the bit-18 command enabled, the tested byte-one publication raised status 0x40000/source 127, and whole-word zero lowered it. Masking retained the byte for redelivery. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7); HW2_S31_LP_PENDING_20261026. The tested BLE-timer and controller resets retained this software-pending delivery, including recovery after LP-clock restoration without republishing or rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
     pub mod word_0024_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -127445,7 +127445,7 @@ pub mod modem_pwr {
 
     /// The `WORD_002C_OPAQUE` register.
     ///
-    /// The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state (a single natural wrap with compare disabled) set this byte to one and independently raised status 2/source 127. Whole-word zero lowered that cause. Multiple-wrap capacity and concurrent set/clear priority remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_STOP_WRAP_20261026.
+    /// The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; the measured rollover-only state (a single natural wrap with compare disabled) set this byte to one and independently raised status 2/source 127. Whole-word zero lowered that cause. Multiple-wrap capacity and concurrent set/clear priority remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_STOP_WRAP_20261026. The tested BLE-timer and controller resets retained compare-disabled rollover delivery, also after LP-clock restoration without rearming. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
     pub mod word_002c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -127527,7 +127527,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0038_OPAQUE` register.
     ///
-    /// A nonzero complete word selects the common timer handler. Measured isolated rollover (2), compare/software (0x40000) and combined (0x40002) status images are named, each raising source 127; independent masking/clear removed their respective lanes. Other causes, the output equation, collision priority and source exhaustiveness remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_GATES_20261026, HW2_S31_LP_PENDING_20261026, HW2_S31_LP_STOP_WRAP_20261026.
+    /// A nonzero complete word selects the common timer handler. Measured isolated rollover (2), compare/software (0x40000) and combined (0x40002) status images are named, each raising source 127; independent masking/clear removed their respective lanes. Other causes, the output equation, collision priority and source exhaustiveness remain unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5), HW_BLE_LP_CAUSES_2026_10_26, HW2_S31_LP_GATES_20261026, HW2_S31_LP_PENDING_20261026, HW2_S31_LP_STOP_WRAP_20261026. The tested reset transactions did not silence these lanes; LP-clock-off read images are unqualified even when matrix127 stays high. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
     pub mod word_0038_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -127696,7 +127696,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0048_OPAQUE` register.
     ///
-    /// Complete word read by multiple runtime functions.
+    /// Complete word read by multiple runtime functions. The low counter advanced across BLE-timer and production controller resets with LP clocks on, and after LP-clock restoration without START. Gated readback is not a counter-stop proof. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
     pub mod word_0048_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -137297,7 +137297,7 @@ pub mod modem_syscon {
                 RstModemSec::from_field(self.0 >> 29)
             }
 
-            /// Bluetooth low-power timer reset.
+            /// Vendor-named Bluetooth low-power timer reset. In the tested initialized MODEM_PWR LP runtime, assert/release alone or within the production controller-domain reset did not clear the two pending bytes, suppress their enabled source-127 delivery or stop the counter with LP clocks on. Clock-off read images are unqualified; restoring LP clocks recovered pending delivery and counter progression without START or enable commands. This field is not a MODEM_PWR LP all-off operation. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
             #[inline]
             pub const fn rst_ble_timer(self) -> bool {
                 (self.0 & 0x40000000) != 0
@@ -137500,7 +137500,7 @@ pub mod modem_syscon {
                 RstModemSec::from_field(self.0 >> 29)
             }
 
-            /// Bluetooth low-power timer reset.
+            /// Vendor-named Bluetooth low-power timer reset. In the tested initialized MODEM_PWR LP runtime, assert/release alone or within the production controller-domain reset did not clear the two pending bytes, suppress their enabled source-127 delivery or stop the counter with LP clocks on. Clock-off read images are unqualified; restoring LP clocks recovered pending delivery and counter progression without START or enable commands. This field is not a MODEM_PWR LP all-off operation. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
             #[inline]
             pub const fn rst_ble_timer(&self) -> bool {
                 (self.0 & 0x40000000) != 0
