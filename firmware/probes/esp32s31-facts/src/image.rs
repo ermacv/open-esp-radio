@@ -3,6 +3,8 @@
     unsafe_code,
     reason = "standalone probe entry, trap ABI and retained SRAM"
 )]
+const SECONDARY: pac::SecondaryHart = const { pac::Hart::SECONDARIES[0] };
+
 use core::{
     ptr,
     sync::atomic::{AtomicPtr, AtomicU32, Ordering},
@@ -291,32 +293,36 @@ fn contain(s: &mut Session<'_>) {
     let c = &mut s.core_control;
     // SOURCE: HAL cores::park_hart1 and boot::soc::contain_hart1; no release.
     c.pmu_cpu_stall.modify_cpu_stall_sw(|w| {
-        w.set_hpcore1_sw_stall_code(0x86);
+        w.set_hpcore_sw_stall_code(SECONDARY.hart().index(), 0x86);
     });
-    c.hp_sys_clkrst_core.modify_hpcore1_ctrl0(|w| {
-        w.set_reg_core1_cpu_clk_en(false)
-            .set_reg_core1_clic_clk_en(false)
-            .set_reg_core1_global_rst_en(true);
-    });
+    c.hp_sys_clkrst_core
+        .modify_hpcore_ctrl0(SECONDARY.hart().index(), |w| {
+            w.set_reg_core_cpu_clk_en(false)
+                .set_reg_core_clic_clk_en(false)
+                .set_reg_core_global_rst_en(true);
+        });
 }
 fn boot_address(s: &mut Session<'_>) {
     contain(s);
     let c = &mut s.core_control;
     for value in [0, 0x2f001234, 0x01234567, 0xfedcba98, 0] {
-        c.lp_sys_core_control.modify_boot_addr_hp_core1(|w| {
-            w.set_boot_addr_hp_core1(value);
-        });
+        c.lp_sys_core_control
+            .modify_boot_addr_hp_core(SECONDARY.index(), |w| {
+                w.set_boot_addr_hp_core(value);
+            });
         oer_riscv::fence();
         let read = c
             .lp_sys_core_control
-            .read_boot_addr_hp_core1()
-            .boot_addr_hp_core1();
-        let held = c.hp_sys_clkrst_core.read_hpcore1_ctrl0();
+            .read_boot_addr_hp_core(SECONDARY.index())
+            .boot_addr_hp_core();
+        let held = c
+            .hp_sys_clkrst_core
+            .read_hpcore_ctrl0(SECONDARY.hart().index());
         emit(
             0x60,
             value,
             read,
-            u32::from(held.reg_core1_global_rst_en()) + 2 * u32::from(held.reg_core1_cpu_clk_en()),
+            u32::from(held.reg_core_global_rst_en()) + 2 * u32::from(held.reg_core_cpu_clk_en()),
         );
     }
     // Same reset preparation order as production, with an explicit readback
@@ -324,18 +330,18 @@ fn boot_address(s: &mut Session<'_>) {
     emit(
         0x61,
         c.lp_sys_core_control
-            .read_boot_addr_hp_core1()
-            .boot_addr_hp_core1(),
+            .read_boot_addr_hp_core(SECONDARY.index())
+            .boot_addr_hp_core(),
         0,
         0,
     );
     c.lp_aon_clkrst_core_reset
-        .trigger_hpcore1_reset_ctrl_hpcore1_sw_reset();
+        .trigger_hpcore_reset_ctrl_hpcore_sw_reset(SECONDARY.hart().index());
     emit(
         0x62,
         c.lp_sys_core_control
-            .read_boot_addr_hp_core1()
-            .boot_addr_hp_core1(),
+            .read_boot_addr_hp_core(SECONDARY.index())
+            .boot_addr_hp_core(),
         0,
         0,
     );
@@ -568,18 +574,21 @@ fn reset(s: &mut Session<'_>) {
         u32::from(u.reg_uart0_sclk_div_num()),
         u32::from(u.reg_uart0_clk_en()),
     );
-    c.lp_sys_core_control.modify_boot_addr_hp_core1(|w| {
-        w.set_boot_addr_hp_core1(0);
-    });
+    c.lp_sys_core_control
+        .modify_boot_addr_hp_core(SECONDARY.index(), |w| {
+            w.set_boot_addr_hp_core(0);
+        });
     oer_riscv::fence();
     c.lp_aon_clkrst_core_reset
-        .trigger_hpcore1_reset_ctrl_hpcore1_sw_reset();
+        .trigger_hpcore_reset_ctrl_hpcore_sw_reset(SECONDARY.hart().index());
     c.pmu_cpu_stall.modify_cpu_stall_sw(|w| {
-        w.set_hpcore1_sw_stall_code(0x86);
+        w.set_hpcore_sw_stall_code(SECONDARY.hart().index(), 0x86);
     });
     oer_riscv::fence();
     FACTS_OUTPUT[0].store(0xfac70007, Ordering::Release);
-    let held = c.hp_sys_clkrst_core.read_hpcore1_ctrl0();
+    let held = c
+        .hp_sys_clkrst_core
+        .read_hpcore_ctrl0(SECONDARY.hart().index());
     for (word, value) in RETAINED.iter().zip([
         0xfac70007,
         0x687731,
@@ -588,9 +597,9 @@ fn reset(s: &mut Session<'_>) {
         u32::from(u.reg_uart0_sclk_div_num()),
         u32::from(u.reg_uart0_clk_en()),
         c.lp_sys_core_control
-            .read_boot_addr_hp_core1()
-            .boot_addr_hp_core1(),
-        u32::from(held.reg_core1_global_rst_en()) + 2 * u32::from(held.reg_core1_cpu_clk_en()),
+            .read_boot_addr_hp_core(SECONDARY.index())
+            .boot_addr_hp_core(),
+        u32::from(held.reg_core_global_rst_en()) + 2 * u32::from(held.reg_core_cpu_clk_en()),
         u32::from(perturbed),
         u32::from(u.reg_uart0_sclk_div_numerator()),
         u32::from(u.reg_uart0_sclk_div_denominator()),
@@ -619,8 +628,12 @@ fn after_reset(s: &mut Session<'_>) {
     let r = &s.reset_cause.lp_aon_reset_cause;
     emit(
         0x81,
-        r.read_hpcore0_reset_cause().hpcore0_reset_cause().get(),
-        r.read_hpcore1_reset_cause().hpcore1_reset_cause().get(),
+        r.read_hpcore_reset_cause(pac::BOOT_HART.index())
+            .hpcore_reset_cause()
+            .get(),
+        r.read_hpcore_reset_cause(SECONDARY.hart().index())
+            .hpcore_reset_cause()
+            .get(),
         u32::from(
             s.core_control
                 .lp_sys_core_control

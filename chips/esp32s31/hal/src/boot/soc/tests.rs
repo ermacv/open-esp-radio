@@ -15,9 +15,9 @@ use oer_esp32s31_pac::{
     lp_peri_clkrst::LpPericlkrstRngInit, trng::trng_host,
 };
 
-use super::{contain_hart1, open_apm_filters, start_trng};
+use super::{contain_secondaries, open_apm_filters, start_trng};
 use crate::platform::{
-    HpCore,
+    Hart,
     core_control::{CoreControlRegisters, HOST_SIZES},
 };
 
@@ -95,10 +95,10 @@ fn hart_1_is_stalled_held_and_left_no_boot_address() {
         let [stall, status, clocks, reset, system] = &mut words;
         let mut cores = CoreControlRegisters::host(stall, status, clocks, reset, system)
             .expect("memory holds the blocks");
-        contain_hart1(&mut cores);
-        assert!(cores.stall_requested(HpCore::Core1));
-        assert!(!cores.stall_requested(HpCore::Core0));
-        assert!(cores.core1_held());
+        contain_secondaries(&mut cores);
+        assert!(cores.stall_requested(Hart::SECONDARIES[0].hart()));
+        assert!(!cores.stall_requested(crate::platform::BOOT_HART));
+        assert!(cores.held(Hart::SECONDARIES[0].hart()));
     }
     assert_eq!(words[4][0x164 / 4], 0, "the stale entry cleared");
     assert!(

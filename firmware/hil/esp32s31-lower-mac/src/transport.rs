@@ -35,9 +35,9 @@ pub(crate) fn usb_interrupt(part: &mut ConsoleInterrupt) {
 pub struct Chip(pub oer_esp32s31_hal::platform::ResetCauses);
 impl oer_hil_agent::base::Platform for Chip {
     fn boot_evidence(&self) -> BootEvidence {
-        use oer_esp32s31_hal::platform::{HpCore, ResetCause};
+        use oer_esp32s31_hal::platform::ResetCause;
         // The console serves boot evidence from core 0.
-        let cause = self.0.of(HpCore::Core0);
+        let cause = self.0.of(oer_esp32s31_hal::platform::BOOT_HART);
         BootEvidence {
             reset_reason: match cause {
                 ResetCause::CoreSoftware => ResetReason::Software,

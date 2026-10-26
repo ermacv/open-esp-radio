@@ -21,6 +21,7 @@ mod controls;
 mod error;
 mod facts;
 mod source;
+mod topology;
 
 pub(crate) use block_type::parse_bits;
 pub use block_type::{BlockType, Element};
@@ -80,6 +81,7 @@ pub struct ExpandedRegister {
 pub struct ChipModel {
     path: PathBuf,
     root: RootFile,
+    pub hart_geometry: Option<topology::Geometry>,
     types: BTreeMap<String, BlockType>,
     layouts: Vec<MemoryLayout>,
     registers: Vec<ExpandedRegister>,
@@ -99,7 +101,17 @@ impl ChipModel {
             .collect::<BTreeSet<_>>();
         let text = std::fs::read_to_string(path)
             .map_err(|error| Error::new(path, "", ErrorKind::Read(error)))?;
-        let root: RootFile = toml_edit::de::from_str(&text)
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "kebab-case")]
+        struct HartSource {
+            hart_facts: Option<String>,
+        }
+        let source: HartSource = toml_edit::de::from_str(&text)
+            .map_err(|e| Error::new(path, "", ErrorKind::Parse(e.to_string())))?;
+        let base = path.parent().unwrap_or(Path::new("."));
+        let harts = topology::count(base, source.hart_facts.as_deref())?;
+        let resolved = topology::resolve(&text, harts, path)?;
+        let mut root: RootFile = toml_edit::de::from_str(&resolved)
             .map_err(|error| Error::new(path, "", ErrorKind::Parse(error.to_string())))?;
         let context = Context {
             path,
@@ -127,7 +139,8 @@ impl ChipModel {
         }
         let base = path.parent().unwrap_or(Path::new("."));
 
-        let types = load_types(context, base, &root.types)?;
+        topology::instances(&mut root, path)?;
+        let types = load_types(context, base, &root.types, harts)?;
         let mut layouts = load_layouts(context, base, &root.layouts)?;
         let regions = check_ram_regions(context, &root.ram_regions)?;
         let mut names = BTreeSet::new();
@@ -144,6 +157,7 @@ impl ChipModel {
         Ok(Self {
             path: path.to_owned(),
             root,
+            hart_geometry: harts,
             types,
             layouts,
             registers,
@@ -252,13 +266,15 @@ fn load_types(
     context: Context<'_>,
     base: &Path,
     includes: &[String],
+    harts: Option<topology::Geometry>,
 ) -> Result<BTreeMap<String, BlockType>, Error> {
     let mut seen = BTreeSet::new();
     let mut types = BTreeMap::new();
     let mut budget = ExpansionBudget::default();
     for include in includes {
         safe_include(context, include, &mut seen)?;
-        let block_type = BlockType::load(&base.join(include), context.evidence, &mut budget)?;
+        let block_type =
+            BlockType::load(&base.join(include), context.evidence, &mut budget, harts)?;
         let name = block_type.name().to_owned();
         if types.contains_key(&name) {
             return Err(Error::new(
@@ -754,6 +770,34 @@ fn expand(
                 });
             }
             fields.sort_by_key(|field| field.low);
+            let reset = if register.element_resets.is_empty() {
+                register.reset
+            } else {
+                let dim = register.dim.ok_or_else(|| {
+                    fail(ErrorKind::Dim(
+                        "element resets need an indexed register".into(),
+                    ))
+                })?;
+                let ordinal = (0..dim.count)
+                    .position(|i| {
+                        register
+                            .name
+                            .replace("%s", &dim.first.wrapping_add(i).to_string())
+                            == element.name
+                    })
+                    .ok_or_else(|| {
+                        fail(ErrorKind::Dim("reset element has no family index".into()))
+                    })?;
+                Some(
+                    register
+                        .element_resets
+                        .get(ordinal)
+                        .copied()
+                        .ok_or_else(|| {
+                            fail(ErrorKind::Dim("reset list omits an element".into()))
+                        })?,
+                )
+            };
             out.push(ExpandedRegister {
                 review: review(&element.key, &identity)?,
                 identity,
@@ -761,7 +805,7 @@ fn expand(
                 key: element.key.clone(),
                 location,
                 width: element.width,
-                reset: register.reset,
+                reset,
                 reserved: register
                     .reserved
                     .as_ref()

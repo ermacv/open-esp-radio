@@ -68,6 +68,8 @@ control-bits = 3
 # SOURCE: the same S31 header, `NLBITS` 3: HAL writes MNLBITS explicitly,
 # without assuming the ROM left reset configuration (SOURCE:
 # HW1_S31_CLIC_20261026 in esp32s31/registers/evidence/hw-interrupts.toml).
+# SOURCE: hw1-20261026-boot-07 (research/hw-interrupt-facts.md):
+# S31 rev0 ROM leaves MNLBITS = 1; this is not its reset value.
 # Levels derive as 1 << level-bits;
 # all implemented control bits are levels, leaving no priority bits.
 level-bits = 3

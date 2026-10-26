@@ -60,7 +60,8 @@ const _: () = {
 };
 
 /// Vectors of a hart's CLIC vector table (MTVT) that hold an entry.
-pub const VECTORS: usize = 48;
+#[cfg(feature = "esp32s31")]
+pub const VECTORS: usize = crate::interrupts::LINES.count as usize;
 
 /// The current hart's trap CSRs.
 #[derive(Clone, Copy, Debug)]

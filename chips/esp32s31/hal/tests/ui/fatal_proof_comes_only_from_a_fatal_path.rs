@@ -12,5 +12,5 @@ pub fn stops(stop: Option<StopTheWorld<'_>>) -> Option<cores::Stopped> {
     let stop = stop?;
     #[cfg(ui_reject)]
     let _forged = StopTheWorld { hart: stop.hart() }; // ui-error: cannot construct `StopTheWorld<'_>` with struct literal syntax due to private fields
-    Some(stop.other())
+    stop.stopped(cores::BOOT_HART)
 }

@@ -185,11 +185,14 @@ impl BlockType {
         path: &Path,
         evidence: &BTreeSet<String>,
         budget: &mut ExpansionBudget,
+        harts: Option<super::topology::Geometry>,
     ) -> Result<Self, Error> {
         let text = std::fs::read_to_string(path)
             .map_err(|error| Error::new(path, "", ErrorKind::Read(error)))?;
-        let file: TypeFile = toml_edit::de::from_str(&text)
+        let text = super::topology::resolve(&text, harts, path)?;
+        let mut file: TypeFile = toml_edit::de::from_str(&text)
             .map_err(|error| Error::new(path, "", ErrorKind::Parse(error.to_string())))?;
+        super::topology::fields(&mut file, path)?;
         Self::check(Context { path, evidence }, path.to_owned(), file, budget)
     }
 
@@ -319,14 +322,26 @@ fn check_register(
         ))));
     }
     if let Some(dim) = register.dim
-        && (dim.count < 2 || dim.stride < bytes || !dim.stride.is_multiple_of(bytes))
+        && (dim.count == 0
+            || dim.first.checked_add(dim.count - 1).is_none()
+            || dim.stride < bytes
+            || !dim.stride.is_multiple_of(bytes))
     {
         return Err(fail(ErrorKind::Dim(format!(
-            "count {} must be at least 2 and stride {:#x} a nonzero multiple of {bytes} bytes",
+            "count {} must be at least 1 and stride {:#x} a nonzero multiple of {bytes} bytes",
             dim.count, dim.stride
         ))));
     }
 
+    if !register.element_resets.is_empty()
+        && register
+            .dim
+            .is_none_or(|dim| dim.count as usize != register.element_resets.len())
+    {
+        return Err(fail(ErrorKind::Dim(
+            "element-resets must cover the complete register family".into(),
+        )));
+    }
     let mut names = BTreeSet::new();
     let mut taken: Vec<(u64, &str)> = Vec::new();
     for field in &register.fields {
@@ -373,13 +388,28 @@ fn check_register(
         context.sources(entity, &reserved.sources)?;
     }
 
-    if let Some(reset) = register.reset {
+    for reset in register.reset.iter().chain(&register.element_resets) {
         let reset_mask = reset.mask.unwrap_or(u32::MAX >> (32 - width));
         if !fits(reset.value, width) || !fits(reset_mask, width) || reset.value & !reset_mask != 0 {
             return Err(fail(ErrorKind::Reset(format!(
                 "value {:#x} and mask {reset_mask:#x} must fit the register, the value within the mask",
                 reset.value
             ))));
+        }
+    }
+
+    if let Some(reserved) = &register.reserved {
+        let common = register.reset.map_or(0, |reset| {
+            reset.value & reset.mask.unwrap_or(u32::MAX) & reserved.mask
+        });
+        if register
+            .element_resets
+            .iter()
+            .any(|reset| (reset.value & reset.mask.unwrap_or(u32::MAX) & reserved.mask) != common)
+        {
+            return Err(fail(ErrorKind::Reset(
+                "family elements must share the template's reserved-bit reset image".into(),
+            )));
         }
     }
 
@@ -706,7 +736,10 @@ fn elements(
                 for index in 0..dim.count {
                     out.push(Element {
                         key: key.clone(),
-                        name: format!("{prefix}{}", name.replace("%s", &index.to_string())),
+                        name: format!(
+                            "{prefix}{}",
+                            name.replace("%s", &dim.first.wrapping_add(index).to_string())
+                        ),
                         offset: offset + u64::from(index) * u64::from(dim.stride),
                         width,
                         group: group.clone(),

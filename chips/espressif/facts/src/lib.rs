@@ -266,6 +266,21 @@ impl Facts {
     /// `origin`, for messages): every fact key, and no other.
     pub fn from_table(id: &str, origin: &str, mut table: Table) -> Result<Self> {
         let at = |error: Error| Error::from(format!("{origin}: {error}"));
+        if let Some(harts) = table
+            .get("interrupts")
+            .and_then(|v| v.get("harts"))
+            .and_then(Value::as_array)
+        {
+            let count = i64::try_from(harts.len()).map_err(|_| at("too many harts".into()))?;
+            if let Some(properties) = table.get_mut("properties").and_then(Value::as_table_mut) {
+                if let Some(stated) = properties.get("cores")
+                    && stated.as_integer() != Some(count)
+                {
+                    return Err(at("properties.cores disagrees with interrupts.harts".into()));
+                }
+                properties.insert("cores".into(), Value::Integer(count));
+            }
+        }
         expand_rules(&mut table).map_err(at)?;
         let stated: Stated = table
             .try_into()
@@ -600,6 +615,22 @@ pub(crate) mod tests {
         rust-target = 'riscv32imac-unknown-none-elf'\nboot = 'staged'\nespflash-chip = 'x'\n\
         revisions = []\n[properties]\nwifi-bands = []\nbluetooth = []\nieee802154 = false\n\
         cores = 1\n";
+
+    #[test]
+    fn interrupt_contract_requires_an_explicit_boot_hart() {
+        let mut table = load(&mut tracked::Tracked, "esp32s31").unwrap().table;
+        for registry in REGISTRY {
+            table.remove(*registry);
+        }
+        table
+            .get_mut("interrupts")
+            .unwrap()
+            .as_table_mut()
+            .unwrap()
+            .remove("boot-hart");
+        let error = Facts::from_table("esp32s31", "chip.toml", table).unwrap_err();
+        assert!(error.to_string().contains("boot-hart"), "{error}");
+    }
 
     #[test]
     fn the_tracked_chips_resolve_from_their_boards() {
@@ -1034,6 +1065,43 @@ pub(crate) mod tests {
                 .to_string()
                 .contains("does not extend chips/x/platform/chip.toml"),
             "{error}"
+        );
+    }
+    #[test]
+    fn redundant_core_count_and_hart_guards_must_agree_at_build_time() {
+        let layers = crate::load(&mut crate::tracked::Tracked, "esp32s31").unwrap();
+        let mut table = layers.table;
+        for registry in crate::REGISTRY {
+            table.remove(*registry);
+        }
+        let mut mismatch = table.clone();
+        mismatch
+            .get_mut("properties")
+            .unwrap()
+            .as_table_mut()
+            .unwrap()
+            .insert("cores".into(), Value::Integer(3));
+        assert!(
+            Facts::from_table("esp32s31", "synthetic", mismatch)
+                .unwrap_err()
+                .to_string()
+                .contains("disagrees")
+        );
+        table
+            .get_mut("interrupts")
+            .unwrap()
+            .as_table_mut()
+            .unwrap()
+            .get_mut("irq-stack-guard-bytes")
+            .unwrap()
+            .as_table_mut()
+            .unwrap()
+            .remove("1");
+        assert!(
+            Facts::from_table("esp32s31", "synthetic", table)
+                .unwrap_err()
+                .to_string()
+                .contains("every hart")
         );
     }
 }

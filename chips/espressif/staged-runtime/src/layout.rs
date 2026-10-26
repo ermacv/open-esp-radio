@@ -54,7 +54,7 @@ pub struct Sections {
     pub dma_data: Range<usize>,
     pub dma_bss: Range<usize>,
     /// Each hart's SRAM interrupt stack.
-    pub irq_stacks: [Range<usize>; 2],
+    pub irq_stacks: [Range<usize>; crate::vectors::HARTS],
     /// The CPU0 task stack, from its bottom to its top.
     pub task_stack: Range<usize>,
 }

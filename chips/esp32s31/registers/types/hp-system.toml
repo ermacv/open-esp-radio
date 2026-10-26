@@ -245,16 +245,11 @@ reset = { value = 0x0 }
 reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYSTEM_REG_H", "ESP_IDF_4D59230D_S31_CORE_CONTROL"] }
 
 [[registers.fields]]
-name = "HP_REG_CORE0_CORESTALLED_ST"
+name = "HP_REG_CORE%s_CORESTALLED_ST"
+dim = { count = "harts", stride = 1 }
 bits = "0"
 class = "read-only"
-description = "hp core0 corestalled status HP core 0 is stalled."
-
-[[registers.fields]]
-name = "HP_REG_CORE1_CORESTALLED_ST"
-bits = "1"
-class = "read-only"
-description = "hp core1 corestalled status HP core 1 is stalled."
+description = "Whether the selected HP core is stalled."
 
 [[registers]]
 name = "HP_CRYPTO_CTRL"

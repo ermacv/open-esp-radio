@@ -103,3 +103,10 @@ It counts encoded records in the flash window, not ELF sections or MMU pages.
 The staged builder checks it after encoding, alongside the independent SRAM
 code/constant placement audit. Its SOURCE identifies the bundled loader
 revision; the shared D/I S31 loader does not require executable flash code.
+
+For an interrupt-bearing chip, `properties.cores` is derived from
+`[interrupts] harts`; a supplied count must agree. The hart list is contiguous
+from zero and its guards cover it exactly once. `boot-hart` selects primary
+initialization. `generate::hart_geometry` renders the PAC's checked identities
+and const-admitted indices; vector generation derives its cardinality from the
+same list. Unknown architectural IDs remain errors carrying their full raw word.

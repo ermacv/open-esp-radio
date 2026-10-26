@@ -16,7 +16,6 @@ wifi-bands = ["2g4"]
 # BTDM controller (BR/EDR and LE) in the vendor Bluetooth library.
 bluetooth = ["le", "br-edr"]
 ieee802154 = true
-cores = 2
 
 # Where every image lies in flash. The image pipeline encodes the ESP-IDF
 # bootloader, the partition table and the OTA selection for these offsets at
@@ -121,7 +120,12 @@ flash-tuning-reference-bytes = 0x1_0000
 
 # The chip's harts and the guard of each one's interrupt stack; the family
 # states the rest of the interrupt contract.
+# SOURCE: ESP-IDF 4d59230d soc/esp32s31/include/soc/soc_caps.h
+# SOC_CPU_CORES_NUM; the list is the sole HP-hart cardinality.
 [interrupts]
+# SOURCE: pinned rev0 ROM _init (0x2f801710), normal_boot (0x2f801790):
+# the primary reset path is hart zero; nonzero IDs enter the secondary path.
+boot-hart = 0
 harts = [0, 1]
 irq-stack-guard-bytes = { "0" = 4096, "1" = 1024 }
 
@@ -129,7 +133,7 @@ irq-stack-guard-bytes = { "0" = 4096, "1" = 1024 }
 # that hart's roots and prove its stack policy before it links a starter.
 [core-start]
 ipc = []
-starters = ["*Cores*::start_hart1*"]
+starters = ["*Cores*::start*"]
 
 # The Rust probe images of the vendor comparison (firmware/probes),
 # in build order: the artifact role each serves. The Bluetooth probe returns
@@ -148,7 +152,7 @@ package = "oer-firmware-probes-esp32s31-register"
 # cause 1 is the power-on reset of ESP-IDF 4d59230d's
 # `components/soc/esp32s31/register/soc/lp_clkrst_reg.h`.
 [reset-cause]
-field = "LP_AON_CLKRST.LP_AONCLKRST_HPCORE0_RESET_CAUSE.LP_AONCLKRST_HPCORE0_RESET_CAUSE"
+field = "LP_AON_CLKRST.LP_AONCLKRST_HPCORE0_RESET_CAUSE.LP_AONCLKRST_HPCORE_RESET_CAUSE"
 power-on = 1
 
 [hil]

@@ -14,7 +14,7 @@ pub(crate) use crate::context::NO_EXECUTOR;
 use crate::context::Running;
 use crate::task::{Current, Interrupt as InterruptMode, Ready, Spawner, TaskId, Tasks, Thread};
 
-const CORE_COUNT: usize = 2;
+const CORE_COUNT: usize = platform::HARTS;
 const UNASSIGNED_CORE: usize = usize::MAX;
 
 /// Each thread-mode executor's wake flag: work other than a ready task (an
@@ -33,8 +33,8 @@ oer_memory::zeroed_static! {
     static WORK_PENDING: WorkPending = zeroed in ".critical.bss.executor";
 }
 
-/// The registered core in the low two bits, plus the current task poll
-/// timestamp in the remaining bits. The unassigned sentinel has core bits 3.
+/// The registered hart in geometry-derived low bits, plus the current task
+/// poll timestamp in the remaining bits. All low bits set mean unassigned.
 #[used]
 #[allow(
     unsafe_code,

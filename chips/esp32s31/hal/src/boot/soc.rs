@@ -110,7 +110,7 @@ impl Soc {
             rng_clock,
             cores,
         } = self;
-        contain_hart1(cores);
+        contain_secondaries(cores);
         open_apm_filters(lp_apm, hp_apm, hp_mem_apm);
         start_trng(trng, rng_clock);
         Ok(())
@@ -122,11 +122,13 @@ impl Soc {
 ///
 /// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/cpu_control.rs:6-96`;
 /// ESP-IDF 4d59230d `components/esp_system/port/soc/esp32s31/system_internal.c:61-100`.
-fn contain_hart1<U: Placement, V: Placement, W: Placement, X: Placement, Y: Placement>(
+fn contain_secondaries<U: Placement, V: Placement, W: Placement, X: Placement, Y: Placement>(
     cores: &mut CoreControlRegisters<U, V, W, X, Y>,
 ) {
-    cores::park_hart1(cores);
-    cores.set_boot_address(0);
+    for hart in crate::platform::Hart::SECONDARIES {
+        cores::park(cores, hart);
+        cores.set_boot_address(hart, 0);
+    }
 }
 
 /// Open the APM access-path filters of every master: each enable written

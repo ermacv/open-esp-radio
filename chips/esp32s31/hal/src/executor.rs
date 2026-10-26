@@ -71,7 +71,9 @@ impl Platform {
 
 /// Whether hart 0's debug module is active in `status`.
 fn debug_module_active<P: oer_mmio::Placement>(status: &DebugModeStatus<P>) -> bool {
-    status.read_core_0_debug_mode().core_0_debug_module_active()
+    status
+        .read_debug_mode(crate::platform::BOOT_HART.index())
+        .debug_module_active()
 }
 
 #[cfg(test)]

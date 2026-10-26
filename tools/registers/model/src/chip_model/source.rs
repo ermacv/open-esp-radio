@@ -164,6 +164,8 @@ pub struct Register {
     #[serde(default)]
     pub fields: Vec<Field>,
     #[serde(default)]
+    pub element_resets: Vec<Reset>,
+    #[serde(default)]
     pub views: Vec<View>,
 }
 
@@ -171,6 +173,8 @@ pub struct Register {
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct Dim {
+    #[serde(default)]
+    pub first: u32,
     pub count: u32,
     pub stride: u32,
 }
@@ -213,6 +217,10 @@ pub struct ReadSafe {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct Field {
+    #[serde(default)]
+    pub dim: Option<FieldDim>,
+    #[serde(skip)]
+    pub family: Option<FieldFamily>,
     pub name: String,
     /// `"n"` or `"high:low"`.
     pub bits: String,
@@ -230,6 +238,20 @@ pub struct Field {
     pub value_range: Option<ValueRange>,
     #[serde(default)]
     pub pointer: Option<Pointer>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FieldDim {
+    pub count: u32,
+    pub stride: i32,
+}
+#[derive(Clone, Debug)]
+pub struct FieldFamily {
+    pub name: String,
+    pub index: u32,
+    pub count: u32,
+    pub stride: i32,
 }
 
 /// What a read and a write of a field do: the closed set of classes the
@@ -415,6 +437,8 @@ pub struct Doorbell {
 pub struct RootFile {
     pub schema: u32,
     pub chip: String,
+    #[serde(default)]
+    pub hart_facts: Option<String>,
     pub types: Vec<String>,
     #[serde(default)]
     pub layouts: Vec<String>,
@@ -443,6 +467,8 @@ pub struct RootFile {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct Instance {
+    #[serde(default)]
+    pub dim: Option<Dim>,
     pub name: String,
     #[serde(rename = "type")]
     pub block_type: String,

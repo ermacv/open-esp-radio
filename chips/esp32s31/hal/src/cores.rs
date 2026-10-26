@@ -1,4 +1,4 @@
-//! The chip's two HP cores (harts): the cores' owner ([`Cores`]), the fatal
+//! The chip's HP cores (harts): the cores' owner ([`Cores`]), the fatal
 //! path's stop of every other hart ([`StopTheWorld`]) and the chip's software
 //! reset ([`software_reset`]).
 //!
@@ -6,12 +6,12 @@
 //! [`ClaimCell`], whose state only a compare-and-swap changes and nothing
 //! waits for:
 //!
-//! - The image takes the cores' owner once, on hart 0 ([`Cores::take`]);
+//! - The image takes the cores' owner once, on the boot hart ([`Cores::take`]);
 //!   each of its operations borrows the words (`Free → Lent → Free`) for a
 //!   few register accesses and a bounded wait.
 //! - `Free → Held(hart)` when a fatal path of `hart` takes them, for good;
 //!   the same hart's path reaches them again, one call at a time. That
-//!   compare-and-swap is the election of two harts that fail at once: the
+//!   compare-and-swap is the election of harts that fail at once: the
 //!   loser never requests a stall, so two fatal harts never stall each
 //!   other. A fatal path that finds the words lent (an operation of the
 //!   cores' owner, or its own hart's path it interrupted) does not wait
@@ -20,8 +20,8 @@
 //! A fatal path is the only one that gets a [`Fatal`]: [`fatal`] masks the
 //! hart's interrupts before lending it, then halts if the path returns.
 //! The path never returns to the code it interrupted. With it,
-//! [`stop_the_world`] takes the words, stops the other hart and confirms it:
-//! the hardware's stall status, or core 1 held in reset with its clock
+//! [`stop_the_world`] takes the words, stops every peer and confirms it:
+//! the hardware's stall status, or a peer held in reset with its clock
 //! gated. A stall the hardware does not confirm within [`STALL_POLLS`] is a
 //! typed failure. The stop only prepares the chip's reset: the fatal path
 //! keeps its record for the next boot and resets ([`software_reset`]).
@@ -56,8 +56,8 @@ use oer_diagnostics::Note;
 use oer_memory::{Claim, ClaimCell, Held};
 use oer_mmio::Placement;
 
-pub use crate::platform::HpCore;
 use crate::platform::core_control::{CoreControlRegisters, Uart0ClockRegisters};
+pub use crate::platform::{BOOT_HART, HARTS, Hart, SecondaryHart};
 
 #[cfg(test)]
 mod tests;
@@ -79,19 +79,14 @@ pub const STALL_POLLS: u32 = 10_000;
 type ThisHart = PhantomData<*const ()>;
 
 /// A fatal path's key of its hart in the cells.
-pub(crate) const fn key(hart: HpCore) -> u8 {
-    match hart {
-        HpCore::Core0 => 0,
-        HpCore::Core1 => 1,
+pub(crate) const fn key(hart: Hart) -> u8 {
+    const {
+        assert!(
+            HARTS <= oer_memory::KEYS as usize,
+            "every hart has a fatal election key"
+        );
     }
-}
-
-/// The hart that is not `hart`.
-const fn other(hart: HpCore) -> HpCore {
-    match hart {
-        HpCore::Core0 => HpCore::Core1,
-        HpCore::Core1 => HpCore::Core0,
-    }
+    hart.get() as u8
 }
 
 /// The chip's core-control words, installed once by the reset root.
@@ -118,21 +113,18 @@ pub(crate) fn install(
     core.and(uart0)
 }
 
-/// The hart this code runs on.
-#[cfg(target_arch = "riscv32")]
-fn current_hart() -> HpCore {
-    let hart = oer_riscv::hart_id();
-    if hart == 0 {
-        HpCore::Core0
-    } else {
-        HpCore::Core1
-    }
+/// An impossible architectural identity, retained before resetting the image.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Fault {
+    InvalidHart { raw: u32 },
 }
 
-/// The host runs the HAL's tests as hart 0.
-#[cfg(not(target_arch = "riscv32"))]
-fn current_hart() -> HpCore {
-    HpCore::Core0
+fn current_hart() -> Result<Hart, Fault> {
+    #[cfg(target_arch = "riscv32")]
+    let raw = oer_riscv::hart_id() as u32;
+    #[cfg(not(target_arch = "riscv32"))]
+    let raw = BOOT_HART.get() as u32;
+    Hart::new(raw).map_err(|invalid| Fault::InvalidHart { raw: invalid.raw })
 }
 
 /// A stall or run request the hardware did not confirm within
@@ -155,7 +147,7 @@ pub enum CoresError {
 /// within `polls` reads.
 fn confirm<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
     words: &CoreControlRegisters<P, Q, R, S, T>,
-    hart: HpCore,
+    hart: Hart,
     stalled: bool,
     polls: u32,
 ) -> Result<(), Unconfirmed> {
@@ -172,7 +164,7 @@ fn confirm<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
 /// Request that `hart` stall and wait for the hardware to confirm it.
 fn stall<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
     words: &mut CoreControlRegisters<P, Q, R, S, T>,
-    hart: HpCore,
+    hart: Hart,
     polls: u32,
 ) -> Result<(), Unconfirmed> {
     words.request_stall(hart);
@@ -183,14 +175,14 @@ fn stall<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
 /// stalled.
 fn run<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
     words: &mut CoreControlRegisters<P, Q, R, S, T>,
-    hart: HpCore,
+    hart: Hart,
     polls: u32,
 ) -> Result<(), Unconfirmed> {
     words.request_run(hart);
     confirm(words, hart, false, polls)
 }
 
-/// How the other hart was found stopped.
+/// How a selected peer was found stopped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Stopped {
     /// Core 1 is held in its global reset with its CPU clock gated: it
@@ -200,17 +192,25 @@ pub enum Stopped {
     Stalled,
 }
 
-/// Stop the hart that is not `this` and confirm it.
+/// Stop and confirm every peer without selecting a fictitious "other" index.
 fn stop_other<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
     words: &mut CoreControlRegisters<P, Q, R, S, T>,
-    this: HpCore,
+    this: Hart,
     polls: u32,
-) -> Result<Stopped, Unconfirmed> {
-    let other = other(this);
-    if other == HpCore::Core1 && words.core1_held() {
-        return Ok(Stopped::Held);
+) -> Result<[Option<Stopped>; HARTS], Unconfirmed> {
+    let mut stopped = [None; HARTS];
+    for hart in Hart::ALL {
+        if hart == this {
+            continue;
+        }
+        *hart.at_mut(&mut stopped) = Some(if words.held(hart) {
+            Stopped::Held
+        } else {
+            stall(words, hart, polls)?;
+            Stopped::Stalled
+        });
     }
-    stall(words, other, polls).map(|()| Stopped::Stalled)
+    Ok(stopped)
 }
 
 /// Prepare the chip's reset on `this` hart, holding the core-control words:
@@ -224,28 +224,33 @@ fn stop_other<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placeme
 /// resetting the cores, with the APP CPU stalled on the core-0 path).
 fn prepare_reset<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
     words: &mut CoreControlRegisters<P, Q, R, S, T>,
-    this: HpCore,
+    this: Hart,
 ) {
-    words.set_boot_address(0);
-    let other = other(this);
-    words.reset_core(other);
-    words.request_stall(other);
+    for hart in Hart::SECONDARIES {
+        words.set_boot_address(hart, 0);
+    }
+    for hart in Hart::ALL {
+        if hart != this {
+            words.reset_core(hart);
+            words.request_stall(hart);
+        }
+    }
 }
 
-/// The cores' owner: hart 1's start, park, stall and run. One exists per
-/// image, on hart 0, which it never leaves (not `Send`).
+/// The cores' owner: secondary start, park, stall and run. One exists per
+/// image, on the boot hart, which it never leaves (not `Send`).
 pub struct Cores(ThisHart);
 
 impl Cores {
-    /// Take the cores' owner on hart 0, once: `None` on hart 1 or after it
+    /// Take the cores' owner on the boot hart, once: `None` off the boot hart or after it
     /// was taken. Its operations are refused once a fatal path holds the
-    /// words.
-    pub fn take() -> Option<Self> {
-        (current_hart() == HpCore::Core0
+    /// words. An unknown architectural ID returns its full raw word in `Fault`.
+    pub fn take() -> Result<Option<Self>, Fault> {
+        Ok((current_hart()? == BOOT_HART
             && OWNER
                 .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
                 .is_ok())
-        .then_some(Self(PhantomData))
+        .then_some(Self(PhantomData)))
     }
 
     fn operate<T>(
@@ -255,46 +260,46 @@ impl Cores {
         operate(&CORE_CONTROL, operation)
     }
 
-    /// How hart 1 stands: held in reset with its clock gated, stalled by the
+    /// How a secondary hart stands: held in reset with its clock gated, stalled by the
     /// hardware's report, or neither.
     ///
     /// # Errors
     /// No words are installed, or a fatal path holds them.
-    pub fn hart1(&mut self) -> Result<Hart1, CoresError> {
-        self.operate(|words| hart1(words))
+    pub fn status(&mut self, hart: SecondaryHart) -> Result<CoreState, CoresError> {
+        self.operate(|words| state(words, hart))
     }
 
-    /// Park hart 1 as ESP-IDF's single-core start does: request its stall,
+    /// Park a secondary hart as ESP-IDF's single-core start does: request its stall,
     /// then gate its clocks and hold it in its global reset.
     ///
     /// # Errors
     /// No words are installed, or a fatal path holds them.
-    pub fn park_hart1(&mut self) -> Result<(), CoresError> {
-        self.operate(park_hart1)
+    pub fn park(&mut self, hart: SecondaryHart) -> Result<(), CoresError> {
+        self.operate(|words| park(words, hart))
     }
 
-    /// Stall hart 1 and wait for the hardware to confirm it.
+    /// Stall a secondary hart and wait for the hardware to confirm it.
     ///
     /// # Errors
     /// No words are installed, a fatal path holds them, or the hardware did
     /// not confirm the stall within [`STALL_POLLS`].
-    pub fn stall_hart1(&mut self) -> Result<(), CoresError> {
-        self.operate(|words| stall(words, HpCore::Core1, STALL_POLLS))?
+    pub fn stall(&mut self, hart: SecondaryHart) -> Result<(), CoresError> {
+        self.operate(|words| stall(words, hart.hart(), STALL_POLLS))?
             .map_err(|Unconfirmed| CoresError::Unconfirmed)
     }
 
-    /// Let hart 1 run and wait for the hardware to report it no longer
+    /// Let a secondary hart run and wait for the hardware to report it no longer
     /// stalled.
     ///
     /// # Errors
     /// No words are installed, a fatal path holds them, or the hardware did
     /// not confirm the run within [`STALL_POLLS`].
-    pub fn run_hart1(&mut self) -> Result<(), CoresError> {
-        self.operate(|words| run(words, HpCore::Core1, STALL_POLLS))?
+    pub fn run(&mut self, hart: SecondaryHart) -> Result<(), CoresError> {
+        self.operate(|words| run(words, hart.hart(), STALL_POLLS))?
             .map_err(|Unconfirmed| CoresError::Unconfirmed)
     }
 
-    /// Start hart 1 at `entry`, as ESP-IDF starts the other core: no boot
+    /// Start a secondary hart at `entry`, as ESP-IDF starts the other core: no boot
     /// address, the run request confirmed, the clocks enabled and the
     /// global reset released, then the entry.
     ///
@@ -305,12 +310,16 @@ impl Cores {
     /// No words are installed, a fatal path holds them, or the hardware did
     /// not confirm the run within [`STALL_POLLS`].
     #[cfg(feature = "cpu1-runs")]
-    pub fn start_hart1(&mut self, entry: extern "C" fn() -> !) -> Result<(), CoresError> {
+    pub fn start(
+        &mut self,
+        hart: SecondaryHart,
+        entry: extern "C" fn() -> !,
+    ) -> Result<(), CoresError> {
         self.operate(|words| {
-            words.set_boot_address(0);
-            run(words, HpCore::Core1, STALL_POLLS)?;
-            words.release_core1();
-            words.set_boot_address(entry as usize as u32);
+            words.set_boot_address(hart, 0);
+            run(words, hart.hart(), STALL_POLLS)?;
+            words.release(hart);
+            words.set_boot_address(hart, entry as usize as u32);
             Ok(())
         })?
         .map_err(|Unconfirmed| CoresError::Unconfirmed)
@@ -328,31 +337,33 @@ fn operate<W, T>(
     })
 }
 
-/// How hart 1 stands.
-fn hart1<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
+/// How a secondary hart stands.
+fn state<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
     words: &CoreControlRegisters<P, Q, R, S, T>,
-) -> Hart1 {
-    if words.core1_held() {
-        Hart1::Held
-    } else if words.is_stalled(HpCore::Core1) {
-        Hart1::Stalled
+    hart: SecondaryHart,
+) -> CoreState {
+    if words.held(hart.hart()) {
+        CoreState::Held
+    } else if words.is_stalled(hart.hart()) {
+        CoreState::Stalled
     } else {
-        Hart1::Released
+        CoreState::Released
     }
 }
 
-/// Request hart 1's stall, then hold it in reset with its clocks gated, as
+/// Request the secondary hart's stall, then hold it in reset with its clocks gated, as
 /// ESP-IDF's single-core start leaves it.
-pub(crate) fn park_hart1<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
+pub(crate) fn park<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
     words: &mut CoreControlRegisters<P, Q, R, S, T>,
+    hart: SecondaryHart,
 ) {
-    words.request_stall(HpCore::Core1);
-    words.hold_core1();
+    words.request_stall(hart.hart());
+    words.hold(hart);
 }
 
-/// How hart 1 stands.
+/// How a secondary hart stands.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Hart1 {
+pub enum CoreState {
     /// Held in its global reset with its CPU clock gated.
     Held,
     /// The hardware reports it stalled.
@@ -366,14 +377,14 @@ pub enum Hart1 {
 /// `Send`). Only [`fatal`] makes one, and the proof does not leave the
 /// closure it is lent to.
 pub struct Fatal<'a> {
-    hart: HpCore,
+    hart: Result<Hart, Fault>,
     _path: PhantomData<fn(&'a ()) -> &'a ()>,
     _hart: ThisHart,
 }
 
 impl Fatal<'_> {
     /// The hart that fails.
-    pub const fn hart(&self) -> HpCore {
+    pub const fn hart(&self) -> Result<Hart, Fault> {
         self.hart
     }
 }
@@ -392,6 +403,7 @@ pub fn fatal(fatal_path: impl for<'a> FnOnce(Fatal<'a>)) -> ! {
             #[cfg(target_arch = "riscv32")]
             oer_riscv::disable_interrupts();
         },
+        current_hart,
         fatal_path,
         || {
             #[cfg(target_arch = "riscv32")]
@@ -415,6 +427,7 @@ pub fn fatal(fatal_path: impl for<'a> FnOnce(Fatal<'a>)) -> ! {
 fn fatal_with(
     mask_threshold: impl FnOnce(),
     disable_interrupts: impl FnOnce(),
+    identify: impl FnOnce() -> Result<Hart, Fault>,
     fatal_path: impl for<'a> FnOnce(Fatal<'a>),
     halt: impl FnOnce() -> core::convert::Infallible,
 ) -> ! {
@@ -423,7 +436,7 @@ fn fatal_with(
     // No access of the fatal path moves before the mask.
     core::sync::atomic::compiler_fence(Ordering::SeqCst);
     fatal_path(Fatal {
-        hart: current_hart(),
+        hart: identify(),
         _path: PhantomData,
         _hart: PhantomData,
     });
@@ -433,6 +446,9 @@ fn fatal_with(
 /// Why a fatal path did not stop the world.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StopError {
+    InvalidHart {
+        raw: u32,
+    },
     /// The reset root installed no core-control words.
     NotInstalled,
     /// The other hart's fatal path holds the core-control words: it stops
@@ -455,21 +471,21 @@ pub enum StopError {
 /// show that the other hart's bus transactions completed. It stays in its
 /// fatal path, on its hart (not `Send`).
 pub struct StopTheWorld<'a> {
-    hart: HpCore,
-    stopped: Stopped,
+    hart: Hart,
+    stopped: [Option<Stopped>; HARTS],
     _path: PhantomData<fn(&'a ()) -> &'a ()>,
     _hart: ThisHart,
 }
 
 impl StopTheWorld<'_> {
     /// The hart of the fatal path.
-    pub const fn hart(&self) -> HpCore {
+    pub const fn hart(&self) -> Hart {
         self.hart
     }
 
-    /// How the other hart was found stopped.
-    pub const fn other(&self) -> Stopped {
-        self.stopped
+    /// How a selected peer was found stopped.
+    pub const fn stopped(&self, hart: Hart) -> Option<Stopped> {
+        *hart.at(&self.stopped)
     }
 }
 
@@ -483,7 +499,9 @@ impl StopTheWorld<'_> {
 /// hart's stall was not confirmed. The caller keeps its record and resets
 /// all the same.
 pub fn stop_the_world<'a>(fatal: &Fatal<'a>) -> Result<StopTheWorld<'a>, StopError> {
-    let hart = fatal.hart;
+    let hart = fatal
+        .hart
+        .map_err(|Fault::InvalidHart { raw }| StopError::InvalidHart { raw })?;
     let stopped = stop_with(&CORE_CONTROL, hart, STALL_POLLS)?;
     Ok(StopTheWorld {
         hart,
@@ -495,9 +513,9 @@ pub fn stop_the_world<'a>(fatal: &Fatal<'a>) -> Result<StopTheWorld<'a>, StopErr
 
 fn stop_with<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
     cell: &ClaimCell<CoreControlRegisters<P, Q, R, S, T>>,
-    hart: HpCore,
+    hart: Hart,
     polls: u32,
-) -> Result<Stopped, StopError> {
+) -> Result<[Option<Stopped>; HARTS], StopError> {
     match cell.hold(key(hart), |words| stop_other(words, hart, polls)) {
         Ok(Held { value, first: true }) => value.map_err(|Unconfirmed| StopError::Unconfirmed),
         Ok(Held { first: false, .. }) => Err(StopError::Reentered),
@@ -533,8 +551,19 @@ pub const RESET_UNPREPARED: &str = "reset-unprepared";
 /// [`AwaitWatchdog`]: its hart then halts, masked, until an armed watchdog
 /// resets the chip. No second owner of the words is made.
 pub fn software_reset(fatal: Fatal<'_>) -> AwaitWatchdog {
-    restore_uart0_with(&UART0_CLOCK, fatal.hart);
-    match reset_with(&CORE_CONTROL, fatal.hart) {
+    let reset = match fatal.hart {
+        Ok(hart) => {
+            restore_uart0_with(&UART0_CLOCK, hart);
+            reset_with(&CORE_CONTROL, hart)
+        }
+        Err(Fault::InvalidHart { raw }) => {
+            // An invalid identity grants no keyed hart authority. Seal free owners
+            // permanently; a lent/held owner is never taken over.
+            let _clock = UART0_CLOCK.seal(|clock| clock.restore_uart0_clock());
+            reset_quarantined_with(&CORE_CONTROL, raw)
+        }
+    };
+    match reset {
         Ok(()) => loop {
             #[cfg(target_arch = "riscv32")]
             oer_riscv::wait_for_interrupt();
@@ -555,10 +584,7 @@ pub fn software_reset(fatal: Fatal<'_>) -> AwaitWatchdog {
 
 /// Restore UART0's clock for the boot ROM if `hart` holds the word; whether
 /// it did.
-fn restore_uart0_with<P: Placement>(
-    cell: &ClaimCell<Uart0ClockRegisters<P>>,
-    hart: HpCore,
-) -> bool {
+fn restore_uart0_with<P: Placement>(cell: &ClaimCell<Uart0ClockRegisters<P>>, hart: Hart) -> bool {
     cell.hold(key(hart), |clock| clock.restore_uart0_clock())
         .is_ok()
 }
@@ -567,7 +593,7 @@ fn restore_uart0_with<P: Placement>(
 /// could not be held.
 fn reset_with<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
     cell: &ClaimCell<CoreControlRegisters<P, Q, R, S, T>>,
-    hart: HpCore,
+    hart: Hart,
 ) -> Result<(), StopError> {
     match cell.hold(key(hart), |words| {
         prepare_reset(words, hart);
@@ -579,4 +605,19 @@ fn reset_with<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placeme
         Err(Claim::Lent) => Err(StopError::Busy),
         Err(Claim::Kept) => Err(StopError::Lost),
     }
+}
+
+/// Seal a free owner without manufacturing a valid hart's election key.
+fn reset_quarantined_with<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
+    cell: &ClaimCell<CoreControlRegisters<P, Q, R, S, T>>,
+    raw: u32,
+) -> Result<(), StopError> {
+    cell.seal(|words| {
+        for hart in Hart::SECONDARIES {
+            words.set_boot_address(hart, 0);
+        }
+        oer_riscv::fence();
+        words.request_system_reset();
+    })
+    .map_err(|_| StopError::InvalidHart { raw })
 }

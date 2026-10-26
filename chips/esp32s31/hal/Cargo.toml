@@ -11,7 +11,7 @@ description = "Ownership and async HAL boundaries for the ESP32-S31 radio"
 # The BLE driver enables its controller-memory engine; Wi-Fi images keep
 # their code-generation identity.
 bluetooth-engine = []
-## Hart 1 runs code: `Cores::start_hart1` exists. No image enables it, and
+## Hart 1 runs code: `Cores::start` exists. No image enables it, and
 ## the crate refuses it, as the staged runtime does: its critical-section
 ## masks only the current hart, so a second running hart needs a cross-hart
 ## lock without spinning first.

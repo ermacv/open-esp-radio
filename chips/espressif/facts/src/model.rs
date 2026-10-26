@@ -342,6 +342,8 @@ pub struct InterruptContract {
     /// Arbitration order when level and priority are equal.
     pub tie_break: TieBreak,
     pub harts: Vec<u32>,
+    /// The hart that owns reset and primary image initialization.
+    pub boot_hart: u32,
     pub level_writers: Vec<LevelWriter>,
     /// Maximum allocation of each hart's dedicated SRAM interrupt stack.
     pub irq_stack_bytes: u32,
@@ -407,7 +409,9 @@ impl InterruptContract {
             return Err("CLIC level bits must fit the implemented control bits (at most 8)".into());
         }
         let harts: alloc::collections::BTreeSet<_> = self.harts.iter().copied().collect();
-        if harts.len() != self.harts.len()
+        if !self.harts.iter().copied().eq(0..self.harts.len() as u32)
+            || !harts.contains(&self.boot_hart)
+            || harts.len() != self.harts.len()
             || harts.is_empty()
             || self
                 .irq_stack_guard_bytes

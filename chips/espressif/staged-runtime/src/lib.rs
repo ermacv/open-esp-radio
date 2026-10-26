@@ -174,9 +174,10 @@ impl Handoff {
         controller: C,
         board: B,
     ) -> Result<(B::Mapping, Adopted<C>), BootError> {
+        panic::report_previous_fault();
         let mapping = board.adopt(&self.proof);
         let actual = usize::from(controller.hart());
-        let expected = oer_espressif_staged_layout::boot::BOOT_HART;
+        let expected = oer_esp32s31_hal::platform::BOOT_HART.get();
         if actual != expected {
             return Err(BootError::WrongHart { actual, expected });
         }

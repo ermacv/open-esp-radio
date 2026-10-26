@@ -1,0 +1,13 @@
+error[E0308]: mismatched types
+ --> tests/ui/holding_a_core_requires_a_secondary_hart.rs:7:20
+  |
+7 |     registers.hold(oer_esp32s31_hal::platform::BOOT_HART); // ui-error: E0308
+  |               ---- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `SecondaryHart`, found `Hart`
+  |               |
+  |               arguments to this method are incorrect
+  |
+note: method defined here
+ --> src/platform/core_control.rs
+  |
+  |     pub fn hold(&mut self, core: SecondaryHart) {
+  |            ^^^^

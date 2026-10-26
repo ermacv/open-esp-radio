@@ -57,19 +57,19 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ES
 [review.entity."TIMERGRP1_CTRL0.REG_TIMERGRP1_WDT_CLK_EN"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_TIMG1"]
 
-[review.entity."HPCORE1_CTRL0"]
+[review.entity."HPCORE%s_CTRL0"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
 
-[review.entity."HPCORE1_CTRL0.REG_CORE1_CLIC_CLK_EN"]
+[review.entity."HPCORE%s_CTRL0.REG_CORE_CLIC_CLK_EN"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
 
-[review.entity."HPCORE1_CTRL0.REG_CORE1_CPU_CLK_EN"]
+[review.entity."HPCORE%s_CTRL0.REG_CORE_CPU_CLK_EN"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
 
-[review.entity."HPCORE1_CTRL0.REG_CORE1_GLOBAL_RST_EN"]
+[review.entity."HPCORE%s_CTRL0.REG_CORE_GLOBAL_RST_EN"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
 
-[review.entity."HPCORE1_CTRL0.REG_CORE1_FORCE_NORST"]
+[review.entity."HPCORE%s_CTRL0.REG_CORE_FORCE_NORST"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_CORE_CONTROL"]
 
 [review.entity."UART0_CTRL0"]
@@ -219,66 +219,37 @@ class = "plain"
 description = "need_des"
 
 [[registers]]
-name = "HPCORE0_CTRL0"
+name = "HPCORE%s_CTRL0"
 offset = 0x1c
-description = "need_des"
-reset = { value = 0x3 }
+dim = { count = "harts", stride = 4 }
+description = "Per-hart CPU/CLIC clocks and global reset."
+reset = { value = 0, mask = 0xfffffff0 }
+element-resets = [{ value = 0x3 }, { value = 0x4 }]
 reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H"] }
 
 [[registers.fields]]
-name = "REG_CORE0_CLIC_CLK_EN"
+name = "REG_CORE_CLIC_CLK_EN"
 bits = "0"
 class = "plain"
-description = "need_des"
+description = "The selected hart's CLIC clock enable."
 
 [[registers.fields]]
-name = "REG_CORE0_CPU_CLK_EN"
+name = "REG_CORE_CPU_CLK_EN"
 bits = "1"
 class = "plain"
-description = "need_des"
+description = "The selected hart's CPU clock enable."
 
 [[registers.fields]]
-name = "REG_CORE0_GLOBAL_RST_EN"
+name = "REG_CORE_GLOBAL_RST_EN"
 bits = "2"
 class = "plain"
-description = "need_des"
+description = "Hold the selected hart in global reset."
 
 [[registers.fields]]
-name = "REG_CORE0_FORCE_NORST"
+name = "REG_CORE_FORCE_NORST"
 bits = "3"
 class = "plain"
-description = "need_des"
-
-[[registers]]
-name = "HPCORE1_CTRL0"
-offset = 0x20
-description = "HP core 1's CLIC and CPU clock enables and its global reset."
-reset = { value = 0x4 }
-reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_HP_SYS_CLKRST_REG_H", "ESP_IDF_4D59230D_S31_CORE_CONTROL"] }
-
-[[registers.fields]]
-name = "REG_CORE1_CLIC_CLK_EN"
-bits = "0"
-class = "plain"
-description = "HP core 1's CLIC clock enable."
-
-[[registers.fields]]
-name = "REG_CORE1_CPU_CLK_EN"
-bits = "1"
-class = "plain"
-description = "HP core 1's CPU clock enable."
-
-[[registers.fields]]
-name = "REG_CORE1_GLOBAL_RST_EN"
-bits = "2"
-class = "plain"
-description = "Holds HP core 1 in its global reset while set."
-
-[[registers.fields]]
-name = "REG_CORE1_FORCE_NORST"
-bits = "3"
-class = "plain"
-description = "Keeps HP core 1 out of reset."
+description = "Keep the selected hart out of reset."
 
 [[registers]]
 name = "TRACE_CTRL0"

@@ -36,3 +36,11 @@ phase-specific owners. The PAC holds no boot or radio sequencing.
 
 `tests/` exercises the generated layouts over host memory; the renderer's
 own tests prove the accessors' behaviour and what they refuse.
+
+The generated `Hart` and `SecondaryHart` identities and `HARTS` come from the
+platform's one HP-hart list. They grant no ownership or launch permission.
+Per-hart stall/status lanes, clock/reset words, reset causes, secondary boot
+addresses, matrix instances and assist-debug words are indexed families.
+`Hart::index` and `SecondaryHart::index` select their respective PAC arrays;
+fixed identities are admitted at compile time and raw identities return errors.
+The local CLIC remains a context-relative boot-hart owner.

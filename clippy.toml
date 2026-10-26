@@ -6,7 +6,7 @@ disallowed-methods = [
     { path = "core::hint::spin_loop", reason = "production radio code must yield through its executor or platform" },
     # A core other than core 0 runs code only from a root that the image's
     # stack policy declares and the image gate proves (docs/memory.md, Stacks).
-    { path = "oer_esp32s31_hal::cores::Cores::start_hart1", reason = "a core starts only from a root the stack policy declares and the image gate proves", allow-invalid = true },
+    { path = "oer_esp32s31_hal::cores::Cores::start", reason = "a core starts only from a root the stack policy declares and the image gate proves", allow-invalid = true },
     # A typed DMA address comes from placed storage or a loan, made only in
     # the chip's HAL `dma_address` module (docs/hardware-memory.md).
     { path = "oer_memory::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },

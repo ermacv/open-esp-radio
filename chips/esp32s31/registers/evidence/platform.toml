@@ -236,3 +236,7 @@ description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, esp-idf:compone
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_BROWNOUT_LL"
 description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/esp_hal_pmu/esp32s31/include/hal/brownout_ll.h sha256 fa02b0233b018f6fe1ae0c5ca7b25e7fc8d13608d39b063387b518b2f50be3c7. BROWNOUT_DETECTOR_LL_FIB_ENABLE is BIT(1) of LP_ANA_PERI.fib_enable (line 22); brownout_ll_ana_reset_enable (lines 108-116) clears it to give BOD mode 1 to software, then writes bod_mode1_cntl.bod_mode1_reset_ena. components/soc/esp32s31/register/soc/lp_analog_peri_reg.h:122-125 places LP_ANA_ANA_FIB_PWR_GLITCH_ENA (mask 0xf) at bit 2."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_BUS_MONITOR_RECORD"
+description = "SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/soc/esp32s31/register/soc/bus_monitor_reg.h:502-551,1170-1219. Per-HP-hart record enable at +0x44/+0xcc (R/W bits 0 record enable, 1 debug-record enable); sampled PC at +0x48/+0xd0 and SP at +0x4c/+0xd4 (32-bit RO), reset zero. The per-hart stride is 0x88. These are register semantics, not evidence of running-peer sampling or bus drain."

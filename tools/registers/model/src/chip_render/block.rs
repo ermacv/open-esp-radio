@@ -70,6 +70,7 @@ pub(super) struct FieldPlan<'m> {
     pub(super) field: &'m Field,
     /// The snake-case stem: the model's name without the block prefix.
     pub(super) stem: String,
+    indexed_stem: Option<String>,
     pub(super) low: u32,
     pub(super) width: u32,
     pub(super) class: FieldClass,
@@ -98,8 +99,16 @@ impl FieldPlan<'_> {
         u32::MAX >> (32 - self.width)
     }
 
+    fn family_stem(&self) -> String {
+        self.indexed_stem
+            .clone()
+            .unwrap_or_else(|| self.stem.clone())
+    }
+    fn family_first(&self) -> bool {
+        self.field.family.as_ref().is_none_or(|f| f.index == 0)
+    }
     pub(super) fn method(&self) -> String {
-        names::ident(&self.stem)
+        names::ident(&self.family_stem())
     }
 
     /// A reader returns the field.
@@ -602,7 +611,15 @@ impl<'m> TypePlan<'m> {
                 .iter()
                 .find(|element| element.key == *key)
                 .map_or(32, |element| element.width);
-            let array = if key.contains("%s") {
+            let array = if let Some(dim) = register.dim
+                && !key.contains('.')
+            {
+                Some((
+                    u64::from(register.offset),
+                    u64::from(dim.stride),
+                    u64::from(dim.count),
+                ))
+            } else if key.contains("%s") {
                 arithmetic(&elements)
             } else {
                 None
@@ -682,13 +699,13 @@ impl<'m> TypePlan<'m> {
             // Every method a field gives the register's images, by name:
             // getters, `_variant` getters, setters and `retain_` methods.
             let mut methods: BTreeMap<String, &str> = BTreeMap::new();
-            for field in &template.fields {
+            for field in template.fields.iter().filter(|field| field.family_first()) {
                 let mut names = vec![field.method()];
                 if field.values.is_some() {
                     names.push(format!("{}_variant", field.stem));
                 }
                 if field.setter() {
-                    names.push(format!("set_{}", field.stem));
+                    names.push(format!("set_{}", field.family_stem()));
                 }
                 if field.prefix.is_some() {
                     names.push(format!("set_{}_prefix", field.stem));
@@ -862,6 +879,10 @@ fn field_plan<'m>(
     }
     Ok(FieldPlan {
         field,
+        indexed_stem: field
+            .family
+            .as_ref()
+            .map(|family| names::snake(names::strip(&family.name, prefix))),
         stem,
         low,
         width,
@@ -1040,6 +1061,23 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
             }
         }
         for field in template.fields.iter().filter(|field| field.setter()) {
+            if !field.family_first() {
+                continue;
+            }
+            if let Some(family) = &field.field.family {
+                let bits = field.write_bits_of("value");
+                let stem = field.family_stem();
+                let ones = field.ones();
+                let _ = writeln!(
+                    output,
+                    "/// Set one indexed field, preserving every other lane.\n#[inline]\npub fn set_{stem}(&mut self, index: oer_mmio::Index<{}>, value: {}) -> &mut Self {{\nlet shift = {}u32.wrapping_add((index.get() as u32).wrapping_mul({}u32));\nlet mask = {ones}u32.wrapping_shl(shift);\nself.0 = (self.0 & !mask) | ({bits}).wrapping_shl(shift);\nself\n}}",
+                    family.count,
+                    field.write_type(None),
+                    field.low,
+                    family.stride as u32
+                );
+                continue;
+            }
             let assignment = if field.width == 32 {
                 format!("self.0 = {};", field.positioned())
             } else {
@@ -1103,6 +1141,28 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
 }
 
 fn render_getter(output: &mut String, field: &FieldPlan<'_>, receiver: &str) {
+    if !field.family_first() {
+        return;
+    }
+    if let Some(family) = &field.field.family {
+        let expression = match field.width {
+            1 => "(bits & 1) != 0".into(),
+            8 => "bits as u8".into(),
+            16 => "bits as u16".into(),
+            32 => "bits".into(),
+            _ => "oer_mmio::Bits::truncate(bits)".to_string(),
+        };
+        let _ = writeln!(
+            output,
+            "/// Read one indexed field.\n#[inline]\npub const fn {}({receiver}, index: oer_mmio::Index<{}>) -> {} {{\nlet shift = {}u32.wrapping_add((index.get() as u32).wrapping_mul({}u32));\nlet bits = self.0.wrapping_shr(shift);\n{expression}\n}}",
+            field.method(),
+            family.count,
+            field.native(),
+            field.low,
+            family.stride as u32
+        );
+        return;
+    }
     match &field.field.description {
         Some(description) => push_doc(output, &clean(description), ""),
         None => {

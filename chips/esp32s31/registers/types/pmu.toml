@@ -3858,21 +3858,16 @@ description = "need_des"
 [[registers]]
 name = "CPU_STALL_SW"
 offset = 0x1ec
-description = "Software stall request codes of the two HP cores: 0x86 requests a stall, 0xFF lets the core run."
+description = "Software stall request codes of the HP cores: 0x86 requests a stall, 0xFF lets the core run."
 reset = { value = 0x0 }
 reserved = { mask = 0xffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H", "ESP_IDF_4D59230D_S31_CORE_CONTROL"] }
 
 [[registers.fields]]
-name = "HPCORE1_SW_STALL_CODE"
-bits = "23:16"
-class = "plain"
-description = "Stall request code of HP core 1."
-
-[[registers.fields]]
-name = "HPCORE0_SW_STALL_CODE"
+name = "HPCORE%s_SW_STALL_CODE"
+dim = { count = "harts", stride = -8 }
 bits = "31:24"
 class = "plain"
-description = "Stall request code of HP core 0."
+description = "Stall request code of the selected HP core."
 
 [[registers]]
 name = "EXT_WAKEUP_LV"
