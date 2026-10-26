@@ -219,6 +219,12 @@ pub(super) fn observe(s: &mut Session<'_>) {
     state(s, 0xb120);
     window();
     state(s, 0xb122);
+    // Separately restore the timer's source clocks before any acknowledge,
+    // start or prepare. Gated zero readback alone is not a retention proof.
+    source_clocks(s);
+    state(s, 0xb124);
+    window();
+    state(s, 0xb126);
     // +0x10 is write-only. Fresh software work tests its bit18 lane without
     // re-enabling it; an explicit enable afterward is the positive control.
     clear(s);
@@ -235,13 +241,7 @@ pub(super) fn observe(s: &mut Session<'_>) {
     clear(s);
     // Separate rollover diagnostic: establish counter clocks/start, without
     // bit1 enable. One natural wrap tests retained delivery, then enable it.
-    s.ble.lp_clock.modify_lp_timer_conf(|w| {
-        w.set_clk_lp_timer_sel_osc_slow(false)
-            .set_clk_lp_timer_sel_osc_fast(false)
-            .set_clk_lp_timer_sel_xtal32k(false)
-            .set_clk_lp_timer_sel_xtal(true)
-            .set_clk_lp_timer_div_num(Bits::constant::<1>());
-    });
+    source_clocks(s);
     // SOURCE: existing init_lp prefix; rollover production requires this
     // sourced control as well as a running counter. No delivery enable.
     s.ble.timer.modify_word_0078_opaque(|w| {
@@ -255,9 +255,25 @@ pub(super) fn observe(s: &mut Session<'_>) {
         state(s, 0xb142);
         enable(s, false, true);
         window();
-        state(s, 0xb144);
+        let enabled = state(s, 0xb144);
+        // If disabled delivery also prevented latching the rollover byte,
+        // only a fresh enabled rollover is a valid positive control.
+        if enabled[2] == 0 && wait_wrap(s, 0xb146) {
+            state(s, 0xb148);
+        }
     }
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0014();
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0004();
     clear(s);
+}
+
+fn source_clocks(s: &mut Session<'_>) {
+    s.ble.lp_clock.modify_lp_timer_conf(|w| {
+        w.set_clk_lp_timer_sel_osc_slow(false)
+            .set_clk_lp_timer_sel_osc_fast(false)
+            .set_clk_lp_timer_sel_xtal32k(false)
+            .set_clk_lp_timer_sel_xtal(true)
+            .set_clk_lp_timer_div_num(Bits::constant::<1>());
+    });
+    oer_riscv::fence();
 }

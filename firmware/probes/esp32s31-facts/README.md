@@ -396,14 +396,18 @@ cause, pending bytes and counter (0xb100/1), plus inherited clock fields
 (0xb102/3), before any peripheral write. It emits the retained pre-reset
 record at 0xb110–13 and HP reset causes/record validity at 0xb114. A separate
 clock-only restoration phase samples at 0xb120–23 without preparing the
-LP timer or writing +0x10. These phases must not be conflated if clocks
+LP timer or writing +0x10. A separate LP XTAL/divider restoration, still
+without clear/prepare/start/enable, samples at 0xb124–27 to distinguish a
+source-clock-hidden state. These phases must not be conflated if clocks
 make the initial bus image unqualified.
 
 `+0x10` has no modeled read accessor. A fresh software cause tests retained
 bit18 delivery before/after an explicit enable (0xb130/2). With only compare
 disabled, a single natural rollover after counter-clock/control25/start restoration
-tests bit1 delivery before/after enable (0xb142/4); no all-ones disable
-precedes that test. Waits are bounded to 40 million cycles for one rollover,
+tests bit1 delivery before/after enable (0xb142/4). If the disabled wrap
+produces no pending byte, a fresh enabled wrap is the positive control
+(0xb148); this distinguishes a masked producer from a broken stimulus.
+No all-ones disable precedes that test. Waits are bounded to 40 million cycles for one rollover,
 200 thousand for compare, and 4096 for a diagnostic settle. A missing
 precondition, timeout or absent positive control invalidates the affected
 claim; completion alone is not success. The reason is consumed once.
