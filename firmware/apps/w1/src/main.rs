@@ -62,7 +62,7 @@ use oer_esp32s31_phy::{
 use oer_esp32s31_radio_client::{Failure, LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
 use oer_espressif_executor::{
-    Doorbell, Executor, InterruptExecutor, LevelOrder, Spawner, timer_observation::Window,
+    Doorbell, Executor, InterruptExecutor, Spawner, timer_observation::Window,
 };
 use oer_espressif_staged_runtime::{panic, stacks};
 use oer_ieee80211_runtime::survey::Survey;
@@ -104,23 +104,22 @@ pub struct W1Config {
 include!(concat!(env!("OUT_DIR"), "/w1_config.rs"));
 
 oer_espressif_staged_runtime::interrupt_table! {
+    contexts { app_wake: 1; radio_executor: 2; radio: 3; }
+    priority: low_to_high;
     /// The application executor's wake (thread mode).
-    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, level 1, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
     /// The radio executor (P2), polled in its handler, which times each run.
-    radio: RadioToken = FromCpu2Irq => crate::irq::radio_executor, line 17, level 2, hart 0, Executor;
+    radio: RadioToken = FromCpu2Irq => crate::irq::radio_executor, line 17, context radio_executor, hart 0, Executor;
     /// The radio interrupt: the Wi-Fi MAC and WDEVPWR banks and the radio
     /// doorbell, P2's requests to the line.
-    wifi: WifiToken = WifiPart => crate::irq::on_wifi, line 18, level 3, hart 0, Hardware;
+    wifi: WifiToken = WifiPart => crate::irq::on_wifi, line 18, context radio, hart 0, Hardware;
     /// The radio executor's timer alarm; it only acknowledges and pends.
-    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 19, level 3, hart 0, Hardware;
+    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
     /// The application executor's timer alarm.
-    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 20, level 1, hart 0, Hardware;
+    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 20, context app_wake, hart 0, Hardware;
     /// The console's USB Serial/JTAG interrupt; it raises the endpoint's signal.
-    console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 21, level 1, hart 0, Hardware;
+    console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 21, context app_wake, hart 0, Hardware;
 }
-
-/// The radio executor between the radio interrupts and the application.
-const LEVELS: LevelOrder<WifiToken, RadioToken, WakeToken> = LevelOrder::new();
 
 /// The CPU clock the bootstrap selects (`firmware/bootstrap/esp32s31`).
 const CPU_HZ: u32 = CpuProfile::Mhz160.clock().rates.cpu_hz;
@@ -165,7 +164,7 @@ oer_espressif_executor::tasks! {
         p2_timers(lines: oer_memory::AffineSpscSender<'static, TimerLine, 2>) = measure::p2_timers;
         rx_task(
             registers: oer_esp32s31_hal::owner::RadioAccess,
-            bound_part: oer_interrupt_table::Bound<WifiPart>,
+            bound_part: oer_interrupt_table::Bound<WifiToken>,
             doorbell: ImageDoorbell,
             bound: oer_memory::AffineSpscSender<'static, Bound, 1>,
         ) = irq::rx_task;
@@ -217,7 +216,7 @@ struct Boot {
     station: [u8; 6],
     access_point: [u8; 6],
     radio: Spawner<RadioTasks>,
-    wifi_bound: oer_interrupt_table::Bound<WifiPart>,
+    wifi_bound: oer_interrupt_table::Bound<WifiToken>,
     doorbell: ImageDoorbell,
     bound: (
         oer_memory::AffineSpscSender<'static, Bound, 1>,
@@ -305,13 +304,15 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     ) else {
         fail("wifi-interrupt")
     };
-    let doorbell = ImageDoorbell(Doorbell::new::<FromCpu3Irq, _>(bell, &wifi_bound));
+    let doorbell = ImageDoorbell(Doorbell::new::<FromCpu3Irq, _, RadioToken>(
+        bell,
+        &wifi_bound,
+    ));
     let (timer_sender, timer_lines) = TIMER_LINES.take().split();
     let radio = InterruptExecutor::<2>::new(software.line2).start(
         adopted.router(),
         interrupts.radio,
         software.irq2,
-        LEVELS,
     );
     if RadioTasks::radio_actor(&radio, actor).is_err()
         || RadioTasks::p2_timers(&radio, timer_sender).is_err()
@@ -414,7 +415,7 @@ struct Parts {
     station: [u8; 6],
     access_point: [u8; 6],
     radio: Spawner<RadioTasks>,
-    wifi_bound: oer_interrupt_table::Bound<WifiPart>,
+    wifi_bound: oer_interrupt_table::Bound<WifiToken>,
     doorbell: ImageDoorbell,
     bound: (
         oer_memory::AffineSpscSender<'static, Bound, 1>,

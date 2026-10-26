@@ -537,6 +537,8 @@ mod thread_signals {
     // another level.
     unsafe impl SignalExecutor for TestThread {
         type Task = TaskId;
+        const SOURCE: u16 = 5;
+        const INTERRUPT_MODE: bool = true;
         fn pend(_: &'static IrqSignal<Self>) {
             pend(EXECUTOR);
         }
@@ -554,9 +556,9 @@ mod thread_signals {
         }
     }
 
-    pub(super) static SIGNAL: IrqSignal<TestThread> = IrqSignal::new();
+    pub(super) static SIGNAL: IrqSignal<TestThread> = IrqSignal::for_host_test();
     /// [`Preempted`]'s signal: each test owns its signal.
-    pub(super) static PREEMPTED_SIGNAL: IrqSignal<TestThread> = IrqSignal::new();
+    pub(super) static PREEMPTED_SIGNAL: IrqSignal<TestThread> = IrqSignal::for_host_test();
 
     /// One run of the executor's loop: its signals, then a poll round.
     pub(super) fn run_round<T: Tasks>() -> bool {

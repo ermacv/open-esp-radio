@@ -62,7 +62,7 @@ use {
 };
 use {oer_ieee80211_port::MacTxPlan, oer_ieee80211_wire::address::IndividualAddress};
 
-type Rx = ReceiveSession<N, B, S, Q, crate::irq::RadioExecutor, Bound<irq::WifiPart>>;
+type Rx = ReceiveSession<N, B, S, Q, crate::irq::RadioExecutor, Bound<crate::WifiToken>>;
 type Frames = FrameReceiver<'static, Q, B, crate::irq::RadioExecutor>;
 type Publisher = QueueSink<'static, EmbassyClock, Q, B>;
 type Tx = OrdinaryTxOwner<
@@ -86,7 +86,7 @@ pub struct Boot {
     pub station: [u8; 6],
     pub ap: [u8; 6],
     pub config: W2Config,
-    pub bound: Bound<irq::WifiPart>,
+    pub bound: Bound<crate::WifiToken>,
     pub bell: irq::ImageDoorbell,
     pub sender: AffineSpscSender<'static, Report, 1>,
 }
@@ -175,7 +175,7 @@ async fn run(
     station: [u8; 6],
     ap: [u8; 6],
     config: W2Config,
-    bound: Bound<irq::WifiPart>,
+    bound: Bound<crate::WifiToken>,
     bell: irq::ImageDoorbell,
     report: &mut Report,
 ) -> Result<(), &'static str> {

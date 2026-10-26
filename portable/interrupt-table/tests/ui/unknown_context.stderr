@@ -1,0 +1,5 @@
+error[E0425]: cannot find value `unknown` in module `contexts`
+  --> tests/ui/unknown_context.rs:16:8
+   |
+16 | table!(unknown); // ui-error: E0425
+   |        ^^^^^^^ not found in `contexts`

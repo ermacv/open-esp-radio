@@ -5,14 +5,14 @@ use oer_espressif_usb_serial_jtag::{Endpoint, EndpointRegisters};
 use oer_interrupt_table::signal::{IrqSignal, SignalExecutor};
 use oer_interrupt_table::{Bound, Silent};
 
-pub fn endpoint<E: SignalExecutor>(
+pub fn endpoint<E: SignalExecutor, U: oer_interrupt_table::Entry<Part = ConsoleInterrupt>, O: oer_interrupt_table::Entry<Part = SystimerAlarm0>>(
     registers: ConsoleEndpoint,
     signal: &'static IrqSignal<E>,
-    usb: &Bound<ConsoleInterrupt>,
-    other: &Bound<SystimerAlarm0>,
+    usb: &Bound<U>,
+    other: &Bound<O>,
 ) {
     #[cfg(ui_reject)]
-    let _endpoint = Endpoint::new(registers, signal, other); // ui-error: E0277
+    let _endpoint = Endpoint::new(registers, signal, other); // ui-error: E0271
     #[cfg(not(ui_reject))]
     let _endpoint = Endpoint::new(registers, signal, usb);
 }

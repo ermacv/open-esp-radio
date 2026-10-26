@@ -90,8 +90,10 @@ implements `hardware::ExecutorPlatform` for source IDs and pending status.
 [`executor`](src/lib.rs) (`oer-espressif-executor`) places
 the image's contexts on one core: the radio interrupts at P3 (the MAC and
 PWR sources and the radio doorbell), the radio executor (`InterruptExecutor`
-on `FROM_CPU` line 2) at P2, the application below it. `LevelOrder` checks
-when the image compiles that P3 preempts P2 and P2 the application.
+on `FROM_CPU` line 2) at P2, the application below it. The table declares
+named levels once. Signal declarations check each handler above its receiving
+executor, or each raising task below it. Request bindings check the receiving
+handler above the requesting executor, on the same hart.
 Equal CLIC levels on one hart cannot preempt each other.
 
 The radio executor never writes the registers a P3 handler owns. It records
@@ -100,9 +102,10 @@ interrupt (`FROM_CPU` line 3) that is one source of the radio handler's part:
 `ring` fences and raises the line. `Doorbell::split` consumes the software
 interrupt, so no executor can use the line, and hands out the
 `DoorbellAcknowledger` for that part and the unbound `DoorbellLine`; only
-`Doorbell::new::<Member, Composite>(line, &Bound<Composite>)` makes the
+`Doorbell::new::<Member, HandlerEntry, ExecutorEntry>(line, &bound)` makes the
 ringing half, once the router bound a part whose sources hold the line's
-(`Member::SOURCE` in `Composite::SOURCES`, checked when the image compiles).
+(`Member::SOURCE` in `HandlerEntry::Part::SOURCES`, checked when the image compiles).
+The same constructor checks that the handler preempts the requesting executor.
 A part of the line alone is the acknowledger itself, which names the line's
 source. The handler first lowers the interrupt through the acknowledger,
 then takes the requests, so a ring after the take is not lost. The request

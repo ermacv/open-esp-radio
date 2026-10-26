@@ -76,7 +76,7 @@ fn a_refused_line_reports_the_writer_error() {
 #[test]
 fn a_note_over_the_endpoint_waits_for_the_host_and_arrives_whole() {
     let block = Shared::default();
-    let interrupt: &'static Interrupt<Host, Irq> = Box::leak(Box::new(Interrupt::new()));
+    let interrupt: &'static Interrupt<Host, Irq> = Box::leak(Box::new(Interrupt::for_host_test()));
     let mut endpoint = Endpoint::new(Task(block.clone()), interrupt.signal(), &silent());
     let note = Note::w3_pass();
     let mut write = pin!(write_note(&mut endpoint, &note));

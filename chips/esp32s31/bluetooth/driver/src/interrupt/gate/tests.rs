@@ -172,6 +172,10 @@ impl DoorbellLine for Line {
 struct Ring(Arc<AtomicUsize>);
 
 impl RadioDoorbell for Ring {
+    const HANDLER: oer_interrupt_table::Context =
+        oer_interrupt_table::Context { level: 3, hart: 0 };
+    const EXECUTOR: oer_interrupt_table::Context =
+        oer_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {
         self.0.fetch_add(1, Ordering::Relaxed);
     }

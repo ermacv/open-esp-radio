@@ -21,7 +21,7 @@
 
 use core::sync::atomic::{Ordering, fence};
 
-use oer_interrupt_table::{Bound, InterruptSource, InterruptSources};
+use oer_interrupt_table::{Bound, Entry, InterruptSource, InterruptSources, request_direction};
 
 use crate::chip::{Line, platform, software_interrupt_source};
 use crate::software_line::SoftwareLine;
@@ -81,25 +81,31 @@ impl_doorbell!(3, FromCpu3, own_line_3);
 
 impl<const SWI: u8> Doorbell<SWI> {
     /// The ringing half of `line`, once `bound` proves that the image's
-    /// interrupt table binds `Composite`, whose sources hold `Member`'s, the
+    /// interrupt table binds entry `E`, whose part holds `Member`'s source, the
     /// line's own: its handler then serves every ring. A part of the line
     /// alone is its own member (each [`InterruptSource`] is
     /// [`InterruptSources`]).
     ///
     /// A member that is not the line, or that the bound part does not hold,
-    /// fails to compile (the constant's assertion, `E0080`).
-    pub fn new<Member, Composite>(line: DoorbellLine<SWI>, bound: &Bound<Composite>) -> Self
+    /// fails to compile (the constant's assertion, `E0080`). `X` is the
+    /// requesting executor's entry; `E` must be above it on the same hart.
+    pub fn new<Member, E, X>(line: DoorbellLine<SWI>, bound: &Bound<E>) -> Self
     where
         Member: InterruptSource,
-        Composite: InterruptSources,
+        E: Entry,
+        X: Entry,
     {
         const {
+            assert!(
+                request_direction(E::CONTEXT, X::CONTEXT),
+                "a request handler must be above its executor on the same hart"
+            );
             assert!(
                 Member::SOURCE == software_interrupt_source(SWI),
                 "the member is not the doorbell's software interrupt"
             );
             assert!(
-                holds(Composite::SOURCES, Member::SOURCE),
+                holds(<E::Part as InterruptSources>::SOURCES, Member::SOURCE),
                 "the bound part does not hold the doorbell's software interrupt"
             );
         };

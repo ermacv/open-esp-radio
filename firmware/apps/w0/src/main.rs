@@ -47,7 +47,7 @@ use oer_esp32s31_phy::{
 use oer_esp32s31_radio_client::{DomainHealth, Failure};
 use oer_esp32s31_radio_client::{LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
-use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder};
+use oer_espressif_executor::{Executor, InterruptExecutor};
 use oer_espressif_staged_runtime::panic;
 use oer_ieee80211_wire::address::IndividualAddress;
 use oer_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
@@ -55,21 +55,21 @@ use oer_radio_regulatory::{Country, RegulatoryDomain};
 use static_cell::StaticCell;
 
 oer_espressif_staged_runtime::interrupt_table! {
+    contexts { app_wake: 1; radio_executor: 2; radio: 3; }
+    priority: low_to_high;
     /// The application executor's wake (thread mode).
-    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, level 1, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
     /// The radio executor (P2), polled in its handler.
-    radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, level 2, hart 0, Executor;
+    radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_executor, hart 0, Executor;
     /// The radio executor's timer alarm; it only acknowledges and pends.
-    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 18, level 3, hart 0, Hardware;
+    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 18, context radio, hart 0, Hardware;
     /// The application executor's timer alarm.
-    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 19, level 1, hart 0, Hardware;
+    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 19, context app_wake, hart 0, Hardware;
     /// The console's USB Serial/JTAG interrupt; it raises the endpoint's signal.
-    console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 20, level 1, hart 0, Hardware;
+    console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 20, context app_wake, hart 0, Hardware;
 }
 
 /// The radio executor between the latching interrupts and the application.
-const LEVELS: LevelOrder<RadioAlarmToken, RadioToken, WakeToken> = LevelOrder::new();
-
 mod usb;
 use usb::Console;
 
@@ -189,7 +189,6 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         adopted.router(),
         interrupts.radio,
         software.irq2,
-        LEVELS,
     );
     if RadioTasks::radio_actor(&radio, actor).is_err() {
         fail("radio-actor-start");

@@ -25,10 +25,10 @@ pub fn events(
     registers.enable_events(authority);
 }
 
-pub fn bound<E: SignalExecutor>(
+pub fn bound<E: SignalExecutor, U: oer_interrupt_table::Entry<Part = ConsoleInterrupt>>(
     registers: ConsoleEndpoint,
     signal: &'static IrqSignal<E>,
-    authority: &Bound<ConsoleInterrupt>,
+    authority: &Bound<U>,
 ) {
     endpoint(registers, signal, authority);
 }

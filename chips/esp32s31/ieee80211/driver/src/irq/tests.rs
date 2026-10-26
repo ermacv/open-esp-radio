@@ -137,6 +137,10 @@ impl Wake for WakeCount {
 struct Rings(Cell<usize>);
 
 impl RadioDoorbell for Rings {
+    const HANDLER: oer_interrupt_table::Context =
+        oer_interrupt_table::Context { level: 3, hart: 0 };
+    const EXECUTOR: oer_interrupt_table::Context =
+        oer_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {
         self.0.set(self.0.get() + 1);
     }

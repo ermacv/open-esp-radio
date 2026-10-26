@@ -3132,9 +3132,12 @@ dependencies = [
 name = "oer-interrupt-table"
 version = "0.1.0"
 dependencies = [
+ "oer-interrupt-table",
  "oer-memory",
  "oer-mmio",
+ "oer-test-ui-cases",
  "static_cell",
+ "tempfile",
 ]
 
 [[package]]

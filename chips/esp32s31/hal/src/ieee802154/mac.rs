@@ -100,7 +100,7 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 /// use oer_esp32s31_hal::platform::InterruptController;
 /// use oer_interrupt_table::Router;
 /// # const LINES: oer_interrupt_table::Lines =
-/// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 2 };
+/// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 2, tie_break: oer_interrupt_table::TieBreak::HighestLine };
 /// use oer_espressif_ieee802154_engine::types::Ieee802154EventMask;
 /// pub fn on_ieee802154(mac: &mut Ieee802154InterruptOwner) {
 ///     // Acknowledge the sampled named events; latch them for the task.
@@ -110,7 +110,9 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: LINES,
 ///     handler_attributes: [];
-///     mac: MacToken = Ieee802154InterruptOwner => on_ieee802154, line 20, level 3, hart 0, Hardware;
+///     contexts { radio: 3; }
+///     priority: low_to_high;
+///     mac: MacToken = Ieee802154InterruptOwner => on_ieee802154, line 20, context radio, hart 0, Hardware;
 /// }
 /// fn start(
 ///     router: &mut Router<InterruptController>,
@@ -134,12 +136,14 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 /// # use oer_esp32s31_hal::platform::InterruptController;
 /// # use oer_interrupt_table::Router;
 /// # const LINES: oer_interrupt_table::Lines =
-/// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 2 };
+/// #     oer_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 2, tie_break: oer_interrupt_table::TieBreak::HighestLine };
 /// # pub fn on_ieee802154(_: &mut Ieee802154InterruptOwner) {}
 /// # oer_interrupt_table::interrupt_table! {
 /// #     lines: LINES,
 /// #     handler_attributes: [];
-/// #     mac: MacToken = Ieee802154InterruptOwner => on_ieee802154, line 20, level 3, hart 0, Hardware;
+/// #     contexts { radio: 3; }
+/// #     priority: low_to_high;
+/// #     mac: MacToken = Ieee802154InterruptOwner => on_ieee802154, line 20, context radio, hart 0, Hardware;
 /// # }
 /// fn start(
 ///     router: &mut Router<InterruptController>,
@@ -300,19 +304,22 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// }
     /// ```
     ///
-    /// ```compile_fail,E0308
+    /// ```compile_fail,E0271
     /// # use oer_esp32s31_hal::ieee802154::mac::Ieee802154TaskOwner;
     /// # use oer_interrupt_table::Bound;
     /// struct OtherIrq;
     /// impl oer_mmio::InterruptSource for OtherIrq {
     ///     const SOURCE: u16 = 3;
     /// }
-    /// fn enable(task: &mut Ieee802154TaskOwner, bound: &Bound<OtherIrq>) {
+    /// fn enable<E: oer_interrupt_table::Entry<Part = OtherIrq>>(task: &mut Ieee802154TaskOwner, bound: &Bound<E>) {
     ///     // Another part's binding proves nothing about this interrupt.
     ///     task.enable_events(bound);
     /// }
     /// ```
-    pub fn enable_events(&mut self, bound: &Bound<Ieee802154InterruptOwner<P>>) {
+    pub fn enable_events<I: oer_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>>(
+        &mut self,
+        bound: &Bound<I>,
+    ) {
         let _bound = bound;
         self.publish_runtime_events();
     }

@@ -60,6 +60,8 @@ std::thread_local! {
 // the pend counts, and the test plays its executor's handler.
 unsafe impl SignalExecutor for TestExecutor {
     type Task = host::HostTask;
+    const SOURCE: u16 = 5;
+    const INTERRUPT_MODE: bool = true;
     fn pend(_: &'static IrqSignal<Self>) {
         PENDS.with(|pends| pends.set(pends.get() + 1));
     }
@@ -81,7 +83,7 @@ fn pends() -> u32 {
     PENDS.with(Cell::get)
 }
 fn signal() -> &'static IrqSignal<TestExecutor> {
-    Box::leak(Box::new(IrqSignal::new()))
+    Box::leak(Box::new(IrqSignal::for_host_test()))
 }
 
 /// A waker that counts its wakes and runs `on_wake` in them.
@@ -308,6 +310,8 @@ fn list_pending_observation_preserves_undelivered_and_delivered_facts() {
     // pend never polls, and running is true only in this test's context.
     unsafe impl SignalExecutor for ObserveExecutor {
         type Task = host::HostTask;
+        const SOURCE: u16 = 5;
+        const INTERRUPT_MODE: bool = true;
         fn pend(_: &'static IrqSignal<Self>) {}
         fn running() -> bool {
             true
@@ -322,7 +326,7 @@ fn list_pending_observation_preserves_undelivered_and_delivered_facts() {
             task.wake();
         }
     }
-    let signal = Box::leak(Box::new(IrqSignal::<ObserveExecutor>::new()));
+    let signal = Box::leak(Box::new(IrqSignal::<ObserveExecutor>::for_host_test()));
     let mut cx = Context::from_waker(Waker::noop());
     assert!(signal.poll_take(&mut cx).is_pending());
     assert_eq!(has_pending::<ObserveExecutor>(), Ok(false));
@@ -349,6 +353,8 @@ fn a_waker_of_no_task_is_refused_without_registering() {
     // `current` refuses every waker, so no task is ever registered.
     unsafe impl SignalExecutor for Refusing {
         type Task = host::HostTask;
+        const SOURCE: u16 = 5;
+        const INTERRUPT_MODE: bool = true;
         fn pend(_: &'static IrqSignal<Self>) {}
         fn running() -> bool {
             true
@@ -363,7 +369,7 @@ fn a_waker_of_no_task_is_refused_without_registering() {
             WAKES.with(|wakes| wakes.set(wakes.get() + 1));
         }
     }
-    let signal = Box::leak(Box::new(IrqSignal::<Refusing>::new()));
+    let signal = Box::leak(Box::new(IrqSignal::<Refusing>::for_host_test()));
     let mut cx = Context::from_waker(Waker::noop());
     assert_eq!(signal.poll_take(&mut cx), Poll::Ready(Err(ForeignContext)));
     assert_eq!(

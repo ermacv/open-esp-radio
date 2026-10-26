@@ -12,7 +12,7 @@ use oer_esp32s31_bluetooth_driver::interrupt::{
 use oer_esp32s31_hal::bluetooth::engine::scheduler::interrupt::SchedulerInterruptChannel;
 use oer_esp32s31_hal::platform::{FromCpu3, FromCpu3Irq};
 use oer_espressif_executor::{Doorbell, DoorbellAcknowledger};
-use oer_interrupt_table::{Controller, Router, signal::IrqSignal};
+use oer_interrupt_table::{Controller, Router, signal::{FromHandler, IrqSignal}};
 
 /// The doorbell's lowering half, which the handler's part holds.
 pub struct Ack(DoorbellAcknowledger<3>);
@@ -32,6 +32,8 @@ pub type Interrupts = BluetoothInterrupts<X, Ack>;
 pub struct Bell(&'static Doorbell<3>);
 
 impl RadioDoorbell for Bell {
+    const HANDLER: oer_interrupt_table::Context = <crate::BtToken as oer_interrupt_table::Entry>::CONTEXT;
+    const EXECUTOR: oer_interrupt_table::Context = <crate::RadioToken as oer_interrupt_table::Entry>::CONTEXT;
     fn ring(&self) {
         self.0.ring();
     }
@@ -47,9 +49,9 @@ pub type SchedulerBell = oer_esp32s31_bluetooth_driver::interrupt::SchedulerDoor
 oer_espressif_staged_runtime::placed_static! {
     static STORAGE: StaticCell<BluetoothInterruptStorage<ChipGate>> = StaticCell::new(), in critical_data "b0";
     pub static FAULT: AtomicBool = AtomicBool::new(false), in critical_data "b0";
-    pub static SCHEDULER_SIGNAL: IrqSignal<X> = IrqSignal::new(), in critical_data "b0";
-    pub static REPLY: IrqSignal<X> = IrqSignal::new(), in critical_data "b0";
-    pub static TIMER_SIGNAL: IrqSignal<X> = IrqSignal::new(), in critical_data "b0";
+    pub static SCHEDULER_SIGNAL: IrqSignal<X> = IrqSignal::new::<FromHandler<crate::BtToken>, crate::RadioToken>(), in critical_data "b0";
+    pub static REPLY: IrqSignal<X> = IrqSignal::new::<FromHandler<crate::BtToken>, crate::RadioToken>(), in critical_data "b0";
+    pub static TIMER_SIGNAL: IrqSignal<X> = IrqSignal::new::<FromHandler<crate::BtToken>, crate::RadioToken>(), in critical_data "b0";
     pub static CHANNEL: SchedulerInterruptChannel = SchedulerInterruptChannel::new(), in critical_data "b0";
     pub static CELLS: ControllerEventCells<X> = ControllerEventCells::new(&SCHEDULER_SIGNAL, &TIMER_SIGNAL), in critical_data "b0";
 }
@@ -100,7 +102,7 @@ pub fn bind<C: Controller>(
     );
     let bound = router.bind(token, part).map_err(|_| BindError::Route)?;
     let doorbell = BELL
-        .try_init(Doorbell::new::<FromCpu3Irq, _>(line, &bound))
+        .try_init(Doorbell::new::<FromCpu3Irq, _, super::RadioToken>(line, &bound))
         .ok_or(BindError::Storage)?;
     let ring = Bell(doorbell);
     let (gate, port) = ends.attach(&bound, ring);

@@ -32,7 +32,10 @@ use oer_espressif_executor::{
     poll_timing::{CycleSource, Mcycle},
 };
 use oer_interrupt_table::InterruptSource;
-use oer_interrupt_table::{Bound as Binding, signal::IrqSignal};
+use oer_interrupt_table::{
+    Bound as Binding,
+    signal::{FromHandler, FromTask, IrqSignal},
+};
 use oer_memory::{AffineSpscSender, HandlerCell};
 
 use crate::{
@@ -77,9 +80,9 @@ oer_espressif_staged_runtime::placed_static! {
     pub static UNSERVICED_PWR: AtomicU32 = AtomicU32::new(0), in critical_data "w1";
     /// The MAC facts the P3 line raises for the receive runner on the
     /// radio executor (P2).
-    static MAC_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new(), in critical_data "w1";
+    static MAC_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new::<(FromHandler<crate::WifiToken>, FromTask<oer_espressif_executor::Executor<0>, crate::WakeToken>), crate::RadioToken>(), in critical_data "w1";
     /// The WDEVPWR facts the P3 line raises for the receive runner.
-    static POWER_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new(), in critical_data "w1";
+    static POWER_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new::<FromHandler<crate::WifiToken>, crate::RadioToken>(), in critical_data "w1";
 }
 
 /// The doorbell's lowering half, which the radio handler's part holds.
@@ -129,6 +132,10 @@ pub fn radio_executor(part: &mut FromCpu2Irq) {
 pub struct ImageDoorbell(pub Doorbell<3>);
 
 impl RadioDoorbell for ImageDoorbell {
+    const HANDLER: oer_interrupt_table::Context =
+        <crate::WifiToken as oer_interrupt_table::Entry>::CONTEXT;
+    const EXECUTOR: oer_interrupt_table::Context =
+        <crate::RadioToken as oer_interrupt_table::Entry>::CONTEXT;
     fn ring(&self) {
         // The handler takes the stamp; a ring before it took the last one
         // keeps the earlier stamp.
@@ -166,7 +173,7 @@ static CLOCK: EmbassyClock = EmbassyClock;
 /// application its ends, then receive until the stop and park.
 pub async fn rx_task(
     mut registers: RadioAccess,
-    bound_part: Binding<WifiPart>,
+    bound_part: Binding<crate::WifiToken>,
     doorbell: ImageDoorbell,
     bound: AffineSpscSender<'static, Bound, 1>,
 ) {

@@ -9,8 +9,17 @@ One line, one part, one direct call. Each entry binds one interrupt part
 to one CPU line at a level on a hart:
 
 ```text
-field: Token = Part => handler, line LINE, level LEVEL, hart HART, CLASS;
+contexts { app_wake: 1; radio_executor: 2; radio: 3; }
+priority: low_to_high;
+field: Token = Part => handler, line LINE, context radio, hart HART, CLASS;
 ```
+
+Contexts name levels once per image. Every entry selects a declared context;
+an unknown name fails to compile. The level check enforces the chip facts'
+range for every declared context, including unused ones. `priority: low_to_high` declares the textual order of
+entries at each level on each hart. The macro checks that order against the
+facts' tie-break: on S31 a later, higher-priority peer must have a higher line
+ID. Peers at one level never preempt each other.
 
 The sources come from the part's type (`oer_mmio::InterruptSources`: the one
 source of an `oer_mmio::InterruptSource`, which the PAC generator implements
@@ -72,7 +81,7 @@ gives the CLIC three level bits):
   hardware-vectored, positive-level-triggered, its level in the control
   byte, `line_control`) and only then routes each of the part's sources to
   it, and returns
-  `Bound<Part>`, the proof a driver takes before it enables the peripheral's
+  `Bound<Entry>`, carrying `LEVEL`, `HART` and `CONTEXT` from that entry, the proof a driver takes before it enables the peripheral's
   interrupt; an entry of another hart or one the table lacks comes back with
   its token and part, and an entry outside the controller fails to compile;
 - `Router::silent` returns `Silent<Part>`, the proof that each of the part's
@@ -88,7 +97,28 @@ gives the CLIC three level bits):
   line is disabled.
 
 An interrupt handler reaches its task only through a static signal
-(`signal`), never through the router or a lock.
+(`signal`), never through the router or a lock. A signal binds its executor's
+entry and all raising contexts at construction:
+
+```text
+IrqSignal::<RadioExecutor>::new::<
+    (FromHandler<WifiToken>, FromTask<AppExecutor, WakeToken>),
+    RadioToken,
+>()
+```
+
+`FromHandler<Entry>` must run above the receiving executor; `FromTask<X, Entry>`
+must be a lower executor's task. Each executor entry must name its actual
+software interrupt source, all participating contexts share a hart, and an
+interrupt-mode executor's entry has class `Executor`. A thread-mode executor's
+wake entry represents its tasks at level zero. Nested pairs declare several
+raisers of one signal; the signal's layout and atomic publication are unchanged.
+
+`Doorbell::new`, Wi-Fi request activation and BLE gate exchange assert the
+same request-direction predicate: the handler must be above the requesting
+executor on the same hart. Wi-Fi and BLE also check that the doorbell names
+the bound handler. There is no separate three-level or same-level proof.
+Every scheduling assertion is evaluated in a const item or inline const block.
 
 ```console
 cargo test -p oer-interrupt-table

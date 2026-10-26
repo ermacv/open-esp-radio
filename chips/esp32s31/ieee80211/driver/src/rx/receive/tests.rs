@@ -269,6 +269,10 @@ struct HostDoorbell<X: SignalExecutor = oer_interrupt_table::signal::host::Host>
 }
 
 impl<X: SignalExecutor> RadioDoorbell for HostDoorbell<X> {
+    const HANDLER: oer_interrupt_table::Context =
+        oer_interrupt_table::Context { level: 3, hart: 0 };
+    const EXECUTOR: oer_interrupt_table::Context =
+        oer_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {
         self.host.record(Event::Ring {
             released: self.rx.released_buffer_count(),
@@ -287,6 +291,10 @@ impl<X: SignalExecutor> RadioDoorbell for HostDoorbell<X> {
 struct Silent;
 
 impl RadioDoorbell for Silent {
+    const HANDLER: oer_interrupt_table::Context =
+        oer_interrupt_table::Context { level: 3, hart: 0 };
+    const EXECUTOR: oer_interrupt_table::Context =
+        oer_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {}
 }
 

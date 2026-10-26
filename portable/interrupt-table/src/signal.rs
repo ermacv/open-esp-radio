@@ -19,6 +19,9 @@
 //! word, is new again, and pends the executor once more: it is never lost.
 //! Facts raised before the executor services them coalesce into one wake.
 
+mod binding;
+pub use binding::{FromHandler, FromTask, Raisers};
+
 use core::{
     cell::UnsafeCell,
     marker::PhantomData,
@@ -48,6 +51,10 @@ pub unsafe trait SignalExecutor: Sized + 'static {
     /// One task of this executor, valid for ever: its storage is static,
     /// and waking a task that has finished is a no-op.
     type Task: Copy + Eq + 'static;
+    /// Software interrupt source of this executor.
+    const SOURCE: u16;
+    /// Whether tasks poll in that interrupt, rather than thread mode.
+    const INTERRUPT_MODE: bool;
     fn pend(signal: &'static IrqSignal<Self>);
     fn running() -> bool;
     fn list() -> &'static SignalList<Self::Task>;
@@ -127,15 +134,32 @@ pub struct ForeignContext;
 pub struct ForeignTask;
 
 impl<E: SignalExecutor> IrqSignal<E> {
-    /// A signal of `E` with no fact.
-    pub const fn new() -> Self {
+    /// A signal of `E` with no fact. `Target` is its executor's table entry;
+    /// `R` names every raising handler or task (`FromHandler`, `FromTask`,
+    /// or nested pairs). The software source, hart and directions are checked
+    /// at compile time. No scheduling metadata is stored in the signal.
+    pub const fn new<R: Raisers, Target: crate::Entry>() -> Self
+    where
+        Target::Part: crate::InterruptSource,
+    {
+        const { R::CONTEXTS.check(binding::executor_context::<E, Target>()) };
+        Self::empty()
+    }
+
+    const fn empty() -> Self {
         Self {
             core: SignalCore::new(),
             executor: PhantomData,
         }
     }
 
-    /// Raise `facts` from any context; `true` when one is new and the
+    /// A synthetic host signal without a chip table. Test support only.
+    #[cfg(any(test, feature = "host-signal"))]
+    pub const fn for_host_test() -> Self {
+        Self::empty()
+    }
+
+    /// Raise `facts` from a declared context; `true` when one is new and the
     /// executor was pended. Inlined into the interrupt handler's placement.
     #[inline(always)]
     pub fn raise(&'static self, facts: u32) -> bool {
@@ -227,12 +251,6 @@ impl<E: SignalExecutor> IrqSignal<E> {
         if let Ok(token) = context::<E>() {
             self.core.service_next::<E>(&token);
         }
-    }
-}
-
-impl<E: SignalExecutor> Default for IrqSignal<E> {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -540,6 +558,8 @@ pub mod host {
     // a wake only wakes the test's waker.
     unsafe impl SignalExecutor for Host {
         type Task = HostTask;
+        const SOURCE: u16 = 5;
+        const INTERRUPT_MODE: bool = true;
         fn pend(signal: &'static IrqSignal<Self>) {
             signal.service();
         }
@@ -562,6 +582,8 @@ pub mod host {
     // own thread-local list explicitly.
     unsafe impl SignalExecutor for Deferred {
         type Task = HostTask;
+        const SOURCE: u16 = 5;
+        const INTERRUPT_MODE: bool = true;
         fn pend(_: &'static IrqSignal<Self>) {}
         fn running() -> bool {
             true
@@ -582,6 +604,8 @@ pub mod host {
     // reached.
     unsafe impl SignalExecutor for Foreign {
         type Task = HostTask;
+        const SOURCE: u16 = 6;
+        const INTERRUPT_MODE: bool = false;
         fn pend(_: &'static IrqSignal<Self>) {}
         fn running() -> bool {
             false
@@ -596,13 +620,13 @@ pub mod host {
     }
 
     pub fn signal() -> &'static IrqSignal<Host> {
-        Box::leak(Box::new(IrqSignal::new()))
+        Box::leak(Box::new(IrqSignal::for_host_test()))
     }
     pub fn deferred_signal() -> &'static IrqSignal<Deferred> {
-        Box::leak(Box::new(IrqSignal::new()))
+        Box::leak(Box::new(IrqSignal::for_host_test()))
     }
     pub fn foreign_signal() -> &'static IrqSignal<Foreign> {
-        Box::leak(Box::new(IrqSignal::new()))
+        Box::leak(Box::new(IrqSignal::for_host_test()))
     }
 }
 

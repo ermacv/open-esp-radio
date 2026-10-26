@@ -7,7 +7,10 @@ use oer_esp32s31_ieee80211_driver::{
 };
 use oer_esp32s31_ieee80211_mac::tx::TxSlot;
 use oer_espressif_executor::{Doorbell, DoorbellAcknowledger, InterruptExecutor};
-use oer_interrupt_table::{Bound, signal::IrqSignal};
+use oer_interrupt_table::{
+    Bound,
+    signal::{FromHandler, FromTask, IrqSignal},
+};
 use oer_memory::HandlerCell;
 
 pub const N: usize = 32;
@@ -35,8 +38,8 @@ oer_memory::zeroed_static! {
     pub static LINE: HandlerCell<WifiIrqLine<RadioExecutor>> = zeroed in ".critical.bss.wifi_rx_line";
 }
 oer_espressif_staged_runtime::placed_static! {
-    pub static MAC_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new(), in critical_data "lower_mac";
-    pub static POWER_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new(), in critical_data "lower_mac";
+    pub static MAC_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new::<(FromHandler<crate::WifiToken>, FromTask<oer_espressif_executor::Executor<0>, crate::WakeToken>), crate::RadioToken>(), in critical_data "lower_mac";
+    pub static POWER_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new::<FromHandler<crate::WifiToken>, crate::RadioToken>(), in critical_data "lower_mac";
     pub static ERRORS: AtomicU32 = AtomicU32::new(0), in critical_data "lower_mac";
 }
 pub static SLOT0: static_cell::StaticCell<TxSlot<TX>> = static_cell::StaticCell::new();
@@ -64,7 +67,7 @@ impl DoorbellAcknowledge for Lower {
 }
 
 /// The router's proof that the table binds the radio handler's part.
-pub type WifiBound = Bound<WifiIrqPart<Lower>>;
+pub type WifiBound = Bound<crate::WifiToken>;
 
 /// The radio handler (P3): both MAC banks and the doorbell, one line.
 pub fn on_wifi(part: &mut WifiIrqPart<Lower>) {
@@ -77,6 +80,10 @@ pub fn on_wifi(part: &mut WifiIrqPart<Lower>) {
 pub struct ImageDoorbell(pub Doorbell<3>);
 
 impl RadioDoorbell for ImageDoorbell {
+    const HANDLER: oer_interrupt_table::Context =
+        <crate::WifiToken as oer_interrupt_table::Entry>::CONTEXT;
+    const EXECUTOR: oer_interrupt_table::Context =
+        <crate::RadioToken as oer_interrupt_table::Entry>::CONTEXT;
     fn ring(&self) {
         self.0.ring();
     }

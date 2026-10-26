@@ -427,7 +427,9 @@ pub fn on_wake(_: &mut WakeIrq) {}
 oer_interrupt_table::interrupt_table! {
     lines: LINES,
     handler_attributes: [];
-    wake: WakeToken = WakeIrq => on_wake, line 20, level 3, hart 0, Hardware;
+    contexts { radio: 3; }
+    priority: low_to_high;
+    wake: WakeToken = WakeIrq => on_wake, line 20, context radio, hart 0, Hardware;
 }
 
 #[test]

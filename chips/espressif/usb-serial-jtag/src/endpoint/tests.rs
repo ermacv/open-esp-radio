@@ -28,7 +28,8 @@ struct Console {
 impl Console {
     fn new() -> Self {
         let block = Shared::default();
-        let interrupt: &'static Interrupt<Host, Irq> = Box::leak(Box::new(Interrupt::new()));
+        let interrupt: &'static Interrupt<Host, Irq> =
+            Box::leak(Box::new(Interrupt::for_host_test()));
         let endpoint = Endpoint::new(Task(block.clone()), interrupt.signal(), &silent());
         Self {
             block,
@@ -52,7 +53,7 @@ fn poll<F: Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
 fn the_endpoint_enables_the_console_interrupts_with_silent_authority() {
     let block = Shared::default();
     assert!(!block.lock().enabled);
-    let interrupt: &'static Interrupt<Host, Irq> = Box::leak(Box::new(Interrupt::new()));
+    let interrupt: &'static Interrupt<Host, Irq> = Box::leak(Box::new(Interrupt::for_host_test()));
     let authority = silent();
     assert!(!block.lock().enabled, "the proof alone enables no events");
     let _endpoint = Endpoint::new(Task(block.clone()), interrupt.signal(), &authority);

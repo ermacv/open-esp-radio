@@ -81,9 +81,9 @@ moves; ownership, orchestration and wiring are rebuilt.
 - A lower-priority task wakes a higher-priority one only through
   `oer_sync::PriorityWaker` ([notifications](execution-wakes.md)).
 - Each interrupt table entry binds one interrupt part, whose type names its
-  sources, to one CPU line (16 to 47) at a level on a hart: the line's vector
+  sources, to one CPU line (16 to 47) at a named context's level on a hart: the line's vector
   calls the entry's handler directly, the handler holds the part, and
-  binding it returns the `Bound` proof a driver takes before it enables the
+  binding it returns the `Bound<Entry>` proof carrying that entry's level and hart a driver takes before it enables the
   peripheral's interrupt; a driver that polls a source no entry binds takes
   the router's `Silent` proof instead. A part of several sources (a radio's
   interrupt banks and its doorbell) routes them all to its one line, and its
@@ -93,6 +93,15 @@ moves; ownership, orchestration and wiring are rebuilt.
   table fails to compile when two entries share a line, or two entries or
   one part list a source twice, and a binding when its entry lies outside
   the chip's interrupt controller.
+- A signal's constructor declares its receiving executor entry and all its
+  raising contexts. Each raising handler is above that executor, or the
+  raiser is a task of a lower context; thread-mode tasks are at level zero.
+  The declaration checks the executor's software source and common hart.
+  Doorbell construction, Wi-Fi activation and BLE gate exchange check that
+  the request handler is above the requesting executor on the same hart;
+  the driver also checks the doorbell against the bound handler. These are
+  const checks over the table's entries, with no separate level-order proof
+  and no runtime metadata in the signal or binding proof.
 - USB Serial/JTAG event enablement and endpoint construction require the
   sealed `EventAuthority` of the endpoint registers' associated interrupt
   part: its `Bound` or `Silent` proof. Missing authority and another part's
@@ -100,7 +109,11 @@ moves; ownership, orchestration and wiring are rebuilt.
 - The CLIC facts select three implemented control bits and three level bits
   (eight levels, no priority bits). At equal level the highest line ID wins
   arbitration; equal-level handlers do not preempt one another. Image line
-  assignments therefore define an explicit order within each level. Inputs
+  assignments therefore define an explicit order within each level. The
+  image declares its named contexts once, declares `priority: low_to_high`,
+  and selects a context per entry. Entries at one level on one hart appear in
+  increasing arbitration priority. The table checks their line IDs against
+  the facts' highest-line tie-break. Inputs
   below the facts' first source line are reserved for core-local use. The HAL
   writes MNLBITS on partition split because its reset value is zero; the
   router checks INT_INFO and MNLBITS against the facts at install and verify.

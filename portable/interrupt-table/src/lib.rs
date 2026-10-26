@@ -40,7 +40,7 @@
 //!
 //! ```compile_fail,E0423
 //! # oer_interrupt_table::__fake_table!();
-//! fn enable_timer_interrupt(_bound: &oer_interrupt_table::Bound<TimerIrq>) {}
+//! fn enable_timer_interrupt(_bound: &oer_interrupt_table::Bound<TimerToken>) {}
 //! // Only a binding makes the proof the interrupt's enable takes.
 //! enable_timer_interrupt(&oer_interrupt_table::Bound { _part: core::marker::PhantomData });
 //! ```
@@ -60,7 +60,7 @@
 //! # let mut router = fake_router(0);
 //! let tokens = Interrupts::take().unwrap();
 //! let bound = router.bind(tokens.timer, TimerIrq::default()).unwrap();
-//! fn enable_timer_interrupt(_bound: &oer_interrupt_table::Bound<TimerIrq>) {}
+//! fn enable_timer_interrupt(_bound: &oer_interrupt_table::Bound<TimerToken>) {}
 //! enable_timer_interrupt(&bound);
 //! ```
 #![no_std]
@@ -164,12 +164,37 @@ pub unsafe trait Entry {
     const LINE: u8;
     const LEVEL: u8;
     const HART: u8;
+    const CLASS: Class;
+    const CONTEXT: Context = Context {
+        level: Self::LEVEL,
+        hart: Self::HART,
+    };
     /// The place the bound part lives in.
     #[doc(hidden)]
     fn storage() -> &'static static_cell::StaticCell<Self::Part>;
     /// The cell the entry's handler borrows the part from.
     #[doc(hidden)]
     fn cell() -> &'static oer_memory::HandlerCell<Self::Part>;
+}
+
+/// Scheduling metadata; register ownership is carried by the interrupt part.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Context {
+    pub level: u8,
+    pub hart: u8,
+}
+
+/// Whether a request handler preempts its executor on the same hart.
+/// Binding APIs assert this predicate in inline const blocks.
+#[must_use]
+pub const fn request_direction(handler: Context, executor: Context) -> bool {
+    handler.hart == executor.hart && handler.level > executor.level
+}
+
+/// Arbitration among pending lines of the same level, from the chip facts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TieBreak {
+    HighestLine,
 }
 
 /// The layout of a chip's CPU lines, which a chip's platform passes to
@@ -184,6 +209,8 @@ pub struct Lines {
     pub levels: u8,
     /// The harts: `0..harts`.
     pub harts: u8,
+    /// Arbitration at equal level, generated from the chip facts.
+    pub tie_break: TieBreak,
 }
 
 /// Declare an image's interrupt table: once per image, since it defines
@@ -193,8 +220,10 @@ pub struct Lines {
 /// hands `INTERRUPT_TABLE` to its platform's runtime.
 ///
 /// A chip's platform wraps it with its [`Lines`]; each entry reads
-/// `field: Token = Part => handler, line LINE, level LEVEL, hart HART, CLASS;`
-/// with literal numbers. `Part` implements [`InterruptSources`] (each
+/// `field: Token = Part => handler, line LINE, context NAME, hart HART, CLASS;`
+/// after `contexts { NAME: LEVEL; ... }` and `priority: low_to_high;`.
+/// The levels are declared once; same-level entries on a hart are written
+/// from lowest to highest arbitration priority and checked against `Lines::tie_break`. `Part` implements [`InterruptSources`] (each
 /// [`InterruptSource`] does), `handler`
 /// is a `fn(&mut Part)`, and the macro defines the token type `Token`, while
 /// `Interrupts::take` hands out every token once. `CLASS` is a [`Class`]:
@@ -205,7 +234,7 @@ pub struct Lines {
 /// gate's report.
 ///
 /// The table fails to compile when a line lies outside
-/// `lines.first..lines.count`, a level outside `1..=lines.levels` or a hart
+/// `lines.first..lines.count`, a declared context level outside `1..=lines.levels` or a hart
 /// outside `0..lines.harts`; when two entries share a line and hart, or
 /// two entries, or one part, list a source twice; when two `Executor` entries share a level and hart, a `Hardware`
 /// or `Exempt(WakerCall, ..)` entry sits on the level of its hart's
@@ -220,9 +249,11 @@ pub struct Lines {
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
-///     radio: RadioToken = RadioIrq => on_radio, line 17, level 2, hart 0, Executor;
+///     contexts { radio_executor: 2; }
+///     priority: low_to_high;
+///     radio: RadioToken = RadioIrq => on_radio, line 17, context radio_executor, hart 0, Executor;
 ///     // A hardware handler would wait for the executor's whole poll.
-///     timer: TimerToken = TimerIrq => on_timer, line 16, level 2, hart 0, Hardware;
+///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio_executor, hart 0, Hardware;
 /// }
 /// ```
 ///
@@ -233,9 +264,11 @@ pub struct Lines {
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
+///     contexts { radio_executor: 2; }
+///     priority: low_to_high;
 ///     // One executor per level and hart.
-///     radio: RadioToken = RadioIrq => on_radio, line 17, level 2, hart 0, Executor;
-///     timer: TimerToken = TimerIrq => on_timer, line 16, level 2, hart 0, Executor;
+///     radio: RadioToken = RadioIrq => on_radio, line 17, context radio_executor, hart 0, Executor;
+///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio_executor, hart 0, Executor;
 /// }
 /// ```
 ///
@@ -245,8 +278,10 @@ pub struct Lines {
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
+///     contexts { radio_executor: 2; }
+///     priority: low_to_high;
 ///     // Nothing to exempt: no executor shares the level.
-///     timer: TimerToken = TimerIrq => on_timer, line 16, level 2, hart 0, Exempt(ExecutorLevel, "no executor here");
+///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "no executor here");
 /// }
 /// ```
 ///
@@ -257,9 +292,11 @@ pub struct Lines {
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
-///     radio: RadioToken = RadioIrq => on_radio, line 17, level 2, hart 0, Executor;
+///     contexts { radio_executor: 2; }
+///     priority: low_to_high;
+///     radio: RadioToken = RadioIrq => on_radio, line 17, context radio_executor, hart 0, Executor;
 ///     // A waker exemption does not exempt the executor's level too.
-///     timer: TimerToken = TimerIrq => on_timer, line 16, level 2, hart 0, Exempt(WakerCall, "its driver");
+///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio_executor, hart 0, Exempt(WakerCall, "its driver");
 /// }
 /// ```
 ///
@@ -270,9 +307,11 @@ pub struct Lines {
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
+///     contexts { radio: 3; }
+///     priority: low_to_high;
 ///     // One line, one source: a line's vector calls one handler.
-///     radio: RadioToken = RadioIrq => on_radio, line 16, level 3, hart 0, Hardware;
-///     timer: TimerToken = TimerIrq => on_timer, line 16, level 3, hart 0, Hardware;
+///     radio: RadioToken = RadioIrq => on_radio, line 16, context radio, hart 0, Hardware;
+///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio, hart 0, Hardware;
 /// }
 /// ```
 ///
@@ -283,9 +322,11 @@ pub struct Lines {
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
+///     contexts { radio: 3; }
+///     priority: low_to_high;
 ///     // One source, one binding: the same part type binds once.
-///     timer: TimerToken = TimerIrq => on_timer, line 16, level 3, hart 0, Hardware;
-///     again: AgainToken = TimerIrq => on_again, line 17, level 3, hart 0, Hardware;
+///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio, hart 0, Hardware;
+///     again: AgainToken = TimerIrq => on_again, line 17, context radio, hart 0, Hardware;
 /// }
 /// ```
 ///
@@ -304,9 +345,11 @@ pub struct Lines {
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
+///     contexts { radio: 3; }
+///     priority: low_to_high;
 ///     // The pair's handler serves source 7 already.
-///     pair: PairToken = PairIrq => on_pair, line 16, level 3, hart 0, Hardware;
-///     seven: SevenToken = SevenIrq => on_seven, line 17, level 3, hart 0, Hardware;
+///     pair: PairToken = PairIrq => on_pair, line 16, context radio, hart 0, Hardware;
+///     seven: SevenToken = SevenIrq => on_seven, line 17, context radio, hart 0, Hardware;
 /// }
 /// ```
 ///
@@ -320,8 +363,10 @@ pub struct Lines {
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
+///     contexts { radio: 3; }
+///     priority: low_to_high;
 ///     // One part lists source 4 twice.
-///     twice: TwiceToken = TwiceIrq => on_twice, line 16, level 3, hart 0, Hardware;
+///     twice: TwiceToken = TwiceIrq => on_twice, line 16, context radio, hart 0, Hardware;
 /// }
 /// ```
 ///
@@ -331,8 +376,10 @@ pub struct Lines {
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
+///     contexts { radio: 3; }
+///     priority: low_to_high;
 ///     // Lines below the first external one are the core's own.
-///     timer: TimerToken = TimerIrq => on_timer, line 7, level 3, hart 0, Hardware;
+///     timer: TimerToken = TimerIrq => on_timer, line 7, context radio, hart 0, Hardware;
 /// }
 /// ```
 ///
@@ -342,8 +389,10 @@ pub struct Lines {
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
-///     // Three level bits hold eight levels.
-///     timer: TimerToken = TimerIrq => on_timer, line 16, level 9, hart 0, Hardware;
+///     contexts { radio: 3; unused: 9; }
+///     priority: low_to_high;
+///     // Even an unused context must fit the facts' eight levels.
+///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio, hart 0, Hardware;
 /// }
 /// ```
 ///
@@ -353,8 +402,10 @@ pub struct Lines {
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
+///     contexts { radio: 3; }
+///     priority: low_to_high;
 ///     // The fake has two harts.
-///     timer: TimerToken = TimerIrq => on_timer, line 16, level 3, hart 2, Hardware;
+///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio, hart 2, Hardware;
 /// }
 /// ```
 ///
@@ -364,8 +415,10 @@ pub struct Lines {
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
+///     contexts { radio: 3; }
+///     priority: low_to_high;
 ///     // A handler gets exactly its entry's part.
-///     timer: TimerToken = TimerIrq => on_radio, line 16, level 3, hart 0, Hardware;
+///     timer: TimerToken = TimerIrq => on_radio, line 16, context radio, hart 0, Hardware;
 /// }
 /// ```
 ///
@@ -381,10 +434,12 @@ pub struct Lines {
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
-///     radio: RadioToken = RadioIrq => on_radio, line 16, level 2, hart 0, Executor;
-///     timer: TimerToken = TimerIrq => on_timer, line 16, level 2, hart 1, Hardware;
-///     pair: PairToken = PairIrq => on_pair, line 17, level 3, hart 1, Hardware;
-///     absent: AbsentToken = AbsentIrq => on_absent, line 47, level 2, hart 0, Exempt(ExecutorLevel, "until its port");
+///     contexts { radio_executor: 2; radio: 3; }
+///     priority: low_to_high;
+///     radio: RadioToken = RadioIrq => on_radio, line 16, context radio_executor, hart 0, Executor;
+///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio_executor, hart 1, Hardware;
+///     pair: PairToken = PairIrq => on_pair, line 17, context radio, hart 1, Hardware;
+///     absent: AbsentToken = AbsentIrq => on_absent, line 47, context radio_executor, hart 0, Exempt(ExecutorLevel, "until its port");
 /// }
 /// ```
 #[macro_export]
@@ -392,14 +447,21 @@ macro_rules! interrupt_table {
     (
         lines: $lines:expr,
         handler_attributes: $handler_attributes:tt;
+        contexts { $($context_name:ident: $context_level:literal;)* }
+        priority: low_to_high;
         $(
             $(#[cfg($cfg:meta)])*
             $(#[doc = $doc:literal])*
             $field:ident: $token:ident = $part:ty => $handler:path,
-                line $line:literal, level $level:literal, hart $hart:literal,
+                line $line:literal, context $context:ident, hart $hart:literal,
                 $class:ident $(($violation:ident, $reason:literal))?;
         )*
     ) => {
+        /// The image's named execution levels. Entries select one by name.
+        #[allow(non_upper_case_globals, reason = "image contexts are named by role")]
+        mod contexts {
+            $(pub const $context_name: u8 = $context_level;)*
+        }
         $(
             $(#[cfg($cfg)])*
             $(#[doc = $doc])*
@@ -414,8 +476,9 @@ macro_rules! interrupt_table {
             unsafe impl $crate::Entry for $token {
                 type Part = $part;
                 const LINE: u8 = $line;
-                const LEVEL: u8 = $level;
+                const LEVEL: u8 = contexts::$context;
                 const HART: u8 = $hart;
+                const CLASS: $crate::Class = $crate::__class!($class $($violation)?);
                 fn storage() -> &'static $crate::__private::StaticCell<$part> {
                     static STORAGE: $crate::__private::StaticCell<$part> =
                         $crate::__private::StaticCell::new();
@@ -450,7 +513,7 @@ macro_rules! interrupt_table {
                 binding: $crate::Binding {
                     source: 0,
                     line: $line,
-                    level: $level,
+                    level: contexts::$context,
                     class: $crate::__class!($class $($violation)?),
                     hart: $hart,
                     handler: {
@@ -472,7 +535,7 @@ macro_rules! interrupt_table {
             },)*
         ];
 
-        const _: () = $crate::__private::check($lines, __OER_DECLARED);
+        const _: () = $crate::__private::check($lines, &[$(contexts::$context_name),*], __OER_DECLARED);
 
         /// Every token of the image's interrupt table.
         #[allow(dead_code, reason = "an image without bindings takes no token")]
@@ -673,11 +736,19 @@ pub mod __private {
         out
     }
 
-    /// The rules of a table, at compile time: each present entry's line,
-    /// level and hart in range, one entry per line and hart and per source,
+    /// The rules of a table, at compile time: declared context levels and
+    /// present entries' lines and harts in range, one entry per line and hart and per source,
     /// one `Executor` per level and hart, no `Hardware` or waker exemption
     /// on its level, every level exemption on it.
-    pub const fn check(lines: Lines, entries: &[Declared]) {
+    pub const fn check(lines: Lines, contexts: &[u8], entries: &[Declared]) {
+        let mut levels = contexts;
+        while let [level, tail @ ..] = levels {
+            levels = tail;
+            assert!(
+                *level >= 1 && *level <= lines.levels,
+                "a context's level is no level a line can hold"
+            );
+        }
         let mut rest = entries;
         let mut position = 0;
         while let [entry, tail @ ..] = rest {
@@ -689,10 +760,6 @@ pub mod __private {
             assert!(
                 entry.binding.line >= lines.first && entry.binding.line < lines.count,
                 "an entry's line is no line a peripheral source can be routed to"
-            );
-            assert!(
-                entry.binding.level >= 1 && entry.binding.level <= lines.levels,
-                "an entry's level is no level a line can hold"
             );
             assert!(
                 entry.binding.hart < lines.harts,
@@ -719,6 +786,17 @@ pub mod __private {
                     !twice(entry.sources, other.sources, same),
                     "two entries, or one part, list a source twice"
                 );
+                if other_position > position
+                    && other.binding.level == entry.binding.level
+                    && other.binding.hart == entry.binding.hart
+                {
+                    match lines.tie_break {
+                        crate::TieBreak::HighestLine => assert!(
+                            entry.binding.line < other.binding.line,
+                            "declared low-to-high priority contradicts the chip's line tie-break"
+                        ),
+                    }
+                }
                 if other.binding.level == entry.binding.level
                     && other.binding.hart == entry.binding.hart
                     && matches!(other.binding.class, Class::Executor)
@@ -869,6 +947,7 @@ macro_rules! __fake_parts {
             count: 48,
             levels: 8,
             harts: 2,
+            tie_break: $crate::TieBreak::HighestLine,
         };
     };
 }
@@ -984,13 +1063,15 @@ macro_rules! __fake_table {
         $crate::interrupt_table! {
             lines: FAKE_LINES,
             handler_attributes: [];
-            timer: TimerToken = TimerIrq => on_timer, line 16, level 1, hart 0, Hardware;
-            radio: RadioToken = RadioIrq => on_radio, line 17, level 2, hart 1, Executor;
-            pair: PairToken = PairIrq => on_pair, line 18, level 1, hart 0, Hardware;
+    contexts { app_wake: 1; radio_executor: 2; }
+    priority: low_to_high;
+            timer: TimerToken = TimerIrq => on_timer, line 16, context app_wake, hart 0, Hardware;
+            radio: RadioToken = RadioIrq => on_radio, line 17, context radio_executor, hart 1, Executor;
+            pair: PairToken = PairIrq => on_pair, line 18, context app_wake, hart 0, Hardware;
             #[cfg(any())]
             /// Left out of every build; on its own it would break the line
             /// rule, which only the build's entries obey.
-            absent: AbsentToken = AbsentIrq => on_absent, line 16, level 1, hart 0, Hardware;
+            absent: AbsentToken = AbsentIrq => on_absent, line 16, context app_wake, hart 0, Hardware;
         }
 
         /// A router of `hart` over a fresh fake controller and the table.

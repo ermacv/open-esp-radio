@@ -1,0 +1,33 @@
+warning: unused import: `Foreign`
+ --> tests/ui/signal_task_direction.rs:1:73
+  |
+1 | use oer_interrupt_table::signal::{FromTask, IrqSignal, host::{Deferred, Foreign}};
+  |                                                                         ^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0080]: evaluation panicked: a signal task must be below its executor
+ --> src/signal.rs
+  |
+  |         const { R::CONTEXTS.check(binding::executor_context::<E, Target>()) };
+  |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_interrupt_table::signal::IrqSignal::<oer_interrupt_table::signal::host::Deferred>::new::<oer_interrupt_table::signal::FromTask<oer_interrupt_table::signal::host::Deferred, ExecutorToken>, ExecutorToken>::{constant#0}` failed inside this call
+  |
+note: inside `signal::binding::Raising::check`
+ --> $RUST/core/src/panic.rs
+  |
+  |           $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the failure occurred here
+  |
+ ::: src/signal/binding.rs
+  |
+  | /                 assert!(
+  | |                     from.level < executor.level,
+  | |                     "a signal task must be below its executor"
+  | |                 );
+  | |_________________- in this macro invocation
+
+note: erroneous constant encountered
+ --> src/signal.rs
+  |
+  |         const { R::CONTEXTS.check(binding::executor_context::<E, Target>()) };
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

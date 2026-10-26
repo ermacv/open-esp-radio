@@ -45,7 +45,7 @@ oer-esp32s31-hal = { path = "../../esp32s31/hal", optional = true }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [dev-dependencies]
-oer-interrupt-table = { path = "../../../portable/interrupt-table" }
+oer-interrupt-table = { path = "../../../portable/interrupt-table", features = ["host-signal"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 
 [lints]
