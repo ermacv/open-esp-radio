@@ -182,6 +182,26 @@ impl Observation {
                 .values()
                 .any(|incoming| incoming.contains(&site))
     }
+
+    /// A sole open exit whose value-analysis targets are all external. Feeding
+    /// those targets back to the graph can prove the function's own frame.
+    pub fn resolved_external_exit(&self, function: &Function) -> Option<u32> {
+        let (&site, _) = self.open_graph.sites.first_key_value()?;
+        let site = u32::try_from(site).ok()?;
+        if !self.closed_except(site) {
+            return None;
+        }
+        let mut resolved = false;
+        for &(_, target, kind) in self.resolved.iter().filter(|(at, ..)| *at == site) {
+            if kind != TransferKind::Tail
+                || (target >= function.address && target - function.address < function.size)
+            {
+                return None;
+            }
+            resolved = true;
+        }
+        resolved.then_some(site)
+    }
 }
 
 #[derive(Default)]
