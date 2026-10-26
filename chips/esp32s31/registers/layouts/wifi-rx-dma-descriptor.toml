@@ -4,12 +4,14 @@ schema = 1
 name = "WIFI_RX_DMA_DESCRIPTOR"
 description = """
 The 12-byte node the Wi-Fi RX DMA walker follows: the control word, the
-buffer address and the link to the next node."""
+buffer address and the link to the next node. Buffers can receive repeated
+writes without visible CONTROL or walker-cursor commit. A changed leading
+word alone is not established as a consumption or accepted-frame predicate."""
 size = 12
 align = 4
 
 [layout.review]
-sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_W1_RX_WALKER_2026_10_18", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
+sources = ["HW18_RX_UNCOMMITTED_WRITES_20261027", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_W1_RX_WALKER_2026_10_18", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
@@ -55,7 +57,7 @@ description = "Vendor offset bit. Software initializes it through the control im
 name = "LENGTH"
 bits = "27:14"
 writer = "hardware"
-description = "Software arms LENGTH with SIZE. On the measured three-node beacon chains, terminal LENGTH is 12 for SIZE=128; first and intermediate nodes retain the armed LENGTH=128 image. That unchanged image does not prove a hardware writeback or distinguish a filled nonterminal from an untouched node."
+description = "Received byte count on a terminal descriptor. Software arms LENGTH with SIZE; an unchanged nonterminal value establishes neither a hardware writeback nor consumption or accepted-frame membership."
 
 [[layout.words.fields]]
 name = "SIZE"

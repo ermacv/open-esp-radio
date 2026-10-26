@@ -275173,7 +275173,7 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity.
+            /// Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity. The grouped pending-STATUS observation establishes that at least one of auxiliary bits 5/24 was pending; it does not identify this lane independently or prove both.
             #[inline]
             pub const fn rx_associated_auxiliary_5(self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -275221,7 +275221,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00002000) != 0
             }
 
-            /// RX success event used to schedule descriptor service. After the measured three-beacon capture and MAC/walker stop, this pending cause reappears through STATUS when RX delivery is unmasked and is hidden on remasking; a sampled acknowledgement clears it. RAW retention, CPU delivery and IRQ-to-payload ordering are not established by that observation.
+            /// RX success event used to schedule descriptor service; it does not by itself establish payload durability or IRQ-to-DMA ordering.
             #[inline]
             pub const fn rx_success(self) -> bool {
                 (self.0 & 0x00004000) != 0
@@ -275269,7 +275269,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00800000) != 0
             }
 
-            /// Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity.
+            /// Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity. The grouped pending-STATUS observation establishes that at least one of auxiliary bits 5/24 was pending; it does not identify this lane independently or prove both.
             #[inline]
             pub const fn rx_associated_auxiliary_24(self) -> bool {
                 (self.0 & 0x01000000) != 0
@@ -307271,7 +307271,9 @@ pub mod layouts {
     }
 
     /// The 12-byte node the Wi-Fi RX DMA walker follows: the control word, the
-    /// buffer address and the link to the next node.
+    /// buffer address and the link to the next node. Buffers can receive repeated
+    /// writes without visible CONTROL or walker-cursor commit. A changed leading
+    /// word alone is not established as a consumption or accepted-frame predicate.
     ///
     /// 12 bytes, aligned to 4; its zero bytes are an all-zero structure.
     /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
@@ -307343,7 +307345,7 @@ pub mod layouts {
     /// Project-assigned name.
     ///
     /// A value of the `WIFI_RX_DMA_DESCRIPTOR.CONTROL` word.
-    /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+    /// SOURCE: HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
     #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct WifiRxDmaDescriptorControl(u32);
 
@@ -307394,7 +307396,7 @@ pub mod layouts {
         pub const LENGTH_WIDTH: u32 = 14;
         /// Greatest unsigned image of `LENGTH`.
         pub const LENGTH_MAX: u32 = 0x3fff;
-        /// Project-assigned name. Software arms LENGTH with SIZE. On the measured three-node beacon chains, terminal LENGTH is 12 for SIZE=128; first and intermediate nodes retain the armed LENGTH=128 image. That unchanged image does not prove a hardware writeback or distinguish a filled nonterminal from an untouched node.
+        /// Project-assigned name. Received byte count on a terminal descriptor. Software arms LENGTH with SIZE; an unchanged nonterminal value establishes neither a hardware writeback nor consumption or accepted-frame membership.
         ///
         /// `LENGTH`, bits 27:14; written by the hardware.
         /// SOURCE: HW18_RX_CHAIN_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18.
@@ -307526,7 +307528,7 @@ pub mod layouts {
     /// Project-assigned name.
     ///
     /// A value of the `WIFI_RX_DMA_DESCRIPTOR.BUFFER` word.
-    /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+    /// SOURCE: HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
     #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct WifiRxDmaDescriptorBuffer(u32);
 
@@ -307551,7 +307553,7 @@ pub mod layouts {
         /// Project-assigned name. The buffer's address.
         ///
         /// `ADDRESS`, bits 31:0; written by the CPU. The address lies in [`DMA_WINDOW`].
-        /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+        /// SOURCE: HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
         pub const fn address(self) -> u32 {
             self.0
         }
@@ -307584,7 +307586,7 @@ pub mod layouts {
     /// Project-assigned name.
     ///
     /// A value of the `WIFI_RX_DMA_DESCRIPTOR.NEXT` word.
-    /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+    /// SOURCE: HW18_RX_UNCOMMITTED_WRITES_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
     #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct WifiRxDmaDescriptorNext(u32);
 

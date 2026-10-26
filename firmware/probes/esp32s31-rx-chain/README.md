@@ -28,12 +28,13 @@ possible, then use the existing flash/monitor commands. This is a short fact
 experiment, not an HIL scenario or a qualification image. No frame is transmitted.
 The channel must match the laboratory AP before running.
 
-`E` rows are hexadecimal words: node index (32 = R), cycle before control,
+`E` rows are hexadecimal words: node index (hex `20` = R, decimal 32), cycle before control,
 cycle after control, control before/after the leading-word read, leading word,
 BUFFER, descriptor NEXT, MAC BASE, MAC LAST/NEXT before the node sample,
 MAC LAST/NEXT after it, unknown NEXT-upper nonzero before/after, and scan number.
 Each row is a sequence of observations, not an atomic snapshot. `D` rows copy
-all 32 buffer words after the outer MAC and walker have stopped. Dumps may
+all 32 buffer words only for nodes whose leading word differs from the sentinel
+after the outer MAC and walker stop. Both E and D node indices are hexadecimal. Dumps may
 contain received air data and belong in local evidence, never git.
 
 The final state is dumped without rearm, then the production release closes RF.
@@ -50,7 +51,8 @@ No CPU source120 route is installed. These phases observe pending status after
 descriptor inspection, without a production take/drain. They cannot expose RAW,
 distinguish auxiliary bits 5/24, enumerate opaque lanes, or measure IRQ entry
 against DMA. A successful pending-status observation does not prove payload
-ordering or justify removing the leading sentinel.
+ordering. The descriptor alone does not mark nonterminal consumption; whether
+the leading sentinel is a valid consumption predicate is not established.
 
 The capture stops at the first frame limit or deadline. If trace capacity is
 exhausted, collection stops, then emits the retained rows and stopped-buffer
@@ -67,3 +69,15 @@ they do not observe MAC DMA completion.
 The staged product-style stack check reports an unresolved P2 stack path.
 This is a diagnostic, unqualified image; no panic budget or memory profile is
 raised to make a product check pass.
+
+The single three-beacon capture `hw18-20261027-rx-radio-01-s31b` used the
+unpushed local composition `1f530932` (#687 + #700 and fallible-root handling),
+not the PR head. It also shows 13 clusters of repeated leading-word changes
+starting at ring nodes 0/3/6, with CONTROL still `0x80200080`, no RX_DONE,
+original descriptor NEXT and stationary sampled MAC BASE/LAST/NEXT. Some clusters
+rewrite nodes 3/4/6/7 before their later beacon contents; 24 ring nodes outside
+the three completed chains remain dirty. Thus a non-sentinel leading word is
+not established as membership in an accepted frame. Aborted/filtered reception
+with rollback is a hypothesis requiring counter/event correlation. The external
+report analyzes every dependent ring decision; this probe does not exercise the
+production take/admission path or demonstrate a production ownership violation.
