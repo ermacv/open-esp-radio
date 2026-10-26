@@ -87,3 +87,54 @@ Reading ATTR_MODE=3 does not establish that writes are ignored: the current
 read-only PAC field has no setter. Likewise, a zero LP wakeup flag before and
 after reset cannot prove preservation of a pending event. These limitations
 must remain explicit in a report even when the other leaves complete.
+
+## SAR/PWDET lifetime and freshness
+
+Selections 140–146 and 149 use the same one-time PAC claim. Run 140 once
+before the others. It applies a finite subset of the production modem clock,
+FE/BB, PWDET and SAR2 initialization leaves, selects the existing reference
+calibration mode, and checks references 0 and `0x5555`. It performs no RF/PHY
+calibration, PBus gain/DCO setup or background tracking. The measured epoch
+starts from ROM-download state, not an untouched power-on reset.
+
+These selections execute in an isolated P2 software-interrupt context using
+the existing trap ABI; `0x14f0` records `mintstatus` and `mcause`. Cycle-counter
+boundaries advance the observations at the adopted CPU rate. Only an integer
+MHz XTAL/CPLL-derived rate is admitted. Named conversion observations stop
+at the 100 µs experimental boundary, which is not a production timeout.
+There is no production executor or timer-service latency in this image.
+
+| Selection | Operation |
+| --- | --- |
+| 140 | Initialize, explicitly disable background PWDET, capture two reference conversions; refuse later trials without nonzero samples |
+| 141 / 142 | Repeated reads at nominal ready+0/1/10/100 µs / first read deferred to ready+100 µs |
+| 143 / 144 | Same two HOLD trials, clearing tone arm immediately after observing ready |
+| 145 / 146 | Alternate reference 0/`0x5555`, with early result reads / first post-trigger result read deferred to 100 µs; require distinguishable preflight samples |
+| 149 | Stop both tone paths and restore DAC scale; the host then uses the stand's download reset to end the epoch |
+
+The first result word's upper lane is the measured sample. Arm settling is
+at least 1 µs; ordinary ready polling begins after at least 2 µs and accepts
+only the named three-bit value 7. EDGE additionally observes status early,
+without accepting early data as completed. RAM records are published after
+the timed region; the debugger reads only the SRAM output and publishes
+selectors while halted. No peripheral MMIO is performed by the debugger.
+
+Record tags (hexadecimal): `1400/1401` clock selection/rate; `1406/1407`
+background-enable and mode checkpoints; `1402/1410` cycle stamps surrounding
+the trigger-setting PAC RMW, then `1403/1411` elapsed cycles/status per poll;
+`1404/1405` preflight samples/admission; `1412` delayed-first-read/arm-clear
+flags and ready anchor; `1413` nominal delay/start/end cycles from that anchor,
+followed by `1414` ready-before/sample/ready-after; `1450` reference and sample
+before/after publication; `1454` ready before/after reference and after arm;
+`1451` trigger stamps/deferred-read flag; `1452` nominal delay/start/end cycles
+from the post-trigger stamp, followed by `1453` ready/sample (`u32::MAX` when
+intentionally unread); `1490` cleanup observation. `14ee` is a refused or
+failed experiment, even if the ordinary completion marker is present.
+
+The ready anchor is the cycle read immediately before the first status load
+that returned 7. Nominal deadlines are lower bounds: the recorded start/end
+cycles expose late observations and MMIO overhead. The actual trigger store
+lies inside the two trigger stamps. Do not infer exact nominal observation
+times, physical minimum conversion time, indefinite retention or calibrated
+voltage/power from these records. SOURCE: `oer-notes/research/opaque-blobray-phy.md`
+(P-SAR-HOLD/P-SAR-EDGE); silicon results: `oer-notes/research/hw-sar-hold.md`.
