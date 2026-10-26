@@ -3,7 +3,7 @@ use crate::ieee80211::dma::{
     rx_ring::{with_bound_buffers, RecycleGrant, Rearm, RxRingLive, RxRingHalted, RxRingError},
     rx_storage::{RxDmaBuffer, RxDmaStorage, buffers::BoundBuffers},
 };
-fn half(storage: &RxDmaStorage<4, 16, 20>, ring: &mut RxRingLive<'_, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
+fn half(storage: &RxDmaStorage<4, 16, 16>, ring: &mut RxRingLive<'_, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
     with_bound_buffers(BoundBuffers::live(storage, ring)?, |ring, buffers| {
         let mut held: Option<RecycleGrant<'_, '_>> = None;
         let result = ring.recycle_completed_half_owned(mmio, |grant| {
@@ -16,7 +16,7 @@ fn half(storage: &RxDmaStorage<4, 16, 20>, ring: &mut RxRingLive<'_, 4>, mmio: &
         result.map(|_| ())
     })
 }
-fn prefix(storage: &RxDmaStorage<4, 16, 20>, ring: &mut RxRingLive<'_, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
+fn prefix(storage: &RxDmaStorage<4, 16, 16>, ring: &mut RxRingLive<'_, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
     with_bound_buffers(BoundBuffers::live(storage, ring)?, |ring, buffers| {
         let mut held: Option<RecycleGrant<'_, '_>> = None;
         let result = ring.recycle_completed_prefix_owned::<1, _, _>(mmio, |grant| {
@@ -29,7 +29,7 @@ fn prefix(storage: &RxDmaStorage<4, 16, 20>, ring: &mut RxRingLive<'_, 4>, mmio:
         result.map(|_| ())
     })
 }
-fn unit(storage: &RxDmaStorage<4, 16, 20>, ring: &mut RxRingLive<'_, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
+fn unit(storage: &RxDmaStorage<4, 16, 16>, ring: &mut RxRingLive<'_, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
     with_bound_buffers(BoundBuffers::live(storage, ring)?, |ring, buffers| {
         let mut held: Option<RecycleGrant<'_, '_>> = None;
         let result = ring.recycle_completed_unit_owned(mmio, 1, |grant| {
@@ -42,7 +42,7 @@ fn unit(storage: &RxDmaStorage<4, 16, 20>, ring: &mut RxRingLive<'_, 4>, mmio: &
         result.map(|_| ())
     })
 }
-fn released(storage: &RxDmaStorage<4, 16, 20>, ring: &mut RxRingLive<'_, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
+fn released(storage: &RxDmaStorage<4, 16, 16>, ring: &mut RxRingLive<'_, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
     with_bound_buffers(BoundBuffers::live(storage, ring)?, |ring, buffers| {
         let mut held: Option<RecycleGrant<'_, '_>> = None;
         let result = ring.recycle_released_terminal_prefix_owned(mmio, 1, |grant| {
@@ -55,7 +55,7 @@ fn released(storage: &RxDmaStorage<4, 16, 20>, ring: &mut RxRingLive<'_, 4>, mmi
         result.map(|_| ())
     })
 }
-fn proven(storage: &RxDmaStorage<4, 16, 20>, ring: &mut RxRingLive<'_, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
+fn proven(storage: &RxDmaStorage<4, 16, 16>, ring: &mut RxRingLive<'_, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
     with_bound_buffers(BoundBuffers::live(storage, ring)?, |ring, buffers| {
         let mut held: Option<RecycleGrant<'_, '_>> = None;
         let result = ring.recycle_proven_unit_owned(mmio, 1, |grant| {
@@ -68,7 +68,7 @@ fn proven(storage: &RxDmaStorage<4, 16, 20>, ring: &mut RxRingLive<'_, 4>, mmio:
         result.map(|_| ())
     })
 }
-fn prepare<'s>(storage: &'s RxDmaStorage<4, 16, 20>, ring: RxRingHalted<'s, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
+fn prepare<'s>(storage: &'s RxDmaStorage<4, 16, 16>, ring: RxRingHalted<'s, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
     let binding = BoundBuffers::halted(storage, ring).map_err(|(_, error)| error)?;
     with_bound_buffers(binding, |ring, buffers| {
         let mut held: Option<RecycleGrant<'_, '_>> = None;
@@ -88,8 +88,8 @@ fn prepare<'s>(storage: &'s RxDmaStorage<4, 16, 20>, ring: RxRingHalted<'s, 4>, 
         result.map(|_| ()).map_err(|(_, error)| error)
     })
 }
-fn foreign(first: &RxDmaStorage<4, 16, 20>, first_ring: &mut RxRingLive<'_, 4>,
-           second: &RxDmaStorage<4, 16, 20>, second_ring: &mut RxRingLive<'_, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
+fn foreign(first: &RxDmaStorage<4, 16, 16>, first_ring: &mut RxRingLive<'_, 4>,
+           second: &RxDmaStorage<4, 16, 16>, second_ring: &mut RxRingLive<'_, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
     with_bound_buffers(BoundBuffers::live(first, first_ring)?, |_first_ring, first_buffers| {
         with_bound_buffers(BoundBuffers::live(second, second_ring)?, |second_ring, second_buffers| {
             second_ring.recycle_completed_prefix_owned::<1, _, _>(mmio, |grant| {
@@ -104,8 +104,8 @@ fn foreign(first: &RxDmaStorage<4, 16, 20>, first_ring: &mut RxRingLive<'_, 4>,
 #[cfg(forge_grant)]
 fn forge() { let _: RecycleGrant<'_, '_> = RecycleGrant::new(0); }
 #[cfg(raw_bytes)]
-fn raw(buffer: &RxDmaBuffer<16, 20>) { let _ = buffer.prepare_for_recycle(); }
-fn affine(storage: &RxDmaStorage<4, 16, 20>, ring: &mut RxRingLive<'_, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
+fn raw(buffer: &RxDmaBuffer<16, 16>) { let _ = buffer.prepare_for_recycle(); }
+fn affine(storage: &RxDmaStorage<4, 16, 16>, ring: &mut RxRingLive<'_, 4>, mmio: &mut impl RxDma) -> Result<(), RxRingError> {
     with_bound_buffers(BoundBuffers::live(storage, ring)?, |ring, buffers| {
         ring.recycle_completed_prefix_owned::<1, _, _>(mmio, |grant| {
             buffers.prepare_for_recycle(grant)?;
@@ -121,7 +121,7 @@ const _: () = assert!(core::mem::size_of::<RecycleGrant<'static, 'static>>() == 
 const _: () = assert!(core::mem::size_of::<crate::ieee80211::dma::rx_ring::ScopedRing<'static, &mut RxRingLive<'static, 4>>>() == core::mem::size_of::<&mut RxRingLive<'static, 4>>());
 fn read_authority<'id, 'loan, 'storage: 'loan>(
     ring: crate::ieee80211::dma::rx_ring::ScopedRing<'id, crate::ieee80211::dma::rx_storage::buffers::CompletedRead<'loan>>,
-    buffers: crate::ieee80211::dma::rx_ring::ScopedBuffers<'id, &'storage RxDmaStorage<4, 16, 20>>,
+    buffers: crate::ieee80211::dma::rx_ring::ScopedBuffers<'id, &'storage RxDmaStorage<4, 16, 16>>,
 ) {
     #[cfg(read_rearm)]
     let _ = buffers.prepare_for_recycle(ring.read_grant());
@@ -130,6 +130,6 @@ fn read_authority<'id, 'loan, 'storage: 'loan>(
 }
 
 #[cfg(raw_completed)]
-fn raw_read(buffer: &RxDmaBuffer<16, 20>) { let _ = buffer.completed(); }
+fn raw_read(buffer: &RxDmaBuffer<16, 16>) { let _ = buffer.completed(); }
 #[cfg(raw_detach)]
-fn raw_detach(storage: &'static RxDmaStorage<4, 16, 20>) { let _ = storage.detach_buffer(4, 0); }
+fn raw_detach(storage: &'static RxDmaStorage<4, 16, 16>) { let _ = storage.detach_buffer(4, 0); }

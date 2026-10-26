@@ -47,8 +47,8 @@ use crate::{
 pub const COUNT: usize = 32;
 /// Bytes of one receive buffer.
 pub const BUFFER: usize = 1_664;
-/// Bytes of one buffer's storage, with the recycle guard.
-pub const STORAGE: usize = 1_668;
+/// Backing bytes of one buffer; its leading guard is inside `BUFFER`.
+pub const STORAGE: usize = BUFFER;
 /// Staging leases.
 pub const SLOTS: usize = 32;
 

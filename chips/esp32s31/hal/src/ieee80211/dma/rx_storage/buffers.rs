@@ -12,14 +12,22 @@ pub struct RxDmaBuffer<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>(
 );
 
 impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE> {
-    pub(super) const fn new() -> Self {
+    pub(super) const fn check_geometry() {
         const {
-            assert!(BUFFER_SIZE >= core::mem::size_of::<u32>() && STORAGE_SIZE >= BUFFER_SIZE);
+            assert!(
+                BUFFER_SIZE >= core::mem::size_of::<u32>() && STORAGE_SIZE >= BUFFER_SIZE,
+                "RX DMA capacity includes its leading guard and fits its backing"
+            );
         }
+    }
+
+    pub(super) const fn new() -> Self {
+        Self::check_geometry();
         Self(UnsafeCell::new([0; STORAGE_SIZE]), ExternalRxReturn::new())
     }
 
     pub(super) fn cpu_owned_mut(&mut self) -> &mut [u8; BUFFER_SIZE] {
+        Self::check_geometry();
         self.0
             .get_mut()
             .get_mut(..BUFFER_SIZE)
@@ -29,6 +37,7 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
     }
 
     pub(super) fn cpu_owned_storage_mut(&mut self) -> &mut [u8; STORAGE_SIZE] {
+        Self::check_geometry();
         self.0.get_mut()
     }
 
