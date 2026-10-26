@@ -250760,6 +250760,38 @@ pub mod wifi_bb {
         }
     }
 
+    /// The `WORD_004C_OPAQUE` register.
+    ///
+    /// Opaque word loaded by bb_intr_handl. Neither field meanings nor read-to-clear behavior nor a relation to interrupt source 123 is established.
+    pub mod word_004c_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4c;
+
+        /// Width of `BITS_0_31_OPAQUE` in bits.
+        pub const BITS_0_31_OPAQUE_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `BITS_0_31_OPAQUE`.
+        pub const BITS_0_31_OPAQUE_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `BITS_0_31_OPAQUE`.
+        pub const BITS_0_31_OPAQUE_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `BITS_0_31_OPAQUE` field.
+            #[inline]
+            pub const fn bits_0_31_opaque(self) -> u32 {
+                self.0
+            }
+        }
+    }
+
     /// The `WORD_0050_OPAQUE` register.
     ///
     /// Complete phy_get_noise_floor reads this word; hardware access semantics remain unknown.
@@ -257621,17 +257653,17 @@ pub mod wifi_bb {
     impl oer_mmio::Registers for PhyBasebandConfigOracleWifiBbWords {
         type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
-            0x18, 0x400, 0x428, 0x43c, 0x440, 0x454, 0x458, 0x45c, 0x460, 0x468, 0x46c, 0x478,
-            0x47c, 0x808, 0x890, 0x8dc, 0x8e4, 0x90c, 0x980, 0xa28, 0xc00, 0xc08, 0xc30, 0xc3c,
-            0xc40, 0xc44, 0xc50, 0xc6c, 0xca8, 0xcd0,
+            0x18, 0x4c, 0x400, 0x428, 0x43c, 0x440, 0x454, 0x458, 0x45c, 0x460, 0x468, 0x46c,
+            0x478, 0x47c, 0x808, 0x890, 0x8dc, 0x8e4, 0x90c, 0x980, 0xa28, 0xc00, 0xc08, 0xc30,
+            0xc3c, 0xc40, 0xc44, 0xc50, 0xc6c, 0xca8, 0xcd0,
         ];
     }
 
     impl oer_mmio::Words for PhyBasebandConfigOracleWifiBbWords {
         const OWNED: &'static [usize] = &[
-            0x18, 0x400, 0x428, 0x43c, 0x440, 0x454, 0x458, 0x45c, 0x460, 0x468, 0x46c, 0x478,
-            0x47c, 0x808, 0x890, 0x8dc, 0x8e4, 0x90c, 0x980, 0xa28, 0xc00, 0xc08, 0xc30, 0xc3c,
-            0xc40, 0xc44, 0xc50, 0xc6c, 0xca8, 0xcd0,
+            0x18, 0x4c, 0x400, 0x428, 0x43c, 0x440, 0x454, 0x458, 0x45c, 0x460, 0x468, 0x46c,
+            0x478, 0x47c, 0x808, 0x890, 0x8dc, 0x8e4, 0x90c, 0x980, 0xa28, 0xc00, 0xc08, 0xc30,
+            0xc3c, 0xc40, 0xc44, 0xc50, 0xc6c, 0xca8, 0xcd0,
         ];
         const OBSERVED: &'static [usize] = &[];
     }
@@ -257672,6 +257704,12 @@ pub mod wifi_bb {
             let mut value = noise_floor_control::W(self.0.read::<0x18>());
             change(&mut value);
             self.0.write::<0x18>(value.0);
+        }
+
+        /// Read `WORD_004C_OPAQUE`.
+        #[inline]
+        pub fn read_word_004c_opaque(&self) -> word_004c_opaque::R {
+            word_004c_opaque::R(self.0.read::<0x4c>())
         }
 
         /// Read `WORD_0400_OPAQUE`.
@@ -258144,10 +258182,10 @@ pub mod wifi_bb {
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
         /// image, ascending.
-        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 29] = [
-            0x18, 0x400, 0x428, 0x43c, 0x440, 0x454, 0x458, 0x45c, 0x460, 0x468, 0x46c, 0x478,
-            0x47c, 0x808, 0x890, 0x8dc, 0x8e4, 0x90c, 0x980, 0xa28, 0xc00, 0xc08, 0xc30, 0xc3c,
-            0xc40, 0xc44, 0xc50, 0xca8, 0xcd0,
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 30] = [
+            0x18, 0x4c, 0x400, 0x428, 0x43c, 0x440, 0x454, 0x458, 0x45c, 0x460, 0x468, 0x46c,
+            0x478, 0x47c, 0x808, 0x890, 0x8dc, 0x8e4, 0x90c, 0x980, 0xa28, 0xc00, 0xc08, 0xc30,
+            0xc3c, 0xc40, 0xc44, 0xc50, 0xca8, 0xcd0,
         ];
 
         /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
@@ -258159,34 +258197,35 @@ pub mod wifi_bb {
         pub fn radio_phy_register_image(&self, index: usize) -> Option<u32> {
             match index {
                 0 => Some(self.0.read::<0x18>()),
-                1 => Some(self.0.read::<0x400>()),
-                2 => Some(self.0.read::<0x428>()),
-                3 => Some(self.0.read::<0x43c>()),
-                4 => Some(self.0.read::<0x440>()),
-                5 => Some(self.0.read::<0x454>()),
-                6 => Some(self.0.read::<0x458>()),
-                7 => Some(self.0.read::<0x45c>()),
-                8 => Some(self.0.read::<0x460>()),
-                9 => Some(self.0.read::<0x468>()),
-                10 => Some(self.0.read::<0x46c>()),
-                11 => Some(self.0.read::<0x478>()),
-                12 => Some(self.0.read::<0x47c>()),
-                13 => Some(self.0.read::<0x808>()),
-                14 => Some(self.0.read::<0x890>()),
-                15 => Some(self.0.read::<0x8dc>()),
-                16 => Some(self.0.read::<0x8e4>()),
-                17 => Some(self.0.read::<0x90c>()),
-                18 => Some(self.0.read::<0x980>()),
-                19 => Some(self.0.read::<0xa28>()),
-                20 => Some(self.0.read::<0xc00>()),
-                21 => Some(self.0.read::<0xc08>()),
-                22 => Some(self.0.read::<0xc30>()),
-                23 => Some(self.0.read::<0xc3c>()),
-                24 => Some(self.0.read::<0xc40>()),
-                25 => Some(self.0.read::<0xc44>()),
-                26 => Some(self.0.read::<0xc50>()),
-                27 => Some(self.0.read::<0xca8>()),
-                28 => Some(self.0.read::<0xcd0>()),
+                1 => Some(self.0.read::<0x4c>()),
+                2 => Some(self.0.read::<0x400>()),
+                3 => Some(self.0.read::<0x428>()),
+                4 => Some(self.0.read::<0x43c>()),
+                5 => Some(self.0.read::<0x440>()),
+                6 => Some(self.0.read::<0x454>()),
+                7 => Some(self.0.read::<0x458>()),
+                8 => Some(self.0.read::<0x45c>()),
+                9 => Some(self.0.read::<0x460>()),
+                10 => Some(self.0.read::<0x468>()),
+                11 => Some(self.0.read::<0x46c>()),
+                12 => Some(self.0.read::<0x478>()),
+                13 => Some(self.0.read::<0x47c>()),
+                14 => Some(self.0.read::<0x808>()),
+                15 => Some(self.0.read::<0x890>()),
+                16 => Some(self.0.read::<0x8dc>()),
+                17 => Some(self.0.read::<0x8e4>()),
+                18 => Some(self.0.read::<0x90c>()),
+                19 => Some(self.0.read::<0x980>()),
+                20 => Some(self.0.read::<0xa28>()),
+                21 => Some(self.0.read::<0xc00>()),
+                22 => Some(self.0.read::<0xc08>()),
+                23 => Some(self.0.read::<0xc30>()),
+                24 => Some(self.0.read::<0xc3c>()),
+                25 => Some(self.0.read::<0xc40>()),
+                26 => Some(self.0.read::<0xc44>()),
+                27 => Some(self.0.read::<0xc50>()),
+                28 => Some(self.0.read::<0xca8>()),
+                29 => Some(self.0.read::<0xcd0>()),
                 _ => None,
             }
         }

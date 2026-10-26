@@ -168,6 +168,12 @@ accuracy = "exact"
 sources = ["ROM_REV0_PHY_AGC"]
 accuracy = "exact"
 
+[review.entity."WORD_004C_OPAQUE"]
+sources = ["BLOB_LIBPP_BB_INTR_HANDL"]
+
+[review.entity."WORD_004C_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["BLOB_LIBPP_BB_INTR_HANDL"]
+
 [review.entity."WORD_0050_OPAQUE.NOISE_FLOOR"]
 sources = ["S31_MMIO_DECLARED_20107050"]
 accuracy = "unknown"
@@ -1281,6 +1287,16 @@ description = "Complete phy_bb_agc_reg_update writes 0xff7da4f3."
 name = "BITS_0_31_OPAQUE"
 bits = "31:0"
 class = "write-only"
+
+[[registers]]
+name = "WORD_004C_OPAQUE"
+offset = 0x4c
+description = "Opaque word loaded by bb_intr_handl. Neither field meanings nor read-to-clear behavior nor a relation to interrupt source 123 is established."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "read-only"
 
 [[registers]]
 name = "WORD_0050_OPAQUE"
