@@ -15,6 +15,12 @@ fn zeroed_rx_storage_checks_geometry_before_cpu_access_or_dma_placement() {
             manifest.join("../../../portable/memory"),
         ),
     ).expect("write isolated compiler manifest");
+    // The workspace lock pins every dependency; the case adds only its own root.
+    fs::copy(
+        manifest.join("../../../Cargo.lock"),
+        scratch.path().join("Cargo.lock"),
+    )
+    .expect("pin dependencies to the workspace lock");
     for (entry, action) in [
         ("place", "let _ = Storage::place(Placed::host(storage));"),
         (
