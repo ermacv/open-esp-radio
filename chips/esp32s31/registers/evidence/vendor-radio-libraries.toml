@@ -3,7 +3,7 @@ schema = 1
 
 [[sources]]
 id = "BLOB_LIBBTDM_LP_SLEEP_ZERO_0030"
-description = "SOURCE: espressif/esp32s31-bt-lib revision 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41; Blobray complete function records for member 19.o r_sym_bt_p3Bpnx3z1Aic11OpE6oK+0x20/+0x60 store a whole-word zero at MODEM_PWR+0x30, on both branches of the boolean sleep-control helper. The same body writes MODEM_PWR+0x40/+0x44 bit0, modifies +0x78 bits25/26 and writes MODEM_SYSCON+0x10/+0x14 bit26. No read of +0x30, nonzero encoding, status role or interrupt route is established. Rechecked in target/hw-hw9/sleep-commands-records.txt; /home/ermacv/dev/oer-notes/research/hw-ble-irq-wave2.md."
+description = "SOURCE: espressif/esp32s31-bt-lib revision 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41; Blobray complete function records for member 19.o r_sym_bt_p3Bpnx3z1Aic11OpE6oK+0x20/+0x60 store a whole-word zero at MODEM_PWR+0x30, on both branches of the boolean sleep-control helper. The same body writes MODEM_PWR+0x40/+0x44 bit0, modifies +0x78 bits25/26 and writes MODEM_ETM+0x110/+0x114 bit26. No read of +0x30, nonzero encoding, status role or interrupt route is established. Rechecked in target/hw-hw9/sleep-commands-records.txt; /home/ermacv/dev/oer-notes/research/hw-ble-irq-wave2.md."
 
 [[sources]]
 id = "BLOB_LIBCOEX_IEEE802154_HANDOFF"
@@ -587,3 +587,11 @@ description = "espressif/esp32s31-bt-lib revision 10c507788e9da0993709cf82e405c8
 [[sources]]
 id = "BLOB_LIBBTDM_LP_CONTROLS_CURRENT"
 description = "espressif/esp32s31-bt-lib revision 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41; Blobray function records, SOURCE: L1/L3-L8, member 9.o r_sym_bt_waDX0omCE7oLuPVSoPOK+0x8..0x24/+0x40/+0x44 initializes with image 2 at MODEM_PWR+0x10. r_sym_bt_86dRVPWrmTMQpChjYeWi+0x42..0x58/+0x5c..0x6c and r_sym_bt_xPWv1Z87N9d40AR9yCcT+0x16..0x3c issue image 0x00040000 there after target or software-pending publication. r_sym_bt_FYr6kIOvDbNGoOHfaRvK+0x12/+0x16/+0x30..0x3c/+0x1a enters the common handler only when +0x38 is nonzero; with a nonzero +0x6c and +0x58 bit 2 set, it freshly rereads +0x58 and sets bit 1. r_sym_bt_f0O4BjwUvyoDFI9I7XYU+0xc/+0x78..0x94/+0x52 RMW-sets +0x58 bits 4 and 0 before programming the first timer. Internal action unknown for each command, status encoding and mode control. No rollover-enable, NRT-mask or all-causes-disabled semantics or reset state is established."
+
+[[sources]]
+id = "BLOB_LIBBREDR_BTLC_COMPARE_ENABLE"
+description = "SOURCE: espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbredr_app.a sha256 813f8a34e98694be4e19e9ac5d0ce5e805f531c73154c35f98e22143834ad851; orca_bt_hal_link.c.o complete r_obh_link_btlc_timer_cc_en selects index 0/1/2/3 and replaces only BT_MAC+0x90 bit30/29/28/27 with its boolean enable argument. SOURCE sites +0x1e/+0x38/+0x56/+0x74; target words are independently proved by r_obh_link_btlc_timer_cc_set. No interrupt bit/output relation is inferred. target/hw-hw9/btlc-classic-records.txt."
+
+[[sources]]
+id = "BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS"
+description = "SOURCE: espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41, member19.o. r_sym_bt_p3Bpnx3z1Aic11OpE6oK +0xa/+0x58 writes complete image0x04000000 to physical0x20108910/0x20108914 (MODEM_ETM+0x110/+0x114) in its nonzero/zero branches. r_sym_bt_1Gbu522bM6JExNgRaco7 +0x2e/+0x36/+0x40 writes MODEM_ETM+4 images0x80,0x40,0x800 before MODEM_PWR+0x40 image0x20000. The paired complete r_sym_bt_8vsaW1r7vBA6atycX0nr +0x24/+0x34 writes MODEM_ETM+8 images0x40,0x80 after disabling the LP command and sampling/zeroing+0x20. Bit11's role is unknown; no channel11 or read-safe status is declared. target/hw-hw9/sleep-commands-records.txt; /home/ermacv/dev/oer-notes/research/hw-ble-irq-wave2.md."

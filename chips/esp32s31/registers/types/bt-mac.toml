@@ -408,9 +408,18 @@ completeness = "complete"
 [review.entity."BTLC_TIMER_CONTROL.LATCH_REQUEST"]
 sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "PUBLIC_ESP32S31_BT_TIME_ROLES", "HW9_S31_BTLC_LATCH_SEED_20261026"]
 
-[review.entity."BTLC_TIMER_CONTROL.BITS_27_30_OPAQUE"]
-sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "S31_MMIO_DECLARED_20101090"]
-completeness = "complete"
+[review.entity."BTLC_TIMER_CONTROL.COMPARE_0_ENABLE"]
+sources = ["BLOB_LIBBREDR_BTLC_COMPARE_ENABLE"]
+
+[review.entity."BTLC_TIMER_CONTROL.COMPARE_1_ENABLE"]
+sources = ["BLOB_LIBBREDR_BTLC_COMPARE_ENABLE"]
+
+[review.entity."BTLC_TIMER_CONTROL.COMPARE_2_ENABLE"]
+sources = ["BLOB_LIBBREDR_BTLC_COMPARE_ENABLE"]
+
+[review.entity."BTLC_TIMER_CONTROL.COMPARE_3_ENABLE"]
+sources = ["BLOB_LIBBREDR_BTLC_COMPARE_ENABLE"]
+
 
 [review.entity."BTLC_TIMER_CONTROL.TIMER_ARM"]
 sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS"]
@@ -2274,11 +2283,28 @@ bits = "26"
 class = "plain"
 
 [[registers.fields]]
-name = "BITS_27_30_OPAQUE"
-bits = "30:27"
+name = "COMPARE_0_ENABLE"
+bits = "30"
 class = "plain"
-description = "HAL initialization clears these unassigned positions together with the complete high-byte reset."
-write-range = { min = 0x0, max = 0xf }
+description = "Compare slot 0 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE."
+
+[[registers.fields]]
+name = "COMPARE_1_ENABLE"
+bits = "29"
+class = "plain"
+description = "Compare slot 1 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE."
+
+[[registers.fields]]
+name = "COMPARE_2_ENABLE"
+bits = "28"
+class = "plain"
+description = "Compare slot 2 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE."
+
+[[registers.fields]]
+name = "COMPARE_3_ENABLE"
+bits = "27"
+class = "plain"
+description = "Compare slot 3 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE."
 
 [[registers.fields]]
 name = "TIMER_ARM"

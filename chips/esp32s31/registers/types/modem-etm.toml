@@ -203,6 +203,12 @@ bits = "7"
 class = "write-trigger"
 description = "Writing 1 enables channel 7."
 
+[[registers.fields]]
+name = "BIT_11_OPAQUE"
+bits = "11"
+class = "write-trigger"
+description = "Observed complete one-bit write in the LP sleep helper; inner action unknown. SOURCE: BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS."
+
 [[registers]]
 name = "CHANNEL_ENABLE_CLEAR"
 offset = 0x8
@@ -297,3 +303,38 @@ name = "BIT_3_OPAQUE"
 bits = "3"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
+
+[review.entity."WORD_0110_OPAQUE"]
+sources = ["BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS"]
+
+[review.entity."WORD_0110_OPAQUE.BIT_26_OPAQUE"]
+sources = ["BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS"]
+
+[[registers]]
+name = "WORD_0110_OPAQUE"
+offset = 0x0110
+description = "One complete bit26 image in the boolean LP sleep helper. Action and readability unknown. SOURCE: BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS."
+
+[[registers.fields]]
+name = "BIT_26_OPAQUE"
+bits = "26"
+class = "write-only"
+
+[review.entity."WORD_0114_OPAQUE"]
+sources = ["BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS"]
+
+[review.entity."WORD_0114_OPAQUE.BIT_26_OPAQUE"]
+sources = ["BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS"]
+
+[[registers]]
+name = "WORD_0114_OPAQUE"
+offset = 0x0114
+description = "One complete bit26 image in the boolean LP sleep helper. Action and readability unknown. SOURCE: BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS."
+
+[[registers.fields]]
+name = "BIT_26_OPAQUE"
+bits = "26"
+class = "write-only"
+
+[review.entity."CHANNEL_ENABLE_SET.BIT_11_OPAQUE"]
+sources = ["BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS"]

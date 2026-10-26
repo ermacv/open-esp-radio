@@ -22649,12 +22649,33 @@ pub mod bt_mac {
         /// Positioned bits of `LATCH_REQUEST`.
         pub const LATCH_REQUEST_MASK: u32 = 0x4000000;
 
-        /// Width of `BITS_27_30_OPAQUE` in bits.
-        pub const BITS_27_30_OPAQUE_WIDTH: u32 = 4;
-        /// Greatest unsigned image of `BITS_27_30_OPAQUE`.
-        pub const BITS_27_30_OPAQUE_MAX: u32 = 0xf;
-        /// Positioned bits of `BITS_27_30_OPAQUE`.
-        pub const BITS_27_30_OPAQUE_MASK: u32 = 0x78000000;
+        /// Width of `COMPARE_0_ENABLE` in bits.
+        pub const COMPARE_0_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `COMPARE_0_ENABLE`.
+        pub const COMPARE_0_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `COMPARE_0_ENABLE`.
+        pub const COMPARE_0_ENABLE_MASK: u32 = 0x40000000;
+
+        /// Width of `COMPARE_1_ENABLE` in bits.
+        pub const COMPARE_1_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `COMPARE_1_ENABLE`.
+        pub const COMPARE_1_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `COMPARE_1_ENABLE`.
+        pub const COMPARE_1_ENABLE_MASK: u32 = 0x20000000;
+
+        /// Width of `COMPARE_2_ENABLE` in bits.
+        pub const COMPARE_2_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `COMPARE_2_ENABLE`.
+        pub const COMPARE_2_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `COMPARE_2_ENABLE`.
+        pub const COMPARE_2_ENABLE_MASK: u32 = 0x10000000;
+
+        /// Width of `COMPARE_3_ENABLE` in bits.
+        pub const COMPARE_3_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `COMPARE_3_ENABLE`.
+        pub const COMPARE_3_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `COMPARE_3_ENABLE`.
+        pub const COMPARE_3_ENABLE_MASK: u32 = 0x8000000;
 
         /// Width of `TIMER_ARM` in bits.
         pub const TIMER_ARM_WIDTH: u32 = 1;
@@ -22699,10 +22720,28 @@ pub mod bt_mac {
                 (self.0 & 0x04000000) != 0
             }
 
-            /// HAL initialization clears these unassigned positions together with the complete high-byte reset.
+            /// Compare slot 0 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE.
             #[inline]
-            pub const fn bits_27_30_opaque(self) -> oer_mmio::Bits<4> {
-                oer_mmio::Bits::truncate(self.0 >> 27)
+            pub const fn compare_0_enable(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Compare slot 1 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE.
+            #[inline]
+            pub const fn compare_1_enable(self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Compare slot 2 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE.
+            #[inline]
+            pub const fn compare_2_enable(self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Compare slot 3 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE.
+            #[inline]
+            pub const fn compare_3_enable(self) -> bool {
+                (self.0 & 0x08000000) != 0
             }
 
             /// The `TIMER_ARM` field.
@@ -22746,10 +22785,28 @@ pub mod bt_mac {
                 (self.0 & 0x04000000) != 0
             }
 
-            /// HAL initialization clears these unassigned positions together with the complete high-byte reset.
+            /// Compare slot 0 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE.
             #[inline]
-            pub const fn bits_27_30_opaque(&self) -> oer_mmio::Bits<4> {
-                oer_mmio::Bits::truncate(self.0 >> 27)
+            pub const fn compare_0_enable(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Compare slot 1 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE.
+            #[inline]
+            pub const fn compare_1_enable(&self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Compare slot 2 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE.
+            #[inline]
+            pub const fn compare_2_enable(&self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Compare slot 3 enable selected by the complete r_obh_link_btlc_timer_cc_en leaf. SOURCE: BLOB_LIBBREDR_BTLC_COMPARE_ENABLE.
+            #[inline]
+            pub const fn compare_3_enable(&self) -> bool {
+                (self.0 & 0x08000000) != 0
             }
 
             /// The `TIMER_ARM` field.
@@ -22792,10 +22849,31 @@ pub mod bt_mac {
                 self
             }
 
-            /// Set `BITS_27_30_OPAQUE`.
+            /// Set `COMPARE_0_ENABLE`.
             #[inline]
-            pub fn set_bits_27_30_opaque(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & 0x87ffffff) | (value.get() << 27);
+            pub fn set_compare_0_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xbfffffff) | (u32::from(value) << 30);
+                self
+            }
+
+            /// Set `COMPARE_1_ENABLE`.
+            #[inline]
+            pub fn set_compare_1_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xdfffffff) | (u32::from(value) << 29);
+                self
+            }
+
+            /// Set `COMPARE_2_ENABLE`.
+            #[inline]
+            pub fn set_compare_2_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xefffffff) | (u32::from(value) << 28);
+                self
+            }
+
+            /// Set `COMPARE_3_ENABLE`.
+            #[inline]
+            pub fn set_compare_3_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xf7ffffff) | (u32::from(value) << 27);
                 self
             }
 
@@ -123230,7 +123308,7 @@ pub mod modem_etm {
     /// Channel-enable set word. Its fields are write-trigger: writing 1 enables that channel and writing 0 has no effect, as in the ESP32-S31 SoC ETM of identical layout. This semantics is not yet verified on the modem ETM hardware. The IEEE 802.15.4 driver writes the word back after reading it with the selected channel bit added; the BTDM runtime writes complete channel images.
     pub mod channel_enable_set {
         /// The bits of the register's declared fields.
-        pub const FIELDS: u32 = 0x000000f7;
+        pub const FIELDS: u32 = 0x000008f7;
         /// The register's width in bits.
         pub const WIDTH: u32 = 32;
 
@@ -123239,7 +123317,7 @@ pub mod modem_etm {
 
         /// The bits of the write-trigger fields: zero in every write but a
         /// field's explicit trigger.
-        pub const TRIGGERS: u32 = 0x000000f7;
+        pub const TRIGGERS: u32 = 0x000008f7;
 
         /// Width of `CH0` in bits.
         pub const CH0_WIDTH: u32 = 1;
@@ -123289,6 +123367,13 @@ pub mod modem_etm {
         pub const CH7_MAX: u32 = 0x1;
         /// Positioned bits of `CH7`.
         pub const CH7_MASK: u32 = 0x80;
+
+        /// Width of `BIT_11_OPAQUE` in bits.
+        pub const BIT_11_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_11_OPAQUE`.
+        pub const BIT_11_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_11_OPAQUE`.
+        pub const BIT_11_OPAQUE_MASK: u32 = 0x800;
 
         /// The write-trigger fields one write of the register sets together;
         /// every other bit of the write is zero or its fixed value.
@@ -123341,6 +123426,13 @@ pub mod modem_etm {
             #[inline]
             pub fn ch7(&mut self) -> &mut Self {
                 self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `BIT_11_OPAQUE`.
+            #[inline]
+            pub fn bit_11_opaque(&mut self) -> &mut Self {
+                self.0 |= 0x00000800;
                 self
             }
         }
@@ -123687,6 +123779,70 @@ pub mod modem_etm {
         }
     }
 
+    /// The `WORD_0110_OPAQUE` register.
+    ///
+    /// One complete bit26 image in the boolean LP sleep helper. Action and readability unknown. SOURCE: BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS.
+    pub mod word_0110_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x04000000;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x110;
+
+        /// Width of `BIT_26_OPAQUE` in bits.
+        pub const BIT_26_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_26_OPAQUE`.
+        pub const BIT_26_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_26_OPAQUE`.
+        pub const BIT_26_OPAQUE_MASK: u32 = 0x4000000;
+
+        /// The value written to the register.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Set `BIT_26_OPAQUE`.
+            #[inline]
+            pub fn set_bit_26_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
+                self
+            }
+        }
+    }
+
+    /// The `WORD_0114_OPAQUE` register.
+    ///
+    /// One complete bit26 image in the boolean LP sleep helper. Action and readability unknown. SOURCE: BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS.
+    pub mod word_0114_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x04000000;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x114;
+
+        /// Width of `BIT_26_OPAQUE` in bits.
+        pub const BIT_26_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_26_OPAQUE`.
+        pub const BIT_26_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_26_OPAQUE`.
+        pub const BIT_26_OPAQUE_MASK: u32 = 0x4000000;
+
+        /// The value written to the register.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Set `BIT_26_OPAQUE`.
+            #[inline]
+            pub fn set_bit_26_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
+                self
+            }
+        }
+    }
+
     /// The `VALUE` register.
     ///
     /// Complete ordered images 0x20 then 0x40 around BLE accelerator initialization; their hardware meaning remains unknown.
@@ -124019,9 +124175,10 @@ pub mod modem_etm {
     pub struct ModemEtmBluetoothWords;
 
     impl oer_mmio::Words for ModemEtmBluetoothWords {
-        const OWNED: &'static [usize] = &[0x2c, 0x30, 0x34, 0x38, 0x3c, 0x40, 0x44, 0x48];
+        const OWNED: &'static [usize] =
+            &[0x2c, 0x30, 0x34, 0x38, 0x3c, 0x40, 0x44, 0x48, 0x110, 0x114];
         const OBSERVED: &'static [usize] = &[];
-        const TRIGGERS: &'static [(usize, u32)] = &[(0x4, 0x000000f0), (0x8, 0x000000f0)];
+        const TRIGGERS: &'static [(usize, u32)] = &[(0x4, 0x000008f0), (0x8, 0x000000f0)];
     }
 
     impl<P: oer_mmio::Placement> ModemEtmBluetooth<P> {
@@ -124055,6 +124212,14 @@ pub mod modem_etm {
         #[inline]
         pub fn trigger_channel_enable_set_ch7(&mut self) {
             self.0.write_trigger::<0x4>(0x00000080);
+        }
+
+        /// Write to the write-trigger field `BIT_11_OPAQUE` of the split word `CHANNEL_ENABLE_SET`,
+        /// starting its hardware action once; zero in every other bit, which
+        /// leaves the other holders' fields alone.
+        #[inline]
+        pub fn trigger_channel_enable_set_bit_11_opaque(&mut self) {
+            self.0.write_trigger::<0x4>(0x00000800);
         }
 
         /// Write to the write-trigger field `CH4` of the split word `CHANNEL_ENABLE_CLEAR`,
@@ -124208,6 +124373,42 @@ pub mod modem_etm {
             change(&mut value);
             self.0.write::<0x48>(value.0);
         }
+
+        /// Write `WORD_0110_OPAQUE` from zero: the fields set, the reserved bits at
+        /// their reset value, every high field at its prefix, zero in every
+        /// other bit.
+        #[inline]
+        pub fn write_word_0110_opaque(&mut self, change: impl FnOnce(&mut word_0110_opaque::W)) {
+            let mut value = word_0110_opaque::W(0x00000000);
+            change(&mut value);
+            self.0.write::<0x110>(value.0);
+        }
+
+        /// Write `WORD_0114_OPAQUE` from zero: the fields set, the reserved bits at
+        /// their reset value, every high field at its prefix, zero in every
+        /// other bit.
+        #[inline]
+        pub fn write_word_0114_opaque(&mut self, change: impl FnOnce(&mut word_0114_opaque::W)) {
+            let mut value = word_0114_opaque::W(0x00000000);
+            change(&mut value);
+            self.0.write::<0x114>(value.0);
+        }
+
+        /// Write the vendor's whole-word image `0x04000000`, undeclared bits included (`MODEM_ETM.WORD_0110_OPAQUE`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS.
+        #[inline]
+        pub fn publish_bluetooth_lp_sleep_etm_0110(&mut self) {
+            self.0.write::<0x110>(0x04000000);
+        }
+
+        /// Write the vendor's whole-word image `0x04000000`, undeclared bits included (`MODEM_ETM.WORD_0114_OPAQUE`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS.
+        #[inline]
+        pub fn publish_bluetooth_lp_sleep_etm_0114(&mut self) {
+            self.0.write::<0x114>(0x04000000);
+        }
     }
 
     /// The words of `MODEM_ETM` its parts [`ModemEtmIeee802154`], [`ModemEtmBluetoothPhy`], [`ModemEtmBluetooth`] hold, which one block divides:
@@ -124218,7 +124419,7 @@ pub mod modem_etm {
         type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x2c, 0x30, 0x34, 0x38, 0x3c, 0x40,
-            0x44, 0x48,
+            0x44, 0x48, 0x110, 0x114,
         ];
     }
 
@@ -134810,6 +135011,22 @@ pub mod modem_pwr {
         #[inline]
         pub fn clear_bluetooth_modem_lp_timer_state_0030(&mut self) {
             self.0.write::<0x30>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included (`MODEM_PWR.WORD_001C_OPAQUE`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS, BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS.
+        #[inline]
+        pub fn clear_bluetooth_modem_lp_timer_state_001c(&mut self) {
+            self.0.write::<0x1c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included (`MODEM_PWR.WORD_0020_OPAQUE`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS, BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS.
+        #[inline]
+        pub fn clear_bluetooth_modem_lp_timer_state_0020(&mut self) {
+            self.0.write::<0x20>(0x00000000);
         }
     }
 
