@@ -38,7 +38,7 @@ fn readiness_beyond_the_old_settle_can_arrive_within_the_deadline() {
 }
 
 #[test]
-fn late_ready_observation_is_rejected_even_when_the_timer_wakes_late() {
+fn a_ready_sample_taken_after_the_deadline_succeeds() {
     let clock: VirtualClock = VirtualClock::default();
     let started = clock.now();
     let mut future = Box::pin(wait(&clock, Duration::from_micros(50), || {
@@ -50,11 +50,55 @@ fn late_ready_observation_is_rejected_even_when_the_timer_wakes_late() {
     assert_eq!(
         future.as_mut().poll(&mut cx),
         Poll::Ready(Readiness {
-            ready: false,
+            ready: true,
             elapsed_micros: 51,
             observations: 2,
         })
     );
+}
+
+#[test]
+fn ready_on_the_first_sample_succeeds_without_waiting() {
+    let clock: VirtualClock = VirtualClock::default();
+    let mut future = Box::pin(wait(&clock, Duration::from_micros(50), || true));
+    assert_eq!(
+        future
+            .as_mut()
+            .poll(&mut Context::from_waker(Waker::noop())),
+        Poll::Ready(Readiness {
+            ready: true,
+            elapsed_micros: 0,
+            observations: 1,
+        })
+    );
+    assert_eq!(clock.next_deadline(), None);
+}
+
+#[test]
+fn never_ready_fails_at_the_deadline() {
+    let clock: VirtualClock = VirtualClock::default();
+    let mut future = Box::pin(wait(&clock, Duration::from_micros(50), || false));
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut polls = 0_u16;
+    let readiness = loop {
+        polls += 1;
+        match future.as_mut().poll(&mut cx) {
+            Poll::Ready(readiness) => break readiness,
+            Poll::Pending => {
+                clock.advance_to_next_deadline().unwrap();
+            }
+        }
+    };
+    assert_eq!(
+        readiness,
+        Readiness {
+            ready: false,
+            elapsed_micros: 50,
+            observations: 51,
+        }
+    );
+    assert_eq!(polls, 51);
+    assert_eq!(clock.next_deadline(), None);
 }
 
 #[test]

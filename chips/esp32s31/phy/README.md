@@ -294,8 +294,9 @@ PBus/I2C leaves retain their bounded direct observation policy.
 TXDC/PWDET retains its direct transaction on the borrowed radio domain,
 without CPU-admission queries between its operations. Runtime SAR readiness
 uses [timer-backed retries](src/tx/sar.rs) under our 40 µs engineering deadline;
-the ROM reference supplies no readiness deadline. A ready observation at the
-deadline is accepted, and one after it fails even if hardware became ready earlier.
+the ROM reference supplies no readiness deadline. A sample that reads ready
+succeeds at any time, even after a late wake-up; the deadline bounds only the
+not-ready case.
 Interrupts remain enabled and the physical owner remains held until terminal
 restoration. Longer registration, tracking and lifecycle operations wait on
 the caller's `oer_time::Timer` through `executor::wait::delay` and its
@@ -364,7 +365,7 @@ The timing mechanisms have different scopes:
 | Mechanism | Meaning | Enforcement / limitation |
 | --- | --- | --- |
 | Vendor minimum settle | Wait at least the required time after a hardware action | Named 1–20 µs settles use `mcycle`; longer settles use the caller's timer. Preemption can lengthen them. |
-| Readiness deadline | Our bound for observing completion or giving up on busy hardware | Direct observations use 20 µs; T7 accepts a completed answer after its 100 µs busy window; SAR requires readiness observed within 40 µs. These are not vendor maximum delays. |
+| Readiness deadline | Our bound for observing completion or giving up on busy hardware | Direct observations use 20 µs; T7 accepts a completed answer after its 100 µs busy window; SAR gives up after 40 µs without a ready sample and accepts any ready sample. These are not vendor maximum delays. |
 | CPU admission | Decide whether another complete atom may run | Stop at a ready peer or 900 µs admission threshold, reserving 100 µs toward the 1 ms contract. No universal atom/poll elapsed-time cutoff. |
 | RF admission | Decide whether the shared RF transaction may start | Pending tracking state and the exclusive domain borrow; grant-protect brackets request hardware arbitration. No hard-window calendar, grant proof or one-period deferral bound. |
 
