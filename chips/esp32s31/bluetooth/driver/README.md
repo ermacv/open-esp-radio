@@ -94,9 +94,10 @@ once the router's `Bound` proof of the part made the doorbell's ringing half
 unprepared bank, the HAL's channel endpoint and the initialized timer: the handler prepares the
 controller output, then starts the runtime timer. Preparation already arms
 the independent rollover lane with the counter stopped, after sampling and
-clearing both inherited pending bytes with whole-word zeros. The removed
-state is exposed by `stale_pending_observation` and the BLE PHY initialization
-report. The timer register owner and authoritative epoch
+clearing both inherited pending bytes with the whole-word all-ones `+0x34`
+command. Sampling precedes that destructive command (SOURCE:
+`HW9_S31_LP_CLEAR34_20261027`, run `hw9-20261027-lp-06`). The removed state
+is exposed by `stale_pending_observation` and the BLE PHY initialization report. The timer register owner and authoritative epoch
 stay in the handler while value-only snapshots and unarmed plans cross through
 `interrupt::ModemLpTimerPort`. P2 only mutates the queue and publishes
 expirations. The handler applies the sourced disable/sample/program/command

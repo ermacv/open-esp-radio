@@ -18,9 +18,9 @@ use super::{
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PreparationOperation {
-    GeneratedTransaction,
+    PrepareControls,
     SamplePending,
-    ClearPending,
+    Clear34AllOnes,
     EnableRollover,
     DeviceFence,
 }
@@ -338,50 +338,73 @@ impl ModemLpTimerInterruptTransaction for InterruptRecorder {
     }
 }
 
-#[derive(Default)]
-struct Recorder(Vec<PreparationOperation>);
+struct PreparationModel {
+    operations: Vec<PreparationOperation>,
+    pending: super::BluetoothModemLpTimerPendingObservation,
+    rollover_armed: bool,
+    output: bool,
+}
 
-impl ModemLpTimerTransaction for Recorder {
-    fn prepare_hardware(&mut self) {
-        self.0.push(PreparationOperation::GeneratedTransaction);
+impl ModemLpTimerTransaction for PreparationModel {
+    fn prepare_controls(&mut self) {
+        self.operations.push(PreparationOperation::PrepareControls);
+        self.rollover_armed = false;
+        self.output = false;
     }
 
     fn sample_pending(&mut self) -> super::BluetoothModemLpTimerPendingObservation {
-        self.0.push(PreparationOperation::SamplePending);
-        super::BluetoothModemLpTimerPendingObservation {
-            state_0024: 7,
-            state_002c: 3,
-        }
+        self.operations.push(PreparationOperation::SamplePending);
+        self.pending
     }
-    fn clear_pending(&mut self) {
-        self.0.push(PreparationOperation::ClearPending);
+    fn clear_pending_with_command(&mut self) {
+        self.operations.push(PreparationOperation::Clear34AllOnes);
+        // SOURCE: HW9_S31_LP_CLEAR34_20261027, hw9-20261027-lp-06.
+        // Model the measured command effect, not a passive host-memory store.
+        self.pending = Default::default();
+        self.output = false;
     }
     fn enable_rollover(&mut self) {
-        self.0.push(PreparationOperation::EnableRollover);
+        self.operations.push(PreparationOperation::EnableRollover);
+        self.rollover_armed = true;
+        self.output = self.pending.state_002c() != 0;
     }
     fn fence(&mut self) {
-        self.0.push(PreparationOperation::DeviceFence);
+        self.operations.push(PreparationOperation::DeviceFence);
     }
 }
 
 #[test]
-fn source_127_preparation_fences_after_the_generated_transaction() {
-    let mut recorder = Recorder::default();
-
-    let stale = execute_modem_lp_timer_prepare(&mut recorder);
-    assert_eq!(stale.state_0024(), 7);
-    assert_eq!(stale.state_002c(), 3);
-
-    assert_eq!(
-        recorder.0,
-        [
-            PreparationOperation::GeneratedTransaction,
-            PreparationOperation::SamplePending,
-            PreparationOperation::ClearPending,
-            PreparationOperation::EnableRollover,
-            PreparationOperation::DeviceFence,
-        ]
-    );
+fn preparation_returns_pending_before_clear34_erases_both_tested_causes() {
+    for (software, rollover) in [(0, 0), (7, 0), (0, 3), (7, 3)] {
+        let inherited = super::BluetoothModemLpTimerPendingObservation {
+            state_0024: software,
+            state_002c: rollover,
+        };
+        let mut model = PreparationModel {
+            operations: Vec::new(),
+            pending: inherited,
+            rollover_armed: true,
+            output: software != 0 || rollover != 0,
+        };
+        let stale = execute_modem_lp_timer_prepare(&mut model);
+        assert_eq!(
+            stale, inherited,
+            "the observation precedes the destructive command"
+        );
+        assert_eq!(model.pending, Default::default());
+        assert!(model.rollover_armed);
+        assert!(!model.output, "arming cannot redeliver inherited rollover");
+        assert_eq!(
+            model.operations,
+            [
+                PreparationOperation::PrepareControls,
+                PreparationOperation::SamplePending,
+                PreparationOperation::Clear34AllOnes,
+                PreparationOperation::EnableRollover,
+                PreparationOperation::DeviceFence,
+            ]
+        );
+    }
 }
 
 #[test]
@@ -867,7 +890,7 @@ fn entries_during_p2_work_retain_dispatch_and_epoch_until_the_plan_returns() {
 }
 
 #[test]
-fn prepare_exposes_stale_pending_and_clears_both_whole_words() {
+fn prepare_exposes_each_inherited_pending_lane_through_the_pac() {
     use super::super::host::HostMemory;
     use oer_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque};
     for (software, rollover) in [(0, 0), (7, 0), (0, 3), (7, 3)] {
@@ -880,8 +903,8 @@ fn prepare_exposes_stale_pending_and_clears_both_whole_words() {
             assert_eq!(u32::from(stale.state_0024()), software);
             assert_eq!(u32::from(stale.state_002c()), rollover);
         }
-        assert_eq!(memory.timer[word_0024_opaque::OFFSET / 4], 0);
-        assert_eq!(memory.timer[word_002c_opaque::OFFSET / 4], 0);
+        // Plain PAC host memory does not emulate +0x34 command effects;
+        // PreparationModel tests the measured destructive clear above.
     }
 }
 

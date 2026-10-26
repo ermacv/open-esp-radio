@@ -200,9 +200,11 @@ pub enum BluetoothModemLpTimerCompareDisposition {
 }
 
 trait ModemLpTimerTransaction {
-    fn prepare_hardware(&mut self);
+    /// Initialize controls and disable delivery without clearing pending.
+    fn prepare_controls(&mut self);
     fn sample_pending(&mut self) -> BluetoothModemLpTimerPendingObservation;
-    fn clear_pending(&mut self);
+    /// Apply the vendor all-ones +0x34 command to clear the two tested causes.
+    fn clear_pending_with_command(&mut self);
     fn enable_rollover(&mut self);
     fn fence(&mut self);
 }
@@ -430,12 +432,15 @@ fn execute_modem_lp_timer_compare_program(
 fn execute_modem_lp_timer_prepare(
     transaction: &mut impl ModemLpTimerTransaction,
 ) -> BluetoothModemLpTimerPendingObservation {
-    transaction.prepare_hardware();
+    transaction.prepare_controls();
     let stale = transaction.sample_pending();
-    // SOURCE: HW_BLE_LP_CAUSES_2026_10_26, R08 0x3004-0x3008.
-    // Unlike vendor init, clear inherited pending before arming rollover:
-    // retained +0x2c otherwise delivers immediately before the gate opens.
-    transaction.clear_pending();
+    // SOURCE: HW9_S31_LP_CLEAR34_20261027, hw9-20261027-lp-06,
+    // lp-clear.json, tags 0x9600-0x9608 and 0x9640-0x9650
+    // (oer-notes/research/hw-ble-irq-wave2.md). The vendor's whole-word
+    // all-ones +0x34 clears both tested pending bytes. Sample before that
+    // command so stale state survives in the returned observation; clear
+    // before arming rollover to avoid delivery into a vacant gate.
+    transaction.clear_pending_with_command();
     transaction.enable_rollover();
     transaction.fence();
     stale
@@ -550,7 +555,7 @@ impl<B: oer_mmio::Placement> ModemLpTimerStartTransaction
 }
 
 impl<B: oer_mmio::Placement> ModemLpTimerTransaction for HardwareModemLpTimerTransaction<'_, B> {
-    fn prepare_hardware(&mut self) {
+    fn prepare_controls(&mut self) {
         self.registers.write_word_004c_opaque(|w| {
             w.set_bits_0_31_opaque(0);
         });
@@ -563,8 +568,6 @@ impl<B: oer_mmio::Placement> ModemLpTimerTransaction for HardwareModemLpTimerTra
             .prepare_bluetooth_modem_lp_timer_command_0008();
         self.registers
             .prepare_bluetooth_modem_lp_timer_command_0014();
-        self.registers
-            .prepare_bluetooth_modem_lp_timer_command_0034();
     }
 
     fn sample_pending(&mut self) -> BluetoothModemLpTimerPendingObservation {
@@ -574,9 +577,9 @@ impl<B: oer_mmio::Placement> ModemLpTimerTransaction for HardwareModemLpTimerTra
         }
     }
 
-    fn clear_pending(&mut self) {
-        self.registers.clear_bluetooth_modem_lp_timer_state_0024();
-        self.registers.clear_bluetooth_modem_lp_timer_state_002c();
+    fn clear_pending_with_command(&mut self) {
+        self.registers
+            .prepare_bluetooth_modem_lp_timer_command_0034();
     }
 
     fn enable_rollover(&mut self) {
@@ -611,7 +614,8 @@ impl<B: oer_mmio::Placement> ModemLpTimerStopTransaction
         self.registers.clear_bluetooth_modem_lp_timer_state_002c();
     }
     fn clear_pending(&mut self) {
-        ModemLpTimerTransaction::clear_pending(self);
+        self.registers.clear_bluetooth_modem_lp_timer_state_0024();
+        self.registers.clear_bluetooth_modem_lp_timer_state_002c();
     }
     fn fence(&mut self) {
         device_fence();
@@ -719,11 +723,14 @@ impl<P: BluetoothPlacements> BluetoothModemLpTimerRegisters<P> {
     /// SOURCE: public ESP32-S31 `libbtdm_common.a` member `9.o`, complete
     /// symbol `r_sym_bt_waDX0omCE7oLuPVSoPOK`, role-mapped by the public
     /// same-chip unobfuscated `r_btdm_hal_rtc_init`. The body performs seven
-    /// writes and one fresh read. Before the final rollover command, both
-    /// pending bytes are sampled and cleared with whole-word zeros; the
-    /// returned observation exposes that stale state to the caller.
-    /// SOURCE: HW_BLE_LP_CAUSES_2026_10_26, R08 0x3004-0x3008: clearing
-    /// inherited pending before arming avoids delivery into a vacant gate.
+    /// writes and one fresh read. Both pending bytes are sampled before
+    /// the whole-word all-ones +0x34 command clears the two tested causes,
+    /// then the final rollover command arms delivery. The returned
+    /// observation exposes the removed stale state to the caller.
+    /// SOURCE: HW9_S31_LP_CLEAR34_20261027, hw9-20261027-lp-06,
+    /// lp-clear.json 0x9600-0x9608 and 0x9640-0x9650
+    /// (oer-notes/research/hw-ble-irq-wave2.md). No per-bit or all-source
+    /// clearing semantics are implied.
     pub fn prepare_registers(&mut self) -> BluetoothModemLpTimerPendingObservation {
         let mut transaction = HardwareModemLpTimerTransaction {
             registers: &mut self.runtime_control,
