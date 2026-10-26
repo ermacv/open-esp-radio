@@ -19,8 +19,8 @@ staged runtime, requiring the normal bootstrap/PSRAM handoff. To package and run
 that same source through the existing staged pipeline, under a board/air lease:
 
 ```console
-cargo stand --owner wifi lease --board s31-b --air shared -- \
-  cargo fw run ../probes/esp32s31-rx-chain --board s31-b --timeout 30s
+cargo stand --owner wifi lease --board s31-c --air shared -- \
+  cargo fw run ../probes/esp32s31-rx-chain --board s31-c --timeout 30s
 ```
 
 The staged path builds through `cargo fw` as well. Build before leasing when
@@ -40,11 +40,14 @@ The final state is dumped without rearm, then the production release closes RF.
 Sampling gaps and scan bounds are reported. No absence or universal ordering
 claim follows from an event that the sampling loop did not see.
 
-The current s31-b launch is blocked before probe entry by the standard
-bootstrap's `psram-density-mismatch` (run `hw4-20261026-rx-chain-01`, lease
-781). No RX data has been collected. The stand refuses power reset for this
-board; run `hw4-20261026-rx-chain-02`, lease 783, performed no power switch.
-The actual density and cold-boot behavior remain unknown. See the external
-research report `/home/ermacv/dev/oer-notes/research/hw-rx-chain-descriptors.md`.
+The current staged launch is blocked before probe entry by the standard
+bootstrap's `psram-density-mismatch` on both s31-b (run
+`hw4-20261026-rx-chain-01`, lease 781) and the separately authorized s31-c
+(run `hw4-20261026-rx-chain-03-s31c`, lease 788). No RX data was collected.
+The common image/bootstrap/profile needs investigation; actual density and
+cold-boot behavior remain unknown. No memory profile was changed, and no
+additional recovery was attempted on s31-c. The earlier s31-b power-reset
+request was refused before actuation (run 02, lease 783). See the external
+report `/home/ermacv/dev/oer-notes/research/hw-rx-chain-descriptors.md`.
 The staged product-style stack check also reports an unresolved P2 stack path;
 this probe remains diagnostic and unqualified.
