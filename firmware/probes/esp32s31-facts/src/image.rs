@@ -51,11 +51,33 @@ j 1b
     mie = const oer_riscv::machine::status::MIE,
 );
 
+// SAFETY: these controlled admission entries use the C ABI, preserve callee
+// registers and write only the six-word exclusive output passed by the caller.
+// The installed trap ABI preserves their temporaries if the pending IRQ enters.
+core::arch::global_asm!(
+    include_str!("threshold-entry.s"),
+    mie = const oer_riscv::machine::status::MIE,
+    mintthresh = const oer_riscv::clic::MINTTHRESH,
+);
+
 // SAFETY: addresses only; definitions and extents are supplied by facts.x.
 unsafe extern "C" {
     safe static _start_trap: [u8; 0];
     safe static _runtime_mtvt: [u8; 0];
     safe static __runtime_cpu0_irq_stack_top: [u8; 0];
+}
+
+// SAFETY: each entry requires masked interrupts, an installed trap stack and
+// an exclusive six-word output; threshold_raising establishes all three.
+unsafe extern "C" {
+    fn facts_threshold_0(output: *mut [u32; 6], threshold: u32);
+    fn facts_threshold_1(output: *mut [u32; 6], threshold: u32);
+    fn facts_threshold_2(output: *mut [u32; 6], threshold: u32);
+    fn facts_threshold_3(output: *mut [u32; 6], threshold: u32);
+    fn facts_threshold_4(output: *mut [u32; 6], threshold: u32);
+    fn facts_threshold_5(output: *mut [u32; 6], threshold: u32);
+    fn facts_threshold_6(output: *mut [u32; 6], threshold: u32);
+    fn facts_threshold_7(output: *mut [u32; 6], threshold: u32);
 }
 
 /// Word 0: completion marker; word 1: number of four-word records starting at 2.
@@ -69,12 +91,13 @@ static FACTS_OUTPUT: [AtomicU32; 514] = [const { AtomicU32::new(0) }; 514];
 #[unsafe(link_section = ".data.facts_request")]
 static FACTS_REQUEST: AtomicU32 = AtomicU32::new(u32::MAX);
 
-// SAFETY: LP RAM is excluded from startup initialization. Only the masked
-// thread writes this record, through volatile operations, before one reset.
+// SAFETY: these aligned LP words are excluded from loading/startup clearing;
+// all u32 bit patterns are valid, and only the masked thread publishes them.
 #[unsafe(link_section = ".noinit.facts")]
-static mut RETAINED: [u32; 12] = [0; 12];
+static RETAINED: [AtomicU32; 12] = [const { AtomicU32::new(0) }; 12];
 static IRQ_COUNT: AtomicU32 = AtomicU32::new(0);
 static IRQ_CYCLE: AtomicU32 = AtomicU32::new(0);
+static IRQ_PC: AtomicU32 = AtomicU32::new(0);
 static SOURCE: AtomicPtr<pac::hp_system::FromCpu2> = AtomicPtr::new(ptr::null_mut());
 
 fn emit(tag: u32, a: u32, b: u32, c: u32) {
@@ -104,6 +127,7 @@ fn halt() -> ! {
 extern "C" fn facts_irq() {
     let cycle = oer_riscv::cycle32();
     IRQ_CYCLE.store(cycle, Ordering::Relaxed);
+    IRQ_PC.store(oer_riscv::read_mepc() as u32, Ordering::Relaxed);
     let source = SOURCE.load(Ordering::Acquire);
     if !source.is_null() {
         // SAFETY: published from main's live source_owner; this
@@ -168,6 +192,10 @@ const PROBES: &[Probe] = &[
     Probe {
         id: 8,
         run: after_reset,
+    },
+    Probe {
+        id: 9,
+        run: threshold_raising,
     },
 ];
 
@@ -321,7 +349,9 @@ fn setup(s: &mut Session<'_>) {
     for n in 0..pac::interrupt_core::route::COUNT {
         if let Ok(i) = Index::new(n) {
             matrix.interrupt_core0.modify_route(i, |w| {
-                w.set_map(Bits::constant::<0>());
+                w.set_map(Bits::constant::<
+                    { pac::interrupt_core::route::Map::Disconnected.bits() },
+                >());
             });
         }
     }
@@ -445,6 +475,60 @@ fn latency(s: &mut Session<'_>) {
         );
     }
 }
+
+fn threshold_raising(s: &mut Session<'_>) {
+    let entries: [unsafe extern "C" fn(*mut [u32; 6], u32); 8] = [
+        facts_threshold_0,
+        facts_threshold_1,
+        facts_threshold_2,
+        facts_threshold_3,
+        facts_threshold_4,
+        facts_threshold_5,
+        facts_threshold_6,
+        facts_threshold_7,
+    ];
+    setup(s);
+    route_source(s);
+    line(s, CONTROLS[0], false);
+    for (variant, entry) in entries.into_iter().enumerate() {
+        for sample in 0..3 {
+            oer_riscv::disable_interrupts();
+            s.source.store_hp_cpu_int_from_cpu_2(false);
+            oer_riscv::restore_interrupt_threshold(0);
+            IRQ_COUNT.store(0, Ordering::Relaxed);
+            IRQ_CYCLE.store(0, Ordering::Relaxed);
+            IRQ_PC.store(0, Ordering::Relaxed);
+            raise(s);
+            let pending = s.interrupt_matrix.clic.read_ctrl(CPU_LINE).ip();
+            let mut marks = [0; 6];
+            // SAFETY: setup installed the exclusive IRQ stack; MIE is masked,
+            // marks is a live exclusive six-word buffer. The entry enables
+            // MIE immediately before raising the threshold, then masks on exit.
+            unsafe { entry(&raw mut marks, u32::from(CONTROLS[1])) };
+            let count = IRQ_COUNT.load(Ordering::Relaxed);
+            let pc = IRQ_PC.load(Ordering::Relaxed);
+            let cycle = IRQ_CYCLE.load(Ordering::Relaxed);
+            let still_pending = s.interrupt_matrix.clic.read_ctrl(CPU_LINE).ip();
+            // Release after recording the critical window: an IRQ delivered
+            // before the write has consumed the source and is not a valid
+            // masked-pending trial. PC and pending distinguish these outcomes.
+            oer_riscv::restore_interrupt_threshold(0);
+            oer_riscv::enable_interrupts();
+            wait_window();
+            oer_riscv::disable_interrupts();
+            emit(0x90, variant as u32, sample, u32::from(pending));
+            emit(0x91, marks[0], marks[1], cycle);
+            emit(0x92, count, pc, marks[2]);
+            emit(0x93, marks[3], marks[4], marks[5]);
+            emit(
+                0x94,
+                u32::from(still_pending),
+                IRQ_COUNT.load(Ordering::Relaxed),
+                u32::from(CONTROLS[0]),
+            );
+        }
+    }
+}
 fn reset(s: &mut Session<'_>) {
     contain(s);
     let c = &mut s.core_control;
@@ -485,38 +569,34 @@ fn reset(s: &mut Session<'_>) {
     oer_riscv::fence();
     FACTS_OUTPUT[0].store(0xfac70007, Ordering::Release);
     let held = c.hp_sys_clkrst_core.read_hpcore1_ctrl0();
-    // SAFETY: interrupts are masked; this image exclusively owns these twelve
-    // LP words, excluded from BSS and the loader's file-backed segments.
-    unsafe {
-        ptr::write_volatile(
-            ptr::addr_of_mut!(RETAINED),
-            [
-                0xfac70007,
-                0x687731,
-                u32::from(lp),
-                u.reg_uart0_clk_src_sel().get(),
-                u32::from(u.reg_uart0_sclk_div_num()),
-                u32::from(u.reg_uart0_clk_en()),
-                c.lp_sys_core_control
-                    .read_boot_addr_hp_core1()
-                    .boot_addr_hp_core1(),
-                u32::from(held.reg_core1_global_rst_en())
-                    + 2 * u32::from(held.reg_core1_cpu_clk_en()),
-                u32::from(perturbed),
-                u32::from(u.reg_uart0_sclk_div_numerator()),
-                u32::from(u.reg_uart0_sclk_div_denominator()),
-                1,
-            ],
-        );
+    for (word, value) in RETAINED.iter().zip([
+        0xfac70007,
+        0x687731,
+        u32::from(lp),
+        u.reg_uart0_clk_src_sel().get(),
+        u32::from(u.reg_uart0_sclk_div_num()),
+        u32::from(u.reg_uart0_clk_en()),
+        c.lp_sys_core_control
+            .read_boot_addr_hp_core1()
+            .boot_addr_hp_core1(),
+        u32::from(held.reg_core1_global_rst_en()) + 2 * u32::from(held.reg_core1_cpu_clk_en()),
+        u32::from(perturbed),
+        u32::from(u.reg_uart0_sclk_div_numerator()),
+        u32::from(u.reg_uart0_sclk_div_denominator()),
+        1,
+    ]) {
+        word.store(value, Ordering::Relaxed);
     }
     oer_riscv::fence();
     c.lp_sys_core_control.trigger_sys_ctrl_sys_sw_rst();
     halt()
 }
 fn retained_record() -> [u32; 12] {
-    // SAFETY: reads retained u32 words (all bit patterns valid) on the masked
-    // thread; the LP window is excluded from ELF loading and BSS clearing.
-    unsafe { ptr::read_volatile(ptr::addr_of!(RETAINED)) }
+    let mut record = [0; 12];
+    for (value, word) in record.iter_mut().zip(&RETAINED) {
+        *value = word.load(Ordering::Relaxed);
+    }
+    record
 }
 fn after_reset(s: &mut Session<'_>) {
     let record = retained_record();

@@ -132,7 +132,8 @@ moves; ownership, orchestration and wiring are rebuilt.
   the facts' highest-line tie-break. Inputs
   below the facts' first source line are reserved for core-local use. The HAL
   writes its selected MNLBITS on partition split without assuming the ROM
-  left the reset configuration; the router checks INT_INFO and MNLBITS against the facts at install and verify.
+  left the reset configuration; the router checks INT_INFO and MNLBITS against
+  the facts at install and verify.
   Stage-two adoption and interrupt enable return typed boot failures to the
   image's existing failure reporter when geometry, configuration, vectors,
   routes or lines disagree; they never enable interrupts on a mismatch.

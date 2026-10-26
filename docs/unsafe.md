@@ -590,6 +590,12 @@ needs:
   symbols the vendor code calls (`_start`, `ets_delay_us`, the probe
   entries), with that code's C signatures, and keeps its fixtures in statics
   the verifier's serial calls reach one at a time.
+- The PAC-only facts image is entered at `_start` by the ROM RAM loader.
+  Its entry establishes the SRAM stack and clears BSS, includes the current
+  runtime's trap ABI, and preserves an atomic LP `.noinit` reason record across
+  system reset. Controlled interrupt-admission entry stubs delimit the
+  threshold-write experiment; the installed trap ABI preserves their registers.
+  Only the masked thread publishes the LP record before the reset fence.
 
 The bootstrap and probe crates deny `clippy::undocumented_unsafe_blocks`, and
 each unsafe attribute in them carries its `// SAFETY:` comment as well.
@@ -602,7 +608,8 @@ explicitly admitted PAC-only facts image `firmware/probes/esp32s31-facts`.
 Other `firmware/probes/*-facts` packages require a separate layer-test admission.
 The facts image takes the PAC once, uses typed accessors, and has no HAL or
 production runtime dependency; production never depends on it. All other
-drivers and adapters reach registers through HAL owners. Check the executable list when changing this boundary.
+drivers and adapters reach registers through HAL owners. Check the executable
+list when changing this boundary.
 
 Upper layers use opaque, finite capabilities rather than raw pointers,
 unchecked lifetimes, generic PAC callbacks or independently reusable interrupt
