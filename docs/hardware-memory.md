@@ -95,10 +95,17 @@ bits = "30"
 writer = "hardware"
 
 [[layout.words.fields]]
-name = "BIT_29_OPAQUE"
+name = "SOSF"
 bits = "29"
 writer = "cpu"
-description = "Cleared when the node is rearmed; meaning unknown."
+description = "Vendor sosf bit, cleared on rearm; acronym and hardware effect unknown."
+
+# SOURCE: BLOB_RX_DESCRIPTOR_DIAGNOSTIC_NAMES in the S31 register model.
+[[layout.words.fields]]
+name = "OFFSET"
+bits = "28"
+writer = "cpu"
+description = "Vendor offset bit; encoding, units and hardware effect unknown."
 
 [[layout.words.fields]]
 name = "LENGTH"
