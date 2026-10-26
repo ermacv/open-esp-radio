@@ -69,17 +69,50 @@ fn masking_a_bank_writes_the_zero_enable_and_clears_nothing() {
 }
 
 #[test]
-fn clearing_a_bank_stores_the_zero_enable_then_the_whole_clear_word() {
+fn clearing_power_stores_the_zero_enable_then_the_whole_clear_word() {
     let before = HostWords::filled(0x5a5a_5a5a);
     let mut after = before.clone();
-    {
-        let mut owners = after.owners();
-        owners.mac_interrupt.clear_all_mac_interrupts();
-        owners.power_interrupt.clear_all_power_interrupts();
-    }
+    after.owners().power_interrupt.clear_all_power_interrupts();
     let changes = before.changes(&after);
-    assert_eq!(values(&changes, "interrupt"), [0, u32::MAX]);
+    assert!(values(&changes, "interrupt").is_empty());
     assert_eq!(values(&changes, "power_interrupt"), [0, u32::MAX]);
+}
+
+#[test]
+fn raw_acknowledgement_does_not_select_a_fatal_cause_arriving_after_the_sample() {
+    let mut words = HostWords::filled(u32::MAX);
+    let sample = {
+        let mut owners = words.owners();
+        owners.mac_interrupt.mask_all_mac_interrupts();
+        owners.mac_interrupt.mac.modify_raw(|word| {
+            word.set_fatal_assertion(false);
+        });
+        owners.mac_interrupt.mac_interrupt_raw()
+    };
+    assert_eq!(sample.fatal_assertion_raw(), None);
+    let sampled_bits = sample.0.bits();
+    words.owners().mac_interrupt.mac.modify_raw(|word| {
+        word.set_fatal_assertion(true);
+    });
+    assert!(
+        words
+            .owners()
+            .mac_interrupt
+            .mac_interrupt_raw()
+            .fatal_assertion_raw()
+            .is_some()
+    );
+    let before_clear = words.clone();
+    words
+        .owners()
+        .mac_interrupt
+        .acknowledge_mac_interrupt_raw(sample);
+    // The host storage records the clear word; its exact value must be the
+    // old sample, excluding the new fatal cause. W1C itself is modelled in MAC.
+    assert_eq!(
+        values(&before_clear.changes(&words), "interrupt"),
+        [sampled_bits]
+    );
 }
 
 #[test]
@@ -129,6 +162,13 @@ fn a_full_status_reads_every_cause() {
     assert!(observation.work_events().rx_success());
     assert!(observation.work_events().tx_timeout());
     assert!(observation.has_auxiliary_event() && observation.has_unhandled_event());
+    assert_eq!(
+        owners
+            .mac_interrupt
+            .mac_interrupt_raw()
+            .fatal_assertion_raw(),
+        Some(u32::MAX)
+    );
     let power = owners
         .power_interrupt
         .power_interrupt_status()
@@ -158,4 +198,32 @@ fn preparing_a_connected_station_clears_the_beacon_filter_control_alone() {
     let changes = before.changes(&after);
     assert!(values(&changes, "interrupt").is_empty());
     assert_eq!(changes.len(), 1);
+}
+
+#[test]
+fn fatal_raw_is_visible_while_status_and_delivery_are_masked() {
+    let mut words = HostWords::filled(0);
+    let mut owners = words.owners();
+    owners.mac_interrupt.mac.modify_raw(|word| {
+        word.set_fatal_assertion(true);
+    });
+    owners.mac_interrupt.mask_all_mac_interrupts();
+    assert!(
+        owners
+            .mac_interrupt
+            .mac_interrupt_status()
+            .observation()
+            .is_empty()
+    );
+    assert_eq!(
+        owners.mac_interrupt.mac_interrupt_enable(),
+        MacInterruptEnableState::Disabled
+    );
+    assert!(
+        owners
+            .mac_interrupt
+            .mac_interrupt_raw()
+            .fatal_assertion_raw()
+            .is_some()
+    );
 }

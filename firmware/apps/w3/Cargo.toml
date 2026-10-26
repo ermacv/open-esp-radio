@@ -29,7 +29,7 @@ oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-po
 oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac" }
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
-oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31"] }
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31", "wifi-fault"] }
 oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["esp32s31", "port-slots"] }
 oer-espressif-usb-serial-jtag.workspace = true
 oer-embassy-time = { path = "../../../portable/embassy/time" }

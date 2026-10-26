@@ -6,20 +6,28 @@
 //! reaches a bank: a task asks the handler for each transition (through the
 //! driver's doorbell), and the CPU route stays as the binding wrote it.
 //!
-//! - **Closed**: both banks masked and every latched event cleared. An
+//! - **Closed**: both banks masked; captured nonfatal MAC events and all
+//!   WDEVPWR events cleared. A later MAC event can remain pending. An
 //!   epoch starts here, whatever the boot left in the banks; an interrupt
 //!   that reaches a closed epoch closes it again
 //!   ([`InterruptEpoch::close_stray`]).
-//! - **Active** ([`InterruptEpoch::activate`]): both banks masked, every
-//!   stale event cleared, then the runtime mask and the station TBTT
-//!   published.
+//! - **Active** ([`InterruptEpoch::activate`]): both banks masked, captured
+//!   nonfatal MAC events and all WDEVPWR events cleared, then the runtime
+//!   mask and the station TBTT published.
 //! - **Masked** ([`InterruptEpoch::mask_all`]): every source masked, nothing
 //!   acknowledged: a latched event stays latched until the epoch closes or
 //!   activates again.
+//! - **Quarantined**: a fatal assertion was captured from unmasked MAC RAW;
+//!   both banks stay masked, no pending event is cleared, and activation or
+//!   closure returns that same fault. The image records it and resets while
+//!   retaining the interrupt and preempted DMA owners.
 //!
-//! Clearing every latched event takes the masking proof:
+//! Closing the banks takes the masking proof:
 //! [`InterruptEpoch::mask_all`] returns [`MaskedBanks`], whose
-//! [`MaskedBanks::clear_all`] closes the epoch.
+//! [`MaskedBanks::clear_all`] checks unmasked MAC RAW before clearing either
+//! bank and closes a healthy epoch; a fatal cause quarantines it instead.
+//! MAC clearing acknowledges only that same nonfatal RAW sample, preserving
+//! a fatal cause that arrives after it.
 
 use core::marker::PhantomData;
 use oer_esp32s31_hal::{
@@ -28,9 +36,9 @@ use oer_esp32s31_hal::{
 };
 
 use super::{
-    BanksMasked, IrqDisposition, IrqSnapshot, MacInterrupt, MacInterruptStatusSnapshot,
-    MacPowerInterrupt, MacPowerInterruptStatusSnapshot, PowerIrqDisposition, PowerIrqSnapshot,
-    handle_mac_irq, handle_power_irq,
+    BanksMasked, Fault, IrqDisposition, IrqSnapshot, MacInterrupt, MacInterruptRawSample,
+    MacInterruptStatusSnapshot, MacPowerInterrupt, MacPowerInterruptStatusSnapshot,
+    PowerIrqDisposition, PowerIrqSnapshot, handle_mac_irq, handle_power_irq,
 };
 
 mod sealed {
@@ -56,12 +64,14 @@ impl RxDelivery for Moderated {
 /// Where an epoch's banks are.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EpochState {
-    /// Both banks masked and cleared.
+    /// Both banks masked; captured nonfatal MAC events and WDEVPWR cleared.
     Closed,
     /// The runtime mask published.
     Active,
     /// Every source masked; latched events kept.
     Masked,
+    /// A fatal sample retained; both banks stay masked until reset.
+    Quarantined(Fault),
 }
 
 /// Both interrupt banks of the radio interrupt handler, in one epoch state.
@@ -98,17 +108,33 @@ impl<M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt> InterruptEpoch<M, I, 
         self.state
     }
 
-    /// Mask both banks, clear every stale event, then publish `mask` and
-    /// the station TBTT: MAC first, then WDEVPWR, at each step.
+    /// Mask both banks, clear the nonfatal MAC RAW sample and WDEVPWR, then
+    /// publish `mask` and the station TBTT: MAC first, then WDEVPWR, at each step.
     ///
     /// A previous epoch may leave a level event latched. Both banks stay
-    /// masked until every stale event is acknowledged: publishing the
+    /// masked until the stale sample is acknowledged: publishing the
     /// runtime mask before the clear would raise the line on a stale event.
-    pub fn activate(&mut self, mask: MacInterruptMask) {
-        self.mask_all().clear_all();
+    pub fn activate(&mut self, mask: MacInterruptMask) -> Result<(), Fault> {
+        if let EpochState::Quarantined(fault) = self.state {
+            return Err(fault);
+        }
+        self.mask_all().clear_all()?;
         self.mac.publish(mask);
         self.power.enable_station_tbtt();
         self.state = EpochState::Active;
+        Ok(())
+    }
+
+    /// Capture a fatal assertion from RAW, independently of the delivery mask.
+    /// No STATUS sample can prove that masked RAW pending is absent.
+    pub fn check_fault(&mut self) -> Result<(), Fault> {
+        if let EpochState::Quarantined(fault) = self.state {
+            return Err(fault);
+        }
+        if let Some(raw) = self.mac.raw().fatal_assertion_raw() {
+            return Err(self.quarantine(Fault::FatalAssertion { raw }));
+        }
+        Ok(())
     }
 
     /// Mask every source of both banks, MAC first, then WDEVPWR. Nothing is
@@ -124,44 +150,61 @@ impl<M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt> InterruptEpoch<M, I, 
         MaskedBanks { epoch: self }
     }
 
-    /// Mask and clear both banks: the epoch closes.
-    pub fn close(&mut self) {
-        self.mask_all().clear_all();
+    /// Mask both banks and check RAW before clearing them. A fatal cause
+    /// quarantines both owners and leaves pending untouched.
+    pub fn close(&mut self) -> Result<(), Fault> {
+        self.mask_all().clear_all()
     }
 
     /// Whether either bank shows an enabled event in the closed epoch, which
     /// it then closes again: an interrupt left from before the epoch (an
     /// enable a reset restored, or the boot left). Samples both banks and
     /// acknowledges nothing, unless it closes them. An open epoch returns
-    /// `false` and touches nothing.
-    pub fn close_stray(&mut self) -> bool {
+    /// `Ok(false)` after checking RAW for a fatal cause.
+    pub fn close_stray(&mut self) -> Result<bool, Fault> {
+        // This also serves the path without an installed line. RAW must be
+        // checked even if this epoch is masked, or construction labelled it
+        // closed before the first MMIO transition.
+        self.check_fault()?;
         if self.state != EpochState::Closed {
-            return false;
+            return Ok(false);
         }
         let mac = !self.mac.status().observation().is_empty();
         let power = !self.power.status().observation().is_empty();
         if mac || power {
-            self.close();
+            self.close()?;
         }
-        mac || power
+        Ok(mac || power)
     }
 
     /// Sample, moderate and acknowledge the MAC bank; `None` in a closed
     /// epoch, which samples nothing ([`Self::close_stray`] serves it).
     #[inline(always)]
-    pub fn service_mac(&mut self) -> Option<(IrqDisposition, IrqSnapshot)> {
+    pub fn service_mac(&mut self) -> Result<Option<(IrqDisposition, IrqSnapshot)>, Fault> {
+        if let EpochState::Quarantined(fault) = self.state {
+            return Err(fault);
+        }
         if self.state == EpochState::Closed {
-            return None;
+            return Ok(None);
         }
         // Both sealed policies are fieldless. Dispatch is monomorphic without
         // a registry, callback or mutable moderation flag.
-        Some(handle_mac_irq::<M, I>(&mut self.mac))
+        match handle_mac_irq::<M, I>(&mut self.mac) {
+            Ok(sample) => Ok(Some(sample)),
+            Err(fault) => Err(self.quarantine(fault)),
+        }
     }
 
-    /// Sample and acknowledge the WDEVPWR bank; `None` in a closed epoch.
+    fn quarantine(&mut self, fault: Fault) -> Fault {
+        drop(self.mask_all());
+        self.state = EpochState::Quarantined(fault);
+        fault
+    }
+
+    /// Sample and acknowledge the WDEVPWR bank; `None` in a closed or quarantined epoch.
     #[inline(always)]
     pub fn service_power(&mut self) -> Option<(PowerIrqDisposition, PowerIrqSnapshot)> {
-        if self.state == EpochState::Closed {
+        if matches!(self.state, EpochState::Closed | EpochState::Quarantined(_)) {
             return None;
         }
         Some(handle_power_irq(&mut self.power))
@@ -210,8 +253,8 @@ impl<M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt> InterruptEpoch<M, I, 
     }
 }
 
-/// Both banks of an epoch, masked: the proof that clearing every latched
-/// event takes. It borrows the epoch, so no other transition runs between
+/// Both banks of an epoch, masked: the proof that closing their pending
+/// samples takes. It borrows the epoch, so no other transition runs between
 /// the mask and the clear.
 ///
 /// Clearing without the mask does not compile:
@@ -228,12 +271,22 @@ pub struct MaskedBanks<'a, M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt>
 }
 
 impl<M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt> MaskedBanks<'_, M, I, P> {
-    /// Acknowledge every latched event of both masked banks, MAC first,
-    /// then WDEVPWR: the epoch closes.
-    pub fn clear_all(self) {
+    /// Acknowledge the captured nonfatal MAC RAW events, then clear WDEVPWR.
+    /// Both banks stay masked while inspecting RAW; a fatal sample quarantines
+    /// them before either clear. A distinct fatal cause arriving after that
+    /// sample is absent from its acknowledgement and stays pending.
+    pub fn clear_all(self) -> Result<(), Fault> {
+        if let EpochState::Quarantined(fault) = self.epoch.state {
+            return Err(fault);
+        }
+        let raw = self.epoch.mac.raw();
+        if let Some(raw) = raw.fatal_assertion_raw() {
+            return Err(self.epoch.quarantine(Fault::FatalAssertion { raw }));
+        }
         let masked = BanksMasked::new();
-        self.epoch.mac.clear_all(&masked);
+        self.epoch.mac.acknowledge_raw(raw, &masked);
         self.epoch.power.clear_all(&masked);
         self.epoch.state = EpochState::Closed;
+        Ok(())
     }
 }

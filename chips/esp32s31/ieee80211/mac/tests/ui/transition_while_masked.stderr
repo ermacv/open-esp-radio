@@ -1,10 +1,10 @@
 error[E0499]: cannot borrow `*epoch` as mutable more than once at a time
- --> tests/ui/transition_while_masked.rs:7:5
+ --> tests/ui/transition_while_masked.rs:7:13
   |
 5 |     let masked = epoch.mask_all();
   |                  ----- first mutable borrow occurs here
 6 |     #[cfg(all())]
-7 |     epoch.activate(MacInterruptMask::STATION); // ui-error: E0499
-  |     ^^^^^ second mutable borrow occurs here
-8 |     masked.clear_all();
-  |     ------ first borrow later used here
+7 |     let _ = epoch.activate(MacInterruptMask::STATION); // ui-error: E0499
+  |             ^^^^^ second mutable borrow occurs here
+8 |     let _ = masked.clear_all();
+  |             ------ first borrow later used here

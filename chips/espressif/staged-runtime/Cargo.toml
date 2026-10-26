@@ -19,6 +19,8 @@ cpu1-runs = []
 ## After the record, call the image's `oer_platform_panic_hook`, which
 ## records more of its state without formatting, then reset.
 panic-hook = []
+## Shared retained Wi-Fi fatal assertion record, reset and next-boot reporting.
+wifi-fault = ["esp32s31"]
 
 [dependencies]
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }

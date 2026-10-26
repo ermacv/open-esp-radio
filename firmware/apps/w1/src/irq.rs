@@ -112,7 +112,12 @@ pub fn on_wifi(part: &mut WifiPart) {
         let _latched =
             MAC_LATCH.compare_exchange(0, measure::stamp(), Ordering::AcqRel, Ordering::Relaxed);
     }
-    if !service_wifi_line(&RX_LINE, part) {
+    if !match service_wifi_line(&RX_LINE, part) {
+        Ok(installed) => installed,
+        Err(oer_esp32s31_ieee80211_mac::irq::Fault::FatalAssertion { raw }) => {
+            oer_espressif_staged_runtime::wifi_fault::reset(raw)
+        }
+    } {
         if mac {
             UNSERVICED_MAC.fetch_add(1, Ordering::Relaxed);
         } else if power {

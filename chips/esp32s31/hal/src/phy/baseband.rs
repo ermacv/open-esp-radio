@@ -126,7 +126,9 @@ pub fn restore_tx_gain_compensation(registers: &mut impl SharedPhyAccess) {
     ops::restore_tx_gain_compensation(&mut phy_blocks_mut(registers).phy_baseband_config_oracle);
 }
 
-/// Configure the complete baseband watchdog leaf.
+/// Configure the baseband watchdog and enable its hardware BB reset action.
+/// The interrupt gate is preserved. Hardware resets BB on timeout; the reset
+/// extent is not measured. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
 ///
 /// Basis: complete rev0 ROM `phy_bb_wdg_cfg` at `0x2f82_7860`, size `0x2c`.
 #[cfg(target_arch = "riscv32")]

@@ -131988,12 +131988,40 @@ pub mod modem_pwr {
         /// Positioned bits of `TSF_TIMER_0`.
         pub const TSF_TIMER_0_MASK: u32 = 0x80;
 
-        /// Width of `BITS_8_31_OPAQUE` in bits.
-        pub const BITS_8_31_OPAQUE_WIDTH: u32 = 24;
-        /// Greatest unsigned image of `BITS_8_31_OPAQUE`.
-        pub const BITS_8_31_OPAQUE_MAX: u32 = 0xffffff;
-        /// Positioned bits of `BITS_8_31_OPAQUE`.
-        pub const BITS_8_31_OPAQUE_MASK: u32 = 0xffffff00;
+        /// Width of `BITS_8_16_OPAQUE` in bits.
+        pub const BITS_8_16_OPAQUE_WIDTH: u32 = 9;
+        /// Greatest unsigned image of `BITS_8_16_OPAQUE`.
+        pub const BITS_8_16_OPAQUE_MAX: u32 = 0x1ff;
+        /// Positioned bits of `BITS_8_16_OPAQUE`.
+        pub const BITS_8_16_OPAQUE_MASK: u32 = 0x1ff00;
+
+        /// Width of `BEACON_FILTER_WAKE` in bits.
+        pub const BEACON_FILTER_WAKE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BEACON_FILTER_WAKE`.
+        pub const BEACON_FILTER_WAKE_MAX: u32 = 0x1;
+        /// Positioned bits of `BEACON_FILTER_WAKE`.
+        pub const BEACON_FILTER_WAKE_MASK: u32 = 0x20000;
+
+        /// Width of `BIT_18_OPAQUE` in bits.
+        pub const BIT_18_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_18_OPAQUE`.
+        pub const BIT_18_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_18_OPAQUE`.
+        pub const BIT_18_OPAQUE_MASK: u32 = 0x40000;
+
+        /// Width of `BEACON_MISS` in bits.
+        pub const BEACON_MISS_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BEACON_MISS`.
+        pub const BEACON_MISS_MAX: u32 = 0x1;
+        /// Positioned bits of `BEACON_MISS`.
+        pub const BEACON_MISS_MASK: u32 = 0x80000;
+
+        /// Width of `BITS_20_31_OPAQUE` in bits.
+        pub const BITS_20_31_OPAQUE_WIDTH: u32 = 12;
+        /// Greatest unsigned image of `BITS_20_31_OPAQUE`.
+        pub const BITS_20_31_OPAQUE_MAX: u32 = 0xfff;
+        /// Positioned bits of `BITS_20_31_OPAQUE`.
+        pub const BITS_20_31_OPAQUE_MASK: u32 = 0xfff00000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -132048,10 +132076,34 @@ pub mod modem_pwr {
                 (self.0 & 0x00000080) != 0
             }
 
-            /// Enable bits whose event identities remain unknown.
+            /// Event identities unknown.
             #[inline]
-            pub const fn bits_8_31_opaque(self) -> oer_mmio::Bits<24> {
+            pub const fn bits_8_16_opaque(self) -> oer_mmio::Bits<9> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
+            }
+
+            /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            #[inline]
+            pub const fn beacon_filter_wake(self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// RX-beacon-path raw observation; independent event identity unknown.
+            #[inline]
+            pub const fn bit_18_opaque(self) -> bool {
+                (self.0 & 0x00040000) != 0
+            }
+
+            /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            #[inline]
+            pub const fn beacon_miss(self) -> bool {
+                (self.0 & 0x00080000) != 0
+            }
+
+            /// Event identities unknown.
+            #[inline]
+            pub const fn bits_20_31_opaque(self) -> oer_mmio::Bits<12> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
             }
         }
 
@@ -132107,10 +132159,34 @@ pub mod modem_pwr {
                 (self.0 & 0x00000080) != 0
             }
 
-            /// Enable bits whose event identities remain unknown.
+            /// Event identities unknown.
             #[inline]
-            pub const fn bits_8_31_opaque(&self) -> oer_mmio::Bits<24> {
+            pub const fn bits_8_16_opaque(&self) -> oer_mmio::Bits<9> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
+            }
+
+            /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            #[inline]
+            pub const fn beacon_filter_wake(&self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// RX-beacon-path raw observation; independent event identity unknown.
+            #[inline]
+            pub const fn bit_18_opaque(&self) -> bool {
+                (self.0 & 0x00040000) != 0
+            }
+
+            /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            #[inline]
+            pub const fn beacon_miss(&self) -> bool {
+                (self.0 & 0x00080000) != 0
+            }
+
+            /// Event identities unknown.
+            #[inline]
+            pub const fn bits_20_31_opaque(&self) -> oer_mmio::Bits<12> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
             }
 
             /// Set `TBTT_3`.
@@ -132169,10 +132245,38 @@ pub mod modem_pwr {
                 self
             }
 
-            /// Set `BITS_8_31_OPAQUE`.
+            /// Set `BITS_8_16_OPAQUE`.
             #[inline]
-            pub fn set_bits_8_31_opaque(&mut self, value: oer_mmio::Bits<24>) -> &mut Self {
-                self.0 = (self.0 & 0x000000ff) | (value.get() << 8);
+            pub fn set_bits_8_16_opaque(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                self.0 = (self.0 & 0xfffe00ff) | (value.get() << 8);
+                self
+            }
+
+            /// Set `BEACON_FILTER_WAKE`.
+            #[inline]
+            pub fn set_beacon_filter_wake(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffdffff) | (u32::from(value) << 17);
+                self
+            }
+
+            /// Set `BIT_18_OPAQUE`.
+            #[inline]
+            pub fn set_bit_18_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffbffff) | (u32::from(value) << 18);
+                self
+            }
+
+            /// Set `BEACON_MISS`.
+            #[inline]
+            pub fn set_beacon_miss(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfff7ffff) | (u32::from(value) << 19);
+                self
+            }
+
+            /// Set `BITS_20_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_20_31_opaque(&mut self, value: oer_mmio::Bits<12>) -> &mut Self {
+                self.0 = (self.0 & 0x000fffff) | (value.get() << 20);
                 self
             }
         }
@@ -132246,12 +132350,40 @@ pub mod modem_pwr {
         /// Positioned bits of `TSF_TIMER_0`.
         pub const TSF_TIMER_0_MASK: u32 = 0x80;
 
-        /// Width of `BITS_8_31_OPAQUE` in bits.
-        pub const BITS_8_31_OPAQUE_WIDTH: u32 = 24;
-        /// Greatest unsigned image of `BITS_8_31_OPAQUE`.
-        pub const BITS_8_31_OPAQUE_MAX: u32 = 0xffffff;
-        /// Positioned bits of `BITS_8_31_OPAQUE`.
-        pub const BITS_8_31_OPAQUE_MASK: u32 = 0xffffff00;
+        /// Width of `BITS_8_16_OPAQUE` in bits.
+        pub const BITS_8_16_OPAQUE_WIDTH: u32 = 9;
+        /// Greatest unsigned image of `BITS_8_16_OPAQUE`.
+        pub const BITS_8_16_OPAQUE_MAX: u32 = 0x1ff;
+        /// Positioned bits of `BITS_8_16_OPAQUE`.
+        pub const BITS_8_16_OPAQUE_MASK: u32 = 0x1ff00;
+
+        /// Width of `BEACON_FILTER_WAKE` in bits.
+        pub const BEACON_FILTER_WAKE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BEACON_FILTER_WAKE`.
+        pub const BEACON_FILTER_WAKE_MAX: u32 = 0x1;
+        /// Positioned bits of `BEACON_FILTER_WAKE`.
+        pub const BEACON_FILTER_WAKE_MASK: u32 = 0x20000;
+
+        /// Width of `BIT_18_OPAQUE` in bits.
+        pub const BIT_18_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_18_OPAQUE`.
+        pub const BIT_18_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_18_OPAQUE`.
+        pub const BIT_18_OPAQUE_MASK: u32 = 0x40000;
+
+        /// Width of `BEACON_MISS` in bits.
+        pub const BEACON_MISS_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BEACON_MISS`.
+        pub const BEACON_MISS_MAX: u32 = 0x1;
+        /// Positioned bits of `BEACON_MISS`.
+        pub const BEACON_MISS_MASK: u32 = 0x80000;
+
+        /// Width of `BITS_20_31_OPAQUE` in bits.
+        pub const BITS_20_31_OPAQUE_WIDTH: u32 = 12;
+        /// Greatest unsigned image of `BITS_20_31_OPAQUE`.
+        pub const BITS_20_31_OPAQUE_MAX: u32 = 0xfff;
+        /// Positioned bits of `BITS_20_31_OPAQUE`.
+        pub const BITS_20_31_OPAQUE_MASK: u32 = 0xfff00000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -132306,10 +132438,34 @@ pub mod modem_pwr {
                 (self.0 & 0x00000080) != 0
             }
 
-            /// Raw event bits whose identities remain unknown.
+            /// Event identities unknown.
             #[inline]
-            pub const fn bits_8_31_opaque(self) -> oer_mmio::Bits<24> {
+            pub const fn bits_8_16_opaque(self) -> oer_mmio::Bits<9> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
+            }
+
+            /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            #[inline]
+            pub const fn beacon_filter_wake(self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// RX-beacon-path raw observation; independent event identity unknown.
+            #[inline]
+            pub const fn bit_18_opaque(self) -> bool {
+                (self.0 & 0x00040000) != 0
+            }
+
+            /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            #[inline]
+            pub const fn beacon_miss(self) -> bool {
+                (self.0 & 0x00080000) != 0
+            }
+
+            /// Event identities unknown.
+            #[inline]
+            pub const fn bits_20_31_opaque(self) -> oer_mmio::Bits<12> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
             }
         }
     }
@@ -132382,12 +132538,40 @@ pub mod modem_pwr {
         /// Positioned bits of `TSF_TIMER_0`.
         pub const TSF_TIMER_0_MASK: u32 = 0x80;
 
-        /// Width of `BITS_8_31_OPAQUE` in bits.
-        pub const BITS_8_31_OPAQUE_WIDTH: u32 = 24;
-        /// Greatest unsigned image of `BITS_8_31_OPAQUE`.
-        pub const BITS_8_31_OPAQUE_MAX: u32 = 0xffffff;
-        /// Positioned bits of `BITS_8_31_OPAQUE`.
-        pub const BITS_8_31_OPAQUE_MASK: u32 = 0xffffff00;
+        /// Width of `BITS_8_16_OPAQUE` in bits.
+        pub const BITS_8_16_OPAQUE_WIDTH: u32 = 9;
+        /// Greatest unsigned image of `BITS_8_16_OPAQUE`.
+        pub const BITS_8_16_OPAQUE_MAX: u32 = 0x1ff;
+        /// Positioned bits of `BITS_8_16_OPAQUE`.
+        pub const BITS_8_16_OPAQUE_MASK: u32 = 0x1ff00;
+
+        /// Width of `BEACON_FILTER_WAKE` in bits.
+        pub const BEACON_FILTER_WAKE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BEACON_FILTER_WAKE`.
+        pub const BEACON_FILTER_WAKE_MAX: u32 = 0x1;
+        /// Positioned bits of `BEACON_FILTER_WAKE`.
+        pub const BEACON_FILTER_WAKE_MASK: u32 = 0x20000;
+
+        /// Width of `BIT_18_OPAQUE` in bits.
+        pub const BIT_18_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_18_OPAQUE`.
+        pub const BIT_18_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_18_OPAQUE`.
+        pub const BIT_18_OPAQUE_MASK: u32 = 0x40000;
+
+        /// Width of `BEACON_MISS` in bits.
+        pub const BEACON_MISS_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BEACON_MISS`.
+        pub const BEACON_MISS_MAX: u32 = 0x1;
+        /// Positioned bits of `BEACON_MISS`.
+        pub const BEACON_MISS_MASK: u32 = 0x80000;
+
+        /// Width of `BITS_20_31_OPAQUE` in bits.
+        pub const BITS_20_31_OPAQUE_WIDTH: u32 = 12;
+        /// Greatest unsigned image of `BITS_20_31_OPAQUE`.
+        pub const BITS_20_31_OPAQUE_MAX: u32 = 0xfff;
+        /// Positioned bits of `BITS_20_31_OPAQUE`.
+        pub const BITS_20_31_OPAQUE_MASK: u32 = 0xfff00000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -132442,10 +132626,34 @@ pub mod modem_pwr {
                 (self.0 & 0x00000080) != 0
             }
 
-            /// Masked event bits whose identities remain unknown.
+            /// Event identities unknown.
             #[inline]
-            pub const fn bits_8_31_opaque(self) -> oer_mmio::Bits<24> {
+            pub const fn bits_8_16_opaque(self) -> oer_mmio::Bits<9> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
+            }
+
+            /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            #[inline]
+            pub const fn beacon_filter_wake(self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// RX-beacon-path raw observation; independent event identity unknown.
+            #[inline]
+            pub const fn bit_18_opaque(self) -> bool {
+                (self.0 & 0x00040000) != 0
+            }
+
+            /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            #[inline]
+            pub const fn beacon_miss(self) -> bool {
+                (self.0 & 0x00080000) != 0
+            }
+
+            /// Event identities unknown.
+            #[inline]
+            pub const fn bits_20_31_opaque(self) -> oer_mmio::Bits<12> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
             }
         }
     }
@@ -132518,12 +132726,40 @@ pub mod modem_pwr {
         /// Positioned bits of `TSF_TIMER_0`.
         pub const TSF_TIMER_0_MASK: u32 = 0x80;
 
-        /// Width of `BITS_8_31_OPAQUE` in bits.
-        pub const BITS_8_31_OPAQUE_WIDTH: u32 = 24;
-        /// Greatest unsigned image of `BITS_8_31_OPAQUE`.
-        pub const BITS_8_31_OPAQUE_MAX: u32 = 0xffffff;
-        /// Positioned bits of `BITS_8_31_OPAQUE`.
-        pub const BITS_8_31_OPAQUE_MASK: u32 = 0xffffff00;
+        /// Width of `BITS_8_16_OPAQUE` in bits.
+        pub const BITS_8_16_OPAQUE_WIDTH: u32 = 9;
+        /// Greatest unsigned image of `BITS_8_16_OPAQUE`.
+        pub const BITS_8_16_OPAQUE_MAX: u32 = 0x1ff;
+        /// Positioned bits of `BITS_8_16_OPAQUE`.
+        pub const BITS_8_16_OPAQUE_MASK: u32 = 0x1ff00;
+
+        /// Width of `BEACON_FILTER_WAKE` in bits.
+        pub const BEACON_FILTER_WAKE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BEACON_FILTER_WAKE`.
+        pub const BEACON_FILTER_WAKE_MAX: u32 = 0x1;
+        /// Positioned bits of `BEACON_FILTER_WAKE`.
+        pub const BEACON_FILTER_WAKE_MASK: u32 = 0x20000;
+
+        /// Width of `BIT_18_OPAQUE` in bits.
+        pub const BIT_18_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_18_OPAQUE`.
+        pub const BIT_18_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_18_OPAQUE`.
+        pub const BIT_18_OPAQUE_MASK: u32 = 0x40000;
+
+        /// Width of `BEACON_MISS` in bits.
+        pub const BEACON_MISS_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BEACON_MISS`.
+        pub const BEACON_MISS_MAX: u32 = 0x1;
+        /// Positioned bits of `BEACON_MISS`.
+        pub const BEACON_MISS_MASK: u32 = 0x80000;
+
+        /// Width of `BITS_20_31_OPAQUE` in bits.
+        pub const BITS_20_31_OPAQUE_WIDTH: u32 = 12;
+        /// Greatest unsigned image of `BITS_20_31_OPAQUE`.
+        pub const BITS_20_31_OPAQUE_MAX: u32 = 0xfff;
+        /// Positioned bits of `BITS_20_31_OPAQUE`.
+        pub const BITS_20_31_OPAQUE_MASK: u32 = 0xfff00000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -132578,10 +132814,34 @@ pub mod modem_pwr {
                 (self.0 & 0x00000080) != 0
             }
 
-            /// Acknowledge event bits whose identities remain unknown.
+            /// Event identities unknown.
             #[inline]
-            pub const fn bits_8_31_opaque(self) -> oer_mmio::Bits<24> {
+            pub const fn bits_8_16_opaque(self) -> oer_mmio::Bits<9> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
+            }
+
+            /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            #[inline]
+            pub const fn beacon_filter_wake(self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// RX-beacon-path raw observation; independent event identity unknown.
+            #[inline]
+            pub const fn bit_18_opaque(self) -> bool {
+                (self.0 & 0x00040000) != 0
+            }
+
+            /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            #[inline]
+            pub const fn beacon_miss(self) -> bool {
+                (self.0 & 0x00080000) != 0
+            }
+
+            /// Event identities unknown.
+            #[inline]
+            pub const fn bits_20_31_opaque(self) -> oer_mmio::Bits<12> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
             }
         }
 
@@ -132716,18 +132976,78 @@ pub mod modem_pwr {
                 }
             }
 
-            /// Acknowledge event bits whose identities remain unknown.
+            /// Event identities unknown.
             #[inline]
-            pub const fn bits_8_31_opaque(&self) -> oer_mmio::Bits<24> {
+            pub const fn bits_8_16_opaque(&self) -> oer_mmio::Bits<9> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
 
-            /// The snapshot without `BITS_8_31_OPAQUE` unless `keep`: it is then not acknowledged.
-            pub const fn retain_bits_8_31_opaque(self, keep: bool) -> Self {
+            /// The snapshot without `BITS_8_16_OPAQUE` unless `keep`: it is then not acknowledged.
+            pub const fn retain_bits_8_16_opaque(self, keep: bool) -> Self {
                 if keep {
                     self
                 } else {
-                    Self(self.0 & 0x000000ff)
+                    Self(self.0 & 0xfffe00ff)
+                }
+            }
+
+            /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            #[inline]
+            pub const fn beacon_filter_wake(&self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// The snapshot without `BEACON_FILTER_WAKE` unless `keep`: it is then not acknowledged.
+            pub const fn retain_beacon_filter_wake(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffdffff)
+                }
+            }
+
+            /// RX-beacon-path raw observation; independent event identity unknown.
+            #[inline]
+            pub const fn bit_18_opaque(&self) -> bool {
+                (self.0 & 0x00040000) != 0
+            }
+
+            /// The snapshot without `BIT_18_OPAQUE` unless `keep`: it is then not acknowledged.
+            pub const fn retain_bit_18_opaque(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffbffff)
+                }
+            }
+
+            /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            #[inline]
+            pub const fn beacon_miss(&self) -> bool {
+                (self.0 & 0x00080000) != 0
+            }
+
+            /// The snapshot without `BEACON_MISS` unless `keep`: it is then not acknowledged.
+            pub const fn retain_beacon_miss(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfff7ffff)
+                }
+            }
+
+            /// Event identities unknown.
+            #[inline]
+            pub const fn bits_20_31_opaque(&self) -> oer_mmio::Bits<12> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// The snapshot without `BITS_20_31_OPAQUE` unless `keep`: it is then not acknowledged.
+            pub const fn retain_bits_20_31_opaque(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0x000fffff)
                 }
             }
         }
@@ -133753,18 +134073,78 @@ pub mod modem_pwr {
             }
         }
 
-        /// The `BITS_8_31_OPAQUE` field.
+        /// The `BITS_8_16_OPAQUE` field.
         #[inline]
-        pub const fn bits_8_31_opaque(&self) -> oer_mmio::Bits<24> {
+        pub const fn bits_8_16_opaque(&self) -> oer_mmio::Bits<9> {
             oer_mmio::Bits::truncate(self.0 >> 8)
         }
 
-        /// The snapshot without `BITS_8_31_OPAQUE` unless `keep`: it is then not acknowledged.
-        pub const fn retain_bits_8_31_opaque(self, keep: bool) -> Self {
+        /// The snapshot without `BITS_8_16_OPAQUE` unless `keep`: it is then not acknowledged.
+        pub const fn retain_bits_8_16_opaque(self, keep: bool) -> Self {
             if keep {
                 self
             } else {
-                Self(self.0 & 0x000000ff)
+                Self(self.0 & 0xfffe00ff)
+            }
+        }
+
+        /// The `BEACON_FILTER_WAKE` field.
+        #[inline]
+        pub const fn beacon_filter_wake(&self) -> bool {
+            (self.0 & 0x00020000) != 0
+        }
+
+        /// The snapshot without `BEACON_FILTER_WAKE` unless `keep`: it is then not acknowledged.
+        pub const fn retain_beacon_filter_wake(self, keep: bool) -> Self {
+            if keep {
+                self
+            } else {
+                Self(self.0 & 0xfffdffff)
+            }
+        }
+
+        /// The `BIT_18_OPAQUE` field.
+        #[inline]
+        pub const fn bit_18_opaque(&self) -> bool {
+            (self.0 & 0x00040000) != 0
+        }
+
+        /// The snapshot without `BIT_18_OPAQUE` unless `keep`: it is then not acknowledged.
+        pub const fn retain_bit_18_opaque(self, keep: bool) -> Self {
+            if keep {
+                self
+            } else {
+                Self(self.0 & 0xfffbffff)
+            }
+        }
+
+        /// The `BEACON_MISS` field.
+        #[inline]
+        pub const fn beacon_miss(&self) -> bool {
+            (self.0 & 0x00080000) != 0
+        }
+
+        /// The snapshot without `BEACON_MISS` unless `keep`: it is then not acknowledged.
+        pub const fn retain_beacon_miss(self, keep: bool) -> Self {
+            if keep {
+                self
+            } else {
+                Self(self.0 & 0xfff7ffff)
+            }
+        }
+
+        /// The `BITS_20_31_OPAQUE` field.
+        #[inline]
+        pub const fn bits_20_31_opaque(&self) -> oer_mmio::Bits<12> {
+            oer_mmio::Bits::truncate(self.0 >> 20)
+        }
+
+        /// The snapshot without `BITS_20_31_OPAQUE` unless `keep`: it is then not acknowledged.
+        pub const fn retain_bits_20_31_opaque(self, keep: bool) -> Self {
+            if keep {
+                self
+            } else {
+                Self(self.0 & 0x000fffff)
             }
         }
     }
@@ -254632,7 +255012,7 @@ pub mod wifi_bb {
 
     /// The `BASEBAND_WATCHDOG_ENABLE` register.
     ///
-    /// Complete phy_bb_wdg_cfg sets bit 31. The standalone watchdog leaves replace bits 31 and 30 and set timeout-clear bit 29.
+    /// BB watchdog reset-enable (31), interrupt-enable (30), and timeout-clear request (29). Hardware resets BB on timeout when reset-enable is set; reset extent is not measured. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
     pub mod baseband_watchdog_enable {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -254642,12 +255022,12 @@ pub mod wifi_bb {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0xc40;
 
-        /// Width of `WATCHDOG_TIMEOUT_CLEAR` in bits.
-        pub const WATCHDOG_TIMEOUT_CLEAR_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `WATCHDOG_TIMEOUT_CLEAR`.
-        pub const WATCHDOG_TIMEOUT_CLEAR_MAX: u32 = 0x1;
-        /// Positioned bits of `WATCHDOG_TIMEOUT_CLEAR`.
-        pub const WATCHDOG_TIMEOUT_CLEAR_MASK: u32 = 0x20000000;
+        /// Width of `WATCHDOG_TIMEOUT_CLEAR_REQUEST` in bits.
+        pub const WATCHDOG_TIMEOUT_CLEAR_REQUEST_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `WATCHDOG_TIMEOUT_CLEAR_REQUEST`.
+        pub const WATCHDOG_TIMEOUT_CLEAR_REQUEST_MAX: u32 = 0x1;
+        /// Positioned bits of `WATCHDOG_TIMEOUT_CLEAR_REQUEST`.
+        pub const WATCHDOG_TIMEOUT_CLEAR_REQUEST_MASK: u32 = 0x20000000;
 
         /// Width of `WATCHDOG_INTERRUPT_ENABLE` in bits.
         pub const WATCHDOG_INTERRUPT_ENABLE_WIDTH: u32 = 1;
@@ -254656,12 +255036,12 @@ pub mod wifi_bb {
         /// Positioned bits of `WATCHDOG_INTERRUPT_ENABLE`.
         pub const WATCHDOG_INTERRUPT_ENABLE_MASK: u32 = 0x40000000;
 
-        /// Width of `WATCHDOG_ENABLE` in bits.
-        pub const WATCHDOG_ENABLE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `WATCHDOG_ENABLE`.
-        pub const WATCHDOG_ENABLE_MAX: u32 = 0x1;
-        /// Positioned bits of `WATCHDOG_ENABLE`.
-        pub const WATCHDOG_ENABLE_MASK: u32 = 0x80000000;
+        /// Width of `WATCHDOG_RESET_ENABLE` in bits.
+        pub const WATCHDOG_RESET_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `WATCHDOG_RESET_ENABLE`.
+        pub const WATCHDOG_RESET_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `WATCHDOG_RESET_ENABLE`.
+        pub const WATCHDOG_RESET_ENABLE_MASK: u32 = 0x80000000;
 
         /// Width of `BITS_0_28_OPAQUE` in bits.
         pub const BITS_0_28_OPAQUE_WIDTH: u32 = 29;
@@ -254675,21 +255055,21 @@ pub mod wifi_bb {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `WATCHDOG_TIMEOUT_CLEAR` field.
+            /// Request clearing the watchdog timeout. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
             #[inline]
-            pub const fn watchdog_timeout_clear(self) -> bool {
+            pub const fn watchdog_timeout_clear_request(self) -> bool {
                 (self.0 & 0x20000000) != 0
             }
 
-            /// The `WATCHDOG_INTERRUPT_ENABLE` field.
+            /// Gate watchdog interrupt delivery independently of hardware reset. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
             #[inline]
             pub const fn watchdog_interrupt_enable(self) -> bool {
                 (self.0 & 0x40000000) != 0
             }
 
-            /// The `WATCHDOG_ENABLE` field.
+            /// Enable hardware BB reset on watchdog timeout; this is not a counter run gate. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
             #[inline]
-            pub const fn watchdog_enable(self) -> bool {
+            pub const fn watchdog_reset_enable(self) -> bool {
                 (self.0 & 0x80000000) != 0
             }
 
@@ -254704,21 +255084,21 @@ pub mod wifi_bb {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `WATCHDOG_TIMEOUT_CLEAR` field.
+            /// Request clearing the watchdog timeout. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
             #[inline]
-            pub const fn watchdog_timeout_clear(&self) -> bool {
+            pub const fn watchdog_timeout_clear_request(&self) -> bool {
                 (self.0 & 0x20000000) != 0
             }
 
-            /// The `WATCHDOG_INTERRUPT_ENABLE` field.
+            /// Gate watchdog interrupt delivery independently of hardware reset. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
             #[inline]
             pub const fn watchdog_interrupt_enable(&self) -> bool {
                 (self.0 & 0x40000000) != 0
             }
 
-            /// The `WATCHDOG_ENABLE` field.
+            /// Enable hardware BB reset on watchdog timeout; this is not a counter run gate. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
             #[inline]
-            pub const fn watchdog_enable(&self) -> bool {
+            pub const fn watchdog_reset_enable(&self) -> bool {
                 (self.0 & 0x80000000) != 0
             }
 
@@ -254728,9 +255108,9 @@ pub mod wifi_bb {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Set `WATCHDOG_TIMEOUT_CLEAR`.
+            /// Set `WATCHDOG_TIMEOUT_CLEAR_REQUEST`.
             #[inline]
-            pub fn set_watchdog_timeout_clear(&mut self, value: bool) -> &mut Self {
+            pub fn set_watchdog_timeout_clear_request(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xdfffffff) | (u32::from(value) << 29);
                 self
             }
@@ -254742,9 +255122,9 @@ pub mod wifi_bb {
                 self
             }
 
-            /// Set `WATCHDOG_ENABLE`.
+            /// Set `WATCHDOG_RESET_ENABLE`.
             #[inline]
-            pub fn set_watchdog_enable(&mut self, value: bool) -> &mut Self {
+            pub fn set_watchdog_reset_enable(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0x7fffffff) | (u32::from(value) << 31);
                 self
             }
@@ -272840,12 +273220,12 @@ pub mod wifi_mac {
         /// Positioned bits of `BIT_20_OPAQUE`.
         pub const BIT_20_OPAQUE_MASK: u32 = 0x100000;
 
-        /// Width of `BIT_21_OPAQUE` in bits.
-        pub const BIT_21_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_21_OPAQUE`.
-        pub const BIT_21_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_21_OPAQUE`.
-        pub const BIT_21_OPAQUE_MASK: u32 = 0x200000;
+        /// Width of `FATAL_ASSERTION` in bits.
+        pub const FATAL_ASSERTION_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `FATAL_ASSERTION`.
+        pub const FATAL_ASSERTION_MAX: u32 = 0x1;
+        /// Positioned bits of `FATAL_ASSERTION`.
+        pub const FATAL_ASSERTION_MASK: u32 = 0x200000;
 
         /// Width of `BIT_22_OPAQUE` in bits.
         pub const BIT_22_OPAQUE_WIDTH: u32 = 1;
@@ -272875,19 +273255,19 @@ pub mod wifi_mac {
         /// Positioned bits of `BITS_25_26_OPAQUE`.
         pub const BITS_25_26_OPAQUE_MASK: u32 = 0x6000000;
 
-        /// Width of `BIT_27_OPAQUE` in bits.
-        pub const BIT_27_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_27_OPAQUE`.
-        pub const BIT_27_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_27_OPAQUE`.
-        pub const BIT_27_OPAQUE_MASK: u32 = 0x8000000;
+        /// Width of `WDEV_TIMER_0` in bits.
+        pub const WDEV_TIMER_0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `WDEV_TIMER_0`.
+        pub const WDEV_TIMER_0_MAX: u32 = 0x1;
+        /// Positioned bits of `WDEV_TIMER_0`.
+        pub const WDEV_TIMER_0_MASK: u32 = 0x8000000;
 
-        /// Width of `BIT_28_OPAQUE` in bits.
-        pub const BIT_28_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_28_OPAQUE`.
-        pub const BIT_28_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_28_OPAQUE`.
-        pub const BIT_28_OPAQUE_MASK: u32 = 0x10000000;
+        /// Width of `WDEV_TIMER_1` in bits.
+        pub const WDEV_TIMER_1_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `WDEV_TIMER_1`.
+        pub const WDEV_TIMER_1_MAX: u32 = 0x1;
+        /// Positioned bits of `WDEV_TIMER_1`.
+        pub const WDEV_TIMER_1_MASK: u32 = 0x10000000;
 
         /// Width of `BITS_29_31_OPAQUE` in bits.
         pub const BITS_29_31_OPAQUE_WIDTH: u32 = 3;
@@ -272985,9 +273365,9 @@ pub mod wifi_mac {
                 (self.0 & 0x00100000) != 0
             }
 
-            /// Unknown event enabled by the complete cold receive mask.
+            /// Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
             #[inline]
-            pub const fn bit_21_opaque(self) -> bool {
+            pub const fn fatal_assertion(self) -> bool {
                 (self.0 & 0x00200000) != 0
             }
 
@@ -273015,15 +273395,15 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0 >> 25)
             }
 
-            /// Unknown event enabled by the complete cold receive mask.
+            /// WDEV timer zero carrier used by TWT; separate from power TSF timers. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
             #[inline]
-            pub const fn bit_27_opaque(self) -> bool {
+            pub const fn wdev_timer_0(self) -> bool {
                 (self.0 & 0x08000000) != 0
             }
 
-            /// Unknown event enabled by the complete cold receive mask.
+            /// WDEV timer one carrier used by TWT; separate from power TSF timers. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
             #[inline]
-            pub const fn bit_28_opaque(self) -> bool {
+            pub const fn wdev_timer_1(self) -> bool {
                 (self.0 & 0x10000000) != 0
             }
 
@@ -273122,9 +273502,9 @@ pub mod wifi_mac {
                 (self.0 & 0x00100000) != 0
             }
 
-            /// Unknown event enabled by the complete cold receive mask.
+            /// Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
             #[inline]
-            pub const fn bit_21_opaque(&self) -> bool {
+            pub const fn fatal_assertion(&self) -> bool {
                 (self.0 & 0x00200000) != 0
             }
 
@@ -273152,15 +273532,15 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0 >> 25)
             }
 
-            /// Unknown event enabled by the complete cold receive mask.
+            /// WDEV timer zero carrier used by TWT; separate from power TSF timers. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
             #[inline]
-            pub const fn bit_27_opaque(&self) -> bool {
+            pub const fn wdev_timer_0(&self) -> bool {
                 (self.0 & 0x08000000) != 0
             }
 
-            /// Unknown event enabled by the complete cold receive mask.
+            /// WDEV timer one carrier used by TWT; separate from power TSF timers. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
             #[inline]
-            pub const fn bit_28_opaque(&self) -> bool {
+            pub const fn wdev_timer_1(&self) -> bool {
                 (self.0 & 0x10000000) != 0
             }
 
@@ -273268,9 +273648,9 @@ pub mod wifi_mac {
                 self
             }
 
-            /// Set `BIT_21_OPAQUE`.
+            /// Set `FATAL_ASSERTION`.
             #[inline]
-            pub fn set_bit_21_opaque(&mut self, value: bool) -> &mut Self {
+            pub fn set_fatal_assertion(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xffdfffff) | (u32::from(value) << 21);
                 self
             }
@@ -273303,16 +273683,16 @@ pub mod wifi_mac {
                 self
             }
 
-            /// Set `BIT_27_OPAQUE`.
+            /// Set `WDEV_TIMER_0`.
             #[inline]
-            pub fn set_bit_27_opaque(&mut self, value: bool) -> &mut Self {
+            pub fn set_wdev_timer_0(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xf7ffffff) | (u32::from(value) << 27);
                 self
             }
 
-            /// Set `BIT_28_OPAQUE`.
+            /// Set `WDEV_TIMER_1`.
             #[inline]
-            pub fn set_bit_28_opaque(&mut self, value: bool) -> &mut Self {
+            pub fn set_wdev_timer_1(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xefffffff) | (u32::from(value) << 28);
                 self
             }
@@ -273328,7 +273708,7 @@ pub mod wifi_mac {
 
     /// The `RAW` register.
     ///
-    /// Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE.
+    /// Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE. Its event lanes correspond to ENABLE/STATUS; masking delivery does not make RAW a STATUS snapshot. SOURCE: BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
     pub mod raw {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -273338,22 +273718,48 @@ pub mod wifi_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0xc44;
 
-        /// Width of `EVENTS` in bits.
-        pub const EVENTS_WIDTH: u32 = 32;
-        /// Greatest unsigned image of `EVENTS`.
-        pub const EVENTS_MAX: u32 = 0xffffffff;
-        /// Positioned bits of `EVENTS`.
-        pub const EVENTS_MASK: u32 = 0xffffffff;
+        /// Width of `BITS_0_20_OPAQUE` in bits.
+        pub const BITS_0_20_OPAQUE_WIDTH: u32 = 21;
+        /// Greatest unsigned image of `BITS_0_20_OPAQUE`.
+        pub const BITS_0_20_OPAQUE_MAX: u32 = 0x1fffff;
+        /// Positioned bits of `BITS_0_20_OPAQUE`.
+        pub const BITS_0_20_OPAQUE_MASK: u32 = 0x1fffff;
+
+        /// Width of `FATAL_ASSERTION` in bits.
+        pub const FATAL_ASSERTION_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `FATAL_ASSERTION`.
+        pub const FATAL_ASSERTION_MAX: u32 = 0x1;
+        /// Positioned bits of `FATAL_ASSERTION`.
+        pub const FATAL_ASSERTION_MASK: u32 = 0x200000;
+
+        /// Width of `BITS_22_31_OPAQUE` in bits.
+        pub const BITS_22_31_OPAQUE_WIDTH: u32 = 10;
+        /// Greatest unsigned image of `BITS_22_31_OPAQUE`.
+        pub const BITS_22_31_OPAQUE_MAX: u32 = 0x3ff;
+        /// Positioned bits of `BITS_22_31_OPAQUE`.
+        pub const BITS_22_31_OPAQUE_MASK: u32 = 0xffc00000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `EVENTS` field.
+            /// Raw event observations; identities are not independently decoded here.
             #[inline]
-            pub const fn events(self) -> u32 {
-                self.0
+            pub const fn bits_0_20_opaque(self) -> oer_mmio::Bits<21> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Unmasked carrier of the vendor fatal assertion path; physical producer unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026 (STATUS21 fatal consumer), BLOB_LIBPP_ISR_REGISTER_DUMP (matching raw event bank).
+            #[inline]
+            pub const fn fatal_assertion(self) -> bool {
+                (self.0 & 0x00200000) != 0
+            }
+
+            /// Raw event observations; identities are not independently decoded here.
+            #[inline]
+            pub const fn bits_22_31_opaque(self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0 >> 22)
             }
         }
 
@@ -273361,16 +273767,42 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `EVENTS` field.
+            /// Raw event observations; identities are not independently decoded here.
             #[inline]
-            pub const fn events(&self) -> u32 {
-                self.0
+            pub const fn bits_0_20_opaque(&self) -> oer_mmio::Bits<21> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Set `EVENTS`.
+            /// Unmasked carrier of the vendor fatal assertion path; physical producer unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026 (STATUS21 fatal consumer), BLOB_LIBPP_ISR_REGISTER_DUMP (matching raw event bank).
             #[inline]
-            pub fn set_events(&mut self, value: u32) -> &mut Self {
-                self.0 = value;
+            pub const fn fatal_assertion(&self) -> bool {
+                (self.0 & 0x00200000) != 0
+            }
+
+            /// Raw event observations; identities are not independently decoded here.
+            #[inline]
+            pub const fn bits_22_31_opaque(&self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0 >> 22)
+            }
+
+            /// Set `BITS_0_20_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_20_opaque(&mut self, value: oer_mmio::Bits<21>) -> &mut Self {
+                self.0 = (self.0 & 0xffe00000) | value.get();
+                self
+            }
+
+            /// Set `FATAL_ASSERTION`.
+            #[inline]
+            pub fn set_fatal_assertion(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffdfffff) | (u32::from(value) << 21);
+                self
+            }
+
+            /// Set `BITS_22_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_22_31_opaque(&mut self, value: oer_mmio::Bits<10>) -> &mut Self {
+                self.0 = (self.0 & 0x003fffff) | (value.get() << 22);
                 self
             }
         }
@@ -273486,12 +273918,12 @@ pub mod wifi_mac {
         /// Positioned bits of `BIT_20_OPAQUE`.
         pub const BIT_20_OPAQUE_MASK: u32 = 0x100000;
 
-        /// Width of `BIT_21_OPAQUE` in bits.
-        pub const BIT_21_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_21_OPAQUE`.
-        pub const BIT_21_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_21_OPAQUE`.
-        pub const BIT_21_OPAQUE_MASK: u32 = 0x200000;
+        /// Width of `FATAL_ASSERTION` in bits.
+        pub const FATAL_ASSERTION_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `FATAL_ASSERTION`.
+        pub const FATAL_ASSERTION_MAX: u32 = 0x1;
+        /// Positioned bits of `FATAL_ASSERTION`.
+        pub const FATAL_ASSERTION_MASK: u32 = 0x200000;
 
         /// Width of `BIT_22_OPAQUE` in bits.
         pub const BIT_22_OPAQUE_WIDTH: u32 = 1;
@@ -273521,19 +273953,19 @@ pub mod wifi_mac {
         /// Positioned bits of `BITS_25_26_OPAQUE`.
         pub const BITS_25_26_OPAQUE_MASK: u32 = 0x6000000;
 
-        /// Width of `BIT_27_OPAQUE` in bits.
-        pub const BIT_27_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_27_OPAQUE`.
-        pub const BIT_27_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_27_OPAQUE`.
-        pub const BIT_27_OPAQUE_MASK: u32 = 0x8000000;
+        /// Width of `WDEV_TIMER_0` in bits.
+        pub const WDEV_TIMER_0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `WDEV_TIMER_0`.
+        pub const WDEV_TIMER_0_MAX: u32 = 0x1;
+        /// Positioned bits of `WDEV_TIMER_0`.
+        pub const WDEV_TIMER_0_MASK: u32 = 0x8000000;
 
-        /// Width of `BIT_28_OPAQUE` in bits.
-        pub const BIT_28_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_28_OPAQUE`.
-        pub const BIT_28_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_28_OPAQUE`.
-        pub const BIT_28_OPAQUE_MASK: u32 = 0x10000000;
+        /// Width of `WDEV_TIMER_1` in bits.
+        pub const WDEV_TIMER_1_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `WDEV_TIMER_1`.
+        pub const WDEV_TIMER_1_MAX: u32 = 0x1;
+        /// Positioned bits of `WDEV_TIMER_1`.
+        pub const WDEV_TIMER_1_MASK: u32 = 0x10000000;
 
         /// Width of `BITS_29_31_OPAQUE` in bits.
         pub const BITS_29_31_OPAQUE_WIDTH: u32 = 3;
@@ -273631,9 +274063,9 @@ pub mod wifi_mac {
                 (self.0 & 0x00100000) != 0
             }
 
-            /// Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.
+            /// Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
             #[inline]
-            pub const fn bit_21_opaque(self) -> bool {
+            pub const fn fatal_assertion(self) -> bool {
                 (self.0 & 0x00200000) != 0
             }
 
@@ -273661,15 +274093,15 @@ pub mod wifi_mac {
                 oer_mmio::Bits::truncate(self.0 >> 25)
             }
 
-            /// Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.
+            /// WDEV timer zero carrier used by TWT; separate from power TSF timers. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
             #[inline]
-            pub const fn bit_27_opaque(self) -> bool {
+            pub const fn wdev_timer_0(self) -> bool {
                 (self.0 & 0x08000000) != 0
             }
 
-            /// Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.
+            /// WDEV timer one carrier used by TWT; separate from power TSF timers. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
             #[inline]
-            pub const fn bit_28_opaque(self) -> bool {
+            pub const fn wdev_timer_1(self) -> bool {
                 (self.0 & 0x10000000) != 0
             }
 
@@ -298167,14 +298599,14 @@ pub mod wifi_mac {
             }
         }
 
-        /// The `BIT_21_OPAQUE` field.
+        /// The `FATAL_ASSERTION` field.
         #[inline]
-        pub const fn bit_21_opaque(&self) -> bool {
+        pub const fn fatal_assertion(&self) -> bool {
             (self.0 & 0x00200000) != 0
         }
 
-        /// The snapshot without `BIT_21_OPAQUE` unless `keep`: it is then not acknowledged.
-        pub const fn retain_bit_21_opaque(self, keep: bool) -> Self {
+        /// The snapshot without `FATAL_ASSERTION` unless `keep`: it is then not acknowledged.
+        pub const fn retain_fatal_assertion(self, keep: bool) -> Self {
             if keep {
                 self
             } else {
@@ -298242,14 +298674,14 @@ pub mod wifi_mac {
             }
         }
 
-        /// The `BIT_27_OPAQUE` field.
+        /// The `WDEV_TIMER_0` field.
         #[inline]
-        pub const fn bit_27_opaque(&self) -> bool {
+        pub const fn wdev_timer_0(&self) -> bool {
             (self.0 & 0x08000000) != 0
         }
 
-        /// The snapshot without `BIT_27_OPAQUE` unless `keep`: it is then not acknowledged.
-        pub const fn retain_bit_27_opaque(self, keep: bool) -> Self {
+        /// The snapshot without `WDEV_TIMER_0` unless `keep`: it is then not acknowledged.
+        pub const fn retain_wdev_timer_0(self, keep: bool) -> Self {
             if keep {
                 self
             } else {
@@ -298257,14 +298689,14 @@ pub mod wifi_mac {
             }
         }
 
-        /// The `BIT_28_OPAQUE` field.
+        /// The `WDEV_TIMER_1` field.
         #[inline]
-        pub const fn bit_28_opaque(&self) -> bool {
+        pub const fn wdev_timer_1(&self) -> bool {
             (self.0 & 0x10000000) != 0
         }
 
-        /// The snapshot without `BIT_28_OPAQUE` unless `keep`: it is then not acknowledged.
-        pub const fn retain_bit_28_opaque(self, keep: bool) -> Self {
+        /// The snapshot without `WDEV_TIMER_1` unless `keep`: it is then not acknowledged.
+        pub const fn retain_wdev_timer_1(self, keep: bool) -> Self {
             if keep {
                 self
             } else {
@@ -298284,6 +298716,73 @@ pub mod wifi_mac {
                 self
             } else {
                 Self(self.0 & 0x1fffffff)
+            }
+        }
+    }
+
+    /// One sample of the `WIFI_MAC.RAW` events `WIFI_MAC.CLEAR` acknowledges, to acknowledge once.
+    ///
+    /// SOURCE: BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+    #[must_use = "a sampled event set must be acknowledged"]
+    #[derive(Debug, Eq, PartialEq)]
+    pub struct MacInterruptRawSnapshot(u32);
+
+    impl MacInterruptRawSnapshot {
+        /// The bits the snapshot keeps: the events the clear word acknowledges.
+        pub const EVENTS: u32 = 0xffffffff;
+
+        /// Whether no event was sampled.
+        pub const fn is_clear(&self) -> bool {
+            self.0 == 0
+        }
+
+        /// The sampled event bits: a value of the sample, which grants nothing.
+        pub const fn bits(&self) -> u32 {
+            self.0
+        }
+
+        /// The `BITS_0_20_OPAQUE` field.
+        #[inline]
+        pub const fn bits_0_20_opaque(&self) -> oer_mmio::Bits<21> {
+            oer_mmio::Bits::truncate(self.0)
+        }
+
+        /// The snapshot without `BITS_0_20_OPAQUE` unless `keep`: it is then not acknowledged.
+        pub const fn retain_bits_0_20_opaque(self, keep: bool) -> Self {
+            if keep {
+                self
+            } else {
+                Self(self.0 & 0xffe00000)
+            }
+        }
+
+        /// The `FATAL_ASSERTION` field.
+        #[inline]
+        pub const fn fatal_assertion(&self) -> bool {
+            (self.0 & 0x00200000) != 0
+        }
+
+        /// The snapshot without `FATAL_ASSERTION` unless `keep`: it is then not acknowledged.
+        pub const fn retain_fatal_assertion(self, keep: bool) -> Self {
+            if keep {
+                self
+            } else {
+                Self(self.0 & 0xffdfffff)
+            }
+        }
+
+        /// The `BITS_22_31_OPAQUE` field.
+        #[inline]
+        pub const fn bits_22_31_opaque(&self) -> oer_mmio::Bits<10> {
+            oer_mmio::Bits::truncate(self.0 >> 22)
+        }
+
+        /// The snapshot without `BITS_22_31_OPAQUE` unless `keep`: it is then not acknowledged.
+        pub const fn retain_bits_22_31_opaque(self, keep: bool) -> Self {
+            if keep {
+                self
+            } else {
+                Self(self.0 & 0x003fffff)
             }
         }
     }
@@ -298346,6 +298845,21 @@ pub mod wifi_mac {
         /// `WIFI_MAC.CLEAR`, zero to every other bit.
         #[inline]
         pub fn acknowledge_mac_interrupt(&mut self, snapshot: MacInterruptSnapshot) {
+            self.0.write::<0xc4c>(snapshot.0);
+        }
+
+        /// Sample `WIFI_MAC.RAW` once, keeping the events `WIFI_MAC.CLEAR` acknowledges (`WIFI_MAC.RAW`).
+        ///
+        /// SOURCE: BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+        #[inline]
+        pub fn sample_mac_interrupt_raw(&self) -> MacInterruptRawSnapshot {
+            MacInterruptRawSnapshot(self.0.read::<0xc44>() & MacInterruptRawSnapshot::EVENTS)
+        }
+
+        /// Acknowledge exactly the sampled events: one to each such bit of
+        /// `WIFI_MAC.CLEAR`, zero to every other bit.
+        #[inline]
+        pub fn acknowledge_mac_interrupt_raw(&mut self, snapshot: MacInterruptRawSnapshot) {
             self.0.write::<0xc4c>(snapshot.0);
         }
     }

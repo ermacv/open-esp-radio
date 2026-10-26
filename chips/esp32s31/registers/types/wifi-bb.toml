@@ -880,18 +880,18 @@ completeness = "partial"
 [review.entity."BASEBAND_WATCHDOG_ENABLE"]
 sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
 
-[review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_TIMEOUT_CLEAR"]
-sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+[review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_TIMEOUT_CLEAR_REQUEST"]
+sources = ["ROM_REV0_BB_WATCHDOG_LANES_20261026", "ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_INTERRUPT_ENABLE"]
-sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+sources = ["ROM_REV0_BB_WATCHDOG_LANES_20261026", "ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
 accuracy = "unknown"
 completeness = "unknown"
 
-[review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_ENABLE"]
-sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+[review.entity."BASEBAND_WATCHDOG_ENABLE.WATCHDOG_RESET_ENABLE"]
+sources = ["ROM_REV0_BB_WATCHDOG_LANES_20261026", "ROM_REV0_PHY_REGISTER_INITIALIZATION", "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -2387,22 +2387,25 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "BASEBAND_WATCHDOG_ENABLE"
 offset = 0xc40
-description = "Complete phy_bb_wdg_cfg sets bit 31. The standalone watchdog leaves replace bits 31 and 30 and set timeout-clear bit 29."
+description = "BB watchdog reset-enable (31), interrupt-enable (30), and timeout-clear request (29). Hardware resets BB on timeout when reset-enable is set; reset extent is not measured. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026."
 
 [[registers.fields]]
-name = "WATCHDOG_TIMEOUT_CLEAR"
+name = "WATCHDOG_TIMEOUT_CLEAR_REQUEST"
 bits = "29"
 class = "plain"
+description = "Request clearing the watchdog timeout. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026."
 
 [[registers.fields]]
 name = "WATCHDOG_INTERRUPT_ENABLE"
 bits = "30"
 class = "plain"
+description = "Gate watchdog interrupt delivery independently of hardware reset. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026."
 
 [[registers.fields]]
-name = "WATCHDOG_ENABLE"
+name = "WATCHDOG_RESET_ENABLE"
 bits = "31"
 class = "plain"
+description = "Enable hardware BB reset on watchdog timeout; this is not a counter run gate. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026."
 
 [[registers.fields]]
 name = "BITS_0_28_OPAQUE"

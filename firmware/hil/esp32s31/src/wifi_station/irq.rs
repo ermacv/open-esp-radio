@@ -69,7 +69,12 @@ pub type WifiBound = Bound<crate::WifiToken>;
 /// The radio interrupt handler (P3): the doorbell's requests, then the MAC
 /// bank, then the WDEVPWR bank, one cause per entry.
 pub fn on_wifi(part: &mut WifiPart) {
-    if !service_wifi_line(&LINE, part) {
+    if !match service_wifi_line(&LINE, part) {
+        Ok(installed) => installed,
+        Err(oer_esp32s31_ieee80211_mac::irq::Fault::FatalAssertion { raw }) => {
+            oer_espressif_staged_runtime::wifi_fault::reset(raw)
+        }
+    } {
         ERRORS.fetch_add(1, Ordering::Relaxed);
     }
 }

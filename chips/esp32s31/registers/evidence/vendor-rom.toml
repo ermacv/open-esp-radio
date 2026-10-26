@@ -216,3 +216,7 @@ description = "ESP32-S31 rev0 ROM (esp-rom-elfs/20260528), sha256 a52ad7513deb65
 [[sources]]
 id = "ROM_REV0_PHY_FREQUENCY_PACKING"
 description = "ESP32-S31 rev0 ROM (esp-rom-elfs/20260528), sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Complete phy_wr_rf_freq_mem at 0x2f824bf4 publishes three words with mode 7. Complete phy_freq_i2c_write_set at 0x2f824d34 composes block | register << 8 | data << 16; its descriptor index byte has kind in bits 7:4 and index in bits 3:0. Complete phy_pll_cap_mem_update at 0x2f824ef0 decodes capacitor low byte and bit 14, adds the correction as u16, retains raw & 0xbf00, and ORs the low byte and the sign-extended high byte shifted left 14. Its signed spill is preserved even in the publication mode byte."
+
+[[sources]]
+id = "ROM_REV0_BB_WATCHDOG_LANES_20261026"
+description = "SOURCE: Blobray, esp-rom-elfs 20260528, esp32s31_rev0_rom.elf. phy_bb_wdt_rst_enable@0x2f8285b8/0x2f8285ca replaces WIFI_BB+c40[31], the reset-enable lane; phy_bb_wdt_int_enable@0x2f8285d4/0x2f8285ea replaces [30], the interrupt-enable gate; phy_bb_wdt_timeout_clear@0x2f8285f4/0x2f8285fe sets [29], the timeout-clear request. phy_bb_wdg_cfg@0x2f827864/0x2f827878/0x2f82787c/0x2f827886 sets reset-enable while preserving interrupt-enable. The hardware resets BB on timeout when reset-enable is set; reset extent has not been measured. No counter run gate or complete source123 service/ack relationship is established."

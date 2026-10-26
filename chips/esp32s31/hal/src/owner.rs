@@ -9,7 +9,8 @@ use crate::{
     },
     phy::i2c::PhyAdcRate,
     types::{
-        MacInterruptEnableState, MacInterruptMask, MacInterruptSnapshot, MacPowerInterruptSnapshot,
+        MacInterruptEnableState, MacInterruptMask, MacInterruptRawSnapshot, MacInterruptSnapshot,
+        MacPowerInterruptSnapshot,
     },
 };
 
@@ -663,12 +664,6 @@ impl MacInterruptRegisters {
         self.inner.mask_all_mac_interrupts();
     }
 
-    /// Acknowledge every latched MAC event through the generated image,
-    /// which masks the bank first.
-    pub fn clear_all_mac_interrupts(&mut self) {
-        self.inner.clear_all_mac_interrupts();
-    }
-
     /// Publish one reviewed MAC interrupt mask.
     pub fn publish_mac_interrupt_mask(&mut self, event_mask: MacInterruptMask) {
         self.inner.publish_mac_interrupt_mask(event_mask);
@@ -681,6 +676,16 @@ impl MacInterruptRegisters {
 
     pub fn mac_interrupt_status(&self) -> MacInterruptSnapshot {
         self.inner.mac_interrupt_status()
+    }
+
+    /// Sample unmasked MAC RAW for inspection and one acknowledgement.
+    pub fn mac_interrupt_raw(&self) -> MacInterruptRawSnapshot {
+        self.inner.mac_interrupt_raw()
+    }
+
+    /// Acknowledge only the sampled RAW events. Retain fatal samples instead.
+    pub fn acknowledge_mac_interrupt_raw(&mut self, snapshot: MacInterruptRawSnapshot) {
+        self.inner.acknowledge_mac_interrupt_raw(snapshot);
     }
 
     pub fn acknowledge_mac_interrupts(&mut self, snapshot: MacInterruptSnapshot) {

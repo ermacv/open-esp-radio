@@ -66,3 +66,20 @@ reserved-TXOP-slot adjustment is a known vendor difference, documented in
 (`VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS`).
 FE `+0x8d0[21:20]` remains opaque: its nonzero sample contributes diagnostic
 and RX-saturation observations, while estimator completion uses READY.
+
+## Wi-Fi watchdog and interrupt evidence
+
+Baseband initialization follows ROM `phy_bb_wdg_cfg`: it sets watchdog control
+low16 to `0xaa` and control30, then enables `WIFI_BB+c40[31]`, the hardware
+BB reset action on timeout. It preserves the independent interrupt-enable gate
+at [30]; [29] is the timeout-clear request. The extent of the hardware BB reset
+has not been measured. These fields do not establish a counter run gate or a
+complete source123 interrupt/status/acknowledgement lifecycle.
+SOURCE: `ROM_REV0_BB_WATCHDOG_LANES_20261026` in the register evidence.
+
+Power source122 STATUS hides masked TSF timer0/1 events while RAW retains them;
+a retained positive sample can clear them under the mask. A fresh zero STATUS
+sample cannot clear hidden RAW. The masked clear-all transaction also clears
+local timer0 pending. These stand facts do not qualify TBTT, beacon or opaque
+lanes, nor simultaneous set/clear priority.
+SOURCE: `HW8_S31_WIFI_TSF_MASK_20261026`.

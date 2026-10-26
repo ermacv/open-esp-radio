@@ -2373,8 +2373,8 @@ provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[review.entity."ENABLE.BIT_21_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
+[review.entity."ENABLE.FATAL_ASSERTION"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
 accuracy = "exact"
 
 [review.entity."ENABLE.BIT_23_OPAQUE"]
@@ -2386,12 +2386,12 @@ sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2
 provenance = "observed"
 accuracy = "exact"
 
-[review.entity."ENABLE.BIT_27_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
+[review.entity."ENABLE.WDEV_TIMER_0"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
 accuracy = "exact"
 
-[review.entity."ENABLE.BIT_28_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
+[review.entity."ENABLE.WDEV_TIMER_1"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
 accuracy = "exact"
 
 [review.entity."RAW"]
@@ -2400,9 +2400,16 @@ provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[review.entity."RAW.EVENTS"]
+[review.entity."RAW.BITS_0_20_OPAQUE"]
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC"]
+
+[review.entity."RAW.FATAL_ASSERTION"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_ISR_REGISTER_DUMP"]
 provenance = "observed"
+accuracy = "exact"
+
+[review.entity."RAW.BITS_22_31_OPAQUE"]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC"]
 
 [review.entity."STATUS"]
 sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_WDEV_PROCESS_FIQ"]
@@ -2479,8 +2486,8 @@ completeness = "complete"
 sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC", "S31_MMIO_DECLARED_20104C48"]
 accuracy = "exact"
 
-[review.entity."STATUS.BIT_21_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
+[review.entity."STATUS.FATAL_ASSERTION"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
 accuracy = "exact"
 
 [review.entity."STATUS.BIT_22_OPAQUE"]
@@ -2500,12 +2507,12 @@ accuracy = "exact"
 sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC", "S31_MMIO_DECLARED_20104C48"]
 accuracy = "exact"
 
-[review.entity."STATUS.BIT_27_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
+[review.entity."STATUS.WDEV_TIMER_0"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
 accuracy = "exact"
 
-[review.entity."STATUS.BIT_28_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
+[review.entity."STATUS.WDEV_TIMER_1"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
 accuracy = "exact"
 
 [review.entity."STATUS.BITS_29_31_OPAQUE"]
@@ -9649,10 +9656,10 @@ class = "plain"
 description = "Interrupt-enable bit whose event identity remains unknown."
 
 [[registers.fields]]
-name = "BIT_21_OPAQUE"
+name = "FATAL_ASSERTION"
 bits = "21"
 class = "plain"
-description = "Unknown event enabled by the complete cold receive mask."
+description = "Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
 
 [[registers.fields]]
 name = "BIT_22_OPAQUE"
@@ -9679,16 +9686,16 @@ class = "plain"
 description = "Interrupt-enable bits whose event identities remain unknown."
 
 [[registers.fields]]
-name = "BIT_27_OPAQUE"
+name = "WDEV_TIMER_0"
 bits = "27"
 class = "plain"
-description = "Unknown event enabled by the complete cold receive mask."
+description = "WDEV timer zero carrier used by TWT; separate from power TSF timers. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
 
 [[registers.fields]]
-name = "BIT_28_OPAQUE"
+name = "WDEV_TIMER_1"
 bits = "28"
 class = "plain"
-description = "Unknown event enabled by the complete cold receive mask."
+description = "WDEV timer one carrier used by TWT; separate from power TSF timers. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
 
 [[registers.fields]]
 name = "BITS_29_31_OPAQUE"
@@ -9699,13 +9706,27 @@ description = "Interrupt-enable bits whose event identities remain unknown."
 [[registers]]
 name = "RAW"
 offset = 0xc44
-description = "Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE."
+description = "Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE. Its event lanes correspond to ENABLE/STATUS; masking delivery does not make RAW a STATUS snapshot. SOURCE: BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
 
 [[registers.fields]]
-name = "EVENTS"
-bits = "31:0"
+name = "BITS_0_20_OPAQUE"
+bits = "20:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xffffffff }
+write-range = { min = 0, max = 0x1fffff }
+description = "Raw event observations; identities are not independently decoded here."
+
+[[registers.fields]]
+name = "FATAL_ASSERTION"
+bits = "21"
+class = "plain"
+description = "Unmasked carrier of the vendor fatal assertion path; physical producer unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026 (STATUS21 fatal consumer), BLOB_LIBPP_ISR_REGISTER_DUMP (matching raw event bank)."
+
+[[registers.fields]]
+name = "BITS_22_31_OPAQUE"
+bits = "31:22"
+class = "plain"
+write-range = { min = 0, max = 0x3ff }
+description = "Raw event observations; identities are not independently decoded here."
 
 [[registers]]
 name = "STATUS"
@@ -9797,10 +9818,10 @@ class = "read-only"
 description = "Masked event bit whose identity remains unknown."
 
 [[registers.fields]]
-name = "BIT_21_OPAQUE"
+name = "FATAL_ASSERTION"
 bits = "21"
 class = "read-only"
-description = "Masked event bit enabled by the complete cold receive mask; its event identity remains unknown."
+description = "Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
 
 [[registers.fields]]
 name = "BIT_22_OPAQUE"
@@ -9827,16 +9848,16 @@ class = "read-only"
 description = "Masked event bits whose identities remain unknown."
 
 [[registers.fields]]
-name = "BIT_27_OPAQUE"
+name = "WDEV_TIMER_0"
 bits = "27"
 class = "read-only"
-description = "Masked event bit enabled by the complete cold receive mask; its event identity remains unknown."
+description = "WDEV timer zero carrier used by TWT; separate from power TSF timers. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
 
 [[registers.fields]]
-name = "BIT_28_OPAQUE"
+name = "WDEV_TIMER_1"
 bits = "28"
 class = "read-only"
-description = "Masked event bit enabled by the complete cold receive mask; its event identity remains unknown."
+description = "WDEV timer one carrier used by TWT; separate from power TSF timers. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
 
 [[registers.fields]]
 name = "BITS_29_31_OPAQUE"
@@ -14605,3 +14626,8 @@ sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_MAC_INTERRU
 register = "RX_CONTROL"
 field = "APPEND_DESCRIPTOR_RELOAD"
 sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_GATE"]
+
+[[interrupt-pairs]]
+status = "RAW"
+clear = "CLEAR"
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT", "BLOB_LIBPP_WIFI_IRQ_FACTS_20261026"]
