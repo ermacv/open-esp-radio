@@ -136,6 +136,7 @@ fn begin(s: &mut Session<'_>, source: pac::Interrupt) {
 }
 
 pub(super) fn matrix(s: &mut Session<'_>) {
+    super::contain(s);
     feed(s);
     let inherited = s
         .interrupt_matrix
@@ -318,6 +319,7 @@ fn usb_empty(s: &mut Session<'_>, tag: u32) -> bool {
     ready
 }
 pub(super) fn usb(s: &mut Session<'_>) {
+    super::contain(s);
     usb_state(s, 0x5000); // Before probe writes, after the ROM RAM loader.
     begin(s, pac::Interrupt::USB_SERIAL_JTAG);
     usb_mask_all(s);
@@ -532,6 +534,12 @@ fn systimer(s: &mut Session<'_>, n: usize) {
         sy_state(s, 0x6030);
         admit(s, 0x6033);
         admit(s, 0x6034);
+        sy_ena(s, n, false);
+        sy_state(s, 0x6110); // Mask an already-positive enabled pending cause.
+        admit(s, 0x6113);
+        sy_ena(s, n, true);
+        sy_state(s, 0x6120);
+        admit(s, 0x6123);
         sy_work(s, n, false);
         sy_state(s, 0x6040);
         admit(s, 0x6043);
@@ -544,6 +552,13 @@ fn systimer(s: &mut Session<'_>, n: usize) {
     if sy_future(s, n, 0x6060) {
         sy_state(s, 0x6070);
         admit(s, 0x6073);
+        sy_clear(s, n); // ENA=0, WORK_EN=1.
+        wait_window();
+        sy_state(s, 0x6130);
+        // Recreate pending for the independent WORK_EN=0 / ENA=0 clear.
+        if !sy_future(s, n, 0x6133) {
+            emit(0x6134, 0, 0, 1);
+        }
         sy_work(s, n, false);
         sy_clear(s, n);
         wait_window();

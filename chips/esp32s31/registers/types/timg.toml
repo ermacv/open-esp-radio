@@ -89,7 +89,7 @@ reserved = { mask = 0xbff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SO
 name = "T_ALARM_EN"
 bits = "10"
 class = "self-clearing"
-description = "Configures whether or not to enable the timer 0 alarm function. This bit will be automatically cleared once an alarm occurs.\\\\ 0: Disable \\\\ 1: Enable \\\\"
+description = "Enables timer0 alarm; one-shot expiry clears this bit while T_EN stays set and pending RAW remains until CLR. A past target armed after a zero-RAW control immediately produced the tested alarm. SOURCE: HW7_S31_TIMG0_20261026."
 
 [[registers.fields]]
 name = "T_DIVCNT_RST"
@@ -119,7 +119,7 @@ description = "Configures the counting direction of the timer 0 time-base counte
 name = "T_EN"
 bits = "31"
 class = "hardware-written"
-description = "Configures whether or not to enable the timer 0 time-base counter. \\\\ 0: Disable \\\\ 1: Enable \\\\"
+description = "Timer0 counter enable. Stopping the counter does not acknowledge an already-pending timer0 interrupt. The tested stopped counter was stable across two captures. SOURCE: HW7_S31_TIMG0_20261026."
 
 [[registers]]
 name = "T0LO"
@@ -734,3 +734,9 @@ name = "CLK_EN"
 bits = "31"
 class = "plain"
 description = "Configures whether to enable gate clock signal for registers. \\\\ 0: Force clock on for registers \\\\ 1: Support clock only when registers are read or written to by software. \\\\"
+
+[review.entity."T0CONFIG.T_ALARM_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "HW7_S31_TIMG0_20261026"]
+
+[review.entity."T0CONFIG.T_EN"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_TIMER_GROUP_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "HW7_S31_TIMG0_20261026"]

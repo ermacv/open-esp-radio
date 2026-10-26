@@ -112370,7 +112370,7 @@ pub mod interrupt_core {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Configures the interrupt source into one CPU interrupt.
+            /// Selects the source CPU line. With FROM_CPU2 on hart0, MAP=0 suppresses line16 and local IP0 pending/delivery while the matrix source status remains active; binding/unparking to line16 delivers the retained level. This observation does not qualify all sources or harts. SOURCE: HW7_S31_MATRIX_20261026.
             #[inline]
             pub const fn map(self) -> oer_mmio::Bits<6> {
                 oer_mmio::Bits::truncate(self.0)
@@ -112382,7 +112382,7 @@ pub mod interrupt_core {
                 Map::from_bits(self.0 & 0x3f)
             }
 
-            /// Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level.
+            /// Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level. SOURCE: HW7_S31_MATRIX_20261026 observes selected source routes inheriting zero after ROM RAM loading. On hart0 FROM_CPU2 with NMBITS=0, writes 0/1/2/3 read back and each delivers to the machine-mode line. This does not qualify S-mode or other sources.
             #[inline]
             pub const fn pass_level(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
@@ -112393,7 +112393,7 @@ pub mod interrupt_core {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Configures the interrupt source into one CPU interrupt.
+            /// Selects the source CPU line. With FROM_CPU2 on hart0, MAP=0 suppresses line16 and local IP0 pending/delivery while the matrix source status remains active; binding/unparking to line16 delivers the retained level. This observation does not qualify all sources or harts. SOURCE: HW7_S31_MATRIX_20261026.
             #[inline]
             pub const fn map(&self) -> oer_mmio::Bits<6> {
                 oer_mmio::Bits::truncate(self.0)
@@ -112405,7 +112405,7 @@ pub mod interrupt_core {
                 Map::from_bits(self.0 & 0x3f)
             }
 
-            /// Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level.
+            /// Set as Non-zero value to enable interrupt-remap feature of the interrupt source. 0=disable remap feature. 1=enable remap feature with S-Level. 2/3=enable remap feature with M-Level. SOURCE: HW7_S31_MATRIX_20261026 observes selected source routes inheriting zero after ROM RAM loading. On hart0 FROM_CPU2 with NMBITS=0, writes 0/1/2/3 read back and each delivers to the machine-mode line. This does not qualify S-mode or other sources.
             #[inline]
             pub const fn pass_level(&self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
@@ -112468,7 +112468,7 @@ pub mod interrupt_core {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Represents the status of the interrupt sources within interrupt-index-range 0 ~ 31. Each bit corresponds to one interrupt source 0:The corresponding interrupt source triggered an interrupt 1:No interrupt triggered Bit k is set while source 0 + k raises its interrupt.
+            /// Source status for indices 0 through 31. Tested hart0 USB2 and TIMG0 T0/source25 status is active-high. FROM_CPU2 status remains high while its route is parked; status is not a CPU-delivery indication. Other lanes and hart1 are not qualified by this observation. SOURCE: HW7_S31_MATRIX_20261026.
             #[inline]
             pub const fn int_status_0(self) -> u32 {
                 self.0
@@ -112500,7 +112500,7 @@ pub mod interrupt_core {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Represents the status of the interrupt sources within interrupt-index-range 32 ~ 63. Each bit corresponds to one interrupt source 0:The corresponding interrupt source triggered an interrupt 1:No interrupt triggered Bit k is set while source 32 + k raises its interrupt.
+            /// Source status for indices 32 through 63. Tested hart0 SYSTIMER target0/1 sources33/34 status is active-high. FROM_CPU2 status remains high while its route is parked; status is not a CPU-delivery indication. Other lanes and hart1 are not qualified by this observation. SOURCE: HW7_S31_MATRIX_20261026.
             #[inline]
             pub const fn int_status_1(self) -> u32 {
                 self.0
@@ -112532,7 +112532,7 @@ pub mod interrupt_core {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Represents the status of the interrupt sources within interrupt-index-range 64 ~ 95. Each bit corresponds to one interrupt source 0:The corresponding interrupt source triggered an interrupt 1:No interrupt triggered Bit k is set while source 64 + k raises its interrupt.
+            /// Source status for indices 64 through 95. Tested hart0 FROM_CPU2/source67 status is active-high. FROM_CPU2 status remains high while its route is parked; status is not a CPU-delivery indication. Other lanes and hart1 are not qualified by this observation. SOURCE: HW7_S31_MATRIX_20261026.
             #[inline]
             pub const fn int_status_2(self) -> u32 {
                 self.0
@@ -233189,13 +233189,13 @@ pub mod systimer {
                 (self.0 & 0x00400000) != 0
             }
 
-            /// Configures whether or not to enable COMP1. See details in SYSTIMER_TARGET2_WORK_EN. Enables comparator 1.
+            /// Enables comparator 1. Clearing WORK_EN stops the producer but retains an already-pending RAW/ST and interrupt output in the tested one-shot. Masking INT_ENA and acknowledging CLR are separate operations. SOURCE: HW7_S31_SYSTIMER_20261026.
             #[inline]
             pub const fn target1_work_en(self) -> bool {
                 (self.0 & 0x00800000) != 0
             }
 
-            /// Configures whether or not to enable COMP0. See details in SYSTIMER_TARGET2_WORK_EN. Enables comparator 0.
+            /// Enables comparator 0. Clearing WORK_EN stops the producer but retains an already-pending RAW/ST and interrupt output in the tested one-shot. Masking INT_ENA and acknowledging CLR are separate operations. SOURCE: HW7_S31_SYSTIMER_20261026.
             #[inline]
             pub const fn target0_work_en(self) -> bool {
                 (self.0 & 0x01000000) != 0
@@ -233260,13 +233260,13 @@ pub mod systimer {
                 (self.0 & 0x00400000) != 0
             }
 
-            /// Configures whether or not to enable COMP1. See details in SYSTIMER_TARGET2_WORK_EN. Enables comparator 1.
+            /// Enables comparator 1. Clearing WORK_EN stops the producer but retains an already-pending RAW/ST and interrupt output in the tested one-shot. Masking INT_ENA and acknowledging CLR are separate operations. SOURCE: HW7_S31_SYSTIMER_20261026.
             #[inline]
             pub const fn target1_work_en(&self) -> bool {
                 (self.0 & 0x00800000) != 0
             }
 
-            /// Configures whether or not to enable COMP0. See details in SYSTIMER_TARGET2_WORK_EN. Enables comparator 0.
+            /// Enables comparator 0. Clearing WORK_EN stops the producer but retains an already-pending RAW/ST and interrupt output in the tested one-shot. Masking INT_ENA and acknowledging CLR are separate operations. SOURCE: HW7_S31_SYSTIMER_20261026.
             #[inline]
             pub const fn target0_work_en(&self) -> bool {
                 (self.0 & 0x01000000) != 0
@@ -235205,7 +235205,7 @@ pub mod timg {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Configures whether or not to enable the timer 0 alarm function. This bit will be automatically cleared once an alarm occurs.\\ 0: Disable \\ 1: Enable \\
+            /// Enables timer0 alarm; one-shot expiry clears this bit while T_EN stays set and pending RAW remains until CLR. A past target armed after a zero-RAW control immediately produced the tested alarm. SOURCE: HW7_S31_TIMG0_20261026.
             #[inline]
             pub const fn t_alarm_en(self) -> bool {
                 (self.0 & 0x00000400) != 0
@@ -235229,7 +235229,7 @@ pub mod timg {
                 (self.0 & 0x40000000) != 0
             }
 
-            /// Configures whether or not to enable the timer 0 time-base counter. \\ 0: Disable \\ 1: Enable \\
+            /// Timer0 counter enable. Stopping the counter does not acknowledge an already-pending timer0 interrupt. The tested stopped counter was stable across two captures. SOURCE: HW7_S31_TIMG0_20261026.
             #[inline]
             pub const fn t_en(self) -> bool {
                 (self.0 & 0x80000000) != 0
@@ -245744,7 +245744,7 @@ pub mod usb_serial_jtag {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// The raw interrupt bit turns to high level when Serial Port IN Endpoint is empty.
+            /// Latched serial IN empty event. In the tested ROM-loader session, CLR deasserts it despite continued FIFO availability and it remains low for the observation window; consuming a new probe byte creates another event. ENA=0 preserves pending and retained-snapshot CLR works while masked. This is not a continuously reasserting FIFO-empty level. SOURCE: HW7_S31_USB_20261026.
             #[inline]
             pub const fn serial_in_empty_int_raw(self) -> bool {
                 (self.0 & 0x00000008) != 0
@@ -245879,7 +245879,7 @@ pub mod usb_serial_jtag {
                 }
             }
 
-            /// The raw interrupt bit turns to high level when Serial Port IN Endpoint is empty.
+            /// Latched serial IN empty event. In the tested ROM-loader session, CLR deasserts it despite continued FIFO availability and it remains low for the observation window; consuming a new probe byte creates another event. ENA=0 preserves pending and retained-snapshot CLR works while masked. This is not a continuously reasserting FIFO-empty level. SOURCE: HW7_S31_USB_20261026.
             #[inline]
             pub const fn serial_in_empty_int_raw(&self) -> bool {
                 (self.0 & 0x00000008) != 0

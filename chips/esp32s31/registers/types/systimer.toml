@@ -25,10 +25,10 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PAC
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
 
 [review.entity."CONF.TARGET1_WORK_EN"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER", "HW7_S31_SYSTIMER_20261026"]
 
 [review.entity."CONF.TARGET0_WORK_EN"]
-sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER", "HW7_S31_SYSTIMER_20261026"]
 
 [review.entity."CONF.TIMER_UNIT1_CORE1_STALL_EN"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD", "ESP_IDF_4D59230D_S31_SYSTIMER"]
@@ -149,13 +149,13 @@ description = "Configures whether or not to enable COMP2.\\\\ 0: Disable\\\\ 1: 
 name = "TARGET1_WORK_EN"
 bits = "23"
 class = "plain"
-description = "Configures whether or not to enable COMP1. See details in SYSTIMER_TARGET2_WORK_EN. Enables comparator 1."
+description = "Enables comparator 1. Clearing WORK_EN stops the producer but retains an already-pending RAW/ST and interrupt output in the tested one-shot. Masking INT_ENA and acknowledging CLR are separate operations. SOURCE: HW7_S31_SYSTIMER_20261026."
 
 [[registers.fields]]
 name = "TARGET0_WORK_EN"
 bits = "24"
 class = "plain"
-description = "Configures whether or not to enable COMP0. See details in SYSTIMER_TARGET2_WORK_EN. Enables comparator 0."
+description = "Enables comparator 0. Clearing WORK_EN stops the producer but retains an already-pending RAW/ST and interrupt output in the tested one-shot. Masking INT_ENA and acknowledging CLR are separate operations. SOURCE: HW7_S31_SYSTIMER_20261026."
 
 [[registers.fields]]
 name = "TIMER_UNIT1_CORE1_STALL_EN"
