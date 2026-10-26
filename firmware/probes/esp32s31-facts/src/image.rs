@@ -184,6 +184,46 @@ struct Probe {
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
     Probe {
+        id: 96,
+        run: ble_wave2::lp_clear,
+    },
+    Probe {
+        id: 97,
+        run: ble_wave2::sleep16,
+    },
+    Probe {
+        id: 98,
+        run: ble_wave2::sleep_other,
+    },
+    Probe {
+        id: 99,
+        run: ble_wave2::shutdown_soft,
+    },
+    Probe {
+        id: 100,
+        run: ble_wave2::shutdown_wrap,
+    },
+    Probe {
+        id: 91,
+        run: ble_wave2::mapping,
+    },
+    Probe {
+        id: 92,
+        run: ble_wave2::masks,
+    },
+    Probe {
+        id: 93,
+        run: ble_wave2::controls,
+    },
+    Probe {
+        id: 94,
+        run: ble_wave2::groups,
+    },
+    Probe {
+        id: 95,
+        run: ble_wave2::arrivals,
+    },
+    Probe {
         id: 90,
         run: ble_wave2::prerequisite,
     },
@@ -360,6 +400,8 @@ extern "C" fn facts_main() -> ! {
             pmu: p.radio_phy.pmu_radio,
             watchdog: p.watchdog.lp_wdt,
             positional: p.bluetooth.ble_hw_positional_word1ff0,
+            etm: p.modem_etm.modem_etm_bluetooth,
+            task_irq: p.bluetooth.btmac_ble_phy_init,
         },
     };
     let source = ptr::addr_of!(source_owner).cast_mut();

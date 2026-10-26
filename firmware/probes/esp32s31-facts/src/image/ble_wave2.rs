@@ -2,6 +2,11 @@
 use super::{Session, ble, contain, emit, pac};
 use oer_mmio::Bits;
 
+mod lp;
+mod mac;
+pub(super) use lp::{lp_clear, shutdown_soft, shutdown_wrap, sleep_other, sleep16};
+pub(super) use mac::{arrivals, controls, groups, mapping, masks};
+
 const LIMIT: u32 = 200_000;
 
 fn window(cycles: u32) {
@@ -39,7 +44,7 @@ fn capture(s: &mut Session<'_>, tag: u32) -> Option<u32> {
     }
 }
 
-pub(super) fn prerequisite(s: &mut Session<'_>) {
+fn setup(s: &mut Session<'_>) {
     oer_riscv::disable_interrupts();
     contain(s);
     ble::clocks(&mut s.ble);
@@ -124,11 +129,78 @@ pub(super) fn prerequisite(s: &mut Session<'_>) {
             .set_timer_arm(true);
     });
     oer_riscv::fence();
+}
+
+pub(super) fn prerequisite(s: &mut Session<'_>) {
+    setup(s);
     let first = capture(s, 0x9010);
     window(4096);
     let second = capture(s, 0x9020);
     emit(
         0x9030,
+        u32::from(first.is_some()),
+        u32::from(second.is_some()),
+        match (first, second) {
+            (Some(a), Some(b)) => b.wrapping_sub(a),
+            _ => 0,
+        },
+    );
+    // SOURCE: current HAL standalone shift=3; its upper byte is preserved.
+    // The older scale-sixteen initialization clears CONFIG_24. Separate this
+    // sourced mode from the earlier probe's scale-eight CONFIG_24=1 recipe.
+    s.ble.core.modify_btlc_timer_control(|w| {
+        w.set_clock_shift(Bits::constant::<3>())
+            .set_config_24(false);
+    });
+    pair(s, 0x9040);
+    // SOURCE: current controller-enable leaf writes CONTROL0=1 before its
+    // public interrupt allocation. This command publishes no scheduler RUN.
+    s.ble.bank.write_irq_control_0(|w| {
+        w.set_command(pac::bt_mac::irq_control_0::Command::Command1.bits());
+    });
+    oer_riscv::fence();
+    pair(s, 0x9080);
+    // SOURCE: current BTDM runtime preparation. Establish its separate LP
+    // counter prerequisite without PHY/RF initialization or an IRQ route.
+    let b = &mut s.ble;
+    b.lp_clock.modify_lp_timer_conf(|w| {
+        w.set_clk_lp_timer_sel_osc_slow(false)
+            .set_clk_lp_timer_sel_osc_fast(false)
+            .set_clk_lp_timer_sel_xtal32k(false)
+            .set_clk_lp_timer_sel_xtal(true)
+            .set_clk_lp_timer_div_num(Bits::constant::<1>());
+    });
+    b.timer.write_word_004c_opaque(|w| {
+        w.set_bits_0_31_opaque(0);
+    });
+    b.timer.modify_word_0078_opaque(|w| {
+        w.set_control_25(true);
+    });
+    b.timer.prepare_bluetooth_modem_lp_timer_command_0004();
+    b.timer.prepare_bluetooth_modem_lp_timer_command_0008();
+    b.timer.prepare_bluetooth_modem_lp_timer_command_0014();
+    b.timer.prepare_bluetooth_modem_lp_timer_command_0034();
+    b.timer.clear_bluetooth_modem_lp_timer_state_0024();
+    b.timer.clear_bluetooth_modem_lp_timer_state_002c();
+    b.timer.write_runtime_timer_start_command(
+        pac::modem_pwr::runtime_timer_start_command::Command::Start,
+        |_| {},
+    );
+    oer_riscv::fence();
+    pair(s, 0x90c0);
+    s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0014();
+    s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0004();
+    s.ble.timer.clear_bluetooth_modem_lp_timer_state_0024();
+    s.ble.timer.clear_bluetooth_modem_lp_timer_state_002c();
+    oer_riscv::fence();
+}
+
+fn pair(s: &mut Session<'_>, tag: u32) {
+    let first = capture(s, tag);
+    window(4096);
+    let second = capture(s, tag + 0x10);
+    emit(
+        tag + 0x20,
         u32::from(first.is_some()),
         u32::from(second.is_some()),
         match (first, second) {
