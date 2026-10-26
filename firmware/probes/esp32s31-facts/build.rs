@@ -76,7 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 MEMORY {{ SRAM (rwx) : ORIGIN = {base:#x}, LENGTH = {length:#x}
 LP (rw) : ORIGIN = {lp:#x}, LENGTH = 0x100 }}
 SECTIONS {{
-.text : ALIGN(64) {{ KEEP(*(.text._start)) *(.text .text.*) *(.trap.runtime) }} > SRAM
+.text : ALIGN(64) {{ KEEP(*(.text._start)) *(.text.facts_threshold_raise) *(.text .text.*) *(.trap.runtime) }} > SRAM
 .trap.mtvt : ALIGN({align}) {{ KEEP(*(.trap.mtvt)) }} > SRAM
 .rodata : ALIGN(4) {{ *(.rodata .rodata.*) }} > SRAM
 .data : ALIGN(4) {{ __global_pointer$ = . + 0x800; *(.sdata .sdata.*) *(.data .data.*) }} > SRAM

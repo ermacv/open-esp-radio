@@ -51,9 +51,9 @@ j 1b
     mie = const oer_riscv::machine::status::MIE,
 );
 
-// SAFETY: these controlled admission entries use the C ABI, preserve callee
-// registers and write only the six-word exclusive output passed by the caller.
-// The installed trap ABI preserves their temporaries if the pending IRQ enters.
+// SAFETY: these controlled admission entries preserve C-ABI callee registers
+// and write only the caller's six-word output. Their live shared PAC borrow
+// reaches the typed Rust raise thunk; the trap ABI preserves interrupted state.
 core::arch::global_asm!(
     include_str!("threshold-entry.s"),
     mie = const oer_riscv::machine::status::MIE,
@@ -67,17 +67,12 @@ unsafe extern "C" {
     safe static __runtime_cpu0_irq_stack_top: [u8; 0];
 }
 
-// SAFETY: each entry requires masked interrupts, an installed trap stack and
-// an exclusive six-word output; threshold_raising establishes all three.
+type ThresholdEntry = unsafe extern "C" fn(*mut [u32; 6], *const pac::hp_system::FromCpu2, u32);
+// SAFETY: the assembly defines 25 rows of eight valid C-ABI entry pointers.
+// Each requires masked interrupts, an installed trap stack, a live shared PAC
+// source and an exclusive six-word output; threshold_raising supplies these.
 unsafe extern "C" {
-    fn facts_threshold_0(output: *mut [u32; 6], threshold: u32);
-    fn facts_threshold_1(output: *mut [u32; 6], threshold: u32);
-    fn facts_threshold_2(output: *mut [u32; 6], threshold: u32);
-    fn facts_threshold_3(output: *mut [u32; 6], threshold: u32);
-    fn facts_threshold_4(output: *mut [u32; 6], threshold: u32);
-    fn facts_threshold_5(output: *mut [u32; 6], threshold: u32);
-    fn facts_threshold_6(output: *mut [u32; 6], threshold: u32);
-    fn facts_threshold_7(output: *mut [u32; 6], threshold: u32);
+    safe static _facts_threshold_entries: [[ThresholdEntry; 8]; 25];
 }
 
 /// Word 0: completion marker; word 1: number of four-word records starting at 2.
@@ -90,6 +85,10 @@ static FACTS_OUTPUT: [AtomicU32; 514] = [const { AtomicU32::new(0) }; 514];
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".data.facts_request")]
 static FACTS_REQUEST: AtomicU32 = AtomicU32::new(u32::MAX);
+/// Selection 9 sweeps one K per command to keep the existing output bounded.
+// SAFETY: unique selector; the debugger writes only while hart 0 is halted.
+#[unsafe(no_mangle)]
+static FACTS_THRESHOLD_K: AtomicU32 = AtomicU32::new(0);
 
 // SAFETY: these aligned LP words are excluded from loading/startup clearing;
 // all u32 bit patterns are valid, and only the masked thread publishes them.
@@ -476,42 +475,54 @@ fn latency(s: &mut Session<'_>) {
     }
 }
 
+// SAFETY: the admission entries call this with main's live shared PAC owner.
+// Keep it out of line so its one typed store and return can be audited in ELF.
+#[unsafe(no_mangle)]
+#[unsafe(link_section = ".text.facts_threshold_raise")]
+#[inline(never)]
+extern "C" fn facts_threshold_raise(source: &pac::hp_system::FromCpu2) {
+    source.store_hp_cpu_int_from_cpu_2(true);
+}
+
 fn threshold_raising(s: &mut Session<'_>) {
-    let entries: [unsafe extern "C" fn(*mut [u32; 6], u32); 8] = [
-        facts_threshold_0,
-        facts_threshold_1,
-        facts_threshold_2,
-        facts_threshold_3,
-        facts_threshold_4,
-        facts_threshold_5,
-        facts_threshold_6,
-        facts_threshold_7,
-    ];
+    let k = FACTS_THRESHOLD_K.load(Ordering::Acquire);
+    let Some(entries) = _facts_threshold_entries.get(k as usize) else {
+        emit(0xed, 9, k, 0);
+        return;
+    };
     setup(s);
     route_source(s);
     line(s, CONTROLS[0], false);
-    for (variant, entry) in entries.into_iter().enumerate() {
+    emit(0x95, k, u32::from(CONTROLS[0]), u32::from(CONTROLS[1]));
+    for (variant, &entry) in entries.iter().enumerate() {
         for sample in 0..3 {
             oer_riscv::disable_interrupts();
             s.source.store_hp_cpu_int_from_cpu_2(false);
+            oer_riscv::fence();
             oer_riscv::restore_interrupt_threshold(0);
             IRQ_COUNT.store(0, Ordering::Relaxed);
             IRQ_CYCLE.store(0, Ordering::Relaxed);
             IRQ_PC.store(0, Ordering::Relaxed);
-            raise(s);
             let pending = s.interrupt_matrix.clic.read_ctrl(CPU_LINE).ip();
             let mut marks = [0; 6];
             // SAFETY: setup installed the exclusive IRQ stack; MIE is masked,
-            // marks is a live exclusive six-word buffer. The entry enables
-            // MIE immediately before raising the threshold, then masks on exit.
-            unsafe { entry(&raw mut marks, u32::from(CONTROLS[1])) };
+            // source is main's live shared PAC owner, marks is exclusive. The
+            // entry enables MIE, calls the typed raise without readback, runs
+            // unrolled K NOPs, raises the ceiling and masks MIE before returning.
+            unsafe {
+                entry(
+                    &raw mut marks,
+                    ptr::from_ref(s.source),
+                    u32::from(CONTROLS[1]),
+                )
+            };
             let count = IRQ_COUNT.load(Ordering::Relaxed);
             let pc = IRQ_PC.load(Ordering::Relaxed);
             let cycle = IRQ_CYCLE.load(Ordering::Relaxed);
+            // Let the source propagate with MIE off and the ceiling still high.
+            // This pending sample is outside the timed instruction window.
+            wait_window();
             let still_pending = s.interrupt_matrix.clic.read_ctrl(CPU_LINE).ip();
-            // Release after recording the critical window: an IRQ delivered
-            // before the write has consumed the source and is not a valid
-            // masked-pending trial. PC and pending distinguish these outcomes.
             oer_riscv::restore_interrupt_threshold(0);
             oer_riscv::enable_interrupts();
             wait_window();

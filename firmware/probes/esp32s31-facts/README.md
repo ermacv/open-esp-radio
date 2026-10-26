@@ -42,7 +42,7 @@ ROM-loader entry after software reset, without another reset. Selections:
 | 6 | Full-width boot-address writes/readback while hart1 is held |
 | 7 | UART restore, other-core reset preparation, LP reason publication, system reset |
 | 8 | Retained reason, UART and reset-cause observation after that reset |
-| 9 | Pending-interrupt threshold raise: 0–3 NOPs, with/without readback, three repeats each |
+| 9 | Raise-to-ceiling race for FACTS_THRESHOLD_K (0–24): eight NOP/readback variants, three repeats each |
 
 `FACTS_OUTPUT` has 514 little-endian words: completion marker, record count,
 then four-word records `(tag, a, b, c)`. Marker `0xfac70001` means completed;
@@ -62,17 +62,26 @@ not production PSRAM; the image does not reproduce scheduling, load, cache
 contention or a running product's clocks. Cycle samples characterize this
 isolated entry path, not a worst-case latency guarantee.
 
-Selection 9 arms FROM_CPU2 at CTL 0x1f with threshold zero and MIE masked.
-Each controlled admission entry enables MIE immediately before writing threshold
-0x3f, executes the selected NOP/readback sequence, timestamps and masks MIE.
-Records 0x90–0x94 give variant (0–3: no readback, 4–7: readback), repeat,
-initial pending; start/end/handler mcycle; entry count/interrupted PC/write PC;
-first post-write PC/mask PC/readback (all ones if absent); pending after the
-window/total entries after release/CTL. The assembly disables compressed
-instructions, so PC offsets identify each instruction boundary exactly.
-A handler entry at or before the write PC consumed the source before raising;
-it cannot confirm masking or a readback requirement. A still-pending source
-with no entry is released only after the critical window has been recorded.
+Selection 9 starts FROM_CPU2 inactive at CTL 0x1f and threshold zero.
+While halted, publish `FACTS_THRESHOLD_K` (0–24) before `FACTS_REQUEST=9`.
+Each entry enables MIE, calls a typed PAC store thunk without readback,
+executes K unrolled NOPs, writes ceiling 0x3f, executes 0–3 NOPs and optionally
+reads the threshold back, timestamps and masks MIE. The thunk's single fixed
+`ret` lies between the store and K NOPs; disassembly must confirm this boundary.
+The linker places it below every entry, so a saved PC before/on/after the
+ceiling write can be compared numerically without confusing the call path.
+
+A command emits 0x95 `(K, CTL, ceiling)` followed by 0x90–0x94 per trial:
+variant (0–3: no readback, 4–7: readback), repeat, initial pending;
+start/end/handler mcycle; entry count/interrupted PC/write PC;
+first post-write PC/MIE-mask PC/readback (all ones if absent);
+settled pending/total entries after release/CTL. Pending is sampled after a
+4096-cycle settle with MIE off and the ceiling still high; it is outside the
+timed window. Each trial then lowers the threshold and checks delivery.
+One K per command keeps the existing output buffer bounded to 121 records.
+There are no loops in the K or post-write instruction delays; the eight
+variants each run three times. Sweep K=0–24 once to locate the admission
+boundary, rather than repeating captures as a qualification series.
 
 Reading ATTR_MODE=3 does not establish that writes are ignored: the current
 read-only PAC field has no setter. Likewise, a zero LP wakeup flag before and

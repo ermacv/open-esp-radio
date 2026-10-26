@@ -50888,7 +50888,7 @@ pub mod cache {
 /// The `CLIC` block type.
 ///
 /// The core-local interrupt controller (CLIC) of the hart that accesses it.
-/// Words 0x0-0x1000: The core-local interrupt controller of the hart that accesses it, as 32-bit words: each line's word holds its pending, enable, attribute and control bytes. Production-router invariant: its bound vectored lines are level-triggered, so a write of the word that changes its enable or control writes back the pending bit read without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). INT_CONFIG holds the number of level bits of each line's control byte. SOURCE: HW1_S31_CLIC_20261026 confirms one software-pending positive-edge vector on external line 16; this does not make concurrent whole-word edge updates safe.
+/// Words 0x0-0x1000: The core-local interrupt controller of the hart that accesses it, as 32-bit words: each line's word holds its pending, enable, attribute and control bytes. Production-router invariant: its bound vectored lines are level-triggered, so a write of the word that changes its enable or control writes back the pending bit read without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). INT_CONFIG holds the number of level bits of each line's control byte. SOURCE: HW1_S31_CLIC_20261026 confirms one software-pending positive-edge vector on external line 16; this does not make concurrent whole-word edge updates safe. SOURCE: HW1_S31_THRESHOLD_20261026 observes no handler entry after raising CSR mintthresh to 0x3f for CTL 0x1f in a 600-trial propagation-boundary sweep, including zero post-write NOPs and no readback; this is distinct from the legacy MMIO threshold.
 pub mod clic {
     /// The `INT_CONFIG` register.
     ///
