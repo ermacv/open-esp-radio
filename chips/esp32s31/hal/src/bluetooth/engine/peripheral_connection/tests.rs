@@ -47,6 +47,7 @@ fn workspace() -> DirectionFindingWorkspaceLink {
     DirectionFindingWorkspaceStorage::place::<crate::bluetooth::engine::HostDma<0x2f02_0000>>(
         crate::dma_static::Placed::host(storage),
     )
+    .expect("workspace projection")
     .binding()
     .link()
 }

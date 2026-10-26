@@ -50,7 +50,8 @@ fn one_bluetooth_static_claims_and_initializes_every_owner_from_zero() {
         phy.le_1m_packet_start_calibration(),
         BlePhyLe1MPacketStartCalibration::le_1m()
     );
-    let df = DirectionFindingWorkspaceStorage::place::<HostDma<0x2f01_0000>>(df);
+    let df = DirectionFindingWorkspaceStorage::place::<HostDma<0x2f01_0000>>(df)
+        .expect("workspace projection");
     assert!(df.is_disabled_baseline_initialized());
     let devices = LeDeviceTable::place::<HostDma<0x2f01_1000>>(devices);
     assert!(devices.is_empty());

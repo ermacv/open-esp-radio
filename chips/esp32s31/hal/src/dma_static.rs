@@ -77,12 +77,31 @@ impl<T: 'static> Placed<T> {
     #[allow(unsafe_code, reason = "the consumed Placed proves static DMA storage")]
     pub(crate) fn into_dma_parts<S: crate::ieee80211::dma::space::DmaSpace>(
         self,
-    ) -> Option<(&'static mut T, oer_memory::StableDmaRange<'static>)> {
+    ) -> Option<(
+        &'static mut T,
+        oer_memory::StableDmaRange<'static>,
+        crate::dma_address::PlacementProjection,
+    )> {
         let start = S::address(self.value, core::ptr::from_ref(self.value))?;
+        let projection = self.projection(start);
         // SAFETY: Placed owns this unique static allocation in the DMA window.
         // The returned storage owner must synchronize access for its complete
         // DMA lifecycle; the proof contains no reference aliasing that owner.
         unsafe { oer_memory::StableDmaRange::from_owner(self.value, start) }
+            .map(|(storage, range)| (storage, range, projection))
+    }
+
+    pub(crate) fn as_ref(&self) -> &T {
+        self.value
+    }
+
+    pub(crate) fn cpu_address(&self) -> usize {
+        core::ptr::from_ref(self.value).addr()
+    }
+
+    /// Geometry accompanies the consumed allocation's range proof.
+    pub(crate) fn projection(&self, base: u32) -> crate::dma_address::PlacementProjection {
+        crate::dma_address::PlacementProjection::from_placed(self, base)
     }
 
     /// The placed value.
@@ -230,7 +249,16 @@ mod sealed {
 /// A stable DMA backing whose bytes lie in the DMA window: a
 /// [`PlacedTxLease`], or a pool wrapper around one. Sealed: placement is the
 /// HAL's to prove, so DMA engines may publish its address unchecked.
-pub trait PlacedBacking: StableDmaBacking + sealed::Sealed {}
+pub trait PlacedBacking: StableDmaBacking + sealed::Sealed {
+    /// Sample the retained placed region once in the owner's sealed address space.
+    fn dma_region(
+        &mut self,
+        space: crate::dma_address::PlacedDmaSpace,
+    ) -> Result<(&mut [u8], crate::dma_address::PlacedRegion), crate::dma_address::ProjectionError>
+    {
+        crate::dma_address::backing_region(self, space)
+    }
+}
 
 impl<L> sealed::Sealed for PlacedTxLease<L> {}
 impl<L: StableDmaBacking> PlacedBacking for PlacedTxLease<L> {}

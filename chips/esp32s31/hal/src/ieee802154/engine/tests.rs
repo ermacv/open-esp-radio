@@ -66,7 +66,8 @@ fn model() -> (
         levels,
         Ieee802154PibDefaults::default(),
         start,
-    );
+    )
+    .expect("placed frame geometry");
     (engine, rx, tx)
 }
 

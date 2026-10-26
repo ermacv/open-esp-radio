@@ -15,8 +15,27 @@
 #[cfg(any(test, feature = "test-support"))]
 pub const HOST_ARENA_BASE: u32 = crate::layouts::DMA_WINDOW.start + 0x1000;
 
-/// How an arena's fields are addressed by DMA.
-pub trait DmaSpace: 'static {
+mod sealed {
+    pub trait Sealed {}
+}
+
+impl sealed::Sealed for ChipDma {}
+#[cfg(any(test, feature = "test-support"))]
+impl sealed::Sealed for HostDma {}
+
+/// How an arena's fields are addressed by DMA. Sealed so a safe caller cannot
+/// substitute an unrelated allocation's DMA address.
+///
+/// ```compile_fail,E0277
+/// use oer_esp32s31_hal::ieee80211::dma::space::DmaSpace;
+/// enum Relocated {}
+/// impl DmaSpace for Relocated {
+///     fn address<A: ?Sized, F: ?Sized>(_: &A, _: *const F) -> Option<u32> {
+///         Some(0x2f00_1000)
+///     }
+/// }
+/// ```
+pub trait DmaSpace: sealed::Sealed + 'static {
     /// The DMA address of `field`, a field of the arena at `arena`, or
     /// `None` when it has none in this space.
     fn address<Arena: ?Sized, Field: ?Sized>(arena: &Arena, field: *const Field) -> Option<u32>;

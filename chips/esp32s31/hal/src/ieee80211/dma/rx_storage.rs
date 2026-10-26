@@ -766,24 +766,31 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         placed: Placed<Self>,
         rotation: usize,
     ) -> Result<PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>, RxDmaStorageError> {
-        let storage = placed.into_inner();
+        let (storage, _range, projection) = placed
+            .into_dma_parts::<S>()
+            .ok_or(RxDmaStorageError::AddressWidth)?;
         storage.validate_descriptor_rotation(rotation)?;
         for descriptor_index in 0..COUNT {
             let buffer_id = (descriptor_index + rotation) % COUNT;
-            let address = storage.placed_buffer_address(&storage.buffers[buffer_id])?;
+            let address = projection
+                .address(&storage.buffers[buffer_id])
+                .map_err(|_| RxDmaStorageError::AddressWidth)?;
             storage.buffer_addresses.record(descriptor_index, address);
         }
         storage.bind_descriptor_rotation(rotation)?;
-        let base = storage.descriptor_base_address()?;
-        // SAFETY: `base` is the DMA address of this placed storage's
-        // descriptor table: COUNT ring descriptors and R behind them,
-        // 12-byte and aligned (`RxDescriptorTable` is `repr(C)`). The
-        // consumed `Placed` proves the static lies in the DMA window, and
-        // the `'static` storage stays allocated for every DMA epoch.
-        #[allow(unsafe_code, reason = "the placed RX arena's descriptor table")]
-        let descriptors = unsafe { RxDescriptorAddresses::new(base, COUNT + 1) }
-            .ok_or(RxDmaStorageError::AddressWidth)?;
-        let reserved_buffer = storage.placed_buffer_address(&storage.reserved_buffer)?;
+        let descriptors = projection
+            .table(
+                storage
+                    .descriptors
+                    .ring()
+                    .iter()
+                    .chain(core::iter::once(storage.descriptors.reserved()))
+                    .map(|descriptor| descriptor.layout()),
+            )
+            .map_err(|_| RxDmaStorageError::AddressWidth)?;
+        let reserved_buffer = projection
+            .address(&storage.reserved_buffer)
+            .map_err(|_| RxDmaStorageError::AddressWidth)?;
         Ok(PlacedRxDma {
             storage,
             descriptors,
@@ -1336,25 +1343,6 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         buffer: &RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>,
     ) -> Result<u32, RxDmaStorageError> {
         S::address(self, buffer.0.get()).ok_or(RxDmaStorageError::AddressWidth)
-    }
-
-    /// The typed DMA address of `buffer`, one of this placed arena's
-    /// buffers.
-    ///
-    /// Only [`Self::place_rotated`] calls it, with the storage the consumed
-    /// `Placed` proved to lie in the DMA window.
-    #[allow(unsafe_code, reason = "a buffer of the placed RX arena")]
-    fn placed_buffer_address(
-        &self,
-        buffer: &RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>,
-    ) -> Result<DmaWindowAddress, RxDmaStorageError> {
-        let address = self.buffer_dma_address(buffer)?;
-        // SAFETY: `address` is the DMA address of a buffer of this storage,
-        // which `place_rotated` received as a consumed `Placed`: the link
-        // keeps it in the DMA window and the `'static` storage stays
-        // allocated for every DMA epoch. A host model's synthetic address is
-        // recorded, never dereferenced.
-        Ok(unsafe { crate::dma_address::placed(address) })
     }
 }
 

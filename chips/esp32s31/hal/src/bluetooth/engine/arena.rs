@@ -54,6 +54,7 @@ pub enum ArenaError {
     Receive(LeRxChainPlaceError),
     SchedulerCapacity,
     EpochExhausted,
+    Placement(crate::dma_address::ProjectionError),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -267,9 +268,22 @@ impl<
         let Some(installation) = EngineEpoch::allocate(&EPOCHS) else {
             return Err((ArenaError::EpochExhausted, clocked, placed));
         };
+        let (storage, placement) = Placement::<D>::take(placed);
+        let df_binding = match direction_finding_workspace::DirectionFindingWorkspaceBinding::new(
+            &storage.0.1.0,
+            &placement,
+        ) {
+            Ok(binding) => binding,
+            Err(error) => {
+                return Err((
+                    ArenaError::Placement(error),
+                    clocked,
+                    Placed::returned(storage),
+                ));
+            }
+        };
         let (registers, interrupts) = clocked.separate_interrupt_owner();
         let epoch = installation.0;
-        let (storage, placement) = Placement::<D>::take(placed);
         let root = core::ptr::NonNull::from(storage);
         #[allow(
             unsafe_code,
@@ -314,7 +328,7 @@ impl<
                         epoch,
                     ),
                     phy: BlePhyEngineStorage::from_parts(phy, &placement),
-                    direction_finding: DirectionFindingWorkspaceStorage::from_parts(df, &placement),
+                    direction_finding: DirectionFindingWorkspaceStorage::from_parts(df, df_binding),
                     devices: LeDeviceTable::from_parts(devices, &placement),
                     scanning_rx: scanning_rx.each_mut().map(|storage| {
                         LeRxChain::from_parts(

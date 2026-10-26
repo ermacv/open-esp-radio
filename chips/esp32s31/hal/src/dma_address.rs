@@ -56,6 +56,221 @@ pub(crate) fn model_reference<L: DmaLayout>(address: u32) -> DmaRef<L> {
     unsafe { placed_link(address) }.expect("a model layout has a nonzero CPU address")
 }
 
+/// The sealed address mapping selected when a placed DMA owner is bound.
+#[derive(Clone, Copy)]
+pub struct PlacedDmaSpace {
+    address: fn(&[u8]) -> Option<u32>,
+}
+
+impl PlacedDmaSpace {
+    pub(crate) fn of<S: crate::ieee80211::dma::space::DmaSpace>() -> Self {
+        Self {
+            address: |bytes| S::address(bytes, bytes.as_ptr()),
+        }
+    }
+
+    pub(crate) fn address(self, bytes: &[u8]) -> Option<u32> {
+        (self.address)(bytes)
+    }
+}
+
+pub(crate) fn backing_region<B: crate::dma_static::PlacedBacking + ?Sized>(
+    backing: &mut B,
+    space: PlacedDmaSpace,
+) -> Result<(&mut [u8], PlacedRegion), ProjectionError> {
+    let bytes = backing.stable_dma_region().into_mut_slice();
+    let base = space.address(bytes).ok_or(ProjectionError::AddressWidth)?;
+    let projection = PlacementProjection::from_storage(bytes, base);
+    let region = projection.region(bytes)?;
+    Ok((bytes, region))
+}
+
+/// Refusal to project a field from a retained placed allocation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProjectionError {
+    OutsideAllocation,
+    AddressWidth,
+    Misaligned,
+    Empty,
+    NonContiguous,
+}
+
+/// Address geometry of one consumed `Placed`, without an aliased Rust borrow.
+/// Only the placement owner constructs this capability and retains the storage.
+pub(crate) struct PlacementProjection {
+    root: usize,
+    bytes: usize,
+    base: u32,
+}
+
+impl PlacementProjection {
+    pub(super) fn from_placed<T>(placed: &crate::dma_static::Placed<T>, base: u32) -> Self {
+        Self::from_storage(placed.as_ref(), base)
+    }
+
+    fn from_storage<T: ?Sized>(storage: &T, base: u32) -> Self {
+        Self {
+            root: core::ptr::from_ref(storage).addr(),
+            bytes: size_of_val(storage),
+            base,
+        }
+    }
+
+    fn checked(&self, cpu: usize, bytes: usize, alignment: usize) -> Result<u32, ProjectionError> {
+        if bytes == 0 {
+            return Err(ProjectionError::Empty);
+        }
+        let offset = cpu
+            .checked_sub(self.root)
+            .ok_or(ProjectionError::OutsideAllocation)?;
+        if offset > self.bytes || bytes > self.bytes - offset {
+            return Err(ProjectionError::OutsideAllocation);
+        }
+        let offset = u32::try_from(offset).map_err(|_| ProjectionError::AddressWidth)?;
+        let bytes = u32::try_from(bytes).map_err(|_| ProjectionError::AddressWidth)?;
+        let address = self
+            .base
+            .checked_add(offset)
+            .ok_or(ProjectionError::AddressWidth)?;
+        address
+            .checked_add(bytes)
+            .ok_or(ProjectionError::AddressWidth)?;
+        if !cpu.is_multiple_of(alignment) || !(address as usize).is_multiple_of(alignment) {
+            return Err(ProjectionError::Misaligned);
+        }
+        Ok(address)
+    }
+
+    #[allow(unsafe_code, reason = "the checked subrange of the consumed Placed")]
+    pub(crate) fn address<T: ?Sized>(
+        &self,
+        field: &T,
+    ) -> Result<DmaWindowAddress, ProjectionError> {
+        let address = self.checked(
+            core::ptr::from_ref(field).addr(),
+            size_of_val(field),
+            align_of_val(field),
+        )?;
+        // SAFETY: the extent and alignment belong to the consumed allocation.
+        // Its owner retains or quarantines the static storage for every DMA epoch.
+        Ok(unsafe { placed(address) })
+    }
+
+    #[cfg(feature = "bluetooth-engine")]
+    pub(crate) fn offset(
+        &self,
+        base: DmaWindowAddress,
+        offset: usize,
+        bytes: usize,
+    ) -> Result<DmaWindowAddress, ProjectionError> {
+        let start = base
+            .get()
+            .checked_sub(self.base)
+            .ok_or(ProjectionError::OutsideAllocation)? as usize;
+        let offset = start
+            .checked_add(offset)
+            .ok_or(ProjectionError::OutsideAllocation)?;
+        let cpu = self
+            .root
+            .checked_add(offset)
+            .ok_or(ProjectionError::AddressWidth)?;
+        let address = self.checked(cpu, bytes, 1)?;
+        // Reuse the byte-region stepping proof; the checked full allocation
+        // address is already typed by the caller's base.
+        let delta = address
+            .checked_sub(base.get())
+            .ok_or(ProjectionError::OutsideAllocation)?;
+        PlacedRegion::new(
+            base,
+            delta.checked_add(1).ok_or(ProjectionError::AddressWidth)?,
+        )
+        .and_then(|region| region.at(delta))
+        .ok_or(ProjectionError::AddressWidth)
+    }
+
+    pub(crate) fn link<L: DmaLayout>(&self, field: &L) -> Result<DmaRef<L>, ProjectionError> {
+        self.link_at::<L>(core::ptr::from_ref(field).addr())
+    }
+
+    #[allow(unsafe_code, reason = "a checked layout within the consumed Placed")]
+    fn link_at<L: DmaLayout>(&self, cpu: usize) -> Result<DmaRef<L>, ProjectionError> {
+        const {
+            assert!(size_of::<L>() > 0 && size_of::<L>() <= u32::MAX as usize);
+        }
+        let address = self.checked(cpu, size_of::<L>(), align_of::<L>())?;
+        // SAFETY: the caller supplies an initialized L (or a reviewed volatile
+        // workspace overlay). The complete aligned extent is within Placed,
+        // whose owner retains or quarantines it for the hardware's full use.
+        unsafe { placed_link(address) }.ok_or(ProjectionError::AddressWidth)
+    }
+
+    pub(crate) fn table<'a, L: DmaLayout + 'a>(
+        &self,
+        fields: impl IntoIterator<Item = &'a L>,
+    ) -> Result<PlacedTable<L>, ProjectionError> {
+        let mut fields = fields.into_iter();
+        let first = self.link(fields.next().ok_or(ProjectionError::Empty)?)?;
+        let mut len = 1usize;
+        for field in fields {
+            let address = self.checked(
+                core::ptr::from_ref(field).addr(),
+                size_of::<L>(),
+                align_of::<L>(),
+            )?;
+            let offset = len
+                .checked_mul(size_of::<L>())
+                .and_then(|n| u32::try_from(n).ok())
+                .ok_or(ProjectionError::AddressWidth)?;
+            if first.bits().checked_add(offset) != Some(address) {
+                return Err(ProjectionError::NonContiguous);
+            }
+            len = len.checked_add(1).ok_or(ProjectionError::AddressWidth)?;
+        }
+        PlacedTable::new(first, len).ok_or(ProjectionError::AddressWidth)
+    }
+
+    pub(crate) fn slots<B>(&self, fields: &[B]) -> Result<PlacedSlots, ProjectionError> {
+        const {
+            assert!(size_of::<B>() <= u32::MAX as usize);
+        }
+        if size_of::<B>() == 0 {
+            return Err(ProjectionError::Empty);
+        }
+        let first = self.address(fields)?;
+        PlacedSlots::new(first, size_of::<B>() as u32, fields.len())
+            .ok_or(ProjectionError::AddressWidth)
+    }
+
+    pub(crate) fn region(&self, bytes: &[u8]) -> Result<PlacedRegion, ProjectionError> {
+        let start = self.address(bytes)?;
+        let len = u32::try_from(bytes.len()).map_err(|_| ProjectionError::AddressWidth)?;
+        PlacedRegion::new(start, len).ok_or(ProjectionError::AddressWidth)
+    }
+
+    /// A reviewed generated volatile layout inside a workspace field.
+    #[cfg(feature = "bluetooth-engine")]
+    pub(crate) fn reference_at<L: DmaLayout, B, F>(
+        &self,
+        workspace: &B,
+        field: &F,
+    ) -> Result<DmaRef<L>, ProjectionError> {
+        const {
+            assert!(size_of::<L>() <= size_of::<B>());
+            assert!(align_of::<B>() >= align_of::<L>());
+        }
+        let root = core::ptr::from_ref(workspace).addr();
+        self.checked(root, size_of::<B>(), align_of::<B>())?;
+        let cpu = core::ptr::from_ref(field).addr();
+        let offset = cpu
+            .checked_sub(root)
+            .ok_or(ProjectionError::OutsideAllocation)?;
+        if offset > size_of::<B>() || size_of::<L>() > size_of::<B>() - offset {
+            return Err(ProjectionError::OutsideAllocation);
+        }
+        self.link_at(cpu)
+    }
+}
+
 /// The DMA addresses of `len` `L`s laid out back to back in placed storage:
 /// a descriptor table typed once, where its storage was placed.
 ///
@@ -104,31 +319,19 @@ impl<L: DmaLayout> PlacedTable<L> {
         size as u32
     };
 
-    /// The table of `len` `L`s whose first lies at `base`; `None` for an
-    /// empty table, a zero base or one whose end passes the address width.
-    ///
-    /// # Safety
-    ///
-    /// `len` `L`s, aligned as `L` requires, lie back to back from `base` in
-    /// storage as for [`placed`], retained for as long as the hardware may
-    /// follow any of their addresses.
-    #[allow(unsafe_code, reason = "the placed source of typed DMA tables")]
-    pub const unsafe fn new(base: u32, len: usize) -> Option<Self> {
-        if len == 0 || len > u32::MAX as usize || base == 0 {
+    /// Complete geometry of a table whose first element is already proved.
+    const fn new(first: DmaRef<L>, len: usize) -> Option<Self> {
+        if len == 0 || len > u32::MAX as usize {
             return None;
         }
         let len = len as u32;
         let Some(bytes) = len.checked_mul(Self::STRIDE) else {
             return None;
         };
-        if base.checked_add(bytes).is_none() {
+        if first.bits().checked_add(bytes).is_none() {
             return None;
         }
-        // SAFETY: the caller's promise covers the first element.
-        match unsafe { placed_link(base) } {
-            Some(first) => Some(Self { first, len }),
-            None => None,
-        }
+        Some(Self { first, len })
     }
 
     /// A host model's table at the synthetic `base`, never dereferenced.
@@ -140,7 +343,7 @@ impl<L: DmaLayout> PlacedTable<L> {
     pub fn for_host_model(base: u32, len: usize) -> Option<Self> {
         // SAFETY: host models record these identities without accessing
         // memory through them, and have no DMA actor.
-        unsafe { Self::new(base, len) }
+        Self::new(unsafe { placed_link(base) }?, len)
     }
 
     /// The first element.
@@ -176,8 +379,9 @@ impl<L: DmaLayout> PlacedTable<L> {
     #[allow(unsafe_code, reason = "an element of a placed table")]
     pub const fn element(self, index: usize) -> Option<DmaRef<L>> {
         match self.address(index) {
-            // SAFETY: `new`'s caller promised `len` placed, aligned `L`s
-            // from the base, and `address` admits only their indices.
+            // SAFETY: the projection checked every initialized, aligned L
+            // and their contiguity. `new` checked the extent's address width;
+            // `address` admits only its indices. Host models never dereference.
             Some(address) => unsafe { placed_link(address) },
             None => None,
         }
@@ -210,19 +414,11 @@ pub struct PlacedRegion {
 }
 
 impl PlacedRegion {
-    /// The region of `len` bytes at `start`; `None` when its end passes
-    /// the address width.
-    ///
-    /// # Safety
-    ///
-    /// The `len` bytes from `start` lie in storage as for [`placed`].
-    #[allow(unsafe_code, reason = "the placed source of typed DMA regions")]
-    pub const unsafe fn new(start: u32, len: u32) -> Option<Self> {
-        if start.checked_add(len).is_none() {
+    /// Geometry of bytes whose starting address is already proved.
+    const fn new(start: DmaWindowAddress, len: u32) -> Option<Self> {
+        if start.get().checked_add(len).is_none() {
             return None;
         }
-        // SAFETY: the caller's promise is the constructor's.
-        let start = unsafe { placed(start) };
         Some(Self { start, len })
     }
 
@@ -247,8 +443,8 @@ impl PlacedRegion {
         if offset >= self.len {
             return None;
         }
-        // SAFETY: `new`'s caller promised every byte of the region; the
-        // sum fits, as `new` checked the end.
+        // SAFETY: the projection checked the complete placed byte extent;
+        // the sum fits, as `new` checked the end.
         Some(unsafe { placed(self.start.get() + offset) })
     }
 }
@@ -263,15 +459,8 @@ pub struct PlacedSlots {
 }
 
 impl PlacedSlots {
-    /// `len` slots of `stride` bytes from `first`; `None` for no slot, a
-    /// zero stride or an end past the address width.
-    ///
-    /// # Safety
-    ///
-    /// The `len * stride` bytes from `first` lie in storage as for
-    /// [`placed`].
-    #[allow(unsafe_code, reason = "the placed source of typed DMA slots")]
-    pub const unsafe fn new(first: u32, stride: u32, len: usize) -> Option<Self> {
+    /// Geometry of slots whose starting address is already proved.
+    const fn new(first: DmaWindowAddress, stride: u32, len: usize) -> Option<Self> {
         if len == 0 || len > u32::MAX as usize || stride == 0 {
             return None;
         }
@@ -279,11 +468,9 @@ impl PlacedSlots {
         let Some(bytes) = len.checked_mul(stride) else {
             return None;
         };
-        if first.checked_add(bytes).is_none() {
+        if first.get().checked_add(bytes).is_none() {
             return None;
         }
-        // SAFETY: the caller's promise is the constructor's.
-        let first = unsafe { placed(first) };
         Some(Self { first, stride, len })
     }
 
@@ -315,8 +502,8 @@ impl PlacedSlots {
     #[allow(unsafe_code, reason = "a slot of placed storage")]
     pub const fn slot(self, index: usize) -> Option<DmaWindowAddress> {
         match self.address(index) {
-            // SAFETY: `new`'s caller promised every slot's bytes, and
-            // `address` admits only their indices.
+            // SAFETY: the projection checked the complete placed slice;
+            // `new` checked its extent and `address` admits only its indices.
             Some(address) => Some(unsafe { placed(address) }),
             None => None,
         }

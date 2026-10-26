@@ -272,10 +272,18 @@ Each chip's HAL has one module that makes typed DMA addresses,
 `dma_address`: the only caller of the `unsafe` `DmaWindowAddress` and
 `DmaRef` constructors of `oer-memory`, which the PAC's generated `layouts`
 bind to the chip's DMA window (clippy `disallowed-methods` refuses them
-elsewhere). Its `placed`/`placed_link`
-take an address of storage the caller keeps pinned in the DMA window: a
-placed static's descriptors and buffers, or a placed pool's buffer
-(`PlacedBacking`); each call site names its proof.
+elsewhere). A single HAL placement projection accompanies the consumed
+`Placed` allocation and its `StableDmaRange`, recording CPU and DMA geometry
+without borrowing the retained owner. Its safe `link`, `table`, `slots` and
+`region` methods check full extents and alignment before calling
+`placed`/`placed_link`; private table/slot/region constructors take typed
+starting addresses. Fixed type geometry is checked in const blocks; dynamic refusal is `ProjectionError`. Wi-Fi address spaces are sealed
+so callers cannot substitute an unrelated address mapping. `PlacedBacking`'s
+sealed `dma_region` samples its stable slice once and projects the whole
+region while the A-MPDU owner retains the lease. The BLE placement adapter
+uses the same projection; its DF workspace overlays check type geometry in
+const blocks, derive member positions from generated accessors and return
+typed errors before arena mutation.
 
 Its `dma_static` module holds the placement constructor:
 `DmaStatic::placed`, `unsafe` and called only by the `dma_static!` macro,
@@ -284,7 +292,8 @@ script's ASSERTs over the DMA range (from the generated `dma-window.x`) are
 the proof.
 
 The 802.15.4 HAL engine consumes its `Placed` buffers and constructs the
-complete address table at one unsafe site. Every projection names a frame
+complete address table through the safe placement projection. Refusal returns
+the unchanged MAC and placed buffers. Every projection names a frame
 inside the retained allocation; subsequent register publications take those
 typed addresses. The shared engine and the combined engine/MAC owner contain
 no unsafe code and perform no address arithmetic.

@@ -218,7 +218,8 @@ impl Rx {
                 ESP32S31_TX_POWER_LEVELS,
                 Ieee802154PibDefaults::default(),
                 permit,
-            ),
+            )
+            .map_err(|_| failed("154-placement"))?,
         };
         engine.set_coexistence(Ieee802154Coexistence::Software(
             Ieee802154CoexPriorities::resolve(&domain.coex_pti_table()),
