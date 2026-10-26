@@ -219,7 +219,11 @@ pub struct Installed;
 /// Install the console's parts for the early writer, the fatal note and
 /// the driver, once, from the reset root.
 pub(crate) fn install(registers: ConsoleRegisters) -> Result<(), Installed> {
-    OWNERSHIP.install(registers).map_err(|_| Installed)
+    install_in(&OWNERSHIP, registers)
+}
+
+fn install_in<T: Console>(ownership: &Ownership<T>, registers: T) -> Result<(), Installed> {
+    ownership.install(registers).map_err(|_| Installed)
 }
 
 /// Writes `note` as one `OER-DIAG:01` line through the early writer, or

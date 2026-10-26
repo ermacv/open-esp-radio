@@ -58,6 +58,40 @@ pub struct Root {
     partitions: Partitions,
 }
 
+/// Why the reset root could not publish its image's platform owners.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InitError {
+    /// The console's parts were installed before.
+    ConsoleInstalled,
+    /// The system timer's counter latch never settled during bootstrap.
+    MonotonicStuck,
+    /// Stage two's core-control words were installed before.
+    CoreControlInstalled,
+}
+
+impl InitError {
+    /// The stable reason used by an image's boot-failure record.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::ConsoleInstalled => "console-installed",
+            Self::MonotonicStuck => "monotonic",
+            Self::CoreControlInstalled => "core-control-installed",
+        }
+    }
+}
+
+impl From<usb_serial_jtag::Installed> for InitError {
+    fn from(_: usb_serial_jtag::Installed) -> Self {
+        Self::ConsoleInstalled
+    }
+}
+
+impl From<MonotonicStuck> for InitError {
+    fn from(_: MonotonicStuck) -> Self {
+        Self::MonotonicStuck
+    }
+}
+
 impl Root {
     /// The root, the first time it is called in an image; `None` after.
     pub fn take() -> Option<Self> {
@@ -71,9 +105,9 @@ impl Root {
     ///
     /// # Errors
     ///
-    /// The system timer's counter latch never settled
-    /// ([`MonotonicStuck`]): no boot wait can be bounded.
-    pub fn into_bootstrap(self) -> Result<Bootstrap, MonotonicStuck> {
+    /// The console was installed before, or the system timer's counter
+    /// latch never settled: no boot wait can be bounded.
+    pub fn into_bootstrap(self) -> Result<Bootstrap, InitError> {
         let Partitions {
             usb_serial_jtag,
             core_control,
@@ -85,7 +119,7 @@ impl Root {
             analog_bus,
             ..
         } = self.partitions;
-        install_console(usb_serial_jtag);
+        usb_serial_jtag::install(ConsoleRegisters::new(usb_serial_jtag))?;
         let SocPeripherals {
             lp_apm_filter,
             hp_apm_filter,
@@ -159,7 +193,11 @@ impl Root {
     /// ([`Watchdogs::new`]): from here the image's executor must feed it
     /// ([`ArmedRtcWatchdog::feed_every`](crate::watchdog::ArmedRtcWatchdog::feed_every)),
     /// and a fatal path that cannot prepare the reset waits for it.
-    pub fn into_runtime(self) -> Runtime {
+    ///
+    /// # Errors
+    ///
+    /// The console or core-control words were installed before.
+    pub fn into_runtime(self) -> Result<Runtime, InitError> {
         let Partitions {
             usb_serial_jtag,
             core_control,
@@ -203,19 +241,16 @@ impl Root {
         .adopt_short_settle_clock();
         #[cfg(not(target_arch = "riscv32"))]
         let _ = boot;
-        install_console(usb_serial_jtag);
+        usb_serial_jtag::install(ConsoleRegisters::new(usb_serial_jtag))?;
         // Stage two runs from the PSRAM the bootstrap mapped over MPLL.
         let clocks = ChipClocks::install(chip_clocks, PsramMpll::adopted());
-        if cores::install(
+        cores::install(
             CoreControlRegisters::new(core_control),
             Uart0ClockRegisters::new(uart0_clock),
         )
-        .is_err()
-        {
-            unreachable!("the one root installs the core-control words once");
-        }
+        .map_err(|_| InitError::CoreControlInstalled)?;
         crate::executor::publish_debug_status(debug);
-        Runtime {
+        Ok(Runtime {
             watchdogs: Watchdogs::new(WatchdogRegisters::new(watchdog)),
             system_timer: SystemTimer::new(system_timer),
             software_interrupts: SoftwareInterrupts::new(
@@ -245,14 +280,7 @@ impl Root {
                 ieee802154,
                 analog_bus,
             })),
-        }
-    }
-}
-
-/// Install the console's parts for the early writer, once per image.
-fn install_console(peripherals: oer_esp32s31_pac::ownership::UsbSerialJtagPeripherals) {
-    if usb_serial_jtag::install(ConsoleRegisters::new(peripherals)).is_err() {
-        unreachable!("the one root installs the console's parts once");
+        })
     }
 }
 

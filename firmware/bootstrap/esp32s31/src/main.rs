@@ -55,9 +55,11 @@ extern "C" fn bootstrap_main() -> ! {
     let root = hal::root::Root::take();
     staged::start();
     let root = root.unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=root-taken\r\n"));
-    let mut hardware = root
-        .into_bootstrap()
-        .unwrap_or_else(|_| fail("OER_BOOT bootstrap=FAIL reason=monotonic\r\n"));
+    let mut hardware = root.into_bootstrap().unwrap_or_else(|error| {
+        print("OER_BOOT bootstrap=FAIL reason=");
+        print(error.name());
+        fail("\r\n")
+    });
     let deadline = boot::BootDeadline::start(&hardware.monotonic, boot::BOOT_BUDGET);
     hardware
         .soc

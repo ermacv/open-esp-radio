@@ -33,12 +33,15 @@ static SESSION: ClaimCell<Session> = ClaimCell::new();
 /// Start the session: take the reset root, split it and bring Wi-Fi up
 /// through its public client path. Zero, or why it did not start: one when
 /// the root was taken before, two or three when Wi-Fi's power or clocks did
-/// not come up, four when a session was installed before.
+/// not come up, four when a session was installed before, five when the reset
+/// root could not install the platform owners.
 fn start_session() -> u32 {
     let Some(root) = Root::take() else {
         return 1;
     };
-    let runtime = root.into_runtime();
+    let Ok(runtime) = root.into_runtime() else {
+        return 5;
+    };
     let clocks = runtime.clocks;
     let (mut radio, partitions) = runtime.radio.split::<ChipClocks, _>(());
     let Ok((powered, power)) =

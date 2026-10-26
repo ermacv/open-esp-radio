@@ -19,7 +19,7 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI1_MEM_S_REG_H", "ESP_I
 provenance = "derived"
 
 [review.entity."CACHE_FCTRL.CACHE_USR_ADDR_4BYTE"]
-sources = ["HW5_PSRAM_USER_ADDRESS_20261026", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI1_MEM_S_REG_H"]
+sources = ["ESP_IDF_4D59230D_S31_SPIMEM_FLASH_LL_H_L616", "HW5_PSRAM_USER_ADDRESS_20261026", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SPI1_MEM_S_REG_H"]
 provenance = "derived"
 
 [review.entity."CLOCK.CLKCNT_H"]
@@ -595,7 +595,10 @@ reserved = { mask = 0xfffffe05, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "CACHE_USR_ADDR_4BYTE"
 bits = "1"
 class = "plain"
-# SOURCE: HW5_PSRAM_USER_ADDRESS_20261026; hw5-20261026-density-04,
+# SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7,
+# esp_hal_mspi/esp32s31/include/hal/spimem_flash_ll.h:616
+# (ESP_IDF_4D59230D_S31_SPIMEM_FLASH_LL_H_L616);
+# HW5_PSRAM_USER_ADDRESS_20261026; hw5-20261026-density-04,
 # /home/ermacv/dev/oer-notes/research/hw-psram-density.md; pinned ROM
 # esp_rom_spi_cmd_config @0x2f811516 sets this bit for a 32-bit address.
 description = "Select four-byte user-command addresses. The command port needs this bit for a 32-bit PSRAM mode-register address, in addition to USER1.USR_ADDR_BITLEN; it is not restricted to cache reads."

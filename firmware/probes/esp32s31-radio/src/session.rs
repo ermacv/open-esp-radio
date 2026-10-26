@@ -42,13 +42,17 @@ pub(crate) const WIFI_POWER: u32 = 2;
 pub(crate) const WIFI_CLOCKS: u32 = 3;
 /// The session cell held a session already.
 pub(crate) const INSTALLED: u32 = 4;
+/// The reset root could not install the platform owners.
+pub(crate) const ROOT_INIT: u32 = 5;
 
 /// Start the session: [`STARTED`] or why it did not.
 pub(crate) fn init() -> u32 {
     let Some(root) = Root::take() else {
         return ROOT_TAKEN;
     };
-    let runtime = root.into_runtime();
+    let Ok(runtime) = root.into_runtime() else {
+        return ROOT_INIT;
+    };
     let clocks = runtime.clocks;
     let (mut radio, partitions) = runtime.radio.split::<ChipClocks, _>(());
     let Ok((powered, power)) =

@@ -115,10 +115,11 @@ pub(crate) enum Failure {
     InterruptCount = 11,
     InterruptLevelBits = 12,
     InterruptStackGuard = 13,
+    RootInitialization = 14,
 }
 
 impl Failure {
-    const ALL: [Self; 13] = [
+    const ALL: [Self; 14] = [
         Self::Layout,
         Self::TaskAllocation,
         Self::EntropySource,
@@ -132,6 +133,7 @@ impl Failure {
         Self::InterruptCount,
         Self::InterruptLevelBits,
         Self::InterruptStackGuard,
+        Self::RootInitialization,
     ];
 
     pub(crate) fn from_boot(error: oer_espressif_staged_runtime::BootError) -> Self {
@@ -161,6 +163,7 @@ impl Failure {
             Self::TaskAllocation => "task-allocation",
             Self::EntropySource => "entropy-source",
             Self::RootTaken => "root-taken",
+            Self::RootInitialization => "root-initialization",
             Self::InterruptTable => "interrupt-table",
             Self::Console => "console",
             Self::InterruptHart => "interrupt-hart",
