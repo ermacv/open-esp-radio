@@ -1935,6 +1935,7 @@ dependencies = [
  "oer-espressif-boot",
  "oer-espressif-coex",
  "oer-espressif-efuse",
+ "oer-espressif-facts",
  "oer-espressif-ieee802154-engine",
  "oer-espressif-ieee802154-mac-values",
  "oer-espressif-modem-clock",

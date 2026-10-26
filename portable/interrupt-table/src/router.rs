@@ -76,6 +76,9 @@ pub trait Controller {
 
     /// The hart whose bank and CLIC this controller writes.
     fn hart(&self) -> u8;
+    /// Check the controller's implemented geometry and selected configuration
+    /// against its chip facts, before installation and before enabling IRQs.
+    fn verify_configuration(&self) -> Result<(), Error>;
     /// Route `source` to `line` on this hart.
     ///
     /// # Errors
@@ -106,6 +109,12 @@ pub trait Controller {
 /// table refuses: a typed boot failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
+    /// Implemented CLICINTCTL bits differ from the chip facts.
+    WrongControlBits { actual: u8, expected: u8 },
+    /// Implemented interrupt input count differs from the chip facts.
+    WrongInterruptCount { actual: u16, expected: u16 },
+    /// Selected MNLBITS differ from the chip facts.
+    WrongLevelBits { actual: u8, expected: u8 },
     /// The entry of `source` belongs to `hart`; the router writes `current`.
     WrongHart { source: u16, hart: u8, current: u8 },
     /// The table holds no entry of the token's source, line, level and hart.
@@ -242,6 +251,7 @@ impl<C: Controller> Router<C> {
         for binding in present(table, controller.hart()) {
             Self::inside(binding.source, binding.line, binding.level)?;
         }
+        controller.verify_configuration()?;
         for source in 0..C::SOURCES {
             controller.silence(source)?;
         }
@@ -434,6 +444,7 @@ impl<C: Controller> Router<C> {
     ///
     /// The first disagreement.
     pub fn verify(&self) -> Result<(), Error> {
+        self.controller.verify_configuration()?;
         let hart = self.controller.hart();
         // Bit `line` of the lines a routed source holds; a line past 63
         // is no line of a controller (`LINES` is at most 64).

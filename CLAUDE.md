@@ -132,8 +132,10 @@ system these rules serve.
   that can be rebuilt.
 - **Checks on the host:** `cargo test -p <pkg>`, `cargo clippy -p <pkg>
   --all-targets` and `cargo fmt --check` for what you changed, plus `cargo
-  test -p oer-test-layers`. Nothing else: images, chip targets, image checks
-  and sizes are built by CI. One image build is allowed only to settle a
+  test -p oer-test-layers`. Images, image checks and sizes are built by CI.
+  Changed chip packages may also run `cargo check` and `cargo clippy` with
+  `--target riscv32imafc-unknown-none-elf -p <pkg>` as type-checks only,
+  without images or linking. One image build is allowed only to settle a
   concrete doubt, named in the PR. Judge a check only by its own exit code,
   never through a pipe (redirect to a file and print `exit=$?`).
 - **Sizes.** CI reports memory growth (code, `.rodata`, SRAM and PSRAM

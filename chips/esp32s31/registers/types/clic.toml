@@ -1,5 +1,4 @@
-# A block type of the curated ESP32-S31 register model: no vendor header
-# or SVD describes this block.
+# The curated ESP32-S31 CLIC block, sourced from the pinned S31 header.
 schema = 3
 
 [type]
@@ -17,7 +16,8 @@ naming = "descriptive"
 [[registers]]
 name = "INT_CONFIG"
 offset = 0x0
-description = "The controller's configuration: how many bits of a line's control byte are its level."
+description = "The controller's configuration: how many bits of a line's control byte are its level. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 20-38: MNLBITS resets to zero; HAL must write its selected level bits."
+reset = { value = 1, mask = 0x7f }
 
 [[registers.fields]]
 name = "NVBITS"
@@ -38,11 +38,47 @@ class = "read-only"
 description = "The number of privilege-mode bits of a line's attribute."
 
 [[registers]]
+name = "INT_INFO"
+offset = 0x4
+description = "Implemented CLIC geometry and version. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 40-59."
+reset = { value = 0x00600030, mask = 0x01ffffff }
+
+[[registers.fields]]
+name = "NUM_INT"
+bits = "12:0"
+class = "read-only"
+description = "Number of interrupt inputs, including reserved core-local inputs."
+
+[[registers.fields]]
+name = "VERSION"
+bits = "20:13"
+class = "read-only"
+description = "Implementation revision in the low nibble, CLIC architecture version in the high nibble."
+
+[[registers.fields]]
+name = "CTLBITS"
+bits = "24:21"
+class = "read-only"
+description = "Implemented high bits of each line's CLICINTCTL byte."
+
+[[registers]]
+name = "INT_THRESH"
+offset = 0x8
+description = "Legacy MMIO machine threshold; runtime uses the standard mintthresh CSR. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 61-67: R/W, reset zero."
+reset = { value = 0, mask = 0xff000000 }
+
+[[registers.fields]]
+name = "CPU_INT_THRESH"
+bits = "31:24"
+class = "plain"
+description = "Legacy machine interrupt threshold."
+
+[[registers]]
 name = "CTRL%s"
 offset = 0x1000
 dim = { count = 48, stride = 0x4 }
-description = "Line %s: pending, enable, attribute and level control."
-reset = { value = 0x0 }
+description = "Line %s: pending, enable, attribute and level control. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 70-116: CTL resets to 0x1f, ATTR_MODE to 0b11, other described fields to zero; unassigned bits have no claimed reset."
+reset = { value = 0x1fc00000, mask = 0xffc70101 }
 
 [[registers.fields]]
 name = "IP"
@@ -72,8 +108,8 @@ description = "Trigger: bit 0 clear is level, set is edge; bit 1 selects the neg
 [[registers.fields]]
 name = "ATTR_MODE"
 bits = "23:22"
-class = "plain"
-description = "Privilege mode of the line."
+class = "read-only"
+description = "Machine privilege mode, fixed at 0b11. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 79-84."
 
 [[registers.fields]]
 name = "CTL"

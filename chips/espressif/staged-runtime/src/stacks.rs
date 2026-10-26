@@ -169,10 +169,10 @@ fn vectors_of(hart: usize) -> (usize, usize) {
 /// must precede the hart's first interrupt admission. Reinstallation
 /// preserves the original paint.
 #[cfg(target_arch = "riscv32")]
-pub unsafe fn install_current_hart_interrupt_stack() {
+pub unsafe fn install_current_hart_interrupt_stack() -> Result<(), crate::BootError> {
     let hart = current_hart();
     let (Some(stack), Some(painted)) = (interrupt_stack(hart), IRQ_PAINTED.get(hart)) else {
-        invalid_hart()
+        return Err(crate::BootError::NoInterruptStack { hart });
     };
     let (bottom, top) = (stack.start, stack.end);
     if !painted.load(Ordering::Acquire) {
@@ -181,7 +181,7 @@ pub unsafe fn install_current_hart_interrupt_stack() {
         unsafe { watermark::paint(bottom as *mut u32, stack.len() / 4) };
         painted.store(true, Ordering::Release);
     }
-    guard_interrupt_stack(bottom, interrupt_stack_guard_bytes(hart));
+    guard_interrupt_stack(bottom, interrupt_stack_guard_bytes(hart))?;
     let (mtvec, mtvt) = vectors_of(hart);
     // SAFETY: `mtvec` names `_start_trap`, which the assembly aligns to 64
     // bytes, and `mtvt` this hart's 256-byte-aligned table in SRAM; `top` is
@@ -189,21 +189,23 @@ pub unsafe fn install_current_hart_interrupt_stack() {
     // `mscratch`. Interrupts stay disabled, so no trap sees the registers
     // change.
     unsafe { oer_riscv::install_trap_stack(mtvec, mtvt, top) };
+    Ok(())
 }
 
-/// Panic unless the current hart dispatches through the runtime's vectors:
+/// Return a boot error unless the current hart dispatches through the runtime's vectors:
 /// `mtvec` names the exception entry in CLIC mode and `mtvt` the hart's
 /// table. The static stack analysis checks the table's entries (each swaps
 /// `sp` to the interrupt stack before its first memory access and returns
 /// through the checked exit); this keeps that check true of the registers
 /// the hart dispatches through.
 #[cfg(target_arch = "riscv32")]
-pub(crate) fn verify_current_hart_vectors() {
+pub(crate) fn verify_current_hart_vectors() -> Result<(), crate::BootError> {
     let mtvec = oer_riscv::read_mtvec();
     let mtvt = oer_riscv::read_mtvt();
     if (mtvec, mtvt) != vectors_of(current_hart()) {
-        foreign_vectors_installed();
+        return Err(crate::BootError::ForeignVectors);
     }
+    Ok(())
 }
 
 /// Arm trigger 0 as a store watchpoint on the word at `address`, the bottom
@@ -212,10 +214,11 @@ pub(crate) fn verify_current_hart_vectors() {
 /// Call with local interrupts disabled and the runtime's word-aligned task
 /// stack bottom; the runtime reserves trigger 0 for this guard.
 #[cfg(target_arch = "riscv32")]
-pub(crate) fn watch_task_stack(address: usize) {
+pub(crate) fn watch_task_stack(address: usize) -> Result<(), crate::BootError> {
     // A NAPOT region of four bytes: the word's address with one trailing one.
-    let data2 = guard::napot_guard(address, 4);
+    let data2 = guard::napot_guard(address, 4)?;
     oer_riscv::arm_store_trigger(TASK_STACK_GUARD_TRIGGER, data2);
+    Ok(())
 }
 
 /// Stop on a hart id with no interrupt stack.
@@ -229,17 +232,6 @@ fn invalid_hart() -> ! {
     panic!("invalid hart for interrupt stack")
 }
 
-/// Stop on vector registers that are not the runtime's.
-#[cfg(target_arch = "riscv32")]
-#[cold]
-#[expect(
-    clippy::panic,
-    reason = "fail-stop on vector registers another writer changed; no caller input"
-)]
-fn foreign_vectors_installed() -> ! {
-    panic!("the hart dispatches through vectors that are not the runtime's");
-}
-
 /// Make every store into the aligned guard of this hart's interrupt
 /// stack raise a breakpoint exception. Interrupt handlers run with the
 /// triggers of the context they interrupted (`vectors.s`); the trap into
@@ -249,9 +241,10 @@ fn foreign_vectors_installed() -> ! {
 /// Called with local interrupts disabled; the runtime reserves trigger 2
 /// for this hart's interrupt-stack guard.
 #[cfg(target_arch = "riscv32")]
-fn guard_interrupt_stack(bottom: usize, bytes: usize) {
-    let data2 = guard::napot_guard(bottom, bytes);
+fn guard_interrupt_stack(bottom: usize, bytes: usize) -> Result<(), crate::BootError> {
+    let data2 = guard::napot_guard(bottom, bytes)?;
     oer_riscv::arm_store_trigger(IRQ_STACK_GUARD_TRIGGER, data2);
+    Ok(())
 }
 
 /// Whether `sp` lies in `hart`'s dedicated interrupt stack. Reads no memory,

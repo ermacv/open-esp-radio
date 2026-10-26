@@ -55,15 +55,24 @@ table-exemption-prefix = "__OER_INTERRUPT_EXEMPT_"
 vector-table-symbol = "_runtime_mtvt"
 vector-table-hart-slots = 64
 exception-entry-symbol = "_start_trap"
-# The CLIC of every hart: 48 lines, of which peripheral sources route to 16
-# to 47 (0 to 15 are the core's own), and three level bits, eight levels.
-#
-# SOURCE: ESP-IDF 4d59230d `soc/esp32s31/include/soc/clic_reg.h` and
-# `soc/esp32c5/include/soc/clic_reg.h` (48 lines, `CLIC_EXT_INTR_NUM_OFFSET`
-# 16) and `riscv/include/riscv/csr_clic.h` (`NLBITS` 3).
+# SOURCE: ESP-IDF 4d59230d `soc/esp32s31/include/soc/clic_reg.h`
+# (`INT_INFO.NUM_INT` default 48, `CLIC_EXT_INTR_NUM_OFFSET` 16).
 lines = 48
+# All lines below this boundary are reserved for core-local use, including
+# conventional CLINT inputs 3/7 (SOURCE: C5 TRM v1.1, Table 2.8-1).
+# Their assignment is not established on S31;
+# no image allocates any of 0..16. Matrix sources use 16..48.
 first-source-line = 16
-levels = 8
+# SOURCE: the same S31 header, `INT_INFO.CTLBITS` default 3 (CLICINTCTLBITS).
+control-bits = 3
+# SOURCE: the same S31 header, `NLBITS` 3: HAL writes MNLBITS explicitly,
+# because INT_CONFIG.MNLBITS resets to 0. Levels derive as 1 << level-bits;
+# all implemented control bits are levels, leaving no priority bits.
+level-bits = 3
+# SOURCE: RISC-V CLIC specification 3f8ee744, "Specifying Interrupt Priority":
+# highest level, then priority, then highest interrupt ID. With no priority
+# bits, equal-level lines arbitrate by descending ID, without peer preemption.
+tie-break = "highest-line"
 # Maximum allocation of each hart's dedicated SRAM interrupt stack.
 irq-stack-bytes = 0x8000
 irq-stack-margin-percent = 10

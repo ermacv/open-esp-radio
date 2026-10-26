@@ -7,11 +7,14 @@ use oer_esp32s31_pac::{
     interrupt_core::{self, InterruptCore0, InterruptCore0Observer},
 };
 use oer_interrupt_table::{
-    Binding, Class, Controller, Error, LineState, Lines, Router, Table, Trigger, line_control,
+    Binding, Class, Controller, Error, LineState, Router, Table, Trigger, line_control,
 };
 use oer_mmio::{Bits, Host, Index, InterruptSource};
 
-use super::{InterruptController, InterruptView, LEVEL_BITS, LineObservation, Observer};
+use super::{
+    InterruptController, InterruptView, LineObservation, Observer,
+    facts::{self, LEVEL_BITS, LINES},
+};
 
 /// Host memory of hart 0's bank and of the CLIC.
 struct Memory {
@@ -67,6 +70,112 @@ impl Memory {
             .1;
         Observer { routes, lines }
     }
+}
+
+/// Inject hardware-owned INT_INFO into private host memory. The field
+/// geometry comes from the model; VERSION and unassigned bits are deliberately
+/// nonzero, since neither is part of the boot geometry contract.
+fn configured_memory(control_bits: u8, lines: u16, level_bits: u8) -> Memory {
+    let mut memory = Memory::filled(0);
+    memory.clic[clic::int_info::OFFSET / 4] = (u32::from(control_bits)
+        << clic::int_info::CTLBITS_MASK.trailing_zeros())
+        | (u32::from(lines) << clic::int_info::NUM_INT_MASK.trailing_zeros())
+        | clic::int_info::VERSION_MASK
+        | !(clic::int_info::CTLBITS_MASK | clic::int_info::NUM_INT_MASK);
+    memory.clic_observer().modify_int_config(|config| {
+        config.set_mnlbits(Bits::new(u32::from(level_bits)).expect("four-bit fixture"));
+    });
+    memory
+}
+
+#[test]
+fn controller_geometry_mismatches_refuse_installation_before_route_or_line_writes() {
+    let expected_count = u16::from(LINES.count);
+    for (control_bits, lines, level_bits, error) in [
+        (
+            facts::CONTROL_BITS - 1,
+            expected_count,
+            LEVEL_BITS,
+            Error::WrongControlBits {
+                actual: facts::CONTROL_BITS - 1,
+                expected: facts::CONTROL_BITS,
+            },
+        ),
+        (
+            facts::CONTROL_BITS + 1,
+            expected_count,
+            LEVEL_BITS,
+            Error::WrongControlBits {
+                actual: facts::CONTROL_BITS + 1,
+                expected: facts::CONTROL_BITS,
+            },
+        ),
+        (
+            facts::CONTROL_BITS,
+            expected_count - 1,
+            LEVEL_BITS,
+            Error::WrongInterruptCount {
+                actual: expected_count - 1,
+                expected: expected_count,
+            },
+        ),
+        (
+            facts::CONTROL_BITS,
+            expected_count + 1,
+            LEVEL_BITS,
+            Error::WrongInterruptCount {
+                actual: expected_count + 1,
+                expected: expected_count,
+            },
+        ),
+        (
+            facts::CONTROL_BITS,
+            expected_count,
+            0,
+            Error::WrongLevelBits {
+                actual: 0,
+                expected: LEVEL_BITS,
+            },
+        ),
+        (
+            facts::CONTROL_BITS,
+            expected_count,
+            LEVEL_BITS + 1,
+            Error::WrongLevelBits {
+                actual: LEVEL_BITS + 1,
+                expected: LEVEL_BITS,
+            },
+        ),
+    ] {
+        let mut memory = configured_memory(control_bits, lines, level_bits);
+        let matrix_before = memory.matrix.clone();
+        let clic_before = memory.clic.clone();
+        assert_eq!(Router::install(memory.controller(), &[]).err(), Some(error));
+        assert_eq!(memory.matrix, matrix_before, "no route writes on mismatch");
+        assert_eq!(memory.clic, clic_before, "no line writes on mismatch");
+    }
+}
+
+#[test]
+fn verification_rechecks_mnlbits_after_installation() {
+    let mut memory = configured_memory(facts::CONTROL_BITS, u16::from(LINES.count), LEVEL_BITS);
+    let matrix = interrupt_core::interrupt_core0_host(&mut memory.matrix)
+        .expect("matrix")
+        .0;
+    let (clic, mut config) = clic::clic_host(&mut memory.clic).expect("CLIC");
+    let controller = InterruptController::new(matrix, clic);
+    let router = Router::install(controller, &[]).expect("matching geometry installs");
+    assert_eq!(router.verify(), Ok(()));
+    config.modify_int_config(|config| {
+        config.set_mnlbits(Bits::constant::<0>());
+    });
+    assert_eq!(
+        router.verify(),
+        Err(Error::WrongLevelBits {
+            actual: 0,
+            expected: LEVEL_BITS
+        })
+    );
 }
 
 fn source(number: u16) -> Index<{ interrupt_core::route::COUNT }> {
@@ -315,13 +424,6 @@ impl InterruptSource for WakeIrq {
 
 pub fn on_wake(_: &mut WakeIrq) {}
 
-const LINES: Lines = Lines {
-    first: 16,
-    count: 48,
-    levels: 8,
-    harts: 2,
-};
-
 oer_interrupt_table::interrupt_table! {
     lines: LINES,
     handler_attributes: [];
@@ -332,7 +434,7 @@ oer_interrupt_table::interrupt_table! {
 fn the_router_silences_boot_leftovers_then_binds_a_line_on_its_level() {
     // Every source routed to line 20 and every line enabled, as a boot
     // before the table might leave them.
-    let mut memory = Memory::filled(0);
+    let mut memory = configured_memory(facts::CONTROL_BITS, u16::from(LINES.count), LEVEL_BITS);
     {
         let mut controller = memory.controller();
         for number in 0..InterruptController::<Host<'_>, Host<'_>>::SOURCES {

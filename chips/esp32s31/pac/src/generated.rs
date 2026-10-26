@@ -50816,7 +50816,7 @@ pub mod cache {
 pub mod clic {
     /// The `INT_CONFIG` register.
     ///
-    /// The controller's configuration: how many bits of a line's control byte are its level.
+    /// The controller's configuration: how many bits of a line's control byte are its level. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 20-38: MNLBITS resets to zero; HAL must write its selected level bits.
     pub mod int_config {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x0000007f;
@@ -50902,9 +50902,117 @@ pub mod clic {
         }
     }
 
+    /// The `INT_INFO` register.
+    ///
+    /// Implemented CLIC geometry and version. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 40-59.
+    pub mod int_info {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x01ffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4;
+
+        /// Width of `NUM_INT` in bits.
+        pub const NUM_INT_WIDTH: u32 = 13;
+        /// Greatest unsigned image of `NUM_INT`.
+        pub const NUM_INT_MAX: u32 = 0x1fff;
+        /// Positioned bits of `NUM_INT`.
+        pub const NUM_INT_MASK: u32 = 0x1fff;
+
+        /// Width of `VERSION` in bits.
+        pub const VERSION_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `VERSION`.
+        pub const VERSION_MAX: u32 = 0xff;
+        /// Positioned bits of `VERSION`.
+        pub const VERSION_MASK: u32 = 0x1fe000;
+
+        /// Width of `CTLBITS` in bits.
+        pub const CTLBITS_WIDTH: u32 = 4;
+        /// Greatest unsigned image of `CTLBITS`.
+        pub const CTLBITS_MAX: u32 = 0xf;
+        /// Positioned bits of `CTLBITS`.
+        pub const CTLBITS_MASK: u32 = 0x1e00000;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Number of interrupt inputs, including reserved core-local inputs.
+            #[inline]
+            pub const fn num_int(self) -> oer_mmio::Bits<13> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Implementation revision in the low nibble, CLIC architecture version in the high nibble.
+            #[inline]
+            pub const fn version(self) -> u8 {
+                (self.0 >> 13) as u8
+            }
+
+            /// Implemented high bits of each line's CLICINTCTL byte.
+            #[inline]
+            pub const fn ctlbits(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 21)
+            }
+        }
+    }
+
+    /// The `INT_THRESH` register.
+    ///
+    /// Legacy MMIO machine threshold; runtime uses the standard mintthresh CSR. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 61-67: R/W, reset zero.
+    pub mod int_thresh {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xff000000;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x8;
+
+        /// Width of `CPU_INT_THRESH` in bits.
+        pub const CPU_INT_THRESH_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `CPU_INT_THRESH`.
+        pub const CPU_INT_THRESH_MAX: u32 = 0xff;
+        /// Positioned bits of `CPU_INT_THRESH`.
+        pub const CPU_INT_THRESH_MASK: u32 = 0xff000000;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Legacy machine interrupt threshold.
+            #[inline]
+            pub const fn cpu_int_thresh(self) -> u8 {
+                (self.0 >> 24) as u8
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Legacy machine interrupt threshold.
+            #[inline]
+            pub const fn cpu_int_thresh(&self) -> u8 {
+                (self.0 >> 24) as u8
+            }
+
+            /// Set `CPU_INT_THRESH`.
+            #[inline]
+            pub fn set_cpu_int_thresh(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0x00ffffff) | (u32::from(value) << 24);
+                self
+            }
+        }
+    }
+
     /// The `CTRL%s` register.
     ///
-    /// Line %s: pending, enable, attribute and level control.
+    /// Line %s: pending, enable, attribute and level control. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 70-116: CTL resets to 0x1f, ATTR_MODE to 0b11, other described fields to zero; unassigned bits have no claimed reset.
     pub mod ctrl {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffc70101;
@@ -51034,7 +51142,7 @@ pub mod clic {
                 AttrTrig::from_field(self.0 >> 17)
             }
 
-            /// Privilege mode of the line.
+            /// Machine privilege mode, fixed at 0b11. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 79-84.
             #[inline]
             pub const fn attr_mode(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 22)
@@ -51081,7 +51189,7 @@ pub mod clic {
                 AttrTrig::from_field(self.0 >> 17)
             }
 
-            /// Privilege mode of the line.
+            /// Machine privilege mode, fixed at 0b11. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 79-84.
             #[inline]
             pub const fn attr_mode(&self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 22)
@@ -51121,13 +51229,6 @@ pub mod clic {
                 self
             }
 
-            /// Set `ATTR_MODE`.
-            #[inline]
-            pub fn set_attr_mode(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                self.0 = (self.0 & 0xff3fffff) | (value.get() << 22);
-                self
-            }
-
             /// Set `CTL`.
             #[inline]
             pub fn set_ctl(&mut self, value: u8) -> &mut Self {
@@ -51138,6 +51239,10 @@ pub mod clic {
     }
 
     /// The `Clic` part of `CLIC`.
+    ///
+    /// The router owns line writes and reads implemented geometry and the configuration whose sole writer is ClicObserver during partition split.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_CLIC.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct Clic<P: oer_mmio::Placement = oer_mmio::Fixed<0x10800000>>(
         oer_mmio::Part<P, ClicDivision, ClicWords>,
@@ -51148,16 +51253,28 @@ pub mod clic {
 
     impl oer_mmio::Words for ClicWords {
         const OWNED: &'static [usize] = &[
-            0x1000, 0x1004, 0x1008, 0x100c, 0x1010, 0x1014, 0x1018, 0x101c, 0x1020, 0x1024, 0x1028,
-            0x102c, 0x1030, 0x1034, 0x1038, 0x103c, 0x1040, 0x1044, 0x1048, 0x104c, 0x1050, 0x1054,
-            0x1058, 0x105c, 0x1060, 0x1064, 0x1068, 0x106c, 0x1070, 0x1074, 0x1078, 0x107c, 0x1080,
-            0x1084, 0x1088, 0x108c, 0x1090, 0x1094, 0x1098, 0x109c, 0x10a0, 0x10a4, 0x10a8, 0x10ac,
-            0x10b0, 0x10b4, 0x10b8, 0x10bc,
+            0x4, 0x1000, 0x1004, 0x1008, 0x100c, 0x1010, 0x1014, 0x1018, 0x101c, 0x1020, 0x1024,
+            0x1028, 0x102c, 0x1030, 0x1034, 0x1038, 0x103c, 0x1040, 0x1044, 0x1048, 0x104c, 0x1050,
+            0x1054, 0x1058, 0x105c, 0x1060, 0x1064, 0x1068, 0x106c, 0x1070, 0x1074, 0x1078, 0x107c,
+            0x1080, 0x1084, 0x1088, 0x108c, 0x1090, 0x1094, 0x1098, 0x109c, 0x10a0, 0x10a4, 0x10a8,
+            0x10ac, 0x10b0, 0x10b4, 0x10b8, 0x10bc,
         ];
-        const OBSERVED: &'static [usize] = &[];
+        const OBSERVED: &'static [usize] = &[0x0];
     }
 
     impl<P: oer_mmio::Placement> Clic<P> {
+        /// Read `INT_CONFIG`.
+        #[inline]
+        pub fn read_int_config(&self) -> int_config::R {
+            int_config::R(self.0.read::<0x0>())
+        }
+
+        /// Read `INT_INFO`.
+        #[inline]
+        pub fn read_int_info(&self) -> int_info::R {
+            int_info::R(self.0.read::<0x4>())
+        }
+
         /// Read `CTRL%s`.
         #[inline]
         pub fn read_ctrl(&self, index: oer_mmio::Index<48>) -> ctrl::R {
@@ -51192,7 +51309,7 @@ pub mod clic {
     pub struct ClicObserverWords;
 
     impl oer_mmio::Words for ClicObserverWords {
-        const OWNED: &'static [usize] = &[0x0];
+        const OWNED: &'static [usize] = &[0x0, 0x8];
         const OBSERVED: &'static [usize] = &[
             0x1000, 0x1004, 0x1008, 0x100c, 0x1010, 0x1014, 0x1018, 0x101c, 0x1020, 0x1024, 0x1028,
             0x102c, 0x1030, 0x1034, 0x1038, 0x103c, 0x1040, 0x1044, 0x1048, 0x104c, 0x1050, 0x1054,
@@ -51218,6 +51335,21 @@ pub mod clic {
             self.0.write::<0x0>(value.0);
         }
 
+        /// Read `INT_THRESH`.
+        #[inline]
+        pub fn read_int_thresh(&self) -> int_thresh::R {
+            int_thresh::R(self.0.read::<0x8>())
+        }
+
+        /// Read `INT_THRESH`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_int_thresh(&mut self, change: impl FnOnce(&mut int_thresh::W)) {
+            let mut value = int_thresh::W(self.0.read::<0x8>());
+            change(&mut value);
+            self.0.write::<0x8>(value.0);
+        }
+
         /// Read `CTRL%s`.
         #[inline]
         pub fn read_ctrl(&self, index: oer_mmio::Index<48>) -> ctrl::R {
@@ -51231,11 +51363,11 @@ pub mod clic {
 
     impl oer_mmio::Registers for ClicDivision {
         const WORDS: &'static [usize] = &[
-            0x0, 0x1000, 0x1004, 0x1008, 0x100c, 0x1010, 0x1014, 0x1018, 0x101c, 0x1020, 0x1024,
-            0x1028, 0x102c, 0x1030, 0x1034, 0x1038, 0x103c, 0x1040, 0x1044, 0x1048, 0x104c, 0x1050,
-            0x1054, 0x1058, 0x105c, 0x1060, 0x1064, 0x1068, 0x106c, 0x1070, 0x1074, 0x1078, 0x107c,
-            0x1080, 0x1084, 0x1088, 0x108c, 0x1090, 0x1094, 0x1098, 0x109c, 0x10a0, 0x10a4, 0x10a8,
-            0x10ac, 0x10b0, 0x10b4, 0x10b8, 0x10bc,
+            0x0, 0x4, 0x8, 0x1000, 0x1004, 0x1008, 0x100c, 0x1010, 0x1014, 0x1018, 0x101c, 0x1020,
+            0x1024, 0x1028, 0x102c, 0x1030, 0x1034, 0x1038, 0x103c, 0x1040, 0x1044, 0x1048, 0x104c,
+            0x1050, 0x1054, 0x1058, 0x105c, 0x1060, 0x1064, 0x1068, 0x106c, 0x1070, 0x1074, 0x1078,
+            0x107c, 0x1080, 0x1084, 0x1088, 0x108c, 0x1090, 0x1094, 0x1098, 0x109c, 0x10a0, 0x10a4,
+            0x10a8, 0x10ac, 0x10b0, 0x10b4, 0x10b8, 0x10bc,
         ];
     }
 

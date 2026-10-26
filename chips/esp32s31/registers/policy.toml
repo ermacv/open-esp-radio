@@ -281,12 +281,15 @@ description = "The interrupt matrix route and pending words and the CLIC configu
 [[partitions.parts]]
 name = "Clic"
 instance = "CLIC"
-registers = ["CTRL%s"]
+registers = ["CTRL%s", "INT_INFO"]
+observes = ["INT_CONFIG"]
+description = "The router owns line writes and reads implemented geometry and the configuration whose sole writer is ClicObserver during partition split."
+sources = ["ESP_IDF_4D59230D_S31_CLIC"]
 
 [[partitions.parts]]
 name = "ClicObserver"
 instance = "CLIC"
-registers = ["INT_CONFIG"]
+registers = ["INT_CONFIG", "INT_THRESH"]
 observes = ["CTRL%s"]
 description = "The CLIC's level bits, set once when the root splits the partition, and hart 0's lines as a fatal path reads them after the other hart stopped; it writes no line."
 sources = ["ESP_IDF_4D59230D_S31_CLIC"]
