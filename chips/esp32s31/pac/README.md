@@ -20,7 +20,7 @@ over it is the HAL's, each vendor step with its `SOURCE:`.
   acknowledgements, FIFO pops and pushes, data-port stores and the strobes
   and stores of shared parts.
 - **Typed pointers.** A field the hardware reads as an address is set only
-  from an `oer_mmio::DmaRef` of its target layout or a `DmaWindowAddress`,
+  from an `oer_memory::DmaRef` of its target layout or a `DmaWindowAddress`,
   never from an integer; a pointer's high field only to its placement's
   prefix.
 - **Ownership.** Each part of the policy is one owner type over its words:

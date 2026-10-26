@@ -2131,6 +2131,7 @@ pub mod ble_accelerator {
     pub struct BleHwAcceleratorWords;
 
     impl oer_mmio::Registers for BleHwAcceleratorWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x80, 0x88, 0x8c, 0xa0, 0xa4,
             0xa8, 0xb8, 0xbc, 0xc4, 0xcc, 0xd0,
@@ -7706,7 +7707,7 @@ pub mod btdm {
             #[inline]
             pub fn set_head_pointer(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::BleSchedulerItem>,
+                value: oer_memory::DmaRef<super::super::layouts::BleSchedulerItem>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
@@ -7731,6 +7732,7 @@ pub mod btdm {
     pub struct BtdmSchedulerTableWords;
 
     impl oer_mmio::Registers for BtdmSchedulerTableWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x1000, 0x1010, 0x1020, 0x1030, 0x1040, 0x1050, 0x1060, 0x1070, 0x1080, 0x1090, 0x10a0,
             0x10b0, 0x10c0, 0x10d0, 0x10e0, 0x10f0,
@@ -18173,6 +18175,7 @@ pub mod bt_bb {
     pub struct PhyBtagcRecoveredWords;
 
     impl oer_mmio::Registers for PhyBtagcRecoveredWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x800, 0x820, 0x840, 0x844, 0x848, 0x84c, 0x850, 0x854, 0x858, 0x85c, 0x864, 0x868,
             0x86c, 0x884, 0x888, 0x88c, 0x894, 0x898, 0x8a0, 0x8a8, 0x8b0, 0x8b4, 0x8b8, 0x8bc,
@@ -18834,6 +18837,7 @@ pub mod bt_bb {
     pub struct PhyAdcDumpRecoveredBtBbWords;
 
     impl oer_mmio::Registers for PhyAdcDumpRecoveredBtBbWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xb4];
     }
 
@@ -18905,6 +18909,7 @@ pub mod bt_bb {
     pub struct BtV32CteWords;
 
     impl oer_mmio::Registers for BtV32CteWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x94, 0x124, 0x128, 0x12c, 0x150, 0x154, 0x158, 0x15c, 0x160, 0x164, 0x168, 0x16c,
             0x1fc,
@@ -19153,6 +19158,7 @@ pub mod bt_bb {
     pub struct BtV32BasebandWords;
 
     impl oer_mmio::Registers for BtV32BasebandWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0xc, 0x14, 0x1c, 0x4c, 0x60, 0x64, 0x68, 0x7c, 0xb8, 0xbc, 0xc0, 0xd4, 0xd8,
             0xdc, 0xe0, 0xe4, 0xe8, 0xec, 0xf0, 0xf4, 0xf8, 0xfc, 0x100, 0x10c, 0x170, 0x184,
@@ -19660,6 +19666,7 @@ pub mod bt_bb {
     pub struct BtV32BasebandRxInfoWords;
 
     impl oer_mmio::Registers for BtV32BasebandRxInfoWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xb0];
     }
 
@@ -19705,6 +19712,7 @@ pub mod bt_bb {
     pub struct SharedBasebandTxTimingWords;
 
     impl oer_mmio::Registers for SharedBasebandTxTimingWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x10];
     }
 
@@ -19762,6 +19770,7 @@ pub mod bt_bb {
     pub struct ZbbbRadioControlWords;
 
     impl oer_mmio::Registers for ZbbbRadioControlWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0xc00, 0xc0c, 0xc10, 0xc14, 0xc18, 0xc28, 0xc2c, 0xc30, 0xc34, 0xc38,
         ];
@@ -23773,7 +23782,7 @@ pub mod bt_mac {
             #[inline]
             pub fn set_compressed_sram_pointer(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::BleSchedulerItem>,
+                value: oer_memory::DmaRef<super::super::layouts::BleSchedulerItem>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
@@ -24955,7 +24964,7 @@ pub mod bt_mac {
             #[inline]
             pub fn set_compressed_sram_pointer(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::BleSchedulerItem>,
+                value: oer_memory::DmaRef<super::super::layouts::BleSchedulerItem>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
@@ -25248,7 +25257,7 @@ pub mod bt_mac {
             #[inline]
             pub fn set_address(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::BlePhyEnvironment>,
+                value: oer_memory::DmaRef<super::super::layouts::BlePhyEnvironment>,
             ) -> &mut Self {
                 self.0 = value.bits().wrapping_add(0x4d);
                 self
@@ -25543,7 +25552,7 @@ pub mod bt_mac {
             #[inline]
             pub fn set_compressed_sram_pointer(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::BleSchedulerItem>,
+                value: oer_memory::DmaRef<super::super::layouts::BleSchedulerItem>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
@@ -26182,7 +26191,7 @@ pub mod bt_mac {
             #[inline]
             pub fn set_compressed_sram_pointer(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::BleBufferHeader>,
+                value: oer_memory::DmaRef<super::super::layouts::BleBufferHeader>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
@@ -26275,7 +26284,7 @@ pub mod bt_mac {
             #[inline]
             pub fn set_compressed_sram_pointer(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::BleBufferHeader>,
+                value: oer_memory::DmaRef<super::super::layouts::BleBufferHeader>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
@@ -26380,7 +26389,7 @@ pub mod bt_mac {
             #[inline]
             pub fn set_compressed_sram_pointer(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::BleBufferHeader>,
+                value: oer_memory::DmaRef<super::super::layouts::BleBufferHeader>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
@@ -26473,7 +26482,7 @@ pub mod bt_mac {
             #[inline]
             pub fn set_compressed_sram_pointer(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::BleBufferHeader>,
+                value: oer_memory::DmaRef<super::super::layouts::BleBufferHeader>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
@@ -26578,7 +26587,7 @@ pub mod bt_mac {
             #[inline]
             pub fn set_compressed_sram_pointer(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::BleBufferHeader>,
+                value: oer_memory::DmaRef<super::super::layouts::BleBufferHeader>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
@@ -26671,7 +26680,7 @@ pub mod bt_mac {
             #[inline]
             pub fn set_compressed_sram_pointer(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::BleBufferHeader>,
+                value: oer_memory::DmaRef<super::super::layouts::BleBufferHeader>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
@@ -30411,7 +30420,7 @@ pub mod bt_mac {
             #[inline]
             pub fn set_compressed_address(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::BleDeviceTable>,
+                value: oer_memory::DmaRef<super::super::layouts::BleDeviceTable>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
@@ -30517,7 +30526,7 @@ pub mod bt_mac {
             #[inline]
             pub fn set_compressed_sram_pointer(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::BleResolvingList>,
+                value: oer_memory::DmaRef<super::super::layouts::BleResolvingList>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
@@ -30577,7 +30586,7 @@ pub mod bt_mac {
             #[inline]
             pub fn set_address(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::BlePhyEnvironment>,
+                value: oer_memory::DmaRef<super::super::layouts::BlePhyEnvironment>,
             ) -> &mut Self {
                 self.0 = value.bits().wrapping_add(0x2c);
                 self
@@ -31943,7 +31952,7 @@ pub mod bt_mac {
             #[inline]
             pub fn set_compressed_descriptor_pointer(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::BleDirectionFindingDescriptor>,
+                value: oer_memory::DmaRef<super::super::layouts::BleDirectionFindingDescriptor>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
                 self
@@ -32378,6 +32387,7 @@ pub mod bt_mac {
     pub struct BleControllerAddressSlotsWords;
 
     impl oer_mmio::Registers for BleControllerAddressSlotsWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x80c, 0x810, 0x814, 0x818, 0x81c, 0x820];
     }
 
@@ -32445,6 +32455,7 @@ pub mod bt_mac {
     pub struct BleHwCteRingControlWords;
 
     impl oer_mmio::Registers for BleHwCteRingControlWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x99c, 0x9a0, 0x9a4, 0x9a8, 0x9ac, 0x9b0, 0x9b4, 0x9b8, 0x9bc, 0x9c0, 0x9c4, 0x9c8,
             0x9cc,
@@ -32543,6 +32554,7 @@ pub mod bt_mac {
     pub struct BleHwResolvingListWords;
 
     impl oer_mmio::Registers for BleHwResolvingListWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x880];
     }
 
@@ -32577,7 +32589,7 @@ pub mod bt_mac {
         #[inline]
         pub fn write_base_pointer(
             &mut self,
-            compressed_sram_pointer: oer_mmio::DmaRef<super::layouts::BleResolvingList>,
+            compressed_sram_pointer: oer_memory::DmaRef<super::layouts::BleResolvingList>,
             change: impl FnOnce(&mut base_pointer::W),
         ) {
             let mut value = base_pointer::W((compressed_sram_pointer.bits() >> 2) & 0xfffff);
@@ -32596,6 +32608,7 @@ pub mod bt_mac {
     pub struct BleHwRuntimeControlWords;
 
     impl oer_mmio::Registers for BleHwRuntimeControlWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0xb30, 0xb34, 0xb38, 0xb3c, 0xb40, 0xb44, 0xb48, 0xb4c, 0xb50, 0xb54, 0xb58, 0xb5c,
             0xb60, 0xb64, 0xb68, 0xb6c, 0xb74, 0xb78, 0xb88, 0xb90, 0xb94,
@@ -32717,6 +32730,7 @@ pub mod bt_mac {
     pub struct BleIsoSchedulerNotifyWords;
 
     impl oer_mmio::Registers for BleIsoSchedulerNotifyWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x424];
     }
 
@@ -32766,6 +32780,7 @@ pub mod bt_mac {
     pub struct BleHwPositionalWord1ff0Words;
 
     impl oer_mmio::Registers for BleHwPositionalWord1ff0Words {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xff0];
     }
 
@@ -32815,6 +32830,7 @@ pub mod bt_mac {
     pub struct BleScanBackoffWords;
 
     impl oer_mmio::Registers for BleScanBackoffWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x970, 0x974, 0x978];
     }
 
@@ -32894,6 +32910,7 @@ pub mod bt_mac {
     pub struct BleSyncPublicationWords;
 
     impl oer_mmio::Registers for BleSyncPublicationWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x878, 0x87c];
     }
 
@@ -32953,6 +32970,7 @@ pub mod bt_mac {
     pub struct BluetoothControllerCoreWords;
 
     impl oer_mmio::Registers for BluetoothControllerCoreWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x74, 0x80, 0x84, 0x8c, 0x90, 0x94, 0x98, 0x9c, 0xac, 0xb0, 0xb4, 0xb8, 0xc4,
             0xc8, 0xcc, 0xd8, 0xdc, 0xe0, 0xec, 0x1c0, 0x1c4, 0x1f0, 0x1f4, 0x1f8, 0x1fc, 0x200,
@@ -33521,7 +33539,7 @@ pub mod bt_mac {
         #[inline]
         pub fn write_phy_environment_tail_pointer(
             &mut self,
-            address: oer_mmio::DmaRef<super::layouts::BlePhyEnvironment>,
+            address: oer_memory::DmaRef<super::layouts::BlePhyEnvironment>,
             change: impl FnOnce(&mut phy_environment_tail_pointer::W),
         ) {
             let mut value = phy_environment_tail_pointer::W(address.bits().wrapping_add(0x4d));
@@ -33783,7 +33801,7 @@ pub mod bt_mac {
         #[inline]
         pub fn or_bluetooth_memory_list_1_pointer_a(
             &mut self,
-            value: oer_mmio::DmaRef<super::layouts::BleBufferHeader>,
+            value: oer_memory::DmaRef<super::layouts::BleBufferHeader>,
         ) {
             self.0
                 .write::<0x280>(self.0.read::<0x280>() | ((value.bits() >> 2) & 0xfffff));
@@ -33796,7 +33814,7 @@ pub mod bt_mac {
         #[inline]
         pub fn or_bluetooth_memory_list_1_pointer_b(
             &mut self,
-            value: oer_mmio::DmaRef<super::layouts::BleBufferHeader>,
+            value: oer_memory::DmaRef<super::layouts::BleBufferHeader>,
         ) {
             self.0
                 .write::<0x284>(self.0.read::<0x284>() | ((value.bits() >> 2) & 0xfffff));
@@ -33809,7 +33827,7 @@ pub mod bt_mac {
         #[inline]
         pub fn or_bluetooth_memory_list_2_pointer_a(
             &mut self,
-            value: oer_mmio::DmaRef<super::layouts::BleBufferHeader>,
+            value: oer_memory::DmaRef<super::layouts::BleBufferHeader>,
         ) {
             self.0
                 .write::<0x288>(self.0.read::<0x288>() | ((value.bits() >> 2) & 0xfffff));
@@ -33822,7 +33840,7 @@ pub mod bt_mac {
         #[inline]
         pub fn or_bluetooth_memory_list_2_pointer_b(
             &mut self,
-            value: oer_mmio::DmaRef<super::layouts::BleBufferHeader>,
+            value: oer_memory::DmaRef<super::layouts::BleBufferHeader>,
         ) {
             self.0
                 .write::<0x28c>(self.0.read::<0x28c>() | ((value.bits() >> 2) & 0xfffff));
@@ -33835,7 +33853,7 @@ pub mod bt_mac {
         #[inline]
         pub fn or_bluetooth_memory_list_3_pointer_a(
             &mut self,
-            value: oer_mmio::DmaRef<super::layouts::BleBufferHeader>,
+            value: oer_memory::DmaRef<super::layouts::BleBufferHeader>,
         ) {
             self.0
                 .write::<0x290>(self.0.read::<0x290>() | ((value.bits() >> 2) & 0xfffff));
@@ -33848,7 +33866,7 @@ pub mod bt_mac {
         #[inline]
         pub fn or_bluetooth_memory_list_3_pointer_b(
             &mut self,
-            value: oer_mmio::DmaRef<super::layouts::BleBufferHeader>,
+            value: oer_memory::DmaRef<super::layouts::BleBufferHeader>,
         ) {
             self.0
                 .write::<0x294>(self.0.read::<0x294>() | ((value.bits() >> 2) & 0xfffff));
@@ -33865,6 +33883,7 @@ pub mod bt_mac {
     pub struct BluetoothResetIdleStatus0Words;
 
     impl oer_mmio::Registers for BluetoothResetIdleStatus0Words {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x550];
     }
 
@@ -33910,6 +33929,7 @@ pub mod bt_mac {
     pub struct BtmacBlePhyInitWords;
 
     impl oer_mmio::Registers for BtmacBlePhyInitWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x474, 0x4b4, 0x4b8, 0x538, 0x650, 0x654, 0x800, 0x858, 0x85c, 0x870, 0x874, 0x8a0,
             0x8a4, 0x8a8, 0x8ac, 0x940, 0x94c, 0x950, 0x954, 0x958, 0x95c,
@@ -34122,7 +34142,7 @@ pub mod bt_mac {
         #[inline]
         pub fn write_device_table_first_entry(
             &mut self,
-            compressed_address: oer_mmio::DmaRef<super::layouts::BleDeviceTable>,
+            compressed_address: oer_memory::DmaRef<super::layouts::BleDeviceTable>,
             change: impl FnOnce(&mut device_table_first_entry::W),
         ) {
             let mut value = device_table_first_entry::W((compressed_address.bits() >> 2) & 0xfffff);
@@ -34317,6 +34337,7 @@ pub mod bt_mac {
     pub struct BluetoothInterruptBankWords;
 
     impl oer_mmio::Registers for BluetoothInterruptBankWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0xc, 0x10, 0x14, 0x54, 0x58, 0x5c, 0x60, 0x64, 0x68, 0x70, 0x1c8, 0x1cc, 0x340, 0x348,
         ];
@@ -34948,6 +34969,7 @@ pub mod bt_mac {
     pub struct BluetoothSchedulerInterruptRuntimeWords;
 
     impl oer_mmio::Registers for BluetoothSchedulerInterruptRuntimeWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x78, 0x7c, 0x1e8, 0x1ec];
     }
 
@@ -35146,6 +35168,7 @@ pub mod bus_monitor {
     pub struct DebugModeStatusWords;
 
     impl oer_mmio::Registers for DebugModeStatusWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x64];
     }
 
@@ -50568,6 +50591,7 @@ pub mod cache {
     pub struct CacheBootWords;
 
     impl oer_mmio::Registers for CacheBootWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x0, 0x30, 0x8c, 0x9c, 0xa0, 0xa4, 0xa8, 0xac, 0xe8];
     }
 
@@ -51230,6 +51254,7 @@ pub mod clic {
     pub struct ClicDivision;
 
     impl oer_mmio::Registers for ClicDivision {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x1000, 0x1004, 0x1008, 0x100c, 0x1010, 0x1014, 0x1018, 0x101c, 0x1020, 0x1024,
             0x1028, 0x102c, 0x1030, 0x1034, 0x1038, 0x103c, 0x1040, 0x1044, 0x1048, 0x104c, 0x1050,
@@ -52378,6 +52403,7 @@ pub mod coex {
     pub struct CoexHwTimerWords;
 
     impl oer_mmio::Registers for CoexHwTimerWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38,
             0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c,
@@ -52498,6 +52524,7 @@ pub mod coex {
     pub struct CoexExternalWords;
 
     impl oer_mmio::Registers for CoexExternalWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x9c, 0xa0, 0xa4, 0xd0, 0xd8];
     }
 
@@ -63001,6 +63028,7 @@ pub mod efuse {
     pub struct EfuseWords;
 
     impl oer_mmio::Registers for EfuseWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x50, 0x54, 0x5c];
     }
 
@@ -70792,6 +70820,7 @@ pub mod fe {
     pub struct PhyAgcOracleFeWords;
 
     impl oer_mmio::Registers for PhyAgcOracleFeWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x8bc];
     }
 
@@ -70866,6 +70895,7 @@ pub mod fe {
     pub struct PhyBasebandConfigOracleFeWords;
 
     impl oer_mmio::Registers for PhyBasebandConfigOracleFeWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x40c, 0x410, 0x414, 0x418, 0x41c, 0x420, 0x424, 0x428, 0x438, 0x444, 0x448, 0x808,
             0x80c, 0x810, 0x814, 0x818, 0x81c, 0x820, 0x824, 0x828, 0x86c, 0x870, 0xc04, 0xc08,
@@ -71357,6 +71387,7 @@ pub mod fe {
     pub struct PhyClockOracleFeWords;
 
     impl oer_mmio::Registers for PhyClockOracleFeWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x400, 0x408, 0x800];
     }
 
@@ -71457,6 +71488,7 @@ pub mod fe {
     pub struct PhyFectrlRecoveredWords;
 
     impl oer_mmio::Registers for PhyFectrlRecoveredWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x834, 0x838, 0x83c, 0x840];
     }
 
@@ -71576,6 +71608,7 @@ pub mod fe {
     pub struct PhyAdcDumpRecoveredFeWords;
 
     impl oer_mmio::Registers for PhyAdcDumpRecoveredFeWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x8cc];
     }
 
@@ -71647,6 +71680,7 @@ pub mod fe {
     pub struct PhyFedataRecoveredWords;
 
     impl oer_mmio::Registers for PhyFedataRecoveredWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x430, 0x440];
     }
 
@@ -71734,6 +71768,7 @@ pub mod fe {
     pub struct PhyFedataWifiRecoveredWords;
 
     impl oer_mmio::Registers for PhyFedataWifiRecoveredWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xc14, 0xc18, 0xc1c];
     }
 
@@ -71837,6 +71872,7 @@ pub mod fe {
     pub struct PhyFrequencyChannelOracleFeWords;
 
     impl oer_mmio::Registers for PhyFrequencyChannelOracleFeWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38, 0x3c, 0x40, 0x874,
         ];
@@ -72049,6 +72085,7 @@ pub mod fe {
     pub struct PhyIqEstimatorOracleWords;
 
     impl oer_mmio::Registers for PhyIqEstimatorOracleWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x44c, 0x450, 0x454, 0x458, 0x45c, 0x460, 0x464, 0x468, 0x46c, 0x47c, 0x8d0,
         ];
@@ -72205,6 +72242,7 @@ pub mod fe {
     pub struct PhyMemoryWords;
 
     impl oer_mmio::Registers for PhyMemoryWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x844, 0x848, 0x84c, 0x850, 0x854, 0x858, 0x85c, 0x860, 0x864, 0x868,
         ];
@@ -72335,6 +72373,7 @@ pub mod fe {
     pub struct PhyPbusWords;
 
     impl oer_mmio::Registers for PhyPbusWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x884, 0x88c, 0x890, 0x894, 0x898, 0x89c, 0x8a0, 0x8a4];
     }
 
@@ -72485,6 +72524,7 @@ pub mod fe {
     pub struct PhyRxDcoOracleWords;
 
     impl oer_mmio::Registers for PhyRxDcoOracleWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x434];
     }
 
@@ -72556,6 +72596,7 @@ pub mod fe {
     pub struct PhyFecoexRecoveredWords;
 
     impl oer_mmio::Registers for PhyFecoexRecoveredWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x10];
     }
 
@@ -75395,6 +75436,7 @@ pub mod hp_alive_sys {
     pub struct HpAliveSysPllClockWords;
 
     impl oer_mmio::Registers for HpAliveSysPllClockWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x0];
     }
 
@@ -75666,6 +75708,7 @@ pub mod hp_apm {
     pub struct HpApmFilterWords;
 
     impl oer_mmio::Registers for HpApmFilterWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xc4];
     }
 
@@ -75910,6 +75953,7 @@ pub mod hp_mem_apm {
     pub struct HpMemApmFilterWords;
 
     impl oer_mmio::Registers for HpMemApmFilterWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xc4];
     }
 
@@ -84266,6 +84310,7 @@ pub mod hp_system {
     pub struct HpSysCoreStallStatusWords;
 
     impl oer_mmio::Registers for HpSysCoreStallStatusWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x64];
     }
 
@@ -84315,6 +84360,7 @@ pub mod hp_system {
     pub struct FromCpu0Words;
 
     impl oer_mmio::Registers for FromCpu0Words {
+        type Sharing = oer_mmio::sharing::Shared;
         const WORDS: &'static [usize] = &[0x10];
     }
 
@@ -84325,7 +84371,7 @@ pub mod hp_system {
 
     // SOURCE: ESP_IDF_4D59230D_S31_FROM_CPU. The shared part's words are side-effect-free reads,
     // write-trigger strobes and one-field words stored whole.
-    impl oer_mmio::SharedRegisters for FromCpu0Words {}
+    // The sharing marker grants SharedRegisters and derives Sync.
 
     /// The part's device registers, as the PAC root claims them.
     pub type FromCpu0Claim = oer_mmio::Block<oer_mmio::Fixed<0x20586000>, FromCpu0Words>;
@@ -84378,6 +84424,7 @@ pub mod hp_system {
     pub struct FromCpu1Words;
 
     impl oer_mmio::Registers for FromCpu1Words {
+        type Sharing = oer_mmio::sharing::Shared;
         const WORDS: &'static [usize] = &[0x14];
     }
 
@@ -84388,7 +84435,7 @@ pub mod hp_system {
 
     // SOURCE: ESP_IDF_4D59230D_S31_FROM_CPU. The shared part's words are side-effect-free reads,
     // write-trigger strobes and one-field words stored whole.
-    impl oer_mmio::SharedRegisters for FromCpu1Words {}
+    // The sharing marker grants SharedRegisters and derives Sync.
 
     /// The part's device registers, as the PAC root claims them.
     pub type FromCpu1Claim = oer_mmio::Block<oer_mmio::Fixed<0x20586000>, FromCpu1Words>;
@@ -84441,6 +84488,7 @@ pub mod hp_system {
     pub struct FromCpu2Words;
 
     impl oer_mmio::Registers for FromCpu2Words {
+        type Sharing = oer_mmio::sharing::Shared;
         const WORDS: &'static [usize] = &[0x18];
     }
 
@@ -84451,7 +84499,7 @@ pub mod hp_system {
 
     // SOURCE: ESP_IDF_4D59230D_S31_FROM_CPU. The shared part's words are side-effect-free reads,
     // write-trigger strobes and one-field words stored whole.
-    impl oer_mmio::SharedRegisters for FromCpu2Words {}
+    // The sharing marker grants SharedRegisters and derives Sync.
 
     /// The part's device registers, as the PAC root claims them.
     pub type FromCpu2Claim = oer_mmio::Block<oer_mmio::Fixed<0x20586000>, FromCpu2Words>;
@@ -84504,6 +84552,7 @@ pub mod hp_system {
     pub struct FromCpu3Words;
 
     impl oer_mmio::Registers for FromCpu3Words {
+        type Sharing = oer_mmio::sharing::Shared;
         const WORDS: &'static [usize] = &[0x1c];
     }
 
@@ -84514,7 +84563,7 @@ pub mod hp_system {
 
     // SOURCE: ESP_IDF_4D59230D_S31_FROM_CPU. The shared part's words are side-effect-free reads,
     // write-trigger strobes and one-field words stored whole.
-    impl oer_mmio::SharedRegisters for FromCpu3Words {}
+    // The sharing marker grants SharedRegisters and derives Sync.
 
     /// The part's device registers, as the PAC root claims them.
     pub type FromCpu3Claim = oer_mmio::Block<oer_mmio::Fixed<0x20586000>, FromCpu3Words>;
@@ -102085,6 +102134,7 @@ pub mod hp_sys_clkrst {
     pub struct HpSysClkrstSystimerWords;
 
     impl oer_mmio::Registers for HpSysClkrstSystimerWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x120];
     }
 
@@ -102169,6 +102219,7 @@ pub mod hp_sys_clkrst {
     pub struct HpSysClkrstCoreWords;
 
     impl oer_mmio::Registers for HpSysClkrstCoreWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x20];
     }
 
@@ -102233,6 +102284,7 @@ pub mod hp_sys_clkrst {
     pub struct HpSysClkrstUart0Words;
 
     impl oer_mmio::Registers for HpSysClkrstUart0Words {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x88];
     }
 
@@ -102337,6 +102389,7 @@ pub mod hp_sys_clkrst {
     pub struct HpSysClkrstTimg1Words;
 
     impl oer_mmio::Registers for HpSysClkrstTimg1Words {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x11c];
     }
 
@@ -102441,6 +102494,7 @@ pub mod hp_sys_clkrst {
     pub struct HpSysClkrstRadioWords;
 
     impl oer_mmio::Registers for HpSysClkrstRadioWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x40, 0x1e0];
     }
 
@@ -102544,6 +102598,7 @@ pub mod hp_sys_clkrst {
     pub struct HpSysClkrstPll160Words;
 
     impl oer_mmio::Registers for HpSysClkrstPll160Words {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x180];
     }
 
@@ -102598,6 +102653,7 @@ pub mod hp_sys_clkrst {
     pub struct HpSysClkrstBootClockWords;
 
     impl oer_mmio::Registers for HpSysClkrstBootClockWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x64, 0x68, 0x174, 0x178, 0x194, 0x198,
         ];
@@ -104637,6 +104693,7 @@ pub mod i2c_ana_mst {
     pub struct I2cAnaMstWords;
 
     impl oer_mmio::Registers for I2cAnaMstWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x0, 0x4, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c];
     }
 
@@ -104926,6 +104983,7 @@ pub mod i2c_ana_mst_mem {
     pub struct PhyI2cCommandRamWords;
 
     impl oer_mmio::Registers for PhyI2cCommandRamWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38,
             0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c, 0x70,
@@ -111011,6 +111069,7 @@ pub mod ieee802154 {
     pub struct SharedBasebandResetIdleStatusWords;
 
     impl oer_mmio::Registers for SharedBasebandResetIdleStatusWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x88];
     }
 
@@ -111790,6 +111849,7 @@ pub mod ieee802154 {
     pub struct Ieee802154Division;
 
     impl oer_mmio::Registers for Ieee802154Division {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38,
             0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x5c, 0x60, 0x64, 0x68, 0x6c, 0x70, 0x78,
@@ -112840,6 +112900,7 @@ pub mod interrupt_core {
     pub struct InterruptCore0StatusWords;
 
     impl oer_mmio::Registers for InterruptCore0StatusWords {
+        type Sharing = oer_mmio::sharing::Shared;
         const WORDS: &'static [usize] = &[0x2a8, 0x2ac, 0x2b0, 0x2b4, 0x2b8, 0x2bc];
     }
 
@@ -112850,7 +112911,7 @@ pub mod interrupt_core {
 
     // SOURCE: ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX. The shared part's words are side-effect-free reads,
     // write-trigger strobes and one-field words stored whole.
-    impl oer_mmio::SharedRegisters for InterruptCore0StatusWords {}
+    // The sharing marker grants SharedRegisters and derives Sync.
 
     /// The part's device registers, as the PAC root claims them.
     pub type InterruptCore0StatusClaim =
@@ -112919,6 +112980,7 @@ pub mod interrupt_core {
     pub struct InterruptCore1Words;
 
     impl oer_mmio::Registers for InterruptCore1Words {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38,
             0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c, 0x70,
@@ -113011,6 +113073,7 @@ pub mod interrupt_core {
     pub struct InterruptCore1StatusWords;
 
     impl oer_mmio::Registers for InterruptCore1StatusWords {
+        type Sharing = oer_mmio::sharing::Shared;
         const WORDS: &'static [usize] = &[0x2a8, 0x2ac, 0x2b0, 0x2b4, 0x2b8, 0x2bc];
     }
 
@@ -113021,7 +113084,7 @@ pub mod interrupt_core {
 
     // SOURCE: ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX. The shared part's words are side-effect-free reads,
     // write-trigger strobes and one-field words stored whole.
-    impl oer_mmio::SharedRegisters for InterruptCore1StatusWords {}
+    // The sharing marker grants SharedRegisters and derives Sync.
 
     /// The part's device registers, as the PAC root claims them.
     pub type InterruptCore1StatusClaim =
@@ -113085,6 +113148,7 @@ pub mod interrupt_core {
     pub struct InterruptCore0Division;
 
     impl oer_mmio::Registers for InterruptCore0Division {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38,
             0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c, 0x70,
@@ -115591,6 +115655,7 @@ pub mod iomux_mspi_pin {
     pub struct IomuxMspiPsramPinsWords;
 
     impl oer_mmio::Registers for IomuxMspiPsramPinsWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38, 0x3c, 0x40, 0x44,
         ];
@@ -116768,6 +116833,7 @@ pub mod lp_ana {
     pub struct LpAnaBrownoutWords;
 
     impl oer_mmio::Registers for LpAnaBrownoutWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x0, 0x4, 0x1c];
     }
 
@@ -119567,6 +119633,7 @@ pub mod lp_aonclkrst {
     pub struct LpAonClkrstCoreResetWords;
 
     impl oer_mmio::Registers for LpAonClkrstCoreResetWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x3c, 0x40];
     }
 
@@ -119658,6 +119725,7 @@ pub mod lp_aonclkrst {
     pub struct LpAonResetCauseWords;
 
     impl oer_mmio::Registers for LpAonResetCauseWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x30, 0x34];
     }
 
@@ -119767,6 +119835,7 @@ pub mod lp_aonclkrst {
     pub struct LpAonClkrstWords;
 
     impl oer_mmio::Registers for LpAonClkrstWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x0, 0x68];
     }
 
@@ -119856,6 +119925,7 @@ pub mod lp_aonclkrst {
     pub struct LpAonClkrstCpllWords;
 
     impl oer_mmio::Registers for LpAonClkrstCpllWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x4c];
     }
 
@@ -120049,6 +120119,7 @@ pub mod lp_apm {
     pub struct LpApmFilterWords;
 
     impl oer_mmio::Registers for LpApmFilterWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xbc];
     }
 
@@ -121981,6 +122052,7 @@ pub mod lp_peri_clkrst {
     pub struct LpPericlkrstRngInitWords;
 
     impl oer_mmio::Registers for LpPericlkrstRngInitWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x3c];
     }
 
@@ -122055,6 +122127,7 @@ pub mod lp_peri_clkrst {
     pub struct LpPericlkrstWords;
 
     impl oer_mmio::Registers for LpPericlkrstWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x30];
     }
 
@@ -122321,6 +122394,7 @@ pub mod lp_system_reg {
     pub struct LpSysCoreControlWords;
 
     impl oer_mmio::Registers for LpSysCoreControlWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x8, 0x164];
     }
 
@@ -122894,6 +122968,7 @@ pub mod modem_datadump {
     pub struct PhyAdcDumpRecoveredModemDatadumpWords;
 
     impl oer_mmio::Registers for PhyAdcDumpRecoveredModemDatadumpWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x4, 0x8, 0x18];
     }
 
@@ -123646,6 +123721,7 @@ pub mod modem_etm {
     pub struct BleHwPositionalWord891cWords;
 
     impl oer_mmio::Registers for BleHwPositionalWord891cWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x11c];
     }
 
@@ -124081,6 +124157,7 @@ pub mod modem_etm {
     pub struct ModemEtmDivision;
 
     impl oer_mmio::Registers for ModemEtmDivision {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x2c, 0x30, 0x34, 0x38, 0x3c, 0x40,
             0x44, 0x48,
@@ -126718,6 +126795,7 @@ pub mod modem_lpcon {
     pub struct ModemLpconSharedClockWords;
 
     impl oer_mmio::Registers for ModemLpconSharedClockWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x4, 0x8, 0xc, 0x14, 0x20];
     }
 
@@ -126856,6 +126934,7 @@ pub mod modem_lpcon {
     pub struct ModemLpconPhyTickWords;
 
     impl oer_mmio::Registers for ModemLpconPhyTickWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x28];
     }
 
@@ -126927,6 +127006,7 @@ pub mod modem_lpcon {
     pub struct ModemLpconChipClocksWords;
 
     impl oer_mmio::Registers for ModemLpconChipClocksWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x18];
     }
 
@@ -132776,6 +132856,7 @@ pub mod modem_pwr {
     pub struct WifiMacAuxTsfControlWords;
 
     impl oer_mmio::Registers for WifiMacAuxTsfControlWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x860, 0x868, 0x870];
     }
 
@@ -132860,6 +132941,7 @@ pub mod modem_pwr {
     pub struct WifiMacCoexRuntimeWords;
 
     impl oer_mmio::Registers for WifiMacCoexRuntimeWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x89c, 0x8a0, 0x8a4, 0x8a8, 0x8ac];
     }
 
@@ -132977,6 +133059,7 @@ pub mod modem_pwr {
     pub struct WifiMacRegdmaControlWords;
 
     impl oer_mmio::Registers for WifiMacRegdmaControlWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x83c];
     }
 
@@ -133031,6 +133114,7 @@ pub mod modem_pwr {
     pub struct WifiMacRtcTimerUpdateWords;
 
     impl oer_mmio::Registers for WifiMacRtcTimerUpdateWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x830, 0x834, 0x838, 0x840, 0x844, 0x854, 0x858, 0x85c, 0x878,
         ];
@@ -133227,6 +133311,7 @@ pub mod modem_pwr {
     pub struct WifiMacStaTbttTargetWords;
 
     impl oer_mmio::Registers for WifiMacStaTbttTargetWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x82c];
     }
 
@@ -133281,6 +133366,7 @@ pub mod modem_pwr {
     pub struct WifiMacTsfLoadWords;
 
     impl oer_mmio::Registers for WifiMacTsfLoadWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x814, 0x818, 0x81c, 0x820, 0x824, 0x828];
     }
 
@@ -133385,6 +133471,7 @@ pub mod modem_pwr {
     pub struct WifiMacTsfStatusWords;
 
     impl oer_mmio::Registers for WifiMacTsfStatusWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x80c, 0x810];
     }
 
@@ -133448,6 +133535,7 @@ pub mod modem_pwr {
     pub struct WifiMacTsfTimerWords;
 
     impl oer_mmio::Registers for WifiMacTsfTimerWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x87c, 0x880, 0x884, 0x888, 0x88c, 0x890, 0x894, 0x898];
     }
 
@@ -133529,6 +133617,7 @@ pub mod modem_pwr {
     pub struct WifiMacPowerInterruptWords;
 
     impl oer_mmio::Registers for WifiMacPowerInterruptWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x8b4, 0x8b8, 0x8bc, 0x8c0];
     }
 
@@ -133797,6 +133886,7 @@ pub mod modem_pwr {
     pub struct WifiMacLocalTimeWords;
 
     impl oer_mmio::Registers for WifiMacLocalTimeWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x800];
     }
 
@@ -133842,6 +133932,7 @@ pub mod modem_pwr {
     pub struct BtdmRuntimeControlWords;
 
     impl oer_mmio::Registers for BtdmRuntimeControlWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x8, 0x10, 0x14, 0x1c, 0x20, 0x24, 0x2c, 0x34, 0x38, 0x40, 0x44, 0x48, 0x4c,
             0x58, 0x64, 0x68, 0x6c, 0x78,
@@ -139259,6 +139350,7 @@ pub mod modem_syscon {
     pub struct ModemSysconRadioWords;
 
     impl oer_mmio::Registers for ModemSysconRadioWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x4, 0xc, 0x10, 0x14, 0x18];
     }
 
@@ -155442,6 +155534,7 @@ pub mod pmu {
     pub struct PmuCpuStallWords;
 
     impl oer_mmio::Registers for PmuCpuStallWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x1ec];
     }
 
@@ -155495,6 +155588,7 @@ pub mod pmu {
     pub struct PmuRadioWords;
 
     impl oer_mmio::Registers for PmuRadioWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x14, 0x1c, 0xf0, 0xf8, 0x104, 0x184, 0x208];
     }
 
@@ -155769,6 +155863,7 @@ pub mod pmu {
     pub struct PmuBootClockWords;
 
     impl oer_mmio::Registers for PmuBootClockWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xf4, 0x1e8, 0x218];
     }
 
@@ -157093,6 +157188,7 @@ pub mod rtc_wdt {
     pub struct LpWdtWords;
 
     impl oer_mmio::Registers for LpWdtWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x0, 0x4, 0x14, 0x18];
     }
 
@@ -157183,6 +157279,7 @@ pub mod rtc_wdt {
     pub struct LpWdtSwdWords;
 
     impl oer_mmio::Registers for LpWdtSwdWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x1c, 0x20];
     }
 
@@ -197014,6 +197111,7 @@ pub mod spi1_mem_c {
     pub struct Spi1FlashWords;
 
     impl oer_mmio::Registers for Spi1FlashWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x8, 0x14, 0x18, 0x1c, 0x20, 0x28, 0x2c, 0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c,
             0x70, 0x74, 0x78, 0x7c, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0x180,
@@ -201370,6 +201468,7 @@ pub mod spi1_mem_s {
     pub struct Memspi3PsramWords;
 
     impl oer_mmio::Registers for Memspi3PsramWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x8, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x34, 0x58, 0x5c, 0x60, 0x64, 0x68,
             0x6c, 0x70, 0x74, 0x78, 0x7c, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0xd4,
@@ -219757,6 +219856,7 @@ pub mod spi_mem_c {
     pub struct Spi0FlashWords;
 
     impl oer_mmio::Registers for Spi0FlashWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x8, 0x14, 0x180, 0x184, 0x188, 0x37c, 0x380];
     }
 
@@ -232044,6 +232144,7 @@ pub mod spi_mem_s {
     pub struct Memspi2PsramWords;
 
     impl oer_mmio::Registers for Memspi2PsramWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0xc, 0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0xd8, 0x180, 0x190, 0x1a0, 0x37c, 0x380,
         ];
@@ -233982,6 +234083,7 @@ pub mod systimer {
     pub struct SystimerWords;
 
     impl oer_mmio::Registers for SystimerWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38, 0x3c, 0x50, 0x54, 0x58, 0x64,
         ];
@@ -234122,6 +234224,7 @@ pub mod systimer {
     pub struct SystimerCounterWords;
 
     impl oer_mmio::Registers for SystimerCounterWords {
+        type Sharing = oer_mmio::sharing::Shared;
         const WORDS: &'static [usize] = &[0x4, 0x40, 0x44];
     }
 
@@ -234132,7 +234235,7 @@ pub mod systimer {
 
     // SOURCE: ESP_IDF_4D59230D_S31_SYSTIMER, ESP_IDF_4D59230D_S31_SYSTIMER_LL. The shared part's words are side-effect-free reads,
     // write-trigger strobes and one-field words stored whole.
-    impl oer_mmio::SharedRegisters for SystimerCounterWords {}
+    // The sharing marker grants SharedRegisters and derives Sync.
 
     /// The part's device registers, as the PAC root claims them.
     pub type SystimerCounterClaim =
@@ -234284,6 +234387,7 @@ pub mod systimer {
     pub struct SystimerDivision;
 
     impl oer_mmio::Registers for SystimerDivision {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x6c];
     }
 
@@ -236608,6 +236712,7 @@ pub mod timg {
     pub struct Timg0WdtWords;
 
     impl oer_mmio::Registers for Timg0WdtWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x48, 0x4c, 0x50, 0x60, 0x64];
     }
 
@@ -236729,6 +236834,7 @@ pub mod timg {
     pub struct Timg1WdtWords;
 
     impl oer_mmio::Registers for Timg1WdtWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x48, 0x4c, 0x50, 0x60, 0x64];
     }
 
@@ -238337,6 +238443,7 @@ pub mod trng {
     pub struct TrngDivision;
 
     impl oer_mmio::Registers for TrngDivision {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x0, 0x4, 0x2c, 0x48, 0xfc];
     }
 
@@ -239387,6 +239494,7 @@ pub mod tsens {
     pub struct LpTsensWords;
 
     impl oer_mmio::Registers for LpTsensWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x0, 0x18];
     }
 
@@ -248244,6 +248352,7 @@ pub mod usb_serial_jtag {
     pub struct UsbSerialJtagPadsWords;
 
     impl oer_mmio::Registers for UsbSerialJtagPadsWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x18];
     }
 
@@ -248293,6 +248402,7 @@ pub mod usb_serial_jtag {
     pub struct UsbDeviceDivision;
 
     impl oer_mmio::Registers for UsbDeviceDivision {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x0, 0x4, 0xc, 0x10, 0x14];
     }
 
@@ -255472,6 +255582,7 @@ pub mod wifi_bb {
     pub struct WifiPhyRateOracleWifiBbWords;
 
     impl oer_mmio::Registers for WifiPhyRateOracleWifiBbWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x8c];
     }
 
@@ -255517,6 +255628,7 @@ pub mod wifi_bb {
     pub struct PhyAgcOracleWifiBbWords;
 
     impl oer_mmio::Registers for PhyAgcOracleWifiBbWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x2c, 0x30, 0x3c, 0x44, 0x48, 0x5c, 0x64, 0x68, 0x94, 0xa0, 0xa4, 0x104, 0x114, 0x11c,
             0x120, 0x124, 0x128, 0x13c, 0x8a4, 0x8c8, 0xd4c,
@@ -255964,6 +256076,7 @@ pub mod wifi_bb {
     pub struct PhyAgcRecoveredGapsWords;
 
     impl oer_mmio::Registers for PhyAgcRecoveredGapsWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x10, 0x14, 0x1c, 0x50, 0x6c, 0x74, 0xcc, 0xf4, 0x108, 0x430, 0x434, 0x438,
         ];
@@ -256199,6 +256312,7 @@ pub mod wifi_bb {
     pub struct PhyBasebandConfigOracleWifiBbWords;
 
     impl oer_mmio::Registers for PhyBasebandConfigOracleWifiBbWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x18, 0x400, 0x428, 0x43c, 0x440, 0x454, 0x458, 0x45c, 0x460, 0x468, 0x46c, 0x478,
             0x47c, 0x808, 0x890, 0x8dc, 0x8e4, 0x90c, 0x980, 0xa28, 0xc00, 0xc08, 0xc30, 0xc3c,
@@ -256781,6 +256895,7 @@ pub mod wifi_bb {
     pub struct PhyBbRecoveredGapsWords;
 
     impl oer_mmio::Registers for PhyBbRecoveredGapsWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xc14, 0xc58, 0xc5c, 0xc60, 0xce8, 0xcec];
     }
 
@@ -256918,6 +257033,7 @@ pub mod wifi_bb {
     pub struct PhyClockOracleWifiBbWords;
 
     impl oer_mmio::Registers for PhyClockOracleWifiBbWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xc80];
     }
 
@@ -256983,6 +257099,7 @@ pub mod wifi_bb {
     pub struct PhyAdcDumpRecoveredWifiBbWords;
 
     impl oer_mmio::Registers for PhyAdcDumpRecoveredWifiBbWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xb8];
     }
 
@@ -257054,6 +257171,7 @@ pub mod wifi_bb {
     pub struct PhyFrequencyChannelOracleWifiBbWords;
 
     impl oer_mmio::Registers for PhyFrequencyChannelOracleWifiBbWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x848, 0xce0, 0xce4];
     }
 
@@ -257166,6 +257284,7 @@ pub mod wifi_bb {
     pub struct PhyNrxRecoveredGapsWords;
 
     impl oer_mmio::Registers for PhyNrxRecoveredGapsWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x800, 0x80c, 0x830, 0x898, 0x8b8, 0x904];
     }
 
@@ -258103,6 +258222,7 @@ pub mod wifi_bb_brx {
     pub struct WifiPhyRateOracleWifiBbBrxWords;
 
     impl oer_mmio::Registers for WifiPhyRateOracleWifiBbBrxWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x60, 0x7c];
     }
 
@@ -258178,6 +258298,7 @@ pub mod wifi_bb_brx {
     pub struct PhyAgcOracleWifiBbBrxWords;
 
     impl oer_mmio::Registers for PhyAgcOracleWifiBbBrxWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x4, 0x10, 0x18, 0x1c, 0x20, 0x28, 0x2c, 0x70, 0x78];
     }
 
@@ -258397,6 +258518,7 @@ pub mod wifi_bb_brx {
     pub struct PhyBrxRecoveredGapsWords;
 
     impl oer_mmio::Registers for PhyBrxRecoveredGapsWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x50];
     }
 
@@ -260175,7 +260297,7 @@ pub mod wifi_mac {
             #[inline]
             pub fn set_address(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::WifiRxDmaDescriptor>,
+                value: oer_memory::DmaRef<super::super::layouts::WifiRxDmaDescriptor>,
             ) -> &mut Self {
                 self.0 = value.bits();
                 self
@@ -278562,7 +278684,7 @@ pub mod wifi_mac {
             #[inline]
             pub fn set_descriptor_address_low(
                 &mut self,
-                value: oer_mmio::DmaRef<super::super::layouts::WifiTxDmaDescriptor>,
+                value: oer_memory::DmaRef<super::super::layouts::WifiTxDmaDescriptor>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfff00000) | (value.bits() & 0xfffff);
                 self
@@ -291987,6 +292109,7 @@ pub mod wifi_mac {
     pub struct WifiMacAntennaInitWords;
 
     impl oer_mmio::Registers for WifiMacAntennaInitWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x2b0, 0x11ac, 0x1228, 0x12a4, 0x1320];
     }
 
@@ -292060,6 +292183,7 @@ pub mod wifi_mac {
     pub struct WifiMacBeaconIeCrcWords;
 
     impl oer_mmio::Registers for WifiMacBeaconIeCrcWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x300];
     }
 
@@ -292105,6 +292229,7 @@ pub mod wifi_mac {
     pub struct WifiMacBeamformingFeedbackTestWords;
 
     impl oer_mmio::Registers for WifiMacBeamformingFeedbackTestWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xe00];
     }
 
@@ -292159,6 +292284,7 @@ pub mod wifi_mac {
     pub struct WifiMacBeamformingReportWords;
 
     impl oer_mmio::Registers for WifiMacBeamformingReportWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x1f94];
     }
 
@@ -292204,6 +292330,7 @@ pub mod wifi_mac {
     pub struct WifiMacBlockAckWords;
 
     impl oer_mmio::Registers for WifiMacBlockAckWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x178, 0x17c, 0x180, 0x184, 0x188, 0x18c, 0x190, 0x194, 0x198, 0x19c, 0x1a0, 0x1a4,
             0x1a8, 0x1ac, 0x1b0, 0x1b4, 0x1b8, 0x1bc, 0x1c0, 0x1c4, 0x1c8, 0x1cc, 0x1d0, 0x1d4,
@@ -292894,6 +293021,7 @@ pub mod wifi_mac {
     pub struct WifiMacBssidPolicyWords;
 
     impl oer_mmio::Registers for WifiMacBssidPolicyWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c];
     }
 
@@ -292971,6 +293099,7 @@ pub mod wifi_mac {
     pub struct WifiMacCoexInitWords;
 
     impl oer_mmio::Registers for WifiMacCoexInitWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x2fc, 0xdd4, 0xdd8, 0xddc];
     }
 
@@ -293073,6 +293202,7 @@ pub mod wifi_mac {
     pub struct WifiMacColdHandshakeWords;
 
     impl oer_mmio::Registers for WifiMacColdHandshakeWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xde0, 0xdf0, 0xdf4, 0xdf8, 0xdfc];
     }
 
@@ -293192,6 +293322,7 @@ pub mod wifi_mac {
     pub struct WifiMacControlWords;
 
     impl oer_mmio::Registers for WifiMacControlWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xcac];
     }
 
@@ -293246,6 +293377,7 @@ pub mod wifi_mac {
     pub struct WifiMacCoreEnableWords;
 
     impl oer_mmio::Registers for WifiMacCoreEnableWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xc00];
     }
 
@@ -293303,6 +293435,7 @@ pub mod wifi_mac {
     pub struct WifiMacCryptoControlWords;
 
     impl oer_mmio::Registers for WifiMacCryptoControlWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x800, 0x804, 0x808, 0x80c, 0x810, 0x814];
     }
 
@@ -293406,6 +293539,7 @@ pub mod wifi_mac {
     pub struct WifiMacCsiDumpWords;
 
     impl oer_mmio::Registers for WifiMacCsiDumpWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x11c];
     }
 
@@ -293460,6 +293594,7 @@ pub mod wifi_mac {
     pub struct WifiMacDiagnosticStatisticsWords;
 
     impl oer_mmio::Registers for WifiMacDiagnosticStatisticsWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x3b4, 0x3b8, 0x3bc, 0x3c0, 0x4e0, 0x4e4, 0x4e8, 0x4ec, 0xe50, 0xe54, 0xe58, 0xe60,
             0xe64,
@@ -293583,6 +293718,7 @@ pub mod wifi_mac {
     pub struct WifiMacHeBufferStatusWords;
 
     impl oer_mmio::Registers for WifiMacHeBufferStatusWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0xd74, 0xd78, 0xd7c, 0xd80, 0xd84, 0xd88, 0xd8c, 0xd90, 0xd94, 0xd98, 0xd9c, 0xda0,
             0xda4, 0xda8, 0xdac, 0xdb0, 0xdb8,
@@ -293671,6 +293807,7 @@ pub mod wifi_mac {
     pub struct WifiMacHeColorCollisionWords;
 
     impl oer_mmio::Registers for WifiMacHeColorCollisionWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x40, 0x44];
     }
 
@@ -293722,6 +293859,7 @@ pub mod wifi_mac {
     pub struct WifiMacHeInitPrefixWords;
 
     impl oer_mmio::Registers for WifiMacHeInitPrefixWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x48, 0x9c, 0x464, 0x47c, 0x480, 0xc2c, 0xc30, 0xc34, 0xc38, 0xc78, 0xde4, 0xe04,
         ];
@@ -293942,6 +294080,7 @@ pub mod wifi_mac {
     pub struct WifiMacHeInitSuffixWords;
 
     impl oer_mmio::Registers for WifiMacHeInitSuffixWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x20, 0x28, 0x2c, 0x38, 0x3c, 0x10c, 0x2b8, 0x404, 0xc7c, 0xc80, 0xc84, 0xc88, 0xc90,
             0xcc0, 0xcc8, 0xcd8, 0xce8, 0xcf8, 0xd08, 0xd18, 0xd28, 0xd38, 0xd48, 0xd58, 0xd68,
@@ -294291,6 +294430,7 @@ pub mod wifi_mac {
     pub struct WifiMacHeMuEdcaTimerWords;
 
     impl oer_mmio::Registers for WifiMacHeMuEdcaTimerWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xdbc, 0xdc0, 0xdc4, 0xdc8];
     }
 
@@ -294349,6 +294489,7 @@ pub mod wifi_mac {
     pub struct WifiMacHeObssNarrowBandRuWords;
 
     impl oer_mmio::Registers for WifiMacHeObssNarrowBandRuWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xe9c, 0xea0];
     }
 
@@ -294421,6 +294562,7 @@ pub mod wifi_mac {
     pub struct WifiMacHeTbDiagnosticsWords;
 
     impl oer_mmio::Registers for WifiMacHeTbDiagnosticsWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x4f4, 0x4f8, 0x4fc, 0x500];
     }
 
@@ -294484,6 +294626,7 @@ pub mod wifi_mac {
     pub struct WifiMacHeTbStatisticsWords;
 
     impl oer_mmio::Registers for WifiMacHeTbStatisticsWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x3a0, 0x3a4];
     }
 
@@ -294535,6 +294678,7 @@ pub mod wifi_mac {
     pub struct WifiMacHeTriggerRxDiagnosticsWords;
 
     impl oer_mmio::Registers for WifiMacHeTriggerRxDiagnosticsWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x508, 0x50c, 0x510, 0x514, 0x518, 0x51c, 0x520, 0x524, 0x528, 0x52c,
         ];
@@ -294638,6 +294782,7 @@ pub mod wifi_mac {
     pub struct WifiMacInternalTxBlockAckWords;
 
     impl oer_mmio::Registers for WifiMacInternalTxBlockAckWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x29c, 0x2a0, 0x2a4, 0x2a8, 0x2ac];
     }
 
@@ -294707,6 +294852,7 @@ pub mod wifi_mac {
     pub struct WifiMacKeyTableWords;
 
     impl oer_mmio::Registers for WifiMacKeyTableWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x1800, 0x1804, 0x1808, 0x180c, 0x1810, 0x1814, 0x1818, 0x181c, 0x1820, 0x1824, 0x1828,
             0x182c, 0x1830, 0x1834, 0x1838, 0x183c, 0x1840, 0x1844, 0x1848, 0x184c, 0x1850, 0x1854,
@@ -294984,6 +295130,7 @@ pub mod wifi_mac {
     pub struct WifiMacLastRxBufferWords;
 
     impl oer_mmio::Registers for WifiMacLastRxBufferWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x120, 0x124, 0x128, 0x12c, 0x130, 0x134, 0x138, 0x140, 0x144, 0x148, 0x14c, 0x150,
             0x154, 0x15c, 0x160, 0x164, 0x168, 0x16c, 0x170,
@@ -295129,6 +295276,7 @@ pub mod wifi_mac {
     pub struct WifiMacRxBssidListWords;
 
     impl oer_mmio::Registers for WifiMacRxBssidListWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x110];
     }
 
@@ -295186,6 +295334,7 @@ pub mod wifi_mac {
     pub struct WifiMacRxCsiControlWords;
 
     impl oer_mmio::Registers for WifiMacRxCsiControlWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x98];
     }
 
@@ -295240,6 +295389,7 @@ pub mod wifi_mac {
     pub struct WifiMacRxCustomTypeWords;
 
     impl oer_mmio::Registers for WifiMacRxCustomTypeWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xca4];
     }
 
@@ -295297,6 +295447,7 @@ pub mod wifi_mac {
     pub struct WifiMacRxEndStateWords;
 
     impl oer_mmio::Registers for WifiMacRxEndStateWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xa8];
     }
 
@@ -295342,6 +295493,7 @@ pub mod wifi_mac {
     pub struct WifiMacRxFilterWords;
 
     impl oer_mmio::Registers for WifiMacRxFilterWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xd8, 0xdc, 0xe0, 0xe4, 0xe8, 0xec, 0xf0, 0xf4];
     }
 
@@ -295427,6 +295579,7 @@ pub mod wifi_mac {
     pub struct WifiMacRxHangStatisticsWords;
 
     impl oer_mmio::Registers for WifiMacRxHangStatisticsWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xc64, 0xe18, 0xe1c];
     }
 
@@ -295484,6 +295637,7 @@ pub mod wifi_mac {
     pub struct WifiMacRxPowerSaveWords;
 
     impl oer_mmio::Registers for WifiMacRxPowerSaveWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xa0];
     }
 
@@ -295541,6 +295695,7 @@ pub mod wifi_mac {
     pub struct WifiMacRxRuntimeResultsWords;
 
     impl oer_mmio::Registers for WifiMacRxRuntimeResultsWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xe28, 0xe30, 0xe34];
     }
 
@@ -295607,6 +295762,7 @@ pub mod wifi_mac {
     pub struct WifiMacRxStatisticsWords;
 
     impl oer_mmio::Registers for WifiMacRxStatisticsWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x30c, 0x310, 0x314, 0x318, 0x31c, 0x320, 0x324, 0x328, 0x32c, 0x330, 0x334, 0x338,
             0x33c, 0x340, 0x344, 0x348, 0x34c, 0x350, 0x35c, 0x360, 0x364, 0x368, 0x36c, 0x370,
@@ -295864,6 +296020,7 @@ pub mod wifi_mac {
     pub struct WifiMacStaBeaconFilterWords;
 
     impl oer_mmio::Registers for WifiMacStaBeaconFilterWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x2b4];
     }
 
@@ -295921,6 +296078,7 @@ pub mod wifi_mac {
     pub struct WifiMacTxrxCallbacksWords;
 
     impl oer_mmio::Registers for WifiMacTxrxCallbacksWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x44c, 0x450, 0x454, 0x458, 0x45c, 0x460, 0xc1c, 0xc54, 0xc58,
         ];
@@ -296114,6 +296272,7 @@ pub mod wifi_mac {
     pub struct WifiMacTxrxPrefixWords;
 
     impl oer_mmio::Registers for WifiMacTxrxPrefixWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] =
             &[0xfc, 0x100, 0x104, 0x108, 0x114, 0x118, 0xc8c, 0xc98, 0xca0];
     }
@@ -296257,6 +296416,7 @@ pub mod wifi_mac {
     pub struct WifiMacTxrxSuffixWords;
 
     impl oer_mmio::Registers for WifiMacTxrxSuffixWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x308, 0xc20, 0xc60, 0xca8];
     }
 
@@ -296356,6 +296516,7 @@ pub mod wifi_mac {
     pub struct WifiMacTxCommonWords;
 
     impl oer_mmio::Registers for WifiMacTxCommonWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xc5c, 0xcb0, 0xcb4, 0xcb8, 0xcbc];
     }
 
@@ -296658,6 +296819,7 @@ pub mod wifi_mac {
     pub struct WifiMacTxCompletionWords;
 
     impl oer_mmio::Registers for WifiMacTxCompletionWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x13c8, 0x13cc, 0x13d8, 0x1444, 0x1448, 0x1454, 0x14c0, 0x14c4, 0x14d0, 0x153c, 0x1540,
             0x154c,
@@ -296721,6 +296883,7 @@ pub mod wifi_mac {
     pub struct WifiMacTxPowerInitWords;
 
     impl oer_mmio::Registers for WifiMacTxPowerInitWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x408, 0x40c, 0x410, 0x414, 0x418, 0x41c, 0x420, 0x424, 0x428, 0x42c, 0x430, 0x434,
             0x438, 0x43c, 0x440, 0x444, 0x448,
@@ -296838,6 +297001,7 @@ pub mod wifi_mac {
     pub struct WifiMacTxQueueControlWords;
 
     impl oer_mmio::Registers for WifiMacTxQueueControlWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0xd34, 0xd3c, 0xd40, 0xd44, 0xd4c, 0xd50, 0xd54, 0xd5c, 0xd60, 0xd64, 0xd6c, 0xd70,
         ];
@@ -296938,6 +297102,7 @@ pub mod wifi_mac {
     pub struct WifiMacTxQueueVectorWords;
 
     impl oer_mmio::Registers for WifiMacTxQueueVectorWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x1364, 0x1368, 0x136c, 0x1370, 0x1374, 0x1378, 0x137c, 0x1380, 0x1384, 0x1388, 0x138c,
             0x1390, 0x1398, 0x139c, 0x13a4, 0x13e0, 0x13e4, 0x13e8, 0x13ec, 0x13f0, 0x13f4, 0x13f8,
@@ -297282,6 +297447,7 @@ pub mod wifi_mac {
     pub struct WifiMacTxStatisticsWords;
 
     impl oer_mmio::Registers for WifiMacTxStatisticsWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xe08, 0xe0c, 0xe10, 0xe14];
     }
 
@@ -297345,6 +297511,7 @@ pub mod wifi_mac {
     pub struct WifiMacInterfaceAddressWords;
 
     impl oer_mmio::Registers for WifiMacInterfaceAddressWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x5c, 0x60, 0x64, 0x68, 0x6c, 0x70, 0x74, 0x78];
     }
 
@@ -297422,6 +297589,7 @@ pub mod wifi_mac {
     pub struct WifiMacRxDmaWords;
 
     impl oer_mmio::Registers for WifiMacRxDmaWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x7c, 0x80, 0x84, 0x88, 0x8c, 0xc68, 0xc6c, 0xc70];
     }
 
@@ -297587,6 +297755,7 @@ pub mod wifi_mac {
     pub struct WifiMacInterruptWords;
 
     impl oer_mmio::Registers for WifiMacInterruptWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xc40, 0xc44, 0xc48, 0xc4c];
     }
 
@@ -298042,6 +298211,7 @@ pub mod wifi_mac {
     pub struct PhyBasebandConfigOracleWifiMacWords;
 
     impl oer_mmio::Registers for PhyBasebandConfigOracleWifiMacWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x48c];
     }
 
@@ -298116,6 +298286,7 @@ pub mod wifi_mac {
     pub struct PhyFrequencyChannelOracleWifiMacWords;
 
     impl oer_mmio::Registers for PhyFrequencyChannelOracleWifiMacWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0x400];
     }
 
@@ -298190,6 +298361,7 @@ pub mod wifi_mac {
     pub struct SharedRadioInitControlWords;
 
     impl oer_mmio::Registers for SharedRadioInitControlWords {
+        type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[0xc24];
     }
 
@@ -303824,74 +303996,74 @@ pub mod layouts {
     /// The `dma-window` RAM region of the memory map.
     pub const DMA_WINDOW: core::ops::Range<u32> = 0x2f000000..0x2f080000;
 
-    /// The [`DMA_WINDOW`] region as `oer-mmio`'s typed addresses name it.
+    /// The [`DMA_WINDOW`] region as `oer-memory`'s typed addresses name it.
     pub struct DmaWindow;
 
-    impl oer_mmio::DmaWindow for DmaWindow {
+    impl oer_memory::DmaWindow for DmaWindow {
         const RANGE: core::ops::Range<u32> = DMA_WINDOW;
     }
 
     /// An address inside [`DMA_WINDOW`] whose memory stays reserved for the
     /// hardware while it may read the address, as the hardware reads it.
-    pub type DmaWindowAddress = oer_mmio::DmaWindowAddress<DmaWindow>;
+    pub type DmaWindowAddress = oer_memory::DmaWindowAddress<DmaWindow>;
 
     /// The address of a layout inside [`DMA_WINDOW`].
-    pub use oer_mmio::DmaRef;
+    pub use oer_memory::DmaRef;
 
     /// A layout placed in [`DMA_WINDOW`] only, which a [`DmaRef`] may point at.
-    pub trait DmaLayout: oer_mmio::DmaLayout<Window = DmaWindow> {}
+    pub trait DmaLayout: oer_memory::DmaLayout<Window = DmaWindow> {}
 
-    impl<L: oer_mmio::DmaLayout<Window = DmaWindow>> DmaLayout for L {}
+    impl<L: oer_memory::DmaLayout<Window = DmaWindow>> DmaLayout for L {}
 
-    impl oer_mmio::DmaLayout for WifiRxDmaDescriptor {
+    impl oer_memory::DmaLayout for WifiRxDmaDescriptor {
         type Window = DmaWindow;
     }
 
-    impl oer_mmio::DmaLayout for WifiTxDmaDescriptor {
+    impl oer_memory::DmaLayout for WifiTxDmaDescriptor {
         type Window = DmaWindow;
     }
 
-    impl oer_mmio::DmaLayout for BleBufferHeader {
+    impl oer_memory::DmaLayout for BleBufferHeader {
         type Window = DmaWindow;
     }
 
-    impl oer_mmio::DmaLayout for BleSchedulerItem {
+    impl oer_memory::DmaLayout for BleSchedulerItem {
         type Window = DmaWindow;
     }
 
-    impl oer_mmio::DmaLayout for BleLinkState {
+    impl oer_memory::DmaLayout for BleLinkState {
         type Window = DmaWindow;
     }
 
-    impl oer_mmio::DmaLayout for BleSchedulerContext {
+    impl oer_memory::DmaLayout for BleSchedulerContext {
         type Window = DmaWindow;
     }
 
-    impl oer_mmio::DmaLayout for BlePhyEnvironment {
+    impl oer_memory::DmaLayout for BlePhyEnvironment {
         type Window = DmaWindow;
     }
 
-    impl oer_mmio::DmaLayout for BleResolvingList {
+    impl oer_memory::DmaLayout for BleResolvingList {
         type Window = DmaWindow;
     }
 
-    impl oer_mmio::DmaLayout for BleDeviceTableEntry {
+    impl oer_memory::DmaLayout for BleDeviceTableEntry {
         type Window = DmaWindow;
     }
 
-    impl oer_mmio::DmaLayout for BleDeviceTable {
+    impl oer_memory::DmaLayout for BleDeviceTable {
         type Window = DmaWindow;
     }
 
-    impl oer_mmio::DmaLayout for BleDirectionFindingConfiguration {
+    impl oer_memory::DmaLayout for BleDirectionFindingConfiguration {
         type Window = DmaWindow;
     }
 
-    impl oer_mmio::DmaLayout for BleDirectionFindingDescriptor {
+    impl oer_memory::DmaLayout for BleDirectionFindingDescriptor {
         type Window = DmaWindow;
     }
 
-    impl oer_mmio::DmaLayout for BleDirectionFindingWorkspace {
+    impl oer_memory::DmaLayout for BleDirectionFindingWorkspace {
         type Window = DmaWindow;
     }
 
@@ -305193,9 +305365,9 @@ pub mod layouts {
         /// The all-zero structure.
         pub const fn zeroed() -> Self {
             Self {
-                control: WifiRxDmaDescriptorControlCell(oer_mmio::VolatileCell::new(0)),
-                buffer: WifiRxDmaDescriptorBufferCell(oer_mmio::VolatileCell::new(0)),
-                next: WifiRxDmaDescriptorNextCell(oer_mmio::VolatileCell::new(0)),
+                control: WifiRxDmaDescriptorControlCell(oer_memory::VolatileCell::new(0)),
+                buffer: WifiRxDmaDescriptorBufferCell(oer_memory::VolatileCell::new(0)),
+                next: WifiRxDmaDescriptorNextCell(oer_memory::VolatileCell::new(0)),
             }
         }
 
@@ -305218,7 +305390,7 @@ pub mod layouts {
     /// The `WIFI_RX_DMA_DESCRIPTOR.CONTROL` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct WifiRxDmaDescriptorControlCell(oer_mmio::VolatileCell<u32>);
+    pub struct WifiRxDmaDescriptorControlCell(oer_memory::VolatileCell<u32>);
 
     impl WifiRxDmaDescriptorControlCell {
         /// One volatile read of the word.
@@ -305380,7 +305552,7 @@ pub mod layouts {
     /// The `WIFI_RX_DMA_DESCRIPTOR.BUFFER` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct WifiRxDmaDescriptorBufferCell(oer_mmio::VolatileCell<u32>);
+    pub struct WifiRxDmaDescriptorBufferCell(oer_memory::VolatileCell<u32>);
 
     impl WifiRxDmaDescriptorBufferCell {
         /// One volatile read of the word.
@@ -305438,7 +305610,7 @@ pub mod layouts {
     /// The `WIFI_RX_DMA_DESCRIPTOR.NEXT` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct WifiRxDmaDescriptorNextCell(oer_mmio::VolatileCell<u32>);
+    pub struct WifiRxDmaDescriptorNextCell(oer_memory::VolatileCell<u32>);
 
     impl WifiRxDmaDescriptorNextCell {
         /// One volatile read of the word.
@@ -305525,9 +305697,9 @@ pub mod layouts {
         /// The all-zero structure.
         pub const fn zeroed() -> Self {
             Self {
-                control: WifiTxDmaDescriptorControlCell(oer_mmio::VolatileCell::new(0)),
-                buffer: WifiTxDmaDescriptorBufferCell(oer_mmio::VolatileCell::new(0)),
-                next: WifiTxDmaDescriptorNextCell(oer_mmio::VolatileCell::new(0)),
+                control: WifiTxDmaDescriptorControlCell(oer_memory::VolatileCell::new(0)),
+                buffer: WifiTxDmaDescriptorBufferCell(oer_memory::VolatileCell::new(0)),
+                next: WifiTxDmaDescriptorNextCell(oer_memory::VolatileCell::new(0)),
             }
         }
 
@@ -305550,7 +305722,7 @@ pub mod layouts {
     /// The `WIFI_TX_DMA_DESCRIPTOR.CONTROL` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct WifiTxDmaDescriptorControlCell(oer_mmio::VolatileCell<u32>);
+    pub struct WifiTxDmaDescriptorControlCell(oer_memory::VolatileCell<u32>);
 
     impl WifiTxDmaDescriptorControlCell {
         /// One volatile read of the word.
@@ -305691,7 +305863,7 @@ pub mod layouts {
     /// The `WIFI_TX_DMA_DESCRIPTOR.BUFFER` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct WifiTxDmaDescriptorBufferCell(oer_mmio::VolatileCell<u32>);
+    pub struct WifiTxDmaDescriptorBufferCell(oer_memory::VolatileCell<u32>);
 
     impl WifiTxDmaDescriptorBufferCell {
         /// One volatile read of the word.
@@ -305749,7 +305921,7 @@ pub mod layouts {
     /// The `WIFI_TX_DMA_DESCRIPTOR.NEXT` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct WifiTxDmaDescriptorNextCell(oer_mmio::VolatileCell<u32>);
+    pub struct WifiTxDmaDescriptorNextCell(oer_memory::VolatileCell<u32>);
 
     impl WifiTxDmaDescriptorNextCell {
         /// One volatile read of the word.
@@ -306596,12 +306768,12 @@ pub mod layouts {
         /// The all-zero structure.
         pub const fn zeroed() -> Self {
             Self {
-                next: BleBufferHeaderNextCell(oer_mmio::VolatileCell::new(0)),
-                packet_base: BleBufferHeaderPacketBaseCell(oer_mmio::VolatileCell::new(0)),
-                pdu_target: BleBufferHeaderPduTargetCell(oer_mmio::VolatileCell::new(0)),
-                completion: BleBufferHeaderCompletionCell(oer_mmio::VolatileCell::new(0)),
-                allocation: BleBufferHeaderAllocationCell(oer_mmio::VolatileCell::new(0)),
-                previous: BleBufferHeaderPreviousCell(oer_mmio::VolatileCell::new(0)),
+                next: BleBufferHeaderNextCell(oer_memory::VolatileCell::new(0)),
+                packet_base: BleBufferHeaderPacketBaseCell(oer_memory::VolatileCell::new(0)),
+                pdu_target: BleBufferHeaderPduTargetCell(oer_memory::VolatileCell::new(0)),
+                completion: BleBufferHeaderCompletionCell(oer_memory::VolatileCell::new(0)),
+                allocation: BleBufferHeaderAllocationCell(oer_memory::VolatileCell::new(0)),
+                previous: BleBufferHeaderPreviousCell(oer_memory::VolatileCell::new(0)),
             }
         }
 
@@ -306639,7 +306811,7 @@ pub mod layouts {
     /// The `BLE_BUFFER_HEADER.NEXT` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleBufferHeaderNextCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleBufferHeaderNextCell(oer_memory::VolatileCell<u32>);
 
     impl BleBufferHeaderNextCell {
         /// One volatile read of the word.
@@ -306717,7 +306889,7 @@ pub mod layouts {
     /// The `BLE_BUFFER_HEADER.PACKET_BASE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleBufferHeaderPacketBaseCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleBufferHeaderPacketBaseCell(oer_memory::VolatileCell<u32>);
 
     impl BleBufferHeaderPacketBaseCell {
         /// One volatile read of the word.
@@ -306797,7 +306969,7 @@ pub mod layouts {
     /// The `BLE_BUFFER_HEADER.PDU_TARGET` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleBufferHeaderPduTargetCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleBufferHeaderPduTargetCell(oer_memory::VolatileCell<u32>);
 
     impl BleBufferHeaderPduTargetCell {
         /// One volatile read of the word.
@@ -306940,7 +307112,7 @@ pub mod layouts {
     /// The `BLE_BUFFER_HEADER.COMPLETION` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleBufferHeaderCompletionCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleBufferHeaderCompletionCell(oer_memory::VolatileCell<u32>);
 
     impl BleBufferHeaderCompletionCell {
         /// One volatile read of the word.
@@ -307002,7 +307174,7 @@ pub mod layouts {
     /// The `BLE_BUFFER_HEADER.ALLOCATION` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleBufferHeaderAllocationCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleBufferHeaderAllocationCell(oer_memory::VolatileCell<u32>);
 
     impl BleBufferHeaderAllocationCell {
         /// One volatile read of the word.
@@ -307119,7 +307291,7 @@ pub mod layouts {
     /// The `BLE_BUFFER_HEADER.PREVIOUS` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleBufferHeaderPreviousCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleBufferHeaderPreviousCell(oer_memory::VolatileCell<u32>);
 
     impl BleBufferHeaderPreviousCell {
         /// One volatile read of the word.
@@ -308153,49 +308325,53 @@ pub mod layouts {
         /// The all-zero structure.
         pub const fn zeroed() -> Self {
             Self {
-                hardware_next: BleSchedulerItemHardwareNextCell(oer_mmio::VolatileCell::new(0)),
-                context: BleSchedulerItemContextCell(oer_mmio::VolatileCell::new(0)),
-                link_state: BleSchedulerItemLinkStateCell(oer_mmio::VolatileCell::new(0)),
-                sequence_start: BleSchedulerItemSequenceStartCell(oer_mmio::VolatileCell::new(0)),
+                hardware_next: BleSchedulerItemHardwareNextCell(oer_memory::VolatileCell::new(0)),
+                context: BleSchedulerItemContextCell(oer_memory::VolatileCell::new(0)),
+                link_state: BleSchedulerItemLinkStateCell(oer_memory::VolatileCell::new(0)),
+                sequence_start: BleSchedulerItemSequenceStartCell(oer_memory::VolatileCell::new(0)),
                 sequence_duration: BleSchedulerItemSequenceDurationCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
-                rate_and_power: BleSchedulerItemRateAndPowerCell(oer_mmio::VolatileCell::new(0)),
+                rate_and_power: BleSchedulerItemRateAndPowerCell(oer_memory::VolatileCell::new(0)),
                 channel_and_priority: BleSchedulerItemChannelAndPriorityCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
-                word_001c_opaque: BleSchedulerItemWord001cOpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
+                word_001c_opaque: BleSchedulerItemWord001cOpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
                 allocation_number: BleSchedulerItemAllocationNumberCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 coexistence_priority: BleSchedulerItemCoexistencePriorityCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
-                word_0028_opaque: BleSchedulerItemWord0028OpaqueCell(oer_mmio::VolatileCell::new(
+                word_0028_opaque: BleSchedulerItemWord0028OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                receive_wait: BleSchedulerItemReceiveWaitCell(oer_memory::VolatileCell::new(0)),
+                list_policy: BleSchedulerItemListPolicyCell(oer_memory::VolatileCell::new(0)),
+                captured_anchor: BleSchedulerItemCapturedAnchorCell(oer_memory::VolatileCell::new(
                     0,
                 )),
-                receive_wait: BleSchedulerItemReceiveWaitCell(oer_mmio::VolatileCell::new(0)),
-                list_policy: BleSchedulerItemListPolicyCell(oer_mmio::VolatileCell::new(0)),
-                captured_anchor: BleSchedulerItemCapturedAnchorCell(oer_mmio::VolatileCell::new(0)),
-                status: BleSchedulerItemStatusCell(oer_mmio::VolatileCell::new(0)),
-                word_003c_opaque: BleSchedulerItemWord003cOpaqueCell(oer_mmio::VolatileCell::new(
+                status: BleSchedulerItemStatusCell(oer_memory::VolatileCell::new(0)),
+                word_003c_opaque: BleSchedulerItemWord003cOpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0040_opaque: BleSchedulerItemWord0040OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                raw_start: BleSchedulerItemRawStartCell(oer_memory::VolatileCell::new(0)),
+                raw_end: BleSchedulerItemRawEndCell(oer_memory::VolatileCell::new(0)),
+                control: BleSchedulerItemControlCell(oer_memory::VolatileCell::new(0)),
+                previous: BleSchedulerItemPreviousCell(oer_memory::VolatileCell::new(0)),
+                completion_next: BleSchedulerItemCompletionNextCell(oer_memory::VolatileCell::new(
                     0,
                 )),
-                word_0040_opaque: BleSchedulerItemWord0040OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                raw_start: BleSchedulerItemRawStartCell(oer_mmio::VolatileCell::new(0)),
-                raw_end: BleSchedulerItemRawEndCell(oer_mmio::VolatileCell::new(0)),
-                control: BleSchedulerItemControlCell(oer_mmio::VolatileCell::new(0)),
-                previous: BleSchedulerItemPreviousCell(oer_mmio::VolatileCell::new(0)),
-                completion_next: BleSchedulerItemCompletionNextCell(oer_mmio::VolatileCell::new(0)),
-                recycle_callback: BleSchedulerItemRecycleCallbackCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
+                recycle_callback: BleSchedulerItemRecycleCallbackCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
                 buffer_recycle_callback: BleSchedulerItemBufferRecycleCallbackCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
             }
         }
@@ -308324,7 +308500,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.HARDWARE_NEXT` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemHardwareNextCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemHardwareNextCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemHardwareNextCell {
         /// One volatile read of the word.
@@ -308515,7 +308691,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.CONTEXT` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemContextCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemContextCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemContextCell {
         /// One volatile read of the word.
@@ -308617,7 +308793,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.LINK_STATE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemLinkStateCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemLinkStateCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemLinkStateCell {
         /// One volatile read of the word.
@@ -308739,7 +308915,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.SEQUENCE_START` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemSequenceStartCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemSequenceStartCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemSequenceStartCell {
         /// One volatile read of the word.
@@ -308797,7 +308973,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.SEQUENCE_DURATION` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemSequenceDurationCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemSequenceDurationCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemSequenceDurationCell {
         /// One volatile read of the word.
@@ -308855,7 +309031,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.RATE_AND_POWER` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemRateAndPowerCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemRateAndPowerCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemRateAndPowerCell {
         /// One volatile read of the word.
@@ -308977,7 +309153,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.CHANNEL_AND_PRIORITY` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemChannelAndPriorityCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemChannelAndPriorityCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemChannelAndPriorityCell {
         /// One volatile read of the word.
@@ -309105,7 +309281,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.WORD_001C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemWord001cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemWord001cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemWord001cOpaqueCell {
         /// One volatile read of the word.
@@ -309204,7 +309380,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.ALLOCATION_NUMBER` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemAllocationNumberCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemAllocationNumberCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemAllocationNumberCell {
         /// One volatile read of the word.
@@ -309274,7 +309450,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.COEXISTENCE_PRIORITY` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemCoexistencePriorityCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemCoexistencePriorityCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemCoexistencePriorityCell {
         /// One volatile read of the word.
@@ -309431,7 +309607,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.WORD_0028_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemWord0028OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemWord0028OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemWord0028OpaqueCell {
         /// One volatile read of the word.
@@ -309472,7 +309648,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.RECEIVE_WAIT` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemReceiveWaitCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemReceiveWaitCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemReceiveWaitCell {
         /// One volatile read of the word.
@@ -309559,7 +309735,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.LIST_POLICY` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemListPolicyCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemListPolicyCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemListPolicyCell {
         /// One volatile read of the word.
@@ -309621,7 +309797,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.CAPTURED_ANCHOR` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemCapturedAnchorCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemCapturedAnchorCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemCapturedAnchorCell {
         /// One volatile read of the word.
@@ -309679,7 +309855,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.STATUS` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemStatusCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemStatusCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemStatusCell {
         /// One volatile read of the word.
@@ -309808,7 +309984,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.WORD_003C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemWord003cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemWord003cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemWord003cOpaqueCell {
         /// One volatile read of the word.
@@ -309849,7 +310025,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.WORD_0040_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemWord0040OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemWord0040OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemWord0040OpaqueCell {
         /// One volatile read of the word.
@@ -309890,7 +310066,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.RAW_START` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemRawStartCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemRawStartCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemRawStartCell {
         /// One volatile read of the word.
@@ -309948,7 +310124,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.RAW_END` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemRawEndCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemRawEndCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemRawEndCell {
         /// One volatile read of the word.
@@ -310006,7 +310182,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.CONTROL` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemControlCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemControlCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemControlCell {
         /// One volatile read of the word.
@@ -310218,7 +310394,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.PREVIOUS` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemPreviousCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemPreviousCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemPreviousCell {
         /// One volatile read of the word.
@@ -310279,7 +310455,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.COMPLETION_NEXT` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemCompletionNextCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemCompletionNextCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemCompletionNextCell {
         /// One volatile read of the word.
@@ -310340,7 +310516,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.RECYCLE_CALLBACK` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemRecycleCallbackCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemRecycleCallbackCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemRecycleCallbackCell {
         /// One volatile read of the word.
@@ -310398,7 +310574,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_ITEM.BUFFER_RECYCLE_CALLBACK` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerItemBufferRecycleCallbackCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerItemBufferRecycleCallbackCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerItemBufferRecycleCallbackCell {
         /// One volatile read of the word.
@@ -310511,47 +310687,49 @@ pub mod layouts {
         /// The all-zero structure.
         pub const fn zeroed() -> Self {
             Self {
-                tx_path: BleLinkStateTxPathCell(oer_mmio::VolatileCell::new(0)),
-                scan_response: BleLinkStateScanResponseCell(oer_mmio::VolatileCell::new(0)),
-                rx_path: BleLinkStateRxPathCell(oer_mmio::VolatileCell::new(0)),
-                control_policy: BleLinkStateControlPolicyCell(oer_mmio::VolatileCell::new(0)),
-                word_0010_opaque: BleLinkStateWord0010OpaqueCell(oer_mmio::VolatileCell::new(0)),
-                packet_policy: BleLinkStatePacketPolicyCell(oer_mmio::VolatileCell::new(0)),
-                receive_context: BleLinkStateReceiveContextCell(oer_mmio::VolatileCell::new(0)),
-                word_001c_opaque: BleLinkStateWord001cOpaqueCell(oer_mmio::VolatileCell::new(0)),
-                rx_list: BleLinkStateRxListCell(oer_mmio::VolatileCell::new(0)),
-                own_address_policy: BleLinkStateOwnAddressPolicyCell(oer_mmio::VolatileCell::new(
+                tx_path: BleLinkStateTxPathCell(oer_memory::VolatileCell::new(0)),
+                scan_response: BleLinkStateScanResponseCell(oer_memory::VolatileCell::new(0)),
+                rx_path: BleLinkStateRxPathCell(oer_memory::VolatileCell::new(0)),
+                control_policy: BleLinkStateControlPolicyCell(oer_memory::VolatileCell::new(0)),
+                word_0010_opaque: BleLinkStateWord0010OpaqueCell(oer_memory::VolatileCell::new(0)),
+                packet_policy: BleLinkStatePacketPolicyCell(oer_memory::VolatileCell::new(0)),
+                receive_context: BleLinkStateReceiveContextCell(oer_memory::VolatileCell::new(0)),
+                word_001c_opaque: BleLinkStateWord001cOpaqueCell(oer_memory::VolatileCell::new(0)),
+                rx_list: BleLinkStateRxListCell(oer_memory::VolatileCell::new(0)),
+                own_address_policy: BleLinkStateOwnAddressPolicyCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0028_opaque: BleLinkStateWord0028OpaqueCell(oer_memory::VolatileCell::new(0)),
+                crc_initialization: BleLinkStateCrcInitializationCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                sequence_policy: BleLinkStateSequencePolicyCell(oer_memory::VolatileCell::new(0)),
+                event_span: BleLinkStateEventSpanCell(oer_memory::VolatileCell::new(0)),
+                access_address: BleLinkStateAccessAddressCell(oer_memory::VolatileCell::new(0)),
+                own_address_low: BleLinkStateOwnAddressLowCell(oer_memory::VolatileCell::new(0)),
+                own_address_high: BleLinkStateOwnAddressHighCell(oer_memory::VolatileCell::new(0)),
+                word_0044_opaque: BleLinkStateWord0044OpaqueCell(oer_memory::VolatileCell::new(0)),
+                word_0048_opaque: BleLinkStateWord0048OpaqueCell(oer_memory::VolatileCell::new(0)),
+                word_004c_opaque: BleLinkStateWord004cOpaqueCell(oer_memory::VolatileCell::new(0)),
+                direction_finding: BleLinkStateDirectionFindingCell(oer_memory::VolatileCell::new(
                     0,
                 )),
-                word_0028_opaque: BleLinkStateWord0028OpaqueCell(oer_mmio::VolatileCell::new(0)),
-                crc_initialization: BleLinkStateCrcInitializationCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                sequence_policy: BleLinkStateSequencePolicyCell(oer_mmio::VolatileCell::new(0)),
-                event_span: BleLinkStateEventSpanCell(oer_mmio::VolatileCell::new(0)),
-                access_address: BleLinkStateAccessAddressCell(oer_mmio::VolatileCell::new(0)),
-                own_address_low: BleLinkStateOwnAddressLowCell(oer_mmio::VolatileCell::new(0)),
-                own_address_high: BleLinkStateOwnAddressHighCell(oer_mmio::VolatileCell::new(0)),
-                word_0044_opaque: BleLinkStateWord0044OpaqueCell(oer_mmio::VolatileCell::new(0)),
-                word_0048_opaque: BleLinkStateWord0048OpaqueCell(oer_mmio::VolatileCell::new(0)),
-                word_004c_opaque: BleLinkStateWord004cOpaqueCell(oer_mmio::VolatileCell::new(0)),
-                direction_finding: BleLinkStateDirectionFindingCell(oer_mmio::VolatileCell::new(0)),
                 direction_finding_policy: BleLinkStateDirectionFindingPolicyCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
-                word_0058_opaque: BleLinkStateWord0058OpaqueCell(oer_mmio::VolatileCell::new(0)),
-                word_005c_opaque: BleLinkStateWord005cOpaqueCell(oer_mmio::VolatileCell::new(0)),
-                event: BleLinkStateEventCell(oer_mmio::VolatileCell::new(0)),
-                scheduler_head: BleLinkStateSchedulerHeadCell(oer_mmio::VolatileCell::new(0)),
-                rx_head: BleLinkStateRxHeadCell(oer_mmio::VolatileCell::new(0)),
-                tx_head: BleLinkStateTxHeadCell(oer_mmio::VolatileCell::new(0)),
-                rx_tail: BleLinkStateRxTailCell(oer_mmio::VolatileCell::new(0)),
-                tx_tail: BleLinkStateTxTailCell(oer_mmio::VolatileCell::new(0)),
-                rx_reserve: BleLinkStateRxReserveCell(oer_mmio::VolatileCell::new(0)),
+                word_0058_opaque: BleLinkStateWord0058OpaqueCell(oer_memory::VolatileCell::new(0)),
+                word_005c_opaque: BleLinkStateWord005cOpaqueCell(oer_memory::VolatileCell::new(0)),
+                event: BleLinkStateEventCell(oer_memory::VolatileCell::new(0)),
+                scheduler_head: BleLinkStateSchedulerHeadCell(oer_memory::VolatileCell::new(0)),
+                rx_head: BleLinkStateRxHeadCell(oer_memory::VolatileCell::new(0)),
+                tx_head: BleLinkStateTxHeadCell(oer_memory::VolatileCell::new(0)),
+                rx_tail: BleLinkStateRxTailCell(oer_memory::VolatileCell::new(0)),
+                tx_tail: BleLinkStateTxTailCell(oer_memory::VolatileCell::new(0)),
+                rx_reserve: BleLinkStateRxReserveCell(oer_memory::VolatileCell::new(0)),
                 rx_queue_configuration: BleLinkStateRxQueueConfigurationCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
-                word_0080_opaque: BleLinkStateWord0080OpaqueCell(oer_mmio::VolatileCell::new(0)),
+                word_0080_opaque: BleLinkStateWord0080OpaqueCell(oer_memory::VolatileCell::new(0)),
             }
         }
 
@@ -310724,7 +310902,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.TX_PATH` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateTxPathCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateTxPathCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateTxPathCell {
         /// One volatile read of the word.
@@ -310861,7 +311039,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.SCAN_RESPONSE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateScanResponseCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateScanResponseCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateScanResponseCell {
         /// One volatile read of the word.
@@ -310997,7 +311175,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.RX_PATH` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateRxPathCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateRxPathCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateRxPathCell {
         /// One volatile read of the word.
@@ -311121,7 +311299,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.CONTROL_POLICY` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateControlPolicyCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateControlPolicyCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateControlPolicyCell {
         /// One volatile read of the word.
@@ -311262,7 +311440,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.WORD_0010_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateWord0010OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateWord0010OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateWord0010OpaqueCell {
         /// One volatile read of the word.
@@ -311332,7 +311510,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.PACKET_POLICY` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStatePacketPolicyCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStatePacketPolicyCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStatePacketPolicyCell {
         /// One volatile read of the word.
@@ -311405,7 +311583,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.RECEIVE_CONTEXT` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateReceiveContextCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateReceiveContextCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateReceiveContextCell {
         /// One volatile read of the word.
@@ -311617,7 +311795,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.WORD_001C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateWord001cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateWord001cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateWord001cOpaqueCell {
         /// One volatile read of the word.
@@ -311658,7 +311836,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.RX_LIST` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateRxListCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateRxListCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateRxListCell {
         /// One volatile read of the word.
@@ -311766,7 +311944,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.OWN_ADDRESS_POLICY` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateOwnAddressPolicyCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateOwnAddressPolicyCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateOwnAddressPolicyCell {
         /// One volatile read of the word.
@@ -311962,7 +312140,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.WORD_0028_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateWord0028OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateWord0028OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateWord0028OpaqueCell {
         /// One volatile read of the word.
@@ -312003,7 +312181,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.CRC_INITIALIZATION` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateCrcInitializationCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateCrcInitializationCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateCrcInitializationCell {
         /// One volatile read of the word.
@@ -312123,7 +312301,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.SEQUENCE_POLICY` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateSequencePolicyCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateSequencePolicyCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateSequencePolicyCell {
         /// One volatile read of the word.
@@ -312289,7 +312467,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.EVENT_SPAN` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateEventSpanCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateEventSpanCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateEventSpanCell {
         /// One volatile read of the word.
@@ -312347,7 +312525,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.ACCESS_ADDRESS` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateAccessAddressCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateAccessAddressCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateAccessAddressCell {
         /// One volatile read of the word.
@@ -312405,7 +312583,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.OWN_ADDRESS_LOW` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateOwnAddressLowCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateOwnAddressLowCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateOwnAddressLowCell {
         /// One volatile read of the word.
@@ -312463,7 +312641,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.OWN_ADDRESS_HIGH` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateOwnAddressHighCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateOwnAddressHighCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateOwnAddressHighCell {
         /// One volatile read of the word.
@@ -312550,7 +312728,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.WORD_0044_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateWord0044OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateWord0044OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateWord0044OpaqueCell {
         /// One volatile read of the word.
@@ -312608,7 +312786,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.WORD_0048_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateWord0048OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateWord0048OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateWord0048OpaqueCell {
         /// One volatile read of the word.
@@ -312716,7 +312894,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.WORD_004C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateWord004cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateWord004cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateWord004cOpaqueCell {
         /// One volatile read of the word.
@@ -312774,7 +312952,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.DIRECTION_FINDING` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateDirectionFindingCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateDirectionFindingCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateDirectionFindingCell {
         /// One volatile read of the word.
@@ -312955,7 +313133,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.DIRECTION_FINDING_POLICY` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateDirectionFindingPolicyCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateDirectionFindingPolicyCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateDirectionFindingPolicyCell {
         /// One volatile read of the word.
@@ -313054,7 +313232,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.WORD_0058_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateWord0058OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateWord0058OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateWord0058OpaqueCell {
         /// One volatile read of the word.
@@ -313095,7 +313273,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.WORD_005C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateWord005cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateWord005cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateWord005cOpaqueCell {
         /// One volatile read of the word.
@@ -313136,7 +313314,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.EVENT` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateEventCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateEventCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateEventCell {
         /// One volatile read of the word.
@@ -313211,7 +313389,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.SCHEDULER_HEAD` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateSchedulerHeadCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateSchedulerHeadCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateSchedulerHeadCell {
         /// One volatile read of the word.
@@ -313272,7 +313450,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.RX_HEAD` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateRxHeadCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateRxHeadCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateRxHeadCell {
         /// One volatile read of the word.
@@ -313333,7 +313511,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.TX_HEAD` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateTxHeadCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateTxHeadCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateTxHeadCell {
         /// One volatile read of the word.
@@ -313394,7 +313572,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.RX_TAIL` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateRxTailCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateRxTailCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateRxTailCell {
         /// One volatile read of the word.
@@ -313455,7 +313633,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.TX_TAIL` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateTxTailCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateTxTailCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateTxTailCell {
         /// One volatile read of the word.
@@ -313516,7 +313694,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.RX_RESERVE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateRxReserveCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateRxReserveCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateRxReserveCell {
         /// One volatile read of the word.
@@ -313577,7 +313755,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.RX_QUEUE_CONFIGURATION` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateRxQueueConfigurationCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateRxQueueConfigurationCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateRxQueueConfigurationCell {
         /// One volatile read of the word.
@@ -313635,7 +313813,7 @@ pub mod layouts {
     /// The `BLE_LINK_STATE.WORD_0080_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleLinkStateWord0080OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleLinkStateWord0080OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleLinkStateWord0080OpaqueCell {
         /// One volatile read of the word.
@@ -313717,58 +313895,58 @@ pub mod layouts {
         pub const fn zeroed() -> Self {
             Self {
                 word_0000_opaque: BleSchedulerContextWord0000OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0004_opaque: BleSchedulerContextWord0004OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0008_opaque: BleSchedulerContextWord0008OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_000c_opaque: BleSchedulerContextWord000cOpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0010_opaque: BleSchedulerContextWord0010OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0014_opaque: BleSchedulerContextWord0014OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0018_opaque: BleSchedulerContextWord0018OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_001c_opaque: BleSchedulerContextWord001cOpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0020_opaque: BleSchedulerContextWord0020OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0024_opaque: BleSchedulerContextWord0024OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0028_opaque: BleSchedulerContextWord0028OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_002c_opaque: BleSchedulerContextWord002cOpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0030_opaque: BleSchedulerContextWord0030OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0034_opaque: BleSchedulerContextWord0034OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0038_opaque: BleSchedulerContextWord0038OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_003c_opaque: BleSchedulerContextWord003cOpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0040_opaque: BleSchedulerContextWord0040OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0044_opaque: BleSchedulerContextWord0044OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
             }
         }
@@ -313867,7 +314045,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0000_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord0000OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord0000OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord0000OpaqueCell {
         /// One volatile read of the word.
@@ -313908,7 +314086,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0004_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord0004OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord0004OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord0004OpaqueCell {
         /// One volatile read of the word.
@@ -313949,7 +314127,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0008_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord0008OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord0008OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord0008OpaqueCell {
         /// One volatile read of the word.
@@ -313990,7 +314168,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_000C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord000cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord000cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord000cOpaqueCell {
         /// One volatile read of the word.
@@ -314031,7 +314209,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0010_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord0010OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord0010OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord0010OpaqueCell {
         /// One volatile read of the word.
@@ -314072,7 +314250,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0014_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord0014OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord0014OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord0014OpaqueCell {
         /// One volatile read of the word.
@@ -314113,7 +314291,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0018_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord0018OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord0018OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord0018OpaqueCell {
         /// One volatile read of the word.
@@ -314154,7 +314332,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_001C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord001cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord001cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord001cOpaqueCell {
         /// One volatile read of the word.
@@ -314195,7 +314373,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0020_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord0020OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord0020OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord0020OpaqueCell {
         /// One volatile read of the word.
@@ -314236,7 +314414,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0024_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord0024OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord0024OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord0024OpaqueCell {
         /// One volatile read of the word.
@@ -314277,7 +314455,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0028_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord0028OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord0028OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord0028OpaqueCell {
         /// One volatile read of the word.
@@ -314318,7 +314496,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_002C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord002cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord002cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord002cOpaqueCell {
         /// One volatile read of the word.
@@ -314359,7 +314537,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0030_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord0030OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord0030OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord0030OpaqueCell {
         /// One volatile read of the word.
@@ -314400,7 +314578,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0034_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord0034OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord0034OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord0034OpaqueCell {
         /// One volatile read of the word.
@@ -314441,7 +314619,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0038_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord0038OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord0038OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord0038OpaqueCell {
         /// One volatile read of the word.
@@ -314482,7 +314660,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_003C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord003cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord003cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord003cOpaqueCell {
         /// One volatile read of the word.
@@ -314523,7 +314701,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0040_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord0040OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord0040OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord0040OpaqueCell {
         /// One volatile read of the word.
@@ -314564,7 +314742,7 @@ pub mod layouts {
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0044_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleSchedulerContextWord0044OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleSchedulerContextWord0044OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleSchedulerContextWord0044OpaqueCell {
         /// One volatile read of the word.
@@ -314659,99 +314837,101 @@ pub mod layouts {
         /// The all-zero structure.
         pub const fn zeroed() -> Self {
             Self {
-                word_0000_opaque: BlePhyEnvironmentWord0000OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0004_opaque: BlePhyEnvironmentWord0004OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0008_opaque: BlePhyEnvironmentWord0008OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_000c_opaque: BlePhyEnvironmentWord000cOpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0010_opaque: BlePhyEnvironmentWord0010OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0014_opaque: BlePhyEnvironmentWord0014OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0018_opaque: BlePhyEnvironmentWord0018OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_001c_opaque: BlePhyEnvironmentWord001cOpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0020_opaque: BlePhyEnvironmentWord0020OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0024_opaque: BlePhyEnvironmentWord0024OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0028_opaque: BlePhyEnvironmentWord0028OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_002c_opaque: BlePhyEnvironmentWord002cOpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
+                word_0000_opaque: BlePhyEnvironmentWord0000OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0004_opaque: BlePhyEnvironmentWord0004OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0008_opaque: BlePhyEnvironmentWord0008OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_000c_opaque: BlePhyEnvironmentWord000cOpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0010_opaque: BlePhyEnvironmentWord0010OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0014_opaque: BlePhyEnvironmentWord0014OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0018_opaque: BlePhyEnvironmentWord0018OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_001c_opaque: BlePhyEnvironmentWord001cOpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0020_opaque: BlePhyEnvironmentWord0020OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0024_opaque: BlePhyEnvironmentWord0024OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0028_opaque: BlePhyEnvironmentWord0028OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_002c_opaque: BlePhyEnvironmentWord002cOpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
                 channel_frequency_offsets: BlePhyEnvironmentChannelFrequencyOffsetsCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 packet_start_offsets: BlePhyEnvironmentPacketStartOffsetsCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 rx_address_delays: BlePhyEnvironmentRxAddressDelaysCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
-                word_003c_opaque: BlePhyEnvironmentWord003cOpaqueCell(oer_mmio::VolatileCell::new(
+                word_003c_opaque: BlePhyEnvironmentWord003cOpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0040_opaque: BlePhyEnvironmentWord0040OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0044_opaque: BlePhyEnvironmentWord0044OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                tx_power_levels: BlePhyEnvironmentTxPowerLevelsCell(oer_memory::VolatileCell::new(
                     0,
                 )),
-                word_0040_opaque: BlePhyEnvironmentWord0040OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0044_opaque: BlePhyEnvironmentWord0044OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                tx_power_levels: BlePhyEnvironmentTxPowerLevelsCell(oer_mmio::VolatileCell::new(0)),
                 tx_power_level_count: BlePhyEnvironmentTxPowerLevelCountCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
-                word_0050_opaque: BlePhyEnvironmentWord0050OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0054_opaque: BlePhyEnvironmentWord0054OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0058_opaque: BlePhyEnvironmentWord0058OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_005c_opaque: BlePhyEnvironmentWord005cOpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0060_opaque: BlePhyEnvironmentWord0060OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0064_opaque: BlePhyEnvironmentWord0064OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0068_opaque: BlePhyEnvironmentWord0068OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_006c_opaque: BlePhyEnvironmentWord006cOpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0070_opaque: BlePhyEnvironmentWord0070OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0074_opaque: BlePhyEnvironmentWord0074OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
+                word_0050_opaque: BlePhyEnvironmentWord0050OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0054_opaque: BlePhyEnvironmentWord0054OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0058_opaque: BlePhyEnvironmentWord0058OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_005c_opaque: BlePhyEnvironmentWord005cOpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0060_opaque: BlePhyEnvironmentWord0060OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0064_opaque: BlePhyEnvironmentWord0064OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0068_opaque: BlePhyEnvironmentWord0068OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_006c_opaque: BlePhyEnvironmentWord006cOpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0070_opaque: BlePhyEnvironmentWord0070OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0074_opaque: BlePhyEnvironmentWord0074OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
                 tx_power_first_level: BlePhyEnvironmentTxPowerFirstLevelCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 tx_power_last_level: BlePhyEnvironmentTxPowerLastLevelCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
             }
         }
@@ -314922,7 +315102,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0000_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0000OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0000OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0000OpaqueCell {
         /// One volatile read of the word.
@@ -314963,7 +315143,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0004_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0004OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0004OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0004OpaqueCell {
         /// One volatile read of the word.
@@ -315004,7 +315184,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0008_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0008OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0008OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0008OpaqueCell {
         /// One volatile read of the word.
@@ -315045,7 +315225,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_000C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord000cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord000cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord000cOpaqueCell {
         /// One volatile read of the word.
@@ -315086,7 +315266,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0010_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0010OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0010OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0010OpaqueCell {
         /// One volatile read of the word.
@@ -315127,7 +315307,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0014_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0014OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0014OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0014OpaqueCell {
         /// One volatile read of the word.
@@ -315168,7 +315348,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0018_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0018OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0018OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0018OpaqueCell {
         /// One volatile read of the word.
@@ -315209,7 +315389,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_001C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord001cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord001cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord001cOpaqueCell {
         /// One volatile read of the word.
@@ -315250,7 +315430,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0020_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0020OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0020OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0020OpaqueCell {
         /// One volatile read of the word.
@@ -315291,7 +315471,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0024_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0024OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0024OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0024OpaqueCell {
         /// One volatile read of the word.
@@ -315332,7 +315512,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0028_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0028OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0028OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0028OpaqueCell {
         /// One volatile read of the word.
@@ -315373,7 +315553,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_002C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord002cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord002cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord002cOpaqueCell {
         /// One volatile read of the word.
@@ -315414,7 +315594,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.CHANNEL_FREQUENCY_OFFSETS` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentChannelFrequencyOffsetsCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentChannelFrequencyOffsetsCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentChannelFrequencyOffsetsCell {
         /// One volatile read of the word.
@@ -315472,7 +315652,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.PACKET_START_OFFSETS` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentPacketStartOffsetsCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentPacketStartOffsetsCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentPacketStartOffsetsCell {
         /// One volatile read of the word.
@@ -315530,7 +315710,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.RX_ADDRESS_DELAYS` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentRxAddressDelaysCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentRxAddressDelaysCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentRxAddressDelaysCell {
         /// One volatile read of the word.
@@ -315588,7 +315768,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_003C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord003cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord003cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord003cOpaqueCell {
         /// One volatile read of the word.
@@ -315629,7 +315809,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0040_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0040OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0040OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0040OpaqueCell {
         /// One volatile read of the word.
@@ -315670,7 +315850,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0044_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0044OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0044OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0044OpaqueCell {
         /// One volatile read of the word.
@@ -315711,7 +315891,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.TX_POWER_LEVELS` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentTxPowerLevelsCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentTxPowerLevelsCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentTxPowerLevelsCell {
         /// One volatile read of the word.
@@ -315769,7 +315949,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.TX_POWER_LEVEL_COUNT` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentTxPowerLevelCountCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentTxPowerLevelCountCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentTxPowerLevelCountCell {
         /// One volatile read of the word.
@@ -315827,7 +316007,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0050_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0050OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0050OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0050OpaqueCell {
         /// One volatile read of the word.
@@ -315868,7 +316048,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0054_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0054OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0054OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0054OpaqueCell {
         /// One volatile read of the word.
@@ -315909,7 +316089,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0058_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0058OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0058OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0058OpaqueCell {
         /// One volatile read of the word.
@@ -315950,7 +316130,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_005C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord005cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord005cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord005cOpaqueCell {
         /// One volatile read of the word.
@@ -315991,7 +316171,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0060_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0060OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0060OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0060OpaqueCell {
         /// One volatile read of the word.
@@ -316032,7 +316212,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0064_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0064OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0064OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0064OpaqueCell {
         /// One volatile read of the word.
@@ -316073,7 +316253,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0068_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0068OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0068OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0068OpaqueCell {
         /// One volatile read of the word.
@@ -316114,7 +316294,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_006C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord006cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord006cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord006cOpaqueCell {
         /// One volatile read of the word.
@@ -316155,7 +316335,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0070_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0070OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0070OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0070OpaqueCell {
         /// One volatile read of the word.
@@ -316196,7 +316376,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.WORD_0074_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentWord0074OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentWord0074OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentWord0074OpaqueCell {
         /// One volatile read of the word.
@@ -316237,7 +316417,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.TX_POWER_FIRST_LEVEL` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentTxPowerFirstLevelCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentTxPowerFirstLevelCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentTxPowerFirstLevelCell {
         /// One volatile read of the word.
@@ -316295,7 +316475,7 @@ pub mod layouts {
     /// The `BLE_PHY_ENVIRONMENT.TX_POWER_LAST_LEVEL` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BlePhyEnvironmentTxPowerLastLevelCell(oer_mmio::VolatileCell<u32>);
+    pub struct BlePhyEnvironmentTxPowerLastLevelCell(oer_memory::VolatileCell<u32>);
 
     impl BlePhyEnvironmentTxPowerLastLevelCell {
         /// One volatile read of the word.
@@ -317045,54 +317225,54 @@ pub mod layouts {
         /// The all-zero structure.
         pub const fn zeroed() -> Self {
             Self {
-                word_0000_opaque: BleResolvingListWord0000OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0004_opaque: BleResolvingListWord0004OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0008_opaque: BleResolvingListWord0008OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_000c_opaque: BleResolvingListWord000cOpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0010_opaque: BleResolvingListWord0010OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0014_opaque: BleResolvingListWord0014OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0018_opaque: BleResolvingListWord0018OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_001c_opaque: BleResolvingListWord001cOpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0020_opaque: BleResolvingListWord0020OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0024_opaque: BleResolvingListWord0024OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0028_opaque: BleResolvingListWord0028OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_002c_opaque: BleResolvingListWord002cOpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0030_opaque: BleResolvingListWord0030OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0034_opaque: BleResolvingListWord0034OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_0038_opaque: BleResolvingListWord0038OpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
-                word_003c_opaque: BleResolvingListWord003cOpaqueCell(oer_mmio::VolatileCell::new(
-                    0,
-                )),
+                word_0000_opaque: BleResolvingListWord0000OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0004_opaque: BleResolvingListWord0004OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0008_opaque: BleResolvingListWord0008OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_000c_opaque: BleResolvingListWord000cOpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0010_opaque: BleResolvingListWord0010OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0014_opaque: BleResolvingListWord0014OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0018_opaque: BleResolvingListWord0018OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_001c_opaque: BleResolvingListWord001cOpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0020_opaque: BleResolvingListWord0020OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0024_opaque: BleResolvingListWord0024OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0028_opaque: BleResolvingListWord0028OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_002c_opaque: BleResolvingListWord002cOpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0030_opaque: BleResolvingListWord0030OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0034_opaque: BleResolvingListWord0034OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_0038_opaque: BleResolvingListWord0038OpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
+                word_003c_opaque: BleResolvingListWord003cOpaqueCell(
+                    oer_memory::VolatileCell::new(0),
+                ),
             }
         }
 
@@ -317180,7 +317360,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_0000_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord0000OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord0000OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord0000OpaqueCell {
         /// One volatile read of the word.
@@ -317242,7 +317422,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_0004_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord0004OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord0004OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord0004OpaqueCell {
         /// One volatile read of the word.
@@ -317283,7 +317463,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_0008_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord0008OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord0008OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord0008OpaqueCell {
         /// One volatile read of the word.
@@ -317324,7 +317504,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_000C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord000cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord000cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord000cOpaqueCell {
         /// One volatile read of the word.
@@ -317365,7 +317545,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_0010_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord0010OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord0010OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord0010OpaqueCell {
         /// One volatile read of the word.
@@ -317406,7 +317586,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_0014_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord0014OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord0014OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord0014OpaqueCell {
         /// One volatile read of the word.
@@ -317447,7 +317627,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_0018_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord0018OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord0018OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord0018OpaqueCell {
         /// One volatile read of the word.
@@ -317488,7 +317668,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_001C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord001cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord001cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord001cOpaqueCell {
         /// One volatile read of the word.
@@ -317529,7 +317709,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_0020_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord0020OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord0020OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord0020OpaqueCell {
         /// One volatile read of the word.
@@ -317570,7 +317750,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_0024_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord0024OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord0024OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord0024OpaqueCell {
         /// One volatile read of the word.
@@ -317611,7 +317791,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_0028_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord0028OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord0028OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord0028OpaqueCell {
         /// One volatile read of the word.
@@ -317652,7 +317832,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_002C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord002cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord002cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord002cOpaqueCell {
         /// One volatile read of the word.
@@ -317693,7 +317873,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_0030_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord0030OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord0030OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord0030OpaqueCell {
         /// One volatile read of the word.
@@ -317734,7 +317914,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_0034_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord0034OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord0034OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord0034OpaqueCell {
         /// One volatile read of the word.
@@ -317775,7 +317955,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_0038_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord0038OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord0038OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord0038OpaqueCell {
         /// One volatile read of the word.
@@ -317816,7 +317996,7 @@ pub mod layouts {
     /// The `BLE_RESOLVING_LIST.WORD_003C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleResolvingListWord003cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleResolvingListWord003cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleResolvingListWord003cOpaqueCell {
         /// One volatile read of the word.
@@ -317882,9 +318062,9 @@ pub mod layouts {
         pub const fn zeroed() -> Self {
             Self {
                 flags_and_address: BleDeviceTableEntryFlagsAndAddressCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
-                address_high: BleDeviceTableEntryAddressHighCell(oer_mmio::VolatileCell::new(0)),
+                address_high: BleDeviceTableEntryAddressHighCell(oer_memory::VolatileCell::new(0)),
             }
         }
 
@@ -317902,7 +318082,7 @@ pub mod layouts {
     /// The `BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleDeviceTableEntryFlagsAndAddressCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleDeviceTableEntryFlagsAndAddressCell(oer_memory::VolatileCell<u32>);
 
     impl BleDeviceTableEntryFlagsAndAddressCell {
         /// One volatile read of the word.
@@ -318073,7 +318253,7 @@ pub mod layouts {
     /// The `BLE_DEVICE_TABLE_ENTRY.ADDRESS_HIGH` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleDeviceTableEntryAddressHighCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleDeviceTableEntryAddressHighCell(oer_memory::VolatileCell<u32>);
 
     impl BleDeviceTableEntryAddressHighCell {
         /// One volatile read of the word.
@@ -318180,7 +318360,7 @@ pub mod layouts {
         pub const fn zeroed() -> Self {
             Self {
                 word_0000_opaque: BleDirectionFindingConfigurationWord0000OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
             }
         }
@@ -318196,7 +318376,7 @@ pub mod layouts {
     /// The `BLE_DIRECTION_FINDING_CONFIGURATION.WORD_0000_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleDirectionFindingConfigurationWord0000OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleDirectionFindingConfigurationWord0000OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleDirectionFindingConfigurationWord0000OpaqueCell {
         /// One volatile read of the word.
@@ -318310,16 +318490,16 @@ pub mod layouts {
         pub const fn zeroed() -> Self {
             Self {
                 word_0000_opaque: BleDirectionFindingDescriptorWord0000OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0004_opaque: BleDirectionFindingDescriptorWord0004OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0008_opaque: BleDirectionFindingDescriptorWord0008OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_000c_opaque: BleDirectionFindingDescriptorWord000cOpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
             }
         }
@@ -318348,7 +318528,7 @@ pub mod layouts {
     /// The `BLE_DIRECTION_FINDING_DESCRIPTOR.WORD_0000_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleDirectionFindingDescriptorWord0000OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleDirectionFindingDescriptorWord0000OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleDirectionFindingDescriptorWord0000OpaqueCell {
         /// One volatile read of the word.
@@ -318406,7 +318586,7 @@ pub mod layouts {
     /// The `BLE_DIRECTION_FINDING_DESCRIPTOR.WORD_0004_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleDirectionFindingDescriptorWord0004OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleDirectionFindingDescriptorWord0004OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleDirectionFindingDescriptorWord0004OpaqueCell {
         /// One volatile read of the word.
@@ -318447,7 +318627,7 @@ pub mod layouts {
     /// The `BLE_DIRECTION_FINDING_DESCRIPTOR.WORD_0008_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleDirectionFindingDescriptorWord0008OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleDirectionFindingDescriptorWord0008OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleDirectionFindingDescriptorWord0008OpaqueCell {
         /// One volatile read of the word.
@@ -318488,7 +318668,7 @@ pub mod layouts {
     /// The `BLE_DIRECTION_FINDING_DESCRIPTOR.WORD_000C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleDirectionFindingDescriptorWord000cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleDirectionFindingDescriptorWord000cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleDirectionFindingDescriptorWord000cOpaqueCell {
         /// One volatile read of the word.
@@ -318560,28 +318740,28 @@ pub mod layouts {
         pub const fn zeroed() -> Self {
             Self {
                 word_0000_opaque: BleDirectionFindingWorkspaceWord0000OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0004_opaque: BleDirectionFindingWorkspaceWord0004OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0008_opaque: BleDirectionFindingWorkspaceWord0008OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_000c_opaque: BleDirectionFindingWorkspaceWord000cOpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0010_opaque: BleDirectionFindingWorkspaceWord0010OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0014_opaque: BleDirectionFindingWorkspaceWord0014OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_0018_opaque: BleDirectionFindingWorkspaceWord0018OpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
                 word_001c_opaque: BleDirectionFindingWorkspaceWord001cOpaqueCell(
-                    oer_mmio::VolatileCell::new(0),
+                    oer_memory::VolatileCell::new(0),
                 ),
             }
         }
@@ -318630,7 +318810,7 @@ pub mod layouts {
     /// The `BLE_DIRECTION_FINDING_WORKSPACE.WORD_0000_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleDirectionFindingWorkspaceWord0000OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleDirectionFindingWorkspaceWord0000OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleDirectionFindingWorkspaceWord0000OpaqueCell {
         /// One volatile read of the word.
@@ -318671,7 +318851,7 @@ pub mod layouts {
     /// The `BLE_DIRECTION_FINDING_WORKSPACE.WORD_0004_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleDirectionFindingWorkspaceWord0004OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleDirectionFindingWorkspaceWord0004OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleDirectionFindingWorkspaceWord0004OpaqueCell {
         /// One volatile read of the word.
@@ -318712,7 +318892,7 @@ pub mod layouts {
     /// The `BLE_DIRECTION_FINDING_WORKSPACE.WORD_0008_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleDirectionFindingWorkspaceWord0008OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleDirectionFindingWorkspaceWord0008OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleDirectionFindingWorkspaceWord0008OpaqueCell {
         /// One volatile read of the word.
@@ -318799,7 +318979,7 @@ pub mod layouts {
     /// The `BLE_DIRECTION_FINDING_WORKSPACE.WORD_000C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleDirectionFindingWorkspaceWord000cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleDirectionFindingWorkspaceWord000cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleDirectionFindingWorkspaceWord000cOpaqueCell {
         /// One volatile read of the word.
@@ -318857,7 +319037,7 @@ pub mod layouts {
     /// The `BLE_DIRECTION_FINDING_WORKSPACE.WORD_0010_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleDirectionFindingWorkspaceWord0010OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleDirectionFindingWorkspaceWord0010OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleDirectionFindingWorkspaceWord0010OpaqueCell {
         /// One volatile read of the word.
@@ -318898,7 +319078,7 @@ pub mod layouts {
     /// The `BLE_DIRECTION_FINDING_WORKSPACE.WORD_0014_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleDirectionFindingWorkspaceWord0014OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleDirectionFindingWorkspaceWord0014OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleDirectionFindingWorkspaceWord0014OpaqueCell {
         /// One volatile read of the word.
@@ -318939,7 +319119,7 @@ pub mod layouts {
     /// The `BLE_DIRECTION_FINDING_WORKSPACE.WORD_0018_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleDirectionFindingWorkspaceWord0018OpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleDirectionFindingWorkspaceWord0018OpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleDirectionFindingWorkspaceWord0018OpaqueCell {
         /// One volatile read of the word.
@@ -318980,7 +319160,7 @@ pub mod layouts {
     /// The `BLE_DIRECTION_FINDING_WORKSPACE.WORD_001C_OPAQUE` word as the hardware may change it: volatile access only.
     #[repr(transparent)]
     #[derive(bytemuck::Zeroable)]
-    pub struct BleDirectionFindingWorkspaceWord001cOpaqueCell(oer_mmio::VolatileCell<u32>);
+    pub struct BleDirectionFindingWorkspaceWord001cOpaqueCell(oer_memory::VolatileCell<u32>);
 
     impl BleDirectionFindingWorkspaceWord001cOpaqueCell {
         /// One volatile read of the word.

@@ -3,6 +3,7 @@ use oer_mmio::{Block, Host, Registers};
 
 pub struct Overflow;
 impl Registers for Overflow {
+    type Sharing = oer_mmio::sharing::Owned;
     #[cfg(not(ui_reject))]
     const WORDS: &'static [usize] = &[usize::MAX - 7];
     // A last word ending past the address space must not wrap to a small

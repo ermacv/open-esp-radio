@@ -873,7 +873,7 @@ register takes `index: oer_mmio::Index<COUNT>` first. A field value is
 `write-values-only`, or one whose `values` cover its width, takes its enum
 unless a narrower `write-range` bounds it: then it takes a bounded
 `<Field>Range`. A field with `values` has a `<field>_variant()` getter. A
-field with a `pointer` fact takes `oer_mmio::DmaRef<Layout>` of its target
+field with a `pointer` fact takes `oer_memory::DmaRef<Layout>` of its target
 layout, or the window's `DmaWindowAddress` for a raw buffer, and stores its
 encoding (`member-offset` added, shifted, its width kept), and
 `clear_<field>()` stores its zero image, no address; a high field has

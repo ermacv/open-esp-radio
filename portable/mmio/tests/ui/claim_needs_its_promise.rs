@@ -3,6 +3,7 @@ use oer_mmio::{Block, Fixed, Registers};
 
 pub struct Control;
 impl Registers for Control {
+    type Sharing = oer_mmio::sharing::Owned;
     const WORDS: &'static [usize] = &[0, 4];
 }
 

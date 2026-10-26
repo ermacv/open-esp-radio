@@ -208,7 +208,7 @@ The root's `[[ram-regions]]` hold the RAM regions the layouts name
 The generator emits, in the chip's PAC (`generated.rs`):
 
 - a `#[repr(C, align(N))]` type of the layout's words, `Zeroable` by derive
-  over `oer-mmio`'s volatile cells, with compile-time size and alignment
+  over `oer-memory`'s volatile cells, with compile-time size and alignment
   checks;
 - for each `shared` word, a cell with volatile `read() -> Value` and
   `write(Value)` only; for each word a `Value` type with typed getters and

@@ -2021,6 +2021,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "oer-espressif-analog",
+ "oer-memory",
  "oer-mmio",
 ]
 
@@ -3211,7 +3212,6 @@ dependencies = [
 name = "oer-mmio"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "oer-test-ui-cases",
 ]
 

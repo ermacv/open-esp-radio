@@ -42,11 +42,6 @@
 //!   strobes and one-field registers stored whole) is written through
 //!   `&self` with [`Block::write_shared`]; at a [`Fixed`] address it is
 //!   `Sync`, so one owner in a `static` serves every execution context.
-//!
-//! Memory the hardware reads by DMA is typed here too: [`DmaWindowAddress`]
-//! and [`DmaRef`] are made only by their `unsafe` constructors (a chip HAL's
-//! `dma_address` module), and [`VolatileCell`] is the volatile word the
-//! generated memory layouts are built from.
 
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
@@ -54,13 +49,11 @@
 #[cfg(test)]
 extern crate std;
 
-use core::{
-    cell::{Cell, UnsafeCell},
-    marker::PhantomData,
-    ptr::NonNull,
-};
+use core::{cell::Cell, marker::PhantomData, ptr::NonNull};
 
 mod sealed {
+    pub trait Sharing {}
+
     /// The address arithmetic of a placement; private to this crate.
     pub trait Sealed {
         /// The read-only handle a [`Reader`](super::Reader) keeps.
@@ -101,6 +94,36 @@ mod sealed {
     }
 }
 
+/// A checked word, used only for the duration of one access. Every caller
+/// proves its offset against its authority in an inline const block; array
+/// indices are bounded by Index. Placements are sealed and originate in the
+/// fixed-register claim or an exclusive, extent-checked host borrow.
+struct DeviceWord(*mut u32);
+
+#[allow(
+    unsafe_code,
+    reason = "the two volatile operations on checked register words"
+)]
+impl DeviceWord {
+    #[inline(always)]
+    fn load(self) -> u32 {
+        // SAFETY: the private callers check this aligned word belongs to
+        // their Block, Part or Reader. Fixed words satisfy assume_owned's
+        // device-register promise. Host words stay within their live borrow;
+        // host authorities are !Send/!Sync, so no CPU access races this load.
+        unsafe { self.0.read_volatile() }
+    }
+
+    #[inline(always)]
+    fn store(self, value: u32) {
+        // SAFETY: only Block and Part writers call this, for words or trigger
+        // bits they own. Shared fixed blocks only store whole device words;
+        // device accesses are outside Rust memory. Host writers are confined
+        // to one thread and retain their exclusive, extent-checked borrow.
+        unsafe { self.0.write_volatile(value) }
+    }
+}
+
 /// Where a register block lives: device registers at a fixed address
 /// ([`Fixed`]) or host memory ([`Host`]). Only this crate implements it.
 pub trait Placement: sealed::Sealed {}
@@ -109,9 +132,9 @@ pub trait Placement: sealed::Sealed {}
 ///
 /// It is made only by [`assume_owned`], so its existence is the promise that
 /// the block's words are its alone. It is `Send` (an owner moves between
-/// execution contexts) and not `Sync`.
+/// execution contexts). A block or part carries its sharing restriction.
 pub struct Fixed<const BASE: usize> {
-    _owner: PhantomData<Cell<()>>,
+    _owner: PhantomData<()>,
 }
 
 impl<const BASE: usize> sealed::Sealed for Fixed<BASE> {
@@ -196,27 +219,51 @@ impl Placement for Host<'_> {}
 /// The declared words of one register block, as byte offsets from its base,
 /// strictly ascending; an array lists every element.
 pub trait Registers {
+    /// Whether the policy permits shared access to this block.
+    type Sharing: Sharing;
     /// The block's words.
     const WORDS: &'static [usize];
+}
+
+/// The sealed sharing policy of a register block.
+pub trait Sharing: sealed::Sharing {}
+
+/// Sharing policies of generated register-word lists.
+pub mod sharing {
+    use core::{cell::Cell, marker::PhantomData};
+
+    /// One context at a time: the block is not `Sync`.
+    pub struct Owned(PhantomData<Cell<()>>);
+    /// Whole-word stores and side-effect-free reads may be shared.
+    pub struct Shared;
+
+    impl super::sealed::Sharing for Owned {}
+    impl super::sealed::Sharing for Shared {}
+    impl super::Sharing for Owned {}
+    impl super::Sharing for Shared {}
 }
 
 /// The words of a block that every execution context may reach at once:
 /// each write it makes is a whole-word store that reads nothing back (a
 /// write-trigger strobe, or a one-field register stored whole), and each
-/// read has no side effect. The register generator implements it only for
-/// a policy's shared block, whose registers it checks are of these kinds.
+/// read has no side effect. The register generator selects `sharing::Shared`
+/// only for a policy's shared block, whose registers it checks are of these
+/// kinds; the marker grants this trait.
 ///
 /// Only such a block is `Sync`; an ordinary block at a fixed address is not:
 ///
 /// ```compile_fail,E0277
 /// struct Words;
 /// impl oer_mmio::Registers for Words {
+///     type Sharing = oer_mmio::sharing::Owned;
 ///     const WORDS: &'static [usize] = &[0];
 /// }
 /// fn sync<T: Sync>() {}
 /// sync::<oer_mmio::Block<oer_mmio::Fixed<0x1000>, Words>>();
 /// ```
-pub trait SharedRegisters: Registers {}
+pub trait SharedRegisters: Registers<Sharing = sharing::Shared> {}
+
+impl<R: Registers<Sharing = sharing::Shared>> SharedRegisters for R {}
 
 /// The interrupt-matrix source of a register owner's interrupt: the owner
 /// a handler holds (the interrupt side of a divided block, or the whole
@@ -263,6 +310,7 @@ impl<const BASE: usize, R: Registers> sealed::Claimed for Block<Fixed<BASE>, R> 
                 _owner: PhantomData,
             },
             registers: PhantomData,
+            sharing: PhantomData,
         }
     }
 }
@@ -295,6 +343,7 @@ tuple_claims!(A, B, C, D, E, F, G, H);
 /// ```compile_fail,E0133
 /// struct Control;
 /// impl oer_mmio::Registers for Control {
+///     type Sharing = oer_mmio::sharing::Owned;
 ///     const WORDS: &'static [usize] = &[0];
 /// }
 /// let block: oer_mmio::Block<oer_mmio::Fixed<0x1000>, Control> = oer_mmio::assume_owned();
@@ -320,6 +369,7 @@ pub unsafe fn assume_owned<C: Claim>() -> C {
 pub struct Block<P: Placement, R: Registers> {
     place: P,
     registers: PhantomData<fn() -> R>,
+    sharing: PhantomData<R::Sharing>,
 }
 
 /// Host memory too small for the block placed in it.
@@ -357,6 +407,7 @@ impl<'a, R: Registers> Block<Host<'a>, R> {
                 _memory: PhantomData,
             },
             registers: PhantomData,
+            sharing: PhantomData,
         })
     }
 }
@@ -434,29 +485,19 @@ const fn array_listed(list: &[usize], offset: usize, stride: usize, count: usize
     true
 }
 
-#[allow(
-    unsafe_code,
-    reason = "the volatile accesses of a block's checked words"
-)]
 impl<P: Placement, R: Registers> Block<P, R> {
     /// One volatile read of the word at byte `OFFSET`.
     #[inline(always)]
     pub fn read<const OFFSET: usize>(&self) -> u32 {
         const { assert!(listed(R::WORDS, OFFSET), "the block lists the word") };
-        // SAFETY: the block is the exclusive authority over the words it
-        // lists (`assume_owned`'s promise, or host memory it borrows mutably
-        // and checked to reach the end of its last word, an end computed
-        // without overflow at compile time) and lists this one, checked at
-        // compile time above.
-        unsafe { self.place.word(OFFSET).read_volatile() }
+        DeviceWord(self.place.word(OFFSET)).load()
     }
 
     /// One volatile write of the whole word at byte `OFFSET`.
     #[inline(always)]
     pub fn write<const OFFSET: usize>(&mut self, value: u32) {
         const { assert!(listed(R::WORDS, OFFSET), "the block lists the word") };
-        // SAFETY: as in `read`; `&mut self` makes this the only access.
-        unsafe { self.place.word(OFFSET).write_volatile(value) }
+        DeviceWord(self.place.word(OFFSET)).store(value)
     }
 
     /// One volatile read of element `index` of the word array at `OFFSET`.
@@ -471,13 +512,7 @@ impl<P: Placement, R: Registers> Block<P, R> {
                 "the block lists every element"
             );
         };
-        // SAFETY: the block lists every element (checked at compile time
-        // above) and `index < COUNT` by `Index`'s constructor.
-        unsafe {
-            self.place
-                .word(OFFSET + STRIDE * index.get())
-                .read_volatile()
-        }
+        DeviceWord(self.place.word(OFFSET + STRIDE * index.get())).load()
     }
 
     /// One volatile write of element `index` of the word array at `OFFSET`.
@@ -493,12 +528,7 @@ impl<P: Placement, R: Registers> Block<P, R> {
                 "the block lists every element"
             );
         };
-        // SAFETY: as in `read_indexed`; `&mut self` makes this the only access.
-        unsafe {
-            self.place
-                .word(OFFSET + STRIDE * index.get())
-                .write_volatile(value)
-        }
+        DeviceWord(self.place.word(OFFSET + STRIDE * index.get())).store(value)
     }
 
     /// Divide the block into a part owning `A`'s words and one owning `B`'s.
@@ -570,6 +600,7 @@ macro_rules! divisions {
                 $(let $part = Part {
                     place: place.duplicate(),
                     words: PhantomData,
+                    owner: PhantomData,
                 };)+
                 drop(place);
                 ($($part,)+)
@@ -670,32 +701,13 @@ const fn owners_cover(block: &[usize], first: &[usize], second: &[usize]) -> boo
     true
 }
 
-#[allow(
-    unsafe_code,
-    reason = "a shared block at a fixed address is reached from every context"
-)]
-// SAFETY: a `Block<Fixed<..>, _>` holds no memory: its only state is the
-// const address. Its accesses are volatile loads and stores of device
-// registers, which are not Rust memory, so accesses from several contexts
-// are no data race; `R: SharedRegisters` limits the `&self` writes to
-// whole-word stores that read nothing back. Host blocks stay `!Sync`, since
-// their words are ordinary memory.
-unsafe impl<const BASE: usize, R: SharedRegisters> Sync for Block<Fixed<BASE>, R> {}
-
-#[allow(
-    unsafe_code,
-    reason = "the volatile whole-word store of a shared block"
-)]
 impl<P: Placement, R: SharedRegisters> Block<P, R> {
     /// One volatile store of the whole word at byte `OFFSET`, through a
     /// shared borrow: the write of a shared block, which reads nothing back.
     #[inline(always)]
     pub fn write_shared<const OFFSET: usize>(&self, value: u32) {
         const { assert!(listed(R::WORDS, OFFSET), "the block lists the word") };
-        // SAFETY: as in `read`. A device word is not Rust memory; a host
-        // block is `!Sync` and borrows its memory mutably, so this store
-        // through the raw word pointer is the only access while it runs.
-        unsafe { self.place.word(OFFSET).write_volatile(value) }
+        DeviceWord(self.place.word(OFFSET)).store(value)
     }
 }
 
@@ -724,6 +736,7 @@ impl<const BASE: usize, R: Registers> Block<Fixed<BASE>, R> {
         Self {
             place,
             registers: PhantomData,
+            sharing: PhantomData,
         }
     }
 }
@@ -759,6 +772,7 @@ impl<'a, R: Registers> Block<Host<'a>, R> {
         Ok(Self {
             place,
             registers: PhantomData,
+            sharing: PhantomData,
         })
     }
 }
@@ -828,9 +842,9 @@ const fn all_listed(mut list: &[usize], words: &[usize]) -> bool {
 pub struct Part<P: Placement, R: Registers, W: Words> {
     place: P,
     words: PhantomData<fn() -> (R, W)>,
+    owner: PhantomData<Cell<()>>,
 }
 
-#[allow(unsafe_code, reason = "the volatile accesses of a part's listed words")]
 impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
     /// One volatile read of a word the part owns or observes.
     #[inline(always)]
@@ -841,9 +855,7 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
                 "a part reads only the words it owns or observes"
             );
         };
-        // SAFETY: the split checked that the block lists every word of the
-        // part, whose authority the part shares only for the words it lists.
-        unsafe { self.place.word(OFFSET).read_volatile() }
+        DeviceWord(self.place.word(OFFSET)).load()
     }
 
     /// One volatile write of a word the part owns.
@@ -855,10 +867,7 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
                 "a part writes only the words it owns"
             );
         };
-        // SAFETY: as in `read`; no other part owns the word (the split
-        // checked the owned lists are disjoint) and `&mut self` makes this
-        // the part's only access.
-        unsafe { self.place.word(OFFSET).write_volatile(value) }
+        DeviceWord(self.place.word(OFFSET)).store(value)
     }
 
     /// One volatile read of an array element the part owns or observes.
@@ -874,13 +883,7 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
                 "a part reads only the arrays it owns or observes"
             );
         };
-        // SAFETY: every element is a listed word of the block (checked above
-        // and by the split) and `index < COUNT` by `Index`.
-        unsafe {
-            self.place
-                .word(OFFSET + STRIDE * index.get())
-                .read_volatile()
-        }
+        DeviceWord(self.place.word(OFFSET + STRIDE * index.get())).load()
     }
 
     /// One volatile write of an array element the part owns.
@@ -896,12 +899,7 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
                 "a part writes only the arrays it owns"
             );
         };
-        // SAFETY: as in `read_indexed`; the part owns every element.
-        unsafe {
-            self.place
-                .word(OFFSET + STRIDE * index.get())
-                .write_volatile(value)
-        }
+        DeviceWord(self.place.word(OFFSET + STRIDE * index.get())).store(value)
     }
 
     /// One volatile store of the part's bits of the shared write-trigger
@@ -914,12 +912,7 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
             assert!(mask != 0, "a part writes only its own trigger words");
             mask
         };
-        // SAFETY: the division checked that the block lists the word, that
-        // no part owns it and that no other part has these bits; a device
-        // word is not Rust memory, so the other parts' stores of their bits
-        // are no data race, and a host part is `!Send`, so they run on this
-        // thread one at a time.
-        unsafe { self.place.word(OFFSET).write_volatile(value & mask) }
+        DeviceWord(self.place.word(OFFSET)).store(value & mask)
     }
 
     /// The part as a [`Reader`] of the words it owns and observes, giving
@@ -943,6 +936,7 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
 /// ```compile_fail,E0599
 /// struct Words;
 /// impl oer_mmio::Registers for Words {
+///     type Sharing = oer_mmio::sharing::Owned;
 ///     const WORDS: &'static [usize] = &[0];
 /// }
 /// impl oer_mmio::Words for Words {
@@ -967,7 +961,6 @@ impl<P: Placement, R: Registers, W: Words> Clone for Reader<P, R, W> {
 
 impl<P: Placement, R: Registers, W: Words> Copy for Reader<P, R, W> {}
 
-#[allow(unsafe_code, reason = "the volatile reads of a reader's listed words")]
 impl<P: Placement, R: Registers, W: Words> Reader<P, R, W> {
     /// One volatile read of a word the reader lists.
     #[inline(always)]
@@ -978,12 +971,7 @@ impl<P: Placement, R: Registers, W: Words> Reader<P, R, W> {
                 "a reader reads only the words it lists"
             );
         };
-        // SAFETY: the block or part the reader was made from lists the word
-        // (checked when it was made) and no owner writes it any more but the
-        // sibling that owns an observed word; a device word is not Rust
-        // memory, and a host reader is `!Send` and borrows its memory for as
-        // long as it lives, so no store races this read.
-        unsafe { sealed::Reading::word(&self.place, OFFSET).read_volatile() }
+        DeviceWord(sealed::Reading::word(&self.place, OFFSET).cast_mut()).load()
     }
 
     /// One volatile read of an array element the reader lists.
@@ -999,8 +987,8 @@ impl<P: Placement, R: Registers, W: Words> Reader<P, R, W> {
                 "a reader reads only the arrays it lists"
             );
         };
-        // SAFETY: as in `read`; `index < COUNT` by `Index`.
-        unsafe { sealed::Reading::word(&self.place, OFFSET + STRIDE * index.get()).read_volatile() }
+        DeviceWord(sealed::Reading::word(&self.place, OFFSET + STRIDE * index.get()).cast_mut())
+            .load()
     }
 }
 
@@ -1175,168 +1163,6 @@ impl<const WIDTH: u32> Bits<WIDTH> {
 impl<const WIDTH: u32> From<Bits<WIDTH>> for u32 {
     fn from(bits: Bits<WIDTH>) -> Self {
         bits.0
-    }
-}
-
-/// A word in memory the hardware may change: volatile access only.
-///
-/// It is not `Sync`; its zero bytes are a valid value.
-#[repr(transparent)]
-#[derive(bytemuck::Zeroable)]
-pub struct VolatileCell<T>(UnsafeCell<T>);
-
-#[allow(unsafe_code, reason = "the volatile accesses of a cell's own value")]
-impl<T: Copy> VolatileCell<T> {
-    /// A cell holding `value`.
-    pub const fn new(value: T) -> Self {
-        Self(UnsafeCell::new(value))
-    }
-
-    /// One volatile read.
-    #[inline(always)]
-    pub fn get(&self) -> T {
-        // SAFETY: the cell is not `Sync`, so no other thread accesses it;
-        // the pointer is valid and aligned for `T` for as long as `self`.
-        unsafe { self.0.get().read_volatile() }
-    }
-
-    /// One volatile write.
-    #[inline(always)]
-    pub fn set(&self, value: T) {
-        // SAFETY: as in `get`; `UnsafeCell` permits the write through `&self`
-        // and no reference into the cell's value exists.
-        unsafe { self.0.get().write_volatile(value) }
-    }
-}
-
-/// The RAM region a chip's DMA engines reach, as the generated `layouts`
-/// module of its PAC names it.
-pub trait DmaWindow {
-    /// The region's addresses.
-    const RANGE: core::ops::Range<u32>;
-}
-
-/// An address inside the DMA window `W` whose memory stays reserved for
-/// the hardware while it may read the address, as the hardware reads it.
-pub struct DmaWindowAddress<W: DmaWindow> {
-    address: u32,
-    window: PhantomData<fn() -> W>,
-}
-
-impl<W: DmaWindow> DmaWindowAddress<W> {
-    /// The address `address`.
-    ///
-    /// # Safety
-    ///
-    /// `address` lies inside `W::RANGE`, in a static placed there or a
-    /// buffer lent to the hardware, which stays reserved for as long as the
-    /// hardware may read the address.
-    #[allow(unsafe_code, reason = "the caller promises a placed address")]
-    pub const unsafe fn new_unchecked(address: u32) -> Self {
-        Self {
-            address,
-            window: PhantomData,
-        }
-    }
-
-    /// The address as the hardware reads it.
-    pub const fn get(self) -> u32 {
-        self.address
-    }
-}
-
-impl<W: DmaWindow> Clone for DmaWindowAddress<W> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<W: DmaWindow> Copy for DmaWindowAddress<W> {}
-
-impl<W: DmaWindow> PartialEq for DmaWindowAddress<W> {
-    fn eq(&self, other: &Self) -> bool {
-        self.address == other.address
-    }
-}
-
-impl<W: DmaWindow> Eq for DmaWindowAddress<W> {}
-
-impl<W: DmaWindow> core::hash::Hash for DmaWindowAddress<W> {
-    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.address.hash(state);
-    }
-}
-
-impl<W: DmaWindow> core::fmt::Debug for DmaWindowAddress<W> {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_tuple("DmaWindowAddress")
-            .field(&self.address)
-            .finish()
-    }
-}
-
-/// A memory layout placed only in its DMA window, which a [`DmaRef`] may
-/// point at.
-pub trait DmaLayout {
-    /// The window the layout lies in.
-    type Window: DmaWindow;
-}
-
-/// The address of an `L` inside its DMA window.
-pub struct DmaRef<L: DmaLayout> {
-    address: DmaWindowAddress<L::Window>,
-    layout: PhantomData<fn() -> L>,
-}
-
-impl<L: DmaLayout> DmaRef<L> {
-    /// The reference to the `L` at `address`.
-    ///
-    /// # Safety
-    ///
-    /// An `L`, aligned as `L` requires, lies at `address` for as long as the
-    /// hardware may follow the reference.
-    #[allow(unsafe_code, reason = "the caller promises a placed layout")]
-    pub const unsafe fn new_unchecked(address: DmaWindowAddress<L::Window>) -> Self {
-        Self {
-            address,
-            layout: PhantomData,
-        }
-    }
-
-    /// The referenced address.
-    pub const fn address(self) -> DmaWindowAddress<L::Window> {
-        self.address
-    }
-
-    /// The address as the hardware reads it.
-    pub const fn bits(self) -> u32 {
-        self.address.address
-    }
-}
-
-impl<L: DmaLayout> Clone for DmaRef<L> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<L: DmaLayout> Copy for DmaRef<L> {}
-
-impl<L: DmaLayout> PartialEq for DmaRef<L> {
-    fn eq(&self, other: &Self) -> bool {
-        self.address == other.address
-    }
-}
-
-impl<L: DmaLayout> Eq for DmaRef<L> {}
-
-impl<L: DmaLayout> core::fmt::Debug for DmaRef<L> {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_tuple("DmaRef")
-            .field(&self.address)
-            .finish()
     }
 }
 

@@ -31,7 +31,10 @@ system these rules serve.
 - **Panics and unsafe.** A change introduces no new runtime panic sites or
   `unsafe` code. Moving architectural instructions into `oer-riscv` may
   increase unsafe constructs there only when the branch's total decreases
-  and no calling crate's count increases; each site retains its narrow
+  and no calling crate's count increases. Moving existing DMA-memory cells
+  and address contracts into `oer-memory` may increase its count only by
+  those relocated sites while the affected crates' total strictly decreases
+  and no caller's count increases; each site retains its narrow
   contract and `// SAFETY:` proof. Compile-time checks and test assertions are allowed.
   Remove existing runtime panics from image crates, including probes and
   HIL; image panic budgets only shrink to 0. `const` panics evaluated at

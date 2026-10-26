@@ -10,6 +10,7 @@ description = "The ESP32-S31 PAC: the exact hardware model generated from the ch
 [dependencies]
 oer-espressif-analog = { path = "../../espressif/analog" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
+oer-memory = { path = "../../../portable/memory" }
 oer-mmio = { path = "../../../portable/mmio" }
 
 
