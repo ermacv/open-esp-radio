@@ -255,6 +255,64 @@ pub fn rom_bootloader(bytes: &[u8]) -> Result<&[u8]> {
     Ok(image)
 }
 
+/// Count mapped records in an encoded ESP image, after the packer has
+/// merged ELF sections. The shared D/I loader identifies them by load
+/// address, not executable flags; ELF cache-off placement is checked first.
+/// SOURCE: ESP-IDF e9da155a72624fce88b8ef2cf3cde9aee2e6067f,
+/// bootloader_support/src/bootloader_utility.c:816-841 and esp_app_format.h
+/// (24-byte image header, 8-byte segment header).
+pub(crate) fn mapped_segment_count(
+    bytes: &[u8],
+    flash: oer_espressif_facts::Region,
+) -> Result<usize> {
+    let image_header = bytes.get(..24).ok_or("truncated ESP image header")?;
+    let count = image_header
+        .get(1)
+        .copied()
+        .ok_or("missing ESP segment count")?;
+    if image_header.first() != Some(&0xe9) || count == 0 {
+        return Err("not an ESP image with segment headers".into());
+    }
+    let mut position = 24_usize;
+    let mut mapped = 0;
+    for _ in 0..count {
+        let data_start = position
+            .checked_add(8)
+            .ok_or("ESP header offset overflow")?;
+        let header = bytes
+            .get(position..data_start)
+            .ok_or("truncated ESP segment header")?;
+        let address = u32::from_le_bytes(
+            header
+                .get(..4)
+                .ok_or("truncated ESP load address")?
+                .try_into()?,
+        );
+        let length = u32::from_le_bytes(
+            header
+                .get(4..)
+                .ok_or("truncated ESP data length")?
+                .try_into()?,
+        );
+        let end = data_start
+            .checked_add(usize::try_from(length)?)
+            .ok_or("ESP segment length overflow")?;
+        bytes
+            .get(data_start..end)
+            .ok_or("truncated ESP segment data")?;
+        if (flash.origin..flash.end()).contains(&address) {
+            if length == 0
+                || !flash.contains_range(u64::from(address), u64::from(address) + u64::from(length))
+            {
+                return Err("empty or out-of-window mapped ESP segment".into());
+            }
+            mapped += 1;
+        }
+        position = end;
+    }
+    Ok(mapped)
+}
+
 /// The OTA data that makes the ESP-IDF bootloader boot application slot
 /// `slot` (0 for `ota_0`, 1 for `ota_1`): its sequence number modulo the
 /// number of slots, plus one.

@@ -2,6 +2,8 @@
 
 use alloc::{collections::BTreeMap, format, string::String, vec::Vec};
 
+use core::num::NonZeroU8;
+
 use serde::{Deserialize, Serialize};
 
 use crate::Result;
@@ -451,10 +453,14 @@ pub struct StagedBoot {
 }
 
 /// The `[boot-chain]` table: what the pinned ESP-IDF second-stage
-/// bootloader keeps for itself.
+/// bootloader reserves and requires.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct BootChain {
+    /// Number of mapped ESP application segments required by this loader.
+    /// These are image records, not MMU pages or ELF executable sections.
+    #[serde(default)]
+    pub mapped_segments: Option<NonZeroU8>,
     /// The end of the application memory map of the pinned ESP-IDF: the
     /// internal SRAM from here up the boot chain keeps for itself (the
     /// second-stage loader, the ROM's boot stacks and data), and the

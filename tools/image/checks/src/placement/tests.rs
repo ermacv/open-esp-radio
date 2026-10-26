@@ -303,6 +303,13 @@ fn flash_data_requires_an_exact_allowlisted_section_and_never_allows_code_or_wri
         (".unrecognized_constant", SectionKind::ReadOnlyData, false),
         (".flash.rodata.extra", SectionKind::ReadOnlyData, false),
         (".metadata", SectionKind::ReadOnlyData, true),
+        (
+            ".flash.tuning.reference.extra",
+            SectionKind::ReadOnlyData,
+            false,
+        ),
+        (".flash.tuning.reference", SectionKind::Text, false),
+        (".flash.tuning.reference", SectionKind::Data, false),
         (".metadata", SectionKind::Text, false),
         (".metadata", SectionKind::Data, false),
     ] {

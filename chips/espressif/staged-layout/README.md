@@ -36,6 +36,14 @@ non-executable flags; an ordinary or orphan constant is rejected regardless
 of its name. The [image checks](../../../tools/image/checks/README.md) own
 that allowlist.
 
+The S31 loader requires exactly two mapped ESP image records in its shared
+D/I window (SOURCE in the chip's `[boot-chain] mapped-segments`). The script
+separates the real payload and tuning-reference spans across an MMU-page
+boundary; neither contains executable bootstrap code. The staged encoder
+checks the resulting image records after adjacent ELF sections merge and
+emits `bootstrap-loader.txt`. This is a loader-format contract, not a
+requirement for one code mapping and one data mapping.
+
 Both staged links omit `.debug_aranges`: the pinned LLVM's fat-LTO emitter
 can encode backward spans when CUs share an input section. Address lookup
 uses the CU ranges and line tables retained in the ELF. The shared

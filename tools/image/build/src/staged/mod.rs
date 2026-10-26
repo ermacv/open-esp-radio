@@ -41,9 +41,10 @@ pub(crate) struct Compiled {
     sizes: crate::sizes::Summary,
 }
 
-/// The staged images' MMU page: the bootstrap keeps its text on 64-KiB
-/// pages and stage two starts on one.
+/// The staged images' MMU page: bootstrap flash sources and stage two
+/// use 64-KiB pages.
 const MMU_PAGE_SIZE: u32 = 0x1_0000;
+const LOADER_REPORT: &str = "bootstrap-loader.txt";
 
 pub(crate) fn build(
     spec: &ImageSpec,
@@ -139,8 +140,12 @@ pub(crate) fn build(
     }
 
     let elf = std::fs::read(&bootstrap_elf)?;
-    let application = encode_application(root, profile, &elf, &bundle)
+    let (application, loader_report) = encode_application(root, profile, &elf, &bundle)
         .map_err(|error| log.failed("encode the ESP application image", error))?;
+    if let Some(report) = loader_report {
+        std::fs::write(output.join(LOADER_REPORT), report)?;
+        bundle.reports.push(LOADER_REPORT.into());
+    }
     std::fs::write(bundle.application(), application)?;
     encode_boot_files(root, profile, &elf, &mut bundle)
         .map_err(|error| log.failed("encode the boot files", error))?;
@@ -160,7 +165,7 @@ fn encode_application(
     profile: &oer_chip_profile::Profile,
     elf: &[u8],
     bundle: &ImageBundle,
-) -> Result<Vec<u8>> {
+) -> Result<(Vec<u8>, Option<String>)> {
     let table = partitions(root, &bundle.flash)?;
     let partition = table
         .iter()
@@ -180,7 +185,36 @@ fn encode_application(
         Some(&partition.name),
     )?;
     audit_application_image(&encoded.application, partition.size)?;
-    Ok(encoded.application)
+    let report = audit_loader_mappings(profile, &encoded.application)?;
+    Ok((encoded.application, report))
+}
+
+/// A loader's segment-count contract is independent of ELF permissions and
+/// cannot be downgraded by a diagnostic gate. Check the actual encoded image.
+fn audit_loader_mappings(
+    profile: &oer_chip_profile::Profile,
+    bytes: &[u8],
+) -> Result<Option<String>> {
+    let Some(expected) = profile
+        .facts
+        .boot_chain
+        .as_ref()
+        .and_then(|chain| chain.mapped_segments)
+    else {
+        return Ok(None);
+    };
+    let memory = profile
+        .facts
+        .memory
+        .as_ref()
+        .ok_or("mapped loader segments need the flash map")?;
+    let found = encode::mapped_segment_count(bytes, memory.flash_xip)?;
+    if found != usize::from(expected.get()) {
+        return Err(format!("bootstrap loader requires {expected} mapped ESP segments, found {found}; flash code is forbidden").into());
+    }
+    Ok(Some(format!(
+        "bootstrap loader mapped-segments={found} expected={expected}\nresult=PASS\n"
+    )))
 }
 
 /// Encode the staged boot's bootloader (in the mode the ROM reads it in,

@@ -42,13 +42,23 @@ pub fn bootstrap(sram: Region, flash: Region, path: &Path) -> Result<String> {
             section.address < u64::from(flash.end()) && end > u64::from(flash.origin);
         // Exact output-section names owned by the shared bootstrap script.
         // Neither a new name nor a prefix of an allowed name grants access.
+        // The S31 loader needs two mapped image records, not flash code:
+        // payload and tuning reference are separate read-only sources.
+        // SOURCE: ESP-IDF e9da155a bootloader_utility.c:802-851;
+        // chips/esp32s31/platform/chip.toml [boot-chain]. The staged encoder
+        // audits the actual ESP segment count after adjacent sections merge.
         let allowed_flash = flash.contains_range(section.address, end)
             && !section.executable
             && !section.writable
             && !section.nobits
             && matches!(
                 section.name,
-                ".flash.appdesc" | ".flash.rodata" | ".eh_frame" | ".eh_frame_hdr" | ".metadata"
+                ".flash.appdesc"
+                    | ".flash.rodata"
+                    | ".flash.tuning.reference"
+                    | ".eh_frame"
+                    | ".eh_frame_hdr"
+                    | ".metadata"
             );
         if section.executable {
             code_bytes = code_bytes

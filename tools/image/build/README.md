@@ -35,6 +35,11 @@ of their names. See the [image checks](../checks/README.md).
 This audit runs on the actual bootstrap ELF, including a Cargo-cached ELF,
 before encoding any flash files; a diagnostic `run` cannot turn its failure
 into a warning. `bootstrap-placement.txt` records the result.
+The encoded ESP application's mapped segment count must also satisfy the
+chip's `[boot-chain] mapped-segments` loader contract; `bootstrap-loader.txt`
+records it before any application bytes or bundle are published. On S31,
+payload and tuning reference supply two read-only mappings in the unified
+D/I window. This grants no executable-flash exception.
 
 | Caller | Enforcement | Required checks |
 | --- | --- | --- |
@@ -91,6 +96,7 @@ An `ImageBundle` is one directory with a `bundle.json`:
 | `runtime.bin`, `bootstrap.elf` | The packed runtime and the bootstrap (staged only) |
 | `placement.txt`, `runtime-stack.txt`, `interrupt-stack.txt`, `bootstrap-stack.txt` | Gate reports |
 | `bootstrap-placement.txt` | Mandatory cache-off bootstrap code/constant placement |
+| `bootstrap-loader.txt` | Encoded mapped-segment count required by the chip's loader, when specified |
 | `runtime-frames.txt`, `bootstrap-frames.txt` | All recorded frames against the move limit, exceptions with ceilings and spare bytes, Diagnostic warnings |
 | `interrupt-placement.txt` | Interrupt code placement, paths to cached functions, static data references and objects, and free SRAM |
 | `image-linker.toml`, `strict-text.x`, `strict-placement.toml` | Runtime linker analysis inputs, generated strict-code fragment and the functions moved with their input sections |
