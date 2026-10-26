@@ -28,7 +28,8 @@ The initial marker is `0xfac70000` (ready). Publish `FACTS_REQUEST` in SRAM
 while halted, then resume the same context. The session keeps its one PAC claim
 across commands; do not reload the ELF or re-enter `_start` to select a leaf.
 A valid retained reason automatically selects the next-boot observer on a new
-ROM-loader entry after software reset, without another reset. Selections:
+ROM-loader entry after software reset, without another reset. Core and reset
+selections:
 
 | Selection | Experiment |
 | --- | --- |
@@ -175,10 +176,11 @@ hardware claim even if the debugger command itself exits successfully.
 
 ## Local radio interrupt retention
 
-Selections 90–101 extend the BLE facts through advancing BTLC captures and
-positive digital causes. No scheduler RUN, RF operation or DMA publication is
-involved. The clock/reset setup is sourced and grouped; it does not establish
-a minimal clock set. With CONFIG_24=0 and CLOCK_SHIFT=3, CONTROL0=1 starts
+Selections 90–104 extend the BLE facts through advancing BTLC captures and
+positive digital causes, including overflow acknowledgement, rate and APB-reset
+boundaries. No scheduler RUN, RF operation or DMA publication is involved. The
+clock/reset setup is sourced and grouped; it does not establish a minimal clock
+set. With CONFIG_24=0 and CLOCK_SHIFT=3, CONTROL0=1 starts
 observed capture progression. Successful seed/capture correspondence alone
 is insufficient; subsequent leaves require a nonzero capture delta.
 
@@ -195,6 +197,9 @@ is insufficient; subsequent leaves require a nonzero capture delta.
 | 98 | Sourced sleep0/17 command pairs, ETM companions and +0x68 target; no invented read of +0x30 or +0x68 |
 | 99 / 100 | #685 LP stop order, controller reset, no-MMIO reunion boundary, digital clock release/restoration with isolated software / one real rollover and primary overflow |
 | 101 | Positive masked-zero checks for both LP lanes before +0x34 clears anything |
+| 102 | BTLC overflow with baseline ENA1 0x1302: mask/unmask, NRT sampled-copy clear, primary sampled bit-1 W1C and short quiet window |
+| 103 | One BTLC rate interval bracketed by mcycle, clock/divider readback and one near-wrap seeded crossing |
+| 104 | Positive overflow and every ENA0/ENA1 lane before MAC reset, after APB reset, after baseline re-enable and CONTROL0 reopen; fresh wrap control |
 
 Each BTLC latch/cause poll is bounded by 200,000 cycles. Each LP wrap wait
 is bounded by 40,000,000 cycles and requests one real wrap; ordinary windows
