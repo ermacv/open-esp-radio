@@ -80,9 +80,9 @@ pub struct EdcaParameters {
 pub fn edca_parameters(record: EdcaAcParameters) -> Option<EdcaParameters> {
     Some(EdcaParameters {
         acm: record.wmm.admission_control_mandatory,
-        aifsn: record.wmm.aifsn,
-        minimum: record.wmm.ecw_min,
-        maximum: record.wmm.ecw_max,
+        aifsn: record.wmm.aifsn.get(),
+        minimum: record.wmm.ecw_min.get(),
+        maximum: record.wmm.ecw_max.get(),
         txop: record.wmm.txop_limit_units_32_us,
         lifetime_us: record.msdu_lifetime.as_micros().try_into().ok()?,
     })
@@ -535,6 +535,29 @@ mod tests {
     use core::num::NonZeroU16;
     use oer_ieee80211_port::{Air, PhyRate};
     use oer_ieee80211_wire::{phy::LegacyRate, sequence::SequenceNumber};
+
+    #[test]
+    fn edca_projection_preserves_advertised_contention_fields() {
+        use oer_ieee80211_wire::qos::WmmAccessCategory;
+
+        let expected = [(3, 4, 10, 0), (7, 4, 10, 0), (2, 3, 4, 94), (2, 2, 3, 47)];
+        for (category, (aifsn, minimum, maximum, txop)) in
+            WmmAccessCategory::ALL.into_iter().zip(expected)
+        {
+            let record = EdcaParameterSet::STANDARD_DEFAULT.access_category(category);
+            assert_eq!(
+                edca_parameters(record),
+                Some(EdcaParameters {
+                    acm: false,
+                    aifsn,
+                    minimum,
+                    maximum,
+                    txop,
+                    lifetime_us: 512_000,
+                })
+            );
+        }
+    }
 
     fn trace(observed: LegacyRate, state: MpduState) -> outcomes::Trace<(), (), ()> {
         outcomes::Trace {

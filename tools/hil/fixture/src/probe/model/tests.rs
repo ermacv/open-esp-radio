@@ -1,7 +1,8 @@
 use oer_ieee80211_wire::{
     ap::profile::{Advertisement, LegacyRates, WmmParameters},
-    extensions::wmm::WmmAcParameters,
+    extensions::wmm::WmmParameterSet,
     ht::HtLocalCapabilities,
+    qos::WmmAccessCategory,
 };
 
 use super::*;
@@ -16,13 +17,7 @@ const ADVERTISEMENT: Advertisement = match Advertisement::new(
     match WmmParameters::new(
         4,
         false,
-        [WmmAcParameters {
-            admission_control_mandatory: false,
-            aifsn: 3,
-            ecw_min: 4,
-            ecw_max: 10,
-            txop_limit_units_32_us: 0,
-        }; 4],
+        [WmmParameterSet::STANDARD_DEFAULT.access_category(WmmAccessCategory::BestEffort); 4],
     ) {
         Some(value) => value,
         None => panic!("the WMM parameters fit their fields"),
