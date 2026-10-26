@@ -70,7 +70,7 @@ pub const RTC_WATCHDOG_STAGE0_HOLD: u32 =
 /// The watchdogs' register owners, split from the root's partition.
 #[must_use = "dropping a register owner permanently loses its register authority"]
 pub struct WatchdogRegisters {
-    /// Timer group 0's main watchdog.
+    /// Timer group 0's main watchdog and its clock and reset word.
     pub main0: Mwdt0Registers,
     /// Timer group 1's main watchdog and its clock and reset word.
     pub main1: Mwdt1Registers,
@@ -86,12 +86,13 @@ impl WatchdogRegisters {
         let WatchdogPeripherals {
             timg0_wdt,
             timg1_wdt,
+            hp_sys_clkrst_timg0,
             hp_sys_clkrst_timg1,
             lp_wdt,
             lp_wdt_swd,
         } = peripherals;
         Self {
-            main0: Mwdt0Registers::new(timg0_wdt),
+            main0: Mwdt0Registers::new(timg0_wdt, hp_sys_clkrst_timg0),
             main1: Mwdt1Registers::new(timg1_wdt, hp_sys_clkrst_timg1),
             rtc: RwdtRegisters::new(lp_wdt),
             super_watchdog: SwdRegisters::new(lp_wdt_swd),
@@ -102,7 +103,8 @@ impl WatchdogRegisters {
 /// Every watchdog of the chip, owned for stage two's lifetime.
 pub struct Watchdogs {
     /// Timer group 0's main watchdog, only stopped: its watchdog clock is
-    /// not the image's, which gates it.
+    /// not the image's, which gates it. It retains the group clock/reset
+    /// word after selecting and enabling T0's XTAL clock at startup.
     pub main0: StoppedMainWatchdog<Mwdt0Registers>,
     /// Timer group 1's main watchdog, the system deadline's timer.
     pub main1: MainWatchdog<Mwdt1Registers>,
@@ -115,15 +117,17 @@ pub struct Watchdogs {
 impl Watchdogs {
     /// Own every watchdog: run timer group 1 from reset on the XTAL clock,
     /// stop both main watchdogs, latched and locked, and arm the RTC
-    /// watchdog for [`RTC_WATCHDOG_BUDGET_MS`]. The super watchdog is left
-    /// as the bootstrap leaves it, fed by hardware.
+    /// watchdog for [`RTC_WATCHDOG_BUDGET_MS`]. Enable T0's XTAL clock
+    /// without resetting its group or changing the watchdog clock.
+    /// The super watchdog is left as the bootstrap leaves it, fed by hardware.
     pub fn new(registers: WatchdogRegisters) -> Self {
         let WatchdogRegisters {
-            main0,
+            mut main0,
             mut main1,
             rtc,
             super_watchdog,
         } = registers;
+        main0.start_timer0_clock();
         main1.start_clock();
         Self {
             main0: StoppedMainWatchdog::new(main0),

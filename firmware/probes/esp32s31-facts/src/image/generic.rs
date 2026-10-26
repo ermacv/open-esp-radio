@@ -16,6 +16,7 @@ pub(super) struct Hardware {
     pub systimer_clock: pac::hp_sys_clkrst::HpSysClkrstSystimer,
     pub timer: pac::ownership::TimerGroup0Peripherals,
     pub watchdog: pac::timg::Timg0Wdt,
+    pub watchdog_clock: pac::hp_sys_clkrst::HpSysClkrstTimg0,
 }
 // Only the masked thread publishes/revokes this exclusive handler loan.
 static CLIC: AtomicPtr<pac::clic::Clic> = AtomicPtr::new(ptr::null_mut());
@@ -622,9 +623,10 @@ fn t0_count(s: &mut Session<'_>) -> Option<u64> {
 }
 fn t0_state(s: &Session<'_>, tag: u32) {
     let timer = &s.generic.timer.timg0_timer0;
-    let r = timer.read_int_raw_timers();
-    let t = timer.read_int_st_timers();
-    let e = timer.read_int_ena_timers();
+    let bank = &s.generic.timer.timg0_interrupt_bank;
+    let r = bank.read_int_raw_timers();
+    let t = bank.read_int_st_timers();
+    let e = bank.read_int_ena_timers();
     emit(
         tag,
         pack([r.t0_int_raw(), r.t1_int_raw(), r.wdt_int_raw()]),
@@ -641,14 +643,17 @@ fn t0_state(s: &Session<'_>, tag: u32) {
     );
 }
 fn t0_ena(s: &mut Session<'_>, enable: bool) {
-    s.generic.timer.timg0_timer0.modify_int_ena_timers(|w| {
-        w.set_t0_int_ena(enable);
-    });
+    s.generic
+        .timer
+        .timg0_interrupt_bank
+        .modify_int_ena_timers(|w| {
+            w.set_t0_int_ena(enable);
+        });
 }
 fn t0_clear(s: &mut Session<'_>) {
     s.generic
         .timer
-        .timg0_timer0
+        .timg0_interrupt_bank
         .trigger_int_clr_timers_t0_int_clr();
     oer_riscv::fence();
 }
@@ -667,7 +672,7 @@ fn t0_wait(s: &Session<'_>, tag: u32) -> bool {
     while !s
         .generic
         .timer
-        .timg0_timer0
+        .timg0_interrupt_bank
         .read_int_raw_timers()
         .t0_int_raw()
         && oer_riscv::cycle32().wrapping_sub(start) < LIMIT
@@ -675,7 +680,7 @@ fn t0_wait(s: &Session<'_>, tag: u32) -> bool {
     let ready = s
         .generic
         .timer
-        .timg0_timer0
+        .timg0_interrupt_bank
         .read_int_raw_timers()
         .t0_int_raw();
     emit(
@@ -699,8 +704,8 @@ pub(super) fn timer0(s: &mut Session<'_>) {
     let w0 = s.generic.watchdog.read_wdtconfig0();
     let w1 = s.generic.watchdog.read_wdtconfig1();
     let w2 = s.generic.watchdog.read_wdtconfig2();
-    let clock = s.generic.timer.hp_sys_clkrst_timg0.read_timergrp0_ctrl0();
-    let ena = s.generic.timer.timg0_timer0.read_int_ena_timers();
+    let clock = s.generic.watchdog_clock.read_timergrp0_ctrl0();
+    let ena = s.generic.timer.timg0_interrupt_bank.read_int_ena_timers();
     emit(
         0x7000,
         pack([
@@ -712,20 +717,18 @@ pub(super) fn timer0(s: &mut Session<'_>) {
         clock.reg_timergrp0_wdt_src_sel().get(),
         u32::from(ena.wdt_int_ena()),
     );
-    if clock.reg_timergrp0_rst_en() {
+    if clock.reg_timergrp0_rst_en() || !clock.reg_timergrp0_apb_clk_en() {
         emit(0x70ee, 0, 0, 1);
+        route(s, pac::Interrupt::TIMERGRP0_T0, false);
         return;
     }
-    s.generic
-        .timer
-        .hp_sys_clkrst_timg0
-        .modify_timergrp0_ctrl0(|w| {
-            w.set_reg_timergrp0_apb_clk_en(true)
-                .set_reg_timergrp0_t0_clk_en(true)
-                .set_reg_timergrp0_t0_src_sel(Bits::constant::<
-                    { pac::hp_sys_clkrst::timergrp0_ctrl0::RegTimergrp0T0SrcSel::Xtal.bits() },
-                >());
-        });
+    // Startup uses the watchdog-side clock owner, not the T0 partition.
+    s.generic.watchdog_clock.modify_timergrp0_ctrl0(|w| {
+        w.set_reg_timergrp0_t0_src_sel(Bits::constant::<
+            { pac::hp_sys_clkrst::timergrp0_ctrl0::RegTimergrp0T0SrcSel::Xtal.bits() },
+        >())
+        .set_reg_timergrp0_t0_clk_en(true);
+    });
     s.generic
         .timer
         .timg0_timer0
@@ -817,13 +820,10 @@ pub(super) fn timer0(s: &mut Session<'_>) {
     );
     t0_state(s, 0x70f1);
     admit(s, 0x70f4);
-    s.generic
-        .timer
-        .hp_sys_clkrst_timg0
-        .modify_timergrp0_ctrl0(|w| {
-            w.set_reg_timergrp0_t0_clk_en(false);
-        });
-    let after = s.generic.timer.hp_sys_clkrst_timg0.read_timergrp0_ctrl0();
+    s.generic.watchdog_clock.modify_timergrp0_ctrl0(|w| {
+        w.set_reg_timergrp0_t0_clk_en(false);
+    });
+    let after = s.generic.watchdog_clock.read_timergrp0_ctrl0();
     emit(
         0x70ff,
         pack([
@@ -836,7 +836,7 @@ pub(super) fn timer0(s: &mut Session<'_>) {
             after.reg_timergrp0_wdt_src_sel() == clock.reg_timergrp0_wdt_src_sel(),
             s.generic
                 .timer
-                .timg0_timer0
+                .timg0_interrupt_bank
                 .read_int_ena_timers()
                 .wdt_int_ena()
                 == ena.wdt_int_ena(),

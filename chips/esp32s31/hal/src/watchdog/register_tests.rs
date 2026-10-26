@@ -43,17 +43,67 @@ fn tick() -> MicrosecondTick {
 fn stopping_a_main_watchdog_clears_only_enable_and_flash_boot() {
     let mut words = memory(instances::timg0::SIZE, u32::MAX);
     let before = words.clone();
-    let _stopped =
-        StoppedMainWatchdog::new(Mwdt0Registers::host(&mut words).expect("host memory holds it"));
-    let view = Mwdt0Registers::host(&mut words).expect("host memory holds the block");
-    let config = view.0.read_wdtconfig0();
+    let mut clock = memory(instances::hp_sys_clkrst::SIZE, u32::MAX);
+    let clock_before = clock.clone();
+    let _stopped = StoppedMainWatchdog::new(
+        Mwdt0Registers::host(&mut words, &mut clock).expect("host memory holds it"),
+    );
+    let view = Mwdt0Registers::host(&mut words, &mut clock).expect("host memory holds the blocks");
+    let config = view.wdt.read_wdtconfig0();
     assert!(!config.wdt_en() && !config.wdt_flashboot_mod_en());
     assert_eq!(config.wdt_stg0().get(), 3, "the stage actions are kept");
     assert_eq!(config.wdt_sys_reset_length().get(), 7);
     assert!(config.wdt_appcpu_reset_en() && config.wdt_procpu_reset_en());
-    assert_eq!(view.0.read_wdtwprotect().wdt_wkey(), LOCK, "locked again");
+    assert_eq!(view.wdt.read_wdtwprotect().wdt_wkey(), LOCK, "locked again");
     drop(view);
     assert_eq!(changed(&before, &words), [0x48, 0x64]);
+    assert_eq!(clock, clock_before, "stopping cannot reset the group");
+}
+
+#[test]
+fn timer0_clock_start_preserves_reset_and_the_watchdog_and_timer1_clocks() {
+    for fill in [0, u32::MAX] {
+        let mut words = memory(instances::timg0::SIZE, fill);
+        let words_before = words.clone();
+        let mut clock = memory(instances::hp_sys_clkrst::SIZE, fill);
+        let mut mwdt =
+            Mwdt0Registers::host(&mut words, &mut clock).expect("host memory holds the blocks");
+        let before = mwdt.clock.read_timergrp0_ctrl0();
+        mwdt.start_timer0_clock();
+        let after = mwdt.clock.read_timergrp0_ctrl0();
+        assert!(after.reg_timergrp0_t0_clk_en());
+        assert_eq!(after.reg_timergrp0_t0_src_sel().get(), 0, "XTAL");
+        assert_eq!(after.reg_timergrp0_rst_en(), before.reg_timergrp0_rst_en());
+        assert_eq!(
+            after.reg_timergrp0_apb_clk_en(),
+            before.reg_timergrp0_apb_clk_en()
+        );
+        assert_eq!(
+            after.reg_timergrp0_force_norst(),
+            before.reg_timergrp0_force_norst()
+        );
+        assert_eq!(
+            after.reg_timergrp0_t1_clk_en(),
+            before.reg_timergrp0_t1_clk_en()
+        );
+        assert_eq!(
+            after.reg_timergrp0_t1_src_sel(),
+            before.reg_timergrp0_t1_src_sel()
+        );
+        assert_eq!(
+            after.reg_timergrp0_wdt_clk_en(),
+            before.reg_timergrp0_wdt_clk_en()
+        );
+        assert_eq!(
+            after.reg_timergrp0_wdt_src_sel(),
+            before.reg_timergrp0_wdt_src_sel()
+        );
+        drop(mwdt);
+        assert_eq!(
+            words, words_before,
+            "clock startup writes no watchdog register"
+        );
+    }
 }
 
 #[test]

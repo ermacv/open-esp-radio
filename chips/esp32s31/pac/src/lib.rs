@@ -17,6 +17,42 @@
 //! sources, the instances' bases, the ownership parts and partitions, the
 //! memory layouts and the analog-I2C dictionary. It has no logic: every
 //! sequence, poll and policy over it is the HAL's.
+//!
+//! T0's counter cannot write the group's interrupt bank:
+//!
+//! ```compile_fail,E0599
+//! # use oer_esp32s31_pac::timg::Timg0Timer0;
+//! fn enable(mut timer: Timg0Timer0) {
+//!     timer.modify_int_ena_timers(|w| { w.set_t0_int_ena(true); });
+//! }
+//! ```
+//!
+//! The timer partition cannot reset the group and re-enable its watchdog:
+//!
+//! ```compile_fail,E0609
+//! # use oer_esp32s31_pac::ownership::TimerGroup0Peripherals;
+//! fn reset(mut timer: TimerGroup0Peripherals) {
+//!     timer.hp_sys_clkrst_timg0.modify_timergrp0_ctrl0(|w| {
+//!         w.set_reg_timergrp0_rst_en(true);
+//!     });
+//! }
+//! ```
+//!
+//! The split CLR word exposes only T0's strobe:
+//!
+//! ```compile_fail,E0599
+//! # use oer_esp32s31_pac::timg::Timg0InterruptBank;
+//! fn clear_watchdog(mut bank: Timg0InterruptBank) {
+//!     bank.trigger_int_clr_timers_wdt_int_clr();
+//! }
+//! ```
+//!
+//! ```compile_fail,E0599
+//! # use oer_esp32s31_pac::timg::Timg0InterruptBank;
+//! fn clear_timer1(mut bank: Timg0InterruptBank) {
+//!     bank.trigger_int_clr_timers_t1_int_clr();
+//! }
+//! ```
 
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]

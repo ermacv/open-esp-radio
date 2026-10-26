@@ -341,6 +341,7 @@ extern "C" fn facts_main() -> ! {
             systimer_clock: p.soc.hp_sys_clkrst_systimer,
             timer: p.timer_group0,
             watchdog: p.watchdog.timg0_wdt,
+            watchdog_clock: p.watchdog.hp_sys_clkrst_timg0,
         },
         ble: ble::Ble {
             bank: p.bluetooth_interrupts.bluetooth_interrupt_bank,
