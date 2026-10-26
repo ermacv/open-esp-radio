@@ -250,27 +250,18 @@ impl<const COUNT: usize, const BUFFER: usize, const STORAGE: usize>
             .unwrap();
     }
 
-    /// The leading and trailing recycle guards of descriptor `index`'s
-    /// buffer, as the DMA engine sees them.
-    pub(super) fn dma_guards(
-        &self,
-        live: &RxRingLive<'_, COUNT>,
-        index: usize,
-    ) -> ([u8; 4], [u8; 4]) {
+    /// The leading recycle guard of descriptor `index`'s buffer, as the
+    /// DMA engine sees it.
+    pub(super) fn dma_guard(&self, live: &RxRingLive<'_, COUNT>, index: usize) -> [u8; 4] {
         let mut leading = [0; 4];
-        let mut trailing = [0; 4];
         let address = self.buffers[index];
         self.storage.dma_read(live, address, &mut leading).unwrap();
-        self.storage
-            .dma_read(live, address + BUFFER as u32, &mut trailing)
-            .unwrap();
-        (leading, trailing)
+        leading
     }
 
-    /// Whether descriptor `index`'s buffer carries both recycle guards.
-    pub(super) fn guards_restored(&self, live: &RxRingLive<'_, COUNT>, index: usize) -> bool {
-        let sentinel = RX_BUFFER_SENTINEL.to_le_bytes();
-        self.dma_guards(live, index) == (sentinel, sentinel)
+    /// Whether descriptor `index`'s buffer carries its leading recycle guard.
+    pub(super) fn guard_restored(&self, live: &RxRingLive<'_, COUNT>, index: usize) -> bool {
+        self.dma_guard(live, index) == RX_BUFFER_SENTINEL.to_le_bytes()
     }
 }
 

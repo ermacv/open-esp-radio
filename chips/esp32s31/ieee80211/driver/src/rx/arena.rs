@@ -42,8 +42,9 @@ pub struct WifiIrqSignals<X: SignalExecutor> {
 
 /// The static arena of one receive epoch.
 ///
-/// `COUNT` descriptors of `BUFFER` bytes (`STORAGE` with the recycle
-/// guard), `STAGE_SLOTS` staging leases of up to `BUFFER` bytes.
+/// `COUNT` descriptors of `BUFFER` bytes (including the leading recycle
+/// guard), `STORAGE` backing bytes per buffer, and `STAGE_SLOTS` staging leases
+/// of up to `BUFFER` bytes.
 #[repr(C)]
 #[derive(bytemuck::Zeroable)]
 #[zeroable(bound = "")]

@@ -26,6 +26,11 @@ DMA rings, keys and the P3/P2 interrupt path. Capabilities and their state:
   through the abandonment protocol in its own context, and the installation
   stays quarantined until reset. Packet-number exhaustion is a typed refusal
   before backend handoff. No retry after a hardware TX timeout.
+- **RX storage.** Each buffer has a four-byte leading recycle sentinel inside
+  its DMA capacity and no trailing sentinel. The large-RX profile uses 96
+  ring buffers and one reserved buffer R, each with 4608 backing bytes.
+  Descriptor observations and ownership grants govern completion and recycle;
+  the leading sentinel only supplies evidence that DMA wrote into a buffer.
 - **Protocol RX.** The port validates protected Data through the MAC's CCMP
   validator, retains its public header and PN, and removes the verified MIC
   trailer before protocol delivery. Integrity is hardware evidence only after

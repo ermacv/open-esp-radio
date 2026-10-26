@@ -336,7 +336,11 @@ One unsafe read-binding constructor retains the completion owner's loan.
 Detachment consumes the completed owner inside the byte core.
 The two byte-cell accesses, detached-buffer handoff, volatile guard observation
 and two sharing implementations form the memory boundary. Completion
-observations precede grants, and guards are restored before publication.
+observations precede grants, and the leading guard is restored before
+publication. That four-byte word lies inside the descriptor's advertised
+capacity; backing storage covers that capacity, with no trailing guard word.
+The leading observation remains evidence of a DMA write, not a completion
+or ownership proof.
 Compiler fixtures build internal callers against the actual HAL source;
 weakened-bound controls confirm every callback escape case detects a regression.
 

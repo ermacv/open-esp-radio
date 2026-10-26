@@ -9,7 +9,7 @@ use oer_esp32s31_hal::ieee80211::dma::{
 /// large-RX profile.
 pub const ESP32S31_RX_DESCRIPTOR_COUNT: usize = 96;
 pub const ESP32S31_RX_BUFFER_SIZE: usize = 4_608;
-pub const ESP32S31_RX_BUFFER_STORAGE_SIZE: usize = ESP32S31_RX_BUFFER_SIZE + 4;
+pub const ESP32S31_RX_BUFFER_STORAGE_SIZE: usize = ESP32S31_RX_BUFFER_SIZE;
 const _: () = assert!(
     oer_esp32s31_hal::ieee80211::dma::rx_ring::rx_ring_outspans_any_unit(
         ESP32S31_RX_DESCRIPTOR_COUNT,

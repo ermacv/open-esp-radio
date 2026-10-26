@@ -140,7 +140,7 @@ impl RxDma for MockRxDma {
 
 #[test]
 fn arena_initializes_in_its_final_location_and_recycles_one_buffer() {
-    let mut storage = RxDmaStorage::<2, 16, 20, HostDma>::new();
+    let mut storage = RxDmaStorage::<2, 16, 16, HostDma>::new();
 
     assert_eq!(storage.descriptors().len(), 2);
     assert_eq!(storage.buffers().len(), 2);
@@ -153,7 +153,7 @@ fn arena_initializes_in_its_final_location_and_recycles_one_buffer() {
 #[test]
 fn a_placed_storage_publishes_its_own_addresses() {
     const COUNT: usize = 2;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     assert_eq!(
         storage.buffer_addresses(),
         &[0; COUNT],
@@ -203,7 +203,7 @@ fn a_placed_storage_publishes_its_own_addresses() {
 fn accepted_list_pressure_projects_next_to_the_current_tail() {
     const COUNT: usize = 4;
     const LOW_MASK: u32 = 0x000f_ffff;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let base = placed.descriptor_base();
     let mut mmio = MockRxDma::default();
@@ -261,7 +261,7 @@ fn completed_ownership_follows_a_permuted_descriptor_buffer_binding() {
     const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     // Descriptor zero names physical buffer one; descriptor one names
     // physical buffer zero.
-    let mut storage = Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new());
+    let mut storage = Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new());
     storage.buffer_mut(1).unwrap()[4..8].copy_from_slice(&[5, 6, 7, 8]);
     let storage = Box::leak(storage);
     let placed = RxDmaStorage::place_rotated(Placed::host(storage), 1).expect("pre-ring rotation");
@@ -318,7 +318,7 @@ fn completed_ownership_follows_a_permuted_descriptor_buffer_binding() {
 fn detached_buffer_cannot_rearm_until_the_network_lease_returns() {
     const COUNT: usize = 2;
     const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     storage.buffer_mut(0).unwrap()[4..8].copy_from_slice(&[1, 2, 3, 4]);
     let placed = place(storage);
     let storage = placed.storage();
@@ -381,7 +381,7 @@ fn detached_buffer_cannot_rearm_until_the_network_lease_returns() {
 fn role_neutral_prefix_recycle_normalizes_a_returned_staged_buffer() {
     const COUNT: usize = 2;
     const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let base = placed.descriptor_base();
@@ -435,7 +435,7 @@ fn role_neutral_prefix_recycle_normalizes_a_returned_staged_buffer() {
 fn released_dma_buffers_rearm_only_as_a_contiguous_ring_prefix() {
     const COUNT: usize = 4;
     const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let base = placed.descriptor_base();
@@ -512,7 +512,7 @@ fn released_dma_buffers_rearm_only_as_a_contiguous_ring_prefix() {
 #[test]
 fn the_consumed_placement_moves_through_one_prepared_live_halted_graph() {
     let placed = place(Box::leak(Box::new(
-        RxDmaStorage::<2, 16, 20, HostDma>::new(),
+        RxDmaStorage::<2, 16, 16, HostDma>::new(),
     )));
     let storage = placed.storage();
     let mut mmio = MockRxDma::default();
@@ -538,9 +538,9 @@ fn the_consumed_placement_moves_through_one_prepared_live_halted_graph() {
 #[test]
 fn live_binding_rejects_a_foreign_storage_arena() {
     const COUNT: usize = 2;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
-    let foreign = RxDmaStorage::<COUNT, 16, 20, HostDma>::new();
+    let foreign = RxDmaStorage::<COUNT, 16, 16, HostDma>::new();
     let mut mmio = MockRxDma::default();
     let mut live = placed
         .prepare_ring(&mut mmio)
@@ -565,7 +565,7 @@ fn live_binding_rejects_a_foreign_storage_arena() {
 fn first_frontier_returns_one_unit_from_a_terminal_burst() {
     const COUNT: usize = 4;
     const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let base = placed.descriptor_base();
@@ -606,7 +606,7 @@ fn first_frontier_returns_one_unit_from_a_terminal_burst() {
 #[test]
 fn failed_root_prepare_quarantines_the_arena_when_walker_stop_is_unproved() {
     const COUNT: usize = 2;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let mut mmio = MockRxDma {
@@ -627,7 +627,7 @@ fn failed_root_prepare_quarantines_the_arena_when_walker_stop_is_unproved() {
 #[test]
 fn failed_halted_prepare_quarantines_the_arena_when_walker_stop_is_unproved() {
     const COUNT: usize = 2;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let mut mmio = MockRxDma::default();
@@ -662,7 +662,7 @@ fn failed_halted_prepare_quarantines_the_arena_when_walker_stop_is_unproved() {
 fn partial_live_buffer_rearm_quarantines_the_arena() {
     const COUNT: usize = 2;
     const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let base = placed.descriptor_base();
@@ -717,7 +717,7 @@ fn completed_descriptor_metadata_is_validated_before_payload_transfer() {
     const COUNT: usize = 2;
 
     for corruption in 0..3 {
-        let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+        let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
         let placed = place(storage);
         let storage = placed.storage();
         let base = placed.descriptor_base();
@@ -760,7 +760,7 @@ fn completed_descriptor_metadata_is_validated_before_payload_transfer() {
 fn impossible_reload_frontier_quarantines_the_static_arena() {
     const COUNT: usize = 2;
     const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let base = placed.descriptor_base();
@@ -823,7 +823,7 @@ fn impossible_reload_frontier_quarantines_the_static_arena() {
 fn in_arena_intermediate_last_rerings_the_doorbell() {
     const COUNT: usize = 4;
     const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let base = placed.descriptor_base();
@@ -908,13 +908,13 @@ const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddress
 /// after its doorbell was rung while NEXT was still nonzero, so the settle
 /// rang it once more and the walker resumed at the appended head (`base`).
 fn ring_after_exhausted_reload_rering() -> (
-    &'static RxDmaStorage<REPAIR_COUNT, 16, 20, HostDma>,
+    &'static RxDmaStorage<REPAIR_COUNT, 16, 16, HostDma>,
     RxRingLive<'static, REPAIR_COUNT>,
     crate::ieee80211::dma::rx_dma::model::RxWalkerModel,
     u32,
 ) {
     const COUNT: usize = REPAIR_COUNT;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let base = placed.descriptor_base();
@@ -1011,7 +1011,7 @@ fn exhausted_reload_records_the_rering_facts() {
 fn exhausted_list_reclaims_untouched_prefix_before_terminal_payload() {
     use crate::ieee80211::dma::rx_dma::model::{RxWalkerModel, RxWalkerOperation};
     const COUNT: usize = 4;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let base = placed.descriptor_base();
@@ -1098,7 +1098,7 @@ fn exhausted_list_reclaims_untouched_prefix_before_terminal_payload() {
 fn dropping_a_taken_completed_unit_requires_radio_reset() {
     const COUNT: usize = 2;
     const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let base = placed.descriptor_base();
@@ -1134,7 +1134,7 @@ fn dropping_a_taken_completed_unit_requires_radio_reset() {
 fn frozen_last_releases_the_descriptor_equal_to_last() {
     const COUNT: usize = 4;
     const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let base = placed.descriptor_base();
@@ -1182,12 +1182,12 @@ fn frozen_last_releases_the_descriptor_equal_to_last() {
 /// Two completed single-descriptor frames, LAST on the first: the walker
 /// still writes the second, so only the first unit can be taken.
 fn two_completed_frames_last_on_the_first() -> (
-    &'static RxDmaStorage<4, 16, 20, HostDma>,
+    &'static RxDmaStorage<4, 16, 16, HostDma>,
     MockRxDma,
     RxRingLive<'static, 4>,
 ) {
     const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
-    let storage = Box::leak(Box::new(RxDmaStorage::<4, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<4, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let base = placed.descriptor_base();
@@ -1392,7 +1392,7 @@ fn a_cursor_of_an_earlier_live_epoch_takes_nothing() {
 fn frozen_last_unit_reclaim_returns_only_one_vendor_chain() {
     const COUNT: usize = 4;
     const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let base = placed.descriptor_base();
@@ -1486,7 +1486,7 @@ fn frozen_last_unit_reclaim_returns_only_one_vendor_chain() {
 #[test]
 fn ambiguous_start_quarantines_the_arena_when_walker_is_observed_live() {
     const COUNT: usize = 2;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let mut mmio = MockRxDma {
@@ -1509,8 +1509,8 @@ fn ambiguous_start_quarantines_the_arena_when_walker_is_observed_live() {
 
 #[test]
 fn zeroed_arena_is_the_reusable_identity_bound_arena_new_builds() {
-    let zeroed = oer_memory::zeroed::zeroed::<RxDmaStorage<4, 16, 20>>();
-    let new = RxDmaStorage::<4, 16, 20, HostDma>::new();
+    let zeroed = oer_memory::zeroed::zeroed::<RxDmaStorage<4, 16, 16>>();
+    let new = RxDmaStorage::<4, 16, 16, HostDma>::new();
     assert_eq!(zeroed.lifecycle_state(), RxDmaArenaState::Reusable);
     assert_eq!(zeroed.lifecycle_state(), new.lifecycle_state());
     for index in 0..4 {
@@ -1533,12 +1533,12 @@ fn zeroed_arena_is_the_reusable_identity_bound_arena_new_builds() {
 }
 
 fn live_host_arena<const COUNT: usize>() -> (
-    &'static RxDmaStorage<COUNT, 16, 20, HostDma>,
+    &'static RxDmaStorage<COUNT, 16, 16, HostDma>,
     &'static [u32; COUNT],
     MockRxDma,
     RxRingLive<'static, COUNT>,
 ) {
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let buffers = storage.buffer_addresses().bits();
@@ -1583,7 +1583,7 @@ fn host_dma_port_writes_only_inside_one_ring_buffer() {
 
     let buffer_bytes = |live: &RxRingLive<'_, COUNT>| {
         buffers.map(|address| {
-            let mut bytes = [0; 20];
+            let mut bytes = [0; 16];
             storage.dma_read(live, address, &mut bytes).unwrap();
             bytes
         })
@@ -1605,7 +1605,7 @@ fn host_dma_port_writes_only_inside_one_ring_buffer() {
         crate::ieee80211::dma::space::HOST_ARENA_BASE - 4,
         base,
         base + crate::ieee80211::dma::descriptor::DESCRIPTOR_BYTES,
-        buffers[COUNT - 1] + 20,
+        buffers[COUNT - 1] + 16,
     ] {
         assert_eq!(
             storage.dma_write(&live, address, &[0xff; 4]),
@@ -1615,7 +1615,7 @@ fn host_dma_port_writes_only_inside_one_ring_buffer() {
     }
     // Crossing the end of buffer zero into buffer one.
     assert_eq!(
-        storage.dma_write(&live, buffers[0] + 18, &[0xff; 4]),
+        storage.dma_write(&live, buffers[0] + 14, &[0xff; 4]),
         Err(HostDmaAccessError::OutsideBuffers)
     );
     assert_eq!(buffer_bytes(&live), bytes_before);
@@ -1668,7 +1668,7 @@ struct ForeignStopProof {
 impl ForeignStopProof {
     fn new() -> Self {
         let other = place(Box::leak(Box::new(
-            RxDmaStorage::<2, 16, 20, HostDma>::new(),
+            RxDmaStorage::<2, 16, 16, HostDma>::new(),
         )));
         let base = other.descriptor_base();
         let other = other.storage();
@@ -1766,7 +1766,7 @@ impl RxDma for ForeignStopProof {
 
 #[test]
 fn a_stop_proof_for_another_arena_poisons_the_live_arena() {
-    let storage = Box::leak(Box::new(RxDmaStorage::<2, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<2, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let mut mmio = ForeignStopProof::new();
@@ -1789,7 +1789,7 @@ fn a_stop_proof_for_another_arena_poisons_the_live_arena() {
 
 #[test]
 fn a_halted_rebuild_refuses_a_stop_proof_for_another_arena() {
-    let storage = Box::leak(Box::new(RxDmaStorage::<2, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<2, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let mut model = crate::ieee80211::dma::rx_dma::model::RxWalkerModel::new();
@@ -1819,7 +1819,7 @@ fn a_halted_rebuild_refuses_a_stop_proof_for_another_arena() {
 #[test]
 fn a_walker_that_does_not_stop_returns_the_live_owner_unconfirmed() {
     use crate::ieee80211::dma::rx_dma::model::{RxWalkerModel, RxWalkerOperation};
-    let storage = Box::leak(Box::new(RxDmaStorage::<2, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<2, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let mut mmio = RxWalkerModel::new();
@@ -1851,7 +1851,7 @@ fn a_chain_longer_than_the_length_field_is_owned_and_recycled() {
     use crate::ieee80211::dma::rx_dma::model::RxWalkerModel;
     const COUNT: usize = 4;
     const BUFFER: u32 = 8_192;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 8_192, 8_196, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 8_192, 8_192, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let base = placed.descriptor_base();
@@ -1937,10 +1937,10 @@ fn a_chain_longer_than_the_length_field_is_owned_and_recycled() {
 fn ring_with_pending_reload(
     mmio: &mut crate::ieee80211::dma::rx_dma::model::RxWalkerModel,
 ) -> (
-    &'static RxDmaStorage<2, 16, 20, HostDma>,
+    &'static RxDmaStorage<2, 16, 16, HostDma>,
     RxRingLive<'static, 2>,
 ) {
-    let storage = Box::leak(Box::new(RxDmaStorage::<2, 16, 20, HostDma>::new()));
+    let storage = Box::leak(Box::new(RxDmaStorage::<2, 16, 16, HostDma>::new()));
     let placed = place(storage);
     let storage = placed.storage();
     let base = placed.descriptor_base();
@@ -2083,7 +2083,7 @@ fn reload_attempts_record_the_largest_observation_count() {
 /// A live host ring whose walker model plays the DMA engine: frames land
 /// where NEXT points and the walker follows each descriptor's link.
 struct Walked<const COUNT: usize> {
-    storage: &'static RxDmaStorage<COUNT, 16, 20, HostDma>,
+    storage: &'static RxDmaStorage<COUNT, 16, 16, HostDma>,
     base: u32,
     walker: crate::ieee80211::dma::rx_dma::model::RxWalkerModel,
     live: RxRingLive<'static, COUNT>,
@@ -2091,7 +2091,7 @@ struct Walked<const COUNT: usize> {
 
 impl<const COUNT: usize> Walked<COUNT> {
     fn start() -> Self {
-        let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+        let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
         let placed = place(storage);
         let storage = placed.storage();
         let base = placed.descriptor_base();
@@ -2846,7 +2846,7 @@ fn walker_on_detached_cannot_fire_on_a_detached_last_at_exhaustion() {
 #[test]
 fn cold_ring_memory_and_core_proofs_precede_the_only_base_publication() {
     let placed = place(Box::leak(Box::new(
-        RxDmaStorage::<4, 16, 20, HostDma>::new(),
+        RxDmaStorage::<4, 16, 16, HostDma>::new(),
     )));
     let mut mmio = MockRxDma::default();
     let memory = placed.prepare_ring(&mut mmio).expect("memory prepared");

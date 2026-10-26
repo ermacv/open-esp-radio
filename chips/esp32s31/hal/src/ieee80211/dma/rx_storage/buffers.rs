@@ -3,7 +3,7 @@ use crate::ieee80211::dma::rx_ring::{ReadOnly, Rearm, ScopedBuffers};
 use core::{cell::UnsafeCell, marker::PhantomData, ptr::NonNull};
 use oer_memory::{ExternalRxBuffer, ExternalRxReturn, ExternalRxReturnState};
 
-/// One aligned DMA-visible buffer with room for the hardware recycle guard.
+/// One aligned DMA-visible buffer with a leading recycle guard inside its capacity.
 #[repr(C, align(4))]
 #[derive(bytemuck::Zeroable)]
 pub struct RxDmaBuffer<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>(
@@ -14,7 +14,7 @@ pub struct RxDmaBuffer<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>(
 impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE> {
     pub(super) const fn new() -> Self {
         const {
-            assert!(BUFFER_SIZE <= usize::MAX - 4 && STORAGE_SIZE >= BUFFER_SIZE + 4);
+            assert!(BUFFER_SIZE >= core::mem::size_of::<u32>() && STORAGE_SIZE >= BUFFER_SIZE);
         }
         Self(UnsafeCell::new([0; STORAGE_SIZE]), ExternalRxReturn::new())
     }
@@ -319,7 +319,7 @@ impl<'id, const N: usize, const B: usize, const S: usize, D: DmaSpace>
     fn guard_overwritten(&self) -> bool {
         self.source().reserved_buffer.leading_guard_overwritten()
     }
-    fn restore_guards(&self, grant: RecycleGrant<'id, '_, Rearm, true>) -> Result<(), RxRingError> {
+    fn restore_guard(&self, grant: RecycleGrant<'id, '_, Rearm, true>) -> Result<(), RxRingError> {
         self.prepare_for_recycle(grant)
     }
 }
@@ -429,14 +429,14 @@ mod tests {
             assert_eq!(align_of::<ExternalRxReturn>(), align_of::<AtomicU8>());
         }
 
-        check::<16, 20>();
-        check::<16, 21>();
-        check::<1700, 1704>();
+        check::<16, 16>();
+        check::<16, 17>();
+        check::<1700, 1700>();
     }
 
     #[test]
     fn rx_buffer_keeps_detach_and_recycle_error_conditions() {
-        let buffer = &*Box::leak(Box::new(RxDmaBuffer::<16, 20>::new()));
+        let buffer = &*Box::leak(Box::new(RxDmaBuffer::<16, 16>::new()));
         for length in [0, 17] {
             assert_eq!(buffer.detach_with(length).err(), Some(RxRingError::Size));
         }

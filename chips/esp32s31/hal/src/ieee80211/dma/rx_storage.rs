@@ -415,12 +415,17 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
 impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace>
     RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
 {
-    /// Empty storage with room for every payload and its recycle guard.
+    /// Empty storage with a leading recycle guard inside each buffer capacity.
     /// The geometry is checked even when construction runs at runtime.
     ///
     /// ```compile_fail,E0080
     /// use oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
-    /// let _ = RxDmaStorage::<1, 16, 19>::new();
+    /// let _ = RxDmaStorage::<1, 16, 15>::new();
+    /// ```
+    ///
+    /// ```compile_fail,E0080
+    /// use oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
+    /// let _ = RxDmaStorage::<1, 3, 3>::new();
     /// ```
     pub const fn new() -> Self {
         Self {
@@ -490,7 +495,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         self.buffers.get_mut(index).map(RxDmaBuffer::cpu_owned_mut)
     }
 
-    /// Restore one buffer's recycle guards before any ring borrows this arena.
+    /// Restore one buffer's leading recycle guard before any ring borrows this arena.
     ///
     /// Requiring `&mut self` proves that no stopped/live ring token can exist
     /// at the same time, so pre-publication setup does not need privileged
