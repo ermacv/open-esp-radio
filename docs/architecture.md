@@ -97,6 +97,16 @@ moves; ownership, orchestration and wiring are rebuilt.
   sealed `EventAuthority` of the endpoint registers' associated interrupt
   part: its `Bound` or `Silent` proof. Missing authority and another part's
   proof fail to compile, including direct calls to the register trait.
+- The CLIC facts select three implemented control bits and three level bits
+  (eight levels, no priority bits). At equal level the highest line ID wins
+  arbitration; equal-level handlers do not preempt one another. Image line
+  assignments therefore define an explicit order within each level. Inputs
+  below the facts' first source line are reserved for core-local use. The HAL
+  writes MNLBITS on partition split because its reset value is zero; the
+  router checks INT_INFO and MNLBITS against the facts at install and verify.
+  Stage-two adoption and interrupt enable return typed boot failures to the
+  image's existing failure reporter when geometry, configuration, vectors,
+  routes or lines disagree; they never enable interrupts on a mismatch.
 - Each interrupt table entry declares its class: `Hardware` (capture,
   acknowledge, latch, raise a signal; never on its core's executor level),
   `Executor` (one per level and core; strict up to its task polls) or

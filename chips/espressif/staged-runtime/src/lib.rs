@@ -86,6 +86,50 @@ pub use oer_espressif_staged_layout::handoff::AdoptsBootstrapMapping;
 #[doc(hidden)]
 pub use oer_memory as __memory;
 
+/// A refused stage-two interrupt installation or enable. The image reports
+/// this through its existing boot-failure path, with interrupts disabled.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BootError {
+    /// The controller belongs to another hart.
+    WrongHart { actual: usize, expected: usize },
+    /// The current hart has no runtime interrupt stack.
+    NoInterruptStack { hart: usize },
+    /// The linker-provided stack guard cannot be encoded as an aligned NAPOT region.
+    InvalidStackGuard { bottom: usize, bytes: usize },
+    /// Vector CSRs no longer name the runtime's checked entries.
+    ForeignVectors,
+    /// Controller geometry, configuration, routes or lines failed verification.
+    InterruptController(oer_interrupt_table::Error),
+}
+
+impl BootError {
+    /// The boot-failure reason carried by the image's diagnostic record.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::WrongHart { .. } => "interrupt-hart",
+            Self::NoInterruptStack { .. } => "interrupt-stack",
+            Self::InvalidStackGuard { .. } => "interrupt-stack-guard",
+            Self::ForeignVectors => "interrupt-vectors",
+            Self::InterruptController(oer_interrupt_table::Error::WrongControlBits { .. }) => {
+                "interrupt-control-bits"
+            }
+            Self::InterruptController(oer_interrupt_table::Error::WrongInterruptCount {
+                ..
+            }) => "interrupt-count",
+            Self::InterruptController(oer_interrupt_table::Error::WrongLevelBits { .. }) => {
+                "interrupt-level-bits"
+            }
+            Self::InterruptController(_) => "interrupt-table",
+        }
+    }
+}
+
+impl From<oer_interrupt_table::Error> for BootError {
+    fn from(error: oer_interrupt_table::Error) -> Self {
+        Self::InterruptController(error)
+    }
+}
+
 /// The image's control at the runtime's entry: stage two runs on CPU0 right
 /// after `_runtime_start`, with interrupts disabled and the bootstrap's
 /// mapping intact. [`entry!`] gives it once, to the image's `main`.
@@ -118,10 +162,10 @@ impl Handoff {
     /// disables every line of the hart, so from here a source is routed only
     /// by binding its entry.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// When `controller` belongs to another hart or does not take the
-    /// silencing writes: a typed boot failure (`oer_interrupt_table::Error`).
+    /// A wrong hart, missing interrupt stack, invalid stack guard, or controller
+    /// disagreement with its chip facts or the image's table returns [`BootError`].
     #[cfg(target_arch = "riscv32")]
     #[allow(
         unsafe_code,
@@ -132,21 +176,17 @@ impl Handoff {
         interrupt_table: &'static InterruptTable,
         controller: C,
         board: B,
-    ) -> (B::Mapping, Adopted<C>) {
+    ) -> Result<(B::Mapping, Adopted<C>), BootError> {
         let mapping = board.adopt(&self.proof);
-        assert!(
-            usize::from(controller.hart()) == oer_espressif_staged_layout::boot::BOOT_HART,
-            "the stage-two handoff runs on the boot hart"
-        );
+        let actual = usize::from(controller.hart());
+        let expected = oer_espressif_staged_layout::boot::BOOT_HART;
+        if actual != expected {
+            return Err(BootError::WrongHart { actual, expected });
+        }
         // SAFETY: the handoff proves interrupts are disabled on the only
         // running hart, which has not admitted one.
-        unsafe { stacks::install_current_hart_interrupt_stack() };
-        let router = match oer_interrupt_table::Router::install(controller, interrupt_table) {
-            Ok(router) => router,
-            Err(error) => {
-                panic!("the hart's routes and lines disagree with the image's table: {error:?}")
-            }
-        };
+        unsafe { stacks::install_current_hart_interrupt_stack() }?;
+        let router = oer_interrupt_table::Router::install(controller, interrupt_table)?;
         // SAFETY: the runtime linker script defines this stack boundary.
         // The zero-sized byte array permits safe access without reading
         // stack memory.
@@ -156,8 +196,8 @@ impl Handoff {
         // Interrupts are disabled and trigger 0 is the runtime's;
         // `_stack_end` is the word-aligned bottom of the CPU0 task stack the
         // runtime linker script places.
-        stacks::watch_task_stack(core::ptr::addr_of!(_stack_end) as usize);
-        (mapping, Adopted { router })
+        stacks::watch_task_stack(core::ptr::addr_of!(_stack_end) as usize)?;
+        Ok((mapping, Adopted { router }))
     }
 }
 
@@ -182,18 +222,15 @@ impl<C: oer_interrupt_table::Controller> Adopted<C> {
     /// source and disabled every line, and a source is routed again only by
     /// binding its entry, after its handler holds its part.
     ///
-    /// # Panics
-    /// When the hart dispatches through other vectors than the runtime's, or
-    /// a route or line disagrees with the image's table: the typed boot
-    /// failure `oer_interrupt_table::Error`.
+    /// # Errors
+    /// [`BootError`] when vector CSRs, controller geometry, configuration,
+    /// routes or lines disagree. Global interrupt enable stays disabled.
     #[cfg(target_arch = "riscv32")]
-    pub fn enable_interrupts(self) -> oer_interrupt_table::Router<C> {
-        stacks::verify_current_hart_vectors();
-        if let Err(error) = self.router.verify() {
-            panic!("the hart's routes and lines disagree with the image's table: {error:?}");
-        }
+    pub fn enable_interrupts(self) -> Result<oer_interrupt_table::Router<C>, BootError> {
+        stacks::verify_current_hart_vectors()?;
+        self.router.verify()?;
         oer_riscv::enable_interrupts();
-        self.router
+        Ok(self.router)
     }
 }
 

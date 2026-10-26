@@ -333,8 +333,12 @@ pub struct InterruptContract {
     /// The first line a peripheral source may be routed to; the lines below
     /// it are the core's own.
     pub first_source_line: u32,
-    /// The levels a line can hold: `1..=levels`.
-    pub levels: u32,
+    /// Implemented high bits of CLICINTCTL (CLICINTCTLBITS).
+    pub control_bits: u8,
+    /// MNLBITS selected by HAL; the number of levels follows from it.
+    pub level_bits: u8,
+    /// Arbitration order when level and priority are equal.
+    pub tie_break: TieBreak,
     pub harts: Vec<u32>,
     pub level_writers: Vec<LevelWriter>,
     /// Maximum allocation of each hart's dedicated SRAM interrupt stack.
@@ -343,6 +347,14 @@ pub struct InterruptContract {
     #[serde(deserialize_with = "by_hart")]
     pub irq_stack_guard_bytes: BTreeMap<u32, u32>,
     pub irq_stack_margin_percent: u32,
+}
+
+/// CLIC arbitration after comparing level and priority.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TieBreak {
+    /// The highest interrupt ID is selected first.
+    HighestLine,
 }
 
 /// A table keyed by hart number, as TOML keys are strings.
@@ -360,6 +372,12 @@ fn by_hart<'de, D: serde::Deserializer<'de>>(
 }
 
 impl InterruptContract {
+    /// The levels a line can hold: `1..=levels()`.
+    pub fn levels(&self) -> Result<u32> {
+        1u32.checked_shl(u32::from(self.level_bits))
+            .ok_or_else(|| "CLIC level bits overflow the level count".into())
+    }
+
     /// Maximum usable bytes; final checks read the actual allocation from ELF.
     pub fn irq_stack_usable_bytes(&self, hart: u32) -> u32 {
         self.irq_stack_bytes - self.irq_stack_guard_bytes[&hart]
@@ -383,8 +401,8 @@ impl InterruptContract {
                     .into(),
             );
         }
-        if self.levels == 0 || self.levels > 256 || !self.levels.is_power_of_two() {
-            return Err("a line's levels must be a power of two from 1 to 256".into());
+        if self.control_bits > 8 || self.level_bits > self.control_bits {
+            return Err("CLIC level bits must fit the implemented control bits (at most 8)".into());
         }
         let harts: alloc::collections::BTreeSet<_> = self.harts.iter().copied().collect();
         if harts.len() != self.harts.len()

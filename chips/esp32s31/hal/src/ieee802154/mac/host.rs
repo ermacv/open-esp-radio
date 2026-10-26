@@ -70,8 +70,11 @@ pub(crate) struct NoRoutes;
 
 impl oer_interrupt_table::Controller for NoRoutes {
     const SOURCES: u16 = 256;
-    const LINES: u8 = 48;
-    const LEVEL_BITS: u8 = 3;
+    const LINES: u8 = crate::platform::interrupt_controller::facts::LINES.count;
+    const LEVEL_BITS: u8 = crate::platform::interrupt_controller::facts::LEVEL_BITS;
+    fn verify_configuration(&self) -> Result<(), oer_interrupt_table::Error> {
+        Ok(())
+    }
     fn hart(&self) -> u8 {
         0
     }

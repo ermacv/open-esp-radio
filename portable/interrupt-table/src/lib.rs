@@ -916,6 +916,9 @@ macro_rules! __fake_controller {
             fn hart(&self) -> u8 {
                 self.hart
             }
+            fn verify_configuration(&self) -> Result<(), $crate::Error> {
+                Ok(())
+            }
             fn route(&mut self, source: u16, line: u8) -> Result<(), $crate::Error> {
                 if line >= Self::LINES {
                     return Err($crate::Error::NoSuchLine { line });

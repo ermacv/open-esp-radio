@@ -201,11 +201,14 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     // The bootstrap configured PSRAM before entering this separately linked
     // runtime; stage two adopts the live mapping without reinitializing the
     // PSRAM device or MMU.
-    let (_psram, mut adopted) = handoff.adopt(
+    let (_psram, mut adopted) = match handoff.adopt(
         INTERRUPT_TABLE,
         runtime.interrupts.controller,
         oer_esp32s31_board::BootstrapPsram,
-    );
+    ) {
+        Ok(adopted) => adopted,
+        Err(error) => crate::fail(crate::fatal::Failure::from_boot(error)),
+    };
     exception::report_stack_guard();
 
     let Some(interrupts) = Interrupts::take() else {
@@ -224,7 +227,10 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let console = usb::open(adopted.router(), interrupts.console_usb);
     let software = runtime.software_interrupts;
     let executor = Executor::<0>::new(software.line0);
-    let mut router = adopted.enable_interrupts();
+    let mut router = match adopted.enable_interrupts() {
+        Ok(router) => router,
+        Err(error) => crate::fail(crate::fatal::Failure::from_boot(error)),
+    };
     let wake = (interrupts.wake, software.irq0);
     let rtc_watchdog = runtime.watchdogs.rtc;
 

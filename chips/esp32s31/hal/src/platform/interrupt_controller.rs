@@ -32,13 +32,11 @@ use oer_mmio::{Bits, Fixed, Index, Placement};
 #[cfg(test)]
 mod tests;
 
-/// The level bits of a line's control byte (`CLIC_INT_CONFIG.MNLBITS`): eight
-/// levels.
-///
-/// SOURCE: ESP-IDF 4d59230d `components/soc/esp32s31/include/soc/clic_reg.h:13`
-/// (`NLBITS` 3); esp-hal 1f646c5 `esp-hal/src/interrupt/riscv/clic.rs:8-10`
-/// (`init` writes `mnlbits` 3).
-pub const LEVEL_BITS: u8 = 3;
+/// Controller geometry generated from the chip facts, shared with runtime
+/// vector generation. Lines below `LINES.first` are reserved core-local inputs.
+pub mod facts {
+    include!(concat!(env!("OUT_DIR"), "/interrupts.rs"));
+}
 
 /// The interrupt matrix's blocks, split from the root: hart 0's controller
 /// and hart 1's bank. Hart 0's pending sources are published for every
@@ -82,7 +80,7 @@ fn pending_in<P: Placement>(status: &InterruptCore0Status<P>, source: u16) -> bo
 }
 
 impl InterruptBlocks {
-    /// Split the root's partition: give the CLIC [`LEVEL_BITS`] level bits,
+    /// Split the root's partition: give the CLIC [`facts::LEVEL_BITS`] level bits,
     /// keeping its other configuration fields, and publish hart 0's pending
     /// sources and the observers of its routes and lines for a fatal path.
     /// Every route and line stays as it is until the router installs the
@@ -124,11 +122,11 @@ impl InterruptBlocks {
     }
 }
 
-/// Give the CLIC [`LEVEL_BITS`] level bits, keeping its other configuration
+/// Give the CLIC [`facts::LEVEL_BITS`] level bits, keeping its other configuration
 /// fields.
 fn set_level_bits<C: Placement>(config: &mut ClicObserver<C>) {
     config.modify_int_config(|config| {
-        config.set_mnlbits(Bits::constant::<{ LEVEL_BITS as u32 }>());
+        config.set_mnlbits(Bits::constant::<{ facts::LEVEL_BITS as u32 }>());
     });
 }
 
@@ -272,10 +270,38 @@ const fn trigger_of(bits: Bits<2>) -> Trigger {
 impl<M: Placement, C: Placement> Controller for InterruptController<M, C> {
     const SOURCES: u16 = interrupt_core::route::COUNT as u16;
     const LINES: u8 = clic::ctrl::COUNT as u8;
-    const LEVEL_BITS: u8 = LEVEL_BITS;
+    const LEVEL_BITS: u8 = facts::LEVEL_BITS;
 
     fn hart(&self) -> u8 {
         0
+    }
+
+    fn verify_configuration(&self) -> Result<(), Error> {
+        const { assert!(Self::LINES == facts::LINES.count) };
+        let info = self.clic.read_int_info();
+        // These fields fit their destination types (four, thirteen and four bits).
+        let control_bits = info.ctlbits().get() as u8;
+        let lines = info.num_int().get() as u16;
+        let level_bits = self.clic.read_int_config().mnlbits().get() as u8;
+        if control_bits != facts::CONTROL_BITS {
+            return Err(Error::WrongControlBits {
+                actual: control_bits,
+                expected: facts::CONTROL_BITS,
+            });
+        }
+        if lines != u16::from(facts::LINES.count) {
+            return Err(Error::WrongInterruptCount {
+                actual: lines,
+                expected: u16::from(facts::LINES.count),
+            });
+        }
+        if level_bits != facts::LEVEL_BITS {
+            return Err(Error::WrongLevelBits {
+                actual: level_bits,
+                expected: facts::LEVEL_BITS,
+            });
+        }
+        Ok(())
     }
 
     fn route(&mut self, source: u16, line: u8) -> Result<(), Error> {

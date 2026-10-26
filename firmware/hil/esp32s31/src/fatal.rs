@@ -108,17 +108,52 @@ pub(crate) enum Failure {
     RootTaken = 4,
     InterruptTable = 5,
     Console = 6,
+    InterruptHart = 7,
+    InterruptStack = 8,
+    InterruptVectors = 9,
+    InterruptControlBits = 10,
+    InterruptCount = 11,
+    InterruptLevelBits = 12,
+    InterruptStackGuard = 13,
 }
 
 impl Failure {
-    const ALL: [Self; 6] = [
+    const ALL: [Self; 13] = [
         Self::Layout,
         Self::TaskAllocation,
         Self::EntropySource,
         Self::RootTaken,
         Self::InterruptTable,
         Self::Console,
+        Self::InterruptHart,
+        Self::InterruptStack,
+        Self::InterruptVectors,
+        Self::InterruptControlBits,
+        Self::InterruptCount,
+        Self::InterruptLevelBits,
+        Self::InterruptStackGuard,
     ];
+
+    pub(crate) fn from_boot(error: oer_espressif_staged_runtime::BootError) -> Self {
+        use oer_espressif_staged_runtime::BootError;
+        use oer_interrupt_table::Error;
+        match error {
+            BootError::WrongHart { .. } => Self::InterruptHart,
+            BootError::NoInterruptStack { .. } => Self::InterruptStack,
+            BootError::InvalidStackGuard { .. } => Self::InterruptStackGuard,
+            BootError::ForeignVectors => Self::InterruptVectors,
+            BootError::InterruptController(Error::WrongControlBits { .. }) => {
+                Self::InterruptControlBits
+            }
+            BootError::InterruptController(Error::WrongInterruptCount { .. }) => {
+                Self::InterruptCount
+            }
+            BootError::InterruptController(Error::WrongLevelBits { .. }) => {
+                Self::InterruptLevelBits
+            }
+            BootError::InterruptController(_) => Self::InterruptTable,
+        }
+    }
 
     pub(crate) const fn name(self) -> &'static str {
         match self {
@@ -128,6 +163,13 @@ impl Failure {
             Self::RootTaken => "root-taken",
             Self::InterruptTable => "interrupt-table",
             Self::Console => "console",
+            Self::InterruptHart => "interrupt-hart",
+            Self::InterruptStack => "interrupt-stack",
+            Self::InterruptStackGuard => "interrupt-stack-guard",
+            Self::InterruptVectors => "interrupt-vectors",
+            Self::InterruptControlBits => "interrupt-control-bits",
+            Self::InterruptCount => "interrupt-count",
+            Self::InterruptLevelBits => "interrupt-level-bits",
         }
     }
 

@@ -152,11 +152,14 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         crate::fail("root-taken")
     };
     let runtime = root.into_runtime();
-    let (_psram, mut adopted) = handoff.adopt(
+    let (_psram, mut adopted) = match handoff.adopt(
         INTERRUPT_TABLE,
         runtime.interrupts.controller,
         board::BootstrapPsram,
-    );
+    ) {
+        Ok(adopted) => adopted,
+        Err(error) => crate::fail(error.name()),
+    };
     if previous.is_some() {
         usb::early_text(b"OER-B0-BRINGUP: previous panic\r\n");
     }
@@ -236,7 +239,10 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     }
     let (console, pads) = usb::open(adopted.router(), tokens.console_usb);
     let app = Executor::<0>::new(software.line0);
-    let mut router = adopted.enable_interrupts();
+    let mut router = match adopted.enable_interrupts() {
+        Ok(router) => router,
+        Err(error) => crate::fail(error.name()),
+    };
     let rng = host::Rng::new(runtime.entropy, EmbassyClock);
     let watchdog = runtime.watchdogs.rtc;
     app.run(&mut router, tokens.wake, software.irq0, move |spawner| {

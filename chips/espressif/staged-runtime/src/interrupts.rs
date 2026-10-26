@@ -4,7 +4,7 @@
 
 /// The CPU lines of the chip's CLIC and its harts, generated from the chip
 /// facts' interrupt contract (`[interrupts] lines`, `first-source-line`,
-/// `levels` and `harts`).
+/// `control-bits`, `level-bits` and `harts`).
 #[cfg(feature = "esp32s31")]
 pub const LINES: oer_interrupt_table::Lines = crate::vectors::LINES;
 

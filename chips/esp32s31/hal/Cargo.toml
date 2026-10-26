@@ -41,6 +41,9 @@ oer-espressif-modem-clock = { path = "../../espressif/modem-clock" }
 oer-radio-coex = { path = "../../../protocols/radio/coex" }
 oer-espressif-usb-serial-jtag = { path = "../../espressif/usb-serial-jtag" }
 
+[build-dependencies]
+oer-espressif-facts = { path = "../../espressif/facts" }
+
 [dev-dependencies]
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory", features = ["test-support"] }

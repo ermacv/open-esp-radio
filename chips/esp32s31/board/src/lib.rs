@@ -55,7 +55,10 @@ pub const fn wifi_power_limits(
 /// handoff adopts it:
 ///
 /// ```ignore
-/// let (psram, adopted) = handoff.adopt(INTERRUPT_TABLE, controller, BootstrapPsram);
+/// let (psram, adopted) = match handoff.adopt(INTERRUPT_TABLE, controller, BootstrapPsram) {
+///     Ok(adopted) => adopted,
+///     Err(error) => fail(error.name()),
+/// };
 /// ```
 ///
 /// Stage two owns no PSRAM controller, cache or MMU register: the root

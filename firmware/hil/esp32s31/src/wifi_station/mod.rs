@@ -89,11 +89,14 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         crate::fail(crate::fatal::Failure::RootTaken);
     };
     let runtime = root.into_runtime();
-    let (_psram, mut adopted) = handoff.adopt(
+    let (_psram, mut adopted) = match handoff.adopt(
         crate::INTERRUPT_TABLE,
         runtime.interrupts.controller,
         board::BootstrapPsram,
-    );
+    ) {
+        Ok(adopted) => adopted,
+        Err(error) => crate::fail(crate::fatal::Failure::from_boot(error)),
+    };
     crate::exception::report_stack_guard();
     let config = CONFIG;
     let Some(interrupts) = crate::Interrupts::take() else {
@@ -191,7 +194,10 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     }
     let (usb, _pads) = crate::usb::open(adopted.router(), interrupts.console_usb);
     let executor = crate::Executor::<0>::new(software.line0);
-    let mut router = adopted.enable_interrupts();
+    let mut router = match adopted.enable_interrupts() {
+        Ok(router) => router,
+        Err(error) => crate::fail(crate::fatal::Failure::from_boot(error)),
+    };
     let watchdog = runtime.watchdogs.rtc;
     executor.run(
         &mut router,
