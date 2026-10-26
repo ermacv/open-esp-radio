@@ -515,7 +515,7 @@ The later positive byte2c check remains an independent precondition.
 
 Selections 140–146 and 149 use the same one-time PAC claim. Run 140 once
 before the others. It applies a finite subset of the production modem clock,
-FE/BB, PWDET and SAR2 initialization leaves, selects the existing reference
+FE/BB and PWDET initialization leaves in the order detailed below, selects the existing reference
 calibration mode, and checks references 0 and `0x5555`. It performs no RF/PHY
 calibration, PBus gain/DCO setup or background tracking. The measured epoch
 starts from ROM-download state, not an untouched power-on reset.
@@ -533,7 +533,7 @@ There is no production executor or timer-service latency in this image.
 | 141 / 142 | Repeated reads at nominal ready+0/1/10/100 µs / first read deferred to ready+100 µs |
 | 143 / 144 | Same two HOLD trials, clearing tone arm immediately after observing ready |
 | 145 / 146 | Alternate reference 0/`0x5555`, with early result reads / first post-trigger result read deferred to 100 µs; require distinguishable preflight samples |
-| 149 | Stop both tone paths and restore DAC scale; the host then uses the stand's download reset to end the epoch |
+| 149 | Stop both tone paths, restore DAC scale, release TSENS and clear the calibration clock; the host then uses the stand's download reset |
 
 The first result word's upper lane is the measured sample. Arm settling is
 at least 1 µs; ordinary ready polling begins after at least 2 µs and accepts
@@ -561,3 +561,72 @@ lies inside the two trigger stamps. Do not infer exact nominal observation
 times, physical minimum conversion time, indefinite retention or calibrated
 voltage/power from these records. SOURCE: `oer-notes/research/opaque-blobray-phy.md`
 (P-SAR-HOLD/P-SAR-EDGE); silicon results: `oer-notes/research/hw-sar-hold.md`.
+
+### Preparation scope and remaining differences
+
+The finite production prefix now follows `hal/src/power.rs::execute_owned`
+and `phy/src/analog/i2c.rs::PhyRfInitPrefixTransition` through TSENS:
+common modem power/readbacks; whole-word PLL images `0x15`, `0x1d` (XTAL
+disabled); calibration clock; FE/BB clocks; BBPLL mode; bias writes;
+`open_i2c_xpd` RF power-down, 100 µs wait, power-up and conditional SAR-I2C
+reset assert/release; SDM byte `0x5b`; 10 µs post-delay; twelve PBus-clear
+transactions and conditional work-mode pulse; I2C timing, BBPLL clear/read,
+high ADC rate, master mode; PWDET tables; seventeen FE writes; TSENS cold
+readout and first-acquire reset/power sequence. Every MMIO uses existing
+PAC owners. Every analog byte resolves both host and command alias through
+`LibphyNormal`, including writes. A missing SDM/readback or a timed-out
+byte/PBus command refuses the experiment; no fallback preparation is used.
+
+The following differences are material; these observations do **not**
+establish a production lifetime contract or qualify PR #707 on their own.
+The same ledger is SOURCE `HW17_S31_SAR_PREPARATION_20261027` in the model.
+
+| ID | Difference from production | Reason / consequence |
+|---|---|---|
+| D1 | ROM RAM-loader state, SRAM stacks and adopted integer-MHz CPU rate; no staged bootstrap/PSRAM, MPLL reference or platform reference counts | PAC-only image has exclusive words, not the production platform lifecycle. Parent PLL/bootstrap state is inherited and recorded where observable. No production clock/load equivalence is claimed. |
+| D2 | SDM checks the same `0x5b` predicate with a 100 µs `mcycle` deadline instead of 9999 MAC-local counter ticks; byte/PBus operations have 20 µs experimental bounds; SAR has a 100 µs bound | Required short stand scope. The ordinary production timer/40 µs policy and vendor unbounded wait are not copied. Named settles preserve ≥100/10/1/2 µs; no executor timing equivalence. |
+| D3 | The production background-enable bit after TSENS is deliberately kept 0 before manual reference/tone selection | Prevent autonomous triggers during HOLD/EDGE; retention with background tracking remains untested. |
+| D4 | RC settings/calibration, filter DCAP and parameter reads, analog init1, RFPLL charge-pump search, command RAM publication, later conditional SAR2 initial-code write, FE update, crystal-duty and channel initialization are omitted | They belong to the full RF calibration suffix and depend on retained/calibrated parameters. No synthetic substitutes are used. In particular `0x578` is no longer moved before the test conversions. |
+| D5 | Full BB/RX/TX DC/IQ calibration and the reference-code root's 15 calibrated PBus setup operations / forced TX clock are omitted | No calibrated RF epoch is available without the prohibited full bring-up. Only the finite existing internal reference/tone leaf is exercised; electrical quality and production transfer remain unproven. |
+| D6 | Sole-owner tone stop / DAC restore / TSENS release and calibration-clock clear, then host stand download reset; no shared route restore or background-tracking handback | There are no other PHY clients in the image. Full-cleanup retention is not measured. |
+| D7 | Isolated P2 handler with cycle boundaries, not the production P2 executor/timer service; some nominal +0/+1 points are late | Actual read windows are logged. No completion IRQ, sub-µs timing, continuous ready retention or loaded-executor behavior is inferred. |
+
+### Complete SAR record arguments
+
+All entries are `(tag, a, b, c)`; tag and status/error codes are hexadecimal,
+while clocks/cycles and reference data are unsigned integers. For `1400`,
+`a=SOC_CLK_SEL`, `b=CPU divider code`, `c=CPLL feedback divider`. For `1401`,
+`a=adopted Hz`, `b=CPLL reference divider`, `c=CPU fractional numerator`.
+For `1450`, `a=published reference` (0 or 21845), `b=sample immediately
+before publication`, `c=sample immediately after publication`; these are
+not result/ready pairs. `1408` is `(checkpoint, observed boolean, expected
+boolean)`; checkpoints 1–8 are reset release, active ICG, register bus,
+modem maps, shared maps, PLL source/XTAL-off, PHY clocks and I2C source.
+`1409` is `(stage, observation, elapsed cycles)`: stage 1 records the accepted
+SDM byte and time from power-up sampling; stage 2 records prefix completion.
+
+`14ee` is `(reason, detail, observation)` and always means failure/refusal,
+even with an ordinary completion marker:
+
+| Reason | Meaning | Detail / observation |
+|---:|---|---|
+| 1 | Unsupported/fractional/invalid adopted clock | 0 / 0; consult `1400/1401` |
+| 2 | Analog field's read failed | block / byte index (0/0 in the former SAR2-specific image) |
+| 3 | Value does not fit the generated analog field | old byte / requested value (former SAR2 path used observation 0) |
+| 4 | Analog initialization failed | stage 1=bias, 2=BBPLL, 3=ADC-rate / 0 (former image: SAR2 initialization) |
+| 5 | HOLD refused: no admitted nonzero preflight | 0 / 0 |
+| 6 | EDGE refused: no distinguishable nonzero references | 0 / 0 |
+| 7 | Invalid SAR registry selection | requested selection / 0 |
+| 8 | P2 handler did not complete | requested selection / 0 |
+| 9 | Common-power readback mismatch | checkpoint / observed boolean |
+| a | SDM did not return `0x5b` within the short bound, or transport failed | last byte (`u32::MAX` if unavailable) / elapsed cycles |
+| b | PBus-clear command was busy at start or timed out | selector / path |
+
+### Evidence identity
+
+The repeat capture is built from a committed PR revision by `cargo fw probe`.
+The run directory retains the loaded ELF, exact source files, full revision
+and raw outputs; the external report names that measured revision and the
+final PR revision. Changes after that measurement, if any, are explicitly
+listed there and in the applicable model SOURCE; the old captures from the
+incomplete preparation are not relabelled as production-equivalent evidence.
