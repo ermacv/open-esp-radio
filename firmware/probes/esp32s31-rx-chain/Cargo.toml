@@ -16,7 +16,7 @@ oer-diagnostics = { path = "../../../portable/diagnostics" }
 heapless = "0.9.3"
 static_cell = { workspace = true }
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
-oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31"] }
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31", "panic-hook"] }
 oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["esp32s31"] }
 oer-espressif-usb-serial-jtag.workspace = true
 embedded-io-async = "0.7.0"

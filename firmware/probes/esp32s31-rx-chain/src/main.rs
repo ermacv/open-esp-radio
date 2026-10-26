@@ -13,6 +13,8 @@
 )]
 
 #[cfg(target_arch = "riscv32")]
+mod diagnostic;
+#[cfg(target_arch = "riscv32")]
 mod image;
 #[cfg(target_arch = "riscv32")]
 mod usb;

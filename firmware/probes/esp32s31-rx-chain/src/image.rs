@@ -124,6 +124,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let Some(interrupts) = Interrupts::take() else {
         fail("interrupts");
     };
+    crate::diagnostic::report_previous();
+    crate::diagnostic::phase(1);
     let factory = FactoryIdentity::read(runtime.efuse);
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
@@ -400,7 +402,10 @@ async fn run(
         WifiMacStartConfig::new(MAC_COLD_HANDSHAKE_DEADLINE, station, ap)
             .map_err(|_| "mac-config")?,
     );
+    usb::text(console, b"RXCHAIN radio-start\n").await;
+    crate::diagnostic::phase(2);
     let (cell, started) = start_esp32s31_radio(cell, wifi, Platform { rng }, config).await;
+    crate::diagnostic::phase(3);
     let stopped = started.map_err(|_| "radio-start")?;
     let parts = stopped.into_runtime_parts();
     let mut access = parts.registers;
