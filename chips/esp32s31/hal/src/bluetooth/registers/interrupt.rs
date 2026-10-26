@@ -277,13 +277,17 @@ pub struct BluetoothInterruptOutputPrepared<P: BluetoothPlacements = Chip> {
 impl<P: BluetoothPlacements> BluetoothInterruptSetup<P> {
     /// Prepare the controller-side interrupt output in the bank's handler.
     ///
-    /// SOURCE: complete ESP32-S31 `libbtdm_common.a` `btdm_hal.c` helpers. The
-    /// composite setup clears bank images `0x0000_8000` and `0x0000_1300`,
-    /// ORs those same baseline sources into the two enable banks, writes one
+    /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ: reviewed ESP32-S31 baseline
+    /// helpers. The composite setup clears bank images `0x0000_8000` and
+    /// `0x0000_1300`, ORs those same baseline sources into the two enable banks,
+    /// writes one
     /// to `0x2010_100c`, then the outer path calls the platform interrupt
     /// allocator for source 124. The earlier HAL-init part of that composite
     /// remains a separate lifecycle prerequisite. Each clear first masks its
-    /// baseline sources in their enable bank.
+    /// baseline sources in their enable bank. The current vendor pin also
+    /// enables bank-one source 1 (BLOB_LIBBTDM_BASELINE_IRQ_CURRENT, N5).
+    /// This handler does not classify it, so this baseline leaves it unchanged
+    /// until B1 identifies the event and its handling.
     pub fn prepare_controller_output(mut self) -> BluetoothInterruptOutputPrepared<P> {
         let mut control = HardwareInterruptControl {
             bank: &mut self.peripherals.bluetooth_interrupt_bank,

@@ -505,9 +505,7 @@ impl<B: oer_mmio::Placement> ModemLpTimerHandlerRegisterTransaction
     }
 
     fn clear_state_0024(&mut self) {
-        self.registers.modify_word_0024_opaque(|w| {
-            w.set_low_byte(0);
-        });
+        self.registers.clear_bluetooth_modem_lp_timer_state_0024();
     }
 
     fn sample_state_002c_low_byte_nonzero(&mut self) -> bool {
@@ -515,9 +513,7 @@ impl<B: oer_mmio::Placement> ModemLpTimerHandlerRegisterTransaction
     }
 
     fn clear_state_002c(&mut self) {
-        self.registers.modify_word_002c_opaque(|w| {
-            w.set_low_byte(0);
-        });
+        self.registers.clear_bluetooth_modem_lp_timer_state_002c();
     }
 
     fn sample_final_state_0024(&mut self) {
@@ -541,18 +537,12 @@ impl<B: oer_mmio::Placement> ModemLpTimerRuntimeTransaction
     }
 
     fn clear_rollover(&mut self) {
-        self.registers.modify_word_002c_opaque(|w| {
-            w.set_low_byte(0);
-        });
+        self.registers.clear_bluetooth_modem_lp_timer_state_002c();
     }
 
     fn publish_software_pending(&mut self) {
-        self.registers.modify_word_0024_opaque(|w| {
-            w.set_low_byte(
-                oer_esp32s31_pac::modem_pwr::word_0024_opaque::LowByte::SoftwarePending.bits()
-                    as u8,
-            );
-        });
+        self.registers
+            .publish_bluetooth_modem_lp_timer_software_pending();
     }
 
     fn disable_compare(&mut self) {
@@ -640,8 +630,12 @@ impl<P: BluetoothPlacements> BluetoothModemLpTimerRegisters<P> {
         }
     }
 
-    /// Acknowledge the two positional state bytes at the start of the common
-    /// timer handler.
+    /// Sample the two positional state bytes at the start of the common
+    /// timer handler and acknowledge each nonzero byte with a whole-word zero.
+    ///
+    /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7). The reviewed
+    /// stores also clear the unmodeled upper bytes; no W1C or output-low
+    /// semantics are inferred.
     ///
     /// This finite transaction never waits, loops, allocates or invokes
     /// software. If neither byte requests work, the vendor path performs its

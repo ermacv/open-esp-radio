@@ -2791,13 +2791,15 @@ sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROL
 name = "clear_bluetooth_modem_lp_timer_state_0024"
 register = "MODEM_PWR.WORD_0024_OPAQUE"
 value = 0
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
+whole-word = true
+sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT"]
 
 [[fixed-register-images]]
 name = "clear_bluetooth_modem_lp_timer_state_002c"
 register = "MODEM_PWR.WORD_002C_OPAQUE"
 value = 0
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
+whole-word = true
+sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT"]
 
 [[fixed-register-images]]
 name = "publish_ble_positional_word_1ff0_image_0"
@@ -2939,14 +2941,15 @@ sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROL
 name = "publish_bluetooth_modem_lp_timer_software_pending"
 register = "MODEM_PWR.WORD_0024_OPAQUE"
 value = 1
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
+whole-word = true
+sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT"]
 
 [[fixed-register-images]]
 name = "disable_bluetooth_modem_lp_timer_compare"
 register = "MODEM_PWR.WORD_0014_OPAQUE"
 value = 0x00040000
 whole-word = true
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
+sources = ["BLOB_LIBBTDM_LP_COMPARE_DISABLE_CURRENT"]
 
 [[fixed-register-images]]
 name = "trigger_bluetooth_modem_lp_timer_command"

@@ -45,25 +45,25 @@ sources = ["BLOB_LIBBTDM_SCHEDULER_LIFECYCLE"]
 sources = ["BLOB_LIBBTDM_SCHEDULER_LIFECYCLE"]
 
 [review.entity."IRQ_CONTROL_0"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"]
 completeness = "partial"
 
 [review.entity."IRQ_CONTROL_0.COMMAND"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"]
 
 [review.entity."IRQ_CONTROL_1"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"]
 completeness = "partial"
 
 [review.entity."IRQ_CONTROL_1.COMMAND"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"]
 
 [review.entity."IRQ_CONTROL_2"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"]
 completeness = "partial"
 
 [review.entity."IRQ_CONTROL_2.COMMAND"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"]
 
 [review.entity."WORD_0018_OPAQUE"]
 sources = ["S31_MMIO_USE_20101018"]
@@ -225,7 +225,13 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 [review.entity."IRQ_ENABLE_1.SOURCE_13"]
 sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
 
-[review.entity."IRQ_ENABLE_1.BITS_0_2_OPAQUE"]
+[review.entity."IRQ_ENABLE_1.SOURCE_1"]
+sources = ["BLOB_LIBBTDM_BASELINE_IRQ_CURRENT"]
+
+[review.entity."IRQ_ENABLE_1.BIT_0_OPAQUE"]
+sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
+
+[review.entity."IRQ_ENABLE_1.BIT_2_OPAQUE"]
 sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
 
 [review.entity."IRQ_ENABLE_1.BIT_7_OPAQUE"]
@@ -965,16 +971,16 @@ completeness = "complete"
 sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES", "S31_MMIO_DECLARED_20101324"]
 
 [review.entity."IRQ_STATUS_SNAPSHOT_0"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT"]
 
 [review.entity."IRQ_STATUS_SNAPSHOT_0.PENDING_BITS"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT"]
 
 [review.entity."IRQ_STATUS_SNAPSHOT_1"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT"]
 
 [review.entity."IRQ_STATUS_SNAPSHOT_1.PENDING_BITS"]
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT"]
 
 [review.entity."HAL_INIT_SLOT_MAP%s"]
 completeness = "partial"
@@ -1663,6 +1669,7 @@ name = "COMMAND"
 values = [{ name = "COMMAND_1", value = 1 }]
 bits = "31:0"
 class = "write-only"
+description = "Observed complete command image 1; internal action unknown. No NRT output-mask, clear or drain semantics are established. SOURCE: BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT (N4)."
 
 [[registers]]
 name = "IRQ_CONTROL_1"
@@ -1674,6 +1681,7 @@ name = "COMMAND"
 values = [{ name = "COMMAND_1", value = 1 }]
 bits = "31:0"
 class = "write-only"
+description = "Observed complete command image 1; internal action unknown. No NRT output-mask, clear or drain semantics are established. SOURCE: BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT (N4)."
 
 [[registers]]
 name = "IRQ_CONTROL_2"
@@ -1685,6 +1693,7 @@ name = "COMMAND"
 values = [{ name = "COMMAND_1", value = 1 }]
 bits = "31:0"
 class = "write-only"
+description = "Observed complete command image 1; internal action unknown. No NRT output-mask, clear or drain semantics are established. SOURCE: BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT (N4)."
 
 [[registers]]
 name = "WORD_0018_OPAQUE"
@@ -1894,7 +1903,13 @@ class = "read-only"
 [[registers]]
 name = "IRQ_ENABLE_1"
 offset = 0x60
-description = "Second controller interrupt-enable bank. Primary setup clears stale image 0x00001300 then ORs that baseline into this word; another complete helper independently controls bit 3."
+description = "Second controller interrupt-enable bank. The current vendor pin clears and OR-enables baseline 0x00001302, then removes the same bits on teardown, preserving all others; another complete helper independently controls bit 3. The HAL baseline is 0x00001300 and does not arm source 1 until B1 identifies its event and handling. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5); BLOB_LIBBTDM_CONTROLLER_IRQ (independent bit-3 helper)."
+
+[[registers.fields]]
+name = "SOURCE_1"
+bits = "1"
+class = "plain"
+description = "The current vendor pin arms this bit in baseline 0x00001302; its cause identity and NRT relationship are unknown. The HAL does not arm it until B1 identifies the event and its handling. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a member 8.o: r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe, r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16, r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18. No reset state is established."
 
 [[registers.fields]]
 name = "SOURCE_3"
@@ -1937,8 +1952,14 @@ bits = "13"
 class = "plain"
 
 [[registers.fields]]
-name = "BITS_0_2_OPAQUE"
-bits = "2:0"
+name = "BIT_0_OPAQUE"
+bits = "0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_2_OPAQUE"
+bits = "2"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
@@ -3222,7 +3243,7 @@ class = "read-only"
 [[registers]]
 name = "IRQ_STATUS_SNAPSHOT_0"
 offset = 0x340
-description = "Raw first-bank status snapshot read by the NRT ISR and copied to IRQ_CLEAR_0."
+description = "Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2)."
 
 [[registers.fields]]
 name = "PENDING_BITS"
@@ -3232,7 +3253,7 @@ class = "read-only"
 [[registers]]
 name = "IRQ_STATUS_SNAPSHOT_1"
 offset = 0x348
-description = "Raw second-bank status snapshot read by the NRT ISR and copied to IRQ_CLEAR_1."
+description = "Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2)."
 
 [[registers.fields]]
 name = "PENDING_BITS"
