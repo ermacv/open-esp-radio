@@ -75,10 +75,6 @@ struct Hardware<'a, D> {
     bell: &'a D,
 }
 
-#[allow(
-    unsafe_code,
-    reason = "the admitted request carries the caller's item and list serialization"
-)]
 #[cfg(feature = "bluetooth-engine")]
 impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
     type Error = SchedulerInterruptError;
@@ -97,9 +93,7 @@ impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
         &mut self,
         request: BluetoothSchedulerExecutionLockRequest,
     ) -> BluetoothSchedulerExecutionLockPublished {
-        // SAFETY: `admit_scheduler_execution_lock` took the caller's item and
-        // list serialization contract for this exact request.
-        unsafe { self.task.publish_scheduler_execution_lock(request) }
+        self.task.publish_scheduler_execution_lock(request)
     }
     async fn observe(
         &mut self,
@@ -130,17 +124,13 @@ pub(crate) async fn step_hardware<D: SchedulerDoorbell>(
 }
 
 /// Clear command-zero START of a published execution lock.
-#[allow(unsafe_code, reason = "the consumed request proves the command")]
 pub(crate) fn clear_start(
     task: &mut BluetoothTaskRegisters,
     lock: &mut BluetoothSchedulerExecutionLock,
 ) {
     if lock.take_published().is_some() {
-        // SAFETY: the consumed request is the published command this clear
-        // ends, and the task runtime serializes the command word.
-        let _cleared = unsafe {
-            task.clear_scheduler_insertion_command_start(BluetoothSchedulerInsertionCommand::Zero)
-        };
+        let _cleared =
+            task.clear_scheduler_insertion_command_start(BluetoothSchedulerInsertionCommand::Zero);
     }
 }
 

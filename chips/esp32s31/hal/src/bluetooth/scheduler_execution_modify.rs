@@ -162,10 +162,6 @@ struct Hardware<'a, D> {
     bell: &'a D,
 }
 
-#[allow(
-    unsafe_code,
-    reason = "the admitted request carries the caller's list ownership and serialization"
-)]
 #[cfg(feature = "bluetooth-engine")]
 impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
     type Error = SchedulerInterruptError;
@@ -188,15 +184,11 @@ impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
         index: BluetoothSchedulerHardwareListIndex,
         list_deletion: bool,
     ) -> BluetoothSchedulerExecutionModifyPublished {
-        // SAFETY: `admit_scheduler_execution_modify` took the caller's list
-        // ownership and serialization contract for this exact request.
-        unsafe {
-            if list_deletion {
-                self.task
-                    .publish_scheduler_execution_modify_list_deletion(index)
-            } else {
-                self.task.publish_scheduler_execution_modify(index)
-            }
+        if list_deletion {
+            self.task
+                .publish_scheduler_execution_modify_list_deletion(index)
+        } else {
+            self.task.publish_scheduler_execution_modify(index)
         }
     }
     async fn repeats(&mut self) -> Result<bool, SchedulerInterruptError> {
@@ -212,11 +204,9 @@ impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
         self.interrupts.settled(self.bell).await
     }
     fn clear_start(&mut self, _published: BluetoothSchedulerExecutionModifyPublished) {
-        // SAFETY: the consumed proof is the command this clear ends.
-        let _cleared = unsafe {
-            self.task
-                .clear_scheduler_insertion_command_start(BluetoothSchedulerInsertionCommand::One)
-        };
+        let _cleared = self
+            .task
+            .clear_scheduler_insertion_command_start(BluetoothSchedulerInsertionCommand::One);
     }
     fn rejected(&mut self) -> bool {
         self.task.scheduler_execution_modify_rejected()

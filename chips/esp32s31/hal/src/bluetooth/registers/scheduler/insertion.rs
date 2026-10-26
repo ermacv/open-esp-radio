@@ -239,17 +239,12 @@ fn execute_execution_lock_observation(
 impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// Publish command zero and return after its trailing device fence.
     ///
-    /// # Safety
-    ///
-    /// The request must name the exact merge-selected initialized item. The
-    /// caller must retain that pinned item and exclusive list serialization
-    /// until insertion-begin and insertion-end return ownership.
+    /// The request carries a typed reference to the merge-selected item. The
+    /// engine retains its submitted pool storage, while the execution-lock state
+    /// retains the publication until observation and START clear. The exclusive
+    /// register loan serializes the command writes.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains the selected item lifetime and scheduler serialization"
-    )]
-    pub unsafe fn publish_scheduler_execution_lock(
+    pub fn publish_scheduler_execution_lock(
         &mut self,
         request: BluetoothSchedulerExecutionLockRequest,
     ) -> BluetoothSchedulerExecutionLockPublished {
@@ -277,16 +272,11 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// Publish command one for exactly one hardware list and return after its
     /// trailing device fence.
     ///
-    /// # Safety
-    ///
-    /// The caller must own the insertion reconciliation epoch and exclusive
-    /// access to `index` until insertion-end returns ownership.
+    /// The engine's insertion state selects `index` and retains the returned
+    /// publication through reconciliation and START clear. The exclusive
+    /// register loan serializes the command writes.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains insertion reconciliation and list serialization"
-    )]
-    pub unsafe fn publish_scheduler_execution_modify(
+    pub fn publish_scheduler_execution_modify(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
     ) -> BluetoothSchedulerExecutionModifyPublished {
@@ -300,16 +290,11 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// hardware list and return after its trailing device fence. The
     /// command-one observation and START clear are shared with insertion.
     ///
-    /// # Safety
-    ///
-    /// The caller must own the deletion of `index` and exclusive access to
-    /// that list until it clears command-one START.
+    /// The engine's deletion state retains the returned publication through
+    /// command-one START clear. The exclusive register loan serializes the
+    /// command writes.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains list deletion and list serialization"
-    )]
-    pub unsafe fn publish_scheduler_execution_modify_list_deletion(
+    pub fn publish_scheduler_execution_modify_list_deletion(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
     ) -> BluetoothSchedulerExecutionModifyPublished {

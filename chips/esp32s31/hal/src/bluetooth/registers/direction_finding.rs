@@ -32,18 +32,11 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// from software to hardware ownership. Direction-finding feature policy,
     /// IQ sample allocation and HCI procedures are deliberately absent.
     ///
-    /// # Safety
-    ///
-    /// The caller must retain a powered, exclusively serialized Controller
-    /// epoch and the initialized pinned descriptor for the lifetime of the
-    /// returned token. No CPU access to hardware-owned descriptor state is
-    /// permitted until a separately reviewed retirement transaction succeeds.
+    /// `descriptor` carries the typed DMA reference to retained volatile
+    /// workspace storage. The engine retains the returned baseline owner through
+    /// stop and reset; the exclusive register loan orders this transaction.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains powered-controller and descriptor-lifetime prerequisites"
-    )]
-    pub unsafe fn prepare_direction_finding_disabled_baseline(
+    pub fn prepare_direction_finding_disabled_baseline(
         &mut self,
         descriptor: DmaRef<BleDirectionFindingDescriptor>,
     ) -> BluetoothDirectionFindingDisabledBaselinePrepared {

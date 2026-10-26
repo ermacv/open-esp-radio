@@ -5,7 +5,7 @@
 //! word and its image, against that absolute address less the block's base,
 //! comparing the whole memory.
 
-#![allow(unsafe_code, reason = "the unsafe operations run over host memory")]
+#![forbid(unsafe_code)]
 
 use std::vec::Vec;
 
@@ -103,8 +103,7 @@ fn ble_phy_initialization_points_the_controller_at_its_memory() {
         let mut baseband =
             BtV32Baseband::host(&mut baseband_words).expect("memory holds the instance");
         let (mut task, _, _) = memory.owners();
-        // SAFETY: host memory; the model references are never dereferenced.
-        unsafe { task.enable_ble_base_stack_hardware(&mut baseband, inputs) };
+        task.enable_ble_base_stack_hardware(&mut baseband, inputs);
         let phy = &task.bluetooth.btmac_ble_phy_init;
         // The private timing byte 91 less one, in both lanes.
         let delay = phy.read_lc_tx_on_delay_config();
@@ -200,14 +199,11 @@ fn a_memory_list_pointer_keeps_the_valid_bit_of_its_word() {
     let mut memory = HostMemory::filled(0x0010_0000 | 0x5_5555);
     let (mut task, _, _) = memory.owners();
     let header = crate::dma_address::model_reference(0x2f00_0040);
-    // SAFETY: host memory; the model reference is never dereferenced.
-    unsafe {
-        task.program_memory_list_pointer(
-            BluetoothMemoryListSelector::One,
-            BluetoothMemoryListSlot::CurrentRx,
-            BluetoothMemoryListPointerImage::Address(header),
-        );
-    }
+    task.program_memory_list_pointer(
+        BluetoothMemoryListSelector::One,
+        BluetoothMemoryListSlot::CurrentRx,
+        BluetoothMemoryListPointerImage::Address(header),
+    );
     let current = task
         .bluetooth
         .bluetooth_controller_core
@@ -225,8 +221,7 @@ fn a_published_head_reads_back_and_the_heads_clear() {
     let (mut task, _, _) = memory.owners();
     let index = BluetoothSchedulerHardwareListIndex::new(3).expect("list three");
     let item = crate::dma_address::model_reference(0x2f00_0100);
-    // SAFETY: host memory; the model reference is never dereferenced.
-    let published = unsafe { task.publish_scheduler_hardware_list_head(index, Some(item)) };
+    let published = task.publish_scheduler_hardware_list_head(index, Some(item));
     assert_eq!(published.head().address(), Some(0x2f00_0100));
     assert_eq!(
         task.observe_scheduler_hardware_list_head(index),
@@ -279,8 +274,7 @@ fn scanner_start_publishes_both_backoff_words_and_the_upper_limit() {
     let mut memory = before.clone();
     {
         let (mut task, _, _) = memory.owners();
-        // SAFETY: host memory; no scanner hardware follows it.
-        let _published = unsafe { task.publish_scan_start() };
+        let _published = task.publish_scan_start();
     }
     // SOURCE: BLOB_LIBBLE_SCAN_BACKOFF: the upper limit 32, each backoff
     // word one.
@@ -300,10 +294,8 @@ fn scheduler_requests_store_every_field_of_their_words() {
     let base = instances::bt_mac::BASE;
     {
         let (mut task, _, _) = memory.owners();
-        // SAFETY: host memory; the model reference is never dereferenced.
-        let skip = unsafe {
-            task.publish_scheduler_skip(super::BluetoothSchedulerSkipRequest::new(item, index))
-        };
+        let skip =
+            task.publish_scheduler_skip(super::BluetoothSchedulerSkipRequest::new(item, index));
         let core = &task.bluetooth.bluetooth_controller_core;
         assert!(core.read_scheduler_skip_request().start());
         let _cleared = task.clear_scheduler_skip(skip);
@@ -313,13 +305,10 @@ fn scheduler_requests_store_every_field_of_their_words() {
     let mut memory = HostMemory::filled(u32::MAX);
     {
         let (mut task, _, _) = memory.owners();
-        // SAFETY: host memory; the model reference is never dereferenced.
-        unsafe {
-            let _lock = task.publish_scheduler_execution_lock(
-                super::BluetoothSchedulerExecutionLockRequest::new(item, index),
-            );
-            let _modify = task.publish_scheduler_execution_modify(index);
-        }
+        let _lock = task.publish_scheduler_execution_lock(
+            super::BluetoothSchedulerExecutionLockRequest::new(item, index),
+        );
+        let _modify = task.publish_scheduler_execution_modify(index);
     }
     // START, list three and the item's word index 0x40; every other field
     // zero.
@@ -328,13 +317,10 @@ fn scheduler_requests_store_every_field_of_their_words() {
     let mut memory = HostMemory::filled(u32::MAX);
     {
         let (mut task, _, _) = memory.owners();
-        // SAFETY: host memory; the model reference is never dereferenced.
-        unsafe {
-            let _modify = task.publish_scheduler_execution_modify_list_deletion(index);
-            let _published = task.publish_scheduler_lock_modify(
-                super::BluetoothSchedulerLockModifyRequest::new(item, index),
-            );
-        }
+        let _modify = task.publish_scheduler_execution_modify_list_deletion(index);
+        let _published = task.publish_scheduler_lock_modify(
+            super::BluetoothSchedulerLockModifyRequest::new(item, index),
+        );
     }
     assert_eq!(memory.core[word(0x2010_1258, base)], 0x8001_0008);
     assert_eq!(memory.core[word(0x2010_1218, base)], 0x8000_0040);
@@ -345,14 +331,11 @@ fn a_memory_list_pointer_is_cleared_then_ored_into_a_fresh_read() {
     let mut memory = HostMemory::filled(0x0010_0000 | 0x5_5555);
     {
         let (mut task, _, _) = memory.owners();
-        // SAFETY: host memory; no hardware follows the list.
-        unsafe {
-            task.program_memory_list_pointer(
-                BluetoothMemoryListSelector::Two,
-                BluetoothMemoryListSlot::NextRx,
-                BluetoothMemoryListPointerImage::Zero,
-            );
-        }
+        task.program_memory_list_pointer(
+            BluetoothMemoryListSelector::Two,
+            BluetoothMemoryListSlot::NextRx,
+            BluetoothMemoryListPointerImage::Zero,
+        );
     }
     // The zero image clears bits 19:0 and keeps the rest of the word.
     let base = instances::bt_mac::BASE;
@@ -371,8 +354,7 @@ fn ble_phy_initialization_clears_every_source_in_one_write() {
         let mut baseband =
             BtV32Baseband::host(&mut baseband_words).expect("memory holds the instance");
         let (mut task, _, _) = memory.owners();
-        // SAFETY: host memory; the model references are never dereferenced.
-        unsafe { task.enable_ble_base_stack_hardware(&mut baseband, inputs) };
+        task.enable_ble_base_stack_hardware(&mut baseband, inputs);
     }
     // SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS: `INTERRUPT_CLEAR = 0xffffffff`.
     let base = instances::bt_mac::BASE;

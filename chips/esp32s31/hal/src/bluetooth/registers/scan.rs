@@ -67,17 +67,11 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     ///
     /// Descriptor and list writes are ordered before the first write.
     ///
-    /// # Safety
-    ///
-    /// The caller must own a powered controller epoch with a fully initialized
-    /// scanner link state, scheduler item and RX list, and must serialize this
-    /// publication with every task and interrupt owner of scanner hardware.
+    /// The engine starts only with the scanning list publication of the same
+    /// Controller epoch. Its retained arena holds the scanner graph, and the
+    /// exclusive register loan serializes these backoff writes.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the signature retains powered scanner-lifecycle and serialization prerequisites"
-    )]
-    pub unsafe fn publish_scan_start(&mut self) -> BluetoothScanStartPublished {
+    pub fn publish_scan_start(&mut self) -> BluetoothScanStartPublished {
         device_fence();
         let mut transaction = PacBluetoothScanStartTransaction {
             registers: &mut self.bluetooth.ble_scan_backoff,
