@@ -24,6 +24,17 @@ pub enum PhyI2cAccessError {
     UnroutedAddress,
 }
 
+// SOURCE: BLOB_LIBPHY_PHY_SET_RATE_CLASS; opaque-blobray-phy.md, TXRF.
+// Existing vendor initialization 0x08 selects class 1 with all other bits 0.
+const TXRF_INITIAL_RATE_CLASS: u8 = match analog_i2c::txrf::byte_0a_opaque::PHY_SET_RATE_CLASS
+    .insert(
+        0,
+        analog_i2c::txrf::byte_0a_opaque::PHY_SET_RATE_CLASS_ARGUMENT_AT_LEAST_8,
+    ) {
+    Some(value) => value,
+    None => panic!("the named initial rate class fits the model field"),
+};
+
 pub(crate) const PHY_I2C_COMMAND_MEMORY_ENTRY_COUNT: usize =
     oer_esp32s31_pac::i2c_ana_mst_mem::command_memory::COUNT;
 
@@ -49,7 +60,10 @@ pub(crate) const PHY_I2C_COMMAND_MEMORY_TEMPLATE: [(Address, u8);
     ),
     (analog_i2c::txrf::byte_08_opaque::ADDRESS, 0xbf),
     (analog_i2c::txrf::byte_09_opaque::ADDRESS, 0x02),
-    (analog_i2c::txrf::byte_0a_opaque::ADDRESS, 0x08),
+    (
+        analog_i2c::txrf::byte_0a_opaque::ADDRESS,
+        TXRF_INITIAL_RATE_CLASS,
+    ),
     (analog_i2c::txrf::byte_0b_opaque::ADDRESS, 0x04),
     (analog_i2c::txrf::byte_0c_opaque::ADDRESS, 0xa7),
     (analog_i2c::txrf::byte_0d_opaque::ADDRESS, 0x77),
@@ -184,8 +198,28 @@ impl PhyI2cCommandMemoryInputs {
             analog_i2c::bbpll::oc_ref_div::ADDRESS,
         ];
         const FIRST_FIXED_VALUES: [u8; PHY_I2C_INITIALIZATION_STAGE_TWO_PAIR_COUNT] = [
-            0x73, 0xba, 0x88, 0xf4, 0x02, 0xfd, 0xbf, 0x01, 0x11, 0xa7, 0x77, 0x08, 0x04, 0x81,
-            0x01, 0x68, 0xa8, 0, 0x44, 0x0a, 0x08, 0x70,
+            0x73,
+            0xba,
+            0x88,
+            0xf4,
+            0x02,
+            0xfd,
+            0xbf,
+            0x01,
+            0x11,
+            0xa7,
+            0x77,
+            TXRF_INITIAL_RATE_CLASS,
+            0x04,
+            0x81,
+            0x01,
+            0x68,
+            0xa8,
+            0,
+            0x44,
+            0x0a,
+            0x08,
+            0x70,
         ];
         const SECOND_ADDRESSES: [Address; PHY_I2C_INITIALIZATION_STAGE_TWO_PAIR_COUNT] = [
             analog_i2c::bbtop::rf_close_control::ADDRESS,
@@ -454,7 +488,10 @@ impl PhyI2cInitializationStageOneInputs {
             9 => Some((analog_i2c::txrf::byte_06_opaque::ADDRESS, 0x11)),
             10 => Some((analog_i2c::txrf::byte_0c_opaque::ADDRESS, 0xa7)),
             11 => Some((analog_i2c::txrf::byte_0d_opaque::ADDRESS, 0x77)),
-            12 => Some((analog_i2c::txrf::byte_0a_opaque::ADDRESS, 0x08)),
+            12 => Some((
+                analog_i2c::txrf::byte_0a_opaque::ADDRESS,
+                TXRF_INITIAL_RATE_CLASS,
+            )),
             13 => Some((analog_i2c::txrf::byte_0b_opaque::ADDRESS, 0x04)),
             14 => Some((analog_i2c::txrf::rc_configuration_1::ADDRESS, 0x81)),
             15 => Some((analog_i2c::rfpll::restart_high::ADDRESS, 0x68)),
@@ -620,5 +657,26 @@ mod tests {
                 Err(PhyI2cAccessError::UnroutedAddress)
             );
         }
+    }
+
+    #[test]
+    fn named_initial_rate_class_preserves_the_vendor_byte() {
+        assert_eq!(TXRF_INITIAL_RATE_CLASS, 0x08);
+        let row = PHY_I2C_COMMAND_MEMORY_TEMPLATE
+            .iter()
+            .find(|(address, _)| *address == analog_i2c::txrf::byte_0a_opaque::ADDRESS)
+            .expect("initialization includes the TXRF class byte");
+        assert_eq!(row.1, 0x08);
+        assert_eq!(
+            PhyI2cInitializationStageOneInputs::new(0, 0).command(12),
+            Some((analog_i2c::txrf::byte_0a_opaque::ADDRESS, 0x08)),
+        );
+        assert_eq!(
+            PhyI2cCommandMemoryInputs::new(0, 0, 0, 0, 0, 0)
+                .initialization_stage_two_pair(11)
+                .expect("retained-wake initialization includes the class byte")
+                .first,
+            (analog_i2c::txrf::byte_0a_opaque::ADDRESS, 0x08),
+        );
     }
 }
