@@ -4,3 +4,7 @@ schema = 1
 [[sources]]
 id = "BLOB_LIBPHY_PHY_SET_RATE_CLASS"
 description = "SOURCE: ermacv/oer-notes research/opaque-blobray-phy.md, TXRF section; pinned esp-phy-lib 20f1db053a0e6cb9f1c09d255c43bf42483041d0 libphy.a phy_feature.o::phy_set_rate+0x3c and inspected OLD body. TXRF byte 0x0a bits 5:3 receive 0 for argument <8 and 1 otherwise; pa_reg_opt calls the setter. Numerical relation is direct; TX analog rate-class role is strong inference. No modulation names, units, electrical effect or code 2..7 meaning is established."
+
+[[sources]]
+id = "ROM_REV0_PHY_SAR_LANE_CONSUMERS"
+description = "SOURCE: ermacv/oer-notes research/opaque-blobray-phy.md, SAR/PWDET result layout and callback linkage; rev0 ROM phy_read_sar_dout@0x2f8266ac+0x10 copies both thirteen-bit lanes from FE +0x81c/+0x820/+0x824/+0x828. phy_get_tone_sar_dout_@0x2f8266da+0x32 consumes only the first word upper lane. phy_get_fm_sar_dout+0x16 invokes callback slot 44 with sample count 2; the captured slot resolves to phy_get_tone_sar_dout_. No result retention or read-clear semantics follows from this consumer provenance."
