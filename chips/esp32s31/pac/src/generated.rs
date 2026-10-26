@@ -67752,7 +67752,7 @@ pub mod fe {
                 oer_mmio::Bits::truncate(self.0 >> 12)
             }
 
-            /// Hardware completion state sampled by the complete power-detector paths; neither source writes these bits.
+            /// All-three-ready predicate is 7. Isolated manual-trigger trials observed a non-7 conversion phase and retention of 7 through ready+100 us, including tone-arm clear; a pre-trigger 7 alone does not identify a fresh sample.
             #[inline]
             pub const fn sar_ready(self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 14)
@@ -67781,7 +67781,7 @@ pub mod fe {
                 oer_mmio::Bits::truncate(self.0 >> 12)
             }
 
-            /// Hardware completion state sampled by the complete power-detector paths; neither source writes these bits.
+            /// All-three-ready predicate is 7. Isolated manual-trigger trials observed a non-7 conversion phase and retention of 7 through ready+100 us, including tone-arm clear; a pre-trigger 7 alone does not identify a fresh sample.
             #[inline]
             pub const fn sar_ready(&self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 14)
@@ -67967,7 +67967,7 @@ pub mod fe {
                 oer_mmio::Bits::truncate(self.0 >> 1)
             }
 
-            /// The `SAR_SAMPLE` field.
+            /// Upper lane consumed by the tone/SAR2 wrapper. Isolated manual PWDET trials retained nonzero data across reads through ready+100 us, including tone-arm clear; the lane can change before all-three-ready during conversion. Other modes and longer retention are untested.
             #[inline]
             pub const fn sar_sample(self) -> oer_mmio::Bits<13> {
                 oer_mmio::Bits::truncate(self.0 >> 17)
