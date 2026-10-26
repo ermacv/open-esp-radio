@@ -104,6 +104,7 @@ pub struct MacInterruptObservation {
     pub(crate) work_events: MacInterruptEvents,
     pub(crate) auxiliary_event: bool,
     pub(crate) unhandled_event: bool,
+    hardware_assertion_status: Option<u32>,
 }
 
 impl MacInterruptObservation {
@@ -120,11 +121,26 @@ impl MacInterruptObservation {
             work_events,
             auxiliary_event,
             unhandled_event,
+            hardware_assertion_status: None,
         }
     }
 
+    /// Attach a fatal assertion's complete sampled STATUS for diagnostics only.
+    /// Dispatch uses the named cause, never decodes this register image.
+    pub const fn with_hardware_assertion(mut self, status: u32) -> Self {
+        self.hardware_assertion_status = Some(status);
+        self
+    }
+
+    pub const fn hardware_assertion_status(self) -> Option<u32> {
+        self.hardware_assertion_status
+    }
+
     pub const fn is_empty(self) -> bool {
-        self.work_events.is_empty() && !self.auxiliary_event && !self.unhandled_event
+        self.work_events.is_empty()
+            && !self.auxiliary_event
+            && !self.unhandled_event
+            && self.hardware_assertion_status.is_none()
     }
 
     pub const fn work_events(self) -> MacInterruptEvents {
@@ -165,14 +181,22 @@ impl MacInterruptSnapshot {
             || sample.sta_beacon_filter()
             || sample.bits_16_18_opaque().get() != 0
             || sample.bit_20_opaque()
-            || sample.bit_21_opaque()
             || sample.bit_22_opaque()
             || sample.bit_23_opaque()
             || sample.bits_25_26_opaque().get() != 0
-            || sample.bit_27_opaque()
-            || sample.bit_28_opaque()
+            || sample.wdev_timer_0()
+            || sample.wdev_timer_1()
             || sample.bits_29_31_opaque().get() != 0;
-        MacInterruptObservation::from_semantic_events(work_events, auxiliary_event, unhandled_event)
+        let observation = MacInterruptObservation::from_semantic_events(
+            work_events,
+            auxiliary_event,
+            unhandled_event,
+        );
+        if sample.hardware_assertion() {
+            observation.with_hardware_assertion(sample.bits())
+        } else {
+            observation
+        }
     }
 }
 
@@ -203,7 +227,11 @@ impl MacPowerInterruptSnapshot {
             sample.tbtt_1()
                 || sample.tbtt_2()
                 || sample.tbtt_3()
-                || sample.bits_8_31_opaque().get() != 0,
+                || sample.bits_8_16_opaque().get() != 0
+                || sample.beacon_filter_wake()
+                || sample.bit_18_opaque()
+                || sample.beacon_miss()
+                || sample.bits_20_31_opaque().get() != 0,
         )
     }
 }
@@ -360,13 +388,13 @@ fn publish_mac_interrupt_mask<P: Placement>(
             .set_bits_16_18_opaque(Bits::constant::<0>())
             .set_tx_timeout(station)
             .set_bit_20_opaque(false)
-            .set_bit_21_opaque(station)
+            .set_hardware_assertion(station)
             .set_bit_22_opaque(false)
             .set_bit_23_opaque(station)
             .set_rx_associated_auxiliary_24(station)
             .set_bits_25_26_opaque(Bits::constant::<0>())
-            .set_bit_27_opaque(station)
-            .set_bit_28_opaque(station)
+            .set_wdev_timer_0(station)
+            .set_wdev_timer_1(station)
             .set_bits_29_31_opaque(Bits::constant::<0>());
     });
 }
@@ -385,7 +413,11 @@ fn mask_mac_power_interrupts<P: Placement>(power: &mut WifiMacPowerInterrupt<P>)
             .set_tsf_timer_2(false)
             .set_tsf_timer_1(false)
             .set_tsf_timer_0(false)
-            .set_bits_8_31_opaque(Bits::constant::<0>());
+            .set_bits_8_16_opaque(Bits::constant::<0>())
+            .set_beacon_filter_wake(false)
+            .set_bit_18_opaque(false)
+            .set_beacon_miss(false)
+            .set_bits_20_31_opaque(Bits::constant::<0>());
     });
 }
 
@@ -411,11 +443,11 @@ fn observe_mac_interrupt_enable<P: Placement>(
         enable.bit_13_opaque(),
         enable.rx_success(),
         enable.tx_timeout(),
-        enable.bit_21_opaque(),
+        enable.hardware_assertion(),
         enable.bit_23_opaque(),
         enable.rx_associated_auxiliary_24(),
-        enable.bit_27_opaque(),
-        enable.bit_28_opaque(),
+        enable.wdev_timer_0(),
+        enable.wdev_timer_1(),
     ];
     if fixed_clear && station_fields.iter().all(|set| !set) {
         MacInterruptEnableState::Disabled
@@ -444,8 +476,10 @@ impl<M: MacPlacement> MacPowerInterruptRegisters<M> {
     /// Mask every WDEVPWR cause without acknowledging one.
     ///
     /// Publishes the all-zero ENABLE image, then orders the write. A
-    /// latched cause stays in STATUS; the CPU line deasserts once the masked
-    /// image reaches the bank.
+    /// pending TSF timer cause stays in RAW while STATUS and output go low.
+    /// A STATUS sample taken after masking cannot acknowledge hidden pending;
+    /// retain a positive sample or use the masked clear-all transaction.
+    /// SOURCE: HW8_S31_WIFI_TSF_MASK_20261026 (timer0/1 only).
     pub fn mask_all_power_interrupts(&mut self) {
         mask_mac_power_interrupts(&mut self.power);
         oer_riscv::fence();
@@ -510,7 +544,7 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
     /// Mask every MAC interrupt source without acknowledging one.
     ///
     /// Publishes the all-zero ENABLE image, then orders the write. A
-    /// latched event stays in STATUS. [`Self::unmask_rx_delivery_interrupts`]
+    /// event is not acknowledged. [`Self::unmask_rx_delivery_interrupts`]
     /// afterwards restores only the RX delivery group.
     pub fn mask_all_mac_interrupts(&mut self) {
         publish_mac_interrupt_mask(&mut self.mac, MacInterruptMask::NONE);

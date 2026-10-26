@@ -112,7 +112,10 @@ pub fn on_wifi(part: &mut WifiPart) {
         let _latched =
             MAC_LATCH.compare_exchange(0, measure::stamp(), Ordering::AcqRel, Ordering::Relaxed);
     }
-    if !service_wifi_line(&RX_LINE, part) {
+    if !match service_wifi_line(&RX_LINE, part) {
+        Ok(installed) => installed,
+        Err(fault) => reset_fault(fault),
+    } {
         if mac {
             UNSERVICED_MAC.fetch_add(1, Ordering::Relaxed);
         } else if power {
@@ -226,4 +229,26 @@ pub async fn rx_task(
         measure::take_mac_latch,
     )
     .await {}
+}
+
+oer_espressif_staged_runtime::retained_static! {
+    static WIFI_FAULT: oer_esp32s31_ieee80211_driver::irq::fault::RetainedFault;
+}
+
+fn reset_fault(fault: oer_esp32s31_ieee80211_mac::irq::Fault) -> ! {
+    // P3 keeps the bank owners quarantined and P2's DMA owners suspended.
+    // This path never returns or drops those owners before the chip resets.
+    oer_espressif_staged_runtime::fatal::reset_recording(|_stop| {
+        if let Some(mut record) = WIFI_FAULT.try_lock() {
+            record.record(fault);
+        }
+    })
+}
+
+pub fn report_previous_fault() {
+    if let Some(fault) = WIFI_FAULT.try_lock().and_then(|mut record| record.take()) {
+        oer_esp32s31_ieee80211_driver::irq::fault::report(fault, |bytes| {
+            let _written = oer_esp32s31_hal::usb_serial_jtag::early_text(bytes);
+        });
+    }
 }

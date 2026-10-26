@@ -160,7 +160,7 @@ impl<X: SignalExecutor> Host<X> {
     fn enter(&self) {
         let activated = self.part(|part| {
             let before = part.epoch().state();
-            service_wifi_line(&self.cell, part);
+            service_wifi_line(&self.cell, part).expect("healthy interrupt");
             before != EpochState::Active && part.epoch().state() == EpochState::Active
         });
         if activated {
@@ -591,6 +591,7 @@ fn the_handler_activates_the_epoch_after_the_install() {
     // The activation alone touched the banks; the stale mask was not
     // applied.
     assert!(harness.host.mac().operations().matches(&[
+        MacInterruptOperation::Status,
         MacInterruptOperation::MaskAll,
         MacInterruptOperation::ClearAll,
         MacInterruptOperation::Publish(oer_esp32s31_hal::types::MacInterruptMask::STATION),
@@ -621,6 +622,7 @@ fn p2_drains_then_unmasks_only_through_the_doorbell() {
         MacInterruptOperation::Status,
         MacInterruptOperation::MaskRxDelivery,
         MacInterruptOperation::Acknowledge(rx_success()),
+        MacInterruptOperation::Status,
         MacInterruptOperation::UnmaskRxDelivery,
     ]));
     assert!(harness.host.power().operations().is_empty());

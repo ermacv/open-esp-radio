@@ -6613,8 +6613,8 @@ value = 0x000100aa
 sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
-name = "enable_phy_baseband_watchdog"
-fields = [{ field = "WIFI_BB.BASEBAND_WATCHDOG_ENABLE.WATCHDOG_ENABLE", source-bit-offset = 0 }]
+name = "enable_phy_baseband_watchdog_reset"
+fields = [{ field = "WIFI_BB.BASEBAND_WATCHDOG_ENABLE.WATCHDOG_RESET_ENABLE", source-bit-offset = 0 }]
 value = 1
 sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION", "S31_ESP_PACS_SVD"]
 
@@ -6854,7 +6854,7 @@ sources = ["ROM_REV0_PHY_POWER_DETECTOR", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
 name = "clear_phy_baseband_watchdog_timeout"
-fields = [{ field = "WIFI_BB.BASEBAND_WATCHDOG_ENABLE.WATCHDOG_TIMEOUT_CLEAR", source-bit-offset = 0 }]
+fields = [{ field = "WIFI_BB.BASEBAND_WATCHDOG_ENABLE.WATCHDOG_TIMEOUT_CLEAR_REQUEST", source-bit-offset = 0 }]
 value = 1
 sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG", "S31_ESP_PACS_SVD"]
 
@@ -7141,7 +7141,7 @@ sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
 name = "configure_phy_baseband_watchdog_reset"
-fields = [{ field = "WIFI_BB.BASEBAND_WATCHDOG_ENABLE.WATCHDOG_ENABLE", source-bit-offset = 0 }]
+fields = [{ field = "WIFI_BB.BASEBAND_WATCHDOG_ENABLE.WATCHDOG_RESET_ENABLE", source-bit-offset = 0 }]
 domain = "PhyVendorRegisterArgument"
 input-transform = { wrapping-subtract = 0, retain-mask = 1 }
 sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG", "S31_ESP_PACS_SVD"]

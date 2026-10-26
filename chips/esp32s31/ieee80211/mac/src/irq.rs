@@ -145,7 +145,8 @@ pub trait MacPowerInterrupt: sealed::Sealed {
     type Snapshot: MacPowerInterruptStatusSnapshot;
 
     fn status(&mut self) -> Self::Snapshot;
-    /// Mask every cause; a latched cause stays latched.
+    /// Mask delivery without acknowledging RAW pending. STATUS hides masked
+    /// causes; sampling STATUS after this is not proof that RAW is clear.
     fn mask_all(&mut self);
     fn acknowledge(&mut self, snapshot: Self::Snapshot);
     /// Acknowledge every latched cause of the masked bank.
@@ -191,7 +192,7 @@ pub const EVENT_KNOWN_MASK: u32 = 0x0f;
 /// `libpp.a[wdev.o]::wDev_ProcessFiq` handles RX success before TX
 /// completion and TX timeout when one interrupt snapshot contains
 /// several causes. The pinned body routes RX success to
-/// `lmacProcessModemStateRxBeacon` instead while power raw-signal bits 21:22
+/// `lmacProcessModemStateRxBeacon` instead while power raw-signal bits 17:18
 /// are set; those belong to MAC modem-state sleep, which this driver never
 /// enables. Those leaves publish separate `ppTask` queue entries, and
 /// complete `libpp.a[pp.o]::ppTask` consumes one entry before
@@ -282,15 +283,26 @@ pub const fn event_mask(causes: MacInterruptEvents) -> u32 {
     mask
 }
 
+/// A terminal MAC interrupt failure, carrying the original STATUS sample.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Fault {
+    /// SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026: MAC21 posts the vendor's
+    /// fatal assertion diagnostic. Its physical trigger remains unknown.
+    HardwareAssertion { status: u32 },
+}
+
 /// Acknowledge one complete MAC snapshot, returning its finite publication.
 /// The caller publishes `snapshot.posted_events` after releasing the register
 /// borrow, so an executor waker can never reenter a live MMIO transaction.
 #[inline(always)]
 pub fn handle_mac_irq<M: epoch::RxDelivery, I: MacInterrupt>(
     interrupt: &mut I,
-) -> (IrqDisposition, IrqSnapshot) {
+) -> Result<(IrqDisposition, IrqSnapshot), Fault> {
     let status = interrupt.status();
     let observation = status.observation();
+    if let Some(status) = observation.hardware_assertion_status() {
+        return Err(Fault::HardwareAssertion { status });
+    }
     let work_events = observation.work_events();
     let snapshot = IrqSnapshot {
         had_status: !observation.is_empty(),
@@ -299,7 +311,7 @@ pub fn handle_mac_irq<M: epoch::RxDelivery, I: MacInterrupt>(
         had_unhandled_event: observation.has_unhandled_event(),
     };
     if observation.is_empty() {
-        return (IrqDisposition::Spurious, snapshot);
+        return Ok((IrqDisposition::Spurious, snapshot));
     }
     if M::MODERATES_RX && work_events.contains(MacInterruptEvents::RX_SUCCESS) {
         // Mask before W1C; a racing level remains latched until the driver
@@ -312,7 +324,7 @@ pub fn handle_mac_irq<M: epoch::RxDelivery, I: MacInterrupt>(
     } else {
         IrqDisposition::Posted
     };
-    (disposition, snapshot)
+    Ok((disposition, snapshot))
 }
 
 /// Acknowledge one complete WDEVPWR snapshot before its causes are published.

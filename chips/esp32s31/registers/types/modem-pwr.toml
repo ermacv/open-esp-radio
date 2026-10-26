@@ -741,7 +741,27 @@ sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
 [review.entity."ENABLE.TSF_TIMER_0"]
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
 
-[review.entity."ENABLE.BITS_8_31_OPAQUE"]
+[review.entity."ENABLE.BITS_8_16_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D8B4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."ENABLE.BEACON_FILTER_WAKE"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "S31_MMIO_DECLARED_2010D8B4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."ENABLE.BIT_18_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D8B4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."ENABLE.BEACON_MISS"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "S31_MMIO_DECLARED_2010D8B4"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."ENABLE.BITS_20_31_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_2010D8B4"]
 accuracy = "unknown"
 completeness = "unknown"
@@ -761,7 +781,27 @@ sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER"]
 [review.entity."RAW.TSF_TIMER_0"]
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER"]
 
-[review.entity."RAW.BITS_8_31_OPAQUE"]
+[review.entity."RAW.BITS_8_16_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D8B8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."RAW.BEACON_FILTER_WAKE"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "S31_MMIO_DECLARED_2010D8B8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."RAW.BIT_18_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D8B8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."RAW.BEACON_MISS"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "S31_MMIO_DECLARED_2010D8B8"]
+accuracy = "unknown"
+completeness = "unknown"
+
+[review.entity."RAW.BITS_20_31_OPAQUE"]
 sources = ["S31_MMIO_DECLARED_2010D8B8"]
 accuracy = "unknown"
 completeness = "unknown"
@@ -781,7 +821,23 @@ sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER"]
 [review.entity."POWER_INTERRUPT_STATUS.TSF_TIMER_0"]
 sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER"]
 
-[review.entity."POWER_INTERRUPT_STATUS.BITS_8_31_OPAQUE"]
+[review.entity."POWER_INTERRUPT_STATUS.BITS_8_16_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8BC"]
+completeness = "unknown"
+
+[review.entity."POWER_INTERRUPT_STATUS.BEACON_FILTER_WAKE"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8BC"]
+completeness = "unknown"
+
+[review.entity."POWER_INTERRUPT_STATUS.BIT_18_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8BC"]
+completeness = "unknown"
+
+[review.entity."POWER_INTERRUPT_STATUS.BEACON_MISS"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8BC"]
+completeness = "unknown"
+
+[review.entity."POWER_INTERRUPT_STATUS.BITS_20_31_OPAQUE"]
 sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8BC"]
 completeness = "unknown"
 
@@ -800,7 +856,23 @@ sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
 [review.entity."CLEAR.TSF_TIMER_0"]
 sources = ["BLOB_LIBPP_HAL_TSF_TIMER"]
 
-[review.entity."CLEAR.BITS_8_31_OPAQUE"]
+[review.entity."CLEAR.BITS_8_16_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0"]
+completeness = "unknown"
+
+[review.entity."CLEAR.BEACON_FILTER_WAKE"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0"]
+completeness = "unknown"
+
+[review.entity."CLEAR.BIT_18_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0"]
+completeness = "unknown"
+
+[review.entity."CLEAR.BEACON_MISS"]
+sources = ["BLOB_LIBPP_WIFI_IRQ_FACTS_20261026", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0"]
+completeness = "unknown"
+
+[review.entity."CLEAR.BITS_20_31_OPAQUE"]
 sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0"]
 completeness = "unknown"
 
@@ -2001,11 +2073,36 @@ class = "plain"
 description = "Enable the guarded TSF timer-zero event."
 
 [[registers.fields]]
-name = "BITS_8_31_OPAQUE"
-bits = "31:8"
+name = "BITS_8_16_OPAQUE"
+bits = "16:8"
 class = "plain"
-description = "Enable bits whose event identities remain unknown."
-write-range = { min = 0x0, max = 0xffffff }
+description = "Event identities unknown."
+write-range = { min = 0, max = 511 }
+
+[[registers.fields]]
+name = "BEACON_FILTER_WAKE"
+bits = "17"
+class = "plain"
+description = "Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+
+[[registers.fields]]
+name = "BIT_18_OPAQUE"
+bits = "18"
+class = "plain"
+description = "RX-beacon-path raw observation; independent event identity unknown."
+
+[[registers.fields]]
+name = "BEACON_MISS"
+bits = "19"
+class = "plain"
+description = "Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+
+[[registers.fields]]
+name = "BITS_20_31_OPAQUE"
+bits = "31:20"
+class = "plain"
+description = "Event identities unknown."
+write-range = { min = 0, max = 4095 }
 
 [[registers]]
 name = "RAW"
@@ -2061,10 +2158,34 @@ class = "read-only"
 description = "Raw guarded TSF timer-zero event."
 
 [[registers.fields]]
-name = "BITS_8_31_OPAQUE"
-bits = "31:8"
+name = "BITS_8_16_OPAQUE"
+bits = "16:8"
 class = "read-only"
-description = "Raw event bits whose identities remain unknown."
+description = "Event identities unknown."
+
+[[registers.fields]]
+name = "BEACON_FILTER_WAKE"
+bits = "17"
+class = "read-only"
+description = "Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+
+[[registers.fields]]
+name = "BIT_18_OPAQUE"
+bits = "18"
+class = "read-only"
+description = "RX-beacon-path raw observation; independent event identity unknown."
+
+[[registers.fields]]
+name = "BEACON_MISS"
+bits = "19"
+class = "read-only"
+description = "Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+
+[[registers.fields]]
+name = "BITS_20_31_OPAQUE"
+bits = "31:20"
+class = "read-only"
+description = "Event identities unknown."
 
 [[registers]]
 name = "POWER_INTERRUPT_STATUS"
@@ -2120,10 +2241,34 @@ class = "read-only"
 description = "Masked guarded TSF timer-zero event."
 
 [[registers.fields]]
-name = "BITS_8_31_OPAQUE"
-bits = "31:8"
+name = "BITS_8_16_OPAQUE"
+bits = "16:8"
 class = "read-only"
-description = "Masked event bits whose identities remain unknown."
+description = "Event identities unknown."
+
+[[registers.fields]]
+name = "BEACON_FILTER_WAKE"
+bits = "17"
+class = "read-only"
+description = "Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+
+[[registers.fields]]
+name = "BIT_18_OPAQUE"
+bits = "18"
+class = "read-only"
+description = "RX-beacon-path raw observation; independent event identity unknown."
+
+[[registers.fields]]
+name = "BEACON_MISS"
+bits = "19"
+class = "read-only"
+description = "Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+
+[[registers.fields]]
+name = "BITS_20_31_OPAQUE"
+bits = "31:20"
+class = "read-only"
+description = "Event identities unknown."
 
 [[registers]]
 name = "CLEAR"
@@ -2179,11 +2324,34 @@ class = "write-one-to-clear"
 description = "Acknowledge the guarded TSF timer-zero event."
 
 [[registers.fields]]
-name = "BITS_8_31_OPAQUE"
-bits = "31:8"
+name = "BITS_8_16_OPAQUE"
+bits = "16:8"
 class = "write-one-to-clear"
-description = "Acknowledge event bits whose identities remain unknown."
-write-range = { min = 0x0, max = 0xffffff }
+description = "Event identities unknown."
+
+[[registers.fields]]
+name = "BEACON_FILTER_WAKE"
+bits = "17"
+class = "write-one-to-clear"
+description = "Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+
+[[registers.fields]]
+name = "BIT_18_OPAQUE"
+bits = "18"
+class = "write-one-to-clear"
+description = "RX-beacon-path raw observation; independent event identity unknown."
+
+[[registers.fields]]
+name = "BEACON_MISS"
+bits = "19"
+class = "write-one-to-clear"
+description = "Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+
+[[registers.fields]]
+name = "BITS_20_31_OPAQUE"
+bits = "31:20"
+class = "write-one-to-clear"
+description = "Event identities unknown."
 
 [[registers]]
 name = "WORD_08D0_OPAQUE"

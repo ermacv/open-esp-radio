@@ -28,7 +28,7 @@ use oer_esp32s31_hal::{
 };
 
 use super::{
-    BanksMasked, IrqDisposition, IrqSnapshot, MacInterrupt, MacInterruptStatusSnapshot,
+    BanksMasked, Fault, IrqDisposition, IrqSnapshot, MacInterrupt, MacInterruptStatusSnapshot,
     MacPowerInterrupt, MacPowerInterruptStatusSnapshot, PowerIrqDisposition, PowerIrqSnapshot,
     handle_mac_irq, handle_power_irq,
 };
@@ -62,6 +62,8 @@ pub enum EpochState {
     Active,
     /// Every source masked; latched events kept.
     Masked,
+    /// A fatal sample retained; both banks stay masked until reset.
+    Quarantined(Fault),
 }
 
 /// Both interrupt banks of the radio interrupt handler, in one epoch state.
@@ -104,11 +106,26 @@ impl<M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt> InterruptEpoch<M, I, 
     /// A previous epoch may leave a level event latched. Both banks stay
     /// masked until every stale event is acknowledged: publishing the
     /// runtime mask before the clear would raise the line on a stale event.
-    pub fn activate(&mut self, mask: MacInterruptMask) {
+    pub fn activate(&mut self, mask: MacInterruptMask) -> Result<(), Fault> {
+        if let EpochState::Quarantined(fault) = self.state {
+            return Err(fault);
+        }
         self.mask_all().clear_all();
         self.mac.publish(mask);
         self.power.enable_station_tbtt();
         self.state = EpochState::Active;
+        Ok(())
+    }
+
+    /// Capture a visible fatal cause before a handler request can clear it.
+    pub fn check_fault(&mut self) -> Result<(), Fault> {
+        if let EpochState::Quarantined(fault) = self.state {
+            return Err(fault);
+        }
+        if let Some(status) = self.mac.status().observation().hardware_assertion_status() {
+            return Err(self.quarantine(Fault::HardwareAssertion { status }));
+        }
+        Ok(())
     }
 
     /// Mask every source of both banks, MAC first, then WDEVPWR. Nothing is
@@ -134,34 +151,53 @@ impl<M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt> InterruptEpoch<M, I, 
     /// enable a reset restored, or the boot left). Samples both banks and
     /// acknowledges nothing, unless it closes them. An open epoch returns
     /// `false` and touches nothing.
-    pub fn close_stray(&mut self) -> bool {
-        if self.state != EpochState::Closed {
-            return false;
+    pub fn close_stray(&mut self) -> Result<bool, Fault> {
+        if let EpochState::Quarantined(fault) = self.state {
+            return Err(fault);
         }
-        let mac = !self.mac.status().observation().is_empty();
+        if self.state != EpochState::Closed {
+            return Ok(false);
+        }
+        let observation = self.mac.status().observation();
+        if let Some(status) = observation.hardware_assertion_status() {
+            return Err(self.quarantine(Fault::HardwareAssertion { status }));
+        }
+        let mac = !observation.is_empty();
         let power = !self.power.status().observation().is_empty();
         if mac || power {
             self.close();
         }
-        mac || power
+        Ok(mac || power)
     }
 
     /// Sample, moderate and acknowledge the MAC bank; `None` in a closed
     /// epoch, which samples nothing ([`Self::close_stray`] serves it).
     #[inline(always)]
-    pub fn service_mac(&mut self) -> Option<(IrqDisposition, IrqSnapshot)> {
+    pub fn service_mac(&mut self) -> Result<Option<(IrqDisposition, IrqSnapshot)>, Fault> {
+        if let EpochState::Quarantined(fault) = self.state {
+            return Err(fault);
+        }
         if self.state == EpochState::Closed {
-            return None;
+            return Ok(None);
         }
         // Both sealed policies are fieldless. Dispatch is monomorphic without
         // a registry, callback or mutable moderation flag.
-        Some(handle_mac_irq::<M, I>(&mut self.mac))
+        match handle_mac_irq::<M, I>(&mut self.mac) {
+            Ok(sample) => Ok(Some(sample)),
+            Err(fault) => Err(self.quarantine(fault)),
+        }
     }
 
-    /// Sample and acknowledge the WDEVPWR bank; `None` in a closed epoch.
+    fn quarantine(&mut self, fault: Fault) -> Fault {
+        drop(self.mask_all());
+        self.state = EpochState::Quarantined(fault);
+        fault
+    }
+
+    /// Sample and acknowledge the WDEVPWR bank; `None` in a closed or quarantined epoch.
     #[inline(always)]
     pub fn service_power(&mut self) -> Option<(PowerIrqDisposition, PowerIrqSnapshot)> {
-        if self.state == EpochState::Closed {
+        if matches!(self.state, EpochState::Closed | EpochState::Quarantined(_)) {
             return None;
         }
         Some(handle_power_irq(&mut self.power))
@@ -234,6 +270,8 @@ impl<M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt> MaskedBanks<'_, M, I,
         let masked = BanksMasked::new();
         self.epoch.mac.clear_all(&masked);
         self.epoch.power.clear_all(&masked);
-        self.epoch.state = EpochState::Closed;
+        if !matches!(self.epoch.state, EpochState::Quarantined(_)) {
+            self.epoch.state = EpochState::Closed;
+        }
     }
 }

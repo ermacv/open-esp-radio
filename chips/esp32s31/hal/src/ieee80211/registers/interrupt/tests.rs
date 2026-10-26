@@ -129,6 +129,7 @@ fn a_full_status_reads_every_cause() {
     assert!(observation.work_events().rx_success());
     assert!(observation.work_events().tx_timeout());
     assert!(observation.has_auxiliary_event() && observation.has_unhandled_event());
+    assert_eq!(observation.hardware_assertion_status(), Some(u32::MAX));
     let power = owners
         .power_interrupt
         .power_interrupt_status()

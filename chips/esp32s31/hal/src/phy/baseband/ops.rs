@@ -316,7 +316,9 @@ pub fn configure_i2c_tx_rate<P: PhyPlacement>(bb: &mut BasebandRegisters<P>) {
     restore_tx_gain_compensation(bb);
 }
 
-/// Configure the complete baseband watchdog leaf.
+/// Configure the baseband watchdog and enable its hardware BB reset action.
+/// The interrupt gate is preserved. Hardware resets BB on timeout; the reset
+/// extent is not measured. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
 pub fn configure_watchdog<P: PhyPlacement>(bb: &mut BasebandRegisters<P>) {
     // SOURCE: ROM_REV0_PHY_REGISTER_INITIALIZATION, S31_ESP_PACS_SVD.
     bb.wifi_bb.modify_baseband_watchdog_control(|w| {
@@ -324,7 +326,7 @@ pub fn configure_watchdog<P: PhyPlacement>(bb: &mut BasebandRegisters<P>) {
     });
     // SOURCE: ROM_REV0_PHY_REGISTER_INITIALIZATION, S31_ESP_PACS_SVD.
     bb.wifi_bb.modify_baseband_watchdog_enable(|w| {
-        w.set_watchdog_enable(true);
+        w.set_watchdog_reset_enable(true);
     });
 }
 

@@ -99,6 +99,26 @@ The arena's fact publishers, request word and counters reach the handler as
 one `WifiIrqLine` the task installs once in a `HandlerCell`, an ownership
 state machine rather than a lock.
 
+MAC source120 `HARDWARE_ASSERTION` (bit21) is terminal. The handler captures
+its complete STATUS before acknowledging or publishing work, masks both banks,
+and returns the MAC crate’s `irq::Fault::HardwareAssertion`. Requests that
+could clear the bank check this fault first, including when no line is installed.
+The quarantined epoch cannot activate or restore RX delivery. Each image keeps
+its interrupt and DMA owners, calls `fatal::reset_recording` without returning,
+and writes its twelve-byte `irq::fault::RetainedFault`; the next boot prints
+the named reason and complete STATUS through the early console. No owner is
+released or handed to the fatal path. The diagnostic word is retained verbatim;
+policy dispatch uses the PAC's named cause and never decodes that word.
+SOURCE: `BLOB_LIBPP_WIFI_IRQ_FACTS_20261026` (the vendor's fatal diagnostic
+message14; the physical producer remains unknown).
+
+Power source122 masking preserves pending in RAW, while masked STATUS hides
+it for the measured TSF timer0/1 lanes. Epoch closure uses the existing
+mask-and-clear-all transaction, rather than sampling STATUS after masking.
+The host model tests masked STATUS, redelivery and clearing with a positive
+sample retained before masking. Its TBTT model remains a policy assumption;
+the timer stand observations do not qualify received-beacon causes.
+
 P2 asks for a bank change by setting a request bit (`fetch_or`, Release)
 and ringing the doorbell; the handler preempts P2, so a request that no
 longer reads pending has been applied. The handler lowers the doorbell

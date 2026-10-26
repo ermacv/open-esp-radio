@@ -60,6 +60,9 @@ use oer_memory::{HandlerCell, Installed};
 
 use crate::rx::counters::WifiRxCounters;
 
+pub mod fault;
+use oer_esp32s31_ieee80211_mac::irq::Fault;
+
 /// The radio doorbell, as the radio executor sees it: a software interrupt
 /// at the radio interrupt level, one of [`WifiIrqPart`]'s sources.
 ///
@@ -406,12 +409,14 @@ impl<X: SignalExecutor> WifiIrqLine<X> {
 
 /// The radio handler's body: lower the doorbell, then serve the line over
 /// `part`. Without an installed line it closes a stray bank event and
-/// returns `false`.
+/// returns `Ok(false)`. A fatal MAC assertion returns its original sample after
+/// quarantining both banks. The image must retain the owners and record the
+/// fault in its never-returning `fatal::reset_recording` path.
 #[inline(always)]
 pub fn service_wifi_line<A, B, I, P, X>(
     cell: &HandlerCell<WifiIrqLine<X>>,
     part: &mut WifiIrqPart<A, B, I, P>,
-) -> bool
+) -> Result<bool, Fault>
 where
     A: DoorbellAcknowledge,
     I: MacInterrupt,
@@ -419,11 +424,12 @@ where
     X: SignalExecutor,
 {
     part.acknowledger.acknowledge();
-    if cell.with(|line| serve(line, part)).is_some() {
-        return true;
+    if let Some(result) = cell.with(|line| serve(line, part)) {
+        result?;
+        return Ok(true);
     }
-    let _stray = part.epoch.close_stray();
-    false
+    let _stray = part.epoch.close_stray()?;
+    Ok(false)
 }
 
 /// One entry over an installed line, one cause: the requests it takes;
@@ -432,7 +438,10 @@ where
 /// borrow ended); with nothing there, the WDEVPWR bank. A closed epoch
 /// closes a stray event instead.
 #[inline(always)]
-fn serve<A, B, I, P, X>(line: &mut WifiIrqLine<X>, part: &mut WifiIrqPart<A, B, I, P>)
+fn serve<A, B, I, P, X>(
+    line: &mut WifiIrqLine<X>,
+    part: &mut WifiIrqPart<A, B, I, P>,
+) -> Result<(), Fault>
 where
     I: MacInterrupt,
     P: MacPowerInterrupt,
@@ -441,18 +450,19 @@ where
     let epoch = &mut part.epoch;
     let pending = line.requests.take();
     if pending != 0 {
-        apply(line, epoch, pending);
+        epoch.check_fault()?;
+        apply(line, epoch, pending)?;
         line.requests.publish_enable(epoch.mac_interrupt_enable());
-        return;
+        return Ok(());
     }
     if epoch.state() == EpochState::Closed {
-        if epoch.close_stray() {
+        if epoch.close_stray()? {
             line.counters.closed_interrupt();
         }
-        return;
+        return Ok(());
     }
     let entry = line.mac.begin_mac_entry();
-    if let Some((disposition, snapshot)) = epoch.service_mac()
+    if let Some((disposition, snapshot)) = epoch.service_mac()?
         && disposition != IrqDisposition::Spurious
     {
         line.counters.mac_interrupt(
@@ -463,20 +473,25 @@ where
         entry
             .finish(line.mac.publish_snapshot_deferred(snapshot))
             .wake();
-        return;
+        return Ok(());
     }
     if let Some((PowerIrqDisposition::Posted, snapshot)) = epoch.service_power() {
         line.counters.power_interrupt();
         line.power.publish(snapshot.observation);
-        return;
+        return Ok(());
     }
     // No request and no enabled event in either bank.
     line.counters.mac_interrupt(true, false, false);
+    Ok(())
 }
 
 /// Apply the requests taken together: the safest wins.
 #[inline(always)]
-fn apply<I, P, X>(line: &WifiIrqLine<X>, epoch: &mut InterruptEpoch<Moderated, I, P>, pending: u32)
+fn apply<I, P, X>(
+    line: &WifiIrqLine<X>,
+    epoch: &mut InterruptEpoch<Moderated, I, P>,
+    pending: u32,
+) -> Result<(), Fault>
 where
     I: MacInterrupt,
     P: MacPowerInterrupt,
@@ -490,18 +505,19 @@ where
             line.mac.notify_masked();
         }
     } else if pending & ACTIVATE != 0 {
-        epoch.activate(MAC_STATION_INTERRUPT_MASK);
+        epoch.activate(MAC_STATION_INTERRUPT_MASK)?;
     } else if pending & UNMASK_RX != 0 {
         if epoch.unmask_rx_after_drain() {
             line.counters.doorbell_unmask();
         } else {
             line.counters.ignored_unmask();
         }
-        return;
+        return Ok(());
     }
     if pending & UNMASK_RX != 0 {
         line.counters.ignored_unmask();
     }
+    Ok(())
 }
 
 /// The arena's parts of one interrupt line, before it is installed.

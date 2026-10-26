@@ -96,6 +96,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         fail("root-taken");
     };
     let runtime = root.into_runtime().unwrap_or_else(|error| fail(error.name()));
+    irq::report_previous_fault();
     let (_psram, mut adopted) = match handoff.adopt(
         INTERRUPT_TABLE,
         runtime.interrupts.controller,

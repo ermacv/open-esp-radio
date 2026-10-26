@@ -152,11 +152,15 @@ impl MacInterruptModel {
 
     /// The hardware latches `events`, whatever the enable state.
     pub fn latch(&mut self, events: MacInterruptObservation) {
+        let assertion = self.latched.hardware_assertion_status();
         self.latched = MacInterruptObservation::from_semantic_events(
             self.latched.work_events().union(events.work_events()),
             self.latched.has_auxiliary_event() || events.has_auxiliary_event(),
             self.latched.has_unhandled_event() || events.has_unhandled_event(),
         );
+        if let Some(status) = assertion.or(events.hardware_assertion_status()) {
+            self.latched = self.latched.with_hardware_assertion(status);
+        }
     }
 
     /// Every latched event, masked or not.
@@ -169,7 +173,7 @@ impl MacInterruptModel {
         let latched = self.latched.work_events();
         let rx = self.rx_delivery_enabled;
         let other = self.other_sources_enabled;
-        MacInterruptObservation::from_semantic_events(
+        let observation = MacInterruptObservation::from_semantic_events(
             MacInterruptEvents::from_causes(
                 other && latched.tx_complete(),
                 false, // The station mask excludes the HE color source.
@@ -178,7 +182,12 @@ impl MacInterruptModel {
             ),
             rx && self.latched.has_auxiliary_event(),
             other && self.latched.has_unhandled_event(),
-        )
+        );
+        if let (true, Some(status)) = (other, self.latched.hardware_assertion_status()) {
+            observation.with_hardware_assertion(status)
+        } else {
+            observation
+        }
     }
 
     pub const fn rx_delivery_enabled(&self) -> bool {
@@ -239,11 +248,17 @@ impl MacInterrupt for MacInterruptModel {
     fn acknowledge(&mut self, snapshot: Self::Snapshot) {
         self.operations
             .push(MacInterruptOperation::Acknowledge(snapshot));
+        let assertion = self.latched.hardware_assertion_status();
         self.latched = MacInterruptObservation::from_semantic_events(
             events_without(self.latched.work_events(), snapshot.work_events()),
             self.latched.has_auxiliary_event() && !snapshot.has_auxiliary_event(),
             self.latched.has_unhandled_event() && !snapshot.has_unhandled_event(),
         );
+        if snapshot.hardware_assertion_status().is_none()
+            && let Some(status) = assertion
+        {
+            self.latched = self.latched.with_hardware_assertion(status);
+        }
     }
 
     fn clear_all(&mut self, _masked: &BanksMasked) {
