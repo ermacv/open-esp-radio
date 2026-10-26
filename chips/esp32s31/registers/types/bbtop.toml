@@ -38,6 +38,9 @@ sources = ["BLOB_LIBPHY_PHY_I2C"]
 [review.entity."SHARED_RX_GAIN_CALIBRATION_ENABLE"]
 sources = ["BLOB_LIBPHY_PHY_I2C"]
 
+[review.entity."BYTE_04_OPAQUE"]
+sources = ["BLOB_LIBPHY_PHY_I2C", "HW15_S31_I2C_20261027"]
+
 [[registers]]
 name = "TX_IQ_LOOPBACK_ENABLE"
 offset = 0x0
@@ -107,6 +110,7 @@ description = "Six-bit field in the second high Bluetooth transmit-power analog 
 name = "BYTE_04_OPAQUE"
 offset = 0x4
 width = 8
+description = "Observed 0x1c in s31-b run hw15-20261027-opaque-07 after the documented probe-specific modem/I2C power-reset, six-map OR and timing/register-mode prefix, without analog byte writes or PHY calibration. Serial, combined parallel and final serial reads replace distinct nonzero command DATA seeds with this value. This is a conditional observation, not a reset value, general read-safe epoch or physical bit meaning."
 
 [[registers.fields]]
 name = "BITS_0_7_OPAQUE"

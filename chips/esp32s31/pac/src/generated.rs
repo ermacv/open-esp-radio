@@ -104368,7 +104368,7 @@ pub mod i2c_ana_mst {
 
     /// The `ANA_CONF1` register.
     ///
-    /// Shared analog-I2C routing and read-mask word. The scoped s31-b serial/parallel/serial probe observes low masks fffffb/fffff7/fffff3 and the same two distinct source bytes; it establishes neither other routes nor analog byte meaning.
+    /// Shared analog-I2C routing and read-mask word. The scoped seeded s31-b probe returns BBTOP04=1c and TXRF08=00 with low masks fffffb/fffff7 and fffff3 combined; no-selector mask ffffff returns ff for BBTOP04 and restoring its selector returns 0x1c. This establishes neither every route nor analog byte meaning.
     pub mod ana_conf1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -104500,13 +104500,13 @@ pub mod i2c_ana_mst {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// BBTOP lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x67)<<2 when assigning the first bank to master zero, and clears it when assigning the second bank to master one. This describes the recovered publication, not every silicon mode.
+            /// BBTOP lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x67)<<2 when assigning the first bank to master zero, and clears it when assigning the second bank to master one. The scoped s31-b control returns ff when this lane routes BBTOP to master0 but its command uses master1, and 0x1c after restoring master1; other modes remain untested.
             #[inline]
             pub const fn bbtop_mst0_select(self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// TXRF lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x6b)<<2 for master zero and clears it for master one.
+            /// TXRF lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x6b)<<2 for master zero and clears it for master one. The scoped s31-b probe verifies stored 1 then 0 and a seeded TXRF08 read on master1; the independent functional effect of this lane is untested.
             #[inline]
             pub const fn txrf_mst0_select(self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -104541,13 +104541,13 @@ pub mod i2c_ana_mst {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// BBTOP lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x67)<<2 when assigning the first bank to master zero, and clears it when assigning the second bank to master one. This describes the recovered publication, not every silicon mode.
+            /// BBTOP lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x67)<<2 when assigning the first bank to master zero, and clears it when assigning the second bank to master one. The scoped s31-b control returns ff when this lane routes BBTOP to master0 but its command uses master1, and 0x1c after restoring master1; other modes remain untested.
             #[inline]
             pub const fn bbtop_mst0_select(&self) -> bool {
                 (self.0 & 0x00000010) != 0
             }
 
-            /// TXRF lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x6b)<<2 for master zero and clears it for master one.
+            /// TXRF lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x6b)<<2 for master zero and clears it for master one. The scoped s31-b probe verifies stored 1 then 0 and a seeded TXRF08 read on master1; the independent functional effect of this lane is untested.
             #[inline]
             pub const fn txrf_mst0_select(&self) -> bool {
                 (self.0 & 0x00000020) != 0
@@ -303056,7 +303056,7 @@ pub mod analog_i2c {
 
             /// The register's byte.
             ///
-            /// SOURCE: BLOB_LIBPHY_PHY_I2C.
+            /// SOURCE: BLOB_LIBPHY_PHY_I2C, HW15_S31_I2C_20261027.
             pub const ADDRESS: Address = Address::new(0x67, 0x4);
 
             /// Width of `BITS_0_7_OPAQUE`.
@@ -304003,7 +304003,7 @@ pub mod analog_i2c {
 
             /// The register's byte.
             ///
-            /// SOURCE: BLOB_LIBPHY_PHY_I2C.
+            /// SOURCE: BLOB_LIBPHY_PHY_I2C, HW15_S31_I2C_20261027.
             pub const ADDRESS: Address = Address::new(0x6b, 0x8);
 
             /// Width of `BITS_0_7_OPAQUE`.

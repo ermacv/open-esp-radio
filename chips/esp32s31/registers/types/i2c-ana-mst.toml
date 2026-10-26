@@ -155,13 +155,13 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
 
 [review.entity."ANA_CONF2.BBTOP_MST0_SELECT"]
-sources = ["ROM_REV0_PHY_I2C_HOST_LANES"]
+sources = ["ROM_REV0_PHY_I2C_HOST_LANES", "HW15_S31_I2C_20261027"]
 provenance = "observed"
 completeness = "partial"
 naming = "descriptive"
 
 [review.entity."ANA_CONF2.TXRF_MST0_SELECT"]
-sources = ["ROM_REV0_PHY_I2C_HOST_LANES"]
+sources = ["ROM_REV0_PHY_I2C_HOST_LANES", "HW15_S31_I2C_20261027"]
 provenance = "observed"
 completeness = "partial"
 naming = "descriptive"
@@ -427,7 +427,7 @@ class = "read-only"
 [[registers]]
 name = "ANA_CONF1"
 offset = 0x1c
-description = "Shared analog-I2C routing and read-mask word. The scoped s31-b serial/parallel/serial probe observes low masks fffffb/fffff7/fffff3 and the same two distinct source bytes; it establishes neither other routes nor analog byte meaning."
+description = "Shared analog-I2C routing and read-mask word. The scoped seeded s31-b probe returns BBTOP04=1c and TXRF08=00 with low masks fffffb/fffff7 and fffff3 combined; no-selector mask ffffff returns ff for BBTOP04 and restoring its selector returns 0x1c. This establishes neither every route nor analog byte meaning."
 reset = { value = 0x2d }
 
 [[registers.fields]]
@@ -459,13 +459,13 @@ description = "Observed source use; the individual hardware meaning is unknown."
 name = "BBTOP_MST0_SELECT"
 bits = "4"
 class = "plain"
-description = "BBTOP lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x67)<<2 when assigning the first bank to master zero, and clears it when assigning the second bank to master one. This describes the recovered publication, not every silicon mode."
+description = "BBTOP lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x67)<<2 when assigning the first bank to master zero, and clears it when assigning the second bank to master one. The scoped s31-b control returns ff when this lane routes BBTOP to master0 but its command uses master1, and 0x1c after restoring master1; other modes remain untested."
 
 [[registers.fields]]
 name = "TXRF_MST0_SELECT"
 bits = "5"
 class = "plain"
-description = "TXRF lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x6b)<<2 for master zero and clears it for master one."
+description = "TXRF lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x6b)<<2 for master zero and clears it for master one. The scoped s31-b probe verifies stored 1 then 0 and a seeded TXRF08 read on master1; the independent functional effect of this lane is untested."
 
 [[registers.fields]]
 name = "PHY_HOST_MAP_OTHER"
