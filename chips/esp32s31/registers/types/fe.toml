@@ -591,54 +591,54 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+sources = ["ROM_REV0_PHY_SAR_LANE_CONSUMERS"]
 
 [review.entity."POWER_DETECTOR_SAR_RESULT.SAR_SAMPLE_LOW"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+sources = ["ROM_REV0_PHY_SAR_LANE_CONSUMERS"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT.SAR_SAMPLE"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+sources = ["ROM_REV0_PHY_SAR_LANE_CONSUMERS"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_1"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+sources = ["ROM_REV0_PHY_SAR_LANE_CONSUMERS"]
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_1.SAR_SAMPLE_LOW"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+sources = ["ROM_REV0_PHY_SAR_LANE_CONSUMERS"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_1.SAR_SAMPLE_HIGH"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+sources = ["ROM_REV0_PHY_SAR_LANE_CONSUMERS"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_2"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+sources = ["ROM_REV0_PHY_SAR_LANE_CONSUMERS"]
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_2.SAR_SAMPLE_LOW"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+sources = ["ROM_REV0_PHY_SAR_LANE_CONSUMERS"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_2.SAR_SAMPLE_HIGH"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+sources = ["ROM_REV0_PHY_SAR_LANE_CONSUMERS"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_3"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+sources = ["ROM_REV0_PHY_SAR_LANE_CONSUMERS"]
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_3.SAR_SAMPLE_LOW"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+sources = ["ROM_REV0_PHY_SAR_LANE_CONSUMERS"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."POWER_DETECTOR_SAR_RESULT_3.SAR_SAMPLE_HIGH"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+sources = ["ROM_REV0_PHY_SAR_LANE_CONSUMERS"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -2101,7 +2101,7 @@ write-range = { min = 0x0, max = 0xffff }
 [[registers]]
 name = "POWER_DETECTOR_SAR_RESULT"
 offset = 0x81c
-description = "First of four consecutive SAR result words. phy_get_tone_sar_dout_ consumes its upper thirteen-bit sample; phy_get_fm_sar_dout consumes both thirteen-bit halves from all four words."
+description = "First of four consecutive SAR result words copied by phy_read_sar_dout. phy_get_tone_sar_dout_ consumes only this word upper thirteen-bit lane; phy_get_fm_sar_dout invokes that callback with sample count 2."
 
 [[registers.fields]]
 name = "SAR_SAMPLE_LOW"
@@ -2116,7 +2116,7 @@ class = "read-only"
 [[registers]]
 name = "POWER_DETECTOR_SAR_RESULT_1"
 offset = 0x820
-description = "Second of four consecutive dual thirteen-bit SAR result words consumed by complete phy_get_fm_sar_dout."
+description = "Second of four consecutive dual thirteen-bit SAR result words copied by phy_read_sar_dout; the tone/FM callback consumes only the first word upper lane."
 
 [[registers.fields]]
 name = "SAR_SAMPLE_LOW"
@@ -2131,7 +2131,7 @@ class = "read-only"
 [[registers]]
 name = "POWER_DETECTOR_SAR_RESULT_2"
 offset = 0x824
-description = "Third of four consecutive dual thirteen-bit SAR result words consumed by complete phy_get_fm_sar_dout."
+description = "Third of four consecutive dual thirteen-bit SAR result words copied by phy_read_sar_dout; the tone/FM callback consumes only the first word upper lane."
 
 [[registers.fields]]
 name = "SAR_SAMPLE_LOW"
@@ -2146,7 +2146,7 @@ class = "read-only"
 [[registers]]
 name = "POWER_DETECTOR_SAR_RESULT_3"
 offset = 0x828
-description = "Fourth of four consecutive dual thirteen-bit SAR result words consumed by complete phy_get_fm_sar_dout."
+description = "Fourth of four consecutive dual thirteen-bit SAR result words copied by phy_read_sar_dout; the tone/FM callback consumes only the first word upper lane."
 
 [[registers.fields]]
 name = "SAR_SAMPLE_LOW"

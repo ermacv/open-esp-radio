@@ -67932,7 +67932,7 @@ pub mod fe {
 
     /// The `POWER_DETECTOR_SAR_RESULT` register.
     ///
-    /// First of four consecutive SAR result words. phy_get_tone_sar_dout_ consumes its upper thirteen-bit sample; phy_get_fm_sar_dout consumes both thirteen-bit halves from all four words.
+    /// First of four consecutive SAR result words copied by phy_read_sar_dout. phy_get_tone_sar_dout_ consumes only this word upper thirteen-bit lane; phy_get_fm_sar_dout invokes that callback with sample count 2.
     pub mod power_detector_sar_result {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x3ffe3ffe;
@@ -67977,7 +67977,7 @@ pub mod fe {
 
     /// The `POWER_DETECTOR_SAR_RESULT_1` register.
     ///
-    /// Second of four consecutive dual thirteen-bit SAR result words consumed by complete phy_get_fm_sar_dout.
+    /// Second of four consecutive dual thirteen-bit SAR result words copied by phy_read_sar_dout; the tone/FM callback consumes only the first word upper lane.
     pub mod power_detector_sar_result_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x3ffe3ffe;
@@ -68022,7 +68022,7 @@ pub mod fe {
 
     /// The `POWER_DETECTOR_SAR_RESULT_2` register.
     ///
-    /// Third of four consecutive dual thirteen-bit SAR result words consumed by complete phy_get_fm_sar_dout.
+    /// Third of four consecutive dual thirteen-bit SAR result words copied by phy_read_sar_dout; the tone/FM callback consumes only the first word upper lane.
     pub mod power_detector_sar_result_2 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x3ffe3ffe;
@@ -68067,7 +68067,7 @@ pub mod fe {
 
     /// The `POWER_DETECTOR_SAR_RESULT_3` register.
     ///
-    /// Fourth of four consecutive dual thirteen-bit SAR result words consumed by complete phy_get_fm_sar_dout.
+    /// Fourth of four consecutive dual thirteen-bit SAR result words copied by phy_read_sar_dout; the tone/FM callback consumes only the first word upper lane.
     pub mod power_detector_sar_result_3 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x3ffe3ffe;
