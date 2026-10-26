@@ -380,3 +380,30 @@ and power/clock (POWER_UP, POWER_UP_FORCE, LP clock, LP reset). Named LP clock,
 forced power and divider15 are fixed; the saved power/clock/divider/sample
 fields are restored afterwards. Changing OUT with READY always zero does not
 identify individual conversion/readout gates or establish a READY handshake.
+
+Selections 105–108 establish, respectively, one real compare, one natural
+rollover, both, and neither, with both LP delivery lanes enabled. Each checks
+the exact pending-byte precondition, then repeats the hart-0 production
+`fatal::reset_recording` reset sequence with hart1 already held: threshold
+ceiling, MIE off, held confirmation, recording, UART0 XTAL restoration,
+boot-address zero, other-core reset pulse, stall, fence, SYS_SW_RST, WFI.
+There is no timer cleanup before this reset.
+
+On the next ROM MEM_END entry, the retained LP reason automatically selects
+109. No debugger reset or re-entry of `_start` may intervene. The observer
+first samples the complete matrix status word containing source 127, LP
+cause, pending bytes and counter (0xb100/1), plus inherited clock fields
+(0xb102/3), before any peripheral write. It emits the retained pre-reset
+record at 0xb110–13 and HP reset causes/record validity at 0xb114. A separate
+clock-only restoration phase samples at 0xb120–23 without preparing the
+LP timer or writing +0x10. These phases must not be conflated if clocks
+make the initial bus image unqualified.
+
+`+0x10` has no modeled read accessor. A fresh software cause tests retained
+bit18 delivery before/after an explicit enable (0xb130/2). With only compare
+disabled, a single natural rollover after counter-clock/start restoration
+tests bit1 delivery before/after enable (0xb142/4); no all-ones disable
+precedes that test. Waits are bounded to 40 million cycles for one rollover,
+200 thousand for compare, and 4096 for a diagnostic settle. A missing
+precondition, timeout or absent positive control invalidates the affected
+claim; completion alone is not success. The reason is consumed once.
