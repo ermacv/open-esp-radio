@@ -84,7 +84,10 @@ timer plan, steps the timer, then takes one gate request, serves one request of
 the scheduler channel and samples and acknowledges the primary status and the
 NRT snapshots. A same-entry dispatch therefore refuses stop with
 `TimerDispatchPending` while retaining its work; a clear status writes nothing.
-The part holds a gate for the bank and one for the timer, and touches a register owner only while
+No producer of 133 is known without RF; the vendor's NRT handler has the same
+sample-and-acknowledge shape and no subscriber on this chip, so the NRT
+snapshots have no consumer here either. The part holds a gate for the bank and
+one for the timer, and touches a register owner only while
 its gate holds it.
 
 `interrupt::BluetoothInterruptGate` is the task's end. The part holds the
