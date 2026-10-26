@@ -156682,11 +156682,17 @@ pub mod pmu {
 
     impl oer_mmio::Registers for PmuRadioWords {
         type Sharing = oer_mmio::sharing::Owned;
-        const WORDS: &'static [usize] = &[0x14, 0x1c, 0xf0, 0xf8, 0x104, 0x184, 0x208];
+        const WORDS: &'static [usize] = &[
+            0x14, 0x1c, 0xf0, 0xf8, 0x104, 0x170, 0x174, 0x184, 0x18c, 0x190, 0x194, 0x19c, 0x1a0,
+            0x1a4, 0x208, 0x220,
+        ];
     }
 
     impl oer_mmio::Words for PmuRadioWords {
-        const OWNED: &'static [usize] = &[0x14, 0x1c, 0xf0, 0xf8, 0x104, 0x184, 0x208];
+        const OWNED: &'static [usize] = &[
+            0x14, 0x1c, 0xf0, 0xf8, 0x104, 0x170, 0x174, 0x184, 0x18c, 0x190, 0x194, 0x19c, 0x1a0,
+            0x1a4, 0x208, 0x220,
+        ];
         const OBSERVED: &'static [usize] = &[];
     }
 
@@ -156887,6 +156893,18 @@ pub mod pmu {
             self.0.write::<0x104>(0x80000000);
         }
 
+        /// Read `SLP_WAKEUP_STATUS0`.
+        #[inline]
+        pub fn read_slp_wakeup_status0(&self) -> slp_wakeup_status0::R {
+            slp_wakeup_status0::R(self.0.read::<0x170>())
+        }
+
+        /// Read `SLP_WAKEUP_STATUS1`.
+        #[inline]
+        pub fn read_slp_wakeup_status1(&self) -> slp_wakeup_status1::R {
+            slp_wakeup_status1::R(self.0.read::<0x174>())
+        }
+
         /// Read `RF_PWC`.
         #[inline]
         pub fn read_rf_pwc(&self) -> rf_pwc::R {
@@ -156900,6 +156918,90 @@ pub mod pmu {
             let mut value = rf_pwc::W(self.0.read::<0x184>());
             change(&mut value);
             self.0.write::<0x184>(value.0);
+        }
+
+        /// Read `INT_RAW`.
+        #[inline]
+        pub fn read_int_raw(&self) -> int_raw::R {
+            int_raw::R(self.0.read::<0x18c>())
+        }
+
+        /// Sample `INT_RAW` once, keeping its declared fields, to acknowledge.
+        #[inline]
+        pub fn sample_int_raw(&self) -> int_raw::Snapshot {
+            int_raw::Snapshot(self.0.read::<0x18c>() & int_raw::FIELDS)
+        }
+
+        /// Acknowledge exactly the sampled set: one to each bit the snapshot
+        /// holds, zero to every other field; the bits of no field keep the
+        /// value read now.
+        #[inline]
+        pub fn acknowledge_int_raw(&mut self, snapshot: int_raw::Snapshot) {
+            let kept = self.0.read::<0x18c>() & !int_raw::FIELDS;
+            self.0.write::<0x18c>(kept | snapshot.0);
+        }
+
+        /// Read `HP_INT_ST`.
+        #[inline]
+        pub fn read_hp_int_st(&self) -> hp_int_st::R {
+            hp_int_st::R(self.0.read::<0x190>())
+        }
+
+        /// Read `HP_INT_ENA`.
+        #[inline]
+        pub fn read_hp_int_ena(&self) -> hp_int_ena::R {
+            hp_int_ena::R(self.0.read::<0x194>())
+        }
+
+        /// Read `HP_INT_ENA`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_hp_int_ena(&mut self, change: impl FnOnce(&mut hp_int_ena::W)) {
+            let mut value = hp_int_ena::W(self.0.read::<0x194>());
+            change(&mut value);
+            self.0.write::<0x194>(value.0);
+        }
+
+        /// Read `LP_INT_RAW`.
+        #[inline]
+        pub fn read_lp_int_raw(&self) -> lp_int_raw::R {
+            lp_int_raw::R(self.0.read::<0x19c>())
+        }
+
+        /// Sample `LP_INT_RAW` once, keeping its declared fields, to acknowledge.
+        #[inline]
+        pub fn sample_lp_int_raw(&self) -> lp_int_raw::Snapshot {
+            lp_int_raw::Snapshot(self.0.read::<0x19c>() & lp_int_raw::FIELDS)
+        }
+
+        /// Acknowledge exactly the sampled set: one to each bit the snapshot
+        /// holds, zero to every other field; the bits of no field keep the
+        /// value read now.
+        #[inline]
+        pub fn acknowledge_lp_int_raw(&mut self, snapshot: lp_int_raw::Snapshot) {
+            let kept = self.0.read::<0x19c>() & !lp_int_raw::FIELDS;
+            self.0.write::<0x19c>(kept | snapshot.0);
+        }
+
+        /// Read `LP_INT_ST`.
+        #[inline]
+        pub fn read_lp_int_st(&self) -> lp_int_st::R {
+            lp_int_st::R(self.0.read::<0x1a0>())
+        }
+
+        /// Read `LP_INT_ENA`.
+        #[inline]
+        pub fn read_lp_int_ena(&self) -> lp_int_ena::R {
+            lp_int_ena::R(self.0.read::<0x1a4>())
+        }
+
+        /// Read `LP_INT_ENA`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_lp_int_ena(&mut self, change: impl FnOnce(&mut lp_int_ena::W)) {
+            let mut value = lp_int_ena::W(self.0.read::<0x1a4>());
+            change(&mut value);
+            self.0.write::<0x1a4>(value.0);
         }
 
         /// Read `ANA_PERI_PWR_CTRL`.
@@ -156917,6 +157019,12 @@ pub mod pmu {
             self.0.write::<0x208>(value.0);
         }
 
+        /// Read `LPCPU_WAKEUP_CAUSE`.
+        #[inline]
+        pub fn read_lpcpu_wakeup_cause(&self) -> lpcpu_wakeup_cause::R {
+            lpcpu_wakeup_cause::R(self.0.read::<0x220>())
+        }
+
         /// Write the vendor's whole-word image `0x80000000`, undeclared bits included (`PMU.HP_ACTIVE_ICG_MODEM`).
         ///
         /// SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP, S31_PMU_HEADERS.
@@ -156927,7 +157035,9 @@ pub mod pmu {
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
         /// image, ascending.
-        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 4] = [0x14, 0x1c, 0x184, 0x208];
+        pub const RADIO_PHY_REGISTER_IMAGE_OFFSETS: [u32; 13] = [
+            0x14, 0x1c, 0x170, 0x174, 0x184, 0x18c, 0x190, 0x194, 0x19c, 0x1a0, 0x1a4, 0x208, 0x220,
+        ];
 
         /// Read word `index` of the part's `radio_phy_register_image` diagnostic image: the
         /// readable words without a read side effect, at
@@ -156939,8 +157049,17 @@ pub mod pmu {
             match index {
                 0 => Some(self.0.read::<0x14>()),
                 1 => Some(self.0.read::<0x1c>()),
-                2 => Some(self.0.read::<0x184>()),
-                3 => Some(self.0.read::<0x208>()),
+                2 => Some(self.0.read::<0x170>()),
+                3 => Some(self.0.read::<0x174>()),
+                4 => Some(self.0.read::<0x184>()),
+                5 => Some(self.0.read::<0x18c>()),
+                6 => Some(self.0.read::<0x190>()),
+                7 => Some(self.0.read::<0x194>()),
+                8 => Some(self.0.read::<0x19c>()),
+                9 => Some(self.0.read::<0x1a0>()),
+                10 => Some(self.0.read::<0x1a4>()),
+                11 => Some(self.0.read::<0x208>()),
+                12 => Some(self.0.read::<0x220>()),
                 _ => None,
             }
         }
