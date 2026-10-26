@@ -1,8 +1,8 @@
 error[E0382]: use of moved value: `placed`
  --> tests/ui/rx_placement_once.rs:7:13
   |
-4 | pub fn prepare<M: RxDma>(placed: PlacedRxDma<2, 16, 20>, mmio: &mut M) {
-  |                          ------ move occurs because `placed` has type `PlacedRxDma<2, 16, 20>`, which does not implement the `Copy` trait
+4 | pub fn prepare<M: RxDma>(placed: PlacedRxDma<2, 16, 16>, mmio: &mut M) {
+  |                          ------ move occurs because `placed` has type `PlacedRxDma<2, 16, 16>`, which does not implement the `Copy` trait
 5 |     let _ = placed.prepare_ring(mmio);
   |                    ------------------ `placed` moved due to this method call
 6 |     #[cfg(all())]

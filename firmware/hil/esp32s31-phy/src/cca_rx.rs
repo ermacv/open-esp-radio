@@ -33,7 +33,7 @@ use oer_time::{Clock, Duration, Timer};
 
 const COUNT: usize = 4;
 const CAPACITY: usize = 1_664;
-const STORAGE_BYTES: usize = CAPACITY + core::mem::size_of::<u32>();
+const STORAGE_BYTES: usize = CAPACITY;
 type Storage = RxDmaStorage<COUNT, CAPACITY, STORAGE_BYTES>;
 
 oer_esp32s31_hal::dma_static! {

@@ -53,7 +53,7 @@ use crate::{
 
 const COUNT: usize = 32;
 const BUFFER: usize = 1_664;
-const STORAGE: usize = 1_668;
+const STORAGE: usize = BUFFER;
 const SLOTS: usize = 32;
 
 type HostLine<X = oer_interrupt_table::signal::host::Host> = WifiIrqLine<X>;

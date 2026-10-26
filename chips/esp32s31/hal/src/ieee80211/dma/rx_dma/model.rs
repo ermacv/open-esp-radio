@@ -504,7 +504,7 @@ mod tests {
     #[test]
     fn the_model_follows_the_pac_walker_and_logs_in_order() {
         let storage = std::boxed::Box::leak(std::boxed::Box::new(
-            RxDmaStorage::<2, 16, 20, HostDma>::new(),
+            RxDmaStorage::<2, 16, 16, HostDma>::new(),
         ));
         let placed = RxDmaStorage::place(crate::dma_static::Placed::host(storage)).unwrap();
         let storage = placed.storage();

@@ -27,7 +27,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
     /// Model the DMA engine writing `bytes` at the published `address`.
     ///
     /// The range must lie inside one buffer's `STORAGE_SIZE` bytes, which
-    /// include the trailing recycle guard; anything else is refused and
+    /// include the leading recycle guard; anything else is refused and
     /// nothing is written. `ring` is this arena's live ring: borrowing it
     /// shared proves that no completed-descriptor view of a buffer exists.
     #[allow(

@@ -1,13 +1,13 @@
 use crate::{support::*, *};
 
-type Arena<const COUNT: usize> = HostRxArena<COUNT, 256, 260>;
+type Arena<const COUNT: usize> = HostRxArena<COUNT, 256, 256>;
 const BUFFER_SIZE: u32 = 256;
 const COMPLETED: oer_esp32s31_hal::layouts::WifiRxDmaDescriptorControl =
     rx_landed_word(BUFFER_SIZE, 80, true);
 
 #[test]
 fn cold_rx_ring_publishes_links_and_hardware_in_order() {
-    let arena = HostRxArena::<2, 1700, 1704>::new();
+    let arena = HostRxArena::<2, 1700, 1700>::new();
     let descriptors = arena.descriptors();
     let mut mmio = mock_walker();
     let stopped = arena.prepare(&mut mmio).unwrap();
@@ -96,16 +96,35 @@ fn completed_rx_descriptor_rearms_only_for_the_expected_storage() {
 }
 
 #[test]
-fn recycled_rx_buffer_restores_both_migration_sentinels() {
+fn recycled_rx_buffer_restores_only_the_leading_sentinel() {
     let mut storage = [0x5a; 20];
     prepare_recycled_buffer(&mut storage, 16).unwrap();
     assert_eq!(&storage[..4], &RX_BUFFER_SENTINEL.to_le_bytes());
-    assert_eq!(&storage[4..16], &[0x5a; 12]);
-    assert_eq!(&storage[16..20], &RX_BUFFER_SENTINEL.to_le_bytes());
-    assert_eq!(
-        prepare_recycled_buffer(&mut storage[..16], 16),
-        Err(RxRingError::Size)
-    );
+    assert_eq!(&storage[4..], &[0x5a; 16]);
+}
+
+#[test]
+fn recycled_rx_buffer_needs_no_storage_beyond_capacity() {
+    let mut storage = [0x5a; 16];
+    prepare_recycled_buffer(&mut storage, 16).unwrap();
+    assert_eq!(&storage[..4], &RX_BUFFER_SENTINEL.to_le_bytes());
+    assert_eq!(&storage[4..], &[0x5a; 12]);
+
+    let mut smallest = [0; 4];
+    prepare_recycled_buffer(&mut smallest, 4).unwrap();
+    assert_eq!(smallest, RX_BUFFER_SENTINEL.to_le_bytes());
+}
+
+#[test]
+fn recycled_rx_buffer_rejects_invalid_capacity_without_writing() {
+    for capacity in [0, 3, 17, usize::MAX] {
+        let mut storage = [0x5a; 16];
+        assert_eq!(
+            prepare_recycled_buffer(&mut storage, capacity),
+            Err(RxRingError::Size)
+        );
+        assert_eq!(storage, [0x5a; 16]);
+    }
 }
 
 #[test]
@@ -152,10 +171,10 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
         .map_err(|(_, error)| error)
         .unwrap();
     // The buffers held stale payload; starting touches no buffer, so these
-    // are the guards preparation restored in every buffer.
+    // are the leading guards preparation restored in every buffer.
     for index in 0..COUNT {
         assert!(
-            arena.guards_restored(&live, index),
+            arena.guard_restored(&live, index),
             "buffer {index} prepared"
         );
     }
@@ -207,7 +226,7 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
         .unwrap();
     let recycled = |arena: &Arena<COUNT>, live: &RxRingLive<'_, COUNT>| {
         (0..COUNT)
-            .filter(|&index| arena.guards_restored(live, index))
+            .filter(|&index| arena.guard_restored(live, index))
             .collect::<Vec<_>>()
     };
     assert_eq!(recycled(&arena, &live), [0, 1]);
@@ -911,7 +930,7 @@ fn live_rx_recycle_rejects_a_corrupt_append_tail_before_any_mutation() {
     );
     // No buffer was prepared: the DMA payload still covers buffer zero's
     // leading guard.
-    assert_eq!(arena.dma_guards(&live, 0).0, [0xa5; 4]);
+    assert_eq!(arena.dma_guard(&live, 0), [0xa5; 4]);
     for (index, expected) in before.into_iter().enumerate() {
         assert_eq!(
             (
@@ -1028,7 +1047,7 @@ fn live_rx_ring_transfers_and_recycles_one_chained_unit_atomically() {
 
     let append = unit.recycle(&mut mmio).unwrap().unwrap();
     let recycled = (0..COUNT)
-        .filter(|&index| arena.guards_restored(&live, index))
+        .filter(|&index| arena.guard_restored(&live, index))
         .collect::<Vec<_>>();
     assert_eq!(recycled, [0, 1]);
     assert_eq!(append.descriptor_count, 2);

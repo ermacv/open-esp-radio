@@ -123,7 +123,7 @@ pub struct RxDmaDetachedUnit {
 ///
 /// ```compile_fail,E0382
 /// use oer_esp32s31_hal::ieee80211::dma::{rx_dma::RxDma, rx_storage::RxDmaRecycleUnit};
-/// fn duplicate(credit: RxDmaRecycleUnit<'_, '_, '_, 4, 16, 20>, mmio: &mut impl RxDma) {
+/// fn duplicate(credit: RxDmaRecycleUnit<'_, '_, '_, 4, 16, 16>, mmio: &mut impl RxDma) {
 ///     let _ = credit.append(mmio);
 ///     let _ = credit.append(mmio);
 /// }
@@ -133,7 +133,7 @@ pub struct RxDmaDetachedUnit {
 /// use oer_esp32s31_hal::ieee80211::dma::{
 ///     rx_dma::RxDma, rx_ring::{RxRingLive, RxFrozenCursor}, rx_storage::RxDmaStorage,
 /// };
-/// fn change_generation(storage: &RxDmaStorage<4, 16, 20>, ring: &mut RxRingLive<'_, 4>,
+/// fn change_generation(storage: &RxDmaStorage<4, 16, 16>, ring: &mut RxRingLive<'_, 4>,
 ///                      cursor: RxFrozenCursor, mmio: &mut impl RxDma) {
 ///     let credit = storage.claim_deferred_recycle(ring, cursor).unwrap().unwrap();
 ///     let _ = ring.freeze_cursor(mmio);
@@ -398,7 +398,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     ///
     /// ```compile_fail,E0382
     /// use oer_esp32s31_hal::ieee80211::dma::{rx_storage::PlacedRxDma, rx_dma::RxDma};
-    /// fn twice<M: RxDma>(placed: PlacedRxDma<2, 16, 20>, mmio: &mut M) {
+    /// fn twice<M: RxDma>(placed: PlacedRxDma<2, 16, 16>, mmio: &mut M) {
     ///     let _ = placed.prepare_ring(mmio);
     ///     let _ = placed.prepare_ring(mmio);
     /// }
@@ -415,12 +415,17 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
 impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace>
     RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
 {
-    /// Empty storage with room for every payload and its recycle guard.
+    /// Empty storage with a leading recycle guard inside each buffer capacity.
     /// The geometry is checked even when construction runs at runtime.
     ///
     /// ```compile_fail,E0080
     /// use oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
-    /// let _ = RxDmaStorage::<1, 16, 19>::new();
+    /// let _ = RxDmaStorage::<1, 16, 15>::new();
+    /// ```
+    ///
+    /// ```compile_fail,E0080
+    /// use oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
+    /// let _ = RxDmaStorage::<1, 3, 3>::new();
     /// ```
     pub const fn new() -> Self {
         Self {
@@ -490,7 +495,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         self.buffers.get_mut(index).map(RxDmaBuffer::cpu_owned_mut)
     }
 
-    /// Restore one buffer's recycle guards before any ring borrows this arena.
+    /// Restore one buffer's leading recycle guard before any ring borrows this arena.
     ///
     /// Requiring `&mut self` proves that no stopped/live ring token can exist
     /// at the same time, so pre-publication setup does not need privileged
@@ -508,6 +513,9 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     /// # Errors
     ///
     /// An address does not fit the DMA address width of the space.
+    ///
+    /// Buffer geometry is checked at monomorphization, including storage
+    /// initialized as zero bytes without calling [`Self::new`].
     pub fn place(
         placed: Placed<Self>,
     ) -> Result<PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>, RxDmaStorageError> {
@@ -531,6 +539,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         placed: Placed<Self>,
         rotation: usize,
     ) -> Result<PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>, RxDmaStorageError> {
+        RxDmaBuffer::<BUFFER_SIZE, STORAGE_SIZE>::check_geometry();
         let (storage, _range, projection) = placed
             .into_dma_parts::<S>()
             .ok_or(RxDmaStorageError::AddressWidth)?;

@@ -81,7 +81,7 @@ fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
         oer_esp32s31_hal::dma_static::Placed::host(Box::leak(Box::new(RxDmaStorage::<
             COUNT,
             BUFFER,
-            { BUFFER + 4 },
+            BUFFER,
             HostDma,
         >::new()))),
     )
@@ -172,7 +172,7 @@ fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
     assert!(ring.try_stop(&mut hardware).is_ok());
 }
 
-type Storage = RxDmaStorage<COUNT, BUFFER, { BUFFER + 4 }, HostDma>;
+type Storage = RxDmaStorage<COUNT, BUFFER, BUFFER, HostDma>;
 
 /// A publisher which, at the moment a frame becomes visible above the
 /// radio, reads its descriptor's word0.

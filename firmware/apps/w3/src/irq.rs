@@ -15,7 +15,7 @@ use oer_memory::HandlerCell;
 
 pub const N: usize = 32;
 pub const B: usize = 1664;
-pub const S: usize = 1668;
+pub const S: usize = B;
 pub const Q: usize = 32;
 pub const TX: usize = 1664;
 pub type RadioExecutor = InterruptExecutor<2>;

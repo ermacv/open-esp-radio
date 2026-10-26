@@ -6,7 +6,7 @@ use oer_esp32s31_hal::ieee80211::{
 
 pub fn prepare(
     mac: &mut WifiMacHal<'_>,
-    storage: &RxDmaStorage<2, 16, 20>,
+    storage: &RxDmaStorage<2, 16, 16>,
     prepared: RxRingPrepared<'_, 2>,
 ) {
     #[cfg(ui_reject)]

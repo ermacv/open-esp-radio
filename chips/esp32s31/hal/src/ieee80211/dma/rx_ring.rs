@@ -691,9 +691,9 @@ impl<'id, 'loan> ScopedRing<'id, super::rx_storage::buffers::CompletedRead<'loan
 pub(crate) trait RxReservedBuffer<'id> {
     /// Whether DMA overwrote the buffer's leading recycle guard.
     fn guard_overwritten(&self) -> bool;
-    /// Restore both recycle guards. Called only after the walker finished
+    /// Restore the leading recycle guard. Called only after the walker finished
     /// writing the buffer.
-    fn restore_guards(&self, grant: RecycleGrant<'id, '_, Rearm, true>) -> Result<(), RxRingError>;
+    fn restore_guard(&self, grant: RecycleGrant<'id, '_, Rearm, true>) -> Result<(), RxRingError>;
 }
 
 /// Validated descriptor memory and private DMA binding, before BASE.
@@ -923,7 +923,7 @@ impl<'id, 'a, const COUNT: usize>
     /// when the preceding list was exhausted, behind the reserved descriptor.
     ///
     /// `prepare_buffer` must restore any buffer-side DMA contract for `index`;
-    /// for the S31 ROM layout this means the two `0xdead_beef` sentinels, and
+    /// for the S31 RX layout this means the leading `0xdead_beef` sentinel, and
     /// `prepare_reserved_buffer` does the same for the reserved descriptor's
     /// buffer at `reserved_buffer_address`. Both are invoked only while the
     /// walker is confirmed stopped.
@@ -1282,7 +1282,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         word0: WifiRxDmaDescriptorControl,
         buffer: &B,
     ) -> Result<(), RxRingError> {
-        buffer.restore_guards(RecycleGrant::new(COUNT))?;
+        buffer.restore_guard(RecycleGrant::new(COUNT))?;
         if word0.rx_done() {
             self.ring
                 .table
@@ -2905,24 +2905,19 @@ fn relink_rotated_ring<const COUNT: usize>(
     Ok(())
 }
 
-/// Restores the two guard words required by the recovered RX recycle path.
+/// Restores the leading guard word used to observe RX buffer writes.
 ///
-/// SOURCE\[ROM_REV0_WDEV_APPEND_RX_BLOCKS] and the source-owned production
-/// recycle transaction.
+/// SOURCE\[ROM_REV0_WDEV_APPEND_RX_BLOCKS] for the leading sentinel value.
 ///
-/// `buffer` is the complete allocation, including the four-byte trailing
-/// guard. `capacity` is the byte count published in the DMA descriptor.
+/// `capacity` is the byte count published in the DMA descriptor and includes
+/// the four-byte leading guard. `buffer` must contain at least that many
+/// bytes; all bytes after the leading guard are preserved.
 pub fn prepare_recycled_buffer(buffer: &mut [u8], capacity: usize) -> Result<(), RxRingError> {
-    if capacity < core::mem::size_of::<u32>()
-        || capacity
-            .checked_add(core::mem::size_of::<u32>())
-            .is_none_or(|required| required > buffer.len())
-    {
+    if capacity < core::mem::size_of::<u32>() || capacity > buffer.len() {
         return Err(RxRingError::Size);
     }
     let sentinel = RX_BUFFER_SENTINEL.to_le_bytes();
     buffer[..sentinel.len()].copy_from_slice(&sentinel);
-    buffer[capacity..capacity + sentinel.len()].copy_from_slice(&sentinel);
     Ok(())
 }
 

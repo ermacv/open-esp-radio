@@ -36,7 +36,7 @@ pub(crate) const COUNT: usize = 16;
 pub(crate) const BUFFER: usize = 1_664;
 pub(crate) const SLOTS: usize = 4;
 
-type Storage = RxDmaStorage<COUNT, BUFFER, { BUFFER + 4 }, HostDma>;
+type Storage = RxDmaStorage<COUNT, BUFFER, BUFFER, HostDma>;
 
 pub(crate) struct Ring {
     storage: &'static Storage,
