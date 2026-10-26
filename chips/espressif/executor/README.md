@@ -51,7 +51,7 @@ Owned timers follow the owner graph: each runtime carries the clock of its
 own deadlines. The platform executor/time ABI remains in
 [adapters](../../../portable/embassy/README.md).
 
-The integrating firmware (none exists yet) chooses memory budgets, claims
+The integrating firmware (`firmware/apps`) chooses memory budgets, claims
 static resources and owns the protocol lifecycles within the [documented
 capability boundaries](../../esp32s31/FEATURES.md). No firmware depends on a
 second runtime owner hidden in a task or network handle.

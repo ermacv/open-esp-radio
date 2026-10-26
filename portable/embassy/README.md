@@ -19,7 +19,7 @@ chip PHY and the runtimes take as an `oer_time::Timer`; chip PHY remains
 executor-independent.
 
 Final memory profiles, static claims, IRQ binding and whole-radio lifecycles
-belong to the integrating firmware; none exists yet. Portable Wi-Fi execution
+belong to the integrating firmware (`firmware/apps`). Portable Wi-Fi execution
 primitives (monitor handoffs, task shutdown, station network ownership) are
 runtime code in [`ieee80211/runtime`](../../protocols/ieee80211/runtime/), not executor
 bindings. An executor-free service never depends on an adapter. The

@@ -42,21 +42,22 @@ In particular, underflow can propagate into the mode byte, as in ROM. Matching
 that behavior does not qualify an out-of-range correction on physical RF.
 
 The target adapter uses the existing typed I2C bindings, direct bounded status
-polling and frequency-memory operations. Required 2-us
-entry settle uses the short ROM delay backend. The admitted transaction uses
-the private P1 transport engine. Complete I2C bus commands are checkpoints:
+polling and frequency-memory operations. The required 2-µs minimum
+entry settle uses the short machine-cycle delay backend. The admitted
+transaction uses the private P2 transport engine. Complete I2C bus commands are checkpoints:
 the two initial reads, low-byte write and both commands of masked high-bit
-writes can retain their partial helper state. The quiet route batches at most
-four checkpoints, admitting another only before twenty microseconds of the
-poll have elapsed. Per-command tracing retains an individual poll for each
-sample. Partial reads and the typed
-masked transaction remain retained under the exclusive analog owner. An
-`Instant` stamped after the last write
-measures the five-microsecond minimum: the next poll reads status immediately
-if it has elapsed, otherwise the short ROM delay supplies only the remainder.
-Each complete memory entry (read and write), setup operation, final write and
-channel-index restoration also has a checkpoint under the same batch budget. These voluntary yields
-construct no timer. Grant protection and software frequency control remain
+writes can retain their partial helper state. The quiet route admits another
+checkpoint while `should_yield` is false and the local batch is below 900 µs.
+Admission checks ready work and the current task poll's elapsed time; it uses
+the shared 50 µs atom / 1 ms poll contracts, without measuring or interrupting
+an overlong atom. Per-command tracing yields after each checkpoint. Partial
+reads and the typed masked transaction remain retained under the exclusive
+analog owner. An `Instant` stamped after the last write measures the
+five-microsecond minimum: the next poll reads status immediately
+if it has elapsed, otherwise the short machine-cycle delay supplies only the
+remainder. Each complete memory entry (read and write), setup operation, final
+write and channel-index restoration also has a checkpoint under the same
+batch budget. These voluntary yields construct no timer. Grant protection and software frequency control remain
 held across them; failure or cancellation cannot publish restoration.
 The Driver shares its outlined clock conversion with the command adapter.
 RFPLL uses its own command/settle timestamps; the generic deadline timestamp
@@ -65,7 +66,7 @@ are unchanged; the final poll timestamp includes dispatch, hardware, model and
 observer work.
 The finite edge limits do not establish a wall-clock bound.
 
-Cold/registration RFPLL I2C also enters the P1 Driver and the same outlined
+Cold/registration RFPLL I2C also enters the P2 driver and the same outlined
 start/sample atom. Its first and repeated completion observations retain the
 one-microsecond wait and the original attempt budget. Direct admitted callers
 use that atom with immediate status polling inside their named twenty-

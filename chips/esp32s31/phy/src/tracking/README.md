@@ -39,12 +39,25 @@ sample order and timestamp updates. It runs only when the caller commits to
 execution; it must not be used merely to ask whether work is due. Its pending
 owner remains pending until the selected target children complete.
 
-The concurrent domain runs the vendor periodic tracking when its owner calls
-`track_concurrent_phy` every tracking period on the radio domain (no radio
-system in this tree does this yet), and due work starts at once, as the
-vendor's does: no protocol pauses, and the tracking graph brackets its RF-sensitive regions with the
-grant-protect request. There is no protocol-selected maintenance of individual
-operations.
+The radio-system actor runs periodic tracking on P2 while tracked membership
+exists. After draining requests it waits on its doorbell versus the backend's
+tracking deadline; a timer win calls `track_concurrent_phy`, which evaluates
+demand and runs due maintenance. The default period is 1 s, with eligibility
+at `previous + period + 1 µs`. Initial client tracking also settles pending
+work in this actor. Protocols are not paused; the tracking graph brackets
+RF-sensitive regions with the grant-protect request.
+
+CPU admission and RF admission are separate. The shared transport and RX-gain
+drivers query cooperative CPU admission between complete atoms, using the
+50 µs atom / 1 ms poll contracts and a 900 µs admission threshold. Those are
+not universal elapsed-time cutoffs; direct TXDC/PWDET and parent loops do not
+query admission between all operations. `admit_maintenance` checks pending
+tracking state, and the exclusive mutable domain borrow serializes the
+actor's tracking and retunes. Neither this check nor grant protection checks
+a hard-window calendar or proves RF exclusion. Queued requests can postpone
+a tick without a one-period deferral bound or shift counter. There is no
+protocol-selected maintenance of individual operations. See the
+[execution and timing scopes](../../README.md#runtime-sequence-and-timing).
 
 ## Operations and hardware effects
 
@@ -63,19 +76,21 @@ the outer owner's lease.
 | [Common calibration](calibration.rs) | A temperature threshold selects DCODE, RX-gain calibration and channel restoration. | The branch restores MAC baseband and TX gain compensation before committing the common reference or entering class calibration. |
 | [Shared TX calibration](calibration.rs) | A shared TX threshold selects software frequency control, forced gain/TX-RX state, TXDC/PWDET and class gain publication. | The graph restores its baseband/control and gain-compensation state. This is not proof that every protocol's MAC, key, TSF or DMA context is unchanged. No selected branch means no hardware actions in this child. |
 
-T2/T4 power tracking owns its child and `EngineTiming` inside the shared P1
+T2/T4 power tracking owns its child and `EngineTiming` inside the shared P2
 driver. A safe enum separates timer/borrowed-transport storage from the
-power route; power has no outer async layer or separate job. A poll executes
+power route; power has no outer async layer or separate job. An atom executes
 one BBPLL edge, one complete force/write plus its 1-µs settle, gain setup,
-or one complete gain-memory record. Runnable checkpoints wake the caller
-without a timer; the RF/state borrow remains held. A compact generator keeps
+or one complete gain-memory record. The driver can batch runnable atoms while
+CPU admission allows; a voluntary yield self-wakes without a timer, retaining
+the RF/state borrow. A compact generator keeps
 only arithmetic state and the next index, never a whole image. Both pinned
 profiles select seed quartets within the seed portion of the unchanged
 seed/output32 concatenation. The whole-image builders share the same arithmetic;
 stream tests compare every encoded entry with the canonical packed image.
 Clock-free preparation and acknowledgement stay outside the clock/accounting
-shell. The shared driver decodes the action once per poll. Only after all32
-Wi-Fi or16 shared records does the gain child acknowledge publication. The terminal poll commits the semantic result after BBPLL-off.
+shell. The shared driver decodes the action once per atom. Only after all 32
+Wi-Fi or 16 shared records does the gain child acknowledge publication.
+Terminal completion commits the semantic result after BBPLL-off.
 In power-family engine observations, `ready_edges` and `maximum_ready_micros`
 count and time gain setup and individual records; `maximum_micros` covers
 the whole driver poll. Separate maxima cover lower/setup, one record's
@@ -145,9 +160,10 @@ through `PhyGrantProtectPort`. The radio domain lends one
 `PhyGrantProtect` request beside the shared PHY, so
 the request is programmed in every configuration, including Wi-Fi alone. The
 hooks do not themselves wait for a grant acknowledgement or prove MAC/DMA
-quiescence. OER retains its wider physical maintenance admission through the
-complete call; no new live-radio access is inferred from the hooks. A failed
-branch leaves the request programmed with the rest of the poisoned epoch.
+quiescence. OER retains the exclusive mutable radio-domain borrow through the
+complete call; the current pending-state admission supplies no additional
+hard-window or exclusive-grant check. A failed branch leaves the request
+programmed with the rest of the poisoned epoch.
 
 The vendor composition combines archive request/event mapping with ROM release
 and timer operations. Its initializer installs the new mapper in the callback
@@ -274,22 +290,27 @@ A grant-protect interval is the time the request was programmed. It is not
 an observation of RF exclusion. The debug-control class (`cfg(oer_debug_control)`)
 lets a diagnostic image force branches through the vendor's
 temperature-tracking debug policy
-(`ConcurrentPhy::set_temperature_tracking_debug`); no firmware in this tree
-enables it.
+(`ConcurrentPhy::set_temperature_tracking_debug`), used by the forced
+tracking-hold diagnostics.
 
-Production RX gain executes as one direct blocking transaction under the
-exclusive PHY owner. It records disjoint DC, publication and control phases,
-plus clock-free search and settle counts. The event-driven transition remains
-the host semantic model and vendor-comparison boundary; firmware does not lower
-each hot edge through the async action/binding/advance path.
+Production RX gain retains one `RxProgram` cursor in cold registration and
+common tracking, under the exclusive PHY owner. Typed step tokens carry its
+commands to `executor::rx`; completed atoms can share a poll while CPU admission
+allows. An incomplete DC/IQ observation waits 1 µs on the caller's timer and
+returns `Pending`, even if that timer is immediately ready. Required short
+minimum settles remain synchronous. Diagnostics record disjoint DC, publication
+and control phases, plus clock-free search and settle counts. Host oracles and
+vendor comparisons exercise that same program; there is no per-leaf future.
 
-A PHY wait (`executor::wait::delay`) is a minimum elapsed duration. It
-captures an absolute deadline on the caller's `oer_time::Timer` when the wait
-is created; the timer contract ends a wait for an elapsed deadline without
-registering a wake, and a future deadline uses ordinary timer wake
-registration. There is no busy wait; the target's hardware edge limits and
-settling durations still apply. This is not a cooperative execution budget:
-several completed waits may permit more hardware steps in one poll. The maximum
+A PHY delay (`executor::wait::delay`) distinguishes minimum hardware settles
+from bus-admission and readiness retry backoff. Named nonzero settles up to
+20 µs use the synchronous short-delay backend, which counts `mcycle` at the
+adopted CPU frequency with interrupts enabled. Longer settles and all retry
+backoffs use the caller's `oer_time::Timer`, capturing the absolute deadline
+when the wait is created. An elapsed timer deadline needs no wake registration;
+a future deadline uses ordinary timer wake registration. These waits are not
+cooperative execution budgets: several completed waits may permit more hardware
+steps in one poll. The maximum
 poll observation must therefore be considered independently of total pause time.
 
 Diagnostic connected Wi-Fi keeps the recorder beside the parked runtime,
@@ -307,7 +328,8 @@ only on its name or on a similar driver for another chip.
 
 A CPU critical section does not stop DMA. The async target executor must not
 hold a CPU critical section across timer waits. The outer owner instead
-retains the required hardware exclusion until terminal completion or failure.
+retains its exclusive radio-domain borrow until terminal completion or failure;
+that borrow and the grant-protect request do not establish an RF quiet window.
 A failed or abandoned tracking epoch cannot yield a ready owner without the
 required reset/recovery.
 
