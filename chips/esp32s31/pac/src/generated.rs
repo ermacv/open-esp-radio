@@ -21192,7 +21192,7 @@ pub mod bt_mac {
 
     /// The `IRQ_ENABLE_1` register.
     ///
-    /// Second controller interrupt-enable bank. Primary setup clears stale image 0x00001300 then ORs that baseline into this word; another complete helper independently controls bit 3.
+    /// Second controller interrupt-enable bank. Primary setup clears stale image 0x00001302 then ORs that baseline into this word; teardown removes the same bits, preserving all others. Source 1 has unknown identity. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5).
     pub mod irq_enable_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -21201,6 +21201,13 @@ pub mod bt_mac {
 
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x60;
+
+        /// Width of `SOURCE_1` in bits.
+        pub const SOURCE_1_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `SOURCE_1`.
+        pub const SOURCE_1_MAX: u32 = 0x1;
+        /// Positioned bits of `SOURCE_1`.
+        pub const SOURCE_1_MASK: u32 = 0x2;
 
         /// Width of `SOURCE_3` in bits.
         pub const SOURCE_3_WIDTH: u32 = 1;
@@ -21258,12 +21265,19 @@ pub mod bt_mac {
         /// Positioned bits of `SOURCE_13`.
         pub const SOURCE_13_MASK: u32 = 0x2000;
 
-        /// Width of `BITS_0_2_OPAQUE` in bits.
-        pub const BITS_0_2_OPAQUE_WIDTH: u32 = 3;
-        /// Greatest unsigned image of `BITS_0_2_OPAQUE`.
-        pub const BITS_0_2_OPAQUE_MAX: u32 = 0x7;
-        /// Positioned bits of `BITS_0_2_OPAQUE`.
-        pub const BITS_0_2_OPAQUE_MASK: u32 = 0x7;
+        /// Width of `BIT_0_OPAQUE` in bits.
+        pub const BIT_0_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_0_OPAQUE`.
+        pub const BIT_0_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_0_OPAQUE`.
+        pub const BIT_0_OPAQUE_MASK: u32 = 0x1;
+
+        /// Width of `BIT_2_OPAQUE` in bits.
+        pub const BIT_2_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_2_OPAQUE`.
+        pub const BIT_2_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_2_OPAQUE`.
+        pub const BIT_2_OPAQUE_MASK: u32 = 0x4;
 
         /// Width of `BIT_7_OPAQUE` in bits.
         pub const BIT_7_OPAQUE_WIDTH: u32 = 1;
@@ -21291,6 +21305,12 @@ pub mod bt_mac {
         pub struct R(pub(super) u32);
 
         impl R {
+            /// Current baseline source; cause identity and NRT relationship unknown. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5).
+            #[inline]
+            pub const fn source_1(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
             /// The `SOURCE_3` field.
             #[inline]
             pub const fn source_3(self) -> bool {
@@ -21341,8 +21361,14 @@ pub mod bt_mac {
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_0_2_opaque(self) -> oer_mmio::Bits<3> {
-                oer_mmio::Bits::truncate(self.0)
+            pub const fn bit_0_opaque(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_2_opaque(self) -> bool {
+                (self.0 & 0x00000004) != 0
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -21368,6 +21394,12 @@ pub mod bt_mac {
         pub struct W(pub(super) u32);
 
         impl W {
+            /// Current baseline source; cause identity and NRT relationship unknown. SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5).
+            #[inline]
+            pub const fn source_1(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
             /// The `SOURCE_3` field.
             #[inline]
             pub const fn source_3(&self) -> bool {
@@ -21418,8 +21450,14 @@ pub mod bt_mac {
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_0_2_opaque(&self) -> oer_mmio::Bits<3> {
-                oer_mmio::Bits::truncate(self.0)
+            pub const fn bit_0_opaque(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_2_opaque(&self) -> bool {
+                (self.0 & 0x00000004) != 0
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -21438,6 +21476,13 @@ pub mod bt_mac {
             #[inline]
             pub const fn bits_14_31_opaque(&self) -> oer_mmio::Bits<18> {
                 oer_mmio::Bits::truncate(self.0 >> 14)
+            }
+
+            /// Set `SOURCE_1`.
+            #[inline]
+            pub fn set_source_1(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
+                self
             }
 
             /// Set `SOURCE_3`.
@@ -21496,10 +21541,17 @@ pub mod bt_mac {
                 self
             }
 
-            /// Set `BITS_0_2_OPAQUE`.
+            /// Set `BIT_0_OPAQUE`.
             #[inline]
-            pub fn set_bits_0_2_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
-                self.0 = (self.0 & 0xfffffff8) | value.get();
+            pub fn set_bit_0_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+
+            /// Set `BIT_2_OPAQUE`.
+            #[inline]
+            pub fn set_bit_2_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffb) | (u32::from(value) << 2);
                 self
             }
 
@@ -26992,7 +27044,7 @@ pub mod bt_mac {
 
     /// The `IRQ_STATUS_SNAPSHOT_0` register.
     ///
-    /// Raw first-bank status snapshot read by the NRT ISR and copied to IRQ_CLEAR_0.
+    /// Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2).
     pub mod irq_status_snapshot_0 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -27024,7 +27076,7 @@ pub mod bt_mac {
 
     /// The `IRQ_STATUS_SNAPSHOT_1` register.
     ///
-    /// Raw second-bank status snapshot read by the NRT ISR and copied to IRQ_CLEAR_1.
+    /// Complete bank snapshot read in bank-zero then bank-one order by the NRT ISR and copied to the corresponding IRQ_CLEAR bank. Independence from enables and the output equation are unknown. SOURCE: BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT (N2).
     pub mod irq_status_snapshot_1 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -34833,14 +34885,14 @@ pub mod bt_mac {
             self.0.write::<0x58>(0x00008000);
         }
 
-        /// Mask the sources of `0x00001300` in `BT_MAC.IRQ_ENABLE_1`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_1`).
+        /// Mask the sources of `0x00001302` in `BT_MAC.IRQ_ENABLE_1`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_1`).
         ///
-        /// SOURCE: BLOB_LIBBTDM_CONTROLLER_IRQ.
+        /// SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT.
         #[inline]
         pub fn clear_bluetooth_primary_baseline_bank_1(&mut self) {
             let bits = self.0.read::<0x60>();
-            self.0.write::<0x60>(bits & 0xffffecff);
-            self.0.write::<0x64>(0x00001300);
+            self.0.write::<0x60>(bits & 0xffffecfd);
+            self.0.write::<0x64>(0x00001302);
         }
 
         /// Mask the sources of `0x18200000` in `BT_MAC.IRQ_ENABLE_0`, keeping every other bit, then acknowledge them (`BT_MAC.IRQ_CLEAR_0`).
@@ -127372,7 +127424,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0010_OPAQUE` register.
     ///
-    /// Complete runtime functions write the independently observed finite images 2 and 0x00040000.
+    /// Observed complete command images 2 during initialization and 0x00040000 after runtime compare or software-pending publication; internal action unknown. Bit 1 is not a proven rollover enable. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7).
     pub mod word_0010_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00040002;
@@ -127421,7 +127473,7 @@ pub mod modem_pwr {
     /// Complete runtime functions write the independently observed finite images 0xFFFFFFFF and 0x00040000.
     pub mod word_0014_opaque {
         /// The bits of the register's declared fields.
-        pub const FIELDS: u32 = 0xfffbffff;
+        pub const FIELDS: u32 = 0xffffffff;
         /// The register's width in bits.
         pub const WIDTH: u32 = 32;
 
@@ -127434,6 +127486,13 @@ pub mod modem_pwr {
         pub const BITS_0_17_OPAQUE_MAX: u32 = 0x3ffff;
         /// Positioned bits of `BITS_0_17_OPAQUE`.
         pub const BITS_0_17_OPAQUE_MASK: u32 = 0x3ffff;
+
+        /// Width of `BIT_18_OPAQUE` in bits.
+        pub const BIT_18_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_18_OPAQUE`.
+        pub const BIT_18_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_18_OPAQUE`.
+        pub const BIT_18_OPAQUE_MASK: u32 = 0x40000;
 
         /// Width of `BITS_19_31_OPAQUE` in bits.
         pub const BITS_19_31_OPAQUE_WIDTH: u32 = 13;
@@ -127450,6 +127509,13 @@ pub mod modem_pwr {
             #[inline]
             pub fn set_bits_0_17_opaque(&mut self, value: oer_mmio::Bits<18>) -> &mut Self {
                 self.0 = (self.0 & 0xfffc0000) | value.get();
+                self
+            }
+
+            /// Set `BIT_18_OPAQUE`.
+            #[inline]
+            pub fn set_bit_18_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffbffff) | (u32::from(value) << 18);
                 self
             }
 
@@ -127564,7 +127630,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0024_OPAQUE` register.
     ///
-    /// State word whose low byte is sampled independently; complete writes publish the finite images zero and one.
+    /// The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings and output effects remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7).
     pub mod word_0024_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -127659,7 +127725,7 @@ pub mod modem_pwr {
 
     /// The `WORD_002C_OPAQUE` register.
     ///
-    /// State word whose low byte is sampled independently; complete runtime paths clear the word.
+    /// The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; independent source-127 delivery is unproved. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7).
     pub mod word_002c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
@@ -127741,7 +127807,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0038_OPAQUE` register.
     ///
-    /// Complete word read by a runtime status path.
+    /// A nonzero complete word selects the common timer handler; status encoding, internal action and source-127 output equation are unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5).
     pub mod word_0038_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -127942,7 +128008,7 @@ pub mod modem_pwr {
 
     /// The `WORD_0058_OPAQUE` register.
     ///
-    /// Shared runtime control word with independently observed RMW operations over bits 0, 1, 2 and 4. Other bits are preserved.
+    /// Runtime mode word: first-timer setup RMW-sets bits 0 and 4; the ISR samples bit 2 and freshly rereads the word before setting bit 1. Other bits are preserved; internal action unknown for each control. No source-mask meaning is established. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
     pub mod word_0058_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -127999,25 +128065,25 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `CONTROL_0` field.
+            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
             #[inline]
             pub const fn control_0(self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// The `CONTROL_1` field.
+            /// Set from a fresh read on the conditional ISR path; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
             #[inline]
             pub const fn control_1(self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// The `CONTROL_2` field.
+            /// Sampled on the conditional ISR path; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
             #[inline]
             pub const fn control_2(self) -> bool {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// The `CONTROL_4` field.
+            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
             #[inline]
             pub const fn control_4(self) -> bool {
                 (self.0 & 0x00000010) != 0
@@ -128040,25 +128106,25 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `CONTROL_0` field.
+            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
             #[inline]
             pub const fn control_0(&self) -> bool {
                 (self.0 & 0x00000001) != 0
             }
 
-            /// The `CONTROL_1` field.
+            /// Set from a fresh read on the conditional ISR path; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
             #[inline]
             pub const fn control_1(&self) -> bool {
                 (self.0 & 0x00000002) != 0
             }
 
-            /// The `CONTROL_2` field.
+            /// Sampled on the conditional ISR path; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
             #[inline]
             pub const fn control_2(&self) -> bool {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// The `CONTROL_4` field.
+            /// Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8).
             #[inline]
             pub const fn control_4(&self) -> bool {
                 (self.0 & 0x00000010) != 0
@@ -134339,6 +134405,22 @@ pub mod modem_pwr {
             self.0.write::<0x78>(value.0);
         }
 
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included (`MODEM_PWR.WORD_0024_OPAQUE`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT.
+        #[inline]
+        pub fn clear_bluetooth_modem_lp_timer_state_0024(&mut self) {
+            self.0.write::<0x24>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included (`MODEM_PWR.WORD_002C_OPAQUE`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT.
+        #[inline]
+        pub fn clear_bluetooth_modem_lp_timer_state_002c(&mut self) {
+            self.0.write::<0x2c>(0x00000000);
+        }
+
         /// Write the vendor's whole-word image `0x00000001`, undeclared bits included (`MODEM_PWR.WORD_0004_OPAQUE`).
         ///
         /// SOURCE: BLOB_LIBBTDM_RUNTIME_CONTROL, PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE.
@@ -134371,9 +134453,17 @@ pub mod modem_pwr {
             self.0.write::<0x34>(0xffffffff);
         }
 
+        /// Write the vendor's whole-word image `0x00000001`, undeclared bits included (`MODEM_PWR.WORD_0024_OPAQUE`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT.
+        #[inline]
+        pub fn publish_bluetooth_modem_lp_timer_software_pending(&mut self) {
+            self.0.write::<0x24>(0x00000001);
+        }
+
         /// Write the vendor's whole-word image `0x00040000`, undeclared bits included (`MODEM_PWR.WORD_0014_OPAQUE`).
         ///
-        /// SOURCE: BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME.
+        /// SOURCE: BLOB_LIBBTDM_LP_COMPARE_DISABLE_CURRENT.
         #[inline]
         pub fn disable_bluetooth_modem_lp_timer_compare(&mut self) {
             self.0.write::<0x14>(0x00040000);

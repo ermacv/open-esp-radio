@@ -37,15 +37,19 @@ sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROL
 sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE"]
 
 [review.entity."WORD_0010_OPAQUE.BIT_1_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_2010D010"]
+sources = ["S31_MMIO_MANUAL_2010D010", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT"]
 completeness = "partial"
 
 [review.entity."WORD_0010_OPAQUE.BIT_18_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_2010D010"]
+sources = ["S31_MMIO_MANUAL_2010D010", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT"]
 completeness = "partial"
 
 [review.entity."WORD_0014_OPAQUE.BITS_0_17_OPAQUE"]
 sources = ["S31_MMIO_MANUAL_2010D014"]
+completeness = "partial"
+
+[review.entity."WORD_0014_OPAQUE.BIT_18_OPAQUE"]
+sources = ["BLOB_LIBBTDM_LP_COMPARE_DISABLE_CURRENT"]
 completeness = "partial"
 
 [review.entity."WORD_0014_OPAQUE.BITS_19_31_OPAQUE"]
@@ -64,17 +68,15 @@ sources = ["S31_MMIO_AUDIT_2010D020", "S31_MMIO_DECLARED_2010D020"]
 completeness = "partial"
 
 [review.entity."WORD_0024_OPAQUE.LOW_BYTE"]
-sources = ["S31_MMIO_DECLARED_2010D024"]
-accuracy = "unknown"
-completeness = "unknown"
+sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT"]
+completeness = "partial"
 
 [review.entity."WORD_002C_OPAQUE.LOW_BYTE"]
-sources = ["S31_MMIO_DECLARED_2010D02C"]
-accuracy = "unknown"
-completeness = "unknown"
+sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT"]
+completeness = "partial"
 
 [review.entity."WORD_0038_OPAQUE.BITS_0_31_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010D038"]
+sources = ["S31_MMIO_DECLARED_2010D038", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -100,24 +102,24 @@ accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."WORD_0058_OPAQUE"]
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ"]
+sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT"]
 completeness = "partial"
 
 [review.entity."WORD_0058_OPAQUE.CONTROL_0"]
-sources = ["S31_MMIO_DECLARED_2010D058"]
+sources = ["S31_MMIO_DECLARED_2010D058", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."WORD_0058_OPAQUE.CONTROL_1"]
-sources = ["S31_MMIO_DECLARED_2010D058"]
+sources = ["S31_MMIO_DECLARED_2010D058", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT"]
 accuracy = "unknown"
 completeness = "unknown"
 
 [review.entity."WORD_0058_OPAQUE.CONTROL_2"]
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ", "S31_MMIO_DECLARED_2010D058"]
+sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ", "S31_MMIO_DECLARED_2010D058", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT"]
 
 [review.entity."WORD_0058_OPAQUE.CONTROL_4"]
-sources = ["S31_MMIO_DECLARED_2010D058"]
+sources = ["S31_MMIO_DECLARED_2010D058", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -850,19 +852,19 @@ class = "write-only"
 [[registers]]
 name = "WORD_0010_OPAQUE"
 offset = 0x10
-description = "Complete runtime functions write the independently observed finite images 2 and 0x00040000."
+description = "Observed complete command images 2 during initialization and 0x00040000 after runtime compare or software-pending publication; internal action unknown. Bit 1 is not a proven rollover enable. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7)."
 
 [[registers.fields]]
 name = "BIT_1_OPAQUE"
 bits = "1"
 class = "write-only"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Observed command lane; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7)."
 
 [[registers.fields]]
 name = "BIT_18_OPAQUE"
 bits = "18"
 class = "write-only"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Observed command lane; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L1/L3-L7)."
 
 [[registers]]
 name = "WORD_0014_OPAQUE"
@@ -874,6 +876,12 @@ name = "BITS_0_17_OPAQUE"
 bits = "17:0"
 class = "write-only"
 description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BIT_18_OPAQUE"
+bits = "18"
+class = "write-only"
+description = "Observed 0x00040000 compare-disable command; internal action unknown, including pending/output suppression. SOURCE: BLOB_LIBBTDM_LP_COMPARE_DISABLE_CURRENT (L3/L9)."
 
 [[registers.fields]]
 name = "BITS_19_31_OPAQUE"
@@ -906,7 +914,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "WORD_0024_OPAQUE"
 offset = 0x24
-description = "State word whose low byte is sampled independently; complete writes publish the finite images zero and one."
+description = "The low byte is sampled for software timer work. Reviewed whole-word stores publish zero to acknowledge it and one to request software work; upper-byte meanings and output effects remain unknown. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L4/L6/L7)."
 
 [[registers.fields]]
 name = "LOW_BYTE"
@@ -917,7 +925,7 @@ class = "plain"
 [[registers]]
 name = "WORD_002C_OPAQUE"
 offset = 0x2c
-description = "State word whose low byte is sampled independently; complete runtime paths clear the word."
+description = "The low byte is sampled for software epoch rollover. Acknowledgement stores a reviewed whole-word zero, not a W1C image; independent source-127 delivery is unproved. SOURCE: BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT (L6/L7)."
 
 [[registers.fields]]
 name = "LOW_BYTE"
@@ -937,7 +945,7 @@ class = "write-only"
 [[registers]]
 name = "WORD_0038_OPAQUE"
 offset = 0x38
-description = "Complete word read by a runtime status path."
+description = "A nonzero complete word selects the common timer handler; status encoding, internal action and source-127 output equation are unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5)."
 
 [[registers.fields]]
 name = "BITS_0_31_OPAQUE"
@@ -1006,27 +1014,31 @@ class = "write-only"
 [[registers]]
 name = "WORD_0058_OPAQUE"
 offset = 0x58
-description = "Shared runtime control word with independently observed RMW operations over bits 0, 1, 2 and 4. Other bits are preserved."
+description = "Runtime mode word: first-timer setup RMW-sets bits 0 and 4; the ISR samples bit 2 and freshly rereads the word before setting bit 1. Other bits are preserved; internal action unknown for each control. No source-mask meaning is established. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8)."
 
 [[registers.fields]]
 name = "CONTROL_0"
 bits = "0"
 class = "plain"
+description = "Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8)."
 
 [[registers.fields]]
 name = "CONTROL_1"
 bits = "1"
 class = "plain"
+description = "Set from a fresh read on the conditional ISR path; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8)."
 
 [[registers.fields]]
 name = "CONTROL_2"
 bits = "2"
 class = "read-only"
+description = "Sampled on the conditional ISR path; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8)."
 
 [[registers.fields]]
 name = "CONTROL_4"
 bits = "4"
 class = "plain"
+description = "Set during first-timer setup; internal action unknown. SOURCE: BLOB_LIBBTDM_LP_CONTROLS_CURRENT (L5/L8)."
 
 [[registers.fields]]
 name = "BIT_3_OPAQUE"

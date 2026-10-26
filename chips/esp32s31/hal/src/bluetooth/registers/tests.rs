@@ -149,7 +149,9 @@ fn the_interrupt_output_enables_the_baseline_and_its_release_masks_it() {
         .bluetooth_interrupt_bank
         .read_irq_enable_1();
     assert!(enable_0.source_15());
-    assert!(enable_1.source_8() && enable_1.source_9() && enable_1.source_12());
+    assert!(
+        enable_1.source_1() && enable_1.source_8() && enable_1.source_9() && enable_1.source_12()
+    );
     let released = prepared.release_controller_output();
     let enable_0 = released
         .peripherals
@@ -160,7 +162,12 @@ fn the_interrupt_output_enables_the_baseline_and_its_release_masks_it() {
         .bluetooth_interrupt_bank
         .read_irq_enable_1();
     assert!(!enable_0.source_15());
-    assert!(!(enable_1.source_8() || enable_1.source_9() || enable_1.source_12()));
+    assert!(
+        !(enable_1.source_1()
+            || enable_1.source_8()
+            || enable_1.source_9()
+            || enable_1.source_12())
+    );
     drop(released);
     // SOURCE: complete `btdm_hal.c` helpers: `IRQ_CONTROL_0..2` take image one.
     let base = instances::bt_mac::BASE;
@@ -381,4 +388,108 @@ fn the_low_power_component_routes_channels_four_through_seven() {
             image
         );
     }
+}
+
+#[test]
+fn baseline_clear_enable_and_release_preserve_unrelated_sources() {
+    use oer_esp32s31_pac::bt_mac::{irq_clear_1, irq_enable_1};
+
+    // SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5): clear/OR-enable/mask
+    // the same baseline, including source 1 whose cause is unknown.
+    for inherited in [0, u32::MAX, 0xa55a_a55a] {
+        let mut memory = HostMemory::filled(inherited);
+        {
+            let (_, interrupts, _) = memory.owners();
+            let prepared = BluetoothInterruptSetup {
+                peripherals: interrupts.peripherals,
+            }
+            .prepare_controller_output();
+            drop(prepared);
+        }
+        assert_eq!(memory.interrupt_bank[irq_clear_1::OFFSET / 4], 0x1302);
+        assert_eq!(
+            memory.interrupt_bank[irq_enable_1::OFFSET / 4],
+            inherited | 0x1302
+        );
+        {
+            let (_, interrupts, _) = memory.owners();
+            let released = BluetoothInterruptSetup {
+                peripherals: interrupts.peripherals,
+            }
+            .prepare_controller_output()
+            .release_controller_output();
+            drop(released);
+        }
+        assert_eq!(
+            memory.interrupt_bank[irq_enable_1::OFFSET / 4],
+            inherited & !0x1302
+        );
+    }
+}
+
+#[test]
+fn timer_handler_acknowledges_only_nonzero_low_bytes_with_whole_word_zero() {
+    use oer_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque};
+
+    for pending in [false, true] {
+        for rollover in [false, true] {
+            let mut memory = HostMemory::filled(0);
+            let pending_before = 0xaabb_cc00 | u32::from(pending);
+            let rollover_before = 0x1122_3300 | u32::from(rollover);
+            memory.timer[word_0024_opaque::OFFSET / 4] = pending_before;
+            memory.timer[word_002c_opaque::OFFSET / 4] = rollover_before;
+            {
+                let (_, _, mut timer) = memory.owners();
+                let observation = timer.acknowledge_handler_registers();
+                assert_eq!(observation.is_some(), pending || rollover);
+                if let Some(observation) = observation {
+                    assert_eq!(observation.state_0024_low_byte_was_nonzero(), pending);
+                    assert_eq!(observation.state_002c_low_byte_was_nonzero(), rollover);
+                }
+            }
+            assert_eq!(
+                memory.timer[word_0024_opaque::OFFSET / 4],
+                if pending { 0 } else { pending_before }
+            );
+            assert_eq!(
+                memory.timer[word_002c_opaque::OFFSET / 4],
+                if rollover { 0 } else { rollover_before }
+            );
+        }
+    }
+}
+
+#[test]
+fn counter_rollover_clears_the_whole_word_and_publishes_whole_word_pending() {
+    use oer_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque};
+
+    let mut memory = HostMemory::filled(u32::MAX);
+    let mut epoch = BluetoothModemLpTimerEpoch::new();
+    {
+        let (_, _, mut timer) = memory.owners();
+        let observation = timer.sample_counter(&mut epoch);
+        assert!(observation.rollover_was_acknowledged());
+        assert_eq!(epoch.high_byte(), 1);
+    }
+    assert_eq!(memory.timer[word_002c_opaque::OFFSET / 4], 0);
+    assert_eq!(memory.timer[word_0024_opaque::OFFSET / 4], 1);
+}
+
+#[test]
+fn immediate_deadline_publishes_pending_with_zero_upper_bytes() {
+    use oer_esp32s31_pac::modem_pwr::word_0024_opaque;
+
+    // Counter low bits and rollover byte are zero; pending has upper bits set.
+    let mut memory = HostMemory::filled(0xa500_0000);
+    {
+        let (_, _, mut timer) = memory.owners();
+        assert_eq!(
+            timer.program_compare(
+                BluetoothModemLpTimerInstant::from_bits(1),
+                BluetoothModemLpTimerEpoch::new(),
+            ),
+            BluetoothModemLpTimerCompareDisposition::Immediate
+        );
+    }
+    assert_eq!(memory.timer[word_0024_opaque::OFFSET / 4], 1);
 }

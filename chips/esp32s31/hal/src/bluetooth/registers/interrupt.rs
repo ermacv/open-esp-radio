@@ -95,6 +95,7 @@ impl<B: oer_mmio::Placement> BluetoothInterruptControl for HardwareInterruptCont
 
     fn enable_primary_baseline_bank_1(&mut self) {
         self.bank.modify_irq_enable_1(|w| {
+            w.set_source_1(true);
             w.set_source_8(true);
             w.set_source_9(true);
             w.set_source_12(true);
@@ -127,6 +128,7 @@ impl<B: oer_mmio::Placement> BluetoothInterruptControl for HardwareInterruptCont
 
     fn mask_primary_baseline_bank_1(&mut self) {
         self.bank.modify_irq_enable_1(|w| {
+            w.set_source_1(false);
             w.set_source_8(false);
             w.set_source_9(false);
             w.set_source_12(false);
@@ -277,8 +279,9 @@ pub struct BluetoothInterruptOutputPrepared<P: BluetoothPlacements = Chip> {
 impl<P: BluetoothPlacements> BluetoothInterruptSetup<P> {
     /// Prepare the controller-side interrupt output in the bank's handler.
     ///
-    /// SOURCE: complete ESP32-S31 `libbtdm_common.a` `btdm_hal.c` helpers. The
-    /// composite setup clears bank images `0x0000_8000` and `0x0000_1300`,
+    /// SOURCE: BLOB_LIBBTDM_BASELINE_IRQ_CURRENT (N5), current ESP32-S31
+    /// `libbtdm_common.a` member `8.o` baseline helpers. The composite setup
+    /// clears bank images `0x0000_8000` and `0x0000_1302`,
     /// ORs those same baseline sources into the two enable banks, writes one
     /// to `0x2010_100c`, then the outer path calls the platform interrupt
     /// allocator for source 124. The earlier HAL-init part of that composite

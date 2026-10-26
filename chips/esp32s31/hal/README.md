@@ -30,3 +30,19 @@ clock owner and prevents installing it again with that root.
   `esp_hal_regi2c/esp32s31/include/hal/regi2c_ctrl_ll.h:43-53`).
 - The Wi-Fi power gate opens once, at installation, and nothing closes it
   (esp-hal 1f646c5 `rtc_cntl/rtc/esp32s31.rs:670`, `enable_wifi_power_clock`).
+
+## Bluetooth register transactions
+
+The interrupt bank clears and enables baseline images `0x8000` / `0x1302`,
+then masks the same sources on release while preserving unrelated enables.
+Bank-one source 1 has no established cause identity. The modem LP timer
+samples the low bytes of its pending and rollover words, acknowledges each
+nonzero byte with a reviewed whole-word zero, and publishes software pending
+with a whole-word one. These stores include the unmodeled upper bytes.
+SOURCE: `BLOB_LIBBTDM_BASELINE_IRQ_CURRENT` (N5) and
+`BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT` (L4/L6/L7) in the register evidence.
+
+The IRQ control commands, LP command lanes and mode controls have unknown
+internal actions. The NRT snapshots do not establish an output-mask equation,
+and compare disable does not prove all-cause quiescence. The register model
+records those limits; the transactions supply no additional output-off proof.

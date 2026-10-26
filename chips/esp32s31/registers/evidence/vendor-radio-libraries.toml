@@ -559,3 +559,27 @@ description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf424830
 [[sources]]
 id = "BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING"
 description = "espressif/esp-phy-lib 20f1db053a0e6cb9f1c09d255c43bf42483041d0 esp32s31/libphy.a sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2. Complete phy_hw_freq.o phy_get_rf_freq_init, size 0x1d8, builds the three-word phy_wr_rf_freq_mem input: capacitor low byte, high byte 0xbf | ((cap >> 8 & 1) << 6), SDM low byte combined with saved register-6 bits 7:3; then SDM middle/middle/high bytes; then crystal duty."
+
+[[sources]]
+id = "BLOB_LIBBTDM_BASELINE_IRQ_CURRENT"
+description = "espressif/esp32s31-bt-lib revision 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41; Blobray function records, SOURCE: N5, member 8.o r_sym_bt_UOcOYUroJKPJVKNXoi0j+0x6/+0xe clears bank images 0x00008000/0x00001302; r_sym_bt_9B6KnNyC18KphpwL4qDG+0xa/+0x16 OR-enables the same images; r_sym_bt_1KrVyC4xCx3TSzt0Ukgs+0xc/+0x18 removes those bits while preserving all others. Bank-one bit 1 has unknown cause identity and no established NRT relationship. No reset state is established."
+
+[[sources]]
+id = "BLOB_LIBBTDM_IRQ_COMMANDS_CURRENT"
+description = "espressif/esp32s31-bt-lib revision 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41; Blobray function records, SOURCE: N4, member 7.o r_sym_bt_vJfrsAScC3Qj3QevwArc+0x4/+0x12/+0x14/+0x36 prepares baseline state, writes complete image 1 to IRQ_CONTROL_0, starts the LP counter and allocates source 124. r_sym_bt_R9CEh2lOqbDmQQGs1gBe+0x14/+0x2c/+0x2e/+0x32 frees that handle, writes complete image 1 to IRQ_CONTROL_1 then IRQ_CONTROL_2 and masks baseline enables. For every command the internal action is unknown; no output-low, mask, clear or drain equation is established."
+
+[[sources]]
+id = "BLOB_LIBBLE_NRT_SNAPSHOTS_CURRENT"
+description = "espressif/esp32s31-bt-lib revision 10c507788e9da0993709cf82e405c896561172d8, libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723; Blobray function records, SOURCE: N2, member nrtIsr_1.o r_sym_nrtIsr_kgxM2CJfVperrlVjmB4B+0x4/+0xe/+0x16/+0x18/+0x2e reads BT_MAC+0x340 then +0x348, stores those exact complete images to IRQ_CLEAR_0 then IRQ_CLEAR_1, and dispatches the NRT broker. This body performs no mask or re-enable write. Independence of these snapshots from enables and the NRT output equation remain unknown; same-bit arrivals can coalesce under the existing reviewed W1C model."
+
+[[sources]]
+id = "BLOB_LIBBTDM_LP_COMPARE_DISABLE_CURRENT"
+description = "espressif/esp32s31-bt-lib revision 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41; Blobray function records, SOURCE: L3/L9, member 9.o r_sym_bt_86dRVPWrmTMQpChjYeWi+0x8 and r_sym_bt_7xXk0h8UTGt2vo5FahqD+0x6a store the complete image 0x00040000 to MODEM_PWR+0x14 before compare programming and on the empty-timer-list stop path. Bit 18 is an observed write-only command lane, reset unknown and internal action unknown. The software compare-disable role does not prove suppression of pending compare, rollover or all source-127 causes."
+
+[[sources]]
+id = "BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT"
+description = "espressif/esp32s31-bt-lib revision 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41; Blobray function records, SOURCE: L4/L6/L7, member 9.o r_sym_bt_86dRVPWrmTMQpChjYeWi+0x28..0x3e publishes complete image 1 to MODEM_PWR+0x24 for an immediate deadline. r_sym_bt_atiitVoBKMplOJVvjTHP+0x4/+0x10/+0x14/+0x20/+0x2c..0x40/+0x46..0x68 samples the low bytes at +0x24 and +0x2c, acknowledges nonzero bytes with whole-word zero stores, advances the software epoch for +0x2c and finally rereads +0x24. r_sym_bt_xPWv1Z87N9d40AR9yCcT+0x6/+0x16..0x3c/+0x44 reads the counter and rollover byte, advances the epoch and rereads the counter on rollover, then stores whole-word zero to +0x2c, whole-word one to +0x24 and 0x00040000 to +0x10. Zero acknowledgement is observed, not W1C; upper-byte meanings, reset states, event retention and output suppression are not established."
+
+[[sources]]
+id = "BLOB_LIBBTDM_LP_CONTROLS_CURRENT"
+description = "espressif/esp32s31-bt-lib revision 10c507788e9da0993709cf82e405c896561172d8, libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41; Blobray function records, SOURCE: L1/L3-L8, member 9.o r_sym_bt_waDX0omCE7oLuPVSoPOK+0x8..0x24/+0x40/+0x44 initializes with image 2 at MODEM_PWR+0x10. r_sym_bt_86dRVPWrmTMQpChjYeWi+0x42..0x58/+0x5c..0x6c and r_sym_bt_xPWv1Z87N9d40AR9yCcT+0x16..0x3c issue image 0x00040000 there after target or software-pending publication. r_sym_bt_FYr6kIOvDbNGoOHfaRvK+0x12/+0x16/+0x30..0x3c/+0x1a enters the common handler only when +0x38 is nonzero; with a nonzero +0x6c and +0x58 bit 2 set, it freshly rereads +0x58 and sets bit 1. r_sym_bt_f0O4BjwUvyoDFI9I7XYU+0xc/+0x78..0x94/+0x52 RMW-sets +0x58 bits 4 and 0 before programming the first timer. Internal action unknown for each command, status encoding and mode control. No rollover-enable, NRT-mask or all-causes-disabled semantics or reset state is established."

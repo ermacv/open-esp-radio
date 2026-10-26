@@ -2791,13 +2791,15 @@ sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROL
 name = "clear_bluetooth_modem_lp_timer_state_0024"
 register = "MODEM_PWR.WORD_0024_OPAQUE"
 value = 0
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
+whole-word = true
+sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT"]
 
 [[fixed-register-images]]
 name = "clear_bluetooth_modem_lp_timer_state_002c"
 register = "MODEM_PWR.WORD_002C_OPAQUE"
 value = 0
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
+whole-word = true
+sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT"]
 
 [[fixed-register-images]]
 name = "publish_ble_positional_word_1ff0_image_0"
@@ -2848,9 +2850,9 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 [[fixed-register-images]]
 name = "clear_bluetooth_primary_baseline_bank_1"
 register = "BT_MAC.IRQ_CLEAR_1"
-value = 0x00001300
+value = 0x00001302
 masks = "BT_MAC.IRQ_ENABLE_1"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+sources = ["BLOB_LIBBTDM_BASELINE_IRQ_CURRENT"]
 
 [[fixed-register-images]]
 name = "frequency_parameter_0"
@@ -2939,14 +2941,15 @@ sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROL
 name = "publish_bluetooth_modem_lp_timer_software_pending"
 register = "MODEM_PWR.WORD_0024_OPAQUE"
 value = 1
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
+whole-word = true
+sources = ["BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT"]
 
 [[fixed-register-images]]
 name = "disable_bluetooth_modem_lp_timer_compare"
 register = "MODEM_PWR.WORD_0014_OPAQUE"
 value = 0x00040000
 whole-word = true
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"]
+sources = ["BLOB_LIBBTDM_LP_COMPARE_DISABLE_CURRENT"]
 
 [[fixed-register-images]]
 name = "trigger_bluetooth_modem_lp_timer_command"
@@ -3516,9 +3519,9 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[field-or-modifies]]
 name = "enable_bluetooth_primary_baseline_bank_1"
-fields = [{ field = "BT_MAC.IRQ_ENABLE_1.SOURCE_8", source-bit-offset = 8 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_9", source-bit-offset = 9 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_12", source-bit-offset = 12 }]
-value = 0x00001300
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+fields = [{ field = "BT_MAC.IRQ_ENABLE_1.SOURCE_1", source-bit-offset = 1 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_8", source-bit-offset = 8 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_9", source-bit-offset = 9 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_12", source-bit-offset = 12 }]
+value = 0x00001302
+sources = ["BLOB_LIBBTDM_BASELINE_IRQ_CURRENT"]
 
 [[field-or-modifies]]
 name = "prepare_bluetooth_modem_lp_timer_control_25"
@@ -3929,9 +3932,9 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 
 [[field-replace-modifies]]
 name = "mask_bluetooth_primary_baseline_bank_1"
-fields = [{ field = "BT_MAC.IRQ_ENABLE_1.SOURCE_8", source-bit-offset = 8 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_9", source-bit-offset = 9 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_12", source-bit-offset = 12 }]
+fields = [{ field = "BT_MAC.IRQ_ENABLE_1.SOURCE_1", source-bit-offset = 1 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_8", source-bit-offset = 8 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_9", source-bit-offset = 9 }, { field = "BT_MAC.IRQ_ENABLE_1.SOURCE_12", source-bit-offset = 12 }]
 value = 0
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+sources = ["BLOB_LIBBTDM_BASELINE_IRQ_CURRENT"]
 
 [[field-replace-modifies]]
 name = "clear_bluetooth_low_power_controls_0_4"
