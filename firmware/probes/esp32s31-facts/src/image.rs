@@ -143,10 +143,25 @@ extern "C" fn facts_irq() {
     }
     let sar = SAR_CONTEXT.swap(ptr::null_mut(), Ordering::AcqRel);
     if !sar.is_null() {
-        // SAFETY: run_sar publishes its exclusive borrow with MIE masked;
-        // the thread touches no SAR owner until this handler returns and MIE
-        // is masked again. The atomic swap permits exactly one handler access.
-        sar::dispatch(unsafe { &mut *sar }, SAR_SELECTION.load(Ordering::Relaxed));
+        let id = SAR_SELECTION.load(Ordering::Relaxed);
+        if let Some(Probe {
+            run: Action::Sar(run),
+            ..
+        }) = PROBES.iter().find(|p| p.id == id)
+        {
+            // SAFETY: the exclusive SAR borrow published by run_sar remains
+            // live through this handler; no other context accesses it.
+            let sar = unsafe { &mut *sar };
+            emit(
+                0x14f0,
+                id,
+                oer_riscv::read_mintstatus() as u32,
+                oer_riscv::read_mcause() as u32,
+            );
+            run(sar);
+        } else {
+            emit(0x14ee, 7, id, 0);
+        }
         SAR_DONE.store(1, Ordering::Release);
         return;
     }
@@ -182,69 +197,82 @@ struct Session<'a> {
 }
 struct Probe {
     id: u32,
-    run: fn(&mut Session<'_>),
+    run: Action,
+}
+enum Action {
+    Thread(fn(&mut Session<'_>)),
+    Sar(fn(&mut sar::Sar)),
 }
 // The sole registration point. Reset is selected explicitly; it cannot run
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
     Probe {
         id: 140,
-        run: |s| s.sar.preflight(),
+        run: Action::Sar(|s| s.preflight()),
     },
     Probe {
         id: 141,
-        run: |s| s.sar.hold(false, false),
+        run: Action::Sar(|s| s.hold(false, false)),
     },
     Probe {
         id: 142,
-        run: |s| s.sar.hold(true, false),
+        run: Action::Sar(|s| s.hold(true, false)),
     },
     Probe {
         id: 143,
-        run: |s| s.sar.hold(false, true),
+        run: Action::Sar(|s| s.hold(false, true)),
     },
     Probe {
         id: 144,
-        run: |s| s.sar.hold(true, true),
+        run: Action::Sar(|s| s.hold(true, true)),
     },
     Probe {
         id: 145,
-        run: |s| s.sar.edge(false),
+        run: Action::Sar(|s| s.edge(false)),
     },
     Probe {
         id: 146,
-        run: |s| s.sar.edge(true),
+        run: Action::Sar(|s| s.edge(true)),
     },
     Probe {
         id: 149,
-        run: |s| s.sar.cleanup(),
+        run: Action::Sar(|s| s.cleanup()),
     },
     Probe {
         id: 2,
-        run: geometry,
+        run: Action::Thread(geometry),
     },
-    Probe { id: 3, run: config },
+    Probe {
+        id: 3,
+        run: Action::Thread(config),
+    },
     Probe {
         id: 6,
-        run: boot_address,
+        run: Action::Thread(boot_address),
     },
-    Probe { id: 1, run: edge },
+    Probe {
+        id: 1,
+        run: Action::Thread(edge),
+    },
     Probe {
         id: 4,
-        run: threshold,
+        run: Action::Thread(threshold),
     },
     Probe {
         id: 5,
-        run: latency,
+        run: Action::Thread(latency),
     },
-    Probe { id: 7, run: reset },
+    Probe {
+        id: 7,
+        run: Action::Thread(reset),
+    },
     Probe {
         id: 8,
-        run: after_reset,
+        run: Action::Thread(after_reset),
     },
     Probe {
         id: 9,
-        run: threshold_raising,
+        run: Action::Thread(threshold_raising),
     },
 ];
 
@@ -281,10 +309,9 @@ extern "C" fn facts_main() -> ! {
             for probe in PROBES {
                 if request == probe.id || (request == 0 && probe.id < 7) {
                     ran = true;
-                    if (140..=149).contains(&request) {
-                        run_sar(&mut s, request);
-                    } else {
-                        (probe.run)(&mut s);
+                    match probe.run {
+                        Action::Sar(_) => run_sar(&mut s, request),
+                        Action::Thread(run) => run(&mut s),
                     }
                 }
             }

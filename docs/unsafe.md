@@ -624,6 +624,15 @@ needs:
   system reset. Controlled interrupt-admission entry stubs delimit the
   threshold-write experiment; the installed trap ABI preserves their registers.
   Only the masked thread publishes the LP record before the reset fence.
+  In `firmware/probes/esp32s31-facts/src/image.rs`, `SAR_CONTEXT` publishes
+  the masked thread's exclusive `Sar` borrow to the isolated P2 handler.
+  Its atomic swap to null admits exactly one handler dereference; the
+  thread accesses no SAR owner until the handler returns and MIE is masked.
+  The stack allocation remains live throughout the dispatch. `SAR_SELECTION`
+  selects the same static `PROBES` registry used by the thread. The handler
+  publishes `SAR_DONE` after the borrow ends; the thread clears the pointer
+  before reusing the session. This is the probe's one SAR raw-pointer site,
+  with no production runtime dependency or independently claimed registers.
 
 The bootstrap and probe crates deny `clippy::undocumented_unsafe_blocks`, and
 each unsafe attribute in them carries its `// SAFETY:` comment as well.

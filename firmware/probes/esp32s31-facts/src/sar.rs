@@ -5,6 +5,8 @@
 use super::{Bits, emit, pac};
 use pac::{fe, wifi_bb};
 
+include!("sar_prepare.rs");
+
 pub(super) struct Sar {
     pub radio: pac::ownership::RadioPhyPeripherals,
     pub clocks: pac::ownership::ChipClockPeripherals,
@@ -14,6 +16,8 @@ pub(super) struct Sar {
     ticks_per_us: u32,
     trigger_window: [u32; 2],
     observations: [(u32, u32); 99],
+    powered: bool,
+    temperature_acquired: bool,
     usable: bool,
     distinct: bool,
 }
@@ -33,6 +37,8 @@ impl Sar {
             ticks_per_us: 0,
             trigger_window: [0; 2],
             observations: [(0, 0); 99],
+            powered: false,
+            temperature_acquired: false,
             usable: false,
             distinct: false,
         }
@@ -87,7 +93,7 @@ impl Sar {
         let bound = self.cycles(us);
         while oer_riscv::cycle32().wrapping_sub(start) < bound {}
     }
-    fn prerequisites(&mut self) {
+    fn prerequisites(&mut self) -> bool {
         let p = &mut self.radio;
         p.pmu_radio.select_hp_active_modem_icg();
 
@@ -121,14 +127,10 @@ impl Sar {
             w.set_reg_ref_160m_clk_en(true);
         });
 
-        p.hp_sys_clkrst_radio.modify_modem_conf(|w| {
-            w.set_modem_apb_clk_en(true);
-            w.set_modem_rst_en(false);
-            w.set_modem_clk_en(true);
-            w.set_modem_clk_source_sel(true);
-            w.set_modem_pll_clk_en(true);
-            w.set_modem_xtal_clk_en(true);
-        });
+        // SOURCE: production modem/clock_device.rs::configure_pll_source_gate.
+        // PAC policy whole-word images 0x15 then 0x1d; XTAL is disabled.
+        p.hp_sys_clkrst_radio.prepare_open_modem_pll_source_gate();
+        p.hp_sys_clkrst_radio.open_modem_pll_source_gate();
 
         p.modem_syscon_radio.modify_modem_rst_conf(|w| {
             w.set_rst_wifibb(pac::modem_syscon::modem_rst_conf::RstWifibb::Asserted);
@@ -189,100 +191,59 @@ impl Sar {
             .modem_lpcon_chip_clocks
             .set_i2c_ana_mst_master_clock(true);
 
-        // SOURCE: ROM_REV0_PHY_OPEN_FE_BB_CLK.
-        p.phy_clock_oracle_fe.write_word_0400_opaque(|w| {
-            w.set_bits_0_2_opaque(Bits::constant::<0x7>())
-                .set_bits_5_8_opaque(Bits::constant::<0xf>());
-        });
-        // SOURCE: ROM_REV0_PHY_OPEN_FE_BB_CLK.
-        p.phy_clock_oracle_fe.modify_word_0800_opaque(|w| {
-            w.set_bits_0_1_opaque(fe::word_0800_opaque::Bits0_1Opaque::Open);
-        });
-        // SOURCE: ROM_REV0_PHY_OPEN_FE_BB_CLK.
-        p.phy_clock_oracle_wifi_bb.write_word_0c80_opaque(|w| {
-            w.set_state(wifi_bb::word_0c80_opaque::State::Open);
-        });
-
-        p.pmu_radio.modify_hp_active_hp_ck_power(|w| {
-            w.set_bits_0_3_opaque(
-                oer_esp32s31_pac::pmu::hp_active_hp_ck_power::Bits0_3Opaque::RomRequired,
-            );
-            w.set_hp_active_xpd_bb_i2c(true);
-        });
-        p.pmu_radio.trigger_imm_hp_ck_power_0_tie_high_xpd_bb_i2c();
-
-        p.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
-            w.set_xpd_perif_i2c(true);
-        });
-
-        p.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
-            w.set_rstb_perif_i2c(true);
-        });
-
-        let master = &mut self.analog.i2c_ana_mst;
-
-        // SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
-        master.modify_i2c0_ctrl1(|w| {
-            w.set_i2c0_sda_side_guard(Bits::constant::<0x2>());
-        });
-        // SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
-        master.modify_i2c0_ctrl1(|w| {
-            w.set_i2c0_scl_pulse_dur(Bits::constant::<0x4>());
-        });
-        // SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
-        master.modify_i2c1_ctrl1(|w| {
-            w.set_i2c1_sda_side_guard(Bits::constant::<0x2>());
-        });
-        // SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
-        master.modify_i2c1_ctrl1(|w| {
-            w.set_i2c1_scl_pulse_dur(Bits::constant::<0x4>());
-        });
-        // SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
-        master.modify_hw_i2c_ctrl(|w| {
-            w.set_hw_i2c_sda_side_guard(Bits::constant::<0x2>());
-        });
-        // SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
-        master.modify_hw_i2c_ctrl(|w| {
-            w.set_hw_i2c_scl_pulse_dur(Bits::constant::<0x4>());
-        });
-
-        // SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
-        master.modify_ana_conf0(|w| {
-            w.set_phy_register_mode(Bits::constant::<2>());
-        });
-        // SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
-        master.modify_ana_conf0(|w| {
-            w.set_phy_register_enable(true);
-        });
+        self.powered = true;
+        self.power_readback()
     }
     fn analog_byte(&mut self, address: pac::analog_i2c::Address, write: Option<u8>) -> Option<u8> {
-        // SOURCE: production phy/i2c/master.rs; SARADC uses normal route host 0.
-        // A 20 µs experimental bound applies to each byte, not a silicon maximum.
+        // SOURCE: production phy/i2c/master.rs. Resolve command alias and host
+        // for every operation, including writes, through the generated route.
+        let route =
+            pac::analog_i2c::route(pac::analog_i2c::Profile::LibphyNormal, address.block())?;
+        let bound = self.cycles(20);
         let m = &mut self.analog.i2c_ana_mst;
-        if m.read_i2c0_ctrl().i2c0_busy() {
+        let busy = match route.host {
+            pac::analog_i2c::Host::Host0 => m.read_i2c0_ctrl().i2c0_busy(),
+            pac::analog_i2c::Host::Host1 => m.read_i2c1_ctrl().i2c1_busy(),
+        };
+        if busy {
             return None;
         }
         m.modify_ana_conf2(|w| {
             w.set_phy_host_map(Bits::constant::<0x3fa0>());
         });
         if write.is_none() {
-            let route =
-                pac::analog_i2c::route(pac::analog_i2c::Profile::LibphyNormal, address.block())?;
             m.publish_phy_i2c_read_mask(Bits::truncate(route.complemented_read_select()));
         }
-        m.write_i2c0_ctrl(|w| {
-            w.set_slave_addr(address.block())
-                .set_slave_reg_addr(address.index())
-                .set_data(write.unwrap_or(0))
-                .set_read_write(write.is_some())
-                .set_start_or_reset(true);
-        });
+        match route.host {
+            pac::analog_i2c::Host::Host0 => m.write_i2c0_ctrl(|w| {
+                w.set_slave_addr(route.command_code)
+                    .set_slave_reg_addr(address.index())
+                    .set_data(write.unwrap_or(0))
+                    .set_read_write(write.is_some())
+                    .set_start_or_reset(true);
+            }),
+            pac::analog_i2c::Host::Host1 => m.write_i2c1_ctrl(|w| {
+                w.set_slave_addr(route.command_code)
+                    .set_slave_reg_addr(address.index())
+                    .set_data(write.unwrap_or(0))
+                    .set_read_write(write.is_some())
+                    .set_start_or_reset(true);
+            }),
+        }
         let start = oer_riscv::cycle32();
-        let bound = ((u64::from(self.hz) * 20).div_ceil(1_000_000)) as u32;
         loop {
-            let value = m.read_i2c0_ctrl();
-            if !value.i2c0_busy() {
-                return Some(value.data());
+            let (busy, data) = match route.host {
+                pac::analog_i2c::Host::Host0 => {
+                    let v = m.read_i2c0_ctrl();
+                    (v.i2c0_busy(), v.data())
+                }
+                pac::analog_i2c::Host::Host1 => {
+                    let v = m.read_i2c1_ctrl();
+                    (v.i2c1_busy(), v.data())
+                }
+            };
+            if !busy {
+                return Some(data);
             }
             if oer_riscv::cycle32().wrapping_sub(start) >= bound {
                 return None;
@@ -388,7 +349,9 @@ impl Sar {
             emit(0x14ee, 1, 0, 0);
             return false;
         }
-        self.prerequisites();
+        if !self.prerequisites() || !self.cold_prefix() {
+            return false;
+        }
         let control = self
             .radio
             .phy_baseband_config_oracle_fe
@@ -425,49 +388,12 @@ impl Sar {
         p.lp_aon_clkrst.modify_rtc_sar2_pwdet_cct(|w| {
             w.set_rtc_sar2_pwdet_cct(Bits::constant::<4>());
         });
-        fe.modify_power_detector_control(|w| {
-            w.set_bit_2_opaque(false);
-        });
-        fe.modify_power_detector_control(|w| {
-            w.set_bit_1_opaque(false);
-        });
-        fe.modify_power_detector_control(|w| {
-            w.set_bit_3_opaque(false);
-        });
-        fe.modify_power_detector_sar_control_status(|w| {
-            w.set_bits_12_13_opaque(Bits::constant::<3>());
-        });
-        fe.modify_power_detector_sar_control_status(|w| {
-            w.set_bit_9_opaque(false);
-        });
-        fe.write_power_detector_reference(|w| {
-            w.set_reference_code(0x016a);
-        });
-        p.lp_aon_clkrst.modify_rtc_sar2_pwdet_cct(|w| {
-            w.set_rtc_sar2_pwdet_cct(Bits::constant::<4>());
-        });
-        // SOURCE: production phy/i2c/commands.rs::Sar2Initialization; preserve
-        // the high byte's other nibble through the generated analog field.
-        let high = pac::analog_i2c::saradc::adc_sar2_initial_code_high_addr::ADC_SAR2_INITIAL_CODE_HIGH_ADDR;
-        let Some(old) = self.analog_byte(high.address(), None) else {
-            emit(0x14ee, 2, 0, 0);
-            return false;
-        };
-        let Some(value) = high.insert(old, 5) else {
-            emit(0x14ee, 3, old.into(), 0);
-            return false;
-        };
-        if self.analog_byte(high.address(), Some(value)).is_none()
-            || self
-                .analog_byte(
-                    pac::analog_i2c::saradc::adc_sar2_initial_code_low_addr::ADDRESS,
-                    Some(0x78),
-                )
-                .is_none()
-        {
-            emit(0x14ee, 4, 0, 0);
-            return false;
-        }
+        // SOURCE: production RF prefix initializes FE and TSENS after PWDET
+        // tables. The later conditional SAR2 init is deliberately omitted:
+        // reaching it requires RC/filter/RFPLL initialization outside this probe.
+        self.front_end();
+        self.temperature();
+        self.enable_pwdet();
         // SOURCE: production power_detector::configure_calibration_mode and
         // baseband::configure_power_control_tone(0x80, 0x50), used by
         // phy_pwdet_ref_code. No PBus DCO/gain calibration is fabricated here.
@@ -660,6 +586,10 @@ impl Sar {
         }
     }
     pub fn cleanup(&mut self) {
+        if !self.powered {
+            emit(0x1490, u32::MAX, u32::MAX, 0);
+            return;
+        }
         // SOURCE: production baseband/ops.rs::stop_power_detector_tone,
         // and the ROM stop-tone DAC-scale restores. Clock ownership stays
         // in this image until the ROM-download reset; no background control.
@@ -680,26 +610,21 @@ impl Sar {
         self.usable = false;
         self.distinct = false;
         emit(0x1490, self.ready(), self.sample(), 0);
-    }
-}
-
-pub(super) fn dispatch(sar: &mut Sar, id: u32) {
-    // This is a probe context observation, not a production scheduling API.
-    emit(
-        0x14f0,
-        id,
-        oer_riscv::read_mintstatus() as u32,
-        oer_riscv::read_mcause() as u32,
-    );
-    match id {
-        140 => sar.preflight(),
-        141 => sar.hold(false, false),
-        142 => sar.hold(true, false),
-        143 => sar.hold(false, true),
-        144 => sar.hold(true, true),
-        145 => sar.edge(false),
-        146 => sar.edge(true),
-        149 => sar.cleanup(),
-        _ => emit(0x14ee, 7, id, 0),
+        // SOURCE: temperature.rs::Restore::release_with, sole owner.
+        if self.temperature_acquired {
+            self.radio.lp_tsens.modify_ctrl(|w| {
+                w.set_power_up(pac::tsens::ctrl::PowerUp::Disabled);
+            });
+            self.radio.lp_periclkrst.modify_tsens_ctrl(|w| {
+                w.set_lp_tsens_clk_en(pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::Disabled);
+            });
+            self.radio.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
+                w.set_xpd_perif_i2c(false);
+            });
+            self.temperature_acquired = false;
+        }
+        self.radio.phy_clock_oracle_fe.modify_word_0800_opaque(|w| {
+            w.set_bit_2_opaque(false);
+        });
     }
 }
