@@ -1,9 +1,0 @@
-error[E0521]: borrowed data escapes outside of closure
-  --> tests/ui/rx_recycle_grant_stays_in_callback.rs:11:26
-   |
-10 |         let mut retained = None;
-   |             ------------ `retained` declared here, outside of the closure body
-11 |         run(&mut |grant| retained = Some(grant)); // ui-error: E0521
-   |                   -----  ^^^^^^^^^^^^^^^^^^^^^^ `grant` escapes the closure body here
-   |                   |
-   |                   `grant` is a reference that is only valid in the closure body

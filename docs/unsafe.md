@@ -320,24 +320,30 @@ inside the retained allocation; subsequent register publications take those
 typed addresses. The shared engine and the combined engine/MAC owner contain
 no unsafe code and perform no address arithmetic.
 
-Wi-Fi RX buffer reads and guard preparation take an affine
-`RecycleGrant<'ring>`. The ring supplies each recycle or stopped-preparation
-callback with an index and a higher-ranked lifetime, so the grant cannot
-survive descriptor publication. The reserved descriptor uses the same grant
-at index `COUNT`. Buffer accessors are private to storage, whose immutable
-descriptor binding selects the corresponding allocation. Retained completed
-owners and the frozen-frontier preview use one narrow unsafe read-grant
-constructor; each mint retains the owner's ring loan for every byte view.
+Wi-Fi RX completed byte views and ring-owned guard preparation consume
+crate-private affine grants. A sealed binding pairs one arena with its live
+or halted ring after identity admission, or takes the pair directly from a retained completed
+owner. `with_bound_buffers` gives the ring and its storage access an invariant,
+fresh lifetime brand. The ring's real preparation/recycle callbacks quantify
+a second, shorter grant lifetime, preventing both foreign-ring grants and
+retention across publication. Storage operations select the bound allocation
+from the grant; raw shared byte methods are private to `rx_storage::buffers`.
+R's grant carries index `COUNT` and a const target parameter, so selection adds
+no per-frame branch. Grants and scoped receivers add no persistent state.
+The retained single-descriptor read keeps its already validated buffer pointer;
+other reads use the descriptor binding. Read grants cannot authorize rearm.
+One unsafe read-binding constructor retains the completion owner's loan.
+Detachment consumes the completed owner inside the byte core.
 The two byte-cell accesses, detached-buffer handoff, volatile guard observation
-and two sharing implementations form the memory boundary. Grants contain no
-runtime state beyond the descriptor index. Completion observations precede
-grants, and buffer guards are restored before descriptor publication.
+and two sharing implementations form the memory boundary. Completion
+observations precede grants, and guards are restored before publication.
+Compiler fixtures build internal callers against the actual HAL source;
+weakened-bound controls confirm every callback escape case detects a regression.
 
-The Wi-Fi DMA storage, `esp32s31-hal`'s `ieee80211::dma` module, has one
-unsafe site that exists only under `test-support`: the host model of the DMA
-engine's memory port, `RxDmaStorage<…, HostDma>::{dma_write, dma_read}` in
-`ieee80211/dma/rx_storage/host_dma.rs`.
-It copies bytes into or out of one buffer's `UnsafeCell` at a published
+The Wi-Fi DMA storage also exposes the host model of the DMA engine's
+memory port under `test-support` and in unit tests: `RxDmaStorage<…, HostDma>::{dma_write, dma_read}` in
+`ieee80211/dma/rx_storage/host_dma.rs`, a child of the byte-storage module.
+Its two unsafe copy operations reach one buffer's `UnsafeCell` at a published
 `HostDma` address (a ring buffer or the reserved descriptor's buffer),
 refusing any range outside a single buffer and any buffer detached to an
 upper owner. Its caller lends the arena's live ring shared:

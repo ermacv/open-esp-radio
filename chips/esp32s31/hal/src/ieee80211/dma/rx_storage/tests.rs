@@ -5,73 +5,6 @@ use super::*;
 use oer_time::settle::{Settle, SettleLimit};
 use oer_time::{Clock, Duration, Instant};
 
-#[test]
-fn rx_buffer_keeps_its_dma_field_layout() {
-    use core::mem::{align_of, offset_of, size_of};
-
-    fn check<const B: usize, const S: usize>() {
-        let alignment = align_of::<RxDmaBuffer<B, S>>();
-        let old_fields = size_of::<UnsafeCell<[u8; S]>>() + size_of::<AtomicU8>();
-        assert_eq!(
-            size_of::<RxDmaBuffer<B, S>>(),
-            old_fields.next_multiple_of(alignment),
-        );
-        assert_eq!(offset_of!(RxDmaBuffer<B, S>, 0), 0);
-        assert_eq!(offset_of!(RxDmaBuffer<B, S>, 1), size_of::<[u8; S]>());
-        assert_eq!(align_of::<ExternalRxReturn>(), align_of::<AtomicU8>());
-    }
-
-    check::<16, 20>();
-    check::<16, 21>();
-    check::<1700, 1704>();
-}
-
-#[test]
-#[allow(unsafe_code, reason = "test owns a leaked buffer without a DMA actor")]
-fn rx_buffer_keeps_detach_and_recycle_error_conditions() {
-    let buffer = &*Box::leak(Box::new(RxDmaBuffer::<16, 20>::new()));
-    for length in [0, 17] {
-        assert_eq!(buffer.detach_with(length).err(), Some(RxRingError::Size));
-    }
-    assert_eq!(buffer.state(), ExternalRxReturnState::Attached);
-    let detached = buffer.detach_with(16).unwrap();
-    assert_eq!(buffer.detach_with(0).err(), Some(RxRingError::Size));
-    assert_eq!(
-        buffer.detach_with(16).err(),
-        Some(RxRingError::BufferOwnershipConflict),
-    );
-    // This test retains the allocation with no DMA actor. Each grant ends
-    // before the next state transition, exactly as a ring callback does.
-    let grant = || {
-        // SAFETY: this allocation has no DMA actor, and the operations below
-        // reject a detached owner before touching its bytes.
-        unsafe { RecycleGrant::completed_read(0, buffer) }
-    };
-    assert_eq!(
-        buffer.prepare_for_recycle(grant()),
-        Err(RxRingError::BufferOwnershipConflict)
-    );
-    assert_eq!(
-        buffer.prepare_observed_for_recycle(grant()),
-        Err(RxRingError::BufferOwnershipConflict)
-    );
-    assert_eq!(
-        buffer.prepare_for_stopped_ring(grant()),
-        Err(RxRingError::BufferOwnershipConflict)
-    );
-    drop(detached);
-    assert_eq!(buffer.state(), ExternalRxReturnState::Returned);
-    assert_eq!(
-        buffer.prepare_for_recycle(grant()),
-        Err(RxRingError::BufferOwnershipConflict)
-    );
-    assert_eq!(buffer.prepare_observed_for_recycle(grant()), Ok(()));
-    assert_eq!(buffer.state(), ExternalRxReturnState::Attached);
-    drop(buffer.detach_with(16).unwrap());
-    assert_eq!(buffer.prepare_for_stopped_ring(grant()), Ok(()));
-    assert_eq!(buffer.state(), ExternalRxReturnState::Attached);
-}
-
 /// A clock which never moves: a reload that settles is never cut short.
 struct Frozen;
 
@@ -236,7 +169,9 @@ fn a_placed_storage_publishes_its_own_addresses() {
     for (index, &address) in storage.buffer_addresses().iter().enumerate() {
         assert_eq!(
             address,
-            HostDma::address(storage, storage.buffers()[index].0.get()).unwrap()
+            storage
+                .buffer_dma_address(&storage.buffers()[index])
+                .unwrap()
         );
     }
 

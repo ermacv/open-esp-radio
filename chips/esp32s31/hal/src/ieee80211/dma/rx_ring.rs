@@ -614,44 +614,73 @@ pub enum RxReloadObservation {
     Settled,
 }
 
-/// Temporary CPU authority for one descriptor's bound buffer.
-///
-/// Recycle and stopped-ring preparation callbacks receive this affine grant
-/// only after the ring established CPU ownership. Their higher-ranked lifetime
-/// prevents retaining it past the callback and descriptor publication. Index
-/// `COUNT` denotes the reserved descriptor during preparation and rearm.
-/// The grant adds no state to the ring and carries only the existing index.
+/// Invariant installation identity and one callback's affine buffer authority.
+/// The second lifetime prevents keeping a grant across a publication even
+/// inside its installation scope. Neither marker occupies runtime storage.
 #[must_use]
-pub struct RecycleGrant<'ring> {
+pub(crate) struct RecycleGrant<'ring, 'grant, Access = Rearm, const RESERVED: bool = false> {
     index: usize,
-    _ring: core::marker::PhantomData<&'ring mut ()>,
+    _ring: core::marker::PhantomData<fn(&'ring ()) -> &'ring ()>,
+    _grant: core::marker::PhantomData<&'grant mut ()>,
+    _access: core::marker::PhantomData<Access>,
 }
 
-impl<'ring> RecycleGrant<'ring> {
+pub(crate) struct Rearm;
+pub(crate) struct ReadOnly;
+
+impl<'ring, 'grant, Access, const RESERVED: bool> RecycleGrant<'ring, 'grant, Access, RESERVED> {
     fn new(index: usize) -> Self {
         Self {
             index,
             _ring: core::marker::PhantomData,
+            _grant: core::marker::PhantomData,
+            _access: core::marker::PhantomData,
         }
     }
-
-    pub const fn index(&self) -> usize {
+    pub(crate) const fn index(&self) -> usize {
         self.index
     }
+}
 
-    /// Extend an already retained completion's CPU read authority.
-    ///
-    /// # Safety
-    /// `owner` must retain this descriptor's completion and its matching ring
-    /// loan for the full returned lifetime. A preview may instead retain a
-    /// shared ring loan after observing a complete frozen-cursor frontier.
-    /// No detached upper owner may access the buffer during that lifetime.
-    #[allow(
-        unsafe_code,
-        reason = "completed owners retain an observed descriptor's ring loan"
-    )]
-    pub(crate) unsafe fn completed_read<T: ?Sized>(index: usize, _owner: &'ring T) -> Self {
-        Self::new(index)
+/// A ring and storage can acquire this identity only as one validated pair.
+pub(crate) struct ScopedRing<'id, R> {
+    ring: R,
+    _id: core::marker::PhantomData<fn(&'id ()) -> &'id ()>,
+}
+
+pub(crate) struct ScopedBuffers<'id, Source> {
+    source: Source,
+    _id: core::marker::PhantomData<fn(&'id ()) -> &'id ()>,
+}
+
+impl<Source> ScopedBuffers<'_, Source> {
+    pub(crate) fn source(&self) -> &Source {
+        &self.source
+    }
+}
+
+/// Generativity keeps two simultaneously borrowed installations distinct.
+/// The sealed binding has already matched the storage to this exact ring.
+pub(crate) fn with_bound_buffers<Source, R, T>(
+    binding: super::rx_storage::buffers::BoundBuffers<Source, R>,
+    run: impl for<'id> FnOnce(ScopedRing<'id, R>, ScopedBuffers<'id, Source>) -> T,
+) -> T {
+    let (source, ring) = binding.into_parts();
+    run(
+        ScopedRing {
+            ring,
+            _id: core::marker::PhantomData,
+        },
+        ScopedBuffers {
+            source,
+            _id: core::marker::PhantomData,
+        },
+    )
+}
+
+impl<'id, 'loan> ScopedRing<'id, super::rx_storage::buffers::CompletedRead<'loan>> {
+    pub(crate) fn read_grant(self) -> RecycleGrant<'id, 'loan, ReadOnly> {
+        RecycleGrant::new(self.ring.index())
     }
 }
 
@@ -659,12 +688,12 @@ impl<'ring> RecycleGrant<'ring> {
 ///
 /// The storage arena implements it over R's buffer, which is never one of
 /// the ring's buffers and is never leased.
-pub(crate) trait RxReservedBuffer {
+pub(crate) trait RxReservedBuffer<'id> {
     /// Whether DMA overwrote the buffer's leading recycle guard.
     fn guard_overwritten(&self) -> bool;
     /// Restore both recycle guards. Called only after the walker finished
     /// writing the buffer.
-    fn restore_guards(&self, grant: RecycleGrant<'_>) -> Result<(), RxRingError>;
+    fn restore_guards(&self, grant: RecycleGrant<'id, '_, Rearm, true>) -> Result<(), RxRingError>;
 }
 
 /// Validated descriptor memory and private DMA binding, before BASE.
@@ -806,7 +835,9 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
     pub fn descriptor_snapshot(&self, index: usize) -> Option<RxDescriptorSnapshot> {
         descriptor_snapshot(self.descriptors, self.descriptor_table.base(), index)
     }
+}
 
+impl<'id, 'a, const COUNT: usize> ScopedRing<'id, RxRingHalted<'a, COUNT>> {
     /// Rebuild the stopped ring for a new ownership epoch.
     ///
     /// Failure returns the halted authority even if hardware observations or
@@ -818,34 +849,37 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
         buffer_size: u32,
         prepare_buffer: F,
         prepare_reserved_buffer: R,
-    ) -> Result<RxRingStopped<'a, COUNT>, (Self, RxRingError)>
+    ) -> Result<RxRingStopped<'a, COUNT>, (RxRingHalted<'a, COUNT>, RxRingError)>
     where
         M: RxDma,
-        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
-        R: for<'grant> FnOnce(RecycleGrant<'grant>) -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'id, 'grant>) -> Result<(), RxRingError>,
+        R: for<'grant> FnOnce(RecycleGrant<'id, 'grant, Rearm, true>) -> Result<(), RxRingError>,
     {
-        if u32::from(self.buffer_size) != buffer_size {
-            return Err((self, RxRingError::Size));
+        let halted = self.ring;
+        if u32::from(halted.buffer_size) != buffer_size {
+            return Err((halted, RxRingError::Size));
         }
-        let lifecycle = self.arena.lifecycle();
-        let buffer_addresses = self.buffer_addresses;
-        match RxRingStopped::prepare_inner(
-            mmio,
-            self.table,
-            self.descriptor_table,
+        let lifecycle = halted.arena.lifecycle();
+        let buffer_addresses = halted.buffer_addresses;
+        let preparation = super::rx_storage::buffers::InitialRing {
+            table: halted.table,
+            descriptor_table: halted.descriptor_table,
             buffer_addresses,
-            self.reserved_buffer,
-            buffer_size,
-            prepare_buffer,
-            prepare_reserved_buffer,
-            self.arena,
-        ) {
+            reserved_buffer: halted.reserved_buffer,
+            arena: halted.arena,
+        };
+        match (ScopedRing {
+            ring: preparation,
+            _id: self._id,
+        })
+        .prepare_inner(mmio, buffer_size, prepare_buffer, prepare_reserved_buffer)
+        {
             // A halted ring retains the common-core proof established before
             // its first BASE. Warm rebuilds keep that core open and RX stopped.
             Ok(prepared) => prepared
                 .core_ready()
                 .publish(mmio)
-                .map_err(|error| (self, error)),
+                .map_err(|error| (halted, error)),
             Err(error) => {
                 if mmio.walker_enabled() {
                     // Preparation failed without proving that the walker is
@@ -854,7 +888,7 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
                     // descriptor rebuild in this radio epoch.
                     RxDmaArenaState::ResetRequired.store(lifecycle);
                 }
-                Err((self, error))
+                Err((halted, error))
             }
         }
     }
@@ -879,7 +913,11 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             arena: self.arena,
         }
     }
+}
 
+impl<'id, 'a, const COUNT: usize>
+    ScopedRing<'id, super::rx_storage::buffers::InitialRing<'a, COUNT>>
+{
     /// Stops the walker and prepares all buffers for one physical-order
     /// cold list beginning at the retained hardware cursor, or descriptor zero
     /// when the preceding list was exhausted, behind the reserved descriptor.
@@ -905,26 +943,25 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
     /// [`RxDmaStorage::prepare_ring`](crate::ieee80211::dma::rx_storage::RxDmaStorage::prepare_ring)
     /// and [`RxDmaStorage::prepare_halted`](crate::ieee80211::dma::rx_storage::RxDmaStorage::prepare_halted),
     /// which bind every descriptor to its arena buffer.
-    #[allow(
-        clippy::too_many_arguments,
-        reason = "each argument is one validated part of the arena's layout"
-    )]
     pub(crate) fn prepare_inner<M, F, R>(
+        self,
         mmio: &mut M,
-        table: &'a RxDescriptorTable<COUNT>,
-        descriptor_table: RxDescriptorAddresses,
-        buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
-        reserved_buffer: DmaWindowAddress,
         buffer_size: u32,
         mut prepare_buffer: F,
         prepare_reserved_buffer: R,
-        arena: &'a RxArenaWords,
     ) -> Result<RxRingPrepared<'a, COUNT>, RxRingError>
     where
         M: RxDma,
-        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
-        R: for<'grant> FnOnce(RecycleGrant<'grant>) -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'id, 'grant>) -> Result<(), RxRingError>,
+        R: for<'grant> FnOnce(RecycleGrant<'id, 'grant, Rearm, true>) -> Result<(), RxRingError>,
     {
+        let super::rx_storage::buffers::InitialRing {
+            table,
+            descriptor_table,
+            buffer_addresses,
+            reserved_buffer,
+            arena,
+        } = self.ring;
         validate_live_ring_geometry::<COUNT>()?;
         let buffer_size_u16 = u16::try_from(buffer_size).map_err(|_| RxRingError::Size)?;
         let Some(armed_word) = rx_armed_word(buffer_size) else {
@@ -981,7 +1018,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             .publish_owned(armed_word, reserved_buffer, Some(head));
 
         Ok(RxRingPrepared {
-            ring: Self {
+            ring: RxRingStopped {
                 descriptors,
                 table,
                 reserved_buffer,
@@ -997,7 +1034,9 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             },
         })
     }
+}
 
+impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
     pub const fn initial_start(&self) -> RingIndex<COUNT> {
         self.initial_start
     }
@@ -1191,7 +1230,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             .last_last_low_plus_one
             .store(encode_optional(last_descriptor_low), Ordering::Relaxed);
     }
+}
 
+impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'a, COUNT>> {
     /// Check the reserved descriptor R once per service pass.
     ///
     /// Before the first ring take a frame may land in R: the cold
@@ -1205,30 +1246,30 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// After the first take nothing names R: any write into it (`RX_DONE`,
     /// an overwritten guard, LAST naming R) is a late landing. It is counted
     /// and fails closed: the arena needs a radio reset.
-    pub(crate) fn observe_reserved_owned<M: RxDma, B: RxReservedBuffer>(
-        &mut self,
+    pub(crate) fn observe_reserved_owned<M: RxDma, B: RxReservedBuffer<'id>>(
+        self,
         mmio: &mut M,
         buffer: &B,
     ) -> Result<(), RxRingError> {
-        let reserved = self.table.reserved();
+        let reserved = self.ring.table.reserved();
         let word0 = reserved.word0();
-        if !self.reserved_left {
+        if !self.ring.reserved_left {
             if word0.rx_done() {
-                increment_saturating(&self.arena.reserved_landings);
+                increment_saturating(&self.ring.arena.reserved_landings);
                 if let Err(error) = self.rearm_reserved(word0, buffer) {
-                    self.require_reset();
+                    self.ring.require_reset();
                     return Err(error);
                 }
             }
             return Ok(());
         }
-        let reserved_low = self.binding.reserved_address() & RX_DESCRIPTOR_ADDRESS_LOW_MASK;
+        let reserved_low = self.ring.binding.reserved_address() & RX_DESCRIPTOR_ADDRESS_LOW_MASK;
         if word0.rx_done()
             || buffer.guard_overwritten()
             || mmio.last_descriptor_low() == reserved_low
         {
-            increment_saturating(&self.arena.reserved_late_landings);
-            self.require_reset();
+            increment_saturating(&self.ring.arena.reserved_late_landings);
+            self.ring.require_reset();
             return Err(RxRingError::Corrupt);
         }
         Ok(())
@@ -1236,14 +1277,15 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
 
     /// Rearm R's buffer guards and, after a terminal landing, its ownership
     /// word. R's link is not touched.
-    fn rearm_reserved<B: RxReservedBuffer>(
+    fn rearm_reserved<B: RxReservedBuffer<'id>>(
         &self,
         word0: WifiRxDmaDescriptorControl,
         buffer: &B,
     ) -> Result<(), RxRingError> {
         buffer.restore_guards(RecycleGrant::new(COUNT))?;
         if word0.rx_done() {
-            self.table
+            self.ring
+                .table
                 .reserved()
                 .publish_word0(rx_rearm_word(word0).ok_or(RxRingError::Size)?);
         }
@@ -1263,20 +1305,25 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// re-enter the ring through a stale head. The leading guard is read
     /// after the ring descriptor's `RX_DONE`, so R's bytes, which precede
     /// it on the walk, are visible.
-    fn leave_reserved<B: RxReservedBuffer>(&mut self, buffer: &B) -> Result<bool, RxRingError> {
-        let reserved = self.table.reserved();
+    fn leave_reserved<B: RxReservedBuffer<'id>>(
+        &mut self,
+        buffer: &B,
+    ) -> Result<bool, RxRingError> {
+        let reserved = self.ring.table.reserved();
         let word0 = reserved.word0();
         let landed = word0.rx_done();
         let continued = !landed && buffer.guard_overwritten();
         if landed || continued {
-            increment_saturating(&self.arena.reserved_landings);
+            increment_saturating(&self.ring.arena.reserved_landings);
             self.rearm_reserved(word0, buffer)?;
         }
         reserved.publish_next(None);
-        self.reserved_left = true;
+        self.ring.reserved_left = true;
         Ok(continued)
     }
+}
 
+impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// The word a completed, observed descriptor `index` carries once its
     /// buffer is detached: its completed image with the owner bit clear
     /// ([`rx_detached_word`]). Validated before the buffer leaves the ring,
@@ -1662,7 +1709,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         }
         RxCompletedUnitFrontier::default()
     }
+}
 
+impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'a, COUNT>> {
     /// Transfer one complete RX unit at the recycle frontier exactly once.
     ///
     /// The unit ends at or before the LAST of `cursor`, inclusive
@@ -1672,29 +1721,32 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// ownership transfer to a later completion epoch: that needs a later
     /// cursor.
     pub(crate) fn take_completed_unit_owned<F, B>(
-        &mut self,
+        mut self,
         cursor: RxFrozenCursor,
         nonterminal_consumed: F,
         reserved: &B,
     ) -> Result<Option<RxCompletedUnit>, RxRingError>
     where
         F: FnMut(usize) -> bool,
-        B: RxReservedBuffer,
+        B: RxReservedBuffer<'id>,
     {
-        let Some((descriptor_limit, _)) = self.frozen_cursor_descriptor_limit(cursor) else {
+        let Some((descriptor_limit, _)) = self.ring.frozen_cursor_descriptor_limit(cursor) else {
             return Ok(None);
         };
-        let Some(mut unit) =
-            self.take_completed_unit_inner(descriptor_limit, nonterminal_consumed)?
+        let Some(mut unit) = self
+            .ring
+            .take_completed_unit_inner(descriptor_limit, nonterminal_consumed)?
         else {
             return Ok(None);
         };
-        if !self.reserved_left {
+        if !self.ring.reserved_left {
             unit.continues_reserved_landing = self.leave_reserved(reserved)?;
         }
         Ok(Some(unit))
     }
+}
 
+impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     fn take_completed_unit_inner<F>(
         &mut self,
         descriptor_limit: usize,
@@ -1795,7 +1847,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         }
         Ok(None)
     }
+}
 
+impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'a, COUNT>> {
     crate::place_rx_hot_path! {
     /// Takes one newly completed descriptor exactly once for this ring epoch.
     ///
@@ -1804,29 +1858,29 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// showed that executing the complete poll/copy path from PSRAM capped
     /// useful UDP RX near 65 Mbit/s.
     #[inline(never)]
-    pub(crate) fn take_completed_owned<B: RxReservedBuffer>(
-        &mut self,
+    pub(crate) fn take_completed_owned<B: RxReservedBuffer<'id>>(
+        mut self,
         index: usize,
         reserved: &B,
     ) -> Option<RxCompletedDescriptor> {
         if index >= COUNT {
             return None;
         }
-        if self.observed_mask.contains(index) {
+        if self.ring.observed_mask.contains(index) {
             return None;
         }
-        let descriptor = &self.descriptors[index];
+        let descriptor = &self.ring.descriptors[index];
         let word0 = descriptor.word0();
         if !word0.rx_done() {
             return None;
         }
-        self.validate_descriptor_image(RingIndex::checked(index)?).ok()?;
-        let descriptor_address = descriptor_address(self.descriptor_table.base(), index).ok()?;
-        if !self.reserved_left && self.leave_reserved(reserved).is_err() {
-            self.require_reset();
+        self.ring.validate_descriptor_image(RingIndex::checked(index)?).ok()?;
+        let descriptor_address = descriptor_address(self.ring.descriptor_table.base(), index).ok()?;
+        if !self.ring.reserved_left && self.leave_reserved(reserved).is_err() {
+            self.ring.require_reset();
             return None;
         }
-        self.observed_mask.insert(index);
+        self.ring.observed_mask.insert(index);
         Some(RxCompletedDescriptor {
             index,
             descriptor_address,
@@ -1834,7 +1888,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             next_descriptor_address: descriptor.next_address(),
         })
     }}
+}
 
+impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     pub(crate) fn validate_completed_descriptor(&self, index: usize) -> Result<bool, RxRingError> {
         let descriptor = self.descriptors.get(index).ok_or(RxRingError::Count)?;
         let word0 = descriptor.word0();
@@ -1875,7 +1931,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         }
         Ok(word0)
     }
+}
 
+impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'a, COUNT>> {
     crate::place_rx_hot_path! {
     /// Settles a prior append and, when the next half is entirely CPU-owned,
     /// rearms and appends it without stopping the live walker.
@@ -1887,13 +1945,13 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// becomes accepted.
     #[inline(never)]
     pub(crate) fn recycle_completed_half_owned<M, F>(
-        &mut self,
+        self,
         mmio: &mut M,
         prepare_buffer: F,
     ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
     where
         M: RxDma,
-        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'id, 'grant>) -> Result<(), RxRingError>,
     {
         self.recycle_completed_group(
             mmio,
@@ -1927,13 +1985,13 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// `MAX_BATCH` bounds one append transaction without imposing a minimum.
     #[inline(never)]
     pub(crate) fn recycle_completed_prefix_owned<const MAX_BATCH: usize, M, F>(
-        &mut self,
+        self,
         mmio: &mut M,
         prepare_buffer: F,
     ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
     where
         M: RxDma,
-        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'id, 'grant>) -> Result<(), RxRingError>,
     {
         if MAX_BATCH == 0 || MAX_BATCH > COUNT {
             return Err(RxRingError::Count);
@@ -1941,15 +1999,15 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         if mmio.try_with_reload_settled(|_settled| ()).is_none() {
             return Ok(None);
         }
-        self.settle_reload(mmio)?;
-        if self.reload_pending() {
+        self.ring.settle_reload(mmio)?;
+        if self.ring.reload_pending() {
             return Ok(None);
         }
 
         let mut completed = 0;
         while completed < MAX_BATCH {
-            let index = self.recycle_start.advance(completed);
-            if !self.observed_mask.contains(index.get()) || !self.descriptors[index.get()].word0().rx_done() {
+            let index = self.ring.recycle_start.advance(completed);
+            if !self.ring.observed_mask.contains(index.get()) || !self.ring.descriptors[index.get()].word0().rx_done() {
                 break;
             }
             completed += 1;
@@ -1969,14 +2027,14 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// unit's `not-done .. done` completion shape until all of its bytes have
     /// been copied to independent storage.
     pub(crate) fn recycle_completed_unit_owned<M, F>(
-        &mut self,
+        self,
         mmio: &mut M,
         descriptor_count: usize,
         prepare_buffer: F,
     ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
     where
         M: RxDma,
-        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'id, 'grant>) -> Result<(), RxRingError>,
     {
         if descriptor_count == 0 || descriptor_count > COUNT {
             return Err(RxRingError::Count);
@@ -1997,14 +2055,14 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// a later still-retained descriptor out of the same irreversible append
     /// transaction.
     pub(crate) fn recycle_released_terminal_prefix_owned<M, F>(
-        &mut self,
+        self,
         mmio: &mut M,
         descriptor_count: usize,
         prepare_buffer: F,
     ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
     where
         M: RxDma,
-        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'id, 'grant>) -> Result<(), RxRingError>,
     {
         if descriptor_count == 0 || descriptor_count > COUNT {
             return Err(RxRingError::Count);
@@ -2027,20 +2085,21 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// frozen-LAST observation through this append. A copied cursor or count
     /// cannot authorize a later descriptor generation.
     pub(crate) fn recycle_proven_unit_owned<M, F>(
-        &mut self,
+        self,
         mmio: &mut M,
         descriptor_count: usize,
         prepare_buffer: F,
     ) -> Result<RxLiveAppend<COUNT>, RxRingError>
     where
         M: RxDma,
-        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'id, 'grant>) -> Result<(), RxRingError>,
     {
         // Only RxDmaRecycleUnit calls this: its mutable ring loan retains
         // the observed group and the frozen LAST generation until append.
         debug_assert!(
-            self.observed_mask
-                .contains_group::<COUNT>(self.recycle_start, descriptor_count)
+            self.ring
+                .observed_mask
+                .contains_group::<COUNT>(self.ring.recycle_start, descriptor_count)
         );
         self.recycle_completed_group(
             mmio,
@@ -2052,7 +2111,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     }
 
     fn recycle_completed_group<M, F>(
-        &mut self,
+        self,
         mmio: &mut M,
         requested_group_size: usize,
         shape: RxRecycleGroupShape,
@@ -2060,30 +2119,31 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
     where
         M: RxDma,
-        F: for<'grant> FnMut(RecycleGrant<'grant>) -> Result<(), RxRingError>,
+        F: for<'grant> FnMut(RecycleGrant<'id, 'grant>) -> Result<(), RxRingError>,
     {
         if mmio.try_with_reload_settled(|_settled| ()).is_none() {
             return Ok(None);
         }
-        self.settle_reload(mmio)?;
-        if self.reload_pending() {
+        self.ring.settle_reload(mmio)?;
+        if self.ring.reload_pending() {
             // The settle rang the doorbell once more; the next pass settles
             // that ring before anything else is appended.
             return Ok(None);
         }
 
         if !self
+            .ring
             .observed_mask
-            .contains_group::<COUNT>(self.recycle_start, requested_group_size)
+            .contains_group::<COUNT>(self.ring.recycle_start, requested_group_size)
         {
             return Ok(None);
         }
-        let accepted_distance = self.recycle_start.distance_to(self.accepted_tail);
+        let accepted_distance = self.ring.recycle_start.distance_to(self.ring.accepted_tail);
         if requested_group_size - 1 > accepted_distance {
             // A completed-looking descriptor beyond the accepted hardware
             // tail is not part of the live list. Reject the complete
             // transaction before modifying buffer guards or descriptor words.
-            self.require_reset();
+            self.ring.require_reset();
             return Err(RxRingError::Corrupt);
         }
         // The accepted tail is the doorbell's link point: the walker parks
@@ -2100,7 +2160,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 RxRecycleGroupShape::EveryDescriptorTerminal => requested_group_size - 1,
                 RxRecycleGroupShape::OneCompletedUnit
                 | RxRecycleGroupShape::OneCompletedUnitThroughFrozenLast => {
-                    self.require_reset();
+                    self.ring.require_reset();
                     return Err(RxRingError::Corrupt);
                 }
             }
@@ -2112,11 +2172,11 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         }
 
         for step in 0..group_size {
-            let index = self.recycle_start.advance(step);
-            let word0 = match self.validate_descriptor_image(index) {
+            let index = self.ring.recycle_start.advance(step);
+            let word0 = match self.ring.validate_descriptor_image(index) {
                 Ok(word0) => word0,
                 Err(error) => {
-                    self.require_reset();
+                    self.ring.require_reset();
                     return Err(error);
                 }
             };
@@ -2128,7 +2188,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 }
             };
             if !valid_completion_shape {
-                self.require_reset();
+                self.ring.require_reset();
                 return Err(RxRingError::Corrupt);
             }
             // Validate every value needed by the later publication before a
@@ -2136,17 +2196,17 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             // the observed group, so these images remain stable until rearm.
             rx_rearm_word(word0).ok_or(RxRingError::Size)?;
             if step + 1 < group_size {
-                descriptor_address(self.descriptor_table.base(), index.advance(1).get())?;
+                descriptor_address(self.ring.descriptor_table.base(), index.advance(1).get())?;
             }
         }
-        let head_index = self.recycle_start;
-        let head_address = descriptor_address(self.descriptor_table.base(), head_index.get())?;
+        let head_index = self.ring.recycle_start;
+        let head_address = descriptor_address(self.ring.descriptor_table.base(), head_index.get())?;
         let tail_index = head_index.advance(group_size - 1);
-        if self.descriptors[self.accepted_tail.get()].next_address() != 0 {
+        if self.ring.descriptors[self.ring.accepted_tail.get()].next_address() != 0 {
             // The accepted tail is the only legal append point. Validate it
             // before the first irreversible buffer/descriptor mutation so a
             // corrupt list cannot become a partially rearmed live arena.
-            self.require_reset();
+            self.ring.require_reset();
             return Err(RxRingError::Corrupt);
         }
         // The frozen-LAST path validates its generation-specific cursor proof
@@ -2155,39 +2215,45 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         if !matches!(
             shape,
             RxRecycleGroupShape::OneCompletedUnitThroughFrozenLast
-        ) && !self.observe_current_completed_unit_link_release(mmio, group_size)
+        ) && !self
+            .ring
+            .observe_current_completed_unit_link_release(mmio, group_size)
         {
             return Ok(None);
         }
-        let Some(next_cursor_generation) = self.cursor_generation.checked_add(1) else {
-            self.require_reset();
+        let Some(next_cursor_generation) = self.ring.cursor_generation.checked_add(1) else {
+            self.ring.require_reset();
             return Err(RxRingError::Corrupt);
         };
         for step in 0..group_size {
-            let index = self.recycle_start.advance(step);
+            let index = self.ring.recycle_start.advance(step);
             if let Err(error) = prepare_buffer(RecycleGrant::new(index.get())) {
                 // The completed-unit token has already been consumed and an
                 // earlier callback may have changed buffer-side guards. That
                 // partial transaction cannot be reconstructed from the next
                 // service pass, so fail closed instead of leaving a silent
                 // observed-mask dead-end.
-                self.require_reset();
+                self.ring.require_reset();
                 return Err(error);
             }
         }
         for step in 0..group_size {
-            let index = self.recycle_start.advance(step);
-            let descriptor = &self.descriptors[index.get()];
+            let index = self.ring.recycle_start.advance(step);
+            let descriptor = &self.ring.descriptors[index.get()];
             let next = if step + 1 < group_size {
                 Some(
-                    self.descriptor_table
+                    self.ring
+                        .descriptor_table
                         .element(index.advance(1).get())
                         .ok_or(RxRingError::Overflow)?,
                 )
             } else {
                 None
             };
-            let buffer = self.bound_buffer(index.get()).ok_or(RxRingError::Count)?;
+            let buffer = self
+                .ring
+                .bound_buffer(index.get())
+                .ok_or(RxRingError::Count)?;
             descriptor.publish_owned(
                 rx_rearm_word(descriptor.word0()).ok_or(RxRingError::Size)?,
                 buffer,
@@ -2195,25 +2261,27 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             );
         }
 
-        let accepted_tail = &self.descriptors[self.accepted_tail.get()];
+        let accepted_tail = &self.ring.descriptors[self.ring.accepted_tail.get()];
         // This type is the sole publication authority. All descriptors in the
         // appended group were observed complete, rearmed and remain
         // unreachable until this old-tail link and the following doorbell.
         let head = self
+            .ring
             .descriptor_table
             .element(head_index.get())
             .ok_or(RxRingError::Overflow)?;
         accepted_tail.publish_next(Some(head));
         mmio.fence();
-        mmio.request_reload(&self.binding);
+        mmio.request_reload(&self.ring.binding);
         mmio.fence();
 
-        self.cursor_generation = next_cursor_generation;
-        self.pending_tail_plus_one = tail_index.get() + 1;
-        self.reload_rerung = false;
-        self.observed_mask
-            .remove_group::<COUNT>(self.recycle_start, group_size);
-        self.recycle_start = self.recycle_start.advance(group_size);
+        self.ring.cursor_generation = next_cursor_generation;
+        self.ring.pending_tail_plus_one = tail_index.get() + 1;
+        self.ring.reload_rerung = false;
+        self.ring
+            .observed_mask
+            .remove_group::<COUNT>(self.ring.recycle_start, group_size);
+        self.ring.recycle_start = self.ring.recycle_start.advance(group_size);
         Ok(Some(RxLiveAppend {
             head_index,
             head_address,
@@ -2221,7 +2289,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             descriptor_count: group_size,
         }))
     }
+}
 
+impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     pub const fn observed_mask(&self) -> RxObservedMask {
         self.observed_mask
     }
