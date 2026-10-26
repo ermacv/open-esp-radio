@@ -320,7 +320,7 @@ marker means the routing hypothesis passed.
 | `140` | `(0,0,0)`, prefix entered. |
 | `141` | peripheral-I2C power, peripheral-I2C reset released, master clock gate. |
 | `142` | I2C160 source select, REF160 output gate, PHY register enable. |
-| `143`, `144`, `145` | BBTOP_MST0_SELECT, TXRF_MST0_SELECT, PHY_HOST_MAP_OTHER; after preset TXRF1, set BBTOP1, clear TXRF0 respectively. |
+| `143`, `144`, `145` | BBTOP_MST0_SELECT, TXRF_MST0_SELECT, upper-map diagnostic image; after preset TXRF1, set BBTOP1, clear TXRF0 respectively. |
 | `14b` | `(case base, requested block, requested byte)`, no modeled route; leaf stops. |
 | `14c` | `(14,0,0)`, CPU clock refusal before the prefix; preceding `a0` gives observations. |
 | `14d` | `(case base, host,0)`, selected host busy before command publication; route/mask may already be set. Leaf stops. |
@@ -328,10 +328,19 @@ marker means the routing hypothesis passed.
 | case base `+0` | reconstructed ANA_CONF1, BBTOP_MST0_SELECT, TXRF_MST0_SELECT. |
 | case base `+1` | returned data, number of busy polls, completion-observer cycles. **Data=`ffffffff` means timeout**, not an analog byte; `+2` is absent and the leaf stops. |
 | case base `+2` | command block, command byte, final busy. |
-| case base `+3` | PHY_HOST_MAP_OTHER, register mode, register enable. |
+| case base `+3` | upper-map diagnostic image, register mode, register enable. |
 | case base `+4` | host, DATA seed,0. |
 | `16f` | `(6,0,0)`, six positive commands completed. |
 | `1ff` | `(1,0,0)`, entire leaf completed. |
+
+The upper-map diagnostic image packs the named lanes above TXRF and the two
+opaque gaps using generated field positions, with the SDM lane as bit zero.
+It preserves the record's twelve-bit encoding without an aggregate register
+field. SDM, RFPLL, BIAS, BBPLL, ULP_BOD, SARADC and DIG_REG lane names describe
+the ROM publication combined with the modeled normal-profile read selectors;
+their independent silicon effects are untested. The unmatched gap positions
+stay opaque. HW15 is evidence for the observed bytes, BBTOP controls and TXRF
+stored clear; the TXRF route itself is sourced only from the vendor mapping.
 
 Case bases: `150` initial BBTOP, `160` initial TXRF, `170` parallel BBTOP,
 `180` parallel TXRF, `190` final BBTOP, `1a0` final TXRF, `1b0` no-selector

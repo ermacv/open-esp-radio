@@ -166,9 +166,58 @@ provenance = "observed"
 completeness = "partial"
 naming = "descriptive"
 
-[review.entity."ANA_CONF2.PHY_HOST_MAP_OTHER"]
+[review.entity."ANA_CONF2.SDM_MST0_SELECT"]
 sources = ["BLOB_LIBPHY_PHY_I2C", "ROM_REV0_PHY_I2C_HOST_LANES"]
 provenance = "observed"
+completeness = "partial"
+naming = "descriptive"
+
+[review.entity."ANA_CONF2.RFPLL_MST0_SELECT"]
+sources = ["BLOB_LIBPHY_PHY_I2C", "ROM_REV0_PHY_I2C_HOST_LANES"]
+provenance = "observed"
+completeness = "partial"
+naming = "descriptive"
+
+[review.entity."ANA_CONF2.BIAS_MST0_SELECT"]
+sources = ["BLOB_LIBPHY_PHY_I2C", "ROM_REV0_PHY_I2C_HOST_LANES"]
+provenance = "observed"
+completeness = "partial"
+naming = "descriptive"
+
+[review.entity."ANA_CONF2.BBPLL_MST0_SELECT"]
+sources = ["BLOB_LIBPHY_PHY_I2C", "ROM_REV0_PHY_I2C_HOST_LANES"]
+provenance = "observed"
+completeness = "partial"
+naming = "descriptive"
+
+[review.entity."ANA_CONF2.ULP_BOD_MST0_SELECT"]
+sources = ["BLOB_LIBPHY_PHY_I2C", "ROM_REV0_PHY_I2C_HOST_LANES"]
+provenance = "observed"
+completeness = "partial"
+naming = "descriptive"
+
+[review.entity."ANA_CONF2.BITS_11_12_OPAQUE"]
+sources = ["BLOB_LIBPHY_PHY_I2C", "ROM_REV0_PHY_I2C_HOST_LANES"]
+provenance = "observed"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."ANA_CONF2.SARADC_MST0_SELECT"]
+sources = ["BLOB_LIBPHY_PHY_I2C", "ROM_REV0_PHY_I2C_HOST_LANES"]
+provenance = "observed"
+completeness = "partial"
+naming = "descriptive"
+
+[review.entity."ANA_CONF2.BITS_14_16_OPAQUE"]
+sources = ["BLOB_LIBPHY_PHY_I2C", "ROM_REV0_PHY_I2C_HOST_LANES"]
+provenance = "observed"
+accuracy = "positional"
+completeness = "unknown"
+
+[review.entity."ANA_CONF2.DIG_REG_MST0_SELECT"]
+sources = ["BLOB_LIBPHY_PHY_I2C", "ROM_REV0_PHY_I2C_HOST_LANES"]
+provenance = "observed"
+completeness = "partial"
 naming = "descriptive"
 
 [review.entity."ANA_CONF2.BITS_0_3_OPAQUE"]
@@ -468,10 +517,58 @@ class = "plain"
 description = "TXRF lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x6b)<<2 for master zero and clears it for master one. The scoped s31-b probe verifies stored 1 then 0 and a seeded TXRF08 read on master1; the independent functional effect of this lane is untested."
 
 [[registers.fields]]
-name = "PHY_HOST_MAP_OTHER"
-bits = "17:6"
+name = "SDM_MST0_SELECT"
+bits = "6"
 class = "plain"
-description = "Remaining twelve bits of the complete host-selection image replaced by phy_get_i2c_hostid_new; individual bank lanes remain unresolved. Normal image 0x3fa0 projects 0xfe8 here, retained-wake parallel image 0x000a projects 2."
+description = "Logical SDM host-map lane derived from libphy-normal request 0x63, read selector 0x10, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested."
+
+[[registers.fields]]
+name = "RFPLL_MST0_SELECT"
+bits = "7"
+class = "plain"
+description = "Logical RFPLL host-map lane derived from libphy-normal request 0x62, read selector 0x20, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested."
+
+[[registers.fields]]
+name = "BIAS_MST0_SELECT"
+bits = "8"
+class = "plain"
+description = "Logical BIAS host-map lane derived from libphy-normal request 0x6a, read selector 0x40, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested."
+
+[[registers.fields]]
+name = "BBPLL_MST0_SELECT"
+bits = "9"
+class = "plain"
+description = "Logical BBPLL host-map lane derived from libphy-normal request 0x66, read selector 0x80, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested."
+
+[[registers.fields]]
+name = "ULP_BOD_MST0_SELECT"
+bits = "10"
+class = "plain"
+description = "Logical ULP_BOD host-map lane derived from libphy-normal request 0x61, read selector 0x100, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested."
+
+[[registers.fields]]
+name = "BITS_11_12_OPAQUE"
+bits = "12:11"
+class = "plain"
+description = "Host-map positions written by the complete sourced map images but not associated with any named bank by the current nonzero libphy-normal read selectors. Their function is unknown; they are not classified as reserved."
+
+[[registers.fields]]
+name = "SARADC_MST0_SELECT"
+bits = "13"
+class = "plain"
+description = "Logical SARADC host-map lane derived from libphy-normal request 0x69, read selector 0x800, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested."
+
+[[registers.fields]]
+name = "BITS_14_16_OPAQUE"
+bits = "16:14"
+class = "plain"
+description = "Host-map positions written by the complete sourced map images but not associated with any named bank by the current nonzero libphy-normal read selectors. Their function is unknown; they are not classified as reserved."
+
+[[registers.fields]]
+name = "DIG_REG_MST0_SELECT"
+bits = "17"
+class = "plain"
+description = "Logical DIG_REG host-map lane derived from libphy-normal request 0x6d, read selector 0x8000, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested."
 
 [[registers.fields]]
 name = "BITS_18_23_OPAQUE"

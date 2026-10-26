@@ -5880,13 +5880,13 @@ sources = ["ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK", "S31_MODEM_SYSCON_STRUCT"]
 
 [[field-replace-modifies]]
 name = "configure_phy_i2c_host_map"
-fields = [{ field = "I2C_ANA_MST.ANA_CONF2.BBTOP_MST0_SELECT", source-bit-offset = 0 }, { field = "I2C_ANA_MST.ANA_CONF2.TXRF_MST0_SELECT", source-bit-offset = 1 }, { field = "I2C_ANA_MST.ANA_CONF2.PHY_HOST_MAP_OTHER", source-bit-offset = 2 }]
+fields = [{ field = "I2C_ANA_MST.ANA_CONF2.BBTOP_MST0_SELECT", source-bit-offset = 0 }, { field = "I2C_ANA_MST.ANA_CONF2.TXRF_MST0_SELECT", source-bit-offset = 1 }, { field = "I2C_ANA_MST.ANA_CONF2.SDM_MST0_SELECT", source-bit-offset = 2 }, { field = "I2C_ANA_MST.ANA_CONF2.RFPLL_MST0_SELECT", source-bit-offset = 3 }, { field = "I2C_ANA_MST.ANA_CONF2.BIAS_MST0_SELECT", source-bit-offset = 4 }, { field = "I2C_ANA_MST.ANA_CONF2.BBPLL_MST0_SELECT", source-bit-offset = 5 }, { field = "I2C_ANA_MST.ANA_CONF2.ULP_BOD_MST0_SELECT", source-bit-offset = 6 }, { field = "I2C_ANA_MST.ANA_CONF2.BITS_11_12_OPAQUE", source-bit-offset = 7 }, { field = "I2C_ANA_MST.ANA_CONF2.SARADC_MST0_SELECT", source-bit-offset = 9 }, { field = "I2C_ANA_MST.ANA_CONF2.BITS_14_16_OPAQUE", source-bit-offset = 10 }, { field = "I2C_ANA_MST.ANA_CONF2.DIG_REG_MST0_SELECT", source-bit-offset = 13 }]
 value = 0x00003fa0
 sources = ["ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
 
 [[field-replace-modifies]]
 name = "configure_phy_i2c_parallel_host_map"
-fields = [{ field = "I2C_ANA_MST.ANA_CONF2.BBTOP_MST0_SELECT", source-bit-offset = 0 }, { field = "I2C_ANA_MST.ANA_CONF2.TXRF_MST0_SELECT", source-bit-offset = 1 }, { field = "I2C_ANA_MST.ANA_CONF2.PHY_HOST_MAP_OTHER", source-bit-offset = 2 }]
+fields = [{ field = "I2C_ANA_MST.ANA_CONF2.BBTOP_MST0_SELECT", source-bit-offset = 0 }, { field = "I2C_ANA_MST.ANA_CONF2.TXRF_MST0_SELECT", source-bit-offset = 1 }, { field = "I2C_ANA_MST.ANA_CONF2.SDM_MST0_SELECT", source-bit-offset = 2 }, { field = "I2C_ANA_MST.ANA_CONF2.RFPLL_MST0_SELECT", source-bit-offset = 3 }, { field = "I2C_ANA_MST.ANA_CONF2.BIAS_MST0_SELECT", source-bit-offset = 4 }, { field = "I2C_ANA_MST.ANA_CONF2.BBPLL_MST0_SELECT", source-bit-offset = 5 }, { field = "I2C_ANA_MST.ANA_CONF2.ULP_BOD_MST0_SELECT", source-bit-offset = 6 }, { field = "I2C_ANA_MST.ANA_CONF2.BITS_11_12_OPAQUE", source-bit-offset = 7 }, { field = "I2C_ANA_MST.ANA_CONF2.SARADC_MST0_SELECT", source-bit-offset = 9 }, { field = "I2C_ANA_MST.ANA_CONF2.BITS_14_16_OPAQUE", source-bit-offset = 10 }, { field = "I2C_ANA_MST.ANA_CONF2.DIG_REG_MST0_SELECT", source-bit-offset = 13 }]
 value = 0x0000000a
 sources = ["BLOB_LIBPHY_PHY_I2C_INIT2_20260907", "S31_ESP_PACS_SVD"]
 

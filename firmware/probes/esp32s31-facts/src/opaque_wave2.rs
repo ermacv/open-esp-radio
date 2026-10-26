@@ -147,6 +147,55 @@ fn prepare(s: &mut Session<'_>) {
     oer_riscv::fence();
 }
 
+// Diagnostic packing above the TXRF lane retains the recorded result format.
+// Every input is a typed getter; positions derive from the generated model.
+fn upper_host_map_image(map: pac::i2c_ana_mst::ana_conf2::R) -> u32 {
+    use pac::i2c_ana_mst::ana_conf2 as fields;
+    [
+        (
+            u32::from(map.sdm_mst0_select()),
+            fields::SDM_MST0_SELECT_MASK,
+        ),
+        (
+            u32::from(map.rfpll_mst0_select()),
+            fields::RFPLL_MST0_SELECT_MASK,
+        ),
+        (
+            u32::from(map.bias_mst0_select()),
+            fields::BIAS_MST0_SELECT_MASK,
+        ),
+        (
+            u32::from(map.bbpll_mst0_select()),
+            fields::BBPLL_MST0_SELECT_MASK,
+        ),
+        (
+            u32::from(map.ulp_bod_mst0_select()),
+            fields::ULP_BOD_MST0_SELECT_MASK,
+        ),
+        (
+            map.bits_11_12_opaque().get(),
+            fields::BITS_11_12_OPAQUE_MASK,
+        ),
+        (
+            u32::from(map.saradc_mst0_select()),
+            fields::SARADC_MST0_SELECT_MASK,
+        ),
+        (
+            map.bits_14_16_opaque().get(),
+            fields::BITS_14_16_OPAQUE_MASK,
+        ),
+        (
+            u32::from(map.dig_reg_mst0_select()),
+            fields::DIG_REG_MST0_SELECT_MASK,
+        ),
+    ]
+    .into_iter()
+    .fold(0, |image, (value, mask)| {
+        image | value.wrapping_shl(mask.trailing_zeros())
+    })
+    .wrapping_shr(fields::SDM_MST0_SELECT_MASK.trailing_zeros())
+}
+
 // A case has route at +0, completion at +1, identity at +2,
 // mode at +3 and request at +4. Refusals have separate global tags.
 fn routing(s: &Session<'_>, tag: u32, host: Host, seed: u8) {
@@ -163,7 +212,7 @@ fn routing(s: &Session<'_>, tag: u32, host: Host, seed: u8) {
     );
     emit(
         tag + 3,
-        map.phy_host_map_other().get(),
+        upper_host_map_image(map),
         m.read_ana_conf0().phy_register_mode().get(),
         u32::from(m.read_ana_conf0().phy_register_enable()),
     );
@@ -254,7 +303,15 @@ fn normal_map(s: &mut Session<'_>) {
     s.analog.i2c_ana_mst.modify_ana_conf2(|w| {
         w.set_bbtop_mst0_select(false)
             .set_txrf_mst0_select(false)
-            .set_phy_host_map_other(Bits::constant::<0xfe8>());
+            .set_sdm_mst0_select(false)
+            .set_rfpll_mst0_select(false)
+            .set_bias_mst0_select(false)
+            .set_bbpll_mst0_select(true)
+            .set_ulp_bod_mst0_select(false)
+            .set_bits_11_12_opaque(Bits::constant::<3>())
+            .set_saradc_mst0_select(true)
+            .set_bits_14_16_opaque(Bits::constant::<7>())
+            .set_dig_reg_mst0_select(true);
     });
 }
 
@@ -291,7 +348,7 @@ fn lane_snapshot(s: &Session<'_>, tag: u32) {
         tag,
         u32::from(m.bbtop_mst0_select()),
         u32::from(m.txrf_mst0_select()),
-        m.phy_host_map_other().get(),
+        upper_host_map_image(m),
     );
 }
 

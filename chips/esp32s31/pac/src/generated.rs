@@ -104468,12 +104468,68 @@ pub mod i2c_ana_mst {
         /// Positioned bits of `TXRF_MST0_SELECT`.
         pub const TXRF_MST0_SELECT_MASK: u32 = 0x20;
 
-        /// Width of `PHY_HOST_MAP_OTHER` in bits.
-        pub const PHY_HOST_MAP_OTHER_WIDTH: u32 = 12;
-        /// Greatest unsigned image of `PHY_HOST_MAP_OTHER`.
-        pub const PHY_HOST_MAP_OTHER_MAX: u32 = 0xfff;
-        /// Positioned bits of `PHY_HOST_MAP_OTHER`.
-        pub const PHY_HOST_MAP_OTHER_MASK: u32 = 0x3ffc0;
+        /// Width of `SDM_MST0_SELECT` in bits.
+        pub const SDM_MST0_SELECT_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `SDM_MST0_SELECT`.
+        pub const SDM_MST0_SELECT_MAX: u32 = 0x1;
+        /// Positioned bits of `SDM_MST0_SELECT`.
+        pub const SDM_MST0_SELECT_MASK: u32 = 0x40;
+
+        /// Width of `RFPLL_MST0_SELECT` in bits.
+        pub const RFPLL_MST0_SELECT_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `RFPLL_MST0_SELECT`.
+        pub const RFPLL_MST0_SELECT_MAX: u32 = 0x1;
+        /// Positioned bits of `RFPLL_MST0_SELECT`.
+        pub const RFPLL_MST0_SELECT_MASK: u32 = 0x80;
+
+        /// Width of `BIAS_MST0_SELECT` in bits.
+        pub const BIAS_MST0_SELECT_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIAS_MST0_SELECT`.
+        pub const BIAS_MST0_SELECT_MAX: u32 = 0x1;
+        /// Positioned bits of `BIAS_MST0_SELECT`.
+        pub const BIAS_MST0_SELECT_MASK: u32 = 0x100;
+
+        /// Width of `BBPLL_MST0_SELECT` in bits.
+        pub const BBPLL_MST0_SELECT_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BBPLL_MST0_SELECT`.
+        pub const BBPLL_MST0_SELECT_MAX: u32 = 0x1;
+        /// Positioned bits of `BBPLL_MST0_SELECT`.
+        pub const BBPLL_MST0_SELECT_MASK: u32 = 0x200;
+
+        /// Width of `ULP_BOD_MST0_SELECT` in bits.
+        pub const ULP_BOD_MST0_SELECT_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `ULP_BOD_MST0_SELECT`.
+        pub const ULP_BOD_MST0_SELECT_MAX: u32 = 0x1;
+        /// Positioned bits of `ULP_BOD_MST0_SELECT`.
+        pub const ULP_BOD_MST0_SELECT_MASK: u32 = 0x400;
+
+        /// Width of `BITS_11_12_OPAQUE` in bits.
+        pub const BITS_11_12_OPAQUE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `BITS_11_12_OPAQUE`.
+        pub const BITS_11_12_OPAQUE_MAX: u32 = 0x3;
+        /// Positioned bits of `BITS_11_12_OPAQUE`.
+        pub const BITS_11_12_OPAQUE_MASK: u32 = 0x1800;
+
+        /// Width of `SARADC_MST0_SELECT` in bits.
+        pub const SARADC_MST0_SELECT_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `SARADC_MST0_SELECT`.
+        pub const SARADC_MST0_SELECT_MAX: u32 = 0x1;
+        /// Positioned bits of `SARADC_MST0_SELECT`.
+        pub const SARADC_MST0_SELECT_MASK: u32 = 0x2000;
+
+        /// Width of `BITS_14_16_OPAQUE` in bits.
+        pub const BITS_14_16_OPAQUE_WIDTH: u32 = 3;
+        /// Greatest unsigned image of `BITS_14_16_OPAQUE`.
+        pub const BITS_14_16_OPAQUE_MAX: u32 = 0x7;
+        /// Positioned bits of `BITS_14_16_OPAQUE`.
+        pub const BITS_14_16_OPAQUE_MASK: u32 = 0x1c000;
+
+        /// Width of `DIG_REG_MST0_SELECT` in bits.
+        pub const DIG_REG_MST0_SELECT_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `DIG_REG_MST0_SELECT`.
+        pub const DIG_REG_MST0_SELECT_MAX: u32 = 0x1;
+        /// Positioned bits of `DIG_REG_MST0_SELECT`.
+        pub const DIG_REG_MST0_SELECT_MASK: u32 = 0x20000;
 
         /// Width of `BITS_18_23_OPAQUE` in bits.
         pub const BITS_18_23_OPAQUE_WIDTH: u32 = 6;
@@ -104512,10 +104568,58 @@ pub mod i2c_ana_mst {
                 (self.0 & 0x00000020) != 0
             }
 
-            /// Remaining twelve bits of the complete host-selection image replaced by phy_get_i2c_hostid_new; individual bank lanes remain unresolved. Normal image 0x3fa0 projects 0xfe8 here, retained-wake parallel image 0x000a projects 2.
+            /// Logical SDM host-map lane derived from libphy-normal request 0x63, read selector 0x10, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested.
             #[inline]
-            pub const fn phy_host_map_other(self) -> oer_mmio::Bits<12> {
-                oer_mmio::Bits::truncate(self.0 >> 6)
+            pub const fn sdm_mst0_select(self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// Logical RFPLL host-map lane derived from libphy-normal request 0x62, read selector 0x20, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested.
+            #[inline]
+            pub const fn rfpll_mst0_select(self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// Logical BIAS host-map lane derived from libphy-normal request 0x6a, read selector 0x40, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested.
+            #[inline]
+            pub const fn bias_mst0_select(self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Logical BBPLL host-map lane derived from libphy-normal request 0x66, read selector 0x80, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested.
+            #[inline]
+            pub const fn bbpll_mst0_select(self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// Logical ULP_BOD host-map lane derived from libphy-normal request 0x61, read selector 0x100, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested.
+            #[inline]
+            pub const fn ulp_bod_mst0_select(self) -> bool {
+                (self.0 & 0x00000400) != 0
+            }
+
+            /// Host-map positions written by the complete sourced map images but not associated with any named bank by the current nonzero libphy-normal read selectors. Their function is unknown; they are not classified as reserved.
+            #[inline]
+            pub const fn bits_11_12_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 11)
+            }
+
+            /// Logical SARADC host-map lane derived from libphy-normal request 0x69, read selector 0x800, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested.
+            #[inline]
+            pub const fn saradc_mst0_select(self) -> bool {
+                (self.0 & 0x00002000) != 0
+            }
+
+            /// Host-map positions written by the complete sourced map images but not associated with any named bank by the current nonzero libphy-normal read selectors. Their function is unknown; they are not classified as reserved.
+            #[inline]
+            pub const fn bits_14_16_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 14)
+            }
+
+            /// Logical DIG_REG host-map lane derived from libphy-normal request 0x6d, read selector 0x8000, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested.
+            #[inline]
+            pub const fn dig_reg_mst0_select(self) -> bool {
+                (self.0 & 0x00020000) != 0
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -104553,10 +104657,58 @@ pub mod i2c_ana_mst {
                 (self.0 & 0x00000020) != 0
             }
 
-            /// Remaining twelve bits of the complete host-selection image replaced by phy_get_i2c_hostid_new; individual bank lanes remain unresolved. Normal image 0x3fa0 projects 0xfe8 here, retained-wake parallel image 0x000a projects 2.
+            /// Logical SDM host-map lane derived from libphy-normal request 0x63, read selector 0x10, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested.
             #[inline]
-            pub const fn phy_host_map_other(&self) -> oer_mmio::Bits<12> {
-                oer_mmio::Bits::truncate(self.0 >> 6)
+            pub const fn sdm_mst0_select(&self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// Logical RFPLL host-map lane derived from libphy-normal request 0x62, read selector 0x20, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested.
+            #[inline]
+            pub const fn rfpll_mst0_select(&self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// Logical BIAS host-map lane derived from libphy-normal request 0x6a, read selector 0x40, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested.
+            #[inline]
+            pub const fn bias_mst0_select(&self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Logical BBPLL host-map lane derived from libphy-normal request 0x66, read selector 0x80, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested.
+            #[inline]
+            pub const fn bbpll_mst0_select(&self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// Logical ULP_BOD host-map lane derived from libphy-normal request 0x61, read selector 0x100, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested.
+            #[inline]
+            pub const fn ulp_bod_mst0_select(&self) -> bool {
+                (self.0 & 0x00000400) != 0
+            }
+
+            /// Host-map positions written by the complete sourced map images but not associated with any named bank by the current nonzero libphy-normal read selectors. Their function is unknown; they are not classified as reserved.
+            #[inline]
+            pub const fn bits_11_12_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 11)
+            }
+
+            /// Logical SARADC host-map lane derived from libphy-normal request 0x69, read selector 0x800, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested.
+            #[inline]
+            pub const fn saradc_mst0_select(&self) -> bool {
+                (self.0 & 0x00002000) != 0
+            }
+
+            /// Host-map positions written by the complete sourced map images but not associated with any named bank by the current nonzero libphy-normal read selectors. Their function is unknown; they are not classified as reserved.
+            #[inline]
+            pub const fn bits_14_16_opaque(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 14)
+            }
+
+            /// Logical DIG_REG host-map lane derived from libphy-normal request 0x6d, read selector 0x8000, and the ROM read_select<<2 publication. phy_i2c_paral_set_mst0 sets the first bank lane for master zero and clears the second for master one. This is a software-publication association; its independent silicon routing effect has not been tested.
+            #[inline]
+            pub const fn dig_reg_mst0_select(&self) -> bool {
+                (self.0 & 0x00020000) != 0
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -104592,10 +104744,66 @@ pub mod i2c_ana_mst {
                 self
             }
 
-            /// Set `PHY_HOST_MAP_OTHER`.
+            /// Set `SDM_MST0_SELECT`.
             #[inline]
-            pub fn set_phy_host_map_other(&mut self, value: oer_mmio::Bits<12>) -> &mut Self {
-                self.0 = (self.0 & 0xfffc003f) | (value.get() << 6);
+            pub fn set_sdm_mst0_select(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffffbf) | (u32::from(value) << 6);
+                self
+            }
+
+            /// Set `RFPLL_MST0_SELECT`.
+            #[inline]
+            pub fn set_rfpll_mst0_select(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffff7f) | (u32::from(value) << 7);
+                self
+            }
+
+            /// Set `BIAS_MST0_SELECT`.
+            #[inline]
+            pub fn set_bias_mst0_select(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffeff) | (u32::from(value) << 8);
+                self
+            }
+
+            /// Set `BBPLL_MST0_SELECT`.
+            #[inline]
+            pub fn set_bbpll_mst0_select(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffdff) | (u32::from(value) << 9);
+                self
+            }
+
+            /// Set `ULP_BOD_MST0_SELECT`.
+            #[inline]
+            pub fn set_ulp_bod_mst0_select(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffbff) | (u32::from(value) << 10);
+                self
+            }
+
+            /// Set `BITS_11_12_OPAQUE`.
+            #[inline]
+            pub fn set_bits_11_12_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & 0xffffe7ff) | (value.get() << 11);
+                self
+            }
+
+            /// Set `SARADC_MST0_SELECT`.
+            #[inline]
+            pub fn set_saradc_mst0_select(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffdfff) | (u32::from(value) << 13);
+                self
+            }
+
+            /// Set `BITS_14_16_OPAQUE`.
+            #[inline]
+            pub fn set_bits_14_16_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & 0xfffe3fff) | (value.get() << 14);
+                self
+            }
+
+            /// Set `DIG_REG_MST0_SELECT`.
+            #[inline]
+            pub fn set_dig_reg_mst0_select(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffdffff) | (u32::from(value) << 17);
                 self
             }
 

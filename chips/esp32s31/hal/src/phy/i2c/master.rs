@@ -158,7 +158,15 @@ impl<'a, P: Placement> AnalogBus<'a, P> {
         self.master.modify_ana_conf2(|w| {
             w.set_bbtop_mst0_select(false)
                 .set_txrf_mst0_select(true)
-                .set_phy_host_map_other(Bits::constant::<2>());
+                .set_sdm_mst0_select(false)
+                .set_rfpll_mst0_select(true)
+                .set_bias_mst0_select(false)
+                .set_bbpll_mst0_select(false)
+                .set_ulp_bod_mst0_select(false)
+                .set_bits_11_12_opaque(Bits::constant::<0>())
+                .set_saradc_mst0_select(false)
+                .set_bits_14_16_opaque(Bits::constant::<0>())
+                .set_dig_reg_mst0_select(false);
         });
     }
 
@@ -216,7 +224,15 @@ fn configure_host_map<P: Placement>(master: &mut I2cAnaMst<P>) {
     master.modify_ana_conf2(|w| {
         w.set_bbtop_mst0_select(false)
             .set_txrf_mst0_select(false)
-            .set_phy_host_map_other(Bits::constant::<0xfe8>());
+            .set_sdm_mst0_select(false)
+            .set_rfpll_mst0_select(false)
+            .set_bias_mst0_select(false)
+            .set_bbpll_mst0_select(true)
+            .set_ulp_bod_mst0_select(false)
+            .set_bits_11_12_opaque(Bits::constant::<3>())
+            .set_saradc_mst0_select(true)
+            .set_bits_14_16_opaque(Bits::constant::<7>())
+            .set_dig_reg_mst0_select(true);
     });
 }
 
