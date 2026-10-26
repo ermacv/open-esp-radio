@@ -187,10 +187,16 @@ adapter binds Xarxa's external-packet API, which is unsafe by design, in one
 unsafe module, `external_rx`: it adopts a detached RX DMA buffer from an
 `oer-memory` handoff slot as a Xarxa `PacketBuf` (`ExternalPacketOrigin::new`
 and `adopt`) and returns the slot through `release_adopted` when the packet
-drops. A slot is adopted again only after that release returned, because the
-radio must first claim the slot the release freed. Preserve the proof at the
-smallest operation; a safe state machine in a crate below the boundary
-remains safe.
+drops. Layout admission inspects `ExternalRxNetworkLease::adoption_view`
+without consuming the affine lease. An unfit frame is copied through the
+lease's safe `frame` view; dropping the lease returns its DMA slot before
+the admission returns its credit. Only a fitting frame consumes the lease
+with `into_adoption`. The Xarxa return callback releases an adopted slot
+directly, then returns its credit. The origin keeps its own static reference
+and is automatically `Sync`. A slot is adopted again only after that release
+returned, because the radio must first claim the slot the release freed.
+Preserve the proof at the smallest operation; a safe state machine in a crate
+below the boundary remains safe.
 
 `oer_esp32s31_hal::bluetooth::engine` owns the controller-SRAM protocol.
 One `Engine` owns the register token and the complete `Placed<BluetoothArena>`;
