@@ -175,6 +175,15 @@ hardware claim even if the debugger command itself exits successfully.
 
 ## Local radio interrupt retention
 
+Selection 90 checks the BTLC prerequisite with the production digital Bluetooth
+clock dependencies and reset domains, then a positional timer seed and two
+capture requests separated by 4096 cycles. Each latch poll is bounded by
+200,000 cycles. Tags 0x9010/0x9020 record request completion, arm/config flags
+and elapsed cycles; the following records hold all three capture words.
+Tag 0x9030 reports completion flags and the first-word delta. A stuck request
+or zero delta is a failed prerequisite, not an interrupt-mask result. No RF,
+scheduler RUN or DMA publication is involved.
+
 | Selection | Bounded experiment |
 | --- | --- |
 | 80 | LP compare arrival after a zero read and before zero acknowledgement; clear-before-arrival control; retained nonzero sample across a rearmed target crossing |

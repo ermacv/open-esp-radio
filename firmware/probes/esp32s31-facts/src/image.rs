@@ -13,6 +13,7 @@ use oer_esp32s31_pac as pac;
 use oer_mmio::{Bits, Index};
 
 mod ble;
+mod ble_wave2;
 mod generic;
 mod radio_local;
 
@@ -182,6 +183,10 @@ struct Probe {
 // The sole registration point. Reset is selected explicitly; it cannot run
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
+    Probe {
+        id: 90,
+        run: ble_wave2::prerequisite,
+    },
     Probe {
         id: 82,
         run: radio_local::ieee_timers,
