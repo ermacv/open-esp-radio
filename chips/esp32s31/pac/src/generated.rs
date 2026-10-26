@@ -67752,7 +67752,7 @@ pub mod fe {
                 oer_mmio::Bits::truncate(self.0 >> 12)
             }
 
-            /// All-three-ready predicate is 7. Isolated manual-trigger trials observed a non-7 conversion phase and retention of 7 through ready+100 us, including tone-arm clear; a pre-trigger 7 alone does not identify a fresh sample.
+            /// All-three-ready predicate is 7. Observed partial codes 0,1,2,3,4,5,6 occurred nonmonotonically before 7 over approximately 20 us; individual bit meanings are unresolved. One-board, one-run isolated manual-trigger trials with explicitly different preparation observed a non-7 conversion phase and retention of 7 through ready+100 us, including tone-arm clear; a pre-trigger 7 alone does not identify a fresh sample.
             #[inline]
             pub const fn sar_ready(self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 14)
@@ -67781,7 +67781,7 @@ pub mod fe {
                 oer_mmio::Bits::truncate(self.0 >> 12)
             }
 
-            /// All-three-ready predicate is 7. Isolated manual-trigger trials observed a non-7 conversion phase and retention of 7 through ready+100 us, including tone-arm clear; a pre-trigger 7 alone does not identify a fresh sample.
+            /// All-three-ready predicate is 7. Observed partial codes 0,1,2,3,4,5,6 occurred nonmonotonically before 7 over approximately 20 us; individual bit meanings are unresolved. One-board, one-run isolated manual-trigger trials with explicitly different preparation observed a non-7 conversion phase and retention of 7 through ready+100 us, including tone-arm clear; a pre-trigger 7 alone does not identify a fresh sample.
             #[inline]
             pub const fn sar_ready(&self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 14)
@@ -67967,7 +67967,7 @@ pub mod fe {
                 oer_mmio::Bits::truncate(self.0 >> 1)
             }
 
-            /// Upper lane consumed by the tone/SAR2 wrapper. Isolated manual PWDET trials retained nonzero data across reads through ready+100 us, including tone-arm clear; the lane can change before all-three-ready during conversion. Other modes and longer retention are untested.
+            /// Upper lane consumed by the tone/SAR2 wrapper. Four HOLD conversions on one board in one run retained nonzero data across reads through ready+100 us, including tone-arm clear; the lane can change before all-three-ready during conversion. Preparation differs from production as specified by HW17_S31_SAR_PREPARATION_20261027; this is an observation, not a production contract. Other modes and longer retention are untested.
             #[inline]
             pub const fn sar_sample(self) -> oer_mmio::Bits<13> {
                 oer_mmio::Bits::truncate(self.0 >> 17)
