@@ -23,9 +23,10 @@ pub(crate) struct Readiness {
 ///
 /// Readiness is judged by the sample alone. A sample that reads ready
 /// succeeds whatever time has elapsed, including when the task woke late and
-/// the sample was taken after the limit: a completed conversion stays
-/// unchanged after ready, reads do not consume it, and its data is valid only
-/// after a ready sample. `limit` bounds only the not-ready case: if no sample
+/// the sample was taken after the limit: a completed conversion stayed
+/// unchanged through the tested 100 us after ready (longer retention is
+/// unqualified), reads did not consume it, and its data is valid only after a
+/// ready sample. `limit` bounds only the not-ready case: if no sample
 /// reads ready by the deadline, the result is a failure. `elapsed_micros` and
 /// `observations` report the wait either way.
 ///
