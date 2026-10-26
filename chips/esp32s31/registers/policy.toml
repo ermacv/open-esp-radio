@@ -975,7 +975,7 @@ description = "Bluetooth modem low-power timer registers transferred independent
 name = "BtdmRuntimeControl"
 instance = "MODEM_PWR"
 interrupt = "MODEM_LP_TIMER"
-registers = ["RUNTIME_TIMER_START_COMMAND", "WORD_0004_OPAQUE", "WORD_0008_OPAQUE", "WORD_0010_OPAQUE", "WORD_0014_OPAQUE", "WORD_001C_OPAQUE", "WORD_0020_OPAQUE", "WORD_0024_OPAQUE", "WORD_002C_OPAQUE", "WORD_0034_OPAQUE", "WORD_0040_OPAQUE", "WORD_0044_OPAQUE", "WORD_0048_OPAQUE", "WORD_004C_OPAQUE", "WORD_0058_OPAQUE", "WORD_0064_OPAQUE", "WORD_0068_OPAQUE", "WORD_006C_OPAQUE", "WORD_0078_OPAQUE"]
+registers = ["RUNTIME_TIMER_START_COMMAND", "WORD_0004_OPAQUE", "WORD_0008_OPAQUE", "WORD_0010_OPAQUE", "WORD_0014_OPAQUE", "WORD_001C_OPAQUE", "WORD_0020_OPAQUE", "WORD_0024_OPAQUE", "WORD_002C_OPAQUE", "WORD_0030_OPAQUE", "WORD_0034_OPAQUE", "WORD_0040_OPAQUE", "WORD_0044_OPAQUE", "WORD_0048_OPAQUE", "WORD_004C_OPAQUE", "WORD_0058_OPAQUE", "WORD_0064_OPAQUE", "WORD_0068_OPAQUE", "WORD_006C_OPAQUE", "WORD_0078_OPAQUE"]
 
 [[partitions.parts]]
 name = "BtdmLpTimerStatus"
@@ -7624,3 +7624,10 @@ reason = "The platform does not enable or sample per-hart PC/SP recording."
 name = "mac_interrupt_raw"
 status = "WIFI_MAC.RAW"
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_WIFI_IRQ_FACTS_20261026"]
+
+[[fixed-register-images]]
+name = "clear_bluetooth_modem_lp_timer_state_0030"
+register = "MODEM_PWR.WORD_0030_OPAQUE"
+value = 0
+whole-word = true
+sources = ["BLOB_LIBBTDM_LP_SLEEP_ZERO_0030"]

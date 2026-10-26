@@ -127647,6 +127647,38 @@ pub mod modem_pwr {
         }
     }
 
+    /// The `WORD_0030_OPAQUE` register.
+    ///
+    /// The boolean sleep-control helper stores complete zero on both branches. No read or inner state encoding is established. SOURCE: BLOB_LIBBTDM_LP_SLEEP_ZERO_0030.
+    pub mod word_0030_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x30;
+
+        /// Width of `BITS_0_31_OPAQUE` in bits.
+        pub const BITS_0_31_OPAQUE_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `BITS_0_31_OPAQUE`.
+        pub const BITS_0_31_OPAQUE_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `BITS_0_31_OPAQUE`.
+        pub const BITS_0_31_OPAQUE_MASK: u32 = 0xffffffff;
+
+        /// The value written to the register.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Set `BITS_0_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_31_opaque(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
     /// The `WORD_0034_OPAQUE` register.
     ///
     /// Complete initialization writes the finite image 0xFFFFFFFF.
@@ -134431,15 +134463,15 @@ pub mod modem_pwr {
     impl oer_mmio::Registers for BtdmRuntimeControlWords {
         type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
-            0x0, 0x4, 0x8, 0x10, 0x14, 0x1c, 0x20, 0x24, 0x2c, 0x34, 0x40, 0x44, 0x48, 0x4c, 0x58,
-            0x64, 0x68, 0x6c, 0x78,
+            0x0, 0x4, 0x8, 0x10, 0x14, 0x1c, 0x20, 0x24, 0x2c, 0x30, 0x34, 0x40, 0x44, 0x48, 0x4c,
+            0x58, 0x64, 0x68, 0x6c, 0x78,
         ];
     }
 
     impl oer_mmio::Words for BtdmRuntimeControlWords {
         const OWNED: &'static [usize] = &[
-            0x0, 0x4, 0x8, 0x10, 0x14, 0x1c, 0x20, 0x24, 0x2c, 0x34, 0x40, 0x44, 0x48, 0x4c, 0x58,
-            0x64, 0x68, 0x6c, 0x78,
+            0x0, 0x4, 0x8, 0x10, 0x14, 0x1c, 0x20, 0x24, 0x2c, 0x30, 0x34, 0x40, 0x44, 0x48, 0x4c,
+            0x58, 0x64, 0x68, 0x6c, 0x78,
         ];
         const OBSERVED: &'static [usize] = &[];
     }
@@ -134580,6 +134612,16 @@ pub mod modem_pwr {
             let mut value = word_002c_opaque::W(self.0.read::<0x2c>());
             change(&mut value);
             self.0.write::<0x2c>(value.0);
+        }
+
+        /// Write `WORD_0030_OPAQUE` from zero: the fields set, the reserved bits at
+        /// their reset value, every high field at its prefix, zero in every
+        /// other bit.
+        #[inline]
+        pub fn write_word_0030_opaque(&mut self, change: impl FnOnce(&mut word_0030_opaque::W)) {
+            let mut value = word_0030_opaque::W(0x00000000);
+            change(&mut value);
+            self.0.write::<0x30>(value.0);
         }
 
         /// Write `WORD_0034_OPAQUE` from zero: the fields set, the reserved bits at
@@ -134760,6 +134802,14 @@ pub mod modem_pwr {
         #[inline]
         pub fn disable_bluetooth_modem_lp_timer_compare(&mut self) {
             self.0.write::<0x14>(0x00040000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included (`MODEM_PWR.WORD_0030_OPAQUE`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_ZERO_0030.
+        #[inline]
+        pub fn clear_bluetooth_modem_lp_timer_state_0030(&mut self) {
+            self.0.write::<0x30>(0x00000000);
         }
     }
 

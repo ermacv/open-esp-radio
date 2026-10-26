@@ -80,6 +80,14 @@ sources = ["S31_MMIO_DECLARED_2010D038", "BLOB_LIBBTDM_LP_CONTROLS_CURRENT", "HW
 accuracy = "unknown"
 completeness = "unknown"
 
+[review.entity."WORD_0030_OPAQUE"]
+sources = ["BLOB_LIBBTDM_LP_SLEEP_ZERO_0030"]
+completeness = "partial"
+
+[review.entity."WORD_0030_OPAQUE.BITS_0_31_OPAQUE"]
+sources = ["BLOB_LIBBTDM_LP_SLEEP_ZERO_0030"]
+completeness = "partial"
+
 [review.entity."WORD_0040_OPAQUE.BIT_0_OPAQUE"]
 sources = ["S31_MMIO_MANUAL_2010D040"]
 completeness = "partial"
@@ -1006,6 +1014,16 @@ description = "The low byte is sampled for software epoch rollover. Acknowledgem
 name = "LOW_BYTE"
 bits = "7:0"
 class = "plain"
+
+[[registers]]
+name = "WORD_0030_OPAQUE"
+offset = 0x30
+description = "The boolean sleep-control helper stores complete zero on both branches. No read or inner state encoding is established. SOURCE: BLOB_LIBBTDM_LP_SLEEP_ZERO_0030."
+
+[[registers.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+class = "write-only"
 
 [[registers]]
 name = "WORD_0034_OPAQUE"
