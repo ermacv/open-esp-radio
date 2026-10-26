@@ -1,0 +1,6 @@
+# SOURCE facts recovered in ermacv/oer-notes/research/opaque-blobray-phy.md.
+schema = 1
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_SET_RATE_CLASS"
+description = "SOURCE: ermacv/oer-notes research/opaque-blobray-phy.md, TXRF section; pinned esp-phy-lib 20f1db053a0e6cb9f1c09d255c43bf42483041d0 libphy.a phy_feature.o::phy_set_rate+0x3c and inspected OLD body. TXRF byte 0x0a bits 5:3 receive 0 for argument <8 and 1 otherwise; pa_reg_opt calls the setter. Numerical relation is direct; TX analog rate-class role is strong inference. No modulation names, units, electrical effect or code 2..7 meaning is established."

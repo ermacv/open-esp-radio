@@ -304406,12 +304406,34 @@ pub mod analog_i2c {
             /// SOURCE: BLOB_LIBPHY_PHY_I2C.
             pub const ADDRESS: Address = Address::new(0x6b, 0xa);
 
-            /// Width of `BITS_0_7_OPAQUE`.
-            pub const BITS_0_7_OPAQUE_WIDTH: u32 = 8;
+            /// Width of `BITS_0_2_OPAQUE`.
+            pub const BITS_0_2_OPAQUE_WIDTH: u32 = 3;
             /// Greatest field image.
-            pub const BITS_0_7_OPAQUE_MAX: u8 = 255;
+            pub const BITS_0_2_OPAQUE_MAX: u8 = 7;
             /// SOURCE: BLOB_LIBPHY_PHY_I2C.
-            pub const BITS_0_7_OPAQUE: Field = match Field::new(Address::new(0x6b, 0xa), 7, 0) {
+            pub const BITS_0_2_OPAQUE: Field = match Field::new(Address::new(0x6b, 0xa), 2, 0) {
+                Some(field) => field,
+                None => panic!("the model's field lies in its byte"),
+            };
+            /// Width of `PHY_SET_RATE_CLASS`.
+            pub const PHY_SET_RATE_CLASS_WIDTH: u32 = 3;
+            /// Greatest field image.
+            pub const PHY_SET_RATE_CLASS_MAX: u8 = 7;
+            /// Named image of `PHY_SET_RATE_CLASS`. SOURCE: BLOB_LIBPHY_PHY_SET_RATE_CLASS.
+            pub const PHY_SET_RATE_CLASS_ARGUMENT_BELOW_8: u8 = 0;
+            /// Named image of `PHY_SET_RATE_CLASS`. SOURCE: BLOB_LIBPHY_PHY_SET_RATE_CLASS.
+            pub const PHY_SET_RATE_CLASS_ARGUMENT_AT_LEAST_8: u8 = 1;
+            /// SOURCE: BLOB_LIBPHY_PHY_SET_RATE_CLASS.
+            pub const PHY_SET_RATE_CLASS: Field = match Field::new(Address::new(0x6b, 0xa), 5, 3) {
+                Some(field) => field,
+                None => panic!("the model's field lies in its byte"),
+            };
+            /// Width of `BITS_6_7_OPAQUE`.
+            pub const BITS_6_7_OPAQUE_WIDTH: u32 = 2;
+            /// Greatest field image.
+            pub const BITS_6_7_OPAQUE_MAX: u8 = 3;
+            /// SOURCE: BLOB_LIBPHY_PHY_I2C.
+            pub const BITS_6_7_OPAQUE: Field = match Field::new(Address::new(0x6b, 0xa), 7, 6) {
                 Some(field) => field,
                 None => panic!("the model's field lies in its byte"),
             };
@@ -305524,8 +305546,8 @@ pub mod analog_i2c {
         },
         RegisterFacts {
             address: Address::new(0x6b, 0xa),
-            described: 0x0,
-            opaque: 0xff,
+            described: 0x38,
+            opaque: 0xc7,
             reserved: 0x0,
             reset: None,
             read_safe_epoch: None,
