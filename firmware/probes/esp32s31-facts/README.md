@@ -32,6 +32,9 @@ ROM-loader entry after software reset, without another reset. Selections:
 
 | Selection | Experiment |
 | --- | --- |
+| 102 | BTLC overflow with baseline ENA1 0x1302: mask/unmask, NRT sampled-copy clear, primary sampled bit-1 W1C and short quiet window |
+| 103 | One BTLC rate interval bracketed by mcycle, clock/divider readback and one near-wrap seeded crossing |
+| 104 | Positive overflow and every ENA0/ENA1 lane before MAC reset, after APB reset, after baseline re-enable and CONTROL0 reopen; fresh wrap control |
 | 0 | Read-before-write CLIC geometry/configuration, held-hart boot address, edge pending, threshold, then five latency samples |
 | `u32::MAX` | Idle in WFI awaiting a debugger command |
 | 1 | One software edge-pending publication |

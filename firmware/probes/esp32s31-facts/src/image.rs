@@ -167,6 +167,8 @@ extern "C" fn oer_exception_handler(_frame: usize) -> ! {
 }
 
 struct Session<'a> {
+    boot_clock: pac::hp_sys_clkrst::HpSysClkrstBootClock,
+    cpll: pac::lp_aonclkrst::LpAonClkrstCpll,
     source: &'a pac::hp_system::FromCpu2,
     interrupt_matrix: pac::ownership::InterruptMatrixPeripherals,
     core_control: pac::ownership::CoreControlPeripherals,
@@ -183,6 +185,18 @@ struct Probe {
 // The sole registration point. Reset is selected explicitly; it cannot run
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
+    Probe {
+        id: 102,
+        run: ble_wave2::overflow_ack,
+    },
+    Probe {
+        id: 103,
+        run: ble_wave2::overflow_rate,
+    },
+    Probe {
+        id: 104,
+        run: ble_wave2::overflow_reset,
+    },
     Probe {
         id: 101,
         run: ble_wave2::lp_masked,
@@ -367,6 +381,8 @@ extern "C" fn facts_main() -> ! {
     let Some(p) = pac::take() else { halt() };
     let source_owner = p.software_interrupt_2.from_cpu2;
     let mut s = Session {
+        boot_clock: p.boot.hp_sys_clkrst_boot_clock,
+        cpll: p.boot.lp_aon_clkrst_cpll,
         source: &source_owner,
         interrupt_matrix: p.interrupt_matrix,
         core_control: p.core_control,

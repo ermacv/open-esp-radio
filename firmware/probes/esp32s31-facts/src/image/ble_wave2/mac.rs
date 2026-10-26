@@ -1,6 +1,9 @@
 //! Positive digital controller-time causes, with bounded source observations.
 use super::{Bits, LIMIT, Session, emit, pac, setup, window};
 
+mod overflow;
+pub(in crate::image) use overflow::{overflow_ack, overflow_rate, overflow_reset};
+
 fn sample(s: &mut Session<'_>) -> Option<u32> {
     s.ble.core.modify_btlc_timer_control(|w| {
         w.set_latch_request(true);
