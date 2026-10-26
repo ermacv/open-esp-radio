@@ -376,9 +376,9 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// Clear and then publish the cancellation hardware-list index through
     /// two fresh-read updates.
     ///
-    /// The scheduler transaction admits this step after lock/modify becomes
-    /// idle and retains its affine index token through acknowledgement and
-    /// request. The exclusive register loan serializes the operational word.
+    /// The scheduler executor runs this step only after lock/modify becomes
+    /// idle, and the transaction retains its affine index token through
+    /// acknowledgement and request. The exclusive register loan serializes the operational word.
     #[doc(hidden)]
     pub fn index_scheduler_cancellation(
         &mut self,

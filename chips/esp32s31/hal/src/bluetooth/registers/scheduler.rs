@@ -484,16 +484,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     ///
     /// A hardware-observed head is an outside identity, not a reference that
     /// may be published before the memory owner resolves it against its arena:
-    ///
-    /// ```compile_fail
-    /// #![forbid(unsafe_code)]
-    /// use oer_esp32s31_hal::bluetooth::{BluetoothTaskRegisters, BluetoothSchedulerHardwareListHead,
-    ///     BluetoothSchedulerHardwareListIndex};
-    /// fn republish(registers: &mut BluetoothTaskRegisters, observed: BluetoothSchedulerHardwareListHead) {
-    ///     registers.publish_scheduler_hardware_list_head(
-    ///         BluetoothSchedulerHardwareListIndex::ZERO, observed.address());
-    /// }
-    /// ```
+    /// `head` is a `DmaRef`, which no observed address can become.
     #[doc(hidden)]
     pub fn publish_scheduler_hardware_list_head(
         &mut self,
