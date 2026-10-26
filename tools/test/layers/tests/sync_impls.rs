@@ -15,8 +15,6 @@ const EXCEPTIONS: &[(&str, usize)] = &[
         1,
     ),
     ("chips/espressif/executor/src/task.rs", 1),
-    ("chips/espressif/executor/src/time_driver.rs", 1),
-    ("portable/interrupt-table/src/signal.rs", 2),
     ("portable/interrupt-table/src/signal/tests.rs", 2),
 ];
 

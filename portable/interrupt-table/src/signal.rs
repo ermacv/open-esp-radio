@@ -23,11 +23,12 @@ mod binding;
 pub use binding::{FromHandler, FromTask, Raisers};
 
 use core::{
-    cell::UnsafeCell,
     marker::PhantomData,
     sync::atomic::{AtomicU32, Ordering},
     task::{Context, Poll},
 };
+
+use oer_memory::{ContextCell, ContextProof};
 
 /// The interrupt-mode executor a signal belongs to.
 ///
@@ -71,6 +72,22 @@ pub unsafe trait SignalExecutor: Sized + 'static {
 /// crate constructs it; an executor's `current` and `wake` take it.
 pub struct ContextToken(PhantomData<*mut ()>);
 
+// Kept private so an executor cannot reuse its public ContextToken to access
+// cells belonging to another executor. Only the checked signal/list paths
+// below construct this proof, and neither their cells nor the proof escape.
+struct CellContext(PhantomData<*mut ()>);
+
+#[allow(
+    unsafe_code,
+    reason = "the signal/list access proof replaces their Sync promises"
+)]
+// SAFETY: every construction below follows the private ContextToken check for
+// the signal/list's owning executor. SignalExecutor confines that executor to
+// one non-concurrent context, and list() always returns its own list. Empty
+// state is const-initialized; task handles are created and used only there.
+// No public API exposes CellContext or either ContextCell.
+unsafe impl ContextProof for CellContext {}
+
 fn context<E: SignalExecutor>() -> Result<ContextToken, ForeignContext> {
     if E::running() {
         Ok(ContextToken(PhantomData))
@@ -104,15 +121,8 @@ struct SignalCore<T: 'static> {
     pending: AtomicU32,
     #[cfg(oer_debug_control)]
     held: AtomicU32,
-    owned: UnsafeCell<Owned<T>>,
+    owned: ContextCell<Owned<T>, CellContext>,
 }
-
-#[allow(unsafe_code, reason = "the owned half is the executor context's")]
-// SAFETY: `pending` is atomic. `owned` is reached only through `owned`,
-// with a private token obtained after the executor's `running` check:
-// one context that never runs concurrently with itself (`SignalExecutor`).
-// A task handle is created and read only in that context.
-unsafe impl<T> Sync for SignalCore<T> {}
 
 /// One coalesced word of facts from an interrupt handler to one task,
 /// bound to its executor at the type level.
@@ -122,8 +132,8 @@ pub struct IrqSignal<E: SignalExecutor> {
     executor: PhantomData<fn() -> E>,
 }
 
-/// The caller runs outside the executor the signal belongs to: its task was
-/// spawned on another executor.
+/// The caller cannot access the signal's executor-owned state: it runs in
+/// another context, has a foreign task waker, or the state is already borrowed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ForeignContext;
 
@@ -188,17 +198,20 @@ impl<E: SignalExecutor> IrqSignal<E> {
     /// Whether facts wait, without consuming them.
     ///
     /// # Errors
-    /// The caller runs outside the signal's executor.
+    /// The executor context is unavailable, including a nested state borrow.
     pub fn has_pending(&'static self) -> Result<bool, ForeignContext> {
-        Ok(self.core.has_pending(&context::<E>()?))
+        self.core
+            .has_pending(&context::<E>()?)
+            .ok_or(ForeignContext)
     }
 
     /// Take all facts raised so far.
     ///
     /// # Errors
-    /// The caller runs outside the signal's executor; facts stay raised.
+    /// The executor context is unavailable, including a nested state borrow;
+    /// facts stay raised.
     pub fn take(&'static self) -> Result<u32, ForeignContext> {
-        Ok(self.core.take(&context::<E>()?))
+        self.core.take(&context::<E>()?).ok_or(ForeignContext)
     }
 
     /// Retain facts in the existing atomic instrumentation mask. Releasing
@@ -217,13 +230,14 @@ impl<E: SignalExecutor> IrqSignal<E> {
     ///
     /// # Errors
     /// The caller runs outside the signal's executor, or `cx`'s waker names
-    /// no task that executor polls now ([`ForeignTask`]); nothing changes.
+    /// no task that executor polls now ([`ForeignTask`]), or executor-owned
+    /// state is already borrowed; facts stay raised.
     pub fn poll_take(&'static self, cx: &mut Context<'_>) -> Poll<Result<u32, ForeignContext>> {
         let (token, task) = match context_task::<E>(cx) {
             Ok(found) => found,
             Err(e) => return Poll::Ready(Err(e)),
         };
-        self.core.poll_take(task, E::list(), &token).map(Ok)
+        self.core.poll_take(task, E::list(), &token)
     }
 
     /// Register the polling task, then report pending facts without taking
@@ -236,19 +250,19 @@ impl<E: SignalExecutor> IrqSignal<E> {
             Ok(found) => found,
             Err(e) => return Poll::Ready(Err(e)),
         };
-        self.core.poll_pending(task, E::list(), &token).map(Ok)
+        self.core.poll_pending(task, E::list(), &token)
     }
 
     /// Wait for facts.
     ///
     /// # Errors
-    /// The caller runs outside the signal's executor.
+    /// The executor context is unavailable, including a nested state borrow.
     pub async fn wait(&'static self) -> Result<u32, ForeignContext> {
         core::future::poll_fn(|cx| self.poll_take(cx)).await
     }
 
     /// Move raised facts to the task and wake it in the executor context.
-    /// Outside that context the facts stay pending.
+    /// Outside that context, or during a nested state borrow, facts stay pending.
     pub fn service(&'static self) {
         if let Ok(token) = context::<E>() {
             self.core.service_next::<E>(&token);
@@ -262,7 +276,7 @@ impl<T: Copy + Eq + 'static> SignalCore<T> {
             pending: AtomicU32::new(0),
             #[cfg(oer_debug_control)]
             held: AtomicU32::new(0),
-            owned: UnsafeCell::new(Owned {
+            owned: ContextCell::new(Owned {
                 task: None,
                 delivered: 0,
                 linked: false,
@@ -276,7 +290,7 @@ impl<T: Copy + Eq + 'static> SignalCore<T> {
         self.pending.fetch_or(facts, Ordering::Release)
     }
 
-    fn has_pending(&self, token: &ContextToken) -> bool {
+    fn has_pending(&self, token: &ContextToken) -> Option<bool> {
         #[cfg(oer_debug_control)]
         {
             let pending = self.pending.load(Ordering::Acquire);
@@ -291,7 +305,7 @@ impl<T: Copy + Eq + 'static> SignalCore<T> {
         }
     }
 
-    fn take(&self, token: &ContextToken) -> u32 {
+    fn take(&self, token: &ContextToken) -> Option<u32> {
         self.owned(token, |owned| {
             #[cfg(oer_debug_control)]
             {
@@ -317,11 +331,14 @@ impl<T: Copy + Eq + 'static> SignalCore<T> {
         task: T,
         list: &'static SignalList<T>,
         token: &ContextToken,
-    ) -> Poll<u32> {
-        self.register(task, list, token);
+    ) -> Poll<Result<u32, ForeignContext>> {
+        if self.register(task, list, token).is_none() {
+            return Poll::Ready(Err(ForeignContext));
+        }
         match self.take(token) {
-            0 => Poll::Pending,
-            facts => Poll::Ready(facts),
+            Some(0) => Poll::Pending,
+            Some(facts) => Poll::Ready(Ok(facts)),
+            None => Poll::Ready(Err(ForeignContext)),
         }
     }
 
@@ -330,31 +347,39 @@ impl<T: Copy + Eq + 'static> SignalCore<T> {
         task: T,
         list: &'static SignalList<T>,
         token: &ContextToken,
-    ) -> Poll<()> {
-        self.register(task, list, token);
-        if self.has_pending(token) {
-            Poll::Ready(())
-        } else {
-            Poll::Pending
+    ) -> Poll<Result<(), ForeignContext>> {
+        if self.register(task, list, token).is_none() {
+            return Poll::Ready(Err(ForeignContext));
+        }
+        match self.has_pending(token) {
+            Some(true) => Poll::Ready(Ok(())),
+            Some(false) => Poll::Pending,
+            None => Poll::Ready(Err(ForeignContext)),
         }
     }
 
     /// Link on the first poll and register the polling task.
-    fn register(&'static self, task: T, list: &'static SignalList<T>, token: &ContextToken) {
+    fn register(
+        &'static self,
+        task: T,
+        list: &'static SignalList<T>,
+        token: &ContextToken,
+    ) -> Option<()> {
         self.owned(token, |owned| {
             if !owned.linked {
+                owned.next = list.push(self, token)?;
                 owned.linked = true;
-                owned.next = list.push(self, token);
             }
             owned.task = Some(task);
-        });
+            Some(())
+        })?
     }
 
     fn service_next<E: SignalExecutor<Task = T>>(
         &'static self,
         token: &ContextToken,
     ) -> Option<&'static SignalCore<T>> {
-        let (wake, next) = self.owned(token, |owned| {
+        let Some((wake, next)) = self.owned(token, |owned| {
             let facts = self.pending.swap(0, Ordering::Acquire);
             owned.delivered |= facts;
             #[cfg(oer_debug_control)]
@@ -367,7 +392,10 @@ impl<T: Copy + Eq + 'static> SignalCore<T> {
                 owned.task.take()
             };
             (wake, owned.next)
-        });
+        }) else {
+            // The enclosing access retains the state; no facts were taken.
+            return None;
+        };
         // The task belongs to this executor: waking it only marks it for
         // this very poll.
         if let Some(task) = wake {
@@ -377,13 +405,8 @@ impl<T: Copy + Eq + 'static> SignalCore<T> {
     }
 
     /// Run `f` on the owned half with proof of the executor context.
-    fn owned<R>(&self, _token: &ContextToken, f: impl FnOnce(&mut Owned<T>) -> R) -> R {
-        #[allow(unsafe_code, reason = "the owned half is the executor context's")]
-        // SAFETY: the token proves the executor's context runs now, and it
-        // never runs concurrently with itself (`SignalExecutor`); no caller
-        // of `owned` calls it again inside `f`.
-        let owned = unsafe { &mut *self.owned.get() };
-        f(owned)
+    fn owned<R>(&self, _token: &ContextToken, f: impl FnOnce(&mut Owned<T>) -> R) -> Option<R> {
+        self.owned.with(&CellContext(PhantomData), f)
     }
 }
 
@@ -411,20 +434,14 @@ impl<E: SignalExecutor> SignalPend<E> {
 /// The signals of one executor, linked by their first poll; only that
 /// executor's context touches the list.
 pub struct SignalList<T: 'static> {
-    head: UnsafeCell<Option<&'static SignalCore<T>>>,
+    head: ContextCell<Option<&'static SignalCore<T>>, CellContext>,
 }
-
-#[allow(unsafe_code, reason = "the list is its executor context's")]
-// SAFETY: `head` is touched only by `push`, from a signal's `owned`, and by
-// `service`, after its context check: both run with a private token in the
-// list's executor context, which never runs concurrently with itself.
-unsafe impl<T> Sync for SignalList<T> {}
 
 impl<T: Copy + Eq + 'static> SignalList<T> {
     /// An empty list.
     pub const fn new() -> Self {
         Self {
-            head: UnsafeCell::new(None),
+            head: ContextCell::new(None),
         }
     }
 
@@ -432,36 +449,27 @@ impl<T: Copy + Eq + 'static> SignalList<T> {
         &self,
         signal: &'static SignalCore<T>,
         _token: &ContextToken,
-    ) -> Option<&'static SignalCore<T>> {
-        #[allow(unsafe_code, reason = "the list is its executor context's")]
-        // SAFETY: called only from `SignalCore::owned`, with proof of the
-        // executor context.
-        let head = unsafe { &mut *self.head.get() };
-        head.replace(signal)
+    ) -> Option<Option<&'static SignalCore<T>>> {
+        self.head
+            .with(&CellContext(PhantomData), |head| head.replace(signal))
     }
 
-    fn has_pending(&self, token: &ContextToken) -> bool {
-        #[allow(
-            unsafe_code,
-            reason = "only the signal list's owning context reads its links"
-        )]
-        // SAFETY: the private token proves the owning executor context, which
-        // serializes list access and all task-owned delivered facts.
-        let mut next = unsafe { *self.head.get() };
+    fn has_pending(&self, token: &ContextToken) -> Option<bool> {
+        let mut next = self.head.with(&CellContext(PhantomData), |head| *head)?;
         while let Some(signal) = next {
-            if signal.has_pending(token) {
-                return true;
+            if signal.has_pending(token)? {
+                return Some(true);
             }
-            next = signal.owned(token, |owned| owned.next);
+            next = signal.owned(token, |owned| owned.next)?;
         }
-        false
+        Some(false)
     }
 
     fn service<E: SignalExecutor<Task = T>>(&self, token: &ContextToken) {
-        #[allow(unsafe_code, reason = "the list is its executor context's")]
-        // SAFETY: the token proves the caller runs in the list's executor
-        // context, which also runs every `push`.
-        let mut next = unsafe { *self.head.get() };
+        let Some(mut next) = self.head.with(&CellContext(PhantomData), |head| *head) else {
+            // The enclosing access retains the list; no signal was visited.
+            return;
+        };
         while let Some(signal) = next {
             next = signal.service_next::<E>(token);
         }
@@ -478,12 +486,14 @@ impl<T: Copy + Eq + 'static> Default for SignalList<T> {
 /// them. This is supplementary to ready-task accounting; a signal not polled
 /// yet is not linked, and its interrupt pend remains the admission boundary.
 pub fn has_pending<E: SignalExecutor>() -> Result<bool, ForeignContext> {
-    Ok(E::list().has_pending(&context::<E>()?))
+    E::list()
+        .has_pending(&context::<E>()?)
+        .ok_or(ForeignContext)
 }
 
 /// Service every signal of `E` before polling its tasks. Outside `E`'s
-/// context neither the list nor its facts are touched. One context check
-/// covers the complete traversal.
+/// context, or during a nested state borrow, unvisited facts stay pending.
+/// One context check covers the complete traversal.
 pub fn service<E: SignalExecutor>() {
     if let Ok(token) = context::<E>() {
         E::list().service::<E>(&token);

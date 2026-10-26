@@ -86,6 +86,83 @@ fn signal() -> &'static IrqSignal<TestExecutor> {
     Box::leak(Box::new(IrqSignal::for_host_test()))
 }
 
+#[test]
+fn nested_signal_access_refuses_reads_and_polls_without_consuming_facts() {
+    let signal = signal();
+    let (_, waker) = counting(None);
+    let mut cx = Context::from_waker(&waker);
+    let token = context::<TestExecutor>().expect("the test context is running");
+    signal.raise(0b11);
+    assert_eq!(
+        signal.core.owned(&token, |_| {
+            assert_eq!(signal.take(), Err(ForeignContext));
+            assert_eq!(signal.has_pending(), Err(ForeignContext));
+            assert_eq!(signal.poll_take(&mut cx), Poll::Ready(Err(ForeignContext)));
+            assert_eq!(
+                signal.poll_pending(&mut cx),
+                Poll::Ready(Err(ForeignContext))
+            );
+            signal.service();
+            assert_eq!(signal.core.pending.load(Ordering::Acquire), 0b11);
+        }),
+        Some(())
+    );
+    assert_eq!(signal.poll_take(&mut cx), Poll::Ready(Ok(0b11)));
+    assert_eq!(signal.poll_take(&mut cx), Poll::Pending);
+}
+
+#[test]
+fn borrowed_list_refuses_registration_without_publishing_a_partial_link() {
+    let signal = signal();
+    let (_, waker) = counting(None);
+    let mut cx = Context::from_waker(&waker);
+    let list = TestExecutor::list();
+    let token = context::<TestExecutor>().expect("the test context is running");
+    signal.raise(0b10);
+    assert_eq!(
+        list.head.with(&CellContext(PhantomData), |_| {
+            assert_eq!(signal.poll_take(&mut cx), Poll::Ready(Err(ForeignContext)));
+            assert_eq!(
+                signal.poll_pending(&mut cx),
+                Poll::Ready(Err(ForeignContext))
+            );
+            assert_eq!(has_pending::<TestExecutor>(), Err(ForeignContext));
+            service::<TestExecutor>();
+            assert_eq!(signal.core.pending.load(Ordering::Acquire), 0b10);
+            assert_eq!(signal.core.owned(&token, |owned| owned.linked), Some(false));
+        }),
+        Some(())
+    );
+    assert_eq!(signal.poll_take(&mut cx), Poll::Ready(Ok(0b10)));
+    signal.raise(0b100);
+    service::<TestExecutor>();
+    assert_eq!(signal.poll_take(&mut cx), Poll::Ready(Ok(0b100)));
+}
+
+#[test]
+fn nested_list_service_retains_both_the_borrowed_and_unvisited_signals() {
+    let first = signal();
+    let head = signal();
+    let (_, waker) = counting(None);
+    let mut cx = Context::from_waker(&waker);
+    assert_eq!(first.poll_take(&mut cx), Poll::Pending);
+    assert_eq!(head.poll_take(&mut cx), Poll::Pending);
+    first.raise(0b01);
+    head.raise(0b10);
+    let token = context::<TestExecutor>().expect("the test context is running");
+    assert_eq!(
+        head.core.owned(&token, |_| {
+            service::<TestExecutor>();
+            assert_eq!(head.core.pending.load(Ordering::Acquire), 0b10);
+            assert_eq!(first.core.pending.load(Ordering::Acquire), 0b01);
+        }),
+        Some(())
+    );
+    service::<TestExecutor>();
+    assert_eq!(head.poll_take(&mut cx), Poll::Ready(Ok(0b10)));
+    assert_eq!(first.poll_take(&mut cx), Poll::Ready(Ok(0b01)));
+}
+
 /// A waker that counts its wakes and runs `on_wake` in them.
 struct Counting {
     wakes: Cell<u32>,

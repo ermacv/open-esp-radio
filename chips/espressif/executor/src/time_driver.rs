@@ -24,7 +24,9 @@
 //! [`init`] owns the running timer's blocks from the reset root without
 //! resetting its counter or clock. The HAL supplies the source identities.
 
-use core::{cell::UnsafeCell, task::Waker};
+use core::{marker::PhantomData, task::Waker};
+
+use oer_memory::{ContextCell, ContextProof};
 
 use embassy_time_driver::Driver;
 use oer_interrupt_table::Entry;
@@ -59,25 +61,28 @@ struct Slot {
     observation: crate::timer_observation::Recorder,
 }
 
-struct SlotCell(UnsafeCell<Slot>);
+// Private to with_slot: no caller can apply a proof to a different slot.
+struct SlotContext(PhantomData<*mut ()>);
 
 #[allow(
     unsafe_code,
-    reason = "a slot is touched only from its executor's context"
+    reason = "the slot access proof replaces its Sync promise"
 )]
-// SAFETY: `with_slot` hands out a slot only to the context of the executor
-// that owns it (`running()`), which polls on one core and does not reenter
-// itself; a higher context that preempts it uses its own slot.
-unsafe impl Sync for SlotCell {}
+// SAFETY: only with_slot constructs this proof, after checking running() for
+// the selected slot. Each executor runs on one core and never concurrently
+// with itself; preempting contexts cannot obtain that slot's proof. Slot is
+// const-initialized and retained for the image's lifetime.
+unsafe impl ContextProof for SlotContext {}
 
-static SLOTS: [SlotCell; SOFTWARE_INTERRUPT_COUNT] = [const {
-    SlotCell(UnsafeCell::new(Slot {
+static SLOTS: [ContextCell<Slot, SlotContext>; SOFTWARE_INTERRUPT_COUNT] = [const {
+    ContextCell::new(Slot {
         queue: WakeQueue::new(),
         programmed: [None; COMPARATOR_COUNT],
         #[cfg(oer_profile)]
         observation: crate::timer_observation::Recorder::new(),
-    }))
-}; SOFTWARE_INTERRUPT_COUNT];
+    })
+};
+    SOFTWARE_INTERRUPT_COUNT];
 
 /// Each executor's comparator, or [`NO_COMPARATOR`].
 static COMPARATOR_OF: [AtomicU8; SOFTWARE_INTERRUPT_COUNT] =
@@ -98,21 +103,13 @@ static ALARM_AT: [(DeadlineCell, DeadlineCell); COMPARATOR_COUNT] =
 static ALARM_FIRED: [AtomicBool; COMPARATOR_COUNT] =
     [const { AtomicBool::new(false) }; COMPARATOR_COUNT];
 
-/// Run `f` on executor `swi`'s slot, when `swi`'s context is running.
+/// Run `f` on executor `swi`'s slot in its context; refuse a nested borrow.
 fn with_slot<R>(swi: u8, f: impl FnOnce(&mut Slot) -> R) -> Option<R> {
     if running() != swi {
         return None;
     }
     let cell = SLOTS.get(swi as usize)?;
-    #[allow(
-        unsafe_code,
-        reason = "a slot is touched only from its executor's context"
-    )]
-    // SAFETY: the running context is executor `swi`'s, the only one that
-    // reaches this slot, and no caller of `with_slot` calls it again inside
-    // `f`.
-    let slot = unsafe { &mut *cell.0.get() };
-    Some(f(slot))
+    cell.with(&SlotContext(PhantomData), f)
 }
 
 use crate::chip::now;
@@ -417,8 +414,8 @@ impl Driver for EmbassyTimeDriver {
             }
         });
         if registered.is_none() {
-            // Registered from another context than the task's executor: the
-            // task polls again in its own context and registers there.
+            // A foreign context or enclosing slot borrow refused registration.
+            // The task polls again after that access ends and registers there.
             waker.wake_by_ref();
         }
     }

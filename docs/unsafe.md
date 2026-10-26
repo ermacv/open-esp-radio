@@ -351,6 +351,21 @@ completed-descriptor views borrow that ring mutably, and the ring is not
 `Sync`, so no CPU view of the bytes is live meanwhile.
 
 `oer-memory` holds the shared proofs for executor-crossing storage.
+`ContextCell<T, P: ContextProof>` holds executor-owned signal state, signal
+list links and timer slots. The owner's private unsafe `ContextProof`
+implementation confines each cell's accesses to its one non-concurrent
+context, including across preemption and cores, and respects the payload's
+thread restrictions during initialization and destruction. Neither the proof
+nor the cell escapes the owner's checked access paths. The cell's sole
+`Sync` implementation and mutable accessor live in `oer-memory`.
+Its non-atomic borrow flag refuses a nested `with` on the same cell with
+`None`, without invoking the closure or changing the payload; borrowing
+another cell is permitted. A guard ends the borrow on return or unwind.
+Signal reads and registration report refusal through `ForeignContext`;
+service leaves unvisited facts pending. Timer registration wakes the task
+to register after the enclosing access ends; timer service leaves its alarm
+state untouched when refused. No interrupt masking, waiting or lock is used.
+
 Its `init_in_place!` macro writes a complete struct into exclusively borrowed
 `MaybeUninit` storage, one field at a time. An unused constructor checks field
 completeness, uniqueness and visibility. Cleanup guards retain initialized fields until
