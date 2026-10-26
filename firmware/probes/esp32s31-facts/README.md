@@ -130,12 +130,45 @@ BTLC candidate does not establish an output equation or a set/clear race result:
 the records must show a real pending cause before interpreting masking or ack.
 The LP counter experiments use divider image 1, which advances the counter in
 the tested setup; image 0 did not advance it. They establish no production-clock
-frequency equation. Counter/cause polls end after 40,000,000 cycles, and the
-wrap leaves stop after one wrap. Multiple-wrap capacity and collision priority
-are outside those observations.
+frequency equation. Counter/cause polls end after 40,000,000 cycles, and selections 25/30/32–35 stop after one wrap. Multiple-wrap capacity and
+collision priority are outside those selections' observations.
 
 BLE leaves feed the existing ROM RTC watchdog through their typed PAC owner
 before each experiment; they do not disable it. The named write-protect images
 are in the register model. Debugger command dwell is not part of a measured
 operation. A reset, zeroed output buffer or untriggered cause is not a passing
 hardware claim even if the debugger command itself exits successfully.
+
+## Local radio interrupt retention
+
+| Selection | Bounded experiment |
+| --- | --- |
+| 80 | LP compare arrival after a zero read and before zero acknowledgement; clear-before-arrival control; retained nonzero sample across a rearmed target crossing |
+| 81 | Exactly two natural wraps with compare disabled and no intermediate ack; one final zero and a 4096-cycle observation |
+| 82 | IEEE timer0/timer1 expiries while enabled/masked; hidden pending revealed by unmask; zero masked snapshot versus a retained positive snapshot acknowledged while masked; selective enabled W1C |
+| 83 | Local TSF timer0/1 RAW, STATUS and source122 across mask/unmask; retained sampled acknowledgement while masked, enabled acknowledgement, and production mask/all-clear |
+
+These explicit leaves use the session's existing PAC claim. CPU interrupts
+stay masked, hart 1 stays held, and sources 122/132 are parked on hart 0;
+only matrix status is observed. There is no RF operation, RX/TX command,
+DMA publication, scheduler or protocol. ED, TBTT/beacon and packet causes
+are not exercised. Digital clock/reset setup follows the production module
+prerequisites; it does not establish their minimal necessary subset. Wi-Fi
+uses the slow-oscillator LP clock with divider zero and opens the bootstrap
+SYSTIMER clocks. The LP leaves retain exclusive XTAL/divider one.
+
+Each LP wait is bounded by 40,000,000 probe cycles; selection 81 requests
+exactly two wraps. Each IEEE/TSF cause poll is bounded by 200,000 cycles;
+ordinary observations use 4096 cycles. Expiry with no positive cause is
+inconclusive. Selection 82 deliberately samples masked status: a zero
+snapshot need not acknowledge hidden pending. It then uses a positive
+snapshot retained across masking as an independent clear control.
+
+In selection 82, records hold compact timer0/timer1 status flags 1/2,
+compact enables 1/2 and the full matrix bank4; the next record holds timer
+values. Selection 83 records compact RAW flags 1/2, actual STATUS bank bits
+and full matrix bank3; its next record holds station TSF low/high and
+compact enables. The compact flags are result encoding, not MMIO masks.
+Selection 80's retained-one byte cannot independently count a second
+compare. None of these phased experiments establishes simultaneous
+set/clear priority, arbitrary wrap capacity or an exhaustive all-cause stop.

@@ -13,6 +13,7 @@ use oer_esp32s31_pac as pac;
 use oer_mmio::{Bits, Index};
 
 mod ble;
+mod radio_local;
 
 include!(concat!(env!("OUT_DIR"), "/geometry.rs"));
 const CPU_LINE: Index<{ pac::clic::ctrl::COUNT }> = Index::constant::<LINE>();
@@ -166,6 +167,7 @@ struct Session<'a> {
     uart0_clock: pac::ownership::Uart0ClockPeripherals,
     reset_cause: pac::ownership::ResetCausePeripherals,
     ble: ble::Ble,
+    radio: radio_local::Radio,
 }
 struct Probe {
     id: u32,
@@ -174,6 +176,22 @@ struct Probe {
 // The sole registration point. Reset is selected explicitly; it cannot run
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
+    Probe {
+        id: 82,
+        run: radio_local::ieee_timers,
+    },
+    Probe {
+        id: 83,
+        run: radio_local::wifi_timers,
+    },
+    Probe {
+        id: 80,
+        run: ble::compare_ack,
+    },
+    Probe {
+        id: 81,
+        run: ble::two_wraps,
+    },
     Probe {
         id: 32,
         run: ble::timer_reset_on,
@@ -279,6 +297,19 @@ extern "C" fn facts_main() -> ! {
         core_control: p.core_control,
         uart0_clock: p.uart0_clock,
         reset_cause: p.reset_cause,
+        radio: radio_local::Radio {
+            tick: p.radio_phy.modem_lpcon_phy_tick,
+            system_clock: p.soc.hp_sys_clkrst_systimer,
+            system_counter: p.system_timer.systimer_counter,
+            local_time: p.mac_local_time.wifi_mac_local_time,
+            status: p.wifi_mac.wifi_mac_tsf_status,
+            zb: p.ieee802154,
+            power: p.wifi_interrupts.wifi_mac_power_interrupt,
+            timer: p.wifi_mac.wifi_mac_tsf_timer,
+            load: p.wifi_mac.wifi_mac_tsf_load,
+            rtc: p.wifi_mac.wifi_mac_rtc_timer_update,
+            aux: p.wifi_mac.wifi_mac_aux_tsf_control,
+        },
         ble: ble::Ble {
             bank: p.bluetooth_interrupts.bluetooth_interrupt_bank,
             core: p.bluetooth.bluetooth_controller_core,

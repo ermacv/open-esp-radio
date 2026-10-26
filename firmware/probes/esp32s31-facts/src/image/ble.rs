@@ -3,7 +3,10 @@ use super::{Session, contain, emit};
 use oer_esp32s31_pac as pac;
 use oer_mmio::Bits;
 
+mod arrival;
 mod reset;
+
+pub(super) use arrival::{compare_ack, two_wraps};
 
 pub(super) fn timer_reset_on(s: &mut Session<'_>) {
     reset::run(s, false, false);
@@ -41,7 +44,7 @@ fn window(cycles: u32) {
     while oer_riscv::cycle32().wrapping_sub(start) < cycles {}
 }
 
-fn clocks(b: &mut Ble) {
+pub(super) fn clocks(b: &mut Ble) {
     // Retain the ROM's reset backstop; feed once per bounded leaf so debugger
     // command dwell does not consume its boot deadline. No host WDT MMIO.
     b.watchdog.modify_wprotect(|w| {
