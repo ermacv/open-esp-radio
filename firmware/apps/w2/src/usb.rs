@@ -15,7 +15,7 @@ pub(crate) type Console = Endpoint<Executor<0>, ConsoleEndpoint>;
 
 oer_espressif_staged_runtime::placed_static! {
     /// The console's interrupt: the endpoint's signal.
-    static INTERRUPT: Interrupt<Executor<0>, ConsoleInterrupt> = Interrupt::new(), in critical_data "console_usb";
+    static INTERRUPT: Interrupt<Executor<0>, ConsoleInterrupt> = Interrupt::new::<crate::ConsoleUsb, crate::WakeToken>(), in critical_data "console_usb";
 }
 
 /// The console's `Hardware` interrupt handler, over the part its entry

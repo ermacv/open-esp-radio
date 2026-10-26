@@ -553,6 +553,12 @@ impl<H: GateHardware, X: SignalExecutor + 'static, R: RadioDoorbell>
     /// An earlier request was abandoned, the slot is occupied or the task
     /// runs outside the reply signal's executor.
     pub(crate) async fn exchange(&mut self, request: Request<H>) -> Result<Reply<H>, GateError> {
+        const {
+            assert!(
+                oer_interrupt_table::request_direction(R::HANDLER, R::EXECUTOR),
+                "a request handler must be above its executor on the same hart"
+            )
+        };
         if self.awaiting {
             return Err(GateError::Abandoned);
         }
@@ -799,15 +805,28 @@ impl<X: SignalExecutor + 'static> BluetoothInterruptEnds<ChipGate, X> {
     /// Complete the task's ends once `_bound` proves the interrupt table
     /// binds the handler's part, with the doorbell's ringing half `ring`,
     /// which the same binding makes
-    /// (`Doorbell::new::<FromCpu3Irq, BluetoothInterrupts<X, B>>(line, &bound)`).
-    pub fn attach<B, R: RadioDoorbell + Clone>(
+    /// (`Doorbell::<3, HandlerEntry, ExecutorEntry>::new::<FromCpu3Irq>(line, &bound)`).
+    pub fn attach<E, B, R: RadioDoorbell + Clone>(
         self,
-        _bound: &Bound<BluetoothInterrupts<X, B>>,
+        _bound: &Bound<E>,
         ring: R,
     ) -> (
         BluetoothInterruptGate<ChipGate, X, R>,
         ModemLpTimerPort<ChipGate, R>,
-    ) {
+    )
+    where
+        E: oer_interrupt_table::Entry<Part = BluetoothInterrupts<X, B>>,
+    {
+        const {
+            assert!(
+                oer_interrupt_table::request_direction(E::CONTEXT, R::EXECUTOR),
+                "a request handler must be above its executor on the same hart"
+            );
+            assert!(
+                E::LEVEL == R::HANDLER.level && E::HART == R::HANDLER.hart,
+                "the doorbell must ring the bound handler"
+            );
+        }
         self.with_ring(ring)
     }
 }

@@ -9,7 +9,7 @@ use super::Interrupt;
 use crate::fake::{Irq, Shared};
 
 fn interrupt() -> &'static Interrupt<Deferred, Irq> {
-    Box::leak(Box::new(Interrupt::new()))
+    Box::leak(Box::new(Interrupt::for_host_test()))
 }
 
 #[test]

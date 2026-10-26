@@ -13,19 +13,21 @@ pub const LINES: oer_interrupt_table::Lines = crate::vectors::LINES;
 ///
 /// ```ignore
 /// oer_espressif_staged_runtime::interrupt_table! {
+///     contexts { radio: 3; }
 ///     /// The IEEE 802.15.4 MAC's events.
 ///     ieee802154: Ieee802154Token = Ieee802154MacIrq => crate::radio::on_event,
-///         line 20, level 3, hart 0, Hardware;
+///         line 20, context radio, hart 0, Hardware;
 /// }
 /// ```
 ///
 /// Each entry names the token field, the token type, the interrupt part its
 /// handler holds (its type names the source:
 /// [`oer_mmio::InterruptSource`]), the handler (`fn(&mut Part)`), the CPU
-/// line ([`LINES`]: 16 to 47), the level (1 to 8), the hart and the handler's class
+/// line ([`LINES`]: 16 to 47), a named context, the hart and the handler's class
 /// (`oer_interrupt_table::Class`: `Hardware`, `Executor` or
 /// `Exempt(VIOLATION, "reason")`), which the image gate checks. The macro
-/// defines the line's handler symbol, which the line's vector calls, the
+/// checks the declared low-to-high line order at each level against the
+/// facts' tie-break rule and defines the line's handler symbol, which the line's vector calls, the
 /// token type, and `Interrupts::take` that hands out each token once.
 #[macro_export]
 macro_rules! interrupt_table {

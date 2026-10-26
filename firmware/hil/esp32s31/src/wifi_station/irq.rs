@@ -7,7 +7,10 @@ use oer_esp32s31_ieee80211_driver::{
 };
 use oer_esp32s31_ieee80211_mac::tx::TxSlot;
 use oer_espressif_executor::{Doorbell, DoorbellAcknowledger, InterruptExecutor};
-use oer_interrupt_table::{Bound, signal::IrqSignal};
+use oer_interrupt_table::{
+    Bound,
+    signal::{FromHandler, FromTask, IrqSignal},
+};
 use oer_memory::HandlerCell;
 
 pub const N: usize = 32;
@@ -35,8 +38,8 @@ oer_memory::zeroed_static! {
     pub static LINE: HandlerCell<WifiIrqLine<RadioExecutor>> = zeroed in ".critical.bss.wifi_rx_line";
 }
 oer_espressif_staged_runtime::placed_static! {
-    pub static MAC_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new(), in critical_data "wifi_station";
-    pub static POWER_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new(), in critical_data "wifi_station";
+    pub static MAC_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new::<(FromHandler<crate::WifiToken>, FromTask<oer_espressif_executor::Executor<0>, crate::ExecutorWake>), crate::RadioToken>(), in critical_data "wifi_station";
+    pub static POWER_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new::<FromHandler<crate::WifiToken>, crate::RadioToken>(), in critical_data "wifi_station";
     pub static ERRORS: AtomicU32 = AtomicU32::new(0), in critical_data "wifi_station";
 }
 pub static SLOT0: static_cell::StaticCell<TxSlot<TX>> = static_cell::StaticCell::new();
@@ -61,7 +64,7 @@ impl DoorbellAcknowledge for Lower {
 pub type WifiPart = WifiIrqPart<Lower>;
 
 /// The router's proof that the image binds the radio handler's part.
-pub type WifiBound = Bound<WifiPart>;
+pub type WifiBound = Bound<crate::WifiToken>;
 
 /// The radio interrupt handler (P3): the doorbell's requests, then the MAC
 /// bank, then the WDEVPWR bank, one cause per entry.
@@ -72,9 +75,16 @@ pub fn on_wifi(part: &mut WifiPart) {
 }
 
 /// The radio doorbell's ringing half.
-pub struct ImageDoorbell(pub Doorbell<3>);
+pub struct ImageDoorbell<
+    E: oer_interrupt_table::Entry = crate::WifiToken,
+    X: oer_interrupt_table::Entry = crate::RadioToken,
+>(pub Doorbell<3, E, X>);
 
-impl RadioDoorbell for ImageDoorbell {
+impl<E: oer_interrupt_table::Entry, X: oer_interrupt_table::Entry> RadioDoorbell
+    for ImageDoorbell<E, X>
+{
+    const HANDLER: oer_interrupt_table::Context = Doorbell::<3, E, X>::HANDLER;
+    const EXECUTOR: oer_interrupt_table::Context = Doorbell::<3, E, X>::EXECUTOR;
     fn ring(&self) {
         self.0.ring();
     }

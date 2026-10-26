@@ -28,7 +28,7 @@ use oer_esp32s31_phy::{
 };
 use oer_esp32s31_radio_client::{LpClock, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
-use oer_espressif_executor::{Doorbell, InterruptExecutor, LevelOrder};
+use oer_espressif_executor::{Doorbell, InterruptExecutor};
 
 use oer_memory::{Placed, StaticPlace};
 use static_cell::{ConstStaticCell, StaticCell};
@@ -65,8 +65,6 @@ oer_espressif_executor::tasks! {
     }
 }
 
-const LEVELS: LevelOrder<crate::WifiToken, crate::RadioToken, crate::ExecutorWake> =
-    LevelOrder::new();
 static ACTOR: StaticCell<Actor> = StaticCell::new();
 
 type Actor = RadioSystem<
@@ -140,19 +138,18 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let software = runtime.software_interrupts;
     // The radio handler's part holds both banks and the doorbell's lowering
     // half; its binding makes the doorbell's ringing half.
-    let (line, lower) = Doorbell::<3>::split(software.line3);
+    let (line, lower) = oer_espressif_executor::DoorbellLine::<3>::split(software.line3);
     let Ok(bound) = adopted.router().bind(
         interrupts.wifi,
         WifiIrqPart::new(runtime.wifi_interrupts, software.irq3, irq::Lower(lower)),
     ) else {
         crate::fail(crate::fatal::Failure::InterruptTable);
     };
-    let bell = irq::ImageDoorbell(Doorbell::new::<FromCpu3Irq, _>(line, &bound));
+    let bell = irq::ImageDoorbell(Doorbell::new::<FromCpu3Irq>(line, &bound));
     let radio = InterruptExecutor::<2>::new(software.line2).start(
         adopted.router(),
         interrupts.radio,
         software.irq2,
-        LEVELS,
     );
     let mut rng = crate::Rng::new(runtime.entropy, EmbassyClock);
     if !rng.status().is_healthy() {

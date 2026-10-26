@@ -143,6 +143,7 @@ pub struct Vectors {
     /// Implemented CLIC control bits and the selected MNLBITS.
     pub control_bits: u8,
     pub level_bits: u8,
+    pub tie_break: crate::TieBreak,
     /// The harts, `0..harts`: each has its table, one after another.
     pub harts: u32,
     /// The words of one hart's table, which is aligned to its size.
@@ -167,6 +168,7 @@ impl Vectors {
             levels: interrupts.levels()?,
             control_bits: interrupts.control_bits,
             level_bits: interrupts.level_bits,
+            tie_break: interrupts.tie_break,
             harts,
             slots: interrupts.vector_table_hart_slots,
         })
@@ -255,12 +257,16 @@ impl Vectors {
              \x20   count: {lines},\n\
              \x20   levels: {levels},\n\
              \x20   harts: {harts},\n\
+             \x20   tie_break: oer_interrupt_table::TieBreak::{tie_break},\n\
              }};\n\n\
              /// The harts with an interrupt stack and a vector table.\n\
              pub const HARTS: usize = {harts};\n\n\
              /// The words of one hart's vector table in `_runtime_mtvt`, the table's\n\
              /// alignment in words; lines 0 to {last} have their word.\n\
              pub const VECTOR_TABLE_WORDS: usize = {slots};\n",
+            tie_break = match self.tie_break {
+                crate::TieBreak::HighestLine => "HighestLine",
+            },
             control_bits = self.control_bits,
             level_bits = self.level_bits,
             first = byte(self.first_source_line, "first line")?,
@@ -376,6 +382,7 @@ mod tests {
             levels: 2,
             control_bits: 1,
             level_bits: 1,
+            tie_break: crate::TieBreak::HighestLine,
             harts: 2,
             slots: 8,
         };

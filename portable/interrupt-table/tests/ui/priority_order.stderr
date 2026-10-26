@@ -1,0 +1,29 @@
+error[E0080]: evaluation panicked: declared low-to-high priority contradicts the chip's line tie-break
+  --> tests/ui/priority_order.rs:8:9
+   |
+ 8 | /         oer_interrupt_table::interrupt_table! { // ui-error: E0080
+ 9 | |             lines: FAKE_LINES,
+10 | |             handler_attributes: [];
+11 | |             contexts { radio: 3; }
+12 | |             first: First = TimerIrq => timer, line 17, context radio, hart 0, Hardware;
+13 | |             second: Second = RadioIrq => radio, line $second, context radio, hart 0, Hardware;
+14 | |         }
+   | |_________^ evaluation of `_` failed inside this call
+...
+18 |   table!(16);
+   |   ---------- in this macro invocation
+   |
+note: inside `oer_interrupt_table::__private::check`
+  --> $RUST/core/src/panic.rs
+   |
+   |           $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the failure occurred here
+   |
+  ::: src/lib.rs
+   |
+   |                           crate::TieBreak::HighestLine => assert!(
+   |  _________________________________________________________-
+   | |                             entry.binding.line < other.binding.line,
+   | |                             "declared low-to-high priority contradicts the chip's line tie-break"
+   | |                         ),
+   | |_________________________- in this macro invocation

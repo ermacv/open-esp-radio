@@ -117,8 +117,8 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     assert!(<TimerToken as Entry>::cell().with(|_| ()).is_none());
     __oer_interrupt_h0_l16();
 
-    let _bound: crate::Bound<TimerIrq> = zero.bind(tokens.timer, TimerIrq::default()).unwrap();
-    assert_eq!(crate::Bound::<TimerIrq>::SOURCE, 3);
+    let _bound: crate::Bound<TimerToken> = zero.bind(tokens.timer, TimerIrq::default()).unwrap();
+    assert_eq!(crate::Bound::<TimerToken>::SOURCE, 3);
     assert_eq!(
         zero.controller.writes[before..],
         [
@@ -153,7 +153,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
         safe fn __oer_interrupt_h0_l18();
     }
     let before = zero.controller.writes.len();
-    let _bound: crate::Bound<PairIrq> = zero.bind(tokens.pair, PairIrq::default()).unwrap();
+    let _bound: crate::Bound<PairToken> = zero.bind(tokens.pair, PairIrq::default()).unwrap();
     assert_eq!(
         zero.controller.writes[before..],
         [

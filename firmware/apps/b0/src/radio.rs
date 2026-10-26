@@ -213,7 +213,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         crate::fail("scheduler-bell")
     };
     let _ = bridge::clock_state();
-    let radio = X::new(software.line2).start(adopted.router(), tokens.radio, software.irq2, LEVELS);
+    let radio = X::new(software.line2).start(adopted.router(), tokens.radio, software.irq2);
     let Some(arena) = ARENA.take() else {
         crate::fail("arena")
     };

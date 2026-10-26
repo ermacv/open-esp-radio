@@ -21,7 +21,7 @@ impl Immediate for EarlyUsb {
 oer_espressif_staged_runtime::placed_static! {
     pub(crate) static CONSOLE: Console<8, 8, EarlyUsb> = Console::new(), in critical_data "logging";
     /// The console's interrupt: the endpoint's signal.
-    static USB_INTERRUPT: Interrupt<Executor<0>, ConsoleInterrupt> = Interrupt::new(), in critical_data "console_usb";
+    static USB_INTERRUPT: Interrupt<Executor<0>, ConsoleInterrupt> = Interrupt::new::<crate::ConsoleUsb, crate::WakeToken>(), in critical_data "console_usb";
 }
 
 /// The console's `Hardware` interrupt handler, over the part its entry

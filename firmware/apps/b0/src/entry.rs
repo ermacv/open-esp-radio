@@ -3,7 +3,7 @@ use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::platform::{FromCpu0Irq, FromCpu2Irq, SystimerAlarm0, SystimerAlarm1};
 use oer_esp32s31_hal::usb_serial_jtag::ConsoleInterrupt;
 use oer_esp32s31_hal::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
-use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder};
+use oer_espressif_executor::{Executor, InterruptExecutor};
 use static_cell::StaticCell;
 
 #[derive(Clone, Copy)]
@@ -19,21 +19,21 @@ mod radio;
 mod usb;
 
 oer_espressif_staged_runtime::interrupt_table! {
+    contexts { app_wake: 1; radio_executor: 2; radio: 3; }
     /// The application executor's wake (thread mode).
-    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, level 1, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
     /// The radio executor (P2), polled in its handler.
-    radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<radio::RadioTasks, FromCpu2Irq>, line 17, level 2, hart 0, Executor;
+    radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<radio::RadioTasks, FromCpu2Irq>, line 17, context radio_executor, hart 0, Executor;
     /// The radio executor's timer alarm; it only acknowledges and pends.
-    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 18, level 3, hart 0, Hardware;
+    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 18, context radio, hart 0, Hardware;
     /// The application executor's timer alarm.
-    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 19, level 1, hart 0, Hardware;
+    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 19, context app_wake, hart 0, Hardware;
     /// The Bluetooth bank, the modem low-power timer and the radio doorbell.
-    bt: BtToken = irq::Interrupts => irq::bt, line 20, level 3, hart 0, Hardware;
+    bt: BtToken = irq::Interrupts => irq::bt, line 20, context radio, hart 0, Hardware;
     /// The console's USB Serial/JTAG interrupt; it raises the endpoint's signal.
-    console_usb: ConsoleUsb = ConsoleInterrupt => usb::interrupt, line 21, level 1, hart 0, Hardware;
+    console_usb: ConsoleUsb = ConsoleInterrupt => usb::interrupt, line 21, context app_wake, hart 0, Hardware;
 }
 type X = InterruptExecutor<2>;
-const LEVELS: LevelOrder<BtToken, RadioToken, WakeToken> = LevelOrder::new();
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     radio::boot(handoff)

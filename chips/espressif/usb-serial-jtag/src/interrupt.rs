@@ -20,9 +20,15 @@ pub struct Interrupt<E: SignalExecutor, R> {
 }
 
 impl<E: SignalExecutor, R: InterruptRegisters> Interrupt<E, R> {
-    pub const fn new() -> Self {
+    pub const fn new<
+        Source: oer_interrupt_table::Entry<Part = R>,
+        Target: oer_interrupt_table::Entry,
+    >() -> Self
+    where
+        Target::Part: oer_interrupt_table::InterruptSource,
+    {
         Self {
-            signal: IrqSignal::new(),
+            signal: IrqSignal::new::<oer_interrupt_table::signal::FromHandler<Source>, Target>(),
             registers: PhantomData,
         }
     }
@@ -43,8 +49,12 @@ impl<E: SignalExecutor, R: InterruptRegisters> Interrupt<E, R> {
     }
 }
 
-impl<E: SignalExecutor, R: InterruptRegisters> Default for Interrupt<E, R> {
-    fn default() -> Self {
-        Self::new()
+#[cfg(test)]
+impl<E: SignalExecutor, R: InterruptRegisters> Interrupt<E, R> {
+    pub const fn for_host_test() -> Self {
+        Self {
+            signal: IrqSignal::for_host_test(),
+            registers: PhantomData,
+        }
     }
 }

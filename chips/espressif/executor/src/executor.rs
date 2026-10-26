@@ -177,114 +177,6 @@ fn claim_core(swi: u8) {
         .unwrap_or_else(|_| panic!("software interrupt {swi} is already used by an executor"));
 }
 
-/// The level of the image's three execution contexts, checked when the image
-/// is compiled: the radio interrupts (`High`, P3) preempt the radio executor
-/// (`Mid`, P2), which preempts the application (`Low`), all on one core.
-///
-/// ```ignore
-/// const ORDER: LevelOrder<MacToken, RadioWakeToken, AppWakeToken> = LevelOrder::new();
-/// ```
-pub struct LevelOrder<High, Mid, Low> {
-    _levels: PhantomData<Levels<High, Mid, Low>>,
-}
-
-type Levels<High, Mid, Low> = fn() -> (High, Mid, Low);
-
-impl<High, Mid, Low> LevelOrder<High, Mid, Low>
-where
-    High: Entry,
-    Mid: Entry,
-    Low: Entry,
-{
-    /// The order of the three entries' levels and cores, or a compile error.
-    pub const fn new() -> Self {
-        const {
-            assert!(
-                High::LEVEL as u8 > Mid::LEVEL as u8,
-                "the radio interrupts must preempt the radio executor"
-            );
-            assert!(
-                Mid::LEVEL as u8 > Low::LEVEL as u8,
-                "the radio executor must preempt the application"
-            );
-            assert!(
-                High::HART as u8 == Mid::HART as u8 && Mid::HART as u8 == Low::HART as u8,
-                "the three contexts share one core"
-            );
-        }
-        Self {
-            _levels: PhantomData,
-        }
-    }
-}
-
-impl<High, Mid, Low> Default for LevelOrder<High, Mid, Low>
-where
-    High: Entry,
-    Mid: Entry,
-    Low: Entry,
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<High, Mid, Low> Clone for LevelOrder<High, Mid, Low> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<High, Mid, Low> Copy for LevelOrder<High, Mid, Low> {}
-
-/// Two entries at one level on one core, checked when the image is compiled:
-/// a radio interrupt (`Radio`, P3) and a peer entry (`Bell`) whose handler
-/// may run between that interrupt's handler runs but never inside one.
-/// Equal levels on one hart cannot preempt each other. The host tests of
-/// `level` cover the refusals.
-pub struct SameLevel<Radio, Bell> {
-    _levels: PhantomData<Pair<Radio, Bell>>,
-}
-
-type Pair<Radio, Bell> = fn() -> (Radio, Bell);
-
-impl<Radio, Bell> SameLevel<Radio, Bell>
-where
-    Radio: Entry,
-    Bell: Entry,
-{
-    /// The two entries' common level and core, or a compile error.
-    pub const fn new() -> Self {
-        const {
-            crate::level::same_level(
-                (Radio::LEVEL as u8, Radio::HART as u8),
-                (Bell::LEVEL as u8, Bell::HART as u8),
-            )
-        }
-        Self {
-            _levels: PhantomData,
-        }
-    }
-}
-
-impl<Radio, Bell> Default for SameLevel<Radio, Bell>
-where
-    Radio: Entry,
-    Bell: Entry,
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<Radio, Bell> Clone for SameLevel<Radio, Bell> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<Radio, Bell> Copy for SameLevel<Radio, Bell> {}
-
 /// Scheduler-free thread-mode executor.
 ///
 /// One software interrupt is reserved per executor so a waker on another CPU
@@ -392,6 +284,8 @@ pub struct InterruptExecutor<const SWI: u8> {
 // in place.
 unsafe impl<const SWI: u8> SignalExecutor for InterruptExecutor<SWI> {
     type Task = TaskId;
+    const SOURCE: u16 = software_interrupt_source(SWI);
+    const INTERRUPT_MODE: bool = true;
     fn pend(signal: &'static IrqSignal<Self>) {
         pend_signal::<SWI>(signal);
     }
@@ -430,6 +324,8 @@ fn thread_context<const SWI: u8>() -> bool {
 // which the round that follows takes, never polling it in place.
 unsafe impl<const SWI: u8> SignalExecutor for Executor<SWI> {
     type Task = TaskId;
+    const SOURCE: u16 = software_interrupt_source(SWI);
+    const INTERRUPT_MODE: bool = false;
     fn pend(_: &'static IrqSignal<Self>) {
         pend(SWI);
     }
@@ -450,28 +346,24 @@ unsafe impl<const SWI: u8> SignalExecutor for Executor<SWI> {
 impl<const SWI: u8> InterruptExecutor<SWI> {
     /// Start polling the tasks `T` in the handler of `wake`'s source, whose
     /// table entry names [`interrupt_handler::<T>`](interrupt_handler) on
-    /// this core. `order` proves that this executor's level lies between the
-    /// radio interrupts' and the application's. The spawner starts `T`'s
-    /// tasks.
+    /// this core. Signal declarations and request bindings check their
+    /// direction from the table entries. The spawner starts `T`'s tasks.
     ///
     /// # Panics
     ///
     /// When the table routes the source to another core, or the software
     /// interrupt already serves an executor.
-    pub fn start<T, W, High, Low, C>(
+    pub fn start<T, W, C>(
         self,
         router: &mut oer_interrupt_table::Router<C>,
         wake: W,
         part: W::Part,
-        order: LevelOrder<High, W, Low>,
     ) -> Spawner<T>
     where
         T: Tasks<Mode = InterruptMode>,
         W: Entry,
         W::Part: oer_interrupt_table::InterruptSource,
         C: oer_interrupt_table::Controller,
-        High: Entry,
-        Low: Entry,
     {
         const {
             assert!(
@@ -481,7 +373,7 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
             );
             assert!(T::EXECUTOR == SWI, "the tasks are another executor's");
         };
-        let _ = (order, self._line);
+        let _ = self._line;
         claim_core(SWI);
         // Published before the source is enabled, so the first handler polls
         // and a pend raises its interrupt.

@@ -142,19 +142,28 @@ pub enum Error {
 /// is enabled and routed: the only way to enable the peripheral's interrupt.
 /// Neither `Copy` nor `Clone`; only [`Router::bind`] makes one.
 #[must_use = "the bound part's interrupt is enabled only with this proof"]
-pub struct Bound<P: InterruptSources> {
-    _part: core::marker::PhantomData<fn() -> P>,
+pub struct Bound<E: Entry> {
+    _part: core::marker::PhantomData<fn() -> E>,
 }
 
-impl<P: InterruptSources> core::fmt::Debug for Bound<P> {
+impl<E: Entry> core::fmt::Debug for Bound<E> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str("Bound")
     }
 }
 
-impl<P: InterruptSource> Bound<P> {
+impl<E: Entry> Bound<E> {
+    pub const LEVEL: u8 = E::LEVEL;
+    pub const HART: u8 = E::HART;
+    pub const CONTEXT: crate::Context = E::CONTEXT;
+}
+
+impl<E: Entry> Bound<E>
+where
+    E::Part: InterruptSource,
+{
     /// The bound source.
-    pub const SOURCE: u16 = P::SOURCE;
+    pub const SOURCE: u16 = <E::Part as InterruptSource>::SOURCE;
 }
 
 /// The proof that every source of `P` is routed nowhere on the router's
@@ -176,17 +185,17 @@ impl<P: InterruptSources> core::fmt::Debug for Silent<P> {
 }
 
 /// What a driver takes before it enables the interrupt events of a part of
-/// sources `P::SOURCES`: [`Bound<P>`] (a handler holds the part and its line
+/// sources `P::SOURCES`: [`Bound<E>`] (a handler holds the part and its line
 /// is routed) or [`Silent<P>`] (no line receives the source). Sealed: only
 /// the router makes either.
 pub trait EventAuthority<P: InterruptSources>: sealed::Sealed {}
 
-impl<P: InterruptSources> EventAuthority<P> for Bound<P> {}
+impl<E: Entry> EventAuthority<E::Part> for Bound<E> {}
 impl<P: InterruptSources> EventAuthority<P> for Silent<P> {}
 
 mod sealed {
     pub trait Sealed {}
-    impl<P: super::InterruptSources> Sealed for super::Bound<P> {}
+    impl<E: super::Entry> Sealed for super::Bound<E> {}
     impl<P: super::InterruptSources> Sealed for super::Silent<P> {}
 }
 
@@ -280,11 +289,12 @@ impl<C: Controller> Router<C> {
     /// # pub fn on_timer(_: &mut TimerIrq) {}
     /// // The table's lines reach past the controller's 48.
     /// const WIDE: oer_interrupt_table::Lines =
-    ///     oer_interrupt_table::Lines { first: 16, count: 64, levels: 8, harts: 1 };
+    ///     oer_interrupt_table::Lines { first: 16, count: 64, levels: 8, harts: 1, tie_break: oer_interrupt_table::TieBreak::HighestLine };
     /// oer_interrupt_table::interrupt_table! {
     ///     lines: WIDE,
     ///     handler_attributes: [];
-    ///     timer: TimerToken = TimerIrq => on_timer, line 60, level 3, hart 0, Hardware;
+    ///     contexts { radio: 3; }
+    ///     timer: TimerToken = TimerIrq => on_timer, line 60, context radio, hart 0, Hardware;
     /// }
     /// fn bind(router: &mut oer_interrupt_table::Router<FakeController>) {
     ///     let tokens = Interrupts::take().unwrap();
@@ -305,7 +315,8 @@ impl<C: Controller> Router<C> {
     /// oer_interrupt_table::interrupt_table! {
     ///     lines: FAKE_LINES,
     ///     handler_attributes: [];
-    ///     far: FarToken = FarIrq => on_far, line 20, level 3, hart 0, Hardware;
+    ///     contexts { radio: 3; }
+    ///     far: FarToken = FarIrq => on_far, line 20, context radio, hart 0, Hardware;
     /// }
     /// fn bind(router: &mut oer_interrupt_table::Router<FakeController>) {
     ///     let tokens = Interrupts::take().unwrap();
@@ -313,11 +324,7 @@ impl<C: Controller> Router<C> {
     /// }
     /// # bind(&mut oer_interrupt_table::Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap());
     /// ```
-    pub fn bind<E: Entry>(
-        &mut self,
-        token: E,
-        part: E::Part,
-    ) -> Result<Bound<E::Part>, Refused<E>> {
+    pub fn bind<E: Entry>(&mut self, token: E, part: E::Part) -> Result<Bound<E>, Refused<E>> {
         const {
             assert!(
                 inside_matrix(<E::Part as InterruptSources>::SOURCES, C::SOURCES),

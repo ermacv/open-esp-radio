@@ -6,7 +6,7 @@
 //! line is one source of the radio interrupt's part, so the handler that
 //! holds the radio registers runs at P3 and applies the request.
 //!
-//! [`Doorbell::split`] takes the line from the reset root and hands out the
+//! [`DoorbellLine::split`] takes the line from the reset root and hands out the
 //! lowering half ([`DoorbellAcknowledger`]) for the handler's part and the
 //! unbound line ([`DoorbellLine`]). Only the binding of that part makes the
 //! ringing half: [`Doorbell::new`] takes the router's [`Bound`] proof of a
@@ -19,17 +19,23 @@
 //! [`DoorbellAcknowledger::acknowledge`], then takes the requests: a ring
 //! after that raises the interrupt again and is not lost.
 
-use core::sync::atomic::{Ordering, fence};
+use core::{
+    marker::PhantomData,
+    sync::atomic::{Ordering, fence},
+};
 
-use oer_interrupt_table::{Bound, InterruptSource, InterruptSources};
+use oer_interrupt_table::{
+    Bound, Class, Context, Entry, InterruptSource, InterruptSources, request_direction,
+};
 
 use crate::chip::{Line, platform, software_interrupt_source};
 use crate::software_line::SoftwareLine;
 
 /// The radio doorbell on software interrupt `SWI` (`FROM_CPU_INTR<SWI>`):
 /// the ringing half.
-pub struct Doorbell<const SWI: u8> {
+pub struct Doorbell<const SWI: u8, E: Entry, X: Entry> {
     line: Line,
+    entries: PhantomData<fn() -> (E, X)>,
 }
 
 /// Software interrupt `SWI`'s line before the binding of the part it is a
@@ -54,7 +60,7 @@ const fn holds(sources: &[u16], source: u16) -> bool {
 
 macro_rules! impl_doorbell {
     ($number:literal, $block:ident, $take:ident) => {
-        impl Doorbell<$number> {
+        impl DoorbellLine<$number> {
             /// Move the line's block from the reset root and lower a stale
             /// raise: the lowering half for the handler's part, and the line
             /// that rings once the part is bound.
@@ -79,32 +85,47 @@ impl_doorbell!(1, FromCpu1, own_line_1);
 impl_doorbell!(2, FromCpu2, own_line_2);
 impl_doorbell!(3, FromCpu3, own_line_3);
 
-impl<const SWI: u8> Doorbell<SWI> {
+impl<const SWI: u8, E: Entry, X: Entry> Doorbell<SWI, E, X> {
+    /// The handler and requester selected by this doorbell's constructor.
+    pub const HANDLER: Context = E::CONTEXT;
+    pub const EXECUTOR: Context = X::CONTEXT;
+
     /// The ringing half of `line`, once `bound` proves that the image's
-    /// interrupt table binds `Composite`, whose sources hold `Member`'s, the
+    /// interrupt table binds entry `E`, whose part holds `Member`'s source, the
     /// line's own: its handler then serves every ring. A part of the line
     /// alone is its own member (each [`InterruptSource`] is
     /// [`InterruptSources`]).
     ///
     /// A member that is not the line, or that the bound part does not hold,
-    /// fails to compile (the constant's assertion, `E0080`).
-    pub fn new<Member, Composite>(line: DoorbellLine<SWI>, bound: &Bound<Composite>) -> Self
+    /// fails to compile (the constant's assertion, `E0080`). `X` is the
+    /// requesting executor's entry; `E` must be above it on the same hart.
+    pub fn new<Member>(line: DoorbellLine<SWI>, bound: &Bound<E>) -> Self
     where
         Member: InterruptSource,
-        Composite: InterruptSources,
     {
         const {
+            assert!(
+                matches!(X::CLASS, Class::Executor),
+                "the doorbell requester must be an executor entry"
+            );
+            assert!(
+                request_direction(E::CONTEXT, X::CONTEXT),
+                "a request handler must be above its executor on the same hart"
+            );
             assert!(
                 Member::SOURCE == software_interrupt_source(SWI),
                 "the member is not the doorbell's software interrupt"
             );
             assert!(
-                holds(Composite::SOURCES, Member::SOURCE),
+                holds(<E::Part as InterruptSources>::SOURCES, Member::SOURCE),
                 "the bound part does not hold the doorbell's software interrupt"
             );
         };
         let _bound = bound;
-        Self { line: line.line }
+        Self {
+            line: line.line,
+            entries: PhantomData,
+        }
     }
 
     /// Raise the doorbell. The fence orders the caller's request writes

@@ -20,10 +20,9 @@
 //!   interrupt, whose entry names `wake_handler::<SWI>`.
 //! - `InterruptExecutor<SWI>` polls its tasks in its software interrupt's
 //!   handler (`interrupt_handler::<Tasks>`), at that interrupt's level: the
-//!   radio executor (P2). Starting it takes a `LevelOrder`, which checks when the
-//!   image compiles that the radio interrupts preempt it and it preempts the
-//!   application.
-//! - `Doorbell<SWI>` is a software interrupt at the radio interrupts' level
+//!   radio executor (P2). Signal declarations and request bindings check
+//!   their direction against the entries' levels and harts when the image compiles.
+//! - `Doorbell<SWI, HandlerEntry, ExecutorEntry>` is a software interrupt at the radio interrupts' level
 //!   (P3, `FROM_CPU` line 3) that the radio executor rings to have a request
 //!   applied there; its handler starts with `DoorbellAcknowledger::acknowledge`. Its line
 //!   is a source of the radio handler's part: the ringing half takes the
@@ -48,8 +47,6 @@ mod doorbell;
 mod executor;
 pub mod hardware;
 #[cfg(any(feature = "chip", test))]
-mod level;
-#[cfg(any(feature = "chip", test))]
 mod poll_stamp;
 #[cfg(feature = "port-slots")]
 pub mod port_slot;
@@ -69,10 +66,7 @@ mod timer_queue;
 #[cfg(feature = "chip")]
 pub use doorbell::{Doorbell, DoorbellAcknowledger, DoorbellLine, LineAcknowledger};
 #[cfg(feature = "chip")]
-pub use executor::{
-    Executor, InterruptExecutor, LevelOrder, SameLevel, interrupt_handler, ready_peers,
-    wake_handler,
-};
+pub use executor::{Executor, InterruptExecutor, interrupt_handler, ready_peers, wake_handler};
 #[cfg(any(feature = "chip", test))]
 pub use task::{AlreadyStarted, Spawner, TaskId, Tasks};
 #[cfg(feature = "chip")]
