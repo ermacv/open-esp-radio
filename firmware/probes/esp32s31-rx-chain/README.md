@@ -41,18 +41,34 @@ The final state is dumped without rearm, then the production release closes RF.
 Sampling gaps and scan bounds are reported. No absence or universal ordering
 claim follows from an event that the sampling loop did not see.
 
-`Q` rows report semantic STATUS observations from the public HAL, after clearing
-all causes before RX and keeping the bank masked during capture. Once the outer
-MAC and walker stop, the probe samples masked STATUS, enables the RX delivery
-group, masks it again, enables it again, acknowledges that sample, and resamples.
-`rx` is RX_SUCCESS; `aux` combines the two RX auxiliaries. `tx`, `timeout`,
-`color` and `unhandled` use the public semantic groups, not register images.
-No CPU source120 route is installed. These phases observe pending status after
-descriptor inspection, without a production take/drain. They cannot expose RAW,
-distinguish auxiliary bits 5/24, enumerate opaque lanes, or measure IRQ entry
-against DMA. A successful pending-status observation does not prove payload
-ordering. The descriptor alone does not mark nonterminal consumption; whether
-the leading sentinel is a valid consumption predicate is not established.
+`Q` rows report semantic STATUS and classified ENABLE observations. ENABLE tags
+are software values: 0 = Disabled (every enable field read zero), 1 = Station,
+2 = Unknown (outside those two reviewed images). An RX-only mask is therefore
+2; this tag does not expose an individual enable bit image. Initial and final
+masked zero STATUS samples alone prove no pending retention.
+
+Version 3 enables only RX delivery 5/14/24 during the receive window, samples
+statistics/semantic STATUS around each scan and acknowledges the sampled STATUS.
+It does not reproduce the version-2 pending-replay experiment. `rx` is
+RX_SUCCESS; `aux` combines 5/24. RAW and the individual auxiliary/opaque lanes
+remain unavailable through the ordinary public HAL diagnostic API. No source120
+CPU route is installed, so IRQ-entry/DMA ordering is not measured.
+
+`C` rows contain 44 hexadecimal software words: scan, changed-leading bitmap
+for ring nodes 0–31, reserved-leading-changed flag, terminal count, then two
+20-word diagnostics bracketing that scan. Each diagnostic is: cycle before,
+cycle after, ENABLE tag, semantic STATUS tag, then MPDU, END, FCS-error, abort,
+abort-FCS-pass, power-drop, same-BM-error, other-unicast, last-unmatched,
+buffer-full, FIFO-overflow, NRX-abort, NRX-restart, HT-SIG-error,
+HE-SIG-A-CRC-error, data-success counters. The software STATUS tag uses bits
+0..5 for TX-complete, RX-success, TX-timeout, color, auxiliary, unhandled; it is
+not a register image. Counter snapshots are multi-register observations, not
+atomic event identities. At most 192 correlation rows are retained. Both IRQ
+sampling and counter reads can perturb timing, so correlation cannot alone
+identify a rejected/aborted producer or prove rollback.
+
+The descriptor alone does not mark nonterminal consumption. The repeated dirty
+writes also leave the sentinel's validity as a consumption predicate unproved.
 
 The capture stops at the first frame limit or deadline. If trace capacity is
 exhausted, collection stops, then emits the retained rows and stopped-buffer
