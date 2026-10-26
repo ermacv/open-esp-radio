@@ -135028,6 +135028,54 @@ pub mod modem_pwr {
         pub fn clear_bluetooth_modem_lp_timer_state_0020(&mut self) {
             self.0.write::<0x20>(0x00000000);
         }
+
+        /// Write the vendor's whole-word image `0x00000001`, undeclared bits included (`MODEM_PWR.WORD_0040_OPAQUE`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
+        #[inline]
+        pub fn enable_bluetooth_lp_sleep_0(&mut self) {
+            self.0.write::<0x40>(0x00000001);
+        }
+
+        /// Write the vendor's whole-word image `0x00010000`, undeclared bits included (`MODEM_PWR.WORD_0040_OPAQUE`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
+        #[inline]
+        pub fn enable_bluetooth_lp_sleep_16(&mut self) {
+            self.0.write::<0x40>(0x00010000);
+        }
+
+        /// Write the vendor's whole-word image `0x00020000`, undeclared bits included (`MODEM_PWR.WORD_0040_OPAQUE`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
+        #[inline]
+        pub fn enable_bluetooth_lp_sleep_17(&mut self) {
+            self.0.write::<0x40>(0x00020000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000001`, undeclared bits included (`MODEM_PWR.WORD_0044_OPAQUE`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
+        #[inline]
+        pub fn disable_bluetooth_lp_sleep_0(&mut self) {
+            self.0.write::<0x44>(0x00000001);
+        }
+
+        /// Write the vendor's whole-word image `0x00010000`, undeclared bits included (`MODEM_PWR.WORD_0044_OPAQUE`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
+        #[inline]
+        pub fn disable_bluetooth_lp_sleep_16(&mut self) {
+            self.0.write::<0x44>(0x00010000);
+        }
+
+        /// Write the vendor's whole-word image `0x00020000`, undeclared bits included (`MODEM_PWR.WORD_0044_OPAQUE`).
+        ///
+        /// SOURCE: BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS.
+        #[inline]
+        pub fn disable_bluetooth_lp_sleep_17(&mut self) {
+            self.0.write::<0x44>(0x00020000);
+        }
     }
 
     /// The `BtdmLpTimerStatus` part of `MODEM_PWR`.

@@ -7660,3 +7660,45 @@ register = "MODEM_ETM.WORD_0114_OPAQUE"
 value = 0x04000000
 whole-word = true
 sources = ["BLOB_LIBBTDM_LP_SLEEP_ETM_COMMANDS"]
+
+[[fixed-register-images]]
+name = "enable_bluetooth_lp_sleep_0"
+register = "MODEM_PWR.WORD_0040_OPAQUE"
+value = 1
+whole-word = true
+sources = ["BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS"]
+
+[[fixed-register-images]]
+name = "enable_bluetooth_lp_sleep_16"
+register = "MODEM_PWR.WORD_0040_OPAQUE"
+value = 0x10000
+whole-word = true
+sources = ["BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS"]
+
+[[fixed-register-images]]
+name = "enable_bluetooth_lp_sleep_17"
+register = "MODEM_PWR.WORD_0040_OPAQUE"
+value = 0x20000
+whole-word = true
+sources = ["BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS"]
+
+[[fixed-register-images]]
+name = "disable_bluetooth_lp_sleep_0"
+register = "MODEM_PWR.WORD_0044_OPAQUE"
+value = 1
+whole-word = true
+sources = ["BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS"]
+
+[[fixed-register-images]]
+name = "disable_bluetooth_lp_sleep_16"
+register = "MODEM_PWR.WORD_0044_OPAQUE"
+value = 0x10000
+whole-word = true
+sources = ["BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS"]
+
+[[fixed-register-images]]
+name = "disable_bluetooth_lp_sleep_17"
+register = "MODEM_PWR.WORD_0044_OPAQUE"
+value = 0x20000
+whole-word = true
+sources = ["BLOB_LIBBTDM_LP_SLEEP_COMMAND_PAIRS"]
