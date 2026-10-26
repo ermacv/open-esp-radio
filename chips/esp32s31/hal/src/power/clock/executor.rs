@@ -359,10 +359,27 @@ impl<B: PlatformClockBackend> ModemPlatformClocks<B> {
 
 /// Modem clock gates driven by the radio PAC.
 pub(crate) trait ModemClockPort {
+    /// Publish the active modem state and its clock maps before any module
+    /// gate is opened, including the PHY's pre-client registration clocks.
+    fn prepare_power_state(&mut self);
     fn configure_device(&mut self, device: ModemClockDevice, enable: bool);
 }
 
 impl ModemClockPort for RadioPhyRegisters {
+    fn prepare_power_state(&mut self) {
+        self.prepare_modem_syscon_clock_map();
+        self.prepare_shared_modem_clock_map();
+        // SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP; ESP-IDF 4d59230d
+        // pmu_init.c:93,137-138. The maps select code two, so module gates
+        // alone cannot admit register access with the reset code zero.
+        // SOURCE: hw10-20261026-radio-start-23-fe-clock and
+        // hw10-20261026-radio-start-25-active-icg;
+        // /home/ermacv/dev/oer-notes/research/hw-radio-start.md.
+        self.select_hp_active_modem_icg();
+        self.apply_modem_icg_selection();
+        self.apply_sleep_icg_selection();
+    }
+
     fn configure_device(&mut self, device: ModemClockDevice, enable: bool) {
         self.configure_modem_clock_device(device, enable);
     }
@@ -450,6 +467,7 @@ pub(crate) fn execute_acquire<B: PlatformClockBackend>(
     held: &mut ModemPlatformClocks<B>,
     platform: &impl PlatformClockProvider<Backend = B>,
 ) -> Result<(ModemClockPlanner, ModemClockLease), PoisonedModemClockAcquire> {
+    port.prepare_power_state();
     oer_espressif_modem_clock::execute_acquire(prepared, |dependency| {
         perform_acquire(dependency, port, held, platform)
     })

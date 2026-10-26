@@ -6,6 +6,7 @@ use crate::power::test_clocks::{ClockEvent, CountingPlatformClocks, abandoned, h
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Operation {
+    PreparePowerState,
     Device(ModemClockDevice, bool),
     AcquirePll,
     ReleasePll,
@@ -22,6 +23,9 @@ type Log = Rc<RefCell<Vec<Operation>>>;
 struct Port(Log);
 
 impl ModemClockPort for Port {
+    fn prepare_power_state(&mut self) {
+        self.0.borrow_mut().push(Operation::PreparePowerState);
+    }
     fn configure_device(&mut self, device: ModemClockDevice, enable: bool) {
         self.0.borrow_mut().push(Operation::Device(device, enable));
     }
@@ -66,6 +70,7 @@ fn the_pll_source_brackets_the_modem_gate_and_the_analog_clock_goes_to_the_platf
     assert_eq!(
         *log.borrow(),
         [
+            Operation::PreparePowerState,
             Operation::Device(ModemClockDevice::ModemAdcCommonFe, true),
             Operation::Device(ModemClockDevice::ModemPrivateFe, true),
             Operation::AcquirePll,
@@ -110,7 +115,7 @@ fn a_refused_platform_request_poisons_the_transaction_before_the_gate() {
     };
     assert_eq!(poisoned.dependency(), Dependency::Pll160AndModemSource);
     // The modem gate was not opened without its upstream source.
-    assert!(log.borrow().is_empty());
+    assert_eq!(*log.borrow(), [Operation::PreparePowerState]);
     assert!(held().is_empty());
 }
 
@@ -281,4 +286,32 @@ fn explicit_abandon_and_unfinished_drop_record_distinct_endings_once() {
         held(),
         holding(&[PlatformClock::Mpll, PlatformClock::AnalogI2cMaster])
     );
+}
+
+/// PHY registration runs before a protocol client can enter common power.
+/// Its first baseband register access must already have a published modem
+/// power state; the later client power sequence cannot supply this prerequisite.
+#[test]
+fn phy_and_calibration_publish_power_before_any_clock_edge() {
+    for module in [ModemClockModule::Phy, ModemClockModule::PhyCalibration] {
+        let (log, mut port, platform) = setup();
+        let mut held_clocks = ModemPlatformClocks::default();
+        let identity = ModemClockPlannerIdentity::new();
+        let planner = ModemClockPlanner::managed(identity);
+        let prepared = planner
+            .prepare_acquire(module.dependencies())
+            .expect("module");
+        let (planner, lease) = execute_acquire(prepared, &mut port, &mut held_clocks, &platform)
+            .unwrap_or_else(|_| panic!("module clocks"));
+        let operations = log.borrow();
+        assert_eq!(operations.first(), Some(&Operation::PreparePowerState));
+        assert!(operations.contains(&Operation::Device(ModemClockDevice::WifiBaseband80x1, true)));
+        if module == ModemClockModule::PhyCalibration {
+            assert!(operations.contains(&Operation::Device(ModemClockDevice::WifiBaseband, true)));
+        }
+        drop(operations);
+        let prepared = planner.prepare_release(lease).expect("release");
+        execute_release(prepared, &mut port, &mut held_clocks)
+            .unwrap_or_else(|_| panic!("release"));
+    }
 }
