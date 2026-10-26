@@ -12,6 +12,8 @@ pub(super) struct Hardware {
     pub mac_interrupt: pac::wifi_mac::WifiMacInterrupt,
     pub tsens: pac::tsens::LpTsens,
     pub periclkrst: pac::lp_peri_clkrst::LpPericlkrst,
+    pub analog_master: pac::i2c_ana_mst::I2cAnaMst,
+    pub pll160: pac::hp_sys_clkrst::HpSysClkrstPll160,
 }
 
 /// Named observation bound from BB-L; independent of modem clock progress.

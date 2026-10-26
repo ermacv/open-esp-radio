@@ -455,6 +455,8 @@ extern "C" fn facts_main() -> ! {
             mac_interrupt: p.wifi_interrupts.wifi_mac_interrupt,
             tsens: p.radio_phy.lp_tsens,
             periclkrst: p.radio_phy.lp_periclkrst,
+            analog_master: p.analog_bus.i2c_ana_mst,
+            pll160: p.chip_clocks.hp_sys_clkrst_pll160,
         },
     };
     let source = ptr::addr_of!(source_owner).cast_mut();
