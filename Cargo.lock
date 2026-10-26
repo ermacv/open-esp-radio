@@ -2583,6 +2583,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-firmware-probes-esp32s31-rx-chain"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "embedded-io-async",
+ "heapless",
+ "oer-diagnostics",
+ "oer-embassy-time",
+ "oer-esp32s31-board",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-ieee80211-driver",
+ "oer-esp32s31-layout",
+ "oer-esp32s31-phy",
+ "oer-esp32s31-radio-client",
+ "oer-esp32s31-radio-system",
+ "oer-espressif-executor",
+ "oer-espressif-staged-runtime",
+ "oer-espressif-usb-serial-jtag",
+ "oer-ieee80211-wire",
+ "oer-interrupt-table",
+ "oer-memory",
+ "oer-radio-regulatory",
+ "oer-riscv",
+ "oer-time",
+ "static_cell",
+]
+
+[[package]]
 name = "oer-hil-agent"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,46 @@
+[package]
+name = "oer-firmware-probes-esp32s31-rx-chain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Bounded passive hardware observation of multi-buffer Wi-Fi RX descriptors"
+build = "build.rs"
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
+oer-riscv = { path = "../../../portable/riscv" }
+oer-diagnostics = { path = "../../../portable/diagnostics" }
+heapless = "0.9.3"
+static_cell = { workspace = true }
+oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31", "panic-hook"] }
+oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["esp32s31"] }
+oer-espressif-usb-serial-jtag.workspace = true
+embedded-io-async = "0.7.0"
+oer-embassy-time = { path = "../../../portable/embassy/time" }
+oer-time = { path = "../../../portable/time" }
+oer-interrupt-table = { path = "../../../portable/interrupt-table" }
+oer-memory = { path = "../../../portable/memory" }
+oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
+oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client" }
+oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system" }
+oer-esp32s31-ieee80211-driver = { path = "../../../chips/esp32s31/ieee80211/driver" }
+oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
+oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
+
+[build-dependencies]
+oer-esp32s31-layout = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true
+
+
+[package.metadata.open-radio.panic-budget]
+# Initial composition inventory: existing production/macro sites, no new
+# handwritten panic sites. This diagnostic image is not a panic-free product.
+runtime = { hal = 15, chips = 310, portable = 1, firmware = 23, unnamed = 5, hardware = 1 }
+bootstrap = { unnamed = 2 }
