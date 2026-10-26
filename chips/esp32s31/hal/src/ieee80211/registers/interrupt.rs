@@ -104,7 +104,6 @@ pub struct MacInterruptObservation {
     pub(crate) work_events: MacInterruptEvents,
     pub(crate) auxiliary_event: bool,
     pub(crate) unhandled_event: bool,
-    hardware_assertion_status: Option<u32>,
 }
 
 impl MacInterruptObservation {
@@ -121,26 +120,11 @@ impl MacInterruptObservation {
             work_events,
             auxiliary_event,
             unhandled_event,
-            hardware_assertion_status: None,
         }
     }
 
-    /// Attach a fatal assertion's complete sampled STATUS for diagnostics only.
-    /// Dispatch uses the named cause, never decodes this register image.
-    pub const fn with_hardware_assertion(mut self, status: u32) -> Self {
-        self.hardware_assertion_status = Some(status);
-        self
-    }
-
-    pub const fn hardware_assertion_status(self) -> Option<u32> {
-        self.hardware_assertion_status
-    }
-
     pub const fn is_empty(self) -> bool {
-        self.work_events.is_empty()
-            && !self.auxiliary_event
-            && !self.unhandled_event
-            && self.hardware_assertion_status.is_none()
+        self.work_events.is_empty() && !self.auxiliary_event && !self.unhandled_event
     }
 
     pub const fn work_events(self) -> MacInterruptEvents {
@@ -187,16 +171,9 @@ impl MacInterruptSnapshot {
             || sample.wdev_timer_0()
             || sample.wdev_timer_1()
             || sample.bits_29_31_opaque().get() != 0;
-        let observation = MacInterruptObservation::from_semantic_events(
-            work_events,
-            auxiliary_event,
-            unhandled_event,
-        );
-        if sample.hardware_assertion() {
-            observation.with_hardware_assertion(sample.bits())
-        } else {
-            observation
-        }
+        // Fatal assertions are checked independently in unmasked RAW before
+        // this STATUS sample can be acknowledged.
+        MacInterruptObservation::from_semantic_events(work_events, auxiliary_event, unhandled_event)
     }
 }
 
@@ -388,7 +365,7 @@ fn publish_mac_interrupt_mask<P: Placement>(
             .set_bits_16_18_opaque(Bits::constant::<0>())
             .set_tx_timeout(station)
             .set_bit_20_opaque(false)
-            .set_hardware_assertion(station)
+            .set_fatal_assertion(station)
             .set_bit_22_opaque(false)
             .set_bit_23_opaque(station)
             .set_rx_associated_auxiliary_24(station)
@@ -443,7 +420,7 @@ fn observe_mac_interrupt_enable<P: Placement>(
         enable.bit_13_opaque(),
         enable.rx_success(),
         enable.tx_timeout(),
-        enable.hardware_assertion(),
+        enable.fatal_assertion(),
         enable.bit_23_opaque(),
         enable.rx_associated_auxiliary_24(),
         enable.wdev_timer_0(),
@@ -570,6 +547,15 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
     /// Read the currently published MAC interrupt mask.
     pub fn mac_interrupt_enable(&self) -> MacInterruptEnableState {
         observe_mac_interrupt_enable(&self.mac)
+    }
+
+    /// Observe a fatal assertion regardless of its delivery mask.
+    /// The complete RAW word is diagnostic data only; dispatch uses the named
+    /// PAC field. This sample is not acknowledged on the fatal path.
+    /// SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026, BLOB_LIBPP_ISR_REGISTER_DUMP.
+    pub fn fatal_assertion_raw(&self) -> Option<u32> {
+        let raw = self.mac.sample_mac_interrupt_raw();
+        raw.fatal_assertion().then_some(raw.bits())
     }
 
     /// Sample the complete MAC interrupt status image.

@@ -129,7 +129,7 @@ fn a_full_status_reads_every_cause() {
     assert!(observation.work_events().rx_success());
     assert!(observation.work_events().tx_timeout());
     assert!(observation.has_auxiliary_event() && observation.has_unhandled_event());
-    assert_eq!(observation.hardware_assertion_status(), Some(u32::MAX));
+    assert_eq!(owners.mac_interrupt.fatal_assertion_raw(), Some(u32::MAX));
     let power = owners
         .power_interrupt
         .power_interrupt_status()
@@ -159,4 +159,26 @@ fn preparing_a_connected_station_clears_the_beacon_filter_control_alone() {
     let changes = before.changes(&after);
     assert!(values(&changes, "interrupt").is_empty());
     assert_eq!(changes.len(), 1);
+}
+
+#[test]
+fn fatal_raw_is_visible_while_status_and_delivery_are_masked() {
+    let mut words = HostWords::filled(0);
+    let mut owners = words.owners();
+    owners.mac_interrupt.mac.modify_raw(|word| {
+        word.set_fatal_assertion(true);
+    });
+    owners.mac_interrupt.mask_all_mac_interrupts();
+    assert!(
+        owners
+            .mac_interrupt
+            .mac_interrupt_status()
+            .observation()
+            .is_empty()
+    );
+    assert_eq!(
+        owners.mac_interrupt.mac_interrupt_enable(),
+        MacInterruptEnableState::Disabled
+    );
+    assert!(owners.mac_interrupt.fatal_assertion_raw().is_some());
 }

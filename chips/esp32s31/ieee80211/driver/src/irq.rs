@@ -60,7 +60,6 @@ use oer_memory::{HandlerCell, Installed};
 
 use crate::rx::counters::WifiRxCounters;
 
-pub mod fault;
 use oer_esp32s31_ieee80211_mac::irq::Fault;
 
 /// The radio doorbell, as the radio executor sees it: a software interrupt
@@ -498,7 +497,7 @@ where
     X: SignalExecutor,
 {
     if pending & CLOSE != 0 {
-        epoch.close();
+        epoch.close()?;
     } else if pending & MASK_ALL != 0 {
         if epoch.state() != EpochState::Masked {
             drop(epoch.mask_all());

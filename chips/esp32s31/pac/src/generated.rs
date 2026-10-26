@@ -273220,12 +273220,12 @@ pub mod wifi_mac {
         /// Positioned bits of `BIT_20_OPAQUE`.
         pub const BIT_20_OPAQUE_MASK: u32 = 0x100000;
 
-        /// Width of `HARDWARE_ASSERTION` in bits.
-        pub const HARDWARE_ASSERTION_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `HARDWARE_ASSERTION`.
-        pub const HARDWARE_ASSERTION_MAX: u32 = 0x1;
-        /// Positioned bits of `HARDWARE_ASSERTION`.
-        pub const HARDWARE_ASSERTION_MASK: u32 = 0x200000;
+        /// Width of `FATAL_ASSERTION` in bits.
+        pub const FATAL_ASSERTION_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `FATAL_ASSERTION`.
+        pub const FATAL_ASSERTION_MAX: u32 = 0x1;
+        /// Positioned bits of `FATAL_ASSERTION`.
+        pub const FATAL_ASSERTION_MASK: u32 = 0x200000;
 
         /// Width of `BIT_22_OPAQUE` in bits.
         pub const BIT_22_OPAQUE_WIDTH: u32 = 1;
@@ -273367,7 +273367,7 @@ pub mod wifi_mac {
 
             /// Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
             #[inline]
-            pub const fn hardware_assertion(self) -> bool {
+            pub const fn fatal_assertion(self) -> bool {
                 (self.0 & 0x00200000) != 0
             }
 
@@ -273504,7 +273504,7 @@ pub mod wifi_mac {
 
             /// Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
             #[inline]
-            pub const fn hardware_assertion(&self) -> bool {
+            pub const fn fatal_assertion(&self) -> bool {
                 (self.0 & 0x00200000) != 0
             }
 
@@ -273648,9 +273648,9 @@ pub mod wifi_mac {
                 self
             }
 
-            /// Set `HARDWARE_ASSERTION`.
+            /// Set `FATAL_ASSERTION`.
             #[inline]
-            pub fn set_hardware_assertion(&mut self, value: bool) -> &mut Self {
+            pub fn set_fatal_assertion(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xffdfffff) | (u32::from(value) << 21);
                 self
             }
@@ -273708,7 +273708,7 @@ pub mod wifi_mac {
 
     /// The `RAW` register.
     ///
-    /// Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE.
+    /// Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE. Its event lanes correspond to ENABLE/STATUS; masking delivery does not make RAW a STATUS snapshot. SOURCE: BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
     pub mod raw {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -273718,22 +273718,48 @@ pub mod wifi_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0xc44;
 
-        /// Width of `EVENTS` in bits.
-        pub const EVENTS_WIDTH: u32 = 32;
-        /// Greatest unsigned image of `EVENTS`.
-        pub const EVENTS_MAX: u32 = 0xffffffff;
-        /// Positioned bits of `EVENTS`.
-        pub const EVENTS_MASK: u32 = 0xffffffff;
+        /// Width of `BITS_0_20_OPAQUE` in bits.
+        pub const BITS_0_20_OPAQUE_WIDTH: u32 = 21;
+        /// Greatest unsigned image of `BITS_0_20_OPAQUE`.
+        pub const BITS_0_20_OPAQUE_MAX: u32 = 0x1fffff;
+        /// Positioned bits of `BITS_0_20_OPAQUE`.
+        pub const BITS_0_20_OPAQUE_MASK: u32 = 0x1fffff;
+
+        /// Width of `FATAL_ASSERTION` in bits.
+        pub const FATAL_ASSERTION_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `FATAL_ASSERTION`.
+        pub const FATAL_ASSERTION_MAX: u32 = 0x1;
+        /// Positioned bits of `FATAL_ASSERTION`.
+        pub const FATAL_ASSERTION_MASK: u32 = 0x200000;
+
+        /// Width of `BITS_22_31_OPAQUE` in bits.
+        pub const BITS_22_31_OPAQUE_WIDTH: u32 = 10;
+        /// Greatest unsigned image of `BITS_22_31_OPAQUE`.
+        pub const BITS_22_31_OPAQUE_MAX: u32 = 0x3ff;
+        /// Positioned bits of `BITS_22_31_OPAQUE`.
+        pub const BITS_22_31_OPAQUE_MASK: u32 = 0xffc00000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `EVENTS` field.
+            /// Raw event observations; identities are not independently decoded here.
             #[inline]
-            pub const fn events(self) -> u32 {
-                self.0
+            pub const fn bits_0_20_opaque(self) -> oer_mmio::Bits<21> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Unmasked carrier of the vendor fatal assertion path; physical producer unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026 (STATUS21 fatal consumer), BLOB_LIBPP_ISR_REGISTER_DUMP (matching raw event bank).
+            #[inline]
+            pub const fn fatal_assertion(self) -> bool {
+                (self.0 & 0x00200000) != 0
+            }
+
+            /// Raw event observations; identities are not independently decoded here.
+            #[inline]
+            pub const fn bits_22_31_opaque(self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0 >> 22)
             }
         }
 
@@ -273741,16 +273767,42 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `EVENTS` field.
+            /// Raw event observations; identities are not independently decoded here.
             #[inline]
-            pub const fn events(&self) -> u32 {
-                self.0
+            pub const fn bits_0_20_opaque(&self) -> oer_mmio::Bits<21> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Set `EVENTS`.
+            /// Unmasked carrier of the vendor fatal assertion path; physical producer unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026 (STATUS21 fatal consumer), BLOB_LIBPP_ISR_REGISTER_DUMP (matching raw event bank).
             #[inline]
-            pub fn set_events(&mut self, value: u32) -> &mut Self {
-                self.0 = value;
+            pub const fn fatal_assertion(&self) -> bool {
+                (self.0 & 0x00200000) != 0
+            }
+
+            /// Raw event observations; identities are not independently decoded here.
+            #[inline]
+            pub const fn bits_22_31_opaque(&self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0 >> 22)
+            }
+
+            /// Set `BITS_0_20_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_20_opaque(&mut self, value: oer_mmio::Bits<21>) -> &mut Self {
+                self.0 = (self.0 & 0xffe00000) | value.get();
+                self
+            }
+
+            /// Set `FATAL_ASSERTION`.
+            #[inline]
+            pub fn set_fatal_assertion(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffdfffff) | (u32::from(value) << 21);
+                self
+            }
+
+            /// Set `BITS_22_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_22_31_opaque(&mut self, value: oer_mmio::Bits<10>) -> &mut Self {
+                self.0 = (self.0 & 0x003fffff) | (value.get() << 22);
                 self
             }
         }
@@ -273866,12 +273918,12 @@ pub mod wifi_mac {
         /// Positioned bits of `BIT_20_OPAQUE`.
         pub const BIT_20_OPAQUE_MASK: u32 = 0x100000;
 
-        /// Width of `HARDWARE_ASSERTION` in bits.
-        pub const HARDWARE_ASSERTION_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `HARDWARE_ASSERTION`.
-        pub const HARDWARE_ASSERTION_MAX: u32 = 0x1;
-        /// Positioned bits of `HARDWARE_ASSERTION`.
-        pub const HARDWARE_ASSERTION_MASK: u32 = 0x200000;
+        /// Width of `FATAL_ASSERTION` in bits.
+        pub const FATAL_ASSERTION_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `FATAL_ASSERTION`.
+        pub const FATAL_ASSERTION_MAX: u32 = 0x1;
+        /// Positioned bits of `FATAL_ASSERTION`.
+        pub const FATAL_ASSERTION_MASK: u32 = 0x200000;
 
         /// Width of `BIT_22_OPAQUE` in bits.
         pub const BIT_22_OPAQUE_WIDTH: u32 = 1;
@@ -274013,7 +274065,7 @@ pub mod wifi_mac {
 
             /// Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
             #[inline]
-            pub const fn hardware_assertion(self) -> bool {
+            pub const fn fatal_assertion(self) -> bool {
                 (self.0 & 0x00200000) != 0
             }
 
@@ -298547,14 +298599,14 @@ pub mod wifi_mac {
             }
         }
 
-        /// The `HARDWARE_ASSERTION` field.
+        /// The `FATAL_ASSERTION` field.
         #[inline]
-        pub const fn hardware_assertion(&self) -> bool {
+        pub const fn fatal_assertion(&self) -> bool {
             (self.0 & 0x00200000) != 0
         }
 
-        /// The snapshot without `HARDWARE_ASSERTION` unless `keep`: it is then not acknowledged.
-        pub const fn retain_hardware_assertion(self, keep: bool) -> Self {
+        /// The snapshot without `FATAL_ASSERTION` unless `keep`: it is then not acknowledged.
+        pub const fn retain_fatal_assertion(self, keep: bool) -> Self {
             if keep {
                 self
             } else {
@@ -298668,6 +298720,73 @@ pub mod wifi_mac {
         }
     }
 
+    /// One sample of the `WIFI_MAC.RAW` events `WIFI_MAC.CLEAR` acknowledges, to acknowledge once.
+    ///
+    /// SOURCE: BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+    #[must_use = "a sampled event set must be acknowledged"]
+    #[derive(Debug, Eq, PartialEq)]
+    pub struct MacInterruptRawSnapshot(u32);
+
+    impl MacInterruptRawSnapshot {
+        /// The bits the snapshot keeps: the events the clear word acknowledges.
+        pub const EVENTS: u32 = 0xffffffff;
+
+        /// Whether no event was sampled.
+        pub const fn is_clear(&self) -> bool {
+            self.0 == 0
+        }
+
+        /// The sampled event bits: a value of the sample, which grants nothing.
+        pub const fn bits(&self) -> u32 {
+            self.0
+        }
+
+        /// The `BITS_0_20_OPAQUE` field.
+        #[inline]
+        pub const fn bits_0_20_opaque(&self) -> oer_mmio::Bits<21> {
+            oer_mmio::Bits::truncate(self.0)
+        }
+
+        /// The snapshot without `BITS_0_20_OPAQUE` unless `keep`: it is then not acknowledged.
+        pub const fn retain_bits_0_20_opaque(self, keep: bool) -> Self {
+            if keep {
+                self
+            } else {
+                Self(self.0 & 0xffe00000)
+            }
+        }
+
+        /// The `FATAL_ASSERTION` field.
+        #[inline]
+        pub const fn fatal_assertion(&self) -> bool {
+            (self.0 & 0x00200000) != 0
+        }
+
+        /// The snapshot without `FATAL_ASSERTION` unless `keep`: it is then not acknowledged.
+        pub const fn retain_fatal_assertion(self, keep: bool) -> Self {
+            if keep {
+                self
+            } else {
+                Self(self.0 & 0xffdfffff)
+            }
+        }
+
+        /// The `BITS_22_31_OPAQUE` field.
+        #[inline]
+        pub const fn bits_22_31_opaque(&self) -> oer_mmio::Bits<10> {
+            oer_mmio::Bits::truncate(self.0 >> 22)
+        }
+
+        /// The snapshot without `BITS_22_31_OPAQUE` unless `keep`: it is then not acknowledged.
+        pub const fn retain_bits_22_31_opaque(self, keep: bool) -> Self {
+            if keep {
+                self
+            } else {
+                Self(self.0 & 0x003fffff)
+            }
+        }
+    }
+
     impl<P: oer_mmio::Placement> WifiMacInterrupt<P> {
         /// Read `ENABLE`.
         #[inline]
@@ -298726,6 +298845,21 @@ pub mod wifi_mac {
         /// `WIFI_MAC.CLEAR`, zero to every other bit.
         #[inline]
         pub fn acknowledge_mac_interrupt(&mut self, snapshot: MacInterruptSnapshot) {
+            self.0.write::<0xc4c>(snapshot.0);
+        }
+
+        /// Sample `WIFI_MAC.RAW` once, keeping the events `WIFI_MAC.CLEAR` acknowledges (`WIFI_MAC.RAW`).
+        ///
+        /// SOURCE: BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+        #[inline]
+        pub fn sample_mac_interrupt_raw(&self) -> MacInterruptRawSnapshot {
+            MacInterruptRawSnapshot(self.0.read::<0xc44>() & MacInterruptRawSnapshot::EVENTS)
+        }
+
+        /// Acknowledge exactly the sampled events: one to each such bit of
+        /// `WIFI_MAC.CLEAR`, zero to every other bit.
+        #[inline]
+        pub fn acknowledge_mac_interrupt_raw(&mut self, snapshot: MacInterruptRawSnapshot) {
             self.0.write::<0xc4c>(snapshot.0);
         }
     }

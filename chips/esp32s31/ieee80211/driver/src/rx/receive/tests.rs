@@ -591,8 +591,9 @@ fn the_handler_activates_the_epoch_after_the_install() {
     // The activation alone touched the banks; the stale mask was not
     // applied.
     assert!(harness.host.mac().operations().matches(&[
-        MacInterruptOperation::Status,
+        MacInterruptOperation::FatalAssertionRaw,
         MacInterruptOperation::MaskAll,
+        MacInterruptOperation::FatalAssertionRaw,
         MacInterruptOperation::ClearAll,
         MacInterruptOperation::Publish(oer_esp32s31_hal::types::MacInterruptMask::STATION),
     ]));
@@ -620,9 +621,10 @@ fn p2_drains_then_unmasks_only_through_the_doorbell() {
     // The only bank operations are the MAC handler's and the doorbell's.
     assert!(harness.host.mac().operations().matches(&[
         MacInterruptOperation::Status,
+        MacInterruptOperation::FatalAssertionRaw,
         MacInterruptOperation::MaskRxDelivery,
         MacInterruptOperation::Acknowledge(rx_success()),
-        MacInterruptOperation::Status,
+        MacInterruptOperation::FatalAssertionRaw,
         MacInterruptOperation::UnmaskRxDelivery,
     ]));
     assert!(harness.host.power().operations().is_empty());

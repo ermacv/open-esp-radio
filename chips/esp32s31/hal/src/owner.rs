@@ -683,6 +683,11 @@ impl MacInterruptRegisters {
         self.inner.mac_interrupt_status()
     }
 
+    /// Read a fatal assertion and its complete unmasked RAW diagnostic word.
+    pub fn fatal_assertion_raw(&self) -> Option<u32> {
+        self.inner.fatal_assertion_raw()
+    }
+
     pub fn acknowledge_mac_interrupts(&mut self, snapshot: MacInterruptSnapshot) {
         self.inner.acknowledge_mac_interrupts(snapshot);
     }

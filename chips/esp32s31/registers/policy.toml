@@ -7569,3 +7569,8 @@ reason = "No owner yet: the bootstrap reaches only its boot part's words."
 instance = "BUS_MONITOR"
 registers = ["CORE_%s_RCD_EN", "CORE_%s_RCD_PDEBUGPC", "CORE_%s_RCD_PDEBUGSP"]
 reason = "The platform does not enable or sample per-hart PC/SP recording."
+
+[[interrupt-snapshots]]
+name = "mac_interrupt_raw"
+status = "WIFI_MAC.RAW"
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_WIFI_IRQ_FACTS_20261026"]

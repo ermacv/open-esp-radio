@@ -187,8 +187,9 @@ fn an_activation_clears_stale_events_then_publishes_the_station_mask() {
     assert_eq!(part.epoch().state(), EpochState::Active);
     // The entry served the request alone: no bank was sampled.
     assert!(mac(&part).operations().matches(&[
-        MacInterruptOperation::Status,
+        MacInterruptOperation::FatalAssertionRaw,
         MacInterruptOperation::MaskAll,
+        MacInterruptOperation::FatalAssertionRaw,
         MacInterruptOperation::ClearAll,
         MacInterruptOperation::Publish(MacInterruptMask::STATION),
     ]));
@@ -225,6 +226,7 @@ fn the_mac_bank_masks_rx_acknowledges_and_wakes_once() {
     // Masked before the acknowledgement; the line drops.
     assert!(mac(&part).operations().matches(&[
         MacInterruptOperation::Status,
+        MacInterruptOperation::FatalAssertionRaw,
         MacInterruptOperation::MaskRxDelivery,
         MacInterruptOperation::Acknowledge(rx_success()),
     ]));
@@ -262,11 +264,10 @@ fn the_power_bank_acknowledges_publishes_and_counts() {
     ]));
     assert!(fixture.power.take().unwrap().sta_tbtt());
     // The MAC bank was sampled first and held nothing; no MAC fact.
-    assert!(
-        mac(&part)
-            .operations()
-            .matches(&[MacInterruptOperation::Status])
-    );
+    assert!(mac(&part).operations().matches(&[
+        MacInterruptOperation::Status,
+        MacInterruptOperation::FatalAssertionRaw
+    ]));
     let report = fixture.counters.report();
     assert_eq!(report.power_irqs, 1);
     assert_eq!((report.mac_irqs, report.spurious_mac_irqs), (0, 0));
@@ -286,11 +287,10 @@ fn an_entry_without_a_cause_is_counted_and_wakes_no_one() {
             .is_pending()
     );
     service_wifi_line(fixture.cell, &mut part).expect("healthy interrupt");
-    assert!(
-        mac(&part)
-            .operations()
-            .matches(&[MacInterruptOperation::Status])
-    );
+    assert!(mac(&part).operations().matches(&[
+        MacInterruptOperation::Status,
+        MacInterruptOperation::FatalAssertionRaw
+    ]));
     assert!(
         power(&part)
             .operations()
@@ -312,7 +312,7 @@ fn an_unmask_after_mask_all_is_ignored_and_the_mask_posted_once() {
     service_wifi_line(fixture.cell, &mut part).expect("healthy interrupt");
     assert_eq!(part.epoch().state(), EpochState::Masked);
     assert!(mac(&part).operations().matches(&[
-        MacInterruptOperation::Status,
+        MacInterruptOperation::FatalAssertionRaw,
         MacInterruptOperation::MaskAll
     ]));
     assert!(fixture.irq.take_batch().unwrap().masked());
@@ -329,11 +329,10 @@ fn an_unmask_after_mask_all_is_ignored_and_the_mask_posted_once() {
     service_wifi_line(fixture.cell, &mut part).expect("healthy interrupt");
     assert!(!mac(&part).rx_delivery_enabled());
     assert!(!mac(&part).other_sources_enabled());
-    assert!(
-        mac(&part)
-            .operations()
-            .matches(&[MacInterruptOperation::Status, MacInterruptOperation::Status])
-    );
+    assert!(mac(&part).operations().matches(&[
+        MacInterruptOperation::FatalAssertionRaw,
+        MacInterruptOperation::FatalAssertionRaw
+    ]));
     // The masked fact is published once.
     assert!(fixture.irq.take_batch().unwrap().is_empty());
     let report = fixture.counters.report();
@@ -359,7 +358,7 @@ fn an_unmask_restores_the_rx_group_of_an_active_epoch() {
     fixture.requests.ring(WifiIrqRequest::UnmaskRx, &rings);
     service_wifi_line(fixture.cell, &mut part).expect("healthy interrupt");
     assert!(mac(&part).operations().matches(&[
-        MacInterruptOperation::Status,
+        MacInterruptOperation::FatalAssertionRaw,
         MacInterruptOperation::UnmaskRxDelivery
     ]));
     assert!(mac(&part).rx_delivery_enabled());
@@ -383,8 +382,9 @@ fn closing_masks_and_clears_and_wins_over_every_other_request() {
     // The entry served the requests alone: the latched RX was cleared, never
     // serviced.
     assert!(mac(&part).operations().matches(&[
-        MacInterruptOperation::Status,
+        MacInterruptOperation::FatalAssertionRaw,
         MacInterruptOperation::MaskAll,
+        MacInterruptOperation::FatalAssertionRaw,
         MacInterruptOperation::ClearAll,
     ]));
     assert!(mac(&part).latched().is_empty());
@@ -458,8 +458,9 @@ fn fatal_mac_sample_preempts_work_and_requests_without_releasing_owners() {
     for request in 0..4 {
         let mut fixture = fixture();
         let mut part = active_part();
-        let status = 0x9361_ace7;
-        mac_mut(&mut part).latch(rx_success().with_hardware_assertion(status));
+        let raw = 0x9361_ace7;
+        mac_mut(&mut part).latch(rx_success());
+        mac_mut(&mut part).latch_fatal_assertion(raw);
         let rings = Rings::default();
         match request {
             1 => fixture.requests.ring(WifiIrqRequest::Close, &rings),
@@ -467,25 +468,53 @@ fn fatal_mac_sample_preempts_work_and_requests_without_releasing_owners() {
             3 => fixture.requests.activate(&HostActivation, &rings),
             _ => (),
         }
-        let fault = Fault::HardwareAssertion { status };
+        let fault = Fault::FatalAssertion { raw };
         assert_eq!(service_wifi_line(fixture.cell, &mut part), Err(fault));
         assert_eq!(part.epoch().state(), EpochState::Quarantined(fault));
-        assert_eq!(
-            mac(&part).latched().hardware_assertion_status(),
-            Some(status)
-        );
+        assert_eq!(mac(&part).latched_fatal_assertion_raw(), Some(raw));
         assert!(!mac(&part).line_asserted() && !power(&part).line_asserted());
-        assert!(mac(&part).operations().matches(&[
-            MacInterruptOperation::Status,
-            MacInterruptOperation::MaskAll
-        ]));
+        let expected = if request == 0 {
+            &[
+                MacInterruptOperation::Status,
+                MacInterruptOperation::FatalAssertionRaw,
+                MacInterruptOperation::MaskAll,
+            ][..]
+        } else {
+            &[
+                MacInterruptOperation::FatalAssertionRaw,
+                MacInterruptOperation::MaskAll,
+            ][..]
+        };
+        assert!(mac(&part).operations().matches(expected));
         assert!(
             power(&part)
                 .operations()
                 .matches(&[PowerInterruptOperation::MaskAll])
         );
-        // No work event escapes the terminal interrupt, and the line stays installed.
         assert!(fixture.cell.with(|_| ()).is_some());
         assert!(fixture.irq.take_batch().expect("host context").is_empty());
     }
+}
+
+#[test]
+fn an_uninstalled_line_captures_masked_inherited_fatal_raw_without_clearing() {
+    let cell = HandlerCell::<WifiIrqLine<Host>>::new();
+    let mut part = closed_part();
+    let raw = 0x1987_6abc;
+    mac_mut(&mut part).latch_fatal_assertion(raw);
+    assert!(mac(&part).visible().is_empty());
+    assert!(!mac(&part).line_asserted());
+    let fault = Fault::FatalAssertion { raw };
+    assert_eq!(service_wifi_line(&cell, &mut part), Err(fault));
+    assert_eq!(part.epoch().state(), EpochState::Quarantined(fault));
+    assert_eq!(mac(&part).latched_fatal_assertion_raw(), Some(raw));
+    assert!(mac(&part).operations().matches(&[
+        MacInterruptOperation::FatalAssertionRaw,
+        MacInterruptOperation::MaskAll
+    ]));
+    assert!(
+        power(&part)
+            .operations()
+            .matches(&[PowerInterruptOperation::MaskAll])
+    );
 }

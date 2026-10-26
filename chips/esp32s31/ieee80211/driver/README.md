@@ -99,18 +99,24 @@ The arena's fact publishers, request word and counters reach the handler as
 one `WifiIrqLine` the task installs once in a `HandlerCell`, an ownership
 state machine rather than a lock.
 
-MAC source120 `HARDWARE_ASSERTION` (bit21) is terminal. The handler captures
-its complete STATUS before acknowledging or publishing work, masks both banks,
-and returns the MAC crate’s `irq::Fault::HardwareAssertion`. Requests that
-could clear the bank check this fault first, including when no line is installed.
-The quarantined epoch cannot activate or restore RX delivery. Each image keeps
-its interrupt and DMA owners, calls `fatal::reset_recording` without returning,
-and writes its twelve-byte `irq::fault::RetainedFault`; the next boot prints
-the named reason and complete STATUS through the early console. No owner is
-released or handed to the fatal path. The diagnostic word is retained verbatim;
-policy dispatch uses the PAC's named cause and never decodes that word.
-SOURCE: `BLOB_LIBPP_WIFI_IRQ_FACTS_20261026` (the vendor's fatal diagnostic
-message14; the physical producer remains unknown).
+MAC source120 `FATAL_ASSERTION` (bit21) names the vendor's fatal assertion
+path, without identifying a physical producer. The handler checks unmasked RAW
+before acknowledging STATUS; every epoch clear checks RAW with both banks
+masked before clearing either bank. This includes activation, direct close,
+`MaskedBanks::clear_all` and a stray entry without an installed line. A fatal
+cause returns the MAC crate's `irq::Fault::FatalAssertion { raw }` and keeps
+both banks quarantined. Closing or activating a quarantined epoch returns the
+same fault without clearing it.
+
+Staged Wi-Fi images select the runtime's `wifi-fault` feature and pass the RAW
+sample to `wifi_fault::reset`, retaining their interrupt and preempted DMA
+owners. That shared module owns one twelve-byte retained record and calls
+`fatal::reset_recording`; after `Root::into_runtime` installs the early console,
+its `report_previous` consumes and prints the reason and complete RAW word.
+The ordinary record stores, magic and checksum are not a power-fail commit
+protocol. Policy dispatch uses the PAC's named cause and never decodes the
+diagnostic word. SOURCE: `BLOB_LIBPP_WIFI_IRQ_FACTS_20261026` (the vendor's
+fatal diagnostic message14), `BLOB_LIBPP_ISR_REGISTER_DUMP` (RAW bank).
 
 Power source122 masking preserves pending in RAW, while masked STATUS hides
 it for the measured TSF timer0/1 lanes. Epoch closure uses the existing

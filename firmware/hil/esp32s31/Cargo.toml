@@ -31,6 +31,7 @@ system-panic-reset = [
     "dep:oer-hil-protocol",
 ]
 wifi-station = [
+    "oer-espressif-staged-runtime/wifi-fault",
     "dep:oer-firmware-apps-w3",
     "panic-hook",
     "dep:oer-hil-protocol",

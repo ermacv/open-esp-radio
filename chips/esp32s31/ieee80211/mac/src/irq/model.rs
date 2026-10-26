@@ -30,6 +30,7 @@ pub const OPERATION_LOG_CAPACITY: usize = 32;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MacInterruptOperation {
     Status,
+    FatalAssertionRaw,
     MaskRxDelivery,
     UnmaskRxDelivery,
     MaskAll,
@@ -121,6 +122,7 @@ const fn events_without(
 #[derive(Clone, Debug)]
 pub struct MacInterruptModel {
     latched: MacInterruptObservation,
+    fatal_assertion_raw: Option<u32>,
     rx_delivery_enabled: bool,
     other_sources_enabled: bool,
     operations: OperationLog<MacInterruptOperation>,
@@ -136,6 +138,7 @@ impl MacInterruptModel {
                 false,
                 false,
             ),
+            fatal_assertion_raw: None,
             rx_delivery_enabled: true,
             other_sources_enabled: true,
             operations: OperationLog::new(),
@@ -152,15 +155,23 @@ impl MacInterruptModel {
 
     /// The hardware latches `events`, whatever the enable state.
     pub fn latch(&mut self, events: MacInterruptObservation) {
-        let assertion = self.latched.hardware_assertion_status();
         self.latched = MacInterruptObservation::from_semantic_events(
             self.latched.work_events().union(events.work_events()),
             self.latched.has_auxiliary_event() || events.has_auxiliary_event(),
             self.latched.has_unhandled_event() || events.has_unhandled_event(),
         );
-        if let Some(status) = assertion.or(events.hardware_assertion_status()) {
-            self.latched = self.latched.with_hardware_assertion(status);
+    }
+
+    /// Inject a named fatal RAW cause without depending on register geometry.
+    /// The sample stays observable under every delivery mask.
+    pub fn latch_fatal_assertion(&mut self, raw: u32) {
+        if self.fatal_assertion_raw.is_none() {
+            self.fatal_assertion_raw = Some(raw);
         }
+    }
+
+    pub const fn latched_fatal_assertion_raw(&self) -> Option<u32> {
+        self.fatal_assertion_raw
     }
 
     /// Every latched event, masked or not.
@@ -173,7 +184,7 @@ impl MacInterruptModel {
         let latched = self.latched.work_events();
         let rx = self.rx_delivery_enabled;
         let other = self.other_sources_enabled;
-        let observation = MacInterruptObservation::from_semantic_events(
+        MacInterruptObservation::from_semantic_events(
             MacInterruptEvents::from_causes(
                 other && latched.tx_complete(),
                 false, // The station mask excludes the HE color source.
@@ -182,12 +193,7 @@ impl MacInterruptModel {
             ),
             rx && self.latched.has_auxiliary_event(),
             other && self.latched.has_unhandled_event(),
-        );
-        if let (true, Some(status)) = (other, self.latched.hardware_assertion_status()) {
-            observation.with_hardware_assertion(status)
-        } else {
-            observation
-        }
+        )
     }
 
     pub const fn rx_delivery_enabled(&self) -> bool {
@@ -202,6 +208,7 @@ impl MacInterruptModel {
     /// The level this bank drives towards its CPU interrupt line.
     pub const fn line_asserted(&self) -> bool {
         !self.visible().is_empty()
+            || (self.other_sources_enabled && self.fatal_assertion_raw.is_some())
     }
 
     pub const fn operations(&self) -> &OperationLog<MacInterruptOperation> {
@@ -228,6 +235,12 @@ impl MacInterrupt for MacInterruptModel {
         self.visible()
     }
 
+    fn fatal_assertion_raw(&mut self) -> Option<u32> {
+        self.operations
+            .push(MacInterruptOperation::FatalAssertionRaw);
+        self.fatal_assertion_raw
+    }
+
     fn mask_rx_delivery(&mut self) {
         self.operations.push(MacInterruptOperation::MaskRxDelivery);
         self.rx_delivery_enabled = false;
@@ -248,21 +261,16 @@ impl MacInterrupt for MacInterruptModel {
     fn acknowledge(&mut self, snapshot: Self::Snapshot) {
         self.operations
             .push(MacInterruptOperation::Acknowledge(snapshot));
-        let assertion = self.latched.hardware_assertion_status();
         self.latched = MacInterruptObservation::from_semantic_events(
             events_without(self.latched.work_events(), snapshot.work_events()),
             self.latched.has_auxiliary_event() && !snapshot.has_auxiliary_event(),
             self.latched.has_unhandled_event() && !snapshot.has_unhandled_event(),
         );
-        if snapshot.hardware_assertion_status().is_none()
-            && let Some(status) = assertion
-        {
-            self.latched = self.latched.with_hardware_assertion(status);
-        }
     }
 
     fn clear_all(&mut self, _masked: &BanksMasked) {
         self.operations.push(MacInterruptOperation::ClearAll);
+        self.fatal_assertion_raw = None;
         self.rx_delivery_enabled = false;
         self.other_sources_enabled = false;
         self.latched = MacInterruptObservation::from_semantic_events(

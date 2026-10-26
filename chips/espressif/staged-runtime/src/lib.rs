@@ -47,6 +47,9 @@ mod default_handlers;
 pub mod diagnostics;
 #[cfg(feature = "esp32s31")]
 pub mod fatal;
+/// Shared retained/reset path selected only by staged Wi-Fi images.
+#[cfg(feature = "wifi-fault")]
+pub mod wifi_fault;
 #[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
 pub use fatal::{fatal_halt, reset, reset_recording};
 #[cfg(target_arch = "riscv32")]

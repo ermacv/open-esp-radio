@@ -5,6 +5,6 @@ pub fn close(epoch: &mut InterruptEpoch<Moderated>) {
     let masked = epoch.mask_all();
     #[cfg(ui_reject)]
     let _ = epoch.activate(MacInterruptMask::STATION); // ui-error: E0499
-    masked.clear_all();
+    let _ = masked.clear_all();
     let _ = epoch.activate(MacInterruptMask::STATION);
 }

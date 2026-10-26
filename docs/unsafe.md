@@ -683,13 +683,18 @@ record keeps the exact reason and observation. The next boot consumes and prints
 it through the early console. No watchdog expiry drives this transition.
 The port lifecycle's fault flag is separate and carries no gate fault.
 
-The Wi-Fi source120 hardware-assertion path keeps the full sampled STATUS as
+The Wi-Fi source120 fatal-assertion path keeps the full sampled RAW as
 an opaque diagnostic. It quarantines both interrupt banks before returning a
 named `irq::Fault` to the image. The image retains the preempted DMA owners and
-the handler's register owners through its never-returning
-`fatal::reset_recording`, writes a twelve-byte `RetainedFault` through the
-existing safe retained-cell API, and reports it at the next boot. No owner is
-released, reconstructed or taken over. The quarantined epoch refuses activation.
+the handler's register owners through the runtime's never-returning shared
+`wifi_fault::reset`, which calls `fatal::reset_recording`,
+writes a twelve-byte record through the existing safe retained-cell API, and
+reports it at the next boot. The `wifi-fault` feature selects the one record
+for staged Wi-Fi images; no image defines a second copy. Every epoch clear
+checks RAW under the delivery mask before clearing either bank. Magic and
+checksum validate ordinary stored values, without a power-fail atomicity
+promise. No owner is released, reconstructed or taken over. The quarantined
+epoch refuses activation.
 BB watchdog reset-enable remains an independent hardware action: initialization
 sets it as the ROM does, preserves interrupt-enable, and its reset extent is
 unmeasured. It supplies no software retained-fault contract.

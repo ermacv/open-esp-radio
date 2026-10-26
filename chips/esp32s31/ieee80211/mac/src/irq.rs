@@ -83,6 +83,9 @@ pub trait MacInterrupt: sealed::Sealed {
     type Snapshot: MacInterruptStatusSnapshot;
 
     fn status(&mut self) -> Self::Snapshot;
+    /// The complete RAW sample if its named fatal assertion is pending,
+    /// including while delivery is masked. Never acknowledges the bank.
+    fn fatal_assertion_raw(&mut self) -> Option<u32>;
     /// Mask the RX delivery group and leave every other source as it is.
     fn mask_rx_delivery(&mut self);
     /// Enable the RX delivery group and leave every other source as it is.
@@ -104,6 +107,10 @@ impl MacInterrupt for MacInterruptRegisters {
 
     fn status(&mut self) -> Self::Snapshot {
         self.mac_interrupt_status()
+    }
+
+    fn fatal_assertion_raw(&mut self) -> Option<u32> {
+        MacInterruptRegisters::fatal_assertion_raw(&*self)
     }
 
     fn mask_rx_delivery(&mut self) {
@@ -283,12 +290,12 @@ pub const fn event_mask(causes: MacInterruptEvents) -> u32 {
     mask
 }
 
-/// A terminal MAC interrupt failure, carrying the original STATUS sample.
+/// A terminal MAC interrupt failure, carrying the original unmasked RAW sample.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Fault {
     /// SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026: MAC21 posts the vendor's
     /// fatal assertion diagnostic. Its physical trigger remains unknown.
-    HardwareAssertion { status: u32 },
+    FatalAssertion { raw: u32 },
 }
 
 /// Acknowledge one complete MAC snapshot, returning its finite publication.
@@ -300,8 +307,8 @@ pub fn handle_mac_irq<M: epoch::RxDelivery, I: MacInterrupt>(
 ) -> Result<(IrqDisposition, IrqSnapshot), Fault> {
     let status = interrupt.status();
     let observation = status.observation();
-    if let Some(status) = observation.hardware_assertion_status() {
-        return Err(Fault::HardwareAssertion { status });
+    if let Some(raw) = interrupt.fatal_assertion_raw() {
+        return Err(Fault::FatalAssertion { raw });
     }
     let work_events = observation.work_events();
     let snapshot = IrqSnapshot {
