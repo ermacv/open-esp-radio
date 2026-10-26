@@ -44,6 +44,12 @@ fn clocks(s: &Session<'_>, tag: u32) {
     let c = s.ble.gates.read_clk_conf();
     let l = s.ble.lp_clock.read_lp_timer_conf();
     emit(
+        tag + 2,
+        u32::from(s.ble.timer.read_word_0078_opaque().control_25()),
+        0,
+        0,
+    );
+    emit(
         tag,
         u32::from(m.modem_apb_clk_en()),
         u32::from(c.clk_wifipwr_en()),
@@ -235,6 +241,11 @@ pub(super) fn observe(s: &mut Session<'_>) {
             .set_clk_lp_timer_sel_xtal32k(false)
             .set_clk_lp_timer_sel_xtal(true)
             .set_clk_lp_timer_div_num(Bits::constant::<1>());
+    });
+    // SOURCE: existing init_lp prefix; rollover production requires this
+    // sourced control as well as a running counter. No delivery enable.
+    s.ble.timer.modify_word_0078_opaque(|w| {
+        w.set_control_25(true);
     });
     s.ble.timer.write_runtime_timer_start_command(
         pac::modem_pwr::runtime_timer_start_command::Command::Start,

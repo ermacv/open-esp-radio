@@ -401,7 +401,7 @@ make the initial bus image unqualified.
 
 `+0x10` has no modeled read accessor. A fresh software cause tests retained
 bit18 delivery before/after an explicit enable (0xb130/2). With only compare
-disabled, a single natural rollover after counter-clock/start restoration
+disabled, a single natural rollover after counter-clock/control25/start restoration
 tests bit1 delivery before/after enable (0xb142/4); no all-ones disable
 precedes that test. Waits are bounded to 40 million cycles for one rollover,
 200 thousand for compare, and 4096 for a diagnostic settle. A missing
