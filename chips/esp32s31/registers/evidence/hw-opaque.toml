@@ -2,6 +2,10 @@
 schema = 1
 
 [[sources]]
+id = "ROM_REV0_PHY_I2C_HOST_LANES"
+description = "SOURCE: pinned esp32s31_rev0_rom.elf a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87, complete instruction bodies phy_get_i2c_mst0_mask at 0x2f829fa8 (callback read selector shifted left two) and phy_i2c_paral_set_mst0 at 0x2f82a082 (OR/store first bank mask at +0x18/+0x1a, AND/store complemented second bank mask at +0x2c/+0x2e). BLOB_LIBPHY_PHY_I2C normal-profile callback mapping gives BBTOP selector4 and TXRF selector8, hence ANA_CONF2 absolute bits4 and5. The existing natural I2cAnaMst owner retains the word. ermacv/oer-notes research/hw-opaque-wave2.md documents the publication and its silicon limits."
+
+[[sources]]
 id = "HW15_S31_I2C_20261027"
 description = "SOURCE: stand s31-b rev0 run hw15-20261027-opaque-05, lease #890; ermacv/oer-notes research/hw-opaque-wave2.md P-I2C; target/hw-hw15/hw15-20261027-opaque-05/i2c.json. One PAC-only loader session repeats the production modem/analog-I2C clock, power/reset, timing and register-mode prerequisite edges without analog writes or PHY calibration. Serial host1 reads BBTOP04=0x10 and TXRF08=0x00 with low masks 0xfffffb and 0xfffff7 and host map 0x3fa0. Combined low mask 0xfffff3 and host map 0x3fa1 return BBTOP04=0x10 on host0 and TXRF08=0x00 on host1; subsequent serial reads match. All six reads complete without the 40000-CPU-cycle deadline. ANA_CONF1 high byte reads zero after the sourced whole-word publication writes ones there. This confirms the tested route for these distinct existing bytes, not other routes, per-gate necessity, persistent analog reset values, calibrated PHY timing or electrical byte meanings. P-EST/P-FREQ did not run."
 

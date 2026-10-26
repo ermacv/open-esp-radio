@@ -154,8 +154,20 @@ sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31
 [review.entity."ANA_CONF2"]
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_I2C_ANA_MST_REG_H", "S31_ESP_PACS_SVD"]
 
-[review.entity."ANA_CONF2.PHY_HOST_MAP"]
-sources = ["BLOB_LIBPHY_PHY_I2C", "HW15_S31_I2C_20261027"]
+[review.entity."ANA_CONF2.BBTOP_MST0_SELECT"]
+sources = ["ROM_REV0_PHY_I2C_HOST_LANES"]
+provenance = "observed"
+completeness = "partial"
+naming = "descriptive"
+
+[review.entity."ANA_CONF2.TXRF_MST0_SELECT"]
+sources = ["ROM_REV0_PHY_I2C_HOST_LANES"]
+provenance = "observed"
+completeness = "partial"
+naming = "descriptive"
+
+[review.entity."ANA_CONF2.PHY_HOST_MAP_OTHER"]
+sources = ["BLOB_LIBPHY_PHY_I2C", "ROM_REV0_PHY_I2C_HOST_LANES"]
 provenance = "observed"
 naming = "descriptive"
 
@@ -444,11 +456,22 @@ class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
 [[registers.fields]]
-name = "PHY_HOST_MAP"
-bits = "17:4"
+name = "BBTOP_MST0_SELECT"
+bits = "4"
 class = "plain"
-description = "Complete host-selection field replaced by phy_get_i2c_hostid_new while unrelated bits are preserved."
-values = [{ name = "REVIEWED_RADIO_MAP", value = 16288 }]
+description = "BBTOP lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x67)<<2 when assigning the first bank to master zero, and clears it when assigning the second bank to master one. This describes the recovered publication, not every silicon mode."
+
+[[registers.fields]]
+name = "TXRF_MST0_SELECT"
+bits = "5"
+class = "plain"
+description = "TXRF lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x6b)<<2 for master zero and clears it for master one."
+
+[[registers.fields]]
+name = "PHY_HOST_MAP_OTHER"
+bits = "17:6"
+class = "plain"
+description = "Remaining twelve bits of the complete host-selection image replaced by phy_get_i2c_hostid_new; individual bank lanes remain unresolved. Normal image 0x3fa0 projects 0xfe8 here, retained-wake parallel image 0x000a projects 2."
 
 [[registers.fields]]
 name = "BITS_18_23_OPAQUE"

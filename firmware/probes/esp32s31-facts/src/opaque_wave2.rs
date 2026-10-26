@@ -150,7 +150,7 @@ fn routing(s: &Session<'_>, tag: u32) {
     emit(
         tag,
         mask.ana_conf1().get() | (u32::from(mask.ana_status1()) << 24),
-        m.read_ana_conf2().phy_host_map().get(),
+        u32::from(m.read_ana_conf2().bbtop_mst0_select()),
         m.read_ana_conf0().phy_register_mode().get(),
     );
 }
@@ -235,7 +235,9 @@ fn serial(s: &mut Session<'_>, address: Address, tag: u32) -> bool {
         return false;
     }
     s.analog.i2c_ana_mst.modify_ana_conf2(|w| {
-        w.set_phy_host_map(Bits::constant::<0x3fa0>());
+        w.set_bbtop_mst0_select(false)
+            .set_txrf_mst0_select(false)
+            .set_phy_host_map_other(Bits::constant::<0xfe8>());
     });
     s.analog
         .i2c_ana_mst
@@ -285,10 +287,10 @@ pub(super) fn i2c(s: &mut Session<'_>) {
     // OR BBTOP read_select<<2, then clear TXRF read_select<<2 in ANA_CONF2.
     // Within the modeled host-map field these are bits 0 and 1 respectively.
     s.analog.i2c_ana_mst.modify_ana_conf2(|w| {
-        w.set_phy_host_map(Bits::truncate(w.phy_host_map().get() | 1));
+        w.set_bbtop_mst0_select(true);
     });
     s.analog.i2c_ana_mst.modify_ana_conf2(|w| {
-        w.set_phy_host_map(Bits::truncate(w.phy_host_map().get() & !2));
+        w.set_txrf_mst0_select(false);
     });
     let Some(br) = analog_i2c::route(Profile::LibphyNormal, b.block()) else {
         return;

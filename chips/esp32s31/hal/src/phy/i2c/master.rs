@@ -156,7 +156,9 @@ impl<'a, P: Placement> AnalogBus<'a, P> {
     pub fn select_parallel_host_map(&mut self) {
         // SOURCE: BLOB_LIBPHY_PHY_I2C_INIT2_20260907, S31_ESP_PACS_SVD.
         self.master.modify_ana_conf2(|w| {
-            w.set_phy_host_map(Bits::constant::<0xa>());
+            w.set_bbtop_mst0_select(false)
+                .set_txrf_mst0_select(true)
+                .set_phy_host_map_other(Bits::constant::<2>());
         });
     }
 
@@ -212,7 +214,9 @@ impl<'a, P: Placement> AnalogBus<'a, P> {
 fn configure_host_map<P: Placement>(master: &mut I2cAnaMst<P>) {
     // SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
     master.modify_ana_conf2(|w| {
-        w.set_phy_host_map(Bits::constant::<0x3fa0>());
+        w.set_bbtop_mst0_select(false)
+            .set_txrf_mst0_select(false)
+            .set_phy_host_map_other(Bits::constant::<0xfe8>());
     });
 }
 

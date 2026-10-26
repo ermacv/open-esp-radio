@@ -104454,45 +104454,26 @@ pub mod i2c_ana_mst {
         /// Positioned bits of `BITS_0_3_OPAQUE`.
         pub const BITS_0_3_OPAQUE_MASK: u32 = 0xf;
 
-        /// Width of `PHY_HOST_MAP` in bits.
-        pub const PHY_HOST_MAP_WIDTH: u32 = 14;
-        /// Greatest unsigned image of `PHY_HOST_MAP`.
-        pub const PHY_HOST_MAP_MAX: u32 = 0x3fff;
-        /// Positioned bits of `PHY_HOST_MAP`.
-        pub const PHY_HOST_MAP_MASK: u32 = 0x3fff0;
+        /// Width of `BBTOP_MST0_SELECT` in bits.
+        pub const BBTOP_MST0_SELECT_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BBTOP_MST0_SELECT`.
+        pub const BBTOP_MST0_SELECT_MAX: u32 = 0x1;
+        /// Positioned bits of `BBTOP_MST0_SELECT`.
+        pub const BBTOP_MST0_SELECT_MASK: u32 = 0x10;
 
-        /// The declared values of the `PHY_HOST_MAP` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum PhyHostMap {
-            ReviewedRadioMap = 0x3fa0,
-        }
+        /// Width of `TXRF_MST0_SELECT` in bits.
+        pub const TXRF_MST0_SELECT_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TXRF_MST0_SELECT`.
+        pub const TXRF_MST0_SELECT_MAX: u32 = 0x1;
+        /// Positioned bits of `TXRF_MST0_SELECT`.
+        pub const TXRF_MST0_SELECT_MASK: u32 = 0x20;
 
-        impl PhyHostMap {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 4
-            }
-
-            /// The declared value `bits`, if it is one.
-            #[inline]
-            pub const fn from_bits(bits: u32) -> Option<Self> {
-                match bits {
-                    0x3fa0 => Some(Self::ReviewedRadioMap),
-                    _ => None,
-                }
-            }
-        }
+        /// Width of `PHY_HOST_MAP_OTHER` in bits.
+        pub const PHY_HOST_MAP_OTHER_WIDTH: u32 = 12;
+        /// Greatest unsigned image of `PHY_HOST_MAP_OTHER`.
+        pub const PHY_HOST_MAP_OTHER_MAX: u32 = 0xfff;
+        /// Positioned bits of `PHY_HOST_MAP_OTHER`.
+        pub const PHY_HOST_MAP_OTHER_MASK: u32 = 0x3ffc0;
 
         /// Width of `BITS_18_23_OPAQUE` in bits.
         pub const BITS_18_23_OPAQUE_WIDTH: u32 = 6;
@@ -104519,16 +104500,22 @@ pub mod i2c_ana_mst {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Complete host-selection field replaced by phy_get_i2c_hostid_new while unrelated bits are preserved.
+            /// BBTOP lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x67)<<2 when assigning the first bank to master zero, and clears it when assigning the second bank to master one. This describes the recovered publication, not every silicon mode.
             #[inline]
-            pub const fn phy_host_map(self) -> oer_mmio::Bits<14> {
-                oer_mmio::Bits::truncate(self.0 >> 4)
+            pub const fn bbtop_mst0_select(self) -> bool {
+                (self.0 & 0x00000010) != 0
             }
 
-            /// The `PHY_HOST_MAP` field as its declared value, if it is one.
+            /// TXRF lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x6b)<<2 for master zero and clears it for master one.
             #[inline]
-            pub const fn phy_host_map_variant(self) -> Option<PhyHostMap> {
-                PhyHostMap::from_bits((self.0 >> 4) & 0x3fff)
+            pub const fn txrf_mst0_select(self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// Remaining twelve bits of the complete host-selection image replaced by phy_get_i2c_hostid_new; individual bank lanes remain unresolved. Normal image 0x3fa0 projects 0xfe8 here, retained-wake parallel image 0x000a projects 2.
+            #[inline]
+            pub const fn phy_host_map_other(self) -> oer_mmio::Bits<12> {
+                oer_mmio::Bits::truncate(self.0 >> 6)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -104554,16 +104541,22 @@ pub mod i2c_ana_mst {
                 oer_mmio::Bits::truncate(self.0)
             }
 
-            /// Complete host-selection field replaced by phy_get_i2c_hostid_new while unrelated bits are preserved.
+            /// BBTOP lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x67)<<2 when assigning the first bank to master zero, and clears it when assigning the second bank to master one. This describes the recovered publication, not every silicon mode.
             #[inline]
-            pub const fn phy_host_map(&self) -> oer_mmio::Bits<14> {
-                oer_mmio::Bits::truncate(self.0 >> 4)
+            pub const fn bbtop_mst0_select(&self) -> bool {
+                (self.0 & 0x00000010) != 0
             }
 
-            /// The `PHY_HOST_MAP` field as its declared value, if it is one.
+            /// TXRF lane of the PHY host map: phy_i2c_paral_set_mst0 sets read_select(0x6b)<<2 for master zero and clears it for master one.
             #[inline]
-            pub const fn phy_host_map_variant(&self) -> Option<PhyHostMap> {
-                PhyHostMap::from_bits((self.0 >> 4) & 0x3fff)
+            pub const fn txrf_mst0_select(&self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// Remaining twelve bits of the complete host-selection image replaced by phy_get_i2c_hostid_new; individual bank lanes remain unresolved. Normal image 0x3fa0 projects 0xfe8 here, retained-wake parallel image 0x000a projects 2.
+            #[inline]
+            pub const fn phy_host_map_other(&self) -> oer_mmio::Bits<12> {
+                oer_mmio::Bits::truncate(self.0 >> 6)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -104585,10 +104578,24 @@ pub mod i2c_ana_mst {
                 self
             }
 
-            /// Set `PHY_HOST_MAP`.
+            /// Set `BBTOP_MST0_SELECT`.
             #[inline]
-            pub fn set_phy_host_map(&mut self, value: oer_mmio::Bits<14>) -> &mut Self {
-                self.0 = (self.0 & 0xfffc000f) | (value.get() << 4);
+            pub fn set_bbtop_mst0_select(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffffef) | (u32::from(value) << 4);
+                self
+            }
+
+            /// Set `TXRF_MST0_SELECT`.
+            #[inline]
+            pub fn set_txrf_mst0_select(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffffdf) | (u32::from(value) << 5);
+                self
+            }
+
+            /// Set `PHY_HOST_MAP_OTHER`.
+            #[inline]
+            pub fn set_phy_host_map_other(&mut self, value: oer_mmio::Bits<12>) -> &mut Self {
+                self.0 = (self.0 & 0xfffc003f) | (value.get() << 6);
                 self
             }
 
