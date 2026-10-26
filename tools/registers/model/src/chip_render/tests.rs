@@ -160,6 +160,31 @@ fn only_the_irreducible_policy_items_render() {
 }
 
 #[test]
+fn a_fixed_hardware_updated_configuration_preserves_undeclared_bits() {
+    let rust = rendered_with(&[(
+        "policy.toml",
+        "schema = 6",
+        "schema = 6\n\n[[fixed-register-images]]\nname = \"configure_hw\"\nregister = \"RADIO0.RAD_HW\"\nvalue = 1\nsources = [\"SRC_DRIVER\"]",
+    )]);
+    let result = run(
+        &rust,
+        r#"
+        let mut memory = [u32::MAX; 128];
+        {
+            let (mut task, _) = radio::radio0_host(&mut memory).expect("host block");
+            task.configure_hw();
+            let value = task.read_hw();
+            assert!(value.cfg());
+            assert!(!value.stat());
+        }
+        assert_eq!(memory[radio::hw::OFFSET / 4], u32::MAX & !2);
+        println!("configured");
+    "#,
+    );
+    assert_eq!(result.trim(), "configured");
+}
+
+#[test]
 fn names_lose_the_block_prefix() {
     let (model, _) = load(&fixture());
     let radio = model.types().get("RADIO").expect("the RADIO type");

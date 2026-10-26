@@ -7,6 +7,8 @@
 //! - a fixed image acknowledging write-one-to-clear events with its proof:
 //!   the enable word it masks first (`masks`) or the event the caller
 //!   consumed (`consumed-event`);
+//! - a fixed configuration of a readable hardware-updated word that has no
+//!   generic modify accessor, preserving undeclared and read-only lanes;
 //! - an interrupt snapshot: a status word sampled into an affine token and
 //!   acknowledged, exactly as sampled, in its clear word;
 //! - a write from zero storing sourced `whole-word-bits` beside its fields;
@@ -123,12 +125,31 @@ pub(super) fn render(
 ) -> Result<(), Error> {
     let file = policy.file();
     let mine = |name: &str| policy.owner(name) == Some(owner.id);
-    for image in file.fixed_register_images.iter().filter(|image| {
-        (image.whole_word || image.masks.is_some() || image.consumed_event.is_some())
-            && mine(&image.name)
-    }) {
+    for image in file
+        .fixed_register_images
+        .iter()
+        .filter(|image| mine(&image.name))
+    {
         let entity = image.name.as_str();
         let target = element(entity, plan, owner, model, &image.register)?;
+        let configuration = !image.whole_word
+            && image.masks.is_none()
+            && image.consumed_event.is_none()
+            && target.template.readable()
+            && !target.template.modifiable()
+            && target.template.fields.iter().any(|field| {
+                matches!(
+                    field.class,
+                    FieldClass::HardwareWritten | FieldClass::SelfClearing
+                )
+            });
+        if !(configuration
+            || image.whole_word
+            || image.masks.is_some()
+            || image.consumed_event.is_some())
+        {
+            continue;
+        }
         if target
             .template
             .fields
@@ -137,7 +158,23 @@ pub(super) fn render(
         {
             return Err(Error::new(entity, "a fixed image sets an address field"));
         }
-        let value = format!("0x{:08x}", image.value);
+        let value = if configuration {
+            let mask = target
+                .template
+                .fields
+                .iter()
+                .filter(|field| {
+                    !matches!(
+                        field.class,
+                        FieldClass::ReadOnly | FieldClass::DebugOnly | FieldClass::Unknown
+                    )
+                })
+                .fold(0, |mask, field| mask | field.mask());
+            let read = target.read(entity, owner)?;
+            format!("({read} & 0x{:08x}) | 0x{:08x}", !mask, image.value)
+        } else {
+            format!("0x{:08x}", image.value)
+        };
         let write = target.write(entity, owner, &value, image.value)?;
         // A masks proof disables the acknowledged sources first, whether or
         // not the image is a whole word.
@@ -176,6 +213,10 @@ pub(super) fn render(
             ),
             (false, Some(masks)) => format!(
                 "Mask the sources of `0x{:08x}` in `{masks}`, keeping every other bit, then acknowledge them",
+                image.value
+            ),
+            (false, None) if configuration => format!(
+                "Apply the fixed configuration `0x{:08x}`, preserving undeclared and read-only bits",
                 image.value
             ),
             (false, None) => format!("Acknowledge the consumed events `0x{:08x}`", image.value),

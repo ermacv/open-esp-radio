@@ -34,6 +34,14 @@ There are no handwritten register modules. The HAL's `root::Root::take`
 wraps this one claim; `into_bootstrap` and `into_runtime` compose the
 phase-specific owners. The PAC holds no boot or radio sequencing.
 
+The USB endpoint owns its raw interrupt observation alongside its enables and
+masked status. The system timer owner holds RAW/ST observation alongside the
+comparator configuration. Timer group zero's T0 counter, alarm and interrupt
+bank form a separate partition for the PHY timer consumer; the watchdog keeps
+its configuration owner. T0 users preserve the watchdog lanes in the shared
+clock and interrupt-enable words and acknowledge only T0. The HAL currently
+discards this partition without exposing a timer API.
+
 `tests/` exercises the generated layouts over host memory; the renderer's
 own tests prove the accessors' behaviour and what they refuse.
 
