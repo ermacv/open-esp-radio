@@ -465,10 +465,24 @@ impl Template<'_> {
         self.modifiable() && self.has_setters()
     }
 
+    /// A readable mixed word's trigger may keep ordinary fields and zero
+    /// every write-one-to-clear/trigger lane without replaying an action.
+    fn mixed_trigger(&self) -> bool {
+        self.readable()
+            && !self.command
+            && !self.port
+            && self.has(FieldClass::WriteOneToClear)
+            && self.replayed().1.is_empty()
+    }
+
     /// Each write-trigger field's explicit trigger: in a register written
-    /// from zero, or one whose read-modify-write replays nothing.
+    /// from zero, one whose read-modify-write replays nothing, or a mixed
+    /// word whose write-one-to-clear lanes can all be zeroed.
     fn triggered(&self) -> bool {
-        self.api() && !self.fifo && !self.port && (!self.readable() || self.modifiable())
+        self.api()
+            && !self.fifo
+            && !self.port
+            && (!self.readable() || self.modifiable() || self.mixed_trigger())
     }
 
     fn has_w(&self) -> bool {
@@ -1471,7 +1485,10 @@ fn render_owned(
                     field.positioned(),
                 )
             };
-            let image = if template.modifiable() {
+            let image = if template.mixed_trigger() {
+                let (zero, _) = template.replayed();
+                format!("(self.0.{} & 0x{:08x}) | {bits}", call.read(), !zero)
+            } else if template.modifiable() {
                 format!("{modify_read} | {bits}")
             } else if let Some(other) = required.first() {
                 return Err(Error::new(
@@ -1493,7 +1510,9 @@ fn render_owned(
                  #[inline]\npub fn trigger_{stem}_{}(&mut self{index}{parameter}) {{\n\
                  self.0.{};\n}}\n",
                 field.field.name,
-                if template.modifiable() {
+                if template.mixed_trigger() {
+                    "ordinary fields and unassigned bits keep the value read, write-one-to-clear and other trigger lanes are zero"
+                } else if template.modifiable() {
                     "every other field keeps the value read, every other trigger is zero"
                 } else {
                     "every other bit is zero or its fixed value"

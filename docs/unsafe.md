@@ -123,6 +123,16 @@ sources, which also writes the bits the model leaves undeclared.
 (`src/lib.rs`, the one claim); it has no handwritten module
 ([PAC](../chips/esp32s31/pac/README.md)).
 
+The HAL's core-control partition owns `LP_SYS.SYS_CTRL` and
+`BOOT_ADDR_HP_CORE1` alongside its stall, clock and reset words. Bootstrap
+containment and fatal reset use those owned typed accessors, with no ROM
+FFI. A mixed-word trigger preserves ordinary fields and unassigned bits,
+writes zero to every WTC lane and every other WT lane, and asserts only its
+selected WT field; it grants no generic modify of a WTC word. The reset
+path keeps the existing ClaimCell election through the trigger, then waits
+for interrupts forever if hardware has not reset it. A path refused by
+that election retains the existing watchdog outcome.
+
 The crates below cover distinct obligations: singleton acquisition and MMIO
 serialization, stable addresses and CPU/DMA transfer, target ABI and placement,
 and one-time static resource or interrupt binding. The embassy network

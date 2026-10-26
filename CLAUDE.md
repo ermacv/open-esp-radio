@@ -60,6 +60,9 @@ system these rules serve.
   preserves reserved and unknown bits; the one exception is a PAC policy
   fixed image marked `whole-word`, a vendor's store of a whole word with
   its `SOURCE:`.
+  A typed trigger in a readable mixed word preserves ordinary fields and
+  unassigned bits, writes zero to WTC and other WT lanes, and sets only its
+  selected WT field. Generic modify remains unavailable for a WTC word.
   Generated register code has no `unsafe`: volatile access lives in
   `portable/mmio` alone. `unsafe` stays in `portable/mmio`, architectural
   instructions in `portable/riscv`, the PAC's one root claim, probe images,

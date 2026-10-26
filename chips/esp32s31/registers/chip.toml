@@ -40,6 +40,7 @@ types = [
     "types/lp-ana.toml",
     "types/lp-aonclkrst.toml",
     "types/lp-peri-clkrst.toml",
+    "types/lp-system.toml",
     "types/modem-datadump.toml",
     "types/modem-etm.toml",
     "types/modem-lpcon.toml",
@@ -600,6 +601,13 @@ type = "HP_ALIVE_SYS"
 base = 0x20589000
 extent = { size = 0x400 }
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L81", "ESP_PACS_A1F6CF68_ESP32S31_SVD_ESP32S31_BASE_SVD"]
+
+[[instances]]
+name = "LP_SYS"
+type = "LP_SYSTEM_REG"
+base = 0x20700000
+extent = { size = 0x168, partial = true, sources = ["ESP_IDF_4D59230D_S31_LP_SYSTEM_REG"] }
+sources = ["ESP_IDF_4D59230D_S31_LP_SYSTEM_BASE"]
 
 [[instances]]
 name = "LP_AON_CLKRST"

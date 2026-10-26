@@ -16,12 +16,9 @@ use oer_esp32s31_pac::{
 };
 
 use super::{contain_hart1, open_apm_filters, start_trng};
-use crate::{
-    cores::BootAddress,
-    platform::{
-        HpCore,
-        core_control::{CoreControlRegisters, HOST_SIZES},
-    },
+use crate::platform::{
+    HpCore,
+    core_control::{CoreControlRegisters, HOST_SIZES},
 };
 
 fn memory(size: usize, fill: u32) -> Vec<u32> {
@@ -37,15 +34,6 @@ fn changed(before: &[u32], after: &[u32]) -> Vec<usize> {
         .filter(|(_, (a, b))| a != b)
         .map(|(index, _)| index * 4)
         .collect()
-}
-
-#[derive(Default)]
-struct Boot(Vec<u32>);
-
-impl BootAddress for Boot {
-    fn set(&mut self, entry: u32) {
-        self.0.push(entry);
-    }
 }
 
 #[test]
@@ -95,24 +83,24 @@ fn the_trng_runs_with_its_health_tests_and_starts_its_startup_test() {
 
 #[test]
 fn hart_1_is_stalled_held_and_left_no_boot_address() {
-    let [stall, status, clocks, reset] = HOST_SIZES;
+    let [stall, status, clocks, reset, system] = HOST_SIZES;
     let mut words = [
         memory(stall, 0),
         memory(status, 0),
         memory(clocks, 0),
         memory(reset, 0),
+        memory(system, u32::MAX),
     ];
-    let mut boot = Boot::default();
     {
-        let [stall, status, clocks, reset] = &mut words;
-        let mut cores = CoreControlRegisters::host(stall, status, clocks, reset)
+        let [stall, status, clocks, reset, system] = &mut words;
+        let mut cores = CoreControlRegisters::host(stall, status, clocks, reset, system)
             .expect("memory holds the blocks");
-        contain_hart1(&mut cores, &mut boot);
+        contain_hart1(&mut cores);
         assert!(cores.stall_requested(HpCore::Core1));
         assert!(!cores.stall_requested(HpCore::Core0));
         assert!(cores.core1_held());
     }
-    assert_eq!(boot.0, [0], "the stale entry cleared");
+    assert_eq!(words[4][0x164 / 4], 0, "the stale entry cleared");
     assert!(
         words[3].iter().all(|word| *word == 0),
         "no core reset pulsed"

@@ -72,7 +72,7 @@ registers = ["CONF0"]
 [[partitions]]
 name = "CoreControlPeripherals"
 member = "core_control"
-description = "Core control: each HP core's stall request and stall status, HP core 1's clocks and global reset and each core's software CPU reset, written by the cores' owner and the fatal path."
+description = "Core control: each HP core's stall request and stall status, HP core 1's clocks and global reset and each core's software CPU reset, the HP core 1 boot address and the system reset trigger, written by the cores' owner and the fatal path."
 
 [[partitions.parts]]
 name = "PmuCpuStall"
@@ -93,6 +93,11 @@ registers = ["HPCORE1_CTRL0"]
 name = "LpAonClkrstCoreReset"
 instance = "LP_AON_CLKRST"
 registers = ["LP_AONCLKRST_HPCORE0_RESET_CTRL", "LP_AONCLKRST_HPCORE1_RESET_CTRL"]
+
+[[partitions.parts]]
+name = "LpSysCoreControl"
+instance = "LP_SYS"
+registers = ["LP_SYSTEM_REG_SYS_CTRL", "LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1"]
 
 [[partitions]]
 name = "Uart0ClockPeripherals"

@@ -72,10 +72,7 @@ fn every_declared_rom_function_and_only_those_functions_has_a_fact() {
     for directory in ["chips/esp32s31", "chips/espressif", "firmware"] {
         scan(&root.join(directory), &mut declarations);
     }
-    assert!(
-        !declarations.0.is_empty(),
-        "the scan finds ROM declarations"
-    );
+    assert!(declarations.0.is_empty(), "S31 uses typed PAC operations");
     let (facts, _) = oer_espressif_facts::generate::tracked("esp32s31").expect("S31 facts");
     let rom = facts.rom.expect("S31 ROM");
     let exports: BTreeSet<_> = rom
@@ -87,11 +84,17 @@ fn every_declared_rom_function_and_only_those_functions_has_a_fact() {
 }
 
 #[test]
-fn short_settles_need_no_rom_delay_or_calibration_exports() {
+fn s31_needs_no_rom_exports() {
     let (facts, _) = oer_espressif_facts::generate::tracked("esp32s31").expect("S31 facts");
     let rom = facts.rom.expect("S31 ROM");
+    assert!(rom.functions.is_empty());
     let script = oer_espressif_facts::generate::rom_script(&rom).expect("S31 ROM script");
-    for name in ["ets_delay_us", "ets_update_cpu_frequency"] {
+    for name in [
+        "ets_delay_us",
+        "ets_update_cpu_frequency",
+        "software_reset",
+        "ets_set_appcpu_boot_addr",
+    ] {
         assert!(!rom.functions.iter().any(|function| function.name == name));
         assert!(
             !script
@@ -100,33 +103,6 @@ fn short_settles_need_no_rom_delay_or_calibration_exports() {
         );
     }
     assert!(!script.contains("s_ticks_per_us"));
-}
-
-#[test]
-fn s31_exports_cite_the_pinned_nonradio_rom_script() {
-    let artifacts: toml::Table =
-        toml::from_str(include_str!("../../../esp32s31/vendor/artifacts.toml"))
-            .expect("artifact pins");
-    let pin = artifacts["source"]
-        .as_array()
-        .expect("sources")
-        .iter()
-        .find(|source| source["id"].as_str() == Some("esp-idf"))
-        .expect("ESP-IDF pin")["revision"]
-        .as_str()
-        .expect("revision");
-    let prefix = format!("SOURCE: ESP-IDF {pin} components/esp_rom/esp32s31/ld/esp32s31.rom.ld:");
-    let (facts, _) = oer_espressif_facts::generate::tracked("esp32s31").expect("S31 facts");
-    for function in facts.rom.expect("S31 ROM").functions {
-        let line = function
-            .source
-            .strip_prefix(&prefix)
-            .expect("pinned nonradio script citation");
-        assert!(
-            line.parse::<usize>().is_ok_and(|line| line > 0),
-            "source line"
-        );
-    }
 }
 
 #[test]

@@ -75,6 +75,8 @@ fn the_bootstrap_soc_owner_holds_filters_and_trng_configuration() {
         .expect("the entropy reader has its status view");
     assert_eq!(trng.observes, ["CONF", "DEBUG_CONF"]);
     for word in [
+        "LP_SYS.LP_SYSTEM_REG_SYS_CTRL",
+        "LP_SYS.LP_SYSTEM_REG_BOOT_ADDR_HP_CORE1",
         "PMU.CPU_STALL_SW",
         "HP_SYS.HP_CPU_CORESTALLED_ST",
         "HP_SYS_CLKRST.HPCORE1_CTRL0",

@@ -6,7 +6,7 @@ use std::{vec, vec::Vec};
 
 use super::{CoreControlRegisters, HOST_SIZES, HpCore, UART0_HOST_SIZE, Uart0ClockRegisters};
 
-struct Memory([Vec<u32>; 4]);
+struct Memory([Vec<u32>; 5]);
 
 impl Memory {
     fn filled(fill: u32) -> Self {
@@ -20,9 +20,10 @@ impl Memory {
         oer_mmio::Host<'_>,
         oer_mmio::Host<'_>,
         oer_mmio::Host<'_>,
+        oer_mmio::Host<'_>,
     > {
-        let [stall, status, clocks, reset] = &mut self.0;
-        CoreControlRegisters::host(stall, status, clocks, reset)
+        let [stall, status, clocks, reset, system] = &mut self.0;
+        CoreControlRegisters::host(stall, status, clocks, reset, system)
             .expect("host memory holds the blocks")
     }
 }
@@ -103,4 +104,51 @@ fn uart0_s_clock_returns_to_undivided_xtal_with_its_gate_open() {
         clock.reg_uart0_apb_clk_en() && clock.reg_uart0_core_rst_en(),
         "the bus clock and reset bits are kept"
     );
+}
+
+#[test]
+fn the_boot_address_store_replaces_the_whole_word_including_zero() {
+    let mut memory = Memory::filled(u32::MAX);
+    let before = memory.0.clone();
+    let entry = 0x2f01_2400;
+    {
+        let mut registers = memory.registers();
+        registers.set_boot_address(entry);
+        assert_eq!(
+            registers
+                .system
+                .read_boot_addr_hp_core1()
+                .boot_addr_hp_core1(),
+            entry
+        );
+        registers.set_boot_address(0);
+        assert_eq!(
+            registers
+                .system
+                .read_boot_addr_hp_core1()
+                .boot_addr_hp_core1(),
+            0
+        );
+    }
+    // SOURCE: pinned lp_system_reg.h:754-764, the boot handoff data word.
+    let mut expected = before;
+    expected[4][0x164 / 4] = 0;
+    assert_eq!(memory.0, expected, "only the boot word was written");
+}
+
+#[test]
+fn the_reset_trigger_keeps_configuration_without_acknowledging_wakeup() {
+    // Host memory records the bus store, rather than emulating WTC hardware:
+    // zero here proves the wakeup flag was not acknowledged.
+    // SOURCE: pinned lp_system_reg.h:47-120 (WT 1/29, WTC 30).
+    for initial in [0, u32::MAX, 0xd55a_5aa5, 0x2000_0000, 0x4000_0000] {
+        let mut memory = Memory::filled(initial);
+        let mut expected = memory.0.clone();
+        expected[4][0x8 / 4] = (initial & !0x6000_0002) | 2;
+        memory.registers().request_system_reset();
+        assert_eq!(
+            memory.0, expected,
+            "ordinary and unassigned bits kept; WTC/other WT zero"
+        );
+    }
 }
