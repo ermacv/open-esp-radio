@@ -3016,7 +3016,7 @@ name = "prepare_bluetooth_modem_lp_timer_command_0034"
 register = "MODEM_PWR.WORD_0034_OPAQUE"
 value = 0xffffffff
 whole-word = true
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE"]
+sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE", "HW9_S31_LP_CLEAR34_20261027"]
 
 [[fixed-register-images]]
 name = "prepare_bluetooth_modem_lp_timer_command_0010"
