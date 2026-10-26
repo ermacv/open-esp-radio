@@ -72,8 +72,9 @@ writes also leave the sentinel's validity as a consumption predicate unproved.
 
 The capture stops at the first frame limit or deadline. If trace capacity is
 exhausted, collection stops, then emits the retained rows and stopped-buffer
-dumps before returning a failed verdict. The local bootstrap/cache and radio
-startup fixes must be composed separately when the probe's base lacks them.
+dumps before returning a failed verdict. The current probe builds on main with
+the bootstrap/cache and radio-start prerequisites included; no local integration
+merge is required.
 
 The probe retains exception/panic details in reset-retained memory through the
 runtime's public hooks; a subsequent boot reports them before opening the live

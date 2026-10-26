@@ -550,7 +550,11 @@ async fn run(
     // Clear stale events under the mask, then read its classified state.
     // This capture enables only RX delivery and acknowledges each sampled
     // STATUS to correlate later write clusters with fresh events/counters.
-    mac_irq.clear_all_mac_interrupts();
+    let initial_raw = mac_irq.mac_interrupt_raw();
+    if initial_raw.fatal_assertion_raw().is_some() {
+        return Err("fatal-before-rx");
+    }
+    mac_irq.acknowledge_mac_interrupt_raw(initial_raw);
     let initial_status = mac_irq.mac_interrupt_status().observation();
     let initial_enable = enable_tag(mac_irq.mac_interrupt_enable());
     access.wifi_mac_hal().configure_open_promiscuous_receive();
