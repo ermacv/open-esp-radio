@@ -7,8 +7,8 @@
 //! owner the register operations of the pinned public LL
 //! (`ieee802154_common_ll.h`), written over the parts' field accessors:
 //!
-//! - `EVENT_STATUS` is written only by acknowledging a sample of it, so an
-//!   event raised after the sample stays latched;
+//! - `EVENT_STATUS` is written only by acknowledging a saved affine sample;
+//!   timer producers stop and are sampled before their events are masked;
 //! - the ETM channel-enable set and clear words are written only by their
 //!   channels' trigger strobes;
 //! - the frame-buffer address registers take only a `DmaWindowAddress`;
@@ -49,6 +49,7 @@ mod etm;
 mod interrupt;
 mod task;
 
+pub use interrupt::Ieee802154EventSnapshot;
 pub use task::Ieee802154PowerSequence;
 pub(crate) use task::{Ieee802154FoundationSnapshot, Ieee802154Pti};
 
@@ -104,8 +105,9 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 /// use oer_espressif_ieee802154_engine::types::Ieee802154EventMask;
 /// pub fn on_ieee802154(mac: &mut Ieee802154InterruptOwner) {
 ///     // Acknowledge the sampled named events; latch them for the task.
-///     let _observed = mac.events();
-///     mac.clear_events(Ieee802154EventMask::NAMED);
+///     let snapshot = mac.events();
+///     let _observed = snapshot.observation();
+///     mac.clear_events(snapshot, Ieee802154EventMask::NAMED);
 /// }
 /// oer_interrupt_table::interrupt_table! {
 ///     lines: LINES,
@@ -262,14 +264,15 @@ impl<P: Placement> Ieee802154InterruptSetupOwner<P> {
         Self { mac }
     }
 
-    /// Install the runtime abort baseline with every event masked,
-    /// acknowledge one stale sample and return the armed interrupt owner.
+    /// Install the runtime abort baseline, clear stale pending and return
+    /// the armed interrupt owner with every event masked.
     ///
-    /// `EVENT_ENABLE` stays zero; both abort fields take their runtime
-    /// baseline and the stale sample is acknowledged, fenced before the
-    /// owner is returned. The events are enabled afterwards: by
+    /// With no handler bound, enable events, sample, mask and acknowledge
+    /// the saved sample. A masked timer read would hide retained pending.
+    /// The final fence precedes returning the owner. Events are enabled by
     /// [`Ieee802154TaskOwner::enable_events`] once a handler holds the owner,
     /// or by the polling engine pair.
+    /// SOURCE: hw8-20261026-radio-local-05, ieee-timers.json, PR #689.
     pub fn arm<E: Placement, B: Placement>(
         self,
         task: &mut Ieee802154TaskOwner<P, E, B>,
@@ -330,7 +333,9 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
 
     /// Mask every MAC event at the end of a session, fenced: the MAC raises
     /// no interrupt until [`enable_events`](Self::enable_events) runs again.
-    /// A latched event stays in `EVENT_STATUS` for the handler.
+    /// Timer pending is retained but hidden from status reads under mask;
+    /// stop and acknowledge timer producers before masking their events.
+    /// SOURCE: hw8-20261026-radio-local-05, ieee-timers.json, PR #689.
     pub fn mask_events(&mut self) {
         self.mask_all_events();
         oer_riscv::fence();
@@ -341,9 +346,10 @@ impl<P: Placement> Ieee802154InterruptOwner<P> {
     /// Close one polled epoch of the engine pair and return inactive setup
     /// ownership. A bound owner never comes back: its handler holds it.
     ///
-    /// The operation and both MAC timers stop, the event, transmit-abort and
-    /// receive-abort enables are cleared, one final sample is acknowledged,
-    /// and both phases are fenced before the setup owner is returned.
+    /// Stop the operation and both MAC timers, sample before masking events
+    /// and aborts, then acknowledge that saved sample. Both phases are fenced
+    /// before the setup owner is returned.
+    /// SOURCE: hw8-20261026-radio-local-05, ieee-timers.json, PR #689.
     pub fn deactivate<E: Placement, B: Placement>(
         self,
         task: &mut Ieee802154TaskOwner<P, E, B>,
@@ -380,6 +386,10 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154InterruptTransitionPort
 
     fn stop_timer1(&mut self) {
         self.task.issue(ieee802154::command::Opcode::Timer1Stop);
+    }
+
+    fn enable_all_events(&mut self) {
+        self.task.enable_all_events();
     }
 
     fn mask_all_events(&mut self) {

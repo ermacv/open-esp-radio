@@ -1,0 +1,25 @@
+error[E0308]: mismatched types
+  --> tests/ui/ieee802154_event_snapshot_once.rs:16:24
+   |
+16 |     owner.clear_events(observation, Ieee802154EventMask::NAMED); // ui-error: E0308
+   |           ------------ ^^^^^^^^^^^ expected `Ieee802154EventSnapshot`, found `Ieee802154EventObservation`
+   |           |
+   |           arguments to this method are incorrect
+   |
+note: method defined here
+  --> src/ieee802154/mac/interrupt.rs
+   |
+   |     pub fn clear_events(&mut self, snapshot: Ieee802154EventSnapshot, mask: Ieee802154EventMask) {
+   |            ^^^^^^^^^^^^
+
+error[E0382]: use of moved value: `snapshot`
+  --> tests/ui/ieee802154_event_snapshot_once.rs:10:24
+   |
+ 6 |     let snapshot = owner.events();
+   |         -------- move occurs because `snapshot` has type `Ieee802154EventSnapshot`, which does not implement the `Copy` trait
+ 7 |     let _observed = snapshot.observation();
+ 8 |     owner.clear_events(snapshot, Ieee802154EventMask::NAMED);
+   |                        -------- value moved here
+ 9 |     #[cfg(all())]
+10 |     owner.clear_events(snapshot, Ieee802154EventMask::NAMED); // ui-error: E0382
+   |                        ^^^^^^^^ value used here after move

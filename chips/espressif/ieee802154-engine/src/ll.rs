@@ -72,7 +72,9 @@ pub trait Ieee802154LowLevel {
     fn set_command(&mut self, command: Ieee802154LlCommand);
     /// `ieee802154_ll_get_events`.
     fn events(&mut self) -> Ieee802154EventObservation;
-    /// `ieee802154_ll_clear_events`: clear the asserted events of `mask`.
+    /// Sample and acknowledge the asserted events of `mask` once.
+    /// Stop timer producers and clear while their events are enabled, before
+    /// masking: masked timer status hides retained pending.
     fn clear_events(&mut self, mask: Ieee802154EventMask);
     /// `ieee802154_ll_get_rx_abort_reason`.
     fn rx_abort_reason(&mut self) -> Ieee802154RxAbortReasonObservation;

@@ -59,6 +59,7 @@ enum InterruptTransitionOperation {
     StopOperation,
     StopTimer0,
     StopTimer1,
+    EnableEvents,
     MaskEvents,
     MaskTxAborts,
     EnableRuntimeTxAborts,
@@ -74,6 +75,9 @@ struct RecordingEventSnapshot(u8);
 
 struct RecordingInterruptTransitionPort {
     event_identity: u8,
+    events_enabled: bool,
+    pending: bool,
+    expire_on_stop: bool,
     operations: Vec<InterruptTransitionOperation>,
 }
 
@@ -86,16 +90,25 @@ impl Ieee802154InterruptTransitionPort for RecordingInterruptTransitionPort {
     }
 
     fn stop_timer0(&mut self) {
+        self.pending |= self.expire_on_stop;
         self.operations
             .push(InterruptTransitionOperation::StopTimer0);
     }
 
     fn stop_timer1(&mut self) {
+        self.pending |= self.expire_on_stop;
         self.operations
             .push(InterruptTransitionOperation::StopTimer1);
     }
 
+    fn enable_all_events(&mut self) {
+        self.events_enabled = true;
+        self.operations
+            .push(InterruptTransitionOperation::EnableEvents);
+    }
+
     fn mask_all_events(&mut self) {
+        self.events_enabled = false;
         self.operations
             .push(InterruptTransitionOperation::MaskEvents);
     }
@@ -126,14 +139,21 @@ impl Ieee802154InterruptTransitionPort for RecordingInterruptTransitionPort {
     }
 
     fn sample_events(&mut self) -> Self::EventSnapshot {
+        // Model the measured timer read: masking hides, but retains, pending.
+        let visible = if self.events_enabled && self.pending {
+            self.event_identity
+        } else {
+            0
+        };
         self.operations
-            .push(InterruptTransitionOperation::SampleStaleEvents(
-                self.event_identity,
-            ));
-        RecordingEventSnapshot(self.event_identity)
+            .push(InterruptTransitionOperation::SampleStaleEvents(visible));
+        RecordingEventSnapshot(visible)
     }
 
     fn acknowledge_events(&mut self, snapshot: Self::EventSnapshot) {
+        if snapshot.0 == self.event_identity {
+            self.pending = false;
+        }
         self.operations
             .push(InterruptTransitionOperation::AcknowledgeStaleEvents(
                 snapshot.0,
@@ -145,6 +165,9 @@ impl Ieee802154InterruptTransitionPort for RecordingInterruptTransitionPort {
 fn arming_acks_the_exact_affine_sample_and_leaves_every_event_masked() {
     let mut port = RecordingInterruptTransitionPort {
         event_identity: 0x5a,
+        events_enabled: false,
+        pending: true,
+        expire_on_stop: false,
         operations: Vec::new(),
     };
     execute_interrupt_arming(
@@ -155,21 +178,28 @@ fn arming_acks_the_exact_affine_sample_and_leaves_every_event_masked() {
     assert_eq!(
         port.operations,
         [
-            InterruptTransitionOperation::MaskEvents,
             InterruptTransitionOperation::EnableRuntimeTxAborts,
             InterruptTransitionOperation::EnableRuntimeRxAborts,
+            InterruptTransitionOperation::EnableEvents,
             InterruptTransitionOperation::OrderDeviceAccesses,
             InterruptTransitionOperation::SampleStaleEvents(0x5a),
+            InterruptTransitionOperation::MaskEvents,
             InterruptTransitionOperation::AcknowledgeStaleEvents(0x5a),
             InterruptTransitionOperation::OrderDeviceAccesses,
         ]
     );
+    assert!(!port.events_enabled);
+    port.enable_all_events();
+    assert_eq!(port.sample_events(), RecordingEventSnapshot(0));
 }
 
 #[test]
 fn production_deactivation_stops_every_engine_before_final_affine_ack() {
     let mut port = RecordingInterruptTransitionPort {
         event_identity: 0x3c,
+        events_enabled: true,
+        pending: false,
+        expire_on_stop: true,
         operations: Vec::new(),
     };
     execute_interrupt_deactivation(&mut port);
@@ -180,15 +210,40 @@ fn production_deactivation_stops_every_engine_before_final_affine_ack() {
             InterruptTransitionOperation::StopOperation,
             InterruptTransitionOperation::StopTimer0,
             InterruptTransitionOperation::StopTimer1,
+            InterruptTransitionOperation::OrderDeviceAccesses,
+            InterruptTransitionOperation::SampleStaleEvents(0x3c),
             InterruptTransitionOperation::MaskEvents,
             InterruptTransitionOperation::MaskTxAborts,
             InterruptTransitionOperation::MaskRxAborts,
-            InterruptTransitionOperation::OrderDeviceAccesses,
-            InterruptTransitionOperation::SampleStaleEvents(0x3c),
             InterruptTransitionOperation::AcknowledgeStaleEvents(0x3c),
             InterruptTransitionOperation::OrderDeviceAccesses,
         ]
     );
+    assert!(!port.events_enabled);
+    port.enable_all_events();
+    assert_eq!(port.sample_events(), RecordingEventSnapshot(0));
+}
+
+#[test]
+fn masked_zero_cannot_clear_pending_but_a_saved_positive_sample_can() {
+    let mut port = RecordingInterruptTransitionPort {
+        event_identity: 1,
+        events_enabled: true,
+        pending: true,
+        expire_on_stop: false,
+        operations: Vec::new(),
+    };
+    let saved = port.sample_events();
+    port.mask_all_events();
+    let hidden = port.sample_events();
+    assert_eq!(hidden, RecordingEventSnapshot(0));
+    port.acknowledge_events(hidden);
+    port.enable_all_events();
+    assert_eq!(port.sample_events(), RecordingEventSnapshot(1));
+    port.mask_all_events();
+    port.acknowledge_events(saved);
+    port.enable_all_events();
+    assert_eq!(port.sample_events(), RecordingEventSnapshot(0));
 }
 
 #[test]

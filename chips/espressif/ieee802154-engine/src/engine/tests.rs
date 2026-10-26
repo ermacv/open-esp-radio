@@ -1,5 +1,5 @@
-//! Engine behavior against a register model. Every expectation is read from
-//! the pinned `esp_ieee802154_dev.c`, not from this engine's output.
+//! Engine behavior against a register model. Expectations come from the
+//! pinned `esp_ieee802154_dev.c` and the cited timer-retention run.
 
 use crate::ll::model::ModelAddress;
 use crate::ll::model::{DEBUG_COUNTERS, debug_slot};
@@ -81,6 +81,8 @@ pub(crate) enum Call {
 pub(crate) struct Hw {
     pub(crate) calls: Vec<Call>,
     events: Ieee802154EventMask,
+    enabled_events: Ieee802154EventMask,
+    expire_timer0_on_stop: bool,
     rx_abort: Ieee802154RxAbortReasonObservation,
     tx_abort: Ieee802154TxAbortReasonObservation,
     tx_auto_ack: bool,
@@ -106,6 +108,8 @@ impl Default for Hw {
         Self {
             calls: Vec::new(),
             events: Ieee802154EventMask::NONE,
+            enabled_events: Ieee802154EventMask::NONE,
+            expire_timer0_on_stop: false,
             rx_abort: Ieee802154RxAbortReasonObservation::Unclassified,
             tx_abort: Ieee802154TxAbortReasonObservation::Unclassified,
             tx_auto_ack: false,
@@ -127,6 +131,19 @@ impl Default for Hw {
     }
 }
 
+impl Hw {
+    fn visible_events(&self) -> Ieee802154EventMask {
+        // SOURCE: hw8-20261026-radio-local-05, PR #689. Only the measured
+        // timer lanes are hidden under mask; pending itself is retained.
+        let timers = mask(&[
+            Ieee802154Event::Timer0Overflow,
+            Ieee802154Event::Timer1Overflow,
+        ]);
+        self.events
+            .difference(timers.difference(self.enabled_events))
+    }
+}
+
 fn etm_index(channel: Ieee802154EtmChannel) -> usize {
     match channel {
         Ieee802154EtmChannel::Channel0 => 0,
@@ -141,11 +158,12 @@ impl Ieee802154LowLevel for Hw {
     }
     fn events(&mut self) -> Ieee802154EventObservation {
         self.calls.push(Call::Events);
-        Ieee802154EventObservation::from_named(self.events)
+        Ieee802154EventObservation::from_named(self.visible_events())
     }
     fn clear_events(&mut self, mask: Ieee802154EventMask) {
         self.calls.push(Call::ClearEvents(mask));
-        self.events = self.events.difference(mask);
+        let sampled = self.visible_events().intersection(mask);
+        self.events = self.events.difference(sampled);
     }
     fn rx_abort_reason(&mut self) -> Ieee802154RxAbortReasonObservation {
         self.calls.push(Call::RxAbortReason);
@@ -223,12 +241,15 @@ impl Ieee802154LowLevel for Hw {
         self.calls.push(Call::DisableRxAborts(set));
     }
     fn enable_all_events(&mut self) {
+        self.enabled_events = Ieee802154EventMask::NAMED;
         self.calls.push(Call::EnableAllEvents);
     }
     fn enable_event(&mut self, event: Ieee802154Event) {
+        self.enabled_events = self.enabled_events.with(event);
         self.calls.push(Call::EnableEvent(event));
     }
     fn disable_event(&mut self, event: Ieee802154Event) {
+        self.enabled_events = self.enabled_events.difference(event.mask());
         self.calls.push(Call::DisableEvent(event));
     }
     fn enable_tx_aborts(&mut self, set: Ieee802154TxAbortEnableSet) {
@@ -295,6 +316,12 @@ impl Ieee802154LowLevel for Hw {
         self.calls.push(Call::StartTimer(timer));
     }
     fn stop_timer(&mut self, timer: Ieee802154Timer) {
+        if timer == Ieee802154Timer::Timer0 && self.expire_timer0_on_stop {
+            // Expiry after an ISR's initial sample, just before STOP takes
+            // effect. No more timer arrivals are injected after this stop.
+            self.events = self.events.with(Ieee802154Event::Timer0Overflow);
+            self.expire_timer0_on_stop = false;
+        }
         self.calls.push(Call::StopTimer(timer));
     }
     fn etm_channel_enabled(&mut self, channel: Ieee802154EtmChannel) -> bool {
@@ -528,7 +555,7 @@ impl Bench {
     }
 
     fn interrupt(&mut self, events: &[Ieee802154Event]) {
-        self.hw.events = mask(events);
+        self.hw.events = self.hw.events.union(mask(events));
         self.hw.calls.clear();
         self.engine.isr(&mut self.hw, &mut self.env);
     }
@@ -1715,4 +1742,101 @@ fn delivered_slot_keeps_epoch_owned_until_returned() {
     };
     owner.receive_handle_done(slot).unwrap();
     assert!(owner.detach().is_ok());
+}
+
+// Every terminal ACK path must remove late timer pending before masking;
+// the next ACK wait must survive an interrupt with no new cause.
+fn assert_next_ack_wait_has_no_stale_timeout(bench: &mut Bench) {
+    assert!(!bench.hw.events.contains(Ieee802154Event::Timer0Overflow));
+    bench.transmit(&DATA_WITH_ACK, false);
+    bench.interrupt(&[Ieee802154Event::TxDone]);
+    assert_eq!(bench.engine.state(), Ieee802154State::RxAck);
+    bench.interrupt(&[]);
+    assert_eq!(bench.engine.state(), Ieee802154State::RxAck);
+    assert!(bench.take_notes().is_empty());
+    bench.deliver(&[0x05, 0x02, 0x00, 0x01, 0xc4, 0xc8]);
+    bench.interrupt(&[Ieee802154Event::AckRxDone]);
+    assert!(matches!(
+        bench.take_notes().as_slice(),
+        [Note::TransmitDone { ack: Some(_), .. }]
+    ));
+}
+
+#[test]
+fn stopping_ack_receive_clears_late_timer_pending_before_masking() {
+    let mut bench = Bench::enabled();
+    bench.transmit(&DATA_WITH_ACK, false);
+    bench.interrupt(&[Ieee802154Event::TxDone]);
+    bench.deliver(&[0x05, 0x02, 0x00, 0x01, 0xc4, 0xc8]);
+    bench.hw.events = Ieee802154Event::AckRxDone.mask();
+    bench.hw.expire_timer0_on_stop = true;
+    bench.engine.sleep(&mut bench.hw, &mut bench.env);
+    assert!(matches!(
+        bench.take_notes().as_slice(),
+        [Note::TransmitDone { ack: Some(_), .. }]
+    ));
+    assert_next_ack_wait_has_no_stale_timeout(&mut bench);
+}
+
+#[test]
+fn received_ack_clears_timer_expiring_after_the_isr_sample() {
+    let mut bench = Bench::enabled();
+    bench.transmit(&DATA_WITH_ACK, false);
+    bench.interrupt(&[Ieee802154Event::TxDone]);
+    bench.deliver(&[0x05, 0x02, 0x00, 0x01, 0xc4, 0xc8]);
+    bench.hw.expire_timer0_on_stop = true;
+    bench.interrupt(&[Ieee802154Event::AckRxDone]);
+    assert!(matches!(
+        bench.take_notes().as_slice(),
+        [Note::TransmitDone { ack: Some(_), .. }]
+    ));
+    assert_next_ack_wait_has_no_stale_timeout(&mut bench);
+}
+
+#[test]
+fn rx_ack_abort_clears_timer_expiring_after_the_isr_sample() {
+    let mut bench = Bench::enabled();
+    bench.transmit(&DATA_WITH_ACK, false);
+    bench.interrupt(&[Ieee802154Event::TxDone]);
+    bench.hw.tx_abort =
+        Ieee802154TxAbortReasonObservation::Named(Ieee802154TxAbortReason::RxAckTimeout);
+    bench.hw.expire_timer0_on_stop = true;
+    bench.interrupt(&[Ieee802154Event::TxAbort]);
+    assert_eq!(
+        bench.take_notes(),
+        [Note::TransmitFailed(
+            DATA_WITH_ACK[1..].to_vec(),
+            Ieee802154TxError::NoAck
+        )]
+    );
+    assert_next_ack_wait_has_no_stale_timeout(&mut bench);
+}
+
+#[test]
+fn a_new_ack_wait_clears_hidden_old_pending_before_starting_timer0() {
+    let mut bench = Bench::enabled();
+    bench.transmit(&DATA_WITH_ACK, false);
+    // TIMER0 is masked and stopped; the first ISR read cannot see this old
+    // latch. Enabling must expose it for clearing before the timer starts.
+    bench.hw.events = Ieee802154Event::Timer0Overflow.mask();
+    assert!(
+        !bench
+            .hw
+            .visible_events()
+            .contains(Ieee802154Event::Timer0Overflow)
+    );
+    bench.interrupt(&[Ieee802154Event::TxDone]);
+    assert_subsequence(
+        &bench.hw.calls,
+        &[
+            Call::StopTimer(Ieee802154Timer::Timer0),
+            Call::EnableEvent(Ieee802154Event::Timer0Overflow),
+            Call::ClearEvents(Ieee802154Event::Timer0Overflow.mask()),
+            Call::StartTimer(Ieee802154Timer::Timer0),
+        ],
+    );
+    assert!(!bench.hw.events.contains(Ieee802154Event::Timer0Overflow));
+    bench.interrupt(&[]);
+    assert_eq!(bench.engine.state(), Ieee802154State::RxAck);
+    assert!(bench.take_notes().is_empty());
 }

@@ -164,11 +164,12 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154LowLevel for Ieee802154
     }
 
     fn events(&mut self) -> Ieee802154EventObservation {
-        self.interrupts.events()
+        self.interrupts.events().observation()
     }
 
     fn clear_events(&mut self, mask: Ieee802154EventMask) {
-        self.interrupts.clear_events(mask);
+        let snapshot = self.interrupts.events();
+        self.interrupts.clear_events(snapshot, mask);
     }
 
     fn rx_abort_reason(&mut self) -> Ieee802154RxAbortReasonObservation {

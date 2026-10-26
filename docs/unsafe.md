@@ -320,6 +320,19 @@ inside the retained allocation; subsequent register publications take those
 typed addresses. The shared engine and the combined engine/MAC owner contain
 no unsafe code and perform no address arithmetic.
 
+The S31 802.15.4 HAL acknowledges events only through an affine
+`Ieee802154EventSnapshot`; its copyable observation grants no write authority.
+Timer pending survives masking but its status read becomes zero. Arming,
+before a handler is bound, enables events, samples, masks and acknowledges
+the saved sample. Deactivation stops the operation and both timers, samples
+before masking and acknowledges that saved sample. During ACK reception the
+engine stops timer0, samples and clears its event while enabled, then masks
+it. A new ACK wait enables and clears old pending while timer0 is stopped,
+before programming and starting it. The HAL never resamples status as the
+authority for acknowledgement. Same-lane recurrence is not an event count.
+SOURCE: `hw8-20261026-radio-local-05`, `ieee-timers.json`, retained-snapshot
+and selective-W1C phases, [PR #689](https://github.com/ermacv/open-esp-radio/pull/689).
+
 Wi-Fi RX completed byte views and ring-owned guard preparation consume
 crate-private affine grants. A sealed binding pairs one arena with its live
 or halted ring after identity admission, or takes the pair directly from a retained completed

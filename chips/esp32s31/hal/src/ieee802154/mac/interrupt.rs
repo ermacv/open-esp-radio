@@ -2,6 +2,8 @@
 //! and the RX/TX status and ED result words it observes.
 //!
 //! SOURCE: esp-idf-7b9cc1ac-ieee802154-common-ll.
+//! SOURCE: hw8-20261026-radio-local-05, ieee-timers.json, PR #689:
+//! masked timer status is hidden; a saved positive sample clears under mask.
 
 use oer_esp32s31_pac::ieee802154::{Ieee802154MacIrq, event_status};
 use oer_espressif_ieee802154_engine::types::{
@@ -17,7 +19,7 @@ use super::{Ieee802154InterruptOwner, Ieee802154InterruptSetupOwner, task::byte}
 
 /// The named events of one `EVENT_STATUS` read, and whether one of the two
 /// unnamed event bits was set.
-fn observation(status: &event_status::R) -> Ieee802154EventObservation {
+fn observation(status: &event_status::Snapshot) -> Ieee802154EventObservation {
     let named = [
         (status.tx_done(), Ieee802154Event::TxDone),
         (status.rx_done(), Ieee802154Event::RxDone),
@@ -39,6 +41,21 @@ fn observation(status: &event_status::R) -> Ieee802154EventObservation {
             events.with(event)
         });
     Ieee802154EventObservation::new(events, status.events_7() || status.events_13())
+}
+
+/// One affine event sample, retained across changes to the enable mask.
+/// Observations are copyable; only this saved sample grants acknowledgement.
+#[derive(Debug)]
+#[must_use = "retain the sample until its selected events are acknowledged"]
+pub struct Ieee802154EventSnapshot {
+    status: event_status::Snapshot,
+}
+
+impl Ieee802154EventSnapshot {
+    /// Classifiable events from the same read that grants acknowledgement.
+    pub fn observation(&self) -> Ieee802154EventObservation {
+        observation(&self.status)
+    }
 }
 
 /// The sampled events `mask` selects; the two unnamed events are never
@@ -80,16 +97,18 @@ impl<P: Placement> Ieee802154InterruptSetupOwner<P> {
 impl<P: Placement> Ieee802154InterruptOwner<P> {
     /// `ieee802154_ll_get_events`: one read of the event field, without
     /// acknowledging it.
-    pub fn events(&self) -> Ieee802154EventObservation {
-        observation(&self.mac.read_event_status())
+    pub fn events(&self) -> Ieee802154EventSnapshot {
+        Ieee802154EventSnapshot {
+            status: self.mac.sample_event_status(),
+        }
     }
 
-    /// `ieee802154_ll_clear_events`: `EVENT_STATUS &= mask`. The
-    /// write-one-to-clear word is sampled once and only the asserted events
-    /// `mask` selects are acknowledged, so events outside the mask and
-    /// events raised after the sample stay latched.
-    pub fn clear_events(&mut self, mask: Ieee802154EventMask) {
-        let snapshot = retain(self.mac.sample_event_status(), mask);
+    /// Acknowledge only the saved sample's events selected by `mask`.
+    /// Timer producers must stop before sampling and masking: a fresh masked
+    /// read hides retained timer pending. No status resample grants this write.
+    /// Other lanes stay latched; recurrence of the same lane is not counted.
+    pub fn clear_events(&mut self, snapshot: Ieee802154EventSnapshot, mask: Ieee802154EventMask) {
+        let snapshot = retain(snapshot.status, mask);
         self.mac.acknowledge_event_status(snapshot);
     }
 
