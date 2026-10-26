@@ -1198,7 +1198,7 @@ impl<const WIDTH: u32> From<Bits<WIDTH>> for u32 {
 /// It is not `Sync`; its zero bytes are a valid value.
 #[repr(transparent)]
 #[derive(bytemuck::Zeroable)]
-pub struct VolatileCell<T: Copy>(UnsafeCell<T>);
+pub struct VolatileCell<T>(UnsafeCell<T>);
 
 #[allow(unsafe_code, reason = "the volatile accesses of a cell's own value")]
 impl<T: Copy> VolatileCell<T> {
