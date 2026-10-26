@@ -22,6 +22,8 @@ mod generic;
 mod lp_lanes;
 mod lp_softreset;
 mod radio_local;
+#[path = "sar.rs"]
+mod sar;
 
 include!(concat!(env!("OUT_DIR"), "/geometry.rs"));
 const CPU_LINE: Index<{ pac::clic::ctrl::COUNT }> = Index::constant::<LINE>();
@@ -107,6 +109,9 @@ static FACTS_THRESHOLD_K: AtomicU32 = AtomicU32::new(0);
 // all u32 bit patterns are valid, and only the masked thread publishes them.
 #[unsafe(link_section = ".noinit.facts")]
 static RETAINED: [AtomicU32; 12] = [const { AtomicU32::new(0) }; 12];
+static SAR_CONTEXT: AtomicPtr<sar::Sar> = AtomicPtr::new(ptr::null_mut());
+static SAR_SELECTION: AtomicU32 = AtomicU32::new(0);
+static SAR_DONE: AtomicU32 = AtomicU32::new(0);
 static IRQ_COUNT: AtomicU32 = AtomicU32::new(0);
 static IRQ_CYCLE: AtomicU32 = AtomicU32::new(0);
 static IRQ_PC: AtomicU32 = AtomicU32::new(0);
@@ -150,6 +155,15 @@ extern "C" fn facts_irq() {
         // shared-register owner is only accessed through &self until IRQs stop.
         unsafe { &*source }.store_hp_cpu_int_from_cpu_2(false);
     }
+    let sar = SAR_CONTEXT.swap(ptr::null_mut(), Ordering::AcqRel);
+    if !sar.is_null() {
+        // SAFETY: run_sar publishes its exclusive borrow with MIE masked;
+        // the thread touches no SAR owner until this handler returns and MIE
+        // is masked again. The atomic swap permits exactly one handler access.
+        sar::dispatch(unsafe { &mut *sar }, SAR_SELECTION.load(Ordering::Relaxed));
+        SAR_DONE.store(1, Ordering::Release);
+        return;
+    }
     let count = IRQ_COUNT.fetch_add(1, Ordering::Relaxed);
     if count >= 8 {
         emit(0xee, oer_riscv::read_mcause() as u32, count, cycle);
@@ -173,8 +187,7 @@ extern "C" fn oer_exception_handler(_frame: usize) -> ! {
 }
 
 struct Session<'a> {
-    boot_clock: pac::hp_sys_clkrst::HpSysClkrstBootClock,
-    cpll: pac::lp_aonclkrst::LpAonClkrstCpll,
+    sar: sar::Sar,
     source: &'a pac::hp_system::FromCpu2,
     interrupt_matrix: pac::ownership::InterruptMatrixPeripherals,
     core_control: pac::ownership::CoreControlPeripherals,
@@ -414,6 +427,38 @@ const PROBES: &[Probe] = &[
         run: ble::lp_modes,
     },
     Probe {
+        id: 140,
+        run: |s| s.sar.preflight(),
+    },
+    Probe {
+        id: 141,
+        run: |s| s.sar.hold(false, false),
+    },
+    Probe {
+        id: 142,
+        run: |s| s.sar.hold(true, false),
+    },
+    Probe {
+        id: 143,
+        run: |s| s.sar.hold(false, true),
+    },
+    Probe {
+        id: 144,
+        run: |s| s.sar.hold(true, true),
+    },
+    Probe {
+        id: 145,
+        run: |s| s.sar.edge(false),
+    },
+    Probe {
+        id: 146,
+        run: |s| s.sar.edge(true),
+    },
+    Probe {
+        id: 149,
+        run: |s| s.sar.cleanup(),
+    },
+    Probe {
         id: 2,
         run: geometry,
     },
@@ -449,8 +494,7 @@ extern "C" fn facts_main() -> ! {
     let Some(p) = pac::take() else { halt() };
     let source_owner = p.software_interrupt_2.from_cpu2;
     let mut s = Session {
-        boot_clock: p.boot.hp_sys_clkrst_boot_clock,
-        cpll: p.boot.lp_aon_clkrst_cpll,
+        sar: sar::Sar::new(p.radio_phy, p.chip_clocks, p.boot, p.analog_bus),
         source: &source_owner,
         interrupt_matrix: p.interrupt_matrix,
         core_control: p.core_control,
@@ -527,7 +571,11 @@ extern "C" fn facts_main() -> ! {
             for probe in PROBES {
                 if request == probe.id || (request == 0 && probe.id < 7) {
                     ran = true;
-                    (probe.run)(&mut s);
+                    if (140..=149).contains(&request) {
+                        run_sar(&mut s, request);
+                    } else {
+                        (probe.run)(&mut s);
+                    }
                 }
             }
             if !ran {
@@ -949,4 +997,23 @@ fn after_reset(s: &mut Session<'_>) {
 fn panic(_info: &core::panic::PanicInfo<'_>) -> ! {
     FACTS_OUTPUT[0].store(0xbad00003, Ordering::Release);
     halt()
+}
+
+// Short isolated P2 probe context, using the existing trap ABI. Cycle-counter
+// deadlines advance the SAR observations; no production runtime is linked.
+fn run_sar(s: &mut Session<'_>, id: u32) {
+    setup(s);
+    route_source(s);
+    line(s, CONTROLS[1], false);
+    SAR_SELECTION.store(id, Ordering::Relaxed);
+    SAR_DONE.store(0, Ordering::Relaxed);
+    SAR_CONTEXT.store(ptr::addr_of_mut!(s.sar), Ordering::Release);
+    raise(s);
+    oer_riscv::enable_interrupts();
+    wait_window();
+    oer_riscv::disable_interrupts();
+    SAR_CONTEXT.store(ptr::null_mut(), Ordering::Release);
+    if SAR_DONE.load(Ordering::Acquire) != 1 {
+        emit(0x14ee, 8, id, 0);
+    }
 }
